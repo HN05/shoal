@@ -1,29 +1,31 @@
-//! Stopping keeps agent sessions and commands for `shoal resume`; agents
-//! stay down until it continues them. The other processes of a workspace,
+//! Stopping keeps agent sessions and commands, and chats, for
+//! `shoal resume`; agents stay down until it continues them. The other
+//! processes of a workspace,
 //! and with `--processes` or `--leftovers` those of a chat, stop for good,
 //! and the agent launches waiting in the queue leave it, having nothing to
 //! save.
 use anyhow::{Result, ensure};
 
-use crate::client::output::agents::WorkspaceStopped;
+use crate::client::output::agents::SpaceStopped;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, commands::queued_agents, context::Context, output::Style, ui},
     client::processes::Selection,
     execution::recovery,
-    model::StoppedWorkspace,
+    model::{PresentSpace, StoppedWorkspace, Workspace},
     protocol::{ErrorCode, QueuedLaunches, RemoteError},
 };
 
 mod batch;
+mod chats;
 mod processes;
 mod targets;
 
 use batch::{stop_all, stop_each};
 pub(super) use processes::processes;
 use processes::stop_untracked;
-pub(super) use targets::ensure_below;
-use targets::{inspect_each, with_children};
+use targets::check_each;
+pub(super) use targets::{ensure_below, resolve};
 
 pub(super) async fn run(
     ctx: &Context,
@@ -40,32 +42,34 @@ pub(super) async fn run(
     {
         return Ok(code);
     }
-    let mut selected = ui::select_workspaces(ctx, targets.space).await?;
-    if !skip_children {
-        selected = with_children(ctx, selected).await?;
-    }
+    let selected = ui::select_spaces(ctx, targets.space, false).await?;
+    let selected = resolve(ctx, selected, !skip_children).await?;
     if crate::env::inherits_scope(&ctx.paths.state) {
-        ensure_below(ctx, &selected).await?;
+        ensure_below(&selected)?;
     }
     match selected.as_slice() {
-        [workspace] => stop_one(ctx, workspace.clone(), yes).await,
-        workspaces => {
-            let workspaces = inspect_each(ctx, workspaces).await?;
-            stop_each(ctx, &workspaces, "", yes).await
+        [PresentSpace::Workspace(workspace)] => stop_one(ctx, workspace, yes).await,
+        [PresentSpace::Chat(chat)] => chats::stop_one(ctx, chat).await,
+        spaces => {
+            check_each(ctx, spaces).await?;
+            stop_each(ctx, spaces, "", yes).await
         }
     }
 }
 
-async fn stop_one(ctx: &Context, workspace: SpaceSelector, yes: bool) -> Result<i32> {
-    let stopped = stop(ctx, &workspace, yes, QueuedLaunches::Cancel).await?;
+/// Stop `workspace`, reporting it alone.
+async fn stop_one(ctx: &Context, workspace: &Workspace, yes: bool) -> Result<i32> {
+    let selector = SpaceSelector::id(&workspace.id);
+    let stopped = stop(ctx, &selector, yes, QueuedLaunches::Cancel).await?;
     if let Some(run) = &stopped.cancelled_run {
         // The job runs until its runner stops it, and its workspace goes then.
         ctx.emit_styled(
             Style::Success,
-            &cancelled_run_message(&workspace.to_string(), run),
-            WorkspaceStopped {
+            &cancelled_run_message(&workspace.name, run),
+            SpaceStopped {
                 stopped: false,
                 saved: false,
+                already_stopped: false,
                 other_processes: 0,
                 cancelled: Vec::new(),
                 cancelled_run: Some(run.clone()),
@@ -74,10 +78,7 @@ async fn stop_one(ctx: &Context, workspace: SpaceSelector, yes: bool) -> Result<
         return Ok(0);
     }
     let cancelled = stopped.cancelled;
-    let other = stop_untracked(ctx, &workspace, Selection::Processes).await?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
-        .await?
-        .workspace;
+    let other = stop_untracked(ctx, &selector, Selection::Processes).await?;
     let saved = !recovery::Saved::load(&ctx.paths, &workspace.id)?.is_empty();
     let mut message = "Workspace processes stopped".to_owned();
     if other.processes > 0 {
@@ -92,9 +93,10 @@ async fn stop_one(ctx: &Context, workspace: SpaceSelector, yes: bool) -> Result<
     ctx.emit_styled(
         Style::Success,
         &message,
-        WorkspaceStopped {
+        SpaceStopped {
             stopped: true,
             saved,
+            already_stopped: false,
             other_processes: other.processes,
             cancelled,
             cancelled_run: None,

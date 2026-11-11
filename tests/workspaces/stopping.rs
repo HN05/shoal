@@ -3,10 +3,10 @@
 use super::recovery::crashed_execution;
 use super::*;
 
-/// Stopping untracked processes takes chats, so completion offers running
-/// chats for it, and plain `stop`, which takes workspaces, does not.
+/// Stopping takes chats, so completion offers them to plain `stop` as to
+/// the stop levels.
 #[test]
-fn completion_offers_chats_only_to_the_stop_levels() {
+fn completion_offers_chats_to_stop() {
     let fixture = Fixture::new();
     fixture.add("planned");
     let repository = fixture.ok(&["repo", "ls"])[0].clone();
@@ -36,7 +36,7 @@ fn completion_offers_chats_only_to_the_stop_levels() {
     let offered = complete(&["stop", "--leftovers", "pl"]);
     assert!(offered.lines().any(|line| line == "planning"), "{offered}");
     let offered = complete(&["stop", "--yes", "pl"]);
-    assert!(!offered.lines().any(|line| line == "planning"), "{offered}");
+    assert!(offered.lines().any(|line| line == "planning"), "{offered}");
 
     agent.kill().unwrap();
     agent.wait().unwrap();

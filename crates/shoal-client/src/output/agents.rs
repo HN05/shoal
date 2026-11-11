@@ -19,14 +19,18 @@ pub struct Agent {
     pub agent: Option<crate::agent::Agent>,
 }
 
-/// A stopped workspace's processes.
+/// A stopped workspace's processes, or a stopped chat.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkspaceStopped {
+pub struct SpaceStopped {
     /// Whether its processes stopped; false for a CI job's workspace, whose
     /// run the forge was asked to cancel instead.
     pub stopped: bool,
-    /// Whether agents or commands wait for `shoal resume`.
+    /// Whether agents, commands or the chat wait for `shoal resume`.
     pub saved: bool,
+    /// The chat was stopped before, and keeps the space recorded as its
+    /// stopper.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub already_stopped: bool,
     /// How many processes Shoal does not track it stopped too.
     pub other_processes: usize,
     /// The agent launches waiting to start in it that the stop removed from
@@ -38,9 +42,10 @@ pub struct WorkspaceStopped {
     pub cancelled_run: Option<String>,
 }
 
-/// The workspaces whose agents and commands a stop stopped, by name.
+/// The workspaces whose agents and commands a stop stopped, and the chats
+/// it stopped, by name.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StoppedWorkspaces {
+pub struct StoppedSpaces {
     pub stopped: Vec<SpaceName>,
     pub failed: Vec<Failure>,
     /// The agent launches waiting to start in them that the stop removed
@@ -115,8 +120,8 @@ pub struct Skipped {
 }
 
 outputs!(
-    WorkspaceStopped,
-    StoppedWorkspaces,
+    SpaceStopped,
+    StoppedSpaces,
     StoppedProcesses,
     Interrupted,
     Continued,

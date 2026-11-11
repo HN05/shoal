@@ -118,8 +118,8 @@ shoal resume <child>                # --discard forgets the saved session
 shoal files <child>
 ```
 
-`stop` stops the child's agent and those below it, keeping their sessions, and
-cancels agents queued to start there; `restart` stops the child's agent and
+`stop` stops the child's agent and those below it, a workspace's or a chat's,
+keeping their sessions, and cancels agents queued to start there; `restart` stops the child's agent and
 starts its session again at once; `resume` queues the agents the caller
 stopped and restores the chats its restart left stopped in a background
 place, while the user resumes the ones the user stopped.

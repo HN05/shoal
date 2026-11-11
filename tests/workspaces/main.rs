@@ -3,6 +3,7 @@
 mod adoption;
 mod approvals;
 mod branches;
+mod chat_stops;
 mod chats;
 mod commands;
 mod completion;

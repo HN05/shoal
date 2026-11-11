@@ -7,6 +7,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, ui},
     client::processes::{Selection, Stopped},
+    model::PresentSpace,
 };
 
 /// Stop the processes Shoal does not track that `selection` takes, of each
@@ -44,19 +45,14 @@ pub(in crate::cli::commands) async fn processes(
     })
 }
 
-/// Refuse `selectors` before any stops when one names neither a running
-/// chat nor a workspace that stopping accepts.
+/// Refuse `selectors` before any stops when one names no space, or a
+/// workspace that stopping would refuse now.
 async fn ensure_spaces(ctx: &Context, selectors: &[SpaceSelector]) -> Result<()> {
-    let chats = crate::client::chats::list(&ctx.paths).await?;
-    let workspaces: Vec<SpaceSelector> = selectors
-        .iter()
-        .filter(|selector| {
-            !(chats.iter()).any(|chat| selector.selects(&chat.id, &chat.name, chat.number))
-        })
-        .cloned()
+    let spaces = super::resolve(ctx, selectors.to_vec(), false).await?;
+    let workspaces: Vec<_> = (spaces.into_iter())
+        .filter(|space| matches!(space, PresentSpace::Workspace(_)))
         .collect();
-    super::inspect_each(ctx, &workspaces).await?;
-    Ok(())
+    super::check_each(ctx, &workspaces).await
 }
 
 /// Stop the untracked processes of `space` that `selection` takes, other

@@ -7,11 +7,11 @@ use crate::client::space_names::SpaceSelector;
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum LifecycleCommand {
-    /// Stop tracked agents and commands, saving them for `shoal resume`, and the other processes of
-    /// the workspaces; keep the workspaces.
+    /// Stop tracked agents and commands, and chats, saving them for `shoal resume`, and the other
+    /// processes of the workspaces; keep the spaces.
     ///
     /// Agents waiting in the agent queue to start in the workspaces leave the queue, as does a queued
-    /// agent named instead of a workspace.
+    /// agent named instead of a space.
     ///
     /// With `--processes` or `--leftovers`, stop only processes Shoal does not track, of workspaces or
     /// chats, the current one by default. Untracked processes carry the space's identity or are its
@@ -23,7 +23,7 @@ pub enum LifecycleCommand {
         /// Treat executions Shoal cannot prove ended as stopped without asking.
         #[arg(short = 'y', long)]
         yes: bool,
-        /// Keep running the workspaces below the selected ones.
+        /// Keep running the spaces below the selected ones.
         #[arg(long, conflicts_with = "all")]
         skip_children: bool,
         /// Cancel the current turns of the agents instead, keeping them running.

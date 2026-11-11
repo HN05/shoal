@@ -606,8 +606,6 @@ fn target_of(id: &str, parent: &str, name: &str, need: Need) -> Option<Target> {
         ("workspace", _, "restore") => Some(Target::RestorableWorkspaces),
         ("workspace", _, _) | ("in_workspace", _, "start") => Some(Target::Workspaces(need)),
         ("parent", _, "start") => Some(Target::Spaces(need)),
-        // Only stopping untracked processes takes chats.
-        ("space", _, "stop") if need != Need::Untracked => Some(Target::Workspaces(need)),
         ("space", _, _) => Some(Target::Spaces(need)),
         ("name", "acquire", "port") => Some(Target::Ports),
         ("pool", "acquire" | "release", "resource" | "repo") | ("resource", "acquire", "repo") => {

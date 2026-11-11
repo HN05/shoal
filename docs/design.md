@@ -803,8 +803,8 @@ below it stopped, which the stopped session or chat records: agents through
 the queue, so the daemon starts them detached, and chats in a background
 place, as it starts them; resuming what the user or Shoal stopped, and
 confirming that an execution Shoal cannot prove ended did, stay the user's.
-Stopping a workspace stops the workspaces below it unless `--skip-children`
-says otherwise, since their agents work for it. Approval
+Stopping a space stops the spaces below it, workspaces and chats, unless
+`--skip-children` says otherwise, since their agents work for it. Approval
 requests go up the same tree: to the nearest space above with an agent, of
 either kind, since each knows best what its children need. A parent space,
 workspace or chat, approves what a permission governs where its own

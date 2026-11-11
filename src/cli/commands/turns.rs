@@ -24,7 +24,7 @@ use crate::{
 pub(super) async fn interrupt(ctx: &Context, selected: Vec<SpaceSelector>) -> Result<i32> {
     let selected = ui::select_workspaces(ctx, selected).await?;
     if crate::env::inherits_scope(&ctx.paths.state) {
-        super::stop::ensure_below(ctx, &selected).await?;
+        super::stop::ensure_below(&super::stop::resolve(ctx, selected.clone(), false).await?)?;
     }
     let interruptions = running_turns(ctx, selected).await?;
     let mut report = ui::Report::new("interrupt");

@@ -299,7 +299,7 @@ fn a_workspaces_agent_resumes_the_agents_its_restart_stopped() {
 /// A fixture whose workspace agents restart with `resume.sh` in their
 /// worktree, whose chats run `agent.sh` in the checkout, and whose detached
 /// places are zmx sessions.
-fn parent_fixture() -> Fixture {
+pub(super) fn parent_fixture() -> Fixture {
     let fixture = Fixture::with_config(Some(&format!(
         "{UNLIMITED_AGENTS}[agents.claude]\ncommand = ['sh', './agent.sh']\nresume_command = ['sh', './resume.sh']\n"
     )));
@@ -319,7 +319,7 @@ fn parent_fixture() -> Fixture {
 }
 
 /// The space whose agent runs a test's commands, with its scope.
-enum Parent {
+pub(super) enum Parent {
     /// A workspace's process, by the workspace's name.
     Workspace(&'static str),
     /// A chat's agent.
@@ -332,20 +332,20 @@ enum Parent {
 
 impl Parent {
     /// The chat `id`, named `name`, with the scope token its agent carries.
-    fn chat(fixture: &Fixture, name: &'static str, id: String) -> Self {
+    pub(super) fn chat(fixture: &Fixture, name: &'static str, id: String) -> Self {
         let scope = fixture.request(serde_json::json!({"chat_scope": {"chat": id}}));
         let token = scope["data"]["token"].as_str().unwrap().to_owned();
         Self::Chat { name, id, token }
     }
 
-    fn name(&self) -> &'static str {
+    pub(super) fn name(&self) -> &'static str {
         match self {
             Self::Workspace(name) | Self::Chat { name, .. } => name,
         }
     }
 
     /// Run `shoal --json <args>` as the space's agent runs it.
-    fn run(&self, fixture: &Fixture, args: &[&str]) -> Output {
+    pub(super) fn run(&self, fixture: &Fixture, args: &[&str]) -> Output {
         match self {
             Self::Workspace(name) => scoped_command(fixture, name, args),
             Self::Chat { id, token, .. } => fixture
@@ -361,7 +361,7 @@ impl Parent {
     }
 
     /// [`Self::run`], which must succeed, returning what it printed.
-    fn ok(&self, fixture: &Fixture, args: &[&str]) -> Value {
+    pub(super) fn ok(&self, fixture: &Fixture, args: &[&str]) -> Value {
         let output = self.run(fixture, args);
         assert!(output.status.success(), "{args:?}: {output:?}");
         serde_json::from_slice(&output.stdout).unwrap()
