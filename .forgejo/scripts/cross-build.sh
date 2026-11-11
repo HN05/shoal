@@ -26,7 +26,9 @@ case "$target:$(uname -s)" in
   *-apple-darwin:Linux)
     # Expose Zig's bundled macOS headers and libSystem stub in SDK layout so
     # rustc can locate it without xcrun. This SDK supplies no Apple frameworks.
-    zig_lib=$("$CI_ZIG_BINARY" env | python3 -c 'import json, pathlib, sys; print(pathlib.Path(json.load(sys.stdin)["lib_dir"]).resolve())')
+    # `zig env` prints ZON, one field per line.
+    zig_lib=$("$CI_ZIG_BINARY" env | sed -n 's/^ *\.lib_dir = "\(.*\)",$/\1/p')
+    zig_lib=$(cd "${zig_lib:?zig env printed no lib_dir}" && pwd -P)
     sdk="${CARGO_TARGET_DIR:?}/zig-macos-sdk"
     mkdir -p "$sdk/usr"
     ln -sfn "$zig_lib/libc/include/any-darwin-any" "$sdk/usr/include"

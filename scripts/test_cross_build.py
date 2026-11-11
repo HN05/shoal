@@ -118,7 +118,12 @@ class CrossBuildTests(unittest.TestCase):
             (darwin / "libSystem.tbd").write_text("bundled stub")
             (darwin / "SDKSettings.json").write_text('{"MinimalDisplayName":"15.1"}')
             zig = bin_dir / "zig"
-            zig.write_text("#!/bin/sh\nprintf '%s\\n' '" + json.dumps({"lib_dir": str(lib)}) + "'\n")
+            # `zig env` prints ZON.
+            zig.write_text(
+                "#!/bin/sh\ncat <<'EOF'\n.{\n"
+                f'    .zig_exe = "{zig}",\n    .lib_dir = "{lib}",\n    .std_dir = "{lib}/std",\n'
+                "    .env = .{\n        .ZIG_LIB_DIR = null,\n    },\n}\nEOF\n"
+            )
             zig.chmod(0o755)
             uname = bin_dir / "uname"
             uname.write_text("#!/bin/sh\necho Linux\n")
