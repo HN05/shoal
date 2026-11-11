@@ -50,7 +50,9 @@ while True:
             .args([
                 "-c",
                 r#"import fcntl, os, pathlib, signal, subprocess, sys, termios, time
-binary, agent, mode, space = sys.argv[1:]
+binary, agent, mode, space, hang_guard = sys.argv[1:]
+# Hang guards only, each step bounded on its own: a loaded runner may be slow.
+hang_guard = float(hang_guard)
 os.setsid()
 fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 # Preserve deliberate caller customization too, rather than resetting to sane.
@@ -71,8 +73,8 @@ try:
     if mode in ('interrupt', 'stop'):
         import json
         workspace = pathlib.Path(json.loads(subprocess.check_output(
-            [binary, '--json', 'status', space], text=True))['workspace']['path'])
-        deadline = time.monotonic() + 10
+            [binary, '--json', 'status', space], text=True, timeout=hang_guard))['workspace']['path'])
+        deadline = time.monotonic() + hang_guard
         while not (workspace / 'raw-ready').exists():
             assert child.poll() is None, child.communicate()
             assert time.monotonic() < deadline, 'agent did not enter raw mode'
@@ -80,8 +82,8 @@ try:
         if mode == 'interrupt':
             child.send_signal(signal.SIGTERM)
         else:
-            subprocess.run([binary, 'stop', space], check=True, capture_output=True, timeout=15)
-    stdout, stderr = child.communicate(timeout=15)
+            subprocess.run([binary, 'stop', space], check=True, capture_output=True, timeout=hang_guard)
+    stdout, stderr = child.communicate(timeout=hang_guard)
     expected = {'success': 0, 'exit': 7, 'killed': 137, 'interrupt': 143, 'stop': 143}[mode]
     assert child.returncode == expected, (child.returncode, stdout, stderr)
     assert b'\x1b' not in stdout + stderr, (stdout, stderr)
@@ -96,6 +98,7 @@ finally:
                 agent.to_str().unwrap(),
                 mode,
                 &fixture.id("terminal"),
+                &support::HANG_GUARD.as_secs().to_string(),
             ])
             .stdin(slave.try_clone().unwrap())
             .stdout(Stdio::piped())
@@ -103,7 +106,8 @@ finally:
             .spawn()
             .unwrap();
         let mut transcript = String::new();
-        if try_wait_for(|| {
+        // Outlast the driver's four bounded steps, so its own report wins.
+        if try_wait_within(support::HANG_GUARD * 5, || {
             // Drain while the driver runs: closing a PTY can wait for unread
             // output on macOS, including when the driver has been killed.
             let _ = master.read_to_string(&mut transcript);
