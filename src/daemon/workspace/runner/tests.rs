@@ -432,10 +432,14 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
     manager.finish_ended_jobs().await.unwrap();
     assert!(manager.workspace_by_id(&workspace.id).await.is_ok());
 
+    manager.runners.take_wake();
     manager
         .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
         .await
         .unwrap();
+    // Its end wakes the runner, which removes the workspace without waiting
+    // for its next poll.
+    assert!(manager.runners.take_wake());
     manager.finish_ended_jobs().await.unwrap();
     assert!(manager.workspace_by_id(&workspace.id).await.is_err());
     assert!(manager.claimed_jobs().await.unwrap().is_empty());

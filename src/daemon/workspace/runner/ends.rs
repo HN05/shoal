@@ -113,6 +113,26 @@ impl Manager {
         self.remove_unclaimed_job_directories().await
     }
 
+    /// Have the runner end the job the ended execution `id` ran now, instead
+    /// of on its next poll, so its workspace goes as soon as it can.
+    pub(crate) async fn wake_runner_for_ended_job(&self, id: &ExecutionId) {
+        let id = id.to_owned();
+        let ran_job = self
+            .store
+            .run(move |db| {
+                crate::daemon::store::exists(
+                    db,
+                    "SELECT 1 FROM ci_jobs WHERE execution_id=?1",
+                    [id],
+                )
+            })
+            .await;
+        // A failed lookup costs only a pass that finds nothing to do.
+        if ran_job.unwrap_or(true) {
+            self.runners.wake();
+        }
+    }
+
     /// Record the execution running in the workspace of `job`, whose claim
     /// a restart cut short after its command started but before its
     /// execution was recorded, returning whether there is one.

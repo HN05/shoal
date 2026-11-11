@@ -135,6 +135,13 @@ impl Runners {
         self.wake();
     }
 
+    /// Whether a pass was asked for since the last call.
+    #[cfg(test)]
+    pub(crate) fn take_wake(&self) -> bool {
+        use futures_util::FutureExt;
+        self.wake.notified().now_or_never().is_some()
+    }
+
     fn take_changed(&self) -> bool {
         self.changed
             .swap(false, std::sync::atomic::Ordering::Relaxed)

@@ -665,6 +665,7 @@ impl Manager {
             self.signals.execution_became_unknown();
         }
         self.close_demo_session(demo).await;
+        self.wake_runner_for_ended_job(&id).await;
         Ok(complete)
     }
 
