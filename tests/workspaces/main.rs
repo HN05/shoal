@@ -29,6 +29,7 @@ mod secrets;
 #[cfg(target_os = "macos")]
 mod simulators;
 mod start;
+mod stopped_work;
 mod stopping;
 mod terminal_sessions;
 mod tmux;

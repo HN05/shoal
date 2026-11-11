@@ -185,6 +185,3 @@ mod sessions;
 mod stale;
 mod targets;
 mod workspace;
-
-#[cfg(test)]
-mod tests;
