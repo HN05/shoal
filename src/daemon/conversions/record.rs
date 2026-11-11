@@ -25,8 +25,13 @@ use crate::{
 pub(crate) enum Pending {
     /// A chat that became a workspace, with the row the chat had, which
     /// gives its running agent and gives the chat back should the
-    /// workspace's worktree fail.
-    Workspace { mode: ModeName, chat: ChatRow },
+    /// workspace's worktree fail, and the execution its agent's last
+    /// session in the workspace is kept under.
+    Workspace {
+        mode: ModeName,
+        chat: ChatRow,
+        execution: ExecutionId,
+    },
     /// A workspace that becomes a chat once the agent `execution` runs
     /// stopped.
     Chat {

@@ -50,9 +50,11 @@ impl Manager {
                 continue;
             }
             let relocated = match pending.clone() {
-                Pending::Workspace { mode, chat } => {
-                    self.relocate_to_workspace(&id, mode, chat).await
-                }
+                Pending::Workspace {
+                    mode,
+                    chat,
+                    execution,
+                } => self.relocate_to_workspace(&id, mode, chat, execution).await,
                 Pending::Chat { mode, execution } => {
                     self.relocate_to_chat(&id, mode, execution).await
                 }
@@ -93,25 +95,44 @@ impl Manager {
     }
 
     /// Restart the agent of the chat that became the workspace `id`, whose
-    /// row was `chat`, in the worktree in `mode`: stop it where it ran, keep
-    /// its session as the workspace's last session, and continue that.
+    /// row was `chat`, in the worktree in `mode`, as [`Self::hand_over`]
+    /// keeps it as `execution`. A hand-over that fails leaves the agent
+    /// running where it was and the conversion pending, to try again.
     async fn relocate_to_workspace(
         &self,
         id: &SpaceId,
         mode: ModeName,
         chat: ChatRow,
+        execution: ExecutionId,
+    ) -> Result<()> {
+        let origin = chat.agent()?.origin()?;
+        if let Err(error) = self.hand_over(id, mode, &chat, execution).await {
+            log!("agent of {id} not handed over yet: {error:#}");
+            return Ok(());
+        }
+        resume_workspace(&self.paths, id, origin.as_ref()).await
+    }
+
+    /// Keep the session of the agent of the chat that became the workspace
+    /// `id`, whose row was `chat`, as the workspace's last session under
+    /// `execution`, marked converted, in `mode`, then stop the agent where it
+    /// ran and forget the conversion and the scope the agent carried there.
+    async fn hand_over(
+        &self,
+        id: &SpaceId,
+        mode: ModeName,
+        chat: &ChatRow,
+        execution: ExecutionId,
     ) -> Result<()> {
         let agent = chat.agent()?;
-        self.stop_converted_chat(id, &agent.process()?).await?;
-        let origin = agent.origin()?;
         let last = LastSession {
-            execution: ExecutionId::generate(),
+            execution,
             agent: agent.agent.clone(),
             session: agent.session.clone(),
             moved: false,
             copied: None,
             converted: true,
-            origin: origin.clone(),
+            origin: agent.origin()?,
             stopped_by: None,
             stop: None,
             model: Default::default(),
@@ -119,12 +140,13 @@ impl Manager {
             narrowing: agent.narrowing()?,
         };
         last.write(&self.paths, id)?;
+        self.stop_converted_chat(id, &agent.process()?).await?;
         let (space, token) = (id.to_owned(), agent.scope_token.clone());
         self.store
             .write(move |tx| super::record::relocated_chat(tx, &space, token.as_ref()))
             .await?;
         self.signals.agent_changed();
-        resume_workspace(&self.paths, id, origin.as_ref()).await
+        Ok(())
     }
 
     /// Make the workspace `id` the chat its agent, which `execution` runs,

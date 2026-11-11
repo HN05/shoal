@@ -46,6 +46,7 @@ impl Converting {
         let pending = Pending::Workspace {
             mode: self.mode.clone(),
             chat,
+            execution: crate::client::execution_ids::ExecutionId::generate(),
         };
         record::record(tx, &self.chat.id, &pending)
     }
