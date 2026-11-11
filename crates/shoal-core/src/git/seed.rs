@@ -1,7 +1,10 @@
 //! The detached worktree a repository's seed builds the default branch in,
 //! and the file lists that decide which build outputs a workspace may reuse.
 //! It is locked so pruning and adoption leave it alone.
-use std::{collections::HashSet, path::Path};
+use std::{
+    collections::HashSet,
+    path::{Component, Path},
+};
 
 use anyhow::Result;
 
@@ -99,10 +102,15 @@ pub async fn untracked_outputs(worktree: &Path, outputs: &[String]) -> Result<Ve
         .collect())
 }
 
-/// Whether the tracked `file` is or lies inside `output`.
+/// Whether the tracked `file` is or lies inside `output`, comparing path
+/// components, so spellings such as `target/` or `./web//node_modules`
+/// match what Git lists.
 fn holds(output: &str, file: &str) -> bool {
-    file.strip_prefix(output)
-        .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+    let output: Vec<_> = Path::new(output)
+        .components()
+        .filter(|component| *component != Component::CurDir)
+        .collect();
+    !output.is_empty() && Path::new(file).components().take(output.len()).eq(output)
 }
 
 fn names(listing: &str) -> impl Iterator<Item = String> + '_ {
