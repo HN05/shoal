@@ -1322,6 +1322,38 @@ async fn idle_cleanup_removes_a_stopped_chat_with_the_workspaces_below_it() {
 }
 
 #[tokio::test]
+async fn automatic_cleanup_leaves_a_chat_restored_since_its_snapshot_running() {
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
+    let (chat, _) = chat_with_workspace(&temp, &manager, &process).await;
+    let set_restore = async |restore: Option<&str>| {
+        let (id, restore) = (chat.id.clone(), restore.map(str::to_owned));
+        manager
+            .store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE chats SET restore=?2,stopped_at=1 WHERE id=?1",
+                    rusqlite::params![id, restore],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+    };
+    set_restore(Some("resume")).await;
+    let snapshot = manager.cleanup_snapshot(&chat.id).await.unwrap().unwrap();
+    // Its agent runs again before the removal reserves it.
+    set_restore(None).await;
+    let space = PresentSpace::Chat(manager.chat_by_id(&chat.id).await.unwrap().unwrap());
+    let removed = manager.remove_unused(&space, snapshot, EventCause::Manual);
+    assert!(removed.await.is_err());
+    let kept = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    assert_eq!(kept.restore, None);
+}
+
+#[tokio::test]
 async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let process = crate::daemon::test_support::ProcessGroup::spawn(

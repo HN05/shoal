@@ -1,7 +1,7 @@
 //! Removing a space, whichever removes it: reserving it, checking it again
 //! at each step, stopping its agent, removing the spaces below it, then its
 //! worktree where it has one, and deleting its record.
-use super::super::{Manager, StopRequest, done::CompletedAncestor};
+use super::super::{Manager, StopRequest, done::CompletedAncestor, space_kinds::AgentState};
 use super::worktree::{WorktreeRemoval, WorktreeStage};
 use super::{Removal, Stage};
 use crate::client::space_ids::SpaceId;
@@ -401,6 +401,13 @@ impl Manager {
             bail!("{retention}; retaining the {}", space.kind());
         }
         self.ensure_agent_ended(&space).await?;
+        // Automatic cleanup takes only spaces whose agent stopped, so one
+        // restored since its snapshot goes on running.
+        if matches!(removal, Removal::Automatic { .. })
+            && self.space_agent(&space, cancelled).await?.state == AgentState::Running
+        {
+            bail!("its agent runs again; retaining the {}", space.kind());
+        }
         if matches!(stage, Stage::Initial) {
             let below = self.taken_with(id, removal).await?;
             ensure_confirmed(space.name(), &below, removal)?;
