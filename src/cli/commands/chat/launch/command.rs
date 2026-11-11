@@ -149,8 +149,9 @@ pub(super) fn command(
 
 /// What the chat about `topic` in `repo` is told: its mode's rules, or
 /// nothing for a chat that `resumes` a session with an agent that takes
-/// them only in its first message, which the session already has; and its
-/// subject, unless it resumes a session.
+/// them only in its first message, which the session already has unless it
+/// is told what changed; and its subject, unless it resumes a session
+/// without being told it.
 fn brief(
     settings: &Effective,
     agent: &Agent,
@@ -176,8 +177,9 @@ fn brief(
             }
         }
     };
+    // A session told what changed takes the rules of its new place too.
     let in_first_message = settings.launch(agent).arguments.instructions.is_none();
-    if resumes && in_first_message {
+    if resumes && in_first_message && !topic.tells_resumed {
         brief.system.clear();
     }
     Ok(brief)

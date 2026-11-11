@@ -120,3 +120,28 @@ fn a_workspace_mode_in_a_checkout_is_told_to_convert() {
     assert!(worker.contains("shoal convert workspace"), "{worker}");
     assert!(!chat.contains("shoal convert workspace"), "{chat}");
 }
+
+#[test]
+fn a_converted_chat_whose_agent_takes_rules_in_its_prompt_gets_its_new_rules() {
+    // An agent that forks a session but has no arguments for instructions.
+    let config = crate::config::Config::from_toml(
+        "[agents.forker]\ncommand = ['forker', '{prompt}']\nfork = ['--fork', '{session}']\n",
+    )
+    .unwrap();
+    let settings = config.resolve(&Default::default()).unwrap();
+    let agent: Agent = "forker".parse().unwrap();
+    assert!(settings.launch(&agent).arguments.instructions.is_none());
+    let repo = repository();
+    let topic = Topic::repository(&repo, &crate::config::modes::ModeName::CHAT);
+    let converted =
+        Topic::repository(&repo, &crate::config::modes::ModeName::CHAT).converted(&repo.path);
+    let repo = ChatRepository::Registered(repo);
+
+    let resumed = brief(&settings, &agent, &repo, &topic, true).unwrap();
+    let told = brief(&settings, &agent, &repo, &converted, true).unwrap();
+
+    // A plain resume has the rules in its session already.
+    assert!(resumed.system.is_empty(), "{}", resumed.system);
+    // The converted one's session has the workspace's, which changed.
+    assert!(told.system.contains("/repos/shoal"), "{}", told.system);
+}
