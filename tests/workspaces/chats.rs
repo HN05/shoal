@@ -254,8 +254,12 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("--execution worker-agent"), "{output:?}");
-    // The restored agent only records how it ran, which stops the chat.
-    wait_until("the restored chat to stop", || saves(&fixture) > saved);
+    // The restored agent only records how it ran, which stops the chat;
+    // listing chats records that.
+    wait_until("the restored chat to stop", || {
+        fixture.ok(&["list", "--chats"]);
+        saves(&fixture) > saved
+    });
     fixture.ok(&["resume", "talk", "worker", "--discard"]);
     // The picker offers the saved chats after the workspaces with stopped
     // work.
@@ -301,10 +305,15 @@ fn a_chat_a_signal_saved_comes_back_on_its_own() {
         fs::read_to_string(home.join("chat-id"))
             .is_ok_and(|id| id.trim() == chat["id"].as_str().unwrap())
     });
+    // Listing chats records the stop of one whose agent exited, as the
+    // daemon's sweep does later when nothing lists them.
     wait_until("restored chat stopped", || {
-        chat_kinds(&fixture) == ["chat_started", "chat_saved", "chat_restored", "chat_saved"]
+        fixture.ok(&["list", "--chats"])[0]["restore"] == "resume"
     });
-    assert_eq!(fixture.ok(&["list", "--chats"])[0]["restore"], "resume");
+    assert_eq!(
+        chat_kinds(&fixture),
+        ["chat_started", "chat_saved", "chat_restored", "chat_saved"]
+    );
 }
 
 /// A [`PASSTHROUGH_ZMX`] whose sessions run their command on a terminal of
