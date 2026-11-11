@@ -2468,6 +2468,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
             shoal_client::protocol::operations::QueuedLaunch::new("reviewer".into()),
         )),
         env: None,
+        queue_entry: None,
     };
     let refused =
         tokio::runtime::Runtime::new()
@@ -2591,6 +2592,7 @@ fn an_apps_workspace_linking_a_pr_takes_its_title_without_a_name() {
         pr: Some("https://forge.example/team/project/pulls/7".into()),
         agent: None,
         env: None,
+        queue_entry: None,
     };
 
     let started = tokio::runtime::Runtime::new()

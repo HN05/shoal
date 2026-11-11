@@ -1004,11 +1004,12 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
             },
         )
         .await;
+    // A launch that names no workspace opens a new one in the caller's scope.
     for (workspace, allowed) in [
         (Some(&child.id), true),
         (Some(&parent.id), false),
         (Some(&sibling.id), false),
-        (None, false),
+        (None, true),
     ] {
         let mut method = crate::protocol::QueueMethod::QueueAdd {
             request: QueueRequest {
@@ -1029,6 +1030,55 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
     let authorized =
         crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
     assert!(authorized.is_err());
+    // Nor does it open one in another repository.
+    let other = register(&manager, &temp, "other").await;
+    let mut method = crate::protocol::QueueMethod::QueueAdd {
+        request: request(&other, "launch", false),
+    };
+    let authorized =
+        crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
+    assert!(authorized.is_err());
+}
+
+#[tokio::test]
+async fn a_launch_a_space_queued_keeps_it_and_goes_with_it() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
+    let parent = create("parent").await.unwrap();
+    let blocker = create("blocker").await.unwrap();
+    let caller = crate::daemon::scope::Caller {
+        space_id: parent.id.clone(),
+        execution: None,
+    };
+    let waiting = QueueRequest {
+        blockers: vec![crate::model::Blocker::Space(blocker.id.to_string())],
+        ..request(&repo, "later", false)
+    };
+    let admission = manager.queue_add_as(waiting, Some(&caller)).await.unwrap();
+    let entry = admission.entry.unwrap();
+    assert_eq!(entry.queued_by.as_ref(), Some(&parent.id));
+    assert!(manager.has_queued_launch(&parent.id).await.unwrap());
+    // The space that queued it reaches it, as the user does; others do not.
+    let reached = manager.reachable_queue(Some(&caller)).await.unwrap();
+    assert!(reached.iter().any(|reached| reached.id == entry.id));
+    let sibling = crate::daemon::scope::Caller {
+        space_id: blocker.id.clone(),
+        execution: None,
+    };
+    let reached = manager.reachable_queue(Some(&sibling)).await.unwrap();
+    assert!(reached.iter().all(|reached| reached.id != entry.id));
+    // Removing the space removes the launch with it.
+    let parent_id = parent.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("DELETE FROM workspaces WHERE id=?1", [&parent_id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(manager.queue_entries().await.unwrap().is_empty());
 }
 
 #[tokio::test]

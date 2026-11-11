@@ -19,7 +19,7 @@ use crate::client::{
     time::UnixTime,
 };
 use crate::{
-    daemon::{notifications::NotificationKind, workspace::Manager},
+    daemon::{notifications::NotificationKind, scope::Caller, workspace::Manager},
     model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan},
     state::{QueueKind, QueueState},
 };
@@ -27,9 +27,19 @@ use crate::{
 impl Manager {
     /// Admit `request` to a free slot or queue it. A launch that no limit
     /// applies to and that nothing blocks starts untracked; one
-    /// admitted here starts in the caller, except a launch in an existing
-    /// workspace, which the daemon always starts.
+    /// admitted here starts in the caller, except one the daemon starts.
     pub async fn queue_add(&self, request: QueueRequest) -> Result<QueueAdmission> {
+        self.queue_add_as(request, None).await
+    }
+
+    /// [`Self::queue_add`] for `caller`. A scoped caller's launch of a new
+    /// workspace opens it in the caller's scope, and the daemon starts it,
+    /// as it starts a launch in an existing workspace.
+    pub(in crate::daemon) async fn queue_add_as(
+        &self,
+        request: QueueRequest,
+        caller: Option<&Caller>,
+    ) -> Result<QueueAdmission> {
         ensure!(
             !request.now || request.blockers.is_empty(),
             "a launch that starts now cannot be blocked"
@@ -39,12 +49,17 @@ impl Manager {
             Some(workspace) => Some(self.launch_target(workspace, &repository.id).await?),
             None => None,
         };
+        let scope = match target {
+            Some(_) => None,
+            None => caller.map(|caller| caller.space_id.clone()),
+        };
         let _gate = self.agent_queue.lock_admission().await;
         // Whether any limit applies does not depend on the slots in use.
         let limits = self
             .agent_limits(vec![repository.id.clone()], &[], &[])
             .await?;
-        if target.is_none() && request.blockers.is_empty() && !limits.apply_to(&repository.id) {
+        let detached = target.is_some() || scope.is_some();
+        if !detached && request.blockers.is_empty() && !limits.apply_to(&repository.id) {
             return Ok(QueueAdmission {
                 start: true,
                 entry: None,
@@ -68,8 +83,8 @@ impl Manager {
             request,
             state,
             opens: target,
+            scope,
         };
-        let detached = launch.opens.is_some();
         let now = launch.request.now;
         self.store
             .write(move |tx| insert_launch(tx, &launch))
@@ -307,18 +322,48 @@ impl Manager {
         Ok(())
     }
 
-    /// Whether an agent launch in the workspace waits in the queue or starts.
-    pub(crate) async fn has_queued_launch(&self, workspace_id: &SpaceId) -> Result<bool> {
-        let workspace_id = workspace_id.to_owned();
+    /// Whether an agent launch in the space, or one its scoped process
+    /// queued that has not opened its workspace, waits in the queue or
+    /// starts.
+    pub(crate) async fn has_queued_launch(&self, space_id: &SpaceId) -> Result<bool> {
+        let space_id = space_id.to_owned();
         self.store
             .run(move |db| {
                 crate::daemon::store::exists(
                     db,
-                    "SELECT 1 FROM agent_queue WHERE (workspace_id=?1 OR opens_workspace_id=?1) AND kind=?2",
-                    params![workspace_id, QueueKind::Launch],
+                    "SELECT 1 FROM agent_queue WHERE kind=?2 AND (workspace_id=?1 OR opens_workspace_id=?1
+                        OR (scope_space_id=?1 AND workspace_id IS NULL))",
+                    params![space_id, QueueKind::Launch],
                 )
             })
             .await
+    }
+
+    /// The caller as which the launch of the starting entry `id` opens its
+    /// workspace: the space whose scoped process queued it, or none for a
+    /// launch of the user's.
+    pub(in crate::daemon) async fn queued_scope(
+        &self,
+        id: &QueueEntryId,
+    ) -> Result<Option<Caller>> {
+        let id = id.to_owned();
+        let scope: Option<Option<SpaceId>> = self
+            .store
+            .run(move |db| {
+                Ok(db
+                    .query_row(
+                        "SELECT scope_space_id FROM agent_queue WHERE id=?1 AND state=?2",
+                        params![id, QueueState::Starting],
+                        |row| row.get(0),
+                    )
+                    .optional()?)
+            })
+            .await?;
+        let scope = scope.context("the queue entry no longer starts")?;
+        Ok(scope.map(|space_id| Caller {
+            space_id,
+            execution: None,
+        }))
     }
 
     /// The workspaces in which an agent launch or restore waits in the queue

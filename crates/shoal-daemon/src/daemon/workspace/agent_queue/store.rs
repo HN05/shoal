@@ -58,6 +58,9 @@ pub(super) struct Launch {
     pub state: QueueState,
     /// The existing workspace the launch opens.
     pub opens: Option<SpaceId>,
+    /// The space whose scoped process queued the launch of a new
+    /// workspace, in whose scope the launch opens it.
+    pub scope: Option<SpaceId>,
 }
 
 /// The branch the launch `plan` creates or opens, if it names one.
@@ -106,8 +109,8 @@ pub(super) fn insert_launch(tx: &rusqlite::Transaction<'_>, launch: &Launch) -> 
     );
     let now = UnixTime::now();
     tx.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing,scope_space_id)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
         params![
             launch.id,
             QueueKind::Launch,
@@ -123,6 +126,7 @@ pub(super) fn insert_launch(tx: &rusqlite::Transaction<'_>, launch: &Launch) -> 
             launch.opens,
             request.mode,
             crate::daemon::store::narrowing_column(&request.narrowing)?,
+            launch.scope,
         ],
     )?;
     blockers::record(tx, &launch.id, &launch.repository, &request.blockers)?;
@@ -168,7 +172,7 @@ pub(super) fn record_waiting_restore(
     )?)
 }
 
-pub(super) const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,mode,narrowing,issue_title,state,created_at,workspace_id,execution_id,opens_workspace_id,base_branch,job";
+pub(super) const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,mode,narrowing,issue_title,state,created_at,workspace_id,execution_id,opens_workspace_id,base_branch,job,scope_space_id";
 
 pub(super) fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
     Ok(QueueEntry {
@@ -186,6 +190,7 @@ pub(super) fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         workspace_id: row.get("workspace_id")?,
         execution: row.get("execution_id")?,
         opens: row.get("opens_workspace_id")?,
+        queued_by: row.get("scope_space_id")?,
         blockers: Vec::new(),
         waits_for_update: false,
         base: row.get("base_branch")?,

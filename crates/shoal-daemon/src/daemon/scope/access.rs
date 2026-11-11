@@ -2,6 +2,7 @@
 //! scope allows.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
+use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, ensure};
 
 use super::Caller;
@@ -297,7 +298,8 @@ impl Manager {
     }
 
     /// The agent queue entries `caller` may act on: those for the
-    /// workspaces its scope reaches but its own, where it may queue agents.
+    /// workspaces its scope reaches but its own, where it may queue agents,
+    /// and the launches of new workspaces that spaces it reaches queued.
     pub(in crate::daemon) async fn reachable_queue(
         &self,
         caller: Option<&Caller>,
@@ -305,35 +307,51 @@ impl Manager {
         let mut entries = self.queue_entries().await?;
         if let Some(caller) = caller {
             let reached = self.reached_spaces(Some(caller)).await?;
-            entries.retain(|entry| {
-                entry.workspace().is_some_and(|workspace| {
-                    workspace != &caller.space_id
-                        && reached
-                            .as_ref()
-                            .is_none_or(|reached| reached.iter().any(|id| id == workspace))
-                })
+            let reaches = |space: &SpaceId| {
+                (reached.as_ref()).is_none_or(|reached| reached.iter().any(|id| id == space))
+            };
+            entries.retain(|entry| match entry.workspace() {
+                Some(workspace) => workspace != &caller.space_id && reaches(workspace),
+                None => entry.queued_by.as_ref().is_some_and(reaches),
             });
         }
         Ok(entries)
     }
 
     /// The workspace `request` starts an agent in, which must be one below
-    /// the caller's, refusing a start regardless of the limits.
+    /// the caller's, or none for the launch of a new workspace in the
+    /// caller's repository, which opens it in the caller's scope; a start
+    /// regardless of the limits is refused.
     pub(in crate::daemon) async fn queue_target<'a>(
         &self,
         caller: &Caller,
         request: &'a mut QueueRequest,
-    ) -> Result<&'a mut SpaceSelector> {
+    ) -> Result<Option<&'a mut SpaceSelector>> {
         const REFUSAL: &str =
             "workspace processes can start agents only in the workspaces split from theirs";
         ensure!(!request.now, NOT_NOW);
+        if request.workspace.is_none() {
+            self.confine_new_launch(caller, request).await?;
+            return Ok(None);
+        }
         let given = request.narrowing;
         let mode = (request.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT);
         let target = request.workspace.as_mut().context(REFUSAL)?;
         let target = self.workspace_below(caller, target, REFUSAL).await?;
         let giver = Some(&caller.space_id);
         (self.ensure_workspace_agent_held(giver, target, &mode, &given)).await?;
-        Ok(target)
+        Ok(Some(target))
+    }
+
+    /// Confine `caller`'s launch of a new workspace to its own repository,
+    /// with only the permissions its own space holds.
+    async fn confine_new_launch(&self, caller: &Caller, request: &mut QueueRequest) -> Result<()> {
+        const REFUSAL: &str = "workspace processes start agents only in their own repository";
+        let repository = &request.repository;
+        request.repository = self.own_repository(caller, repository, REFUSAL).await?;
+        let repository = self.repository(&request.repository).await?.id;
+        let giver = Some(&caller.space_id);
+        (self.ensure_caller_holds(giver, &request.narrowing, Some(&repository))).await
     }
 
     /// Question `number` for the caller to answer, which must be one of a

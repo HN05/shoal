@@ -104,6 +104,8 @@ pub struct NewWorkspace {
     pub pr: Option<String>,
     /// The agent its preparation queues.
     pub agent: Option<Box<QueuedLaunch>>,
+    /// The starting queue entry whose launch opens it.
+    pub queue_entry: Option<crate::queue::QueueEntryId>,
 }
 
 impl NewWorkspace {
@@ -121,6 +123,7 @@ impl NewWorkspace {
             issue: None,
             pr: None,
             agent: None,
+            queue_entry: None,
         }
     }
 }
@@ -142,6 +145,7 @@ pub async fn start_workspace(
         issue,
         pr,
         agent,
+        queue_entry,
     } = workspace;
     let method = OperationMethod::StartWorkspace {
         repository,
@@ -155,6 +159,7 @@ pub async fn start_workspace(
         pr,
         agent,
         env: Some(env),
+        queue_entry,
     };
     connection::request(daemon, method).await
 }

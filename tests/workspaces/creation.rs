@@ -1838,6 +1838,7 @@ fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
             issue: Some("316".into()),
             pr: None,
             agent: None,
+            queue_entry: None,
         };
         let refused = runtime.block_on(connection::request::<StartedWorkspace>(&app, create));
         assert!(refused.is_err(), "expected a refusal: {refused:?}");
@@ -1870,6 +1871,7 @@ fn an_apps_workspace_on_an_issue_takes_its_title_without_a_name() {
         issue: Some("316".into()),
         pr: None,
         agent: None,
+        queue_entry: None,
     };
 
     let started = runtime
@@ -1924,6 +1926,7 @@ fn an_app_follows_the_setup_of_a_workspace_it_creates() {
             issue: None,
             pr: None,
             agent: None,
+            queue_entry: None,
         };
         runtime
             .block_on(shoal_client::connection::request::<StartedWorkspace>(

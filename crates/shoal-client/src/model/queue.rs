@@ -41,6 +41,10 @@ pub struct QueueEntry {
     /// The existing workspace a launch in it opens, known when it is queued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opens: Option<SpaceId>,
+    /// The space whose agent queued a launch of a new workspace, which the
+    /// launch opens in that space's scope.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queued_by: Option<SpaceId>,
     /// What still blocks a waiting launch: workspace and queued launch
     /// names and issue URLs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

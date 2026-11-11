@@ -30,7 +30,7 @@ pub(super) async fn handle(
             prompt,
         } => Body::QueueEntry(manager.queue_agent(&workspace, agent, prompt).await?),
         QueueMethod::QueueAdd { request } => {
-            Body::QueueAdmission(manager.queue_add(request).await?)
+            Body::QueueAdmission(manager.queue_add_as(request, caller).await?)
         }
         QueueMethod::ListQueue => Body::QueueEntries(manager.visible_queue().await?),
         QueueMethod::QueuedPlan { entry } => Body::QueuedPlan(manager.queued_plan(&entry).await?),
@@ -86,7 +86,7 @@ impl Scoped for QueueMethod {
             QueueMethod::ListQueue
             | QueueMethod::QueueRemove { .. }
             | QueueMethod::QueueMove { .. } => None,
-            QueueMethod::QueueAdd { request } => Some(manager.queue_target(caller, request).await?),
+            QueueMethod::QueueAdd { request } => manager.queue_target(caller, request).await?,
             QueueMethod::QueueAgent { workspace, .. } => {
                 const REFUSAL: &str =
                     "workspace processes can start agents only in the workspaces split from theirs";

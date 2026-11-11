@@ -15,7 +15,7 @@ use super::super::{
     scope::{Caller, Scoped, denied},
     workspace::{Manager, NewWorkspace},
 };
-use crate::client::space_names::SpaceSelector;
+use crate::client::{queue::QueueEntryId, space_names::SpaceSelector};
 use crate::protocol::{
     Body, ErrorCode, OperationMethod, Response,
     operations::{Started, WorkspaceStart},
@@ -43,17 +43,23 @@ pub(super) async fn handle(
         }
         OperationMethod::StartWorkspace {
             repository,
-            start,
+            mut start,
             base,
             path,
             git_profile,
-            parent,
+            mut parent,
             options,
             issue,
             pr,
             agent,
             env,
+            queue_entry,
         } => {
+            let queued = match caller {
+                Some(_) => None,
+                None => queued_start(manager, queue_entry, &mut parent, &mut start).await?,
+            };
+            let caller = caller.or(queued.as_ref());
             let opening = Opening {
                 start,
                 base,
@@ -156,19 +162,8 @@ impl Scoped for OperationMethod {
                 }
                 Some(workspace)
             }
-            // Only the user reopens a recorded workspace for a launch.
-            OperationMethod::StartWorkspace {
-                start: WorkspaceStart::Workspace(_),
-                ..
-            } => return Err(denied()),
-            // A scoped caller opens workspaces only in its own tree, below
-            // its own space unless it names one below it, which must be in
-            // their repository.
             OperationMethod::StartWorkspace { parent, start, .. } => {
-                manager.parent_below(caller, parent).await?;
-                if let WorkspaceStart::Copy { source, .. } = start {
-                    manager.copy_within(caller, source).await?;
-                }
+                confine_start(manager, caller, parent, start).await?;
                 None
             }
             // An agent converts only its own space, which the conversion
@@ -182,6 +177,42 @@ impl Scoped for OperationMethod {
             }
         })
     }
+}
+
+/// The scope the user's process opens a workspace in for the launch of
+/// queue entry `entry`: that of the space whose scoped process queued it,
+/// to which the start is confined, or the user's own for any other.
+async fn queued_start(
+    manager: &Manager,
+    entry: Option<QueueEntryId>,
+    parent: &mut Option<SpaceSelector>,
+    start: &mut WorkspaceStart,
+) -> Result<Option<Caller>> {
+    let Some(entry) = entry else {
+        return Ok(None);
+    };
+    let Some(queued) = manager.queued_scope(&entry).await? else {
+        return Ok(None);
+    };
+    confine_start(manager, &queued, parent, start).await?;
+    Ok(Some(queued))
+}
+
+/// Confine a workspace start of `caller` to its own tree: below its own
+/// space unless `parent` names one below it, from a copy of a workspace it
+/// reaches. Only the user reopens a recorded workspace for a launch.
+async fn confine_start(
+    manager: &Manager,
+    caller: &Caller,
+    parent: &mut Option<SpaceSelector>,
+    start: &mut WorkspaceStart,
+) -> Result<()> {
+    match start {
+        WorkspaceStart::Workspace(_) => return Err(denied()),
+        WorkspaceStart::Copy { source, .. } => manager.copy_within(caller, source).await?,
+        _ => {}
+    }
+    manager.parent_below(caller, parent).await
 }
 
 /// Who follows an operation: the scope token it sent, which must stay

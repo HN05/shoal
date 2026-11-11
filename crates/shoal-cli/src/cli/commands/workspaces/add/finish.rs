@@ -128,6 +128,7 @@ pub(super) async fn add_planned(
         parent: parent.or(chat.map(SpaceSelector::Id)),
         workspace,
         agent: launch.clone(),
+        queue_entry: queue_entry.clone(),
     };
     let started = start_add_workspace(ctx, &target, start, issue.as_ref()).await?;
     if let Some(entry) = &queue_entry {
@@ -273,6 +274,8 @@ struct AddStart {
     workspace: Option<SpaceId>,
     /// The agent its preparation queues.
     agent: Option<Box<QueuedLaunch>>,
+    /// The starting queue entry whose launch opens it.
+    queue_entry: Option<QueueEntryId>,
 }
 
 /// Open the planned workspace, assigned `issue`, and start preparing it.
@@ -284,6 +287,7 @@ async fn start_add_workspace(
         parent,
         workspace,
         agent,
+        queue_entry,
     }: AddStart,
     issue: Option<&issues::Issue>,
 ) -> Result<StartedWorkspace> {
@@ -324,6 +328,7 @@ async fn start_add_workspace(
         issue: issue.map(|issue| issue.url.clone()),
         pr,
         agent,
+        queue_entry,
     };
     let env = crate::env::without_secrets();
     let started = crate::client::operations::start_workspace(&ctx.paths, new, env);
