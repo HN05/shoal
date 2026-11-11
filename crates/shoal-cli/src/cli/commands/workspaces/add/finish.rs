@@ -334,6 +334,7 @@ async fn start_add_workspace<'c>(
         options,
         pull_head,
         copy,
+        typed,
     } = creation;
     let start = match (workspace, pull_head, existing, copy) {
         (Some(workspace), ..) => WorkspaceStart::Workspace(SpaceSelector::Id(workspace)),
@@ -345,9 +346,14 @@ async fn start_add_workspace<'c>(
         (None, None, None, Some(copy)) => WorkspaceStart::Copy {
             source: copy.source,
             branch,
+            typed,
         },
         (None, None, None, None) => {
-            WorkspaceStart::Name(branch.context("a branch name is required")?)
+            let branch = branch.context("a branch name is required")?;
+            match typed {
+                true => WorkspaceStart::Typed(branch),
+                false => WorkspaceStart::Name(branch),
+            }
         }
     };
     let new = NewWorkspace {

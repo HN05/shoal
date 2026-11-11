@@ -36,6 +36,10 @@ pub struct Creation {
     /// after the copied one's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copy: Option<CopyCreation>,
+    /// `branch` is the user's own name, which the new branch takes exactly
+    /// or is refused, rather than a name Shoal derived and may suffix.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub typed: bool,
 }
 
 /// The workspace a new one copies, and the name the copy takes without a

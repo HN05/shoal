@@ -135,6 +135,28 @@ async fn a_copy_s_name_stays_its_requested_one() {
 }
 
 #[tokio::test]
+async fn a_copy_on_a_typed_branch_is_refused_rather_than_suffixed() {
+    let f = Fixture::new().await;
+    git(&f.source.path, &["branch", "taken"]);
+    let source = CopySource {
+        workspace: SpaceSelector::id(&f.source.id),
+        checkpoint: None,
+    };
+    let typed = |branch: &str| {
+        let new = NewWorkspace {
+            exact_branch: true,
+            ..NewWorkspace::default()
+        };
+        let place = CopyPlace::Branch(Some(branch.into()));
+        let repository = (&f.source.repository_id).into();
+        f.manager.create_copy(repository, &source, place, new)
+    };
+    typed("taken").await.unwrap_err();
+    let copy = typed("fresh").await.unwrap();
+    assert_eq!(copy.branch.as_deref(), Some("fresh"));
+}
+
+#[tokio::test]
 async fn a_copy_takes_the_suffix_its_branch_takes_on_a_parent_component() {
     let f = Fixture::new().await;
     let repository = f.source.repository_id.clone();

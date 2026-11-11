@@ -240,7 +240,12 @@ impl Manager {
         let branch = match place {
             CopyPlace::Branch(_) => {
                 git::check_branch_name(Some(&repo.path), &requested).await?;
-                Some(self.available_branch(repo, &requested).await?)
+                let branch = self.available_branch(repo, &requested).await?;
+                ensure!(
+                    !new.exact_branch || branch == requested,
+                    "branch {requested} conflicts with an existing branch or workspace; name another"
+                );
+                Some(branch)
             }
             CopyPlace::Commit => None,
         };

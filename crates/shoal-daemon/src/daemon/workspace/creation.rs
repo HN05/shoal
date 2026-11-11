@@ -31,6 +31,9 @@ pub(crate) struct NewWorkspace<'a> {
     /// The chat it replaces, taking its ID, number, name and place in the
     /// tree, instead of going below `parent`.
     pub converts: Option<crate::daemon::conversions::Converting>,
+    /// Its new branch takes exactly the requested name, which a taken name
+    /// refuses instead of suffixing.
+    pub exact_branch: bool,
 }
 
 /// A worktree Git created and Shoal configured, which settling seeds.
@@ -71,6 +74,10 @@ impl Manager {
         let (repo, git) = self.lock_repository(repository).await?;
         git::check_branch_name(Some(&repo.path), &name).await?;
         let branch = self.available_branch(&repo, &name).await?;
+        ensure!(
+            !new.exact_branch || branch == name,
+            "branch {name} conflicts with an existing branch or workspace; name another"
+        );
         self.create_branch_workspace(
             &repo,
             name,
@@ -144,6 +151,7 @@ impl Manager {
             options,
             parent: below,
             converts,
+            exact_branch: _,
         } = new;
         let existing = match &source {
             WorkspaceSource::Existing { .. } => Some(branch.as_str()),

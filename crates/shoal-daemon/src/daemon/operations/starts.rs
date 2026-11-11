@@ -226,14 +226,32 @@ impl Manager {
                     reused: false,
                 })
             }
+            WorkspaceStart::Typed(name) => {
+                let new = NewWorkspace {
+                    exact_branch: true,
+                    ..new
+                };
+                let workspace = self
+                    .create_workspace_below(repository, name, base, new, parent)
+                    .await?;
+                Ok(OpenedWorkspace {
+                    workspace,
+                    reused: false,
+                })
+            }
             WorkspaceStart::Branch(branch) => {
                 self.open_branch_below(repository, &branch, base, new, parent, caller)
                     .await
             }
-            WorkspaceStart::Copy { source, branch } => {
+            WorkspaceStart::Copy {
+                source,
+                branch,
+                typed,
+            } => {
                 ensure!(base.is_none(), "a copy starts from its source, not a base");
                 let new = NewWorkspace {
                     parent: parent.clone(),
+                    exact_branch: typed,
                     ..new
                 };
                 let place = CopyPlace::Branch(branch);

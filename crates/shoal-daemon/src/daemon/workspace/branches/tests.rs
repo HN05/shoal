@@ -124,6 +124,27 @@ async fn names_suffix_only_conflicts_and_serialize_concurrent_adds() {
 }
 
 #[tokio::test]
+async fn a_typed_name_is_refused_rather_than_suffixed() {
+    let f = Fixture::new().await;
+    let typed = |name: &str| {
+        let new = crate::daemon::workspace::NewWorkspace {
+            exact_branch: true,
+            ..Default::default()
+        };
+        f.manager
+            .create_workspace_with(&f.repo_id, name.into(), None, new)
+    };
+    assert_eq!(typed("free").await.unwrap().branch.as_deref(), Some("free"));
+    git(&f.repo, &["branch", "taken"]);
+    for name in ["taken", "taken/below", "HEAD"] {
+        typed(name).await.unwrap_err();
+    }
+    // The two of a race take one name: one creates it, the other is refused.
+    let (first, second) = tokio::join!(typed("raced"), typed("raced"));
+    assert_ne!(first.is_ok(), second.is_ok());
+}
+
+#[tokio::test]
 async fn remote_default_controls_creation_diff_and_removal() {
     for branch in ["develop", "release/current"] {
         let f = Fixture::new().await;

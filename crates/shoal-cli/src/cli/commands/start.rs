@@ -572,6 +572,7 @@ async fn in_new_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> R
         // exists, or one a workspace has.
         branch: args.branch,
         existing: None,
+        typed: false,
         base: args.base,
         git_profile: args.git_profile,
         pr: None,

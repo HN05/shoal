@@ -62,6 +62,7 @@ pub(super) async fn settle(
         "branch {name} conflicts with an existing branch or workspace; name another"
     );
     creation.branch = Some(name);
+    creation.typed = true;
     Ok(None)
 }
 

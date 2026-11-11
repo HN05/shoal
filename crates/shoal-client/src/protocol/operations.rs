@@ -139,6 +139,9 @@ pub struct Started {
 pub enum WorkspaceStart {
     /// A new branch of this name, from the request's `base`.
     Name(String),
+    /// A new branch of exactly this name, as the user typed it, from the
+    /// request's `base`; refused rather than suffixed when the name is taken.
+    Typed(String),
     /// An existing branch, local or remote, reopening the workspace on it.
     Branch(String),
     /// PR `url`'s head, at a commit, reopening the workspace made for the
@@ -150,6 +153,10 @@ pub enum WorkspaceStart {
         source: super::CopySource,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         branch: Option<String>,
+        /// `branch` is the user's own name, which the copy's branch takes
+        /// exactly or is refused, as [`Self::Typed`] does.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        typed: bool,
     },
     /// The recorded workspace of the repository this selector names,
     /// reopened for a launch in it, never created again; it takes no base,
