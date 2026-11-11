@@ -27,11 +27,17 @@ def version_parts(version):
 
 def manifest_version(manifest):
     """Shoal's version in *manifest*, the parsed root Cargo.toml: the shoal
-    package inherits it from the workspace with the packages built into it."""
+    package inherits it from the workspace with the packages built into it,
+    or, at tags made before they shared it, states its own."""
     package = manifest["package"]
-    if package["name"] != "shoal" or package.get("version") != {"workspace": True}:
-        raise ValueError("expected the shoal package to inherit the workspace version")
-    return manifest["workspace"]["package"]["version"]
+    if package["name"] != "shoal":
+        raise ValueError("expected the shoal package")
+    version = package.get("version")
+    if version == {"workspace": True}:
+        return manifest["workspace"]["package"]["version"]
+    if isinstance(version, str):
+        return version
+    raise ValueError("expected a version for the shoal package")
 
 
 def tag_version(tag):

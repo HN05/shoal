@@ -12,6 +12,17 @@ class ReleaseMetadataTests(unittest.TestCase):
         self.assertEqual(metadata.http_error_message(error),
                          "HTTP 422 Unprocessable Entity: asset already exists")
 
+    def test_manifest_version_reads_the_inherited_or_the_package_version(self):
+        inherited = {"workspace": {"package": {"version": "0.16.0"}},
+                     "package": {"name": "shoal", "version": {"workspace": True}}}
+        self.assertEqual(metadata.manifest_version(inherited), "0.16.0")
+        own = {"package": {"name": "shoal", "version": "0.15.8"}}
+        self.assertEqual(metadata.manifest_version(own), "0.15.8")
+        for invalid in ({"package": {"name": "other", "version": "0.15.8"}},
+                        {"package": {"name": "shoal"}}):
+            with self.subTest(manifest=invalid), self.assertRaises(ValueError):
+                metadata.manifest_version(invalid)
+
     def test_stable_version_and_tag_round_trip(self):
         for version, parts in (("0.0.0", (0, 0, 0)), ("12.34.56", (12, 34, 56))):
             with self.subTest(version=version):
