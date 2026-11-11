@@ -5188,8 +5188,11 @@ the space's blockers and cancels the restore. The waiting restore keeps the
 space from cleanup, as other automatic restores do. A chat's agent stops the
 same way: Shoal saves the chat to come back on its own, which waits while it
 is blocked, then restores it in a background place, as `shoal restart` does,
-provided its session can be resumed; `shoal done` on such a chat records its
-completion and keeps it stopped for `shoal resume`.
+provided its session can be resumed and no work it started still runs
+outside its agent's process group; `shoal done` on such a chat records its
+completion and keeps it stopped for `shoal resume`. A restored chat with
+messages waiting starts its first turn with the prompt that delivers them, as
+a workspace agent's wrapper wakes it.
 
 `status` shows a `Progress` section with the status line and the numbered
 steps, marking the current one, and `list` shows how many steps are done with

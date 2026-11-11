@@ -184,6 +184,8 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let args = fs::read_to_string(home.join("chat-args")).unwrap();
     assert!(args.contains("--resume\nchat-session\n"), "{args}");
+    // Nothing waits for it, so it starts no turn of its own.
+    assert!(!args.contains("Shoal: new messages"), "{args}");
     assert_eq!(fs::read_to_string(home.join("chat-id")).unwrap().trim(), id);
     assert_eq!(
         fs::read_to_string(home.join("chat-tmpdir")).unwrap().trim(),
@@ -2199,4 +2201,29 @@ fn a_name_request_reaches_the_chats_agent() {
     fixture.add("worker");
     let output = scoped_command(&fixture, "worker", &["rename", "--request", "talk"]);
     assert!(!output.status.success(), "{output:?}");
+}
+
+#[test]
+fn a_restored_chat_with_messages_waiting_starts_a_turn_for_them() {
+    let fixture = chat_session_fixture();
+    let home = fixture.root.path().to_owned();
+    save_running_chat(&fixture, |fixture| {
+        let output = fixture.run(&["stop", "talk"]);
+        assert!(output.status.success(), "{output:?}");
+    });
+    let output = fixture.run(&[
+        "messages",
+        "send",
+        "--space",
+        "talk",
+        "What blocked you cleared",
+    ]);
+    assert!(output.status.success(), "{output:?}");
+
+    let (output, transcript) =
+        fixture.interactive_command(fixture.command().args(["resume", "talk", "--focus"]), "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let args = fs::read_to_string(home.join("chat-args")).unwrap();
+    assert!(args.contains("--resume\nchat-session\n"), "{args}");
+    assert!(args.contains("Shoal: new messages"), "{args}");
 }

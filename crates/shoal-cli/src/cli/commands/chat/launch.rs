@@ -103,7 +103,10 @@ impl Launch {
         let topic = restored(ctx, topic, options.restore.as_ref(), &home).await?;
         let name = initial_name(&topic, options.name.clone());
         let settings = crate::client::workspaces::settings(&ctx.paths, repo.config()).await?;
-        let chat = command::chat_launch(settings, &agent, repo, &topic, &options, name)?;
+        let mut chat = command::chat_launch(settings, &agent, repo, &topic, &options, name)?;
+        if chat.opening.is_none() {
+            chat.opening = waiting_prompt(ctx, options.restore.as_ref()).await?;
+        }
         Ok(Self {
             agent,
             chat,
@@ -259,6 +262,18 @@ impl Launch {
         let git = crate::agent_git::Launch::agent_logins(&ctx.paths)?;
         exec_agent(ctx, home.path(), chat, &token, &command, &profile, &git)
     }
+}
+
+/// The prompt a restored chat, told nothing new, starts its first turn
+/// with when messages wait for it, as a workspace agent's wrapper wakes it:
+/// the prompt's hook delivers them. A chat's agent has no wrapper, and the
+/// hook that wakes it runs only once a turn ended.
+async fn waiting_prompt(ctx: &Context, restore: Option<&SpaceId>) -> Result<Option<String>> {
+    let Some(chat) = restore else {
+        return Ok(None);
+    };
+    let waiting = crate::client::agent_messages::undelivered(&ctx.paths, SpaceSelector::id(chat));
+    Ok((!waiting.await?.is_empty()).then(|| crate::terminal::WAKE_PROMPT.to_owned()))
 }
 
 /// `topic`, for a chat that restores the saved chat `restore` in `home`, as
