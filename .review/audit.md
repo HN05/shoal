@@ -31,22 +31,35 @@ Every run audits the entire application: `src`, `crates`, `tests`, `.forgejo`
 and `scripts`. Do not narrow the audit to a subset. Partition it among workers
 by these areas, giving any path not listed to the closest one:
 
-- Workspaces, ownership and removal: `src/daemon/workspace`, `src/daemon/cleanup`,
-  `crates/shoal-core/src/removal`, `crates/shoal-core/src/git`, `crates/shoal-client/src/repository.rs`
-- Daemon lifecycle, persisted state and recovery: `src/daemon.rs`,
-  `src/daemon/store`, `src/daemon/recovery`, `crates/shoal-core/src/daemon_handoff.rs`,
-  `src/daemon/auto_update.rs`, `crates/shoal-client/src/state.rs`,
-  `crates/shoal-client/src/protocol.rs`
-- Execution wrapper, tracked processes and agents: `crates/shoal-core/src/execution`,
-  `crates/shoal-core/src/process`, `src/daemon/execution_*`, `src/daemon/agent_*`,
-  `crates/shoal-core/src/agents`, `crates/shoal-core/src/happy`
-- Resources and access: `src/daemon/ports`, `src/daemon/resources`, `src/daemon/sim`,
-  `src/daemon/approvals`, `src/daemon/scope.rs`, `crates/shoal-core/src/secrets.rs`
+- Workspaces, ownership and removal:
+  `crates/shoal-daemon/src/daemon/workspace`,
+  `crates/shoal-daemon/src/daemon/cleanup`, `crates/shoal-core/src/removal`,
+  `crates/shoal-core/src/git`, `crates/shoal-client/src/repository.rs`
+- Daemon lifecycle, persisted state and recovery:
+  `crates/shoal-daemon/src/daemon.rs`, `crates/shoal-daemon/src/daemon/store`,
+  `crates/shoal-daemon/src/daemon/recovery`,
+  `crates/shoal-core/src/daemon_handoff.rs`,
+  `crates/shoal-daemon/src/daemon/auto_update.rs`,
+  `crates/shoal-client/src/state.rs`, `crates/shoal-client/src/protocol.rs`
+- Execution wrapper, tracked processes and agents:
+  `crates/shoal-core/src/execution`, `crates/shoal-core/src/process`,
+  `crates/shoal-daemon/src/daemon/execution_*`,
+  `crates/shoal-daemon/src/daemon/agent_*`, `crates/shoal-core/src/agents`,
+  `crates/shoal-core/src/happy`
+- Resources and access: `crates/shoal-daemon/src/daemon/ports`,
+  `crates/shoal-daemon/src/daemon/resources`,
+  `crates/shoal-daemon/src/daemon/sim`,
+  `crates/shoal-daemon/src/daemon/approvals`,
+  `crates/shoal-daemon/src/daemon/scope.rs`,
+  `crates/shoal-core/src/secrets.rs`
 - Forge integration, links, events and messages: `crates/shoal-forge`,
-  `src/daemon/links`, `src/daemon/events`, `src/daemon/questions`,
-  `src/daemon/chats`
-- CLI and configuration: `src/cli`, `crates/shoal-client/src/config`,
-  `crates/shoal-core/src/presets`, `src/seed`, `crates/shoal-core/src/transfer`
+  `crates/shoal-daemon/src/daemon/links`,
+  `crates/shoal-daemon/src/daemon/events`,
+  `crates/shoal-daemon/src/daemon/questions`,
+  `crates/shoal-daemon/src/daemon/chats`
+- CLI and configuration: `crates/shoal-cli/src/cli`,
+  `crates/shoal-client/src/config`, `crates/shoal-core/src/presets`,
+  `crates/shoal-daemon/src/seed`, `crates/shoal-core/src/transfer`
 - Tests, CI and release tooling: `tests`, `crates/shoal-subprocess`,
   `.forgejo`, `scripts`
 

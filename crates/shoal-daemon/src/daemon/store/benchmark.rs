@@ -1,6 +1,7 @@
 //! Opt-in storage benchmark: cargo test --release connection_setup -- --ignored --nocapture
 use super::*;
 use crate::client::space_ids::SpaceId;
+use shoal_core::outln;
 use std::{
     sync::{
         Arc, Mutex,

@@ -69,7 +69,10 @@ impl Fixture {
         .unwrap();
         if fake_sim {
             let script = root.path().join("bin/xcrun");
-            install_test_script(&script, include_str!("../fixtures/simctl.py"));
+            install_test_script(
+                &script,
+                include_str!("../../crates/shoal-daemon/tests/fixtures/simctl.py"),
+            );
         }
         // Forge requests reach only the scripted forge, which answers none
         // until a test scripts it.

@@ -10,11 +10,11 @@ nextest-version = "0.9.91"
 
 [test-groups]
 # The overload fixture's ownership scans cover the whole process table, so its
-# tests take turns through a file lock (src/daemon/test_support/overload.rs).
+# tests take turns through a file lock (crates/shoal-daemon/src/daemon/test_support/overload.rs).
 overload-fixture = { max-threads = 1 }
 
 [[profile.default.overrides]]
-filter = 'package(shoal) & kind(bin) & test(/^daemon::overload_tests::/)'
+filter = 'package(shoal-daemon) & kind(lib) & test(/^daemon::overload_tests::/)'
 test-group = 'overload-fixture'
 # They run one after another for minutes; starting them first keeps them from
 # becoming the run's tail.

@@ -1254,28 +1254,44 @@ version = "0.15.8"
 dependencies = [
  "anyhow",
  "base64",
- "clap",
- "clap_complete",
  "fs2",
- "futures-util",
  "libc",
  "rusqlite",
- "rustix",
- "serde",
  "serde_json",
  "sha2",
+ "shoal-cli",
  "shoal-client",
- "shoal-config-derive",
- "shoal-core",
+ "shoal-daemon",
  "shoal-forge",
- "shoal-subprocess",
  "socket2",
  "tempfile",
  "tokio",
  "toml",
  "toml_edit",
  "uuid",
- "zbus",
+]
+
+[[package]]
+name = "shoal-cli"
+version = "0.15.8"
+dependencies = [
+ "anyhow",
+ "clap",
+ "clap_complete",
+ "fs2",
+ "futures-util",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2",
+ "shoal-client",
+ "shoal-core",
+ "shoal-forge",
+ "shoal-subprocess",
+ "tempfile",
+ "tokio",
+ "toml",
+ "uuid",
 ]
 
 [[package]]
@@ -1338,6 +1354,32 @@ dependencies = [
  "toml",
  "toml_edit",
  "uuid",
+]
+
+[[package]]
+name = "shoal-daemon"
+version = "0.15.8"
+dependencies = [
+ "anyhow",
+ "fs2",
+ "futures-util",
+ "libc",
+ "rusqlite",
+ "rustix",
+ "serde",
+ "serde_json",
+ "sha2",
+ "shoal-client",
+ "shoal-core",
+ "shoal-forge",
+ "shoal-subprocess",
+ "socket2",
+ "tempfile",
+ "tokio",
+ "toml",
+ "toml_edit",
+ "uuid",
+ "zbus",
 ]
 
 [[package]]

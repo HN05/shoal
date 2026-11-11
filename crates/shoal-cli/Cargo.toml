@@ -1,0 +1,34 @@
+[package]
+name = "shoal-cli"
+version.workspace = true
+# The CLI's help shows this description.
+description = "Local workspaces and resource allocation for coding agents"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive", "env", "string"] }
+clap_complete = { version = "=4.6.11", features = ["unstable-dynamic"] }
+fs2 = "0.4"
+futures-util.workspace = true
+libc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.11"
+shoal-client = { workspace = true, features = ["clap"] }
+shoal-core.workspace = true
+shoal-forge = { workspace = true, features = ["clap"] }
+shoal-subprocess.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }
+toml.workspace = true
+uuid = { workspace = true, features = ["serde", "v4"] }
+
+[dev-dependencies]
+shoal-client = { workspace = true, features = ["test-support"] }
+shoal-core = { workspace = true, features = ["test-support"] }
+shoal-forge = { workspace = true, features = ["test-support"] }
+tokio = { workspace = true, features = ["test-util"] }

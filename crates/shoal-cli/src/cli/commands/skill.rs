@@ -28,7 +28,10 @@ use crate::{
 use record::{Entry, Record};
 
 /// Bundled skills by name; a packaged directory holds `<name>/SKILL.md` for each.
-const SKILLS: [(&str, &str); 1] = [("shoal", include_str!("../../../skills/shoal/SKILL.md"))];
+const SKILLS: [(&str, &str); 1] = [(
+    "shoal",
+    include_str!("../../../../../skills/shoal/SKILL.md"),
+)];
 /// The skills earlier versions installed before Shoal recorded its
 /// installations, which this version no longer bundles.
 const UNRECORDED: [&str; 2] = ["shoal-worker", "shoal-orchestrator"];

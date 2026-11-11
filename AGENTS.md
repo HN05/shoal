@@ -92,20 +92,22 @@ for delivering a PR, under Committing near the end, decide when work is done.
   connection and client-side logic: the CLI sends each daemon request through
   a named operation of the client module for its subject and never builds one
   itself. What the CLI alone needs, such as parsing, prompting and printing,
-  stays in `cli`, and `shoal-client` depends on no Shoal crate but
+  stays in `shoal-cli`, and `shoal-client` depends on no Shoal crate but
   `shoal-forge`, `shoal-subprocess`, `shoal-time` and `shoal-config-derive`.
 - `crates/shoal-time` holds the wall-clock timestamp type every crate shares,
   and depends on no Shoal crate.
-- The `shoal` package holds the CLI under `src/cli`, the daemon under
-  `src/daemon` and `main`. Code both use, directly or through code they call,
-  lives in `crates/shoal-core`, in a top-level module named for what it does;
-  it names neither the CLI nor the daemon and depends on no Shoal crate but
-  `shoal-client`, `shoal-forge`, `shoal-proxy` and `shoal-subprocess`. Its
-  items are `pub` only where the `shoal` package uses them, and fixtures the
-  other crates' tests share sit behind its `test-support` feature.
-- Modules under `cli` serve only the CLI. Code that the daemon, the execution
-  wrapper, the proxy or the workers use lives outside `cli`; nothing outside
-  `src/cli` names the `cli` module except the crate's `main`.
+- The CLI lives in `crates/shoal-cli` and the daemon in `crates/shoal-daemon`,
+  neither of which depends on the other, so an edit in one rebuilds neither
+  the other nor its tests. The `shoal` package is only `main`, which runs the
+  CLI and passes it the daemon for `shoal daemon run`. Code both use, directly
+  or through code they call, lives in `crates/shoal-core`, in a top-level
+  module named for what it does; it names neither the CLI nor the daemon and
+  depends on no Shoal crate but `shoal-client`, `shoal-forge`, `shoal-proxy`
+  and `shoal-subprocess`. Its items are `pub` only where another Shoal crate
+  uses them, and fixtures the other crates' tests share sit behind its
+  `test-support` feature.
+- `crates/shoal-cli` serves only the CLI. Code that the daemon, the execution
+  wrapper, the proxy or the workers use lives outside it.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
   together. `setup.command` is tracked and gates
   readiness; hooks are untracked user processes with workspace identity and no

@@ -45,6 +45,7 @@ use crate::client::space_names::SpaceSelector;
 
 #[derive(Debug, Parser)]
 #[command(
+    name = "shoal",
     version,
     about,
     disable_help_subcommand = true,

@@ -24,17 +24,18 @@ instead of the PR delivery guidance below.
   request through a named client operation and never builds one itself.
   `shoal-client` depends on no Shoal crate but `shoal-forge`,
   `shoal-subprocess`, `shoal-time` and `shoal-config-derive`.
-- Code the CLI and the daemon share lives in `crates/shoal-core`, which names
-  neither and depends on no Shoal crate but `shoal-client`, `shoal-forge`,
-  `shoal-proxy` and `shoal-subprocess`. Flag an item there made `pub` that the
-  `shoal` package does not use, and test fixtures outside its `test-support`
-  feature that other crates' tests need.
-- Modules under `cli` serve only the CLI: flag code outside `src/cli`, other
-  than the crate's `main`, that names the `cli` module, and code under `cli`
-  that the daemon, the execution wrapper, the proxy or the workers need.
+- The CLI (`crates/shoal-cli`) and the daemon (`crates/shoal-daemon`) depend
+  on neither each other; the `shoal` package's `main` joins them. Code they
+  share lives in `crates/shoal-core`, which names neither and depends on no
+  Shoal crate but `shoal-client`, `shoal-forge`, `shoal-proxy` and
+  `shoal-subprocess`. Flag an item there made `pub` that no other Shoal crate
+  uses, and test fixtures outside its `test-support` feature that other
+  crates' tests need.
+- `crates/shoal-cli` serves only the CLI: flag code there that the daemon, the
+  execution wrapper, the proxy or the workers need.
 - Forge requests, and logic that reads forge data without the daemon's state,
   such as check states, item snapshots, item URLs and run IDs, live in
-  `crates/shoal-forge`, never in `src/daemon` or `src/cli`; scope, approvals,
+  `crates/shoal-forge`, never in `shoal-daemon` or `shoal-cli`; scope, approvals,
   identity choice and workspace records stay in the daemon. Flag a match on
   the forge kind outside a `Backend` implementation, and a match that picks
   `issue`, `pull` or `run` by an item's kind outside `ForgeRepo`'s one

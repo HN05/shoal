@@ -1,0 +1,39 @@
+[package]
+name = "shoal-daemon"
+version.workspace = true
+description = "Shoal's daemon"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+fs2 = "0.4"
+futures-util.workspace = true
+libc.workspace = true
+rusqlite = { workspace = true, features = ["bundled"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.11"
+shoal-client = { workspace = true, features = ["rusqlite"] }
+shoal-core.workspace = true
+shoal-forge = { workspace = true, features = ["rusqlite"] }
+shoal-subprocess.workspace = true
+socket2 = "0.6"
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }
+toml.workspace = true
+toml_edit.workspace = true
+uuid = { workspace = true, features = ["serde", "v4"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { version = "1", features = ["fs"] }
+# systemd-logind's shutdown delay lock and announcements, over the system bus.
+zbus = { version = "6", default-features = false, features = ["tokio", "proxy"] }
+
+[dev-dependencies]
+shoal-client = { workspace = true, features = ["test-support"] }
+shoal-core = { workspace = true, features = ["test-support"] }
+shoal-forge = { workspace = true, features = ["test-support"] }
+tokio = { workspace = true, features = ["test-util"] }

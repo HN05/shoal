@@ -18,7 +18,7 @@ use crate::{
 };
 
 /// The reference bundled with this release, readable without network access.
-const REFERENCE: &str = include_str!("../../../docs/reference.md");
+const REFERENCE: &str = include_str!("../../../../../docs/reference.md");
 
 /// `KEY VALUE` pairs as the changes they set.
 pub(super) fn sets(assignments: Vec<String>) -> Result<Vec<Change>> {
