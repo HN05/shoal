@@ -20,16 +20,6 @@ test-group = 'overload-fixture'
 # becoming the run's tail.
 priority = 100
 
-# The longest tests, which nextest would start late, in name order, so that
-# they ended the run alone.
-[[profile.default.overrides]]
-filter = '''package(shoal) & kind(bin) & (
-  test(=daemon::store::tests::migrates_every_recorded_version_to_the_same_schema)
-  | test(=daemon::workspace::branches::tests::branch_compatibility_preserves_allocation_and_existing_branch_policies)
-  | test(=git::worktrunk::tests::literal_branch_compatibility_with_worktrunk)
-)'''
-priority = 100
-
 [profile.ci]
 # Every failing test is a defect to fix, so a run reports them all.
 fail-fast = false
