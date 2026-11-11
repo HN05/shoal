@@ -70,8 +70,9 @@ pub(super) async fn owned(
 
 /// Whether the running chat `chat`, its agent running as `agent`, has work
 /// in flight outside the process group its agent runs in, such as a
-/// background task, other than the execution `wrappers`: an idle chat with
-/// such work is still working, as an idle workspace agent with it is.
+/// background task, other than the execution `wrappers` and an agent hook
+/// waiting for the next update: an idle chat with such work is still
+/// working, as an idle workspace agent with it is.
 pub(super) async fn runs_outside_group(
     chat: &SpaceId,
     agent: &Identity,
@@ -83,8 +84,15 @@ pub(super) async fn runs_outside_group(
         return Ok(false);
     };
     let group = identity::group_of(&agent);
-    Ok((owned(chat, &agent, &[], wrappers).await?.iter())
-        .any(|process| *process != agent && identity::group_of(process) != group))
+    // Claude Code's wake hook waits for the next update in a group of its
+    // own; it waits rather than works.
+    Ok(
+        (owned(chat, &agent, &[], wrappers).await?.iter()).any(|process| {
+            *process != agent
+                && identity::group_of(process) != group
+                && !identity::waiting_hook(process)
+        }),
+    )
 }
 
 /// Those of `processes` still running.

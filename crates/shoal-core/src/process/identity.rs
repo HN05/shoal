@@ -27,6 +27,12 @@ pub use marks::owned_by_workspace;
 pub(crate) use marks::started_with;
 pub(crate) use platform::executable;
 
+/// Whether `process` is an agent hook waiting for the next update, which
+/// waits rather than works.
+pub fn waiting_hook(process: &Identity) -> bool {
+    started_with(process, crate::env::WAITING_HOOK)
+}
+
 /// Deeper chains are not plausible process trees; stop rather than loop.
 const MAX_ANCESTRY: usize = 64;
 

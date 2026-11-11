@@ -1188,3 +1188,41 @@ async fn a_blocked_chat_with_a_background_task_keeps_running() {
     unsafe { libc::kill(leader.id() as i32, libc::SIGKILL) };
     leader.wait().unwrap();
 }
+
+#[tokio::test]
+async fn a_blocked_chats_waiting_hook_is_no_background_work() {
+    use crate::{client::progress::ProgressChange, model::Blocker, state::AgentState};
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut agent) = running_chat(root.path(), &manager).await;
+    // Claude Code's wake hook waits for the next update in a group of its
+    // own, carrying the chat's identity. A system binary hides its
+    // environment on macOS, so the test binary stands in for it.
+    let mut hook = crate::daemon::test_support::spawn_marked_child(
+        crate::daemon::test_support::marked_child()
+            .env_remove(crate::env::WORKSPACE_ID)
+            .env_remove(crate::env::EXECUTION_ID)
+            .env(crate::env::CHAT, chat.id.as_str())
+            .env(crate::env::WAITING_HOOK, "1")
+            .process_group(0),
+    );
+    let selector = SpaceSelector::id(&chat.id);
+    let add = ProgressChange::AddBlocker {
+        blocker: Blocker::Pr("https://github.com/team/app/pull/8".into()),
+        step: None,
+        reason: "Needs the API".into(),
+    };
+    manager.set_progress(&selector, add).await.unwrap();
+    let session = Some(crate::agent::AgentSessionId::from("session"));
+    manager
+        .set_agent_state(&selector, AgentState::Idle, None, session)
+        .await
+        .unwrap();
+
+    manager.save_blocked_chats().await.unwrap();
+
+    let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    assert_eq!(saved.restore, Some(ChatRestore::Automatic));
+    hook.kill().await.unwrap();
+    hook.wait().await.unwrap();
+    agent.wait().unwrap();
+}

@@ -67,7 +67,7 @@ impl Processes {
                 && execution.wrapper.as_ref() != Some(&owned.identity)
                 && process::group_of(&owned.identity)
                     .is_some_and(|group| execution.group_id.is_none_or(|own| group != own))
-                && !process::started_with(&owned.identity, crate::env::WAITING_HOOK)
+                && !process::waiting_hook(&owned.identity)
         })
     }
 
