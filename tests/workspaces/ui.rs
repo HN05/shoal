@@ -2063,6 +2063,7 @@ fn text_listings_lead_with_the_ids_their_commands_take() {
     let repo = fixture.repo.to_str().unwrap();
     let first = fixture.add("first");
     let first = first["id"].as_str().unwrap();
+    install_fake_agents(&fixture, &["claude"]);
     fixture.ok(&[
         "start", repo, "later", "--after", first, "--agent", "claude",
     ]);
