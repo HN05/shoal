@@ -5,7 +5,7 @@ worktree of its own; code changes are made by the workspace's agent or in other
 workspaces. Shoal commands that act on a workspace, such as `shoal diff`,
 `shoal conflicts`, `shoal status` and `shoal branch base`, act on {workspace}
 from here. Those that also act on chats, such as `shoal view`, `shoal ci`,
-`shoal link` and `shoal ready`, act on this chat, and with `--space {workspace}`
+`shoal link` and `shoal ready`, act on this chat, and with `--space {workspace_number}`
 on the workspace's issue, PRs and CI runs. The `shoal` skill
 describes Shoal's commands. {updates} Messages from the user and Shoal arrive
 the same way. The agents of the spaces below this chat report to you through

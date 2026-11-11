@@ -340,6 +340,9 @@ impl Fields {
                 if let Some(workspace) = home.workspace() {
                     fields.extend([
                         ("{workspace}", workspace.directory_name().to_owned()),
+                        // What selects the workspace, which its directory's
+                        // name does not.
+                        ("{workspace_number}", workspace.number.to_string()),
                         ("{branch}", workspace.branch.clone().unwrap_or_default()),
                         ("{head}", head_label(workspace)),
                     ]);

@@ -151,6 +151,16 @@ fn plan_instructions_end() -> &'static str {
 }
 
 #[test]
+fn a_chat_in_a_workspace_selects_it_by_number() {
+    let settings = settings("");
+    let mut workspace = workspace();
+    workspace.number = 12.into();
+    let place = chat(ChatHome::Workspace(&workspace), Delivery::Pushed);
+    let chat = brief(&settings, &"chat".into(), place, None).unwrap();
+    assert!(chat.system.contains("`--space 12`"), "{}", chat.system);
+}
+
+#[test]
 fn built_in_modes_carry_the_work_rule_until_a_mode_leaves_it_out() {
     let place = worker(Delivery::Watched);
     let system = |config: &str| {

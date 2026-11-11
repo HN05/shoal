@@ -39,7 +39,7 @@ fn a_chat_in_a_workspace_is_told_not_to_edit() {
         "workspace worker of the shoal",
         "branch feature",
         "/work/worker",
-        "`--space worker`",
+        &format!("`--space {}`", workspace.number),
     ] {
         assert!(told.contains(expected), "{expected:?} in {told}");
     }

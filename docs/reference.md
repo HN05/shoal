@@ -2455,7 +2455,8 @@ mode's rules follow. No layer replaces or suppresses the guidance. A launch's fi
 message is its subject, an issue or the prompt it was given, worded the same in
 every mode, followed by its mode's instructions; without a subject it has no
 first message. Rules and instructions may use `{workspace}`, `{branch}` and
-`{path}` of the space, `{repo}` and `{head}` for a chat, `{updates}` saying how
+`{path}` of the space, `{repo}` and `{head}` for a chat, `{workspace_number}`
+for a chat in a workspace's worktree, the number that selects the workspace, `{updates}` saying how
 the agent receives issue and PR activity (delivered by its hooks for
 Claude Code, and for a workspace's Codex in a zmx session, Rex block or Herdr pane, otherwise
 by running `shoal watch pr`), `{issue.number}`, `{issue.title}` and
