@@ -5,6 +5,7 @@ pub mod account;
 pub mod backends;
 pub mod capability;
 pub mod ci;
+pub mod clearance;
 pub mod conventions;
 pub mod download;
 pub mod hosts;
@@ -277,21 +278,6 @@ impl ForgeRepo {
         let (number, url) = self.pull(input)?;
         let pull = self.kind.pull_details(self, account, number).await?;
         self.checkout_details(number, url, pull)
-    }
-
-    /// The state of the PR at `url`, in this repository.
-    pub async fn pull_url_state(
-        &self,
-        account: &account::Account,
-        url: &str,
-    ) -> Result<items::item::ItemState> {
-        let (number, _) = self.pull(url)?;
-        Ok(self
-            .kind
-            .pull_details(self, account, number)
-            .await?
-            .item
-            .state)
     }
 
     /// The PR `pull`, read as `number` at `url`, with where its head is.
