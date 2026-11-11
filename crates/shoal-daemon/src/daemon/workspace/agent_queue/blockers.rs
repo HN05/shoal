@@ -48,10 +48,11 @@ struct Done {
     head: String,
 }
 
-/// A recorded blocker of a waiting launch in `repository`.
+/// A recorded blocker of a waiting launch or a space in `repository`; a
+/// chat without one has only space and forge blockers that clear.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Recorded {
-    repository: RepositoryId,
+    repository: Option<RepositoryId>,
     kind: BlockerKind,
     target: String,
 }
@@ -217,10 +218,14 @@ impl Manager {
             }
             BlockerKind::Issue => {
                 let url = target.clone();
-                let linked = self
-                    .store
-                    .run(move |db| issue_workspaces(db, &repository, &url))
-                    .await?;
+                let linked = match repository {
+                    Some(repository) => {
+                        (self.store)
+                            .run(move |db| issue_workspaces(db, &repository, &url))
+                            .await?
+                    }
+                    None => Vec::new(),
+                };
                 self.issue_progress(target, linked).await
             }
             // Only the forge says when these clear; its poll forgets them then.
@@ -266,11 +271,11 @@ impl Manager {
         kind: BlockerKind,
         target: &str,
     ) -> Result<Option<String>> {
-        let (Some(repository), BlockerKind::Space | BlockerKind::Issue) = (repository, kind) else {
+        if !matches!(kind, BlockerKind::Space | BlockerKind::Issue) {
             return Ok(None);
-        };
+        }
         let recorded = Recorded {
-            repository: repository.to_owned(),
+            repository: repository.cloned(),
             kind,
             target: target.to_owned(),
         };
@@ -333,7 +338,7 @@ fn waiting_blockers(db: &mut Connection) -> Result<Vec<(QueueEntryId, Recorded)>
             Ok((
                 row.get::<_, QueueEntryId>(0)?,
                 Recorded {
-                    repository: row.get(1)?,
+                    repository: Some(row.get(1)?),
                     kind: row.get(2)?,
                     target: row.get(3)?,
                 },

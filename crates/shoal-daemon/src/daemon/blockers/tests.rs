@@ -179,3 +179,13 @@ fn the_cleared_message_names_what_cleared_and_what_still_blocks() {
     assert!(text.contains(&format!("Still open:\n- PR {PR}")));
     assert!(!cleared_message(&cleared, None).contains("Still open"));
 }
+
+#[tokio::test]
+async fn a_space_blocker_of_a_space_without_a_repository_clears_once_that_space_goes() {
+    let (_temp, manager) = manager().await;
+    let cleared = manager
+        .cleared_locally(None, BlockerKind::Space, "removed-space-id")
+        .await
+        .unwrap();
+    assert!(cleared.is_some());
+}
