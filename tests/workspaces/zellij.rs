@@ -506,8 +506,9 @@ const AGENT: &str = "[agents.pi]\ncommand = ['sh', '-c', 'echo agent ran; exec s
 
 /// Wait until `workspace` finished setup with one execution, its agent's.
 /// Setup runs as an execution of its own, which can end before the add
-/// worker records the place it opened and starts the agent there, so both
-/// come from one status: once setup finished, an execution is the agent's.
+/// worker records the place it opened and starts the agent there. A status
+/// that says setup finished can still list setup's execution, which it
+/// read first, so only the agent's name tells the agent's execution apart.
 fn wait_for_agent(fixture: &Fixture, workspace: &str) {
     wait_until("setup to finish with the agent running", || {
         if !fixture
@@ -523,7 +524,7 @@ fn wait_for_agent(fixture: &Fixture, workspace: &str) {
         status["setup_finished"] == true
             && status["executions"]
                 .as_array()
-                .is_some_and(|runs| runs.len() == 1)
+                .is_some_and(|runs| runs.len() == 1 && runs[0]["agent"] == "pi")
     });
 }
 
