@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context as _, Result, ensure};
 
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     agents::check_queued_launch,
     daemon::{
@@ -24,6 +24,15 @@ use crate::{
     repository::Selector,
     state::WorkspaceState,
 };
+
+/// Name a new workspace without a name of its own after `issue`'s title,
+/// as every start does, whoever sends it; options apply only to a new
+/// workspace, so one reused keeps its name.
+fn name_after_issue(options: &mut CreationOptions, issue: Option<&OpenIssue>) {
+    if let Some(issue) = issue {
+        (options.name).get_or_insert_with(|| SpaceName::derive(&issue.title, "workspace"));
+    }
+}
 
 /// What a workspace [`Manager::start_workspace`] opens: where it starts,
 /// from what base, where and with what Git profile, below which space, and
@@ -60,7 +69,7 @@ impl Manager {
     pub(crate) async fn start_workspace(
         self: &Arc<Self>,
         repository: Selector,
-        opening: Opening<'_>,
+        mut opening: Opening<'_>,
         preparing: Preparing,
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
@@ -77,6 +86,7 @@ impl Manager {
             Some(input) => Some(self.read_open_issue(&repo.path, input).await?),
             None => None,
         };
+        name_after_issue(&mut opening.new.options, issue.as_ref());
         let opened = (self.open_for_start(repository, opening, caller.is_some())).await?;
         self.prepare_new(opened, issue, preparing, caller).await
     }
@@ -86,7 +96,7 @@ impl Manager {
     pub(crate) async fn start_split(
         self: &Arc<Self>,
         parent: &SpaceSelector,
-        split: Split,
+        mut split: Split,
         preparing: Preparing,
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
@@ -99,6 +109,7 @@ impl Manager {
             Some(input) => Some(self.read_open_issue(&parent.path, input).await?),
             None => None,
         };
+        name_after_issue(&mut split.options, issue.as_ref());
         let child = self.create_child(&parent, split).await?;
         let opened = OpenedWorkspace {
             workspace: child,

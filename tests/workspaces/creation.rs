@@ -1828,6 +1828,41 @@ fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
     }
 }
 
+#[test]
+fn an_apps_workspace_on_an_issue_takes_its_title_without_a_name() {
+    use shoal_client::{
+        connection,
+        protocol::{
+            OperationMethod,
+            operations::{StartedWorkspace, WorkspaceStart},
+        },
+    };
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let fixture = issue_fixture("github.com");
+    write_issue_state(&fixture, "Open");
+    let app = fixture.connector();
+    let create = OperationMethod::StartWorkspace {
+        repository: fixture.repo.to_str().unwrap().into(),
+        start: WorkspaceStart::Name("app-work".into()),
+        base: Some("HEAD".into()),
+        path: None,
+        git_profile: None,
+        parent: None,
+        options: Default::default(),
+        env: None,
+        issue: Some("316".into()),
+        pr: None,
+        agent: None,
+    };
+
+    let started = runtime
+        .block_on(connection::request::<StartedWorkspace>(&app, create))
+        .unwrap();
+
+    assert_eq!(started.workspace.name, "Issue");
+    assert_eq!(started.workspace.branch.as_deref(), Some("app-work"));
+}
+
 /// An app creates workspaces through `shoal_client` and follows their
 /// preparation in the daemon's worker: setup's output as setup writes it,
 /// the post-setup hook, then the ready workspace, or the typed failure of
