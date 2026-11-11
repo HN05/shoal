@@ -11,8 +11,8 @@ import tomllib
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 import release_notes
-from release_metadata import (commit_id, http_error_message, pull_branch, tag_version,
-                               version_parts as parts, version_tag)
+from release_metadata import (commit_id, http_error_message, manifest_version, pull_branch,
+                               tag_version, version_parts as parts, version_tag)
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -27,13 +27,13 @@ def git(*args):
 
 
 def versions(manifest, lock):
-    package = tomllib.loads(manifest)["package"]
+    version = manifest_version(tomllib.loads(manifest))
     local = [p for p in tomllib.loads(lock)["package"]
              if p["name"] == "shoal" and "source" not in p]
-    if package["name"] != "shoal" or len(local) != 1 or local[0]["version"] != package["version"]:
+    if len(local) != 1 or local[0]["version"] != version:
         raise ValueError("expected matching local Shoal versions in Cargo.toml and Cargo.lock")
-    parts(package["version"])
-    return package["version"]
+    parts(version)
+    return version
 
 
 def bump(manifest, lock, requested, occupied):
@@ -48,11 +48,13 @@ def bump(manifest, lock, requested, occupied):
         raise ValueError(f"version must be newer than {current}")
     if f"v{requested}" in occupied:
         raise ValueError("version already has a tag or release branch")
-    manifest, count = re.subn(r'(\[package\][\s\S]*?^version\s*=\s*)"[^"]+"',
+    manifest, count = re.subn(r'(\[workspace\.package\][\s\S]*?^version\s*=\s*)"[^"]+"',
                              lambda m: m[1] + f'"{requested}"', manifest, count=1, flags=re.M)
-    lock, lock_count = re.subn(r'(\[\[package\]\]\nname = "shoal"\nversion = )"[^"]+"',
-                              lambda m: m[1] + f'"{requested}"', lock, count=1)
-    if count != 1 or lock_count != 1 or versions(manifest, lock) != requested:
+    # The local packages at Shoal's version are those that inherit it.
+    lock, lock_count = re.subn(r'(\[\[package\]\]\nname = "[^"]+"\nversion = )"'
+                              + re.escape(current) + r'"(?!\nsource)',
+                              lambda m: m[1] + f'"{requested}"', lock)
+    if count != 1 or lock_count < 1 or versions(manifest, lock) != requested:
         raise ValueError("could not safely update package versions")
     return requested, manifest, lock
 

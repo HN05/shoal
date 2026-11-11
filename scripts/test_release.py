@@ -12,14 +12,20 @@ import release
 
 
 class ReleaseTests(unittest.TestCase):
-    manifest = '[package]\nname = "shoal"\nversion = "0.1.0"\n'
-    lock = '[[package]]\nname = "shoal"\nversion = "0.1.0"\n\n[[package]]\nname = "other"\nversion = "2.0.0"\nsource = "registry"\n'
+    manifest = ('[workspace.package]\nversion = "0.1.0"\n\n'
+                '[package]\nname = "shoal"\nversion.workspace = true\n')
+    lock = ('[[package]]\nname = "shoal"\nversion = "0.1.0"\n\n'
+            '[[package]]\nname = "shoal-core"\nversion = "0.1.0"\n\n'
+            '[[package]]\nname = "shoal-client"\nversion = "0.3.0"\n\n'
+            '[[package]]\nname = "other"\nversion = "0.1.0"\nsource = "registry"\n')
 
     def test_next_unused_patch_and_only_local_package_changes(self):
         version, manifest, lock = release.bump(self.manifest, self.lock, None, {"v0.1.1"})
         self.assertEqual(version, "0.1.2")
         self.assertEqual(release.versions(manifest, lock), version)
-        self.assertIn('name = "other"\nversion = "2.0.0"', lock)
+        self.assertIn('name = "shoal-core"\nversion = "0.1.2"', lock)
+        self.assertIn('name = "shoal-client"\nversion = "0.3.0"', lock)
+        self.assertIn('name = "other"\nversion = "0.1.0"', lock)
 
     def test_explicit_version_and_rejections(self):
         self.assertEqual(release.bump(self.manifest, self.lock, "1.0.0", set())[0], "1.0.0")

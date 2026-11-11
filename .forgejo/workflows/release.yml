@@ -83,7 +83,7 @@ jobs:
           else
             python3 scripts/release.py run
           fi
-          tag=$(python3 -c 'import tomllib; print("v" + tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+          tag=$(python3 -c 'import tomllib; print("v" + tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
           printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
 
   update-tap:

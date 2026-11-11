@@ -9,7 +9,7 @@ from typing import NamedTuple
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
-from release_metadata import (commit_id, tag_version, verified_tag_commit,
+from release_metadata import (commit_id, manifest_version, tag_version, verified_tag_commit,
                               version_parts as release_version)
 
 
@@ -146,8 +146,7 @@ def main():
         return subprocess.check_output(["git", "-C", str(source), *arguments], text=True).strip()
 
     revision = git("rev-parse", "--verify", f"refs/tags/{args.tag}^{{commit}}")
-    package = tomllib.loads(git("show", f"{revision}:Cargo.toml"))["package"]
-    if package["name"] != "shoal" or package["version"] != version:
+    if manifest_version(tomllib.loads(git("show", f"{revision}:Cargo.toml"))) != version:
         raise ValueError("release tag must match Shoal's Cargo package version")
     if args.source_url == "https://github.com/HN05/shoal.git":
         # Do not publish a formula before the source mirror has the exact tag.

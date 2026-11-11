@@ -25,6 +25,15 @@ def version_parts(version):
     return tuple(map(int, version.split(".")))
 
 
+def manifest_version(manifest):
+    """Shoal's version in *manifest*, the parsed root Cargo.toml: the shoal
+    package inherits it from the workspace with the packages built into it."""
+    package = manifest["package"]
+    if package["name"] != "shoal" or package.get("version") != {"workspace": True}:
+        raise ValueError("expected the shoal package to inherit the workspace version")
+    return manifest["workspace"]["package"]["version"]
+
+
 def tag_version(tag):
     if not STABLE_TAG.fullmatch(tag):
         raise ValueError("expected a stable vMAJOR.MINOR.PATCH tag")

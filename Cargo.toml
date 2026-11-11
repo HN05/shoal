@@ -2,7 +2,9 @@
 members = ["crates/*"]
 default-members = [".", "crates/*"]
 
+# Shoal's version, which the packages built into the shoal binary share.
 [workspace.package]
+version = "0.15.8"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT"
@@ -31,7 +33,7 @@ uuid = "1.26.1"
 
 [package]
 name = "shoal"
-version = "0.15.8"
+version.workspace = true
 description = "Local workspaces and resource allocation for coding agents"
 edition.workspace = true
 rust-version.workspace = true
