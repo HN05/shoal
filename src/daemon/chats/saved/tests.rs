@@ -204,6 +204,29 @@ async fn a_stop_keeps_a_pending_automatic_restore_from_bringing_the_chat_back() 
     );
 }
 
+/// A daemon interrupted between saving a chat to come back on its own and
+/// stopping it leaves its agent running, which a stop then ends.
+#[tokio::test]
+async fn a_stop_ends_the_agent_an_interrupted_save_left_running() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut process) = running_chat(root.path(), &manager).await;
+    manager
+        .store
+        .run(|db| {
+            db.execute("UPDATE chats SET restore='automatic',saved=1", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let stopped = manager.stop_chat_for_resume(&chat, None).await.unwrap();
+
+    assert!(!stopped.already_stopped);
+    assert!(!process.wait().unwrap().success());
+    let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    assert_eq!(saved.restore, Some(ChatRestore::Resume));
+}
+
 #[tokio::test]
 async fn the_daemon_saves_running_chats_as_it_exits() {
     for (ending, restore) in [

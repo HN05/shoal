@@ -119,7 +119,7 @@ impl Manager {
 
     /// [`Self::save_chat`] for `saving`, with no other save, handoff or
     /// automatic restore under way, returning whether the chat ran or its
-    /// automatic restore was pending.
+    /// automatic restore was pending; either way the processes it owns stop.
     async fn save_running_chat(
         &self,
         id: &SpaceId,
@@ -135,15 +135,23 @@ impl Manager {
         self.stop_finished_chats().await?;
         let chat = id.to_owned();
         let stopped_by = stopped_by.cloned();
-        let (held, Saved { running, released }) = (self.store)
+        let (stopping, released) = (self.store)
             .write(move |tx| {
                 let held = stop && hold_automatic(tx, &chat, stopped_by.as_ref())?;
-                let saved = save(tx, ChatRestore::Resume, Some(&chat), stopped_by.as_ref())?;
-                Ok((held, saved))
+                let Saved { running, released } =
+                    save(tx, ChatRestore::Resume, Some(&chat), stopped_by.as_ref())?;
+                // A save an interrupted daemon never stopped may leave the
+                // agent of a held chat running.
+                let stopping = match running.into_iter().next() {
+                    Some(running) => Some(running),
+                    None if held => Some((chat.clone(), saved_process(tx, &chat)?)),
+                    None => None,
+                };
+                Ok((stopping, released))
             })
             .await?;
-        let Some((id, process)) = running.into_iter().next() else {
-            return Ok(held);
+        let Some((id, process)) = stopping else {
+            return Ok(false);
         };
         let stopped = self.stop_saved(&id, &process).await;
         if stopped.is_err() {
@@ -386,7 +394,7 @@ impl Manager {
 }
 
 /// The process the stopped chat `id` ran as.
-fn saved_process(db: &mut Connection, id: &SpaceId) -> Result<Identity> {
+fn saved_process(db: &Connection, id: &SpaceId) -> Result<Identity> {
     let (pid, birth, unique): (u32, String, Option<String>) = db.query_row(
         "SELECT pid,birth,unique_id FROM chats WHERE id=?1",
         [id],
