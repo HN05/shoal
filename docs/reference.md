@@ -3723,8 +3723,9 @@ first instead of what it did. A failure from then on keeps the workspace and
 arrives as a `removal_failed` notification, or for an agent's removal as a message
 to that agent, saying why; `shoal rm` tries again. Deleting the worktree fails
 once it has run for ten minutes, and closing a zmx session once it has run for
-30 seconds. A removal the daemon stopped before it finished leaves the
-workspace `failed`, its log saying so, and `shoal rm` finishes it. `--wait`
+30 seconds. A removal that stopped before it finished, because the daemon
+stopped or its work ended early, leaves the workspace `failed`, its log saying
+so, and `shoal rm` finishes it. `--wait`
 returns only once the workspace is removed and reports the branch it kept.
 Removing a chat always waits.
 

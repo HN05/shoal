@@ -17,6 +17,7 @@ mod test_support;
 mod tests;
 mod worktree;
 
+pub(in crate::daemon::workspace) use abandoned::Underway;
 pub(crate) use abandoned::fail_interrupted_removals;
 pub(in crate::daemon::workspace) use policy::Removal;
 use policy::{Retention, Stage};

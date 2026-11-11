@@ -260,7 +260,7 @@ impl Manager {
                     }
                     None => None,
                 };
-                drop(reservation);
+                reservation.finish();
                 Ok(SpaceRemoval { children, worktree })
             }
             Err(error) => {

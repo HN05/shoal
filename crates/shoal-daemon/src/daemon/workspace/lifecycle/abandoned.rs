@@ -1,15 +1,67 @@
 //! Removals that stop before they finish without retaining their
-//! workspace, as when the daemon stops: the workspace leaves `removing` for
-//! `failed`, and its log says where its removal stopped, so `shoal rm`
-//! finishes it.
+//! workspace, as when the daemon stops or a removal's work ends early: the
+//! workspace leaves `removing` for `failed`, and its log says where its
+//! removal stopped, so `shoal rm` finishes it.
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::client::space_ids::{SpaceId, SpaceNumber};
 use crate::{
-    daemon::events::{self, EventCause, EventKind},
+    daemon::{
+        events::{self, EventCause, EventKind},
+        log,
+        store::Store,
+    },
     state::WorkspaceState,
 };
+
+/// A removal under way from its reservation. Dropped before
+/// [`Self::finish`], as when its work panics or is dropped, it fails the
+/// workspace, so none stays in `removing` with no removal running.
+pub(in crate::daemon::workspace) struct Underway {
+    store: Store,
+    id: SpaceId,
+    finished: AtomicBool,
+}
+
+impl Underway {
+    pub(in crate::daemon::workspace) fn new(store: Store, id: SpaceId) -> Self {
+        Self {
+            store,
+            id,
+            finished: AtomicBool::new(false),
+        }
+    }
+
+    /// The removal removed the workspace or retained it.
+    pub(in crate::daemon::workspace) fn finish(&self) {
+        self.finished.store(true, Ordering::Relaxed);
+    }
+}
+
+impl Drop for Underway {
+    fn drop(&mut self) {
+        if *self.finished.get_mut() {
+            return;
+        }
+        // Without a runtime the daemon is stopping, and startup fails it.
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let (store, id) = (self.store.clone(), self.id.clone());
+        runtime.spawn(async move {
+            let failed = store.write({
+                let id = id.clone();
+                move |tx| fail_stopped_removal(tx, &id, "its work ended early")
+            });
+            if let Err(error) = failed.await {
+                log!("removal of {id} left it removing: {error:#}");
+            }
+        });
+    }
+}
 
 /// Fail every workspace a removal left in `removing` when the daemon
 /// stopped, in the transaction that quarantines the other interrupted

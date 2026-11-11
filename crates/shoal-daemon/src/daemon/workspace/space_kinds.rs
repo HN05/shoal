@@ -5,7 +5,10 @@
 use anyhow::{Context as _, Result, ensure};
 
 use super::{
-    Manager, StopRequest, executions::StopPolicy, lifecycle::Removal, reservation::RemovalRules,
+    Manager, StopRequest,
+    executions::StopPolicy,
+    lifecycle::{Removal, Underway},
+    reservation::RemovalRules,
 };
 use crate::{
     daemon::{chats, events},
@@ -47,9 +50,19 @@ pub(crate) struct SpaceReservation<'a> {
 }
 
 enum Held<'a> {
-    /// The workspace's lifecycle state, which the reservation replaced.
-    Workspace(WorkspaceState),
+    /// The workspace's lifecycle state, which the reservation replaced, and
+    /// the removal under way, which fails it if the removal ends early.
+    Workspace(WorkspaceState, Underway),
     Chat(#[allow(dead_code, reason = "held until it drops")] chats::Reservation<'a>),
+}
+
+impl SpaceReservation<'_> {
+    /// Give up the reservation once its removal deleted the space's record.
+    pub(crate) fn finish(self) {
+        if let Held::Workspace(_, underway) = &self.held {
+            underway.finish();
+        }
+    }
 }
 
 impl Manager {
@@ -166,9 +179,10 @@ impl Manager {
                 let replaced = self
                     .reserve_lifecycle_for_removal(&workspace.id, rules)
                     .await?;
+                let underway = Underway::new(self.store.clone(), workspace.id.clone());
                 Ok(SpaceReservation {
                     space: PresentSpace::Workspace(workspace),
-                    held: Held::Workspace(replaced),
+                    held: Held::Workspace(replaced, underway),
                 })
             }
             PresentSpace::Chat(chat) => {
@@ -197,13 +211,15 @@ impl Manager {
         error: &anyhow::Error,
     ) -> Result<()> {
         match reservation.held {
-            Held::Workspace(replaced) => {
+            Held::Workspace(replaced, underway) => {
                 let state = if unready {
                     WorkspaceState::Failed
                 } else {
                     replaced
                 };
-                (self.retain_workspace(reservation.space.id(), state, cause, error)).await
+                (self.retain_workspace(reservation.space.id(), state, cause, error)).await?;
+                underway.finish();
+                Ok(())
             }
             Held::Chat(_) => (self.record_retained(reservation.space.id(), cause, error)).await,
         }
