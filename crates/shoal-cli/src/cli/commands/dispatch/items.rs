@@ -60,7 +60,6 @@ async fn view_review(ctx: &Context, args: ViewArgs) -> Result<i32> {
         !args.no_comments
             && args.check.is_none()
             && args.job.is_none()
-            && args.job_id.is_none()
             && !args.web
             && args.repo.name.is_none(),
         "view review takes a review ID and --space only"

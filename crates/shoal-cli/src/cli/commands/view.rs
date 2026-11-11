@@ -25,7 +25,7 @@ use crate::{
 /// Show or open what `args` selects: one CI run as `ci` reads it, otherwise
 /// issues, PRs and linked runs.
 pub(super) async fn show(ctx: &Context, args: ViewArgs) -> Result<i32> {
-    let job = args.job.map(JobRef::Name).or(args.job_id.map(JobRef::Id));
+    let job = args.job.map(JobRef::Name);
     if args.items.selects_ci() && (args.items.item.is_some() || job.is_some()) {
         ensure!(
             args.check.is_none(),
@@ -35,7 +35,7 @@ pub(super) async fn show(ctx: &Context, args: ViewArgs) -> Result<i32> {
     }
     ensure!(
         job.is_none(),
-        "--job and --job-id read a CI run's job: view ci RUN --job NAME"
+        "--job reads a CI run's job: view ci RUN --job NAME"
     );
     let repo = args.repo.name;
     if args.web {

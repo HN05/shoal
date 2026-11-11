@@ -4756,8 +4756,9 @@ run.
 branch, workflow and jobs, each in one of those states or `cancelled` when
 Forgejo cancelled it before a runner took it, so it has no log, and the log
 tails of its failed jobs as `shoal view`
-shows a PR's; `--job` shows only that job's whole log, in any state and up to
-8 MiB, and `--job-id` that of the job with that ID when several share a name. A number after `ci`
+shows a PR's; `--job` shows only one job's whole log, in any state and up to
+8 MiB, by its name or, as several jobs may share one, the ID the view lists
+beside it. A number after `ci`
 names a run; a number alone never does. `shoal ci ls` lists the newest runs,
 ten unless `--limit` says up to 100, on the workspace's branch, the one
 `--branch` names or the head commit of the PR `--pr` names, and of one workflow

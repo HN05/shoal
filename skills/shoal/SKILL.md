@@ -370,7 +370,7 @@ rebase command.
 
 ```sh
 shoal ci ls [--pr N]
-shoal view ci <run-url> [--job '<name>' | --job-id <id>]
+shoal view ci <run-url> [--job '<name or ID>']
 shoal ci rerun [--check '<name>'] [--pr N]
 shoal ci rerun <run-url> [--failed]
 shoal ci cancel [--check '<name>' | <run-url>]
@@ -378,7 +378,7 @@ shoal ci run <workflow> [--input NAME=VALUE] [--branch B]
 ```
 
 `view ci` lists a run's jobs with the log tails of its failed ones; `--job`
-prints one job's whole log, whatever its result. `ci rerun --check` reruns a
+prints one job's whole log, by its name or listed ID, whatever its result. `ci rerun --check` reruns a
 failed check on the linked PR's current head, and without `--check` every
 failed one; `ci cancel` cancels running and waiting ones. With a run URL both act on one run of the space's branch. `ci run` starts
 a workflow, by its file name or its link, on the space's branch, or for a chat

@@ -33,7 +33,6 @@ pub(super) async fn view_command(ctx: &Context, space: Option<SpaceSelector>) ->
         no_comments: false,
         check: None,
         job: None,
-        job_id: None,
         web,
     })))
 }

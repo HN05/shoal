@@ -214,6 +214,17 @@ fn jobs_are_selected_by_id_or_by_a_name_no_other_job_has() -> Result<()> {
     );
     assert!(find_job(&run, &jobs, &JobRef::Name("test".into())).is_err());
     assert!(find_job(&run, &jobs, &JobRef::Id(JobId::new(4))).is_err());
+    // A name no job has may be the ID listed beside one, and a job's name
+    // comes before another's ID.
+    assert_eq!(
+        find_job(&run, &jobs, &JobRef::Name("2".into()))?.id,
+        JobId::new(2)
+    );
+    let numbered = [job(JobId::new(5), "1"), job(JobId::new(1), "lint")];
+    assert_eq!(
+        find_job(&run, &numbered, &JobRef::Name("1".into()))?.id,
+        JobId::new(5)
+    );
     Ok(())
 }
 

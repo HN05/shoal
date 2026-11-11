@@ -3,7 +3,6 @@
 use clap::{Args, Subcommand, ValueEnum};
 
 use crate::client::space_names::SpaceSelector;
-use crate::forge::numbers::JobId;
 use crate::{cli::args::item_reference, model::Relation, reviews::ReviewId};
 
 #[derive(Debug, Subcommand)]
@@ -75,16 +74,13 @@ pub struct ViewArgs {
     #[arg(long)]
     pub no_comments: bool,
     /// Show only this failed check's log, where the forge reads job logs.
-    #[arg(long, value_name = "NAME", conflicts_with_all = ["job", "job_id"])]
+    #[arg(long, value_name = "NAME", conflicts_with = "job")]
     pub check: Option<String>,
-    /// Show only the whole log of this job of a CI run, in any state.
-    #[arg(long, value_name = "NAME", conflicts_with = "job_id")]
+    /// Show only the whole log of the CI run's job with this name or ID, in any state.
+    #[arg(long, value_name = "NAME|ID")]
     pub job: Option<String>,
-    /// Show only the whole log of the CI run's job with this ID, for jobs that share a name.
-    #[arg(long, value_name = "ID")]
-    pub job_id: Option<JobId>,
     /// Open the items in the browser instead.
-    #[arg(long, conflicts_with_all = ["no_comments", "check", "job", "job_id"])]
+    #[arg(long, conflicts_with_all = ["no_comments", "check", "job"])]
     pub web: bool,
 }
 

@@ -5335,7 +5335,7 @@ fn ci_run_views_read_every_page_of_jobs_and_tell_apart_jobs_of_one_name() {
         "view",
         "ci",
         "12",
-        "--job-id",
+        "--job",
         "1001",
         "--space",
         &fixture.id("topic"),

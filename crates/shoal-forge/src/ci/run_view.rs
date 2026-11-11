@@ -51,6 +51,7 @@ pub struct RunView {
 #[serde(rename_all = "snake_case")]
 pub enum JobRef {
     Id(JobId),
+    /// A name, or the ID beside it in a run's view when no job has that name.
     Name(String),
 }
 
@@ -86,6 +87,7 @@ pub fn validate_filter(filter: &RunFilter) -> Result<()> {
 
 /// The job `job` selects among `run`'s `jobs`.
 fn find_job<'a>(run: &Run, jobs: &'a [RunJob], job: &JobRef) -> Result<&'a RunJob> {
+    let job = &numbered_job(jobs, job);
     let matching = jobs
         .iter()
         .filter(|candidate| match job {
@@ -96,7 +98,7 @@ fn find_job<'a>(run: &Run, jobs: &'a [RunJob], job: &JobRef) -> Result<&'a RunJo
     match (job, matching.as_slice()) {
         (_, [found]) => Ok(found),
         (JobRef::Name(name), []) => bail!(
-            "run {} has no job {name}; shoal view ci {} lists its jobs' names",
+            "run {} has no job {name}; shoal view ci {} lists its jobs' names and IDs",
             run.url,
             run.url
         ),
@@ -105,6 +107,16 @@ fn find_job<'a>(run: &Run, jobs: &'a [RunJob], job: &JobRef) -> Result<&'a RunJo
             run.url
         ),
         (JobRef::Id(id), _) => bail!("run {} has no job with ID {id}", run.url),
+    }
+}
+
+/// `job`, or the ID a name that no job of `jobs` has spells.
+fn numbered_job(jobs: &[RunJob], job: &JobRef) -> JobRef {
+    match job {
+        JobRef::Name(name) if !jobs.iter().any(|candidate| candidate.name == *name) => {
+            name.parse().map_or_else(|_| job.clone(), JobRef::Id)
+        }
+        _ => job.clone(),
     }
 }
 
