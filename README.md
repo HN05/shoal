@@ -53,7 +53,7 @@ the daemon. Prebuilt binaries do not require Rust.
 | --- | --- |
 | Git 2.43+ (`git`) | Repository and branch operations |
 | [zmx](https://github.com/neurosnap/zmx) 1.0.1+, unless `terminal.default_host` names another host | Agent sessions that keep running after you detach |
-| [fzf](https://github.com/junegunn/fzf) | Interactive menus and pickers |
+| [fzf](https://github.com/junegunn/fzf) 0.63+ | Interactive menus and pickers |
 
 Feature-specific tools are installed separately: `curl` for issues and PR
 watches, with a [token](docs/reference.md#forges) for private repositories; the agent or

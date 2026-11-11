@@ -37,6 +37,7 @@
 //! instead, and are refused naming what the prompt asks for, or the option a
 //! caller names with [`require_argument`]. A new kind of input or choice
 //! belongs here, built on these operations, so the next command can use it too.
+mod fzf;
 mod keys;
 mod linked;
 mod modes;

@@ -240,6 +240,7 @@ pub(super) fn fzf_output(
     extra: &[String],
 ) -> Result<String> {
     require_interactive(ctx, prompt)?;
+    super::fzf::ensure_supported()?;
     let mut command = Command::new(Tool::Fzf.program());
     if current_directory()?.is_none() {
         command.current_dir("/");
