@@ -1,58 +1,28 @@
-//! The `shoal` command: the CLI and the daemon, over [`shoal_client`].
+//! The `shoal` command: the CLI and the daemon, over [`shoal_core`] and
+//! [`shoal_client`].
 
-// First, so that every module below sees its print macros.
+// Every module sees the shared crate's print macros.
 #[macro_use]
-mod stdout;
+extern crate shoal_core;
 
-mod agent_git;
-mod agents;
-mod build;
-mod caches;
 mod cli;
-mod config_file;
 mod daemon;
-mod daemon_handoff;
-mod daemon_owner;
-mod env;
-mod execution;
-mod fsutil;
-mod git;
-mod git_credential;
-mod git_profile;
-mod happy;
-mod hooks;
-mod installed;
-mod paths;
-mod presets;
-mod process;
-mod proxy;
-mod push_gate;
-mod refusal;
-mod releases;
-mod removal;
-mod repository;
-mod secrets;
 mod seed;
-mod service;
-mod sessions;
-mod shell;
-mod start_plan;
-mod terminal;
+
 #[cfg(test)]
-mod test_support;
-#[cfg(test)]
-mod helper_tests {
-    crate::helper_tests!();
-}
-mod tmp_dirs;
-mod tools;
-mod transfer;
-mod workers;
+use shoal_core::test_support;
+use shoal_core::{
+    agent_git, agents, build, caches, config_file, daemon_handoff, daemon_owner, env, execution,
+    fsutil, git, git_profile, hooks, installed, paths, presets, process, proxy, push_gate, refusal,
+    releases, removal, repository, secrets, service, sessions, shell, start_plan, stdout, terminal,
+    tmp_dirs, tools, transfer, workers,
+};
 
 use cli::Cli;
 use shoal_client as client;
 use shoal_client::time;
 use shoal_client::{agent, ai, config, demos, model, profile, protocol, reviews, state, validate};
+use shoal_core::WORKER_STACK;
 use shoal_forge as forge;
 use shoal_subprocess as subprocess;
 
@@ -106,11 +76,6 @@ fn main() {
     run_cli(cli);
 }
 
-/// Tokio worker threads get more stack than its 2 MiB default: the daemon
-/// polls deep async paths, such as manual cleanup's removal, whose debug
-/// builds overflow that on Linux. Unused stack is reserved, not committed.
-pub(crate) const WORKER_STACK: usize = 8 << 20;
-
 fn run_cli(cli: Cli) {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -148,4 +113,9 @@ async fn run_commands(cli: Cli) {
             std::process::exit(1);
         }
     }
+}
+
+#[cfg(test)]
+mod helper_tests {
+    shoal_core::helper_tests!();
 }

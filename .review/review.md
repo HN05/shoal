@@ -24,6 +24,11 @@ instead of the PR delivery guidance below.
   request through a named client operation and never builds one itself.
   `shoal-client` depends on no Shoal crate but `shoal-forge`,
   `shoal-subprocess`, `shoal-time` and `shoal-config-derive`.
+- Code the CLI and the daemon share lives in `crates/shoal-core`, which names
+  neither and depends on no Shoal crate but `shoal-client`, `shoal-forge`,
+  `shoal-proxy` and `shoal-subprocess`. Flag an item there made `pub` that the
+  `shoal` package does not use, and test fixtures outside its `test-support`
+  feature that other crates' tests need.
 - Modules under `cli` serve only the CLI: flag code outside `src/cli`, other
   than the crate's `main`, that names the `cli` module, and code under `cli`
   that the daemon, the execution wrapper, the proxy or the workers need.

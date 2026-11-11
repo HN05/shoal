@@ -98,10 +98,16 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `shoal-forge`, `shoal-subprocess`, `shoal-time` and `shoal-config-derive`.
 - `crates/shoal-time` holds the wall-clock timestamp type every crate shares,
   and depends on no Shoal crate.
+- The `shoal` package holds the CLI under `src/cli`, the daemon under
+  `src/daemon` and `main`. Code both use, directly or through code they call,
+  lives in `crates/shoal-core`, in a top-level module named for what it does;
+  it names neither the CLI nor the daemon and depends on no Shoal crate but
+  `shoal-client`, `shoal-forge`, `shoal-proxy` and `shoal-subprocess`. Its
+  items are `pub` only where the `shoal` package uses them, and fixtures the
+  other crates' tests share sit behind its `test-support` feature.
 - Modules under `cli` serve only the CLI. Code that the daemon, the execution
-  wrapper, the proxy or the workers use, directly or through code they call,
-  lives in a top-level module named for what it does, outside `cli`; nothing
-  outside `src/cli` names the `cli` module except the crate's `main`.
+  wrapper, the proxy or the workers use lives outside `cli`; nothing outside
+  `src/cli` names the `cli` module except the crate's `main`.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
   together. `setup.command` is tracked and gates
   readiness; hooks are untracked user processes with workspace identity and no

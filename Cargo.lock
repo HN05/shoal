@@ -1147,17 +1147,13 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 name = "shoal"
 version = "0.15.8"
 dependencies = [
- "aes-gcm",
  "anyhow",
  "base64",
  "clap",
  "clap_complete",
- "crypto_box",
- "crypto_secretbox",
  "fs2",
  "futures-util",
  "libc",
- "plist",
  "rusqlite",
  "rustix",
  "serde",
@@ -1165,8 +1161,8 @@ dependencies = [
  "sha2",
  "shoal-client",
  "shoal-config-derive",
+ "shoal-core",
  "shoal-forge",
- "shoal-proxy",
  "shoal-subprocess",
  "socket2",
  "tempfile",
@@ -1207,6 +1203,35 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "shoal-core"
+version = "0.15.8"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "base64",
+ "clap",
+ "crypto_box",
+ "crypto_secretbox",
+ "fs2",
+ "futures-util",
+ "libc",
+ "plist",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "shoal-client",
+ "shoal-forge",
+ "shoal-proxy",
+ "shoal-subprocess",
+ "tempfile",
+ "tokio",
+ "toml",
+ "toml_edit",
+ "uuid",
 ]
 
 [[package]]

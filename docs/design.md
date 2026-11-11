@@ -59,7 +59,9 @@ The protocol is the one protocol for the CLI and for apps. Apps use it through
 the `shoal-client` library, which holds the requests and responses with the
 types they carry, the connection the CLI makes, and the client-side logic the
 CLI shares with apps; the CLI and the daemon are the binary-only `shoal`
-package, which depends on it. Commands print only the
+package, which depends on it and on `shoal-core`, the code the CLI and the
+daemon share. Changing the CLI or the daemon rebuilds the `shoal` package
+only, not `shoal-core`. Commands print only the
 library's types with `--json`, which a development build checks read back, so
 a program that runs `shoal --json` parses the output with them. The protocol
 keeps no
