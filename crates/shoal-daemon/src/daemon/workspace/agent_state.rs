@@ -369,14 +369,15 @@ impl Manager {
             self.record_agent_session(&space, execution.as_ref(), session)
                 .await?;
         }
-        let now = UnixTime::now();
         let made = made.unwrap_or_else(SystemTime::now);
+        // A late turn's prompt cache, too, lives from when the turn ended.
+        let at = UnixTime::from_system_time(made);
         let report = Report {
             space: space.id().to_owned(),
             state,
             execution,
-            at: UnixTime::from_system_time(made),
-            prompt_cache_expires_at: ending.prompt_cache.map(|lifetime| now + lifetime),
+            at,
+            prompt_cache_expires_at: ending.prompt_cache.map(|lifetime| at + lifetime),
             failed: ending.failed,
         };
         let saved = self.store.write(move |tx| save(tx, &report)).await?;

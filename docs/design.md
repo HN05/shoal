@@ -2249,7 +2249,8 @@ process that the daemon does not receive alerts the user with the error, which
 the hooks discard. The hook keeps its report on disk until the daemon answers,
 so neither the alert nor the state depends on the call that failed or on the
 hook outliving its time limit: the daemon finds the reports left, alerts, and
-records the newest late unless a report made after it was recorded first.
+records each late, in the order its hook made it, unless a report made after
+it was recorded first.
 Every report counts from when its hook made it, and a chat's late report
 only while the chat runs the agent that made it; overload protection reads it only to stop
 idle agents first. A workspace keeps the

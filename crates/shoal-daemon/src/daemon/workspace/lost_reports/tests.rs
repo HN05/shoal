@@ -670,3 +670,32 @@ async fn a_delayed_live_report_waits_behind_a_later_one_still_sent() {
         AgentState::Working
     );
 }
+
+#[tokio::test]
+async fn a_late_turns_prompt_cache_lives_from_when_the_turn_ended() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&manager, &temp).await;
+    let ended = UnixTime::now() - Duration::from_secs(120);
+    let turn_end = TurnEnd {
+        prompt_cache_secs: Some(300),
+        ..TurnEnd::default()
+    };
+
+    let status = manager
+        .report_agent_state(
+            &SpaceSelector::id(&workspace.id),
+            AgentState::Idle,
+            None,
+            None,
+            Some(turn_end),
+            Some(ended.system_time()),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(status.since, ended);
+    assert_eq!(
+        status.prompt_cache_expires_at,
+        Some(ended + Duration::from_secs(300))
+    );
+}

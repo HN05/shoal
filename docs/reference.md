@@ -5123,8 +5123,9 @@ A space's own process keeps each report it sends in the state directory until
 the daemon answers, so a report the daemon does not receive, which the hooks
 would discard, stays there even when the hook's time limit ends it first: the
 daemon looks for such reports at start and every 15 seconds, records an
-[alert](#notifications) naming the space with the error, and records the newest
-report of a space unless a later one arrived first.
+[alert](#notifications) naming the space with the error, and records each
+report in the order its hook made it, unless one made later was recorded
+first.
 Scoped callers report only for their own space, which their scope names
 wherever they run; `--space` selects another one for unscoped callers.
 
