@@ -16,7 +16,7 @@ use crate::daemon::{
 };
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
-use std::{fs, future::Future};
+use std::{fs, future::Future, os::unix::fs::PermissionsExt};
 
 mod agent_restart;
 mod idle_cleanup;
@@ -962,6 +962,14 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
         .filter(|path| path.to_string_lossy().ends_with(".recovery.json"))
         .collect::<Vec<_>>();
     assert_eq!(records.len(), 1);
+    assert_eq!(
+        fs::metadata(&records[0]).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+    // A manual stop never restores automatically.
+    publish_recovery(&manager);
+    assert!(!workspace.path.join("restored").exists());
+    assert!(queue_is_empty(&manager).await);
     let text = fs::read_to_string(&records[0]).unwrap();
     let mut record: serde_json::Value = serde_json::from_str(&text).unwrap();
     // The wrapper that waited has exited, so resume restores the agent.
