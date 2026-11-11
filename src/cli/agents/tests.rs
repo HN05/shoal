@@ -66,6 +66,7 @@ fn chat(
         progress: None,
         parent: None,
         children: Vec::new(),
+        converted: false,
     }
 }
 

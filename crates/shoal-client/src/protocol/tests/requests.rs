@@ -42,6 +42,7 @@ const REQUESTS: &[&str] = &[
     r#"{"check_dependencies":{"repository":"app","after":[{"work":"fix"},{"issue":"https://forge.example/team/app/issues/1"}]}}"#,
     r#"{"adopt_workspace":{"repository":"app","path":"/work/fix","copy":false}}"#,
     r#"{"rename_workspace":{"workspace":"fix","branch":"fix-2"}}"#,
+    r#"{"convert_to_chat":{"workspace":"fix","mode":"plan"}}"#,
     r#""list_workspaces""#,
     r#""untracked_worktrees""#,
     r#"{"find_spaces":{"target":{"item":{"kind":"pr","input":"7"}}}}"#,

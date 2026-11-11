@@ -124,6 +124,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         progress: None,
         parent: None,
         children: Vec::new(),
+        converted: false,
     };
     let mut manifest = Manifest {
         remote_url: None,

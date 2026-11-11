@@ -204,6 +204,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                 progress: None,
                 parent: None,
                 children: Vec::new(),
+                converted: false,
             }])
         } else {
             assert!(matches!(
@@ -285,6 +286,7 @@ fn resume_completes_resumable_spaces() {
         progress: None,
         parent: None,
         children: Vec::new(),
+        converted: false,
     };
     let candidates = stopped_chat_candidates(vec![
         chat("talk", Some(crate::state::ChatRestore::Resume)),

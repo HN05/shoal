@@ -105,6 +105,13 @@ pub(super) enum Removal<'a> {
         refuse_holds: bool,
         confirmed: Option<&'a [SpaceId]>,
     },
+    /// The workspace becomes the chat `chat`: its worktree goes once a
+    /// checkpoint keeps its unsaved files, while its branch, its record
+    /// under the chat's kind and the spaces below it stay. The user's holds
+    /// refuse it.
+    Converted {
+        chat: &'a crate::daemon::conversions::record::ConvertedChat,
+    },
 }
 
 impl<'a> Removal<'a> {
@@ -117,6 +124,7 @@ impl<'a> Removal<'a> {
             Self::Deleted => EventCause::MissingDirectory,
             Self::Parent { .. } => EventCause::Parent,
             Self::UnderCompleted { .. } => EventCause::ParentCompletion,
+            Self::Converted { .. } => EventCause::Manual,
         }
     }
 
@@ -128,14 +136,17 @@ impl<'a> Removal<'a> {
             | Removal::Parent { .. }
             | Removal::UnderCompleted { .. }
             | Removal::Merged { .. }
-            | Removal::Completed { .. } => &NOTHING,
+            | Removal::Completed { .. }
+            | Removal::Converted { .. } => &NOTHING,
         }
     }
 
     pub(super) fn inspection(self) -> InspectionPolicy {
         match self {
             Removal::Manual { inspection, .. } => inspection,
-            Removal::Parent { .. } | Removal::UnderCompleted { .. } => InspectionPolicy::GitOnly,
+            Removal::Parent { .. } | Removal::UnderCompleted { .. } | Removal::Converted { .. } => {
+                InspectionPolicy::GitOnly
+            }
             Removal::Automatic { .. }
             | Removal::Deleted
             | Removal::Merged { .. }
@@ -149,7 +160,8 @@ impl<'a> Removal<'a> {
             | Removal::Merged { .. }
             | Removal::Completed { .. }
             | Removal::UnderCompleted { .. }
-            | Removal::Parent { .. } => StopPolicy::ForRemoval,
+            | Removal::Parent { .. }
+            | Removal::Converted { .. } => StopPolicy::ForRemoval,
             Removal::Automatic { .. } | Removal::Deleted => StopPolicy::RequireCompleteProof,
         }
     }
@@ -165,8 +177,8 @@ impl<'a> Removal<'a> {
         }
     }
 
-    /// Merged cleanup, an ancestor's completion and a parent's removal
-    /// remove unsaved files once a checkpoint keeps them.
+    /// Merged cleanup, an ancestor's completion, a parent's removal and a
+    /// conversion remove unsaved files once a checkpoint keeps them.
     pub(super) fn discards_archived_files(self) -> bool {
         matches!(
             self,
@@ -178,6 +190,7 @@ impl<'a> Removal<'a> {
                 ..
             } | Removal::Parent { .. }
                 | Removal::UnderCompleted { .. }
+                | Removal::Converted { .. }
         )
     }
 
@@ -191,7 +204,10 @@ impl<'a> Removal<'a> {
             Removal::Automatic { cause, .. } => {
                 !matches!(cause, EventCause::DiskSpace | EventCause::Manual)
             }
-            Removal::Manual { .. } | Removal::Deleted | Removal::Parent { .. } => false,
+            Removal::Manual { .. }
+            | Removal::Deleted
+            | Removal::Parent { .. }
+            | Removal::Converted { .. } => false,
         }
     }
 
@@ -208,6 +224,12 @@ impl<'a> Removal<'a> {
         )
     }
 
+    /// Whether the removal keeps the workspace's record, under a chat's
+    /// kind, and the spaces below it, taking only the chats in its worktree.
+    pub(super) fn converts(self) -> bool {
+        matches!(self, Removal::Converted { .. })
+    }
+
     /// Whether the removal leaves alone the workspaces below that are in a
     /// stalled directory, as the cleanup sweep, which makes it, skips them.
     pub(super) fn skips_stalled(self) -> bool {
@@ -220,6 +242,7 @@ impl<'a> Removal<'a> {
         match self {
             Removal::Manual { release_holds, .. } => !release_holds,
             Removal::Parent { refuse_holds, .. } => refuse_holds,
+            Removal::Converted { .. } => true,
             _ => false,
         }
     }
@@ -307,7 +330,13 @@ impl<'a> Removal<'a> {
                     )
                 )
             ),
-            (Removal::Deleted | Removal::Parent { .. } | Removal::UnderCompleted { .. }, _) => {}
+            (
+                Removal::Deleted
+                | Removal::Parent { .. }
+                | Removal::UnderCompleted { .. }
+                | Removal::Converted { .. },
+                _,
+            ) => {}
         }
         Ok(())
     }

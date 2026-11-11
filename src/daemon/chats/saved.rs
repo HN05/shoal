@@ -582,7 +582,7 @@ fn restore(
     ensure_place_free(tx, repository, restored.workspace.as_ref())?;
     let updated = tx.execute(
         "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL,stopped_at=NULL,saved=0,
-            unique_id=?6,stopped_by=NULL,narrowing=?7
+            unique_id=?6,stopped_by=NULL,narrowing=?7,converted=0
          WHERE id=?1 AND restore IS NOT NULL",
         params![
             restored.id,

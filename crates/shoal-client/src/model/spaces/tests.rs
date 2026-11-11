@@ -37,6 +37,7 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_id_or_name() {
         progress: None,
         parent: None,
         children: Vec::new(),
+        converted: false,
     };
     let spaces = Spaces {
         workspaces: vec![workspace],

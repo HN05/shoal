@@ -83,6 +83,10 @@ pub struct Chat {
     /// The spaces below it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<SpaceRef>,
+    /// A stopped chat that was a workspace, whose restored agent is told
+    /// what the space is now.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub converted: bool,
 }
 
 /// Where a new chat runs: its repository's registered checkout, the

@@ -366,16 +366,7 @@ impl Manager {
             if let Some(settings) = xcode {
                 self.delete_xcode_data(&workspace, &settings).await;
             }
-            let released = self
-                .commit_workspace_removal(
-                    &workspace.id,
-                    if present {
-                        removal.cause()
-                    } else {
-                        EventCause::MissingDirectory
-                    },
-                )
-                .await?;
+            let released = self.commit_removal(&workspace.id, removal, present).await?;
             Ok((outcome, post_remove, released))
         }
         .await;
@@ -383,7 +374,7 @@ impl Manager {
             Ok((outcome, post_remove, released)) => {
                 self.ask_user_about(&released).await;
                 Ok(self
-                    .complete_workspace_removal(&workspace, outcome, post_remove)
+                    .complete_workspace_removal(&workspace, outcome, post_remove, removal)
                     .await)
             }
             Err(error) => {
@@ -461,6 +452,25 @@ impl Manager {
         }
     }
 
+    /// Commit `removal` of the workspace `id`, whose directory was
+    /// `present`: delete its record, or for a conversion replace it with
+    /// the chat's; the requests it decided, given back to the user.
+    async fn commit_removal(
+        &self,
+        id: &SpaceId,
+        removal: Removal<'_>,
+        present: bool,
+    ) -> Result<Vec<crate::daemon::approvals::ApprovalRequest>> {
+        if let Removal::Converted { chat } = removal {
+            return self.commit_conversion(id, chat).await;
+        }
+        let cause = match present {
+            true => removal.cause(),
+            false => EventCause::MissingDirectory,
+        };
+        self.commit_workspace_removal(id, cause).await
+    }
+
     /// Release ownership and cascading resource leases in one transaction,
     /// giving the requests the workspace decides, such as an issue proposal
     /// that outlives its workspace, back to the user; those given back.
@@ -497,6 +507,7 @@ impl Manager {
         workspace: &Workspace,
         mut outcome: RemovalResult,
         post_remove: Option<PostRemoveHook>,
+        removal: Removal<'_>,
     ) -> RemovalResult {
         self.close_space_places(&workspace.id, &workspace.name)
             .await;
@@ -508,20 +519,10 @@ impl Manager {
             );
         }
         self.delete_session_logs(&workspace.id);
-        if let Err(error) = self
-            .delete_tmp_dir(&workspace.repository_id, &workspace.id)
-            .await
-        {
-            crate::daemon::log!(
-                "temporary directory of {} not deleted: {error:#}",
-                workspace.name
-            );
-        }
-        if let Err(error) = self.delete_workspace_files(workspace).await {
-            crate::daemon::log!(
-                "files attached to messages of {} not deleted: {error:#}",
-                workspace.name
-            );
+        // The chat a conversion makes keeps the space's temporary directory
+        // and attached files.
+        if !removal.converts() {
+            self.delete_space_files(workspace).await;
         }
         if let Some(hook) = post_remove {
             outcome.hook_error = self.run_post_remove_hook(workspace, &hook).await;
@@ -537,6 +538,26 @@ impl Manager {
             }
         }
         outcome
+    }
+
+    /// Delete the temporary directory and attached files of the removed
+    /// `workspace`.
+    async fn delete_space_files(&self, workspace: &Workspace) {
+        if let Err(error) = self
+            .delete_tmp_dir(&workspace.repository_id, &workspace.id)
+            .await
+        {
+            crate::daemon::log!(
+                "temporary directory of {} not deleted: {error:#}",
+                workspace.name
+            );
+        }
+        if let Err(error) = self.delete_workspace_files(workspace).await {
+            crate::daemon::log!(
+                "files attached to messages of {} not deleted: {error:#}",
+                workspace.name
+            );
+        }
     }
 
     /// Session logs are run data owned by the record just deleted.
@@ -661,6 +682,9 @@ impl Manager {
         removal: Removal<'_>,
         check: &Inspection,
     ) -> Result<RemovalResult> {
+        if let Removal::Converted { chat } = removal {
+            self.forget_converted_agent(workspace, chat)?;
+        }
         let record = self.save_restore_record(workspace, removal).await?;
         ensure_checkpoint_keeps_files(check, removal, record.as_ref())?;
         let (files, branch) = worktrunk_removal_options(check, removal);
@@ -754,7 +778,13 @@ impl Manager {
                     ancestor.name()
                 );
             }
-            (Removal::Manual { .. } | Removal::Deleted | Removal::Parent { .. }, _) => {}
+            (
+                Removal::Manual { .. }
+                | Removal::Deleted
+                | Removal::Parent { .. }
+                | Removal::Converted { .. },
+                _,
+            ) => {}
         }
         Ok(check)
     }
@@ -847,7 +877,10 @@ impl Manager {
         workspace: &Workspace,
         removal: Removal<'_>,
     ) -> Result<Vec<SpaceName>> {
-        let children = self.taken_first(&workspace.id).await?;
+        let children = match removal.converts() {
+            true => self.chats_in(&workspace.id).await?,
+            false => self.taken_first(&workspace.id).await?,
+        };
         self.remove_children(&workspace.name, children, removal)
             .await
     }
@@ -957,6 +990,7 @@ pub(super) fn worktrunk_removal_options(
     let own_branch = check.workspace.branch.is_some()
         && (!check.workspace.disposable || check.branch == check.workspace.branch);
     let branch = if own_branch
+        && !removal.converts()
         && check.branch_preserved()
         && check
             .default_branch

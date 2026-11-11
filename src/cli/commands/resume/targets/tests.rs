@@ -36,6 +36,7 @@ fn spaces() -> Spaces {
         progress: None,
         parent: None,
         children: Vec::new(),
+        converted: false,
     };
     Spaces {
         workspaces: vec![workspace],

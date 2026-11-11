@@ -102,6 +102,14 @@ pub enum WorkspaceMethod {
         workspace: SpaceSelector,
         branch: String,
     },
+    /// Make the workspace a chat in `mode`, `chat` by default, once its
+    /// agent's turn ends: its worktree goes as `shoal rm` removes it, and
+    /// its agent restarts in the repository's checkout.
+    ConvertToChat {
+        workspace: SpaceSelector,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mode: Option<crate::config::modes::ModeName>,
+    },
     ListWorkspaces,
     /// Git worktrees under repositories' Shoal directories that no
     /// workspace owns; in pages.

@@ -12,8 +12,10 @@ use crate::{
     agent::Agent,
     client::{agent::AgentSessionId, scope_tokens::ScopeToken},
     config::{modes::ModeName, permissions::PermissionsConfig},
+    daemon::approvals::{ApprovalRequest, release_decided_by},
     process::identity::Identity,
     sessions::Origin,
+    state::ChatRestore,
 };
 
 /// A conversion whose agent still runs where the space was, until its turn
@@ -204,6 +206,64 @@ pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) ->
     tx.execute("DELETE FROM executions WHERE workspace_id=?1", [id])?;
     tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
     forget(tx, id)
+}
+
+/// The stopped chat a workspace becomes: its agent, the execution it ran
+/// as, the session it carries on and the place it ran in, the process it
+/// ran as, its mode and the permissions given to it.
+#[derive(Debug, Clone)]
+pub(crate) struct ConvertedChat {
+    pub agent: Agent,
+    pub execution: ExecutionId,
+    pub session: Option<AgentSessionId>,
+    pub origin: Option<Origin>,
+    pub process: Identity,
+    pub mode: ModeName,
+    pub narrowing: PermissionsConfig,
+}
+
+/// Replace the workspace `id` with the stopped chat `chat` under its ID,
+/// number and name, which restores in its repository's checkout: its
+/// questions and unread messages become the chat's, and what only a
+/// workspace has goes with its row. Returns the requests the workspace
+/// decided, given back to the user, since a stopped chat decides none.
+pub(crate) fn replace_workspace(
+    tx: &Transaction<'_>,
+    id: &SpaceId,
+    chat: &ConvertedChat,
+) -> Result<Vec<ApprovalRequest>> {
+    tx.execute(
+        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,session,
+            restore,stopped_at,saved,unique_id,scope_token,number,mode,narrowing,converted)
+         SELECT id,repository_id,name,?2,?3,?4,unixepoch(),?5,?6,?7,unixepoch(),1,?8,?9,
+            number,?10,?11,1
+         FROM workspaces WHERE id=?1",
+        params![
+            id,
+            chat.agent,
+            chat.process.pid,
+            chat.process.birth,
+            (chat.origin.as_ref())
+                .map(serde_json::to_string)
+                .transpose()?,
+            chat.session,
+            ChatRestore::Resume,
+            crate::daemon::chats::unique_id(&chat.process)?,
+            ScopeToken::generate(),
+            chat.mode,
+            crate::daemon::store::narrowing_column(&chat.narrowing)?,
+        ],
+    )?;
+    tx.execute(
+        "UPDATE questions SET chat_id=workspace_id,workspace_id=NULL WHERE workspace_id=?1",
+        [id],
+    )?;
+    move_agent_messages(tx, id)?;
+    let released = release_decided_by(tx, id)?;
+    tx.execute("DELETE FROM executions WHERE workspace_id=?1", [id])?;
+    tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
+    forget(tx, id)?;
+    Ok(released)
 }
 
 /// Make the unread agent messages of the workspace `id` the unread messages

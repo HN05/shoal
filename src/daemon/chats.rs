@@ -221,6 +221,7 @@ impl Manager {
             progress: None,
             parent: None,
             children: Vec::new(),
+            converted: false,
         };
         let (recorded, removing) = (process.clone(), self.chat_removals.clone());
         let below = parent.map(|parent| (parent, removing));
@@ -711,7 +712,7 @@ pub(crate) fn scope_token(db: &Connection, id: &SpaceId) -> Result<Option<ScopeT
 /// The never-reused ID of `process` as JSON, where the platform reports one,
 /// which finds what the chat's agent started once it ended, as after it
 /// exits.
-pub(super) fn unique_id(process: &Identity) -> Result<Option<String>> {
+pub(crate) fn unique_id(process: &Identity) -> Result<Option<String>> {
     Ok(process
         .unique
         .as_ref()
@@ -829,7 +830,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
                     chats.started_at,chats.origin,repositories.workspaces_dir,chats.session,
                     chats.restore,chats.completion,
                     workspaces.id,workspaces.name,workspaces.branch,chats.number,chats.mode,
-                    chats.root_dir,chats.narrowing
+                    chats.root_dir,chats.narrowing,chats.converted
              FROM chats LEFT JOIN repositories ON repositories.id=chats.repository_id
                 LEFT JOIN workspaces ON workspaces.id=chats.workspace_id
              ORDER BY chats.started_at, chats.rowid",
@@ -878,6 +879,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
             progress: None,
             parent: None,
             children: Vec::new(),
+            converted: row.get(18)?,
         })
     })?
     .collect::<rusqlite::Result<Vec<Chat>>>()?

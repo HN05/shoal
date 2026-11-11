@@ -175,6 +175,15 @@ pub(super) async fn handle(
                 .rename_workspace(&workspace, &branch, caller.and_then(|c| c.execution_id()))
                 .await?,
         ),
+        WorkspaceMethod::ConvertToChat { workspace, mode } => Body::Workspace(
+            manager
+                .convert_to_chat(
+                    &workspace,
+                    mode.unwrap_or_else(crate::model::chat_mode),
+                    caller,
+                )
+                .await?,
+        ),
         WorkspaceMethod::ListWorkspaces => {
             let root = manager.reach_root(caller).await?;
             Body::Workspaces(manager.visible_workspaces(root.as_ref()).await?)
@@ -367,6 +376,7 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::SetWorkspaceTitle { workspace, .. }
             | WorkspaceMethod::WorkspacePlaces { workspace }
             | WorkspaceMethod::RenameWorkspace { workspace, .. }
+            | WorkspaceMethod::ConvertToChat { workspace, .. }
             | WorkspaceMethod::SplitWorkspace { workspace, .. }
             | WorkspaceMethod::CreateCommitWorkspace {
                 parent: Some(workspace),
