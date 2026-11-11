@@ -555,8 +555,10 @@ worktree's config file, which every command that resolves its settings, such
 as `shoal attach`, waits on, check a worktree within 30 seconds, a status
 reporting what it could not read; one that runs out or is interrupted
 records the directory holding the worktree as stalled, which the daemon reports
-once as an alert and in Shoal's `status` until a check there finishes. The
-directory comes from the path alone, since reading the filesystem could stall
+once as an alert and in Shoal's `status` until a check there finishes. A check
+can also run that long under heavy memory pressure with no prompt waiting, so
+the report says the check timed out and names a prompt only as a possible
+cause. The directory comes from the path alone, since reading the filesystem could stall
 too, and groups a repository's workspaces, which a prompt for their location
 holds together.
 Those checks skip a stalled directory until 20 seconds after its last check, and

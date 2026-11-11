@@ -171,10 +171,10 @@ async fn answer_step(mut stream: UnixStream, request_id: u64, progress: &Progres
 }
 
 /// The stalled directory, or else the check that has run longer than
-/// [`SLOW_ACCESS`], with the permission it may wait on.
+/// [`SLOW_ACCESS`], with what may hold it up.
 fn waiting(access: &FileAccess) -> Option<String> {
     let waiting = match access.stalls().first() {
-        Some(stall) => format!("file access in {} stalled", stall.directory.display()),
+        Some(stall) => format!("file access in {} timed out", stall.directory.display()),
         None => {
             let (path, waited) = access
                 .waiting()
@@ -187,7 +187,7 @@ fn waiting(access: &FileAccess) -> Option<String> {
         }
     };
     Some(format!(
-        "{waiting}; a macOS privacy prompt may be waiting for an answer"
+        "{waiting}; the system may be slow, or a macOS privacy prompt may be waiting for an answer"
     ))
 }
 

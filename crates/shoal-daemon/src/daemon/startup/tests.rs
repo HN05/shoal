@@ -127,7 +127,7 @@ async fn status_names_the_file_access_a_step_waits_on() {
     let stalled = waiting(access).unwrap();
     assert!(
         stalled.starts_with(&format!(
-            "file access in {} stalled;",
+            "file access in {} timed out;",
             root.path().display()
         )),
         "{stalled}"

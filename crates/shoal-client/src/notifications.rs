@@ -84,7 +84,8 @@ states!(NotificationKind {
     EnvironmentProblem => "environment_problem",
     /// A repository's default branch has not synced with its remote for a while.
     SyncFailed => "sync_failed",
-    /// File access in a directory stalled, as while a macOS privacy prompt waits.
+    /// File access in a directory timed out, as under heavy memory pressure or
+    /// while a macOS privacy prompt waits.
     AccessStalled => "access_stalled",
     /// A repository's runner could not register, be deleted or run a job.
     RunnerFailed => "runner_failed",

@@ -17,8 +17,9 @@ pub struct DaemonStatus {
     pub cleanup_error: Option<String>,
 }
 
-/// A directory whose file access stalled, as while macOS waits for an answer
-/// to a privacy prompt, until a later check there finishes.
+/// A directory whose file access timed out, as under heavy memory pressure or
+/// while macOS waits for an answer to a privacy prompt, until a later check
+/// there finishes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccessStall {
     /// The directory holding the checked path, whose other paths' checks
@@ -35,7 +36,7 @@ impl AccessStall {
     /// What the user reads about the stall.
     pub fn message(&self) -> String {
         format!(
-            "File access in {} stalled: a check of {} {}. A macOS privacy prompt may be waiting for an answer.",
+            "File access in {} timed out: a check of {} {}. Shoal checks again; if it keeps timing out, a macOS privacy prompt may be waiting for an answer.",
             self.directory.display(),
             self.path.display(),
             self.reason

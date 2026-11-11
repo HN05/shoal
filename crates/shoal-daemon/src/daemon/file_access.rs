@@ -2,19 +2,22 @@
 //! the daemon starts there, can wait on file access without end: while macOS
 //! waits for an answer to a privacy prompt, every new process that opens a
 //! file in the protected location waits until the prompt is answered or the
-//! kernel interrupts it, whichever process the prompt is for. Checks run under
-//! a time limit. One that runs out or is interrupted records the directory
-//! holding the checked path as stalled, which the daemon reports once, and
-//! later checks of paths there skip it until a recheck finishes.
+//! kernel interrupts it, whichever process the prompt is for. Under heavy
+//! memory pressure a check can also run long with no prompt waiting, so the
+//! daemon reports a stall as a timeout, naming a prompt only as a possible
+//! cause. Checks run under a time limit. One that runs out or is interrupted
+//! records the directory holding the checked path as stalled, which the
+//! daemon reports once, and later checks of paths there skip it until a
+//! recheck finishes.
 use std::{
     collections::BTreeMap,
-    io,
+    fmt, io,
     path::{Path, PathBuf},
     sync::{Mutex, MutexGuard, PoisonError},
     time::Duration,
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use futures_util::future::BoxFuture;
 use tokio::time::Instant;
 
@@ -92,7 +95,7 @@ impl FileAccess {
         let directory = directory(path);
         let _recheck = match self.reserve(&directory) {
             Ok(recheck) => recheck,
-            Err(stall) => return (Err(stalled(&stall)), None),
+            Err(stall) => return (Err(TimedOut(stall).into()), None),
         };
         let running = self.start(path);
         let outcome = tokio::time::timeout(LIMIT, check).await;
@@ -110,8 +113,8 @@ impl FileAccess {
         };
         let (stall, new) = self.record(directory, path, reason);
         let error = match error {
-            Some(error) => error.context(stalled(&stall)),
-            None => stalled(&stall),
+            Some(error) => error.context(TimedOut(stall.clone())),
+            None => TimedOut(stall.clone()).into(),
         };
         (Err(error), new.then_some(stall))
     }
@@ -271,12 +274,22 @@ fn interrupted(error: &anyhow::Error) -> bool {
     })
 }
 
-fn stalled(stall: &AccessStall) -> anyhow::Error {
-    anyhow!(
-        "file access in {} stalled; a macOS privacy prompt may be waiting for an answer",
-        stall.directory.display()
-    )
+/// The failure of a check its directory's stall ended or skipped, which the
+/// daemon reports to the user on its own.
+#[derive(Debug)]
+struct TimedOut(AccessStall);
+
+impl fmt::Display for TimedOut {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "file access in {} timed out; try again. If it keeps timing out, a macOS privacy prompt may be waiting for an answer",
+            self.0.directory.display()
+        )
+    }
 }
+
+impl std::error::Error for TimedOut {}
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
