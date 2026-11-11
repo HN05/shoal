@@ -2859,7 +2859,7 @@ a commit instead. A copy of current files is a linked worktree that Git creates
 without checking anything out; Shoal copies the source's index and worktree Git
 config into it and clones its files (APFS clones on macOS, reflinks on Linux,
 plain copies where the filesystem has neither, and a snapshot of each top-level
-entry that is a btrfs subvolume, as a seed output is), so `git status` and `git diff`
+entry that is a btrfs subvolume holding no other, as a seed output is), so `git status` and `git diff`
 match the source's. The source must be ready, its worktree must verify, and no
 Git operation may be under way there; an agent running there does not matter,
 since copying only reads it. An untracked nested repository or a changed
