@@ -241,14 +241,14 @@ impl Manager {
             }
             CopyPlace::Commit => None,
         };
-        let from = branch.clone().unwrap_or_else(|| requested.clone());
         let name = match &new.options.name {
             Some(given) => given.checked()?,
             None => SpaceName::derive(&requested, "workspace"),
         };
         let chosen = new.path.is_none();
         let path = self
-            .new_workspace_path(repo, &from, new.path.clone())
+            // The directory takes its own suffix, never the branch's.
+            .new_workspace_path(repo, &requested, new.path.clone())
             .await?;
         let at = branch.is_none().then(|| StartingCommit {
             commit: source.head.clone(),

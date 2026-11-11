@@ -122,6 +122,8 @@ async fn a_copy_s_name_stays_its_requested_one() {
         (copy.name.as_str(), copy.branch.as_deref()),
         ("topic-copy", Some("topic-copy-2"))
     );
+    // The branch's suffix leaves the directory, which is free, unsuffixed.
+    assert_eq!(copy.path.file_name().unwrap(), "topic-copy");
     let named = f
         .copy(None, CopyPlace::Branch(Some("named".into())))
         .await
