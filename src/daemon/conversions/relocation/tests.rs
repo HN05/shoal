@@ -697,13 +697,25 @@ async fn a_session_report_waits_for_a_hand_over_under_way() {
         let (manager, id) = (manager.clone(), workspace.id.clone());
         async move { manager.record_converting_session(&id, "s4".into()).await }
     });
-    tokio::task::yield_now().await;
-    let reported_early = reporting.is_finished();
+    crate::daemon::conversions::handovers::WAITING
+        .notified()
+        .await;
+    let during = converting_session(&manager, &workspace).await;
     release.send(()).unwrap();
     handing_over.await.unwrap();
     reporting.await.unwrap().unwrap();
 
-    assert!(!reported_early, "the report waited for the hand-over");
+    assert_eq!(
+        during.as_deref(),
+        Some("s1"),
+        "the report waits for the hand-over"
+    );
+    let after = converting_session(&manager, &workspace).await;
+    assert_eq!(after.as_deref(), Some("s4"));
+}
+
+/// The session the conversion of `workspace` keeps for its chat's agent.
+async fn converting_session(manager: &Manager, workspace: &Workspace) -> Option<String> {
     let id = workspace.id.clone();
     let pending = (manager.store)
         .run(move |db| crate::daemon::conversions::pending(db, &id))
@@ -712,10 +724,8 @@ async fn a_session_report_waits_for_a_hand_over_under_way() {
     let Some(crate::daemon::conversions::Pending::Workspace { chat, .. }) = pending else {
         panic!("expected the conversion: {pending:?}");
     };
-    let session = chat
-        .agent()
+    chat.agent()
         .unwrap()
         .session
-        .map(|session| session.to_string());
-    assert_eq!(session.as_deref(), Some("s4"));
+        .map(|session| session.to_string())
 }

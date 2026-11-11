@@ -8,7 +8,7 @@ use rusqlite::Transaction;
 
 use crate::{config::modes::ModeName, model::Workspace};
 
-mod handovers;
+pub(crate) mod handovers;
 pub(crate) mod record;
 mod relocation;
 mod to_chat;

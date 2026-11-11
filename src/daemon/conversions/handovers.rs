@@ -20,7 +20,18 @@ impl Handovers {
         if HELD.try_with(|()| ()).is_ok() {
             return work.await;
         }
-        let _held = self.0.lock().await;
+        let _held = match self.0.try_lock() {
+            Ok(held) => held,
+            Err(_) => {
+                #[cfg(test)]
+                WAITING.notify_one();
+                self.0.lock().await
+            }
+        };
         HELD.scope((), work).await
     }
 }
+
+/// Notified when a hold waits for another, which tests synchronize on.
+#[cfg(test)]
+pub(crate) static WAITING: tokio::sync::Notify = tokio::sync::Notify::const_new();
