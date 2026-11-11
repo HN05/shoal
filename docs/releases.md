@@ -47,5 +47,5 @@ another release, and a release whose `SHA256SUMS` is attached keeps its assets,
 while a partial upload is replaced whole.
 
 Builds run in the CI image described in AGENTS.md, which carries the pinned
-Rust toolchain, Zig, cargo-zigbuild and rcodesign; rebuild it after
+Rust toolchain, cargo-nextest, Zig, cargo-zigbuild and rcodesign; rebuild it after
 changing its Containerfile. Archives include the agent skills for Homebrew installation.

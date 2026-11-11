@@ -56,7 +56,7 @@ RUN rustup component add rustfmt clippy \
 
 # The runner starts every job container with `tail -f /dev/null` as PID 1,
 # which never reaps: each process a test detaches would stay a zombie once it
-# exits, thousands by the end of `cargo test`, and every process inventory the
+# exits, thousands by the end of a test run, and every process inventory the
 # tests' daemons and fixtures take would read them all. The workflow's
 # `container.options: --init` is ignored. The runner finds `tail` on this
 # image's PATH, where this one comes before /usr/bin and runs tail under tini
@@ -89,6 +89,12 @@ RUN cargo install --locked cargo-audit --version 0.22.2 \
 RUN CARGO_PROFILE_RELEASE_LTO=false \
     CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 \
     cargo install --locked cargo-outdated --version 0.19.0 \
+ && rm -rf "$CARGO_HOME/registry"
+
+# release.py validates a release's tests with cargo-nextest, as ci.yml's rust
+# job does on Shoal runners; .config/nextest.toml names the oldest version it
+# accepts.
+RUN cargo install --locked cargo-nextest --version 0.9.151 \
  && rm -rf "$CARGO_HOME/registry"
 
 # release.yml cross-builds the release binaries with cargo-zigbuild, and
@@ -125,5 +131,5 @@ RUN rustc --version && cargo clippy --version && cargo fmt --version \
  && git --version && lsof -v 2>&1 | head -1 && zsh --version && python3 --version && jq --version \
  && tmux -V && zellij --version \
  && zig version && cargo-zigbuild --version && rcodesign --version \
- && cargo audit --version && cargo outdated --version \
+ && cargo audit --version && cargo outdated --version && cargo nextest --version \
  && tini --version && [ "$(command -v tail)" = /usr/local/bin/tail ]

@@ -393,7 +393,8 @@ release-script tests, and its `musl` job (the other required check) checks the b
 host's musl target with cargo-zigbuild and runs the identity module's tests
 there when a PR changes them, the dependencies or the workflow; a PR whose
 only `area/` label is `area/docs` skips them, as do the release workflow's PR and version commit,
-which `scripts/release.py` validates itself. A draft PR runs no checks; taking it out of draft
+which `scripts/release.py` validates itself with the `rust` job's checks, in
+the Docker CI image. A draft PR runs no checks; taking it out of draft
 (removing the `WIP:` title prefix, as `shoal ready` does) starts one run.
 Its `rust` job and `flaky.yml`'s job, which build, run with `runs-on: shoal` on
 Shoal runners; the jobs that only query the forge stay on Docker, as does the

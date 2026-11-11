@@ -62,7 +62,10 @@ def bump(manifest, lock, requested, occupied):
 def validate():
     run("cargo", "fmt", "--all", "--check")
     run("env", "CARGO_BUILD_WARNINGS=deny", "cargo", "clippy", "--locked", "--all-targets")
-    run("cargo", "test", "--locked")
+    # As CI does: nextest runs each test in a process of its own, and the doc
+    # tests, which it does not run, follow.
+    run("cargo", "nextest", "run", "--locked", "--profile", "ci")
+    run("cargo", "test", "--locked", "--doc")
     run("python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "test_*.py")
     run("cargo", "build", "--locked", "--release")
 
