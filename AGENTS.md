@@ -175,7 +175,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   launch keeps a workspace, and a session Shoal saved keeps it from idle
   cleanup as saved stopped work does. Idle cleanup also counts a
   coordinator's running agent as use of a workspace below it in which no
-  agent of its own has started, since its subagents work there. A chat's
+  agent of its own has started, since its subagents work there, and of a
+  chat below it whose agent stopped, whose work is left to it. A chat's
   agent exiting stops the chat, which ends only by removal.
 - `[cleanup.auto]` has `enabled` (default true) and `idle_minutes` (default
   10), resolved per workspace on each sweep. `[cleanup.merged]` (default true,

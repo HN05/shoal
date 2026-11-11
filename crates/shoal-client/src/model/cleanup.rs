@@ -41,8 +41,9 @@ pub enum CleanupReason {
     RunningCommands,
     Permits,
     Simulators,
-    /// No agent of its own has started there, and the agent of the
-    /// coordinator that does its work runs.
+    /// No agent of its own works there, as none has started in the
+    /// workspace or the chat's stopped, and the agent of the coordinator
+    /// that does its work runs.
     ParentAgentRunning,
     MissingDirectory,
     Dirty,

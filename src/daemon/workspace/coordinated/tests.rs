@@ -228,3 +228,29 @@ async fn idle_cleanup_keeps_a_child_while_its_chat_becomes_a_workspace() {
         .unwrap();
     assert_eq!(kept(&manager, &child).await, None);
 }
+
+#[tokio::test]
+async fn idle_cleanup_keeps_a_stopped_chat_while_its_coordinator_runs() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let (chat, _process) =
+        crate::daemon::test_support::chat(&manager, "notes", "chat", Some(&repo), Some(&parent.id))
+            .await;
+    let started = start_agent(&manager, &parent).await;
+    let chat_kept = async || (manager.cleanup_candidacy(&chat.id).await.unwrap()).err();
+    // Its own agent does its work while it runs, and the coordinator's once
+    // it stopped.
+    assert_eq!(chat_kept().await, Some(CleanupReason::AgentRunning));
+    manager.stop_chat(&chat.id).await.unwrap();
+    assert_eq!(chat_kept().await, Some(CleanupReason::ParentAgentRunning));
+    finish(&manager, started).await;
+    assert_eq!(chat_kept().await, None);
+}

@@ -1,9 +1,10 @@
-//! Workspaces whose coordinator does their work itself: those in which no
+//! Spaces whose coordinator does their work itself: workspaces in which no
 //! agent of their own has started, as a split child before `shoal start`
-//! gives it one, which the workspace's unrecorded mode tells. The
-//! coordinator's subagents work there from inside its agent, reporting
-//! under its scope from its directory, so Shoal cannot tell which such
-//! workspace a subagent works in; each counts as its coordinator's work.
+//! gives it one, which the workspace's unrecorded mode tells, and chats
+//! whose agent stopped. The coordinator's subagents work there from inside
+//! its agent, reporting under its scope from its directory, so Shoal cannot
+//! tell which such workspace a subagent works in; each counts as its
+//! coordinator's work, and a stopped chat's work is left to it.
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::Connection;
@@ -31,7 +32,7 @@ impl Manager {
         Ok(())
     }
 
-    /// Whether the agent of the coordinator that does the work of workspace
+    /// Whether the agent of the coordinator that does the work of the space
     /// `id` runs, in any turn state, since its subagents may work on past
     /// its turn.
     pub(super) async fn coordinator_runs(&self, id: &SpaceId) -> Result<bool> {
@@ -59,8 +60,8 @@ fn coordinator_state(
     Ok(agent_state::current(db, &coordinator)?.map(|status| status.state))
 }
 
-/// The coordinator of workspace `id` while no agent of its own has started
-/// there.
+/// The coordinator of the space `id` while no agent of its own works there:
+/// none has started in the workspace, or the chat's has stopped.
 fn working_coordinator(
     db: &Connection,
     id: &SpaceId,
@@ -68,7 +69,8 @@ fn working_coordinator(
 ) -> Result<Option<SpaceId>> {
     let agentless = store::exists(
         db,
-        "SELECT 1 FROM workspaces WHERE id=?1 AND mode IS NULL",
+        "SELECT 1 FROM workspaces WHERE id=?1 AND mode IS NULL
+         UNION ALL SELECT 1 FROM chats WHERE id=?1 AND restore IS NOT NULL",
         [id],
     )?;
     if !agentless {
