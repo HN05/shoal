@@ -275,3 +275,51 @@ async fn a_conversion_of_a_workspace_whose_agent_stopped_is_not_recorded() {
     );
     assert!(!manager.converting(&workspace.id).await.unwrap());
 }
+
+#[tokio::test]
+async fn a_workspace_built_on_after_the_command_keeps_its_worktree() {
+    let (root, manager) = manager().await;
+    let repo = registered(root.path(), &manager).await;
+    let base = manager
+        .create_workspace(&repo.id, "base".into(), None, None, None)
+        .await
+        .unwrap();
+    let stacked = manager
+        .create_workspace(&repo.id, "stacked".into(), None, None, None)
+        .await
+        .unwrap();
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
+    let identity = crate::process::identity::capture(process.id())
+        .unwrap()
+        .unwrap();
+    process.kill();
+    let chat = ConvertedChat {
+        agent: "claude".into(),
+        execution: ExecutionId::generate(),
+        session: None,
+        origin: None,
+        process: identity,
+        mode: crate::model::chat_mode(),
+        narrowing: Default::default(),
+        stopped_by: None,
+    };
+    // Built on once the conversion was accepted, before the agent's turn ended.
+    let selector = SpaceSelector::id(&stacked.id);
+    (manager.set_base_workspace(&selector, Some(base.id.to_string())))
+        .await
+        .unwrap();
+
+    let refused = manager
+        .convert_worktree_to_chat(&base.id, &chat)
+        .await
+        .unwrap_err();
+
+    assert!(
+        format!("{refused:#}").contains("builds on its branch"),
+        "{refused:#}"
+    );
+    assert!(base.path.exists());
+    assert!(manager.chat_by_id(&base.id).await.unwrap().is_none());
+}

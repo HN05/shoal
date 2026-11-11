@@ -779,13 +779,17 @@ impl Manager {
                     ancestor.name()
                 );
             }
-            (
-                Removal::Manual { .. }
-                | Removal::Deleted
-                | Removal::Parent { .. }
-                | Removal::Converted { .. },
-                _,
-            ) => {}
+            // Its record stays, as a chat's, so nothing may build on its
+            // branch, which goes with the worktree, whenever that began.
+            (Removal::Converted { .. }, _) => {
+                if let Some(stacked) = check.workspace.stacked_workspaces.first() {
+                    bail!(
+                        "workspace {} builds on its branch; retaining workspace",
+                        stacked.name
+                    );
+                }
+            }
+            (Removal::Manual { .. } | Removal::Deleted | Removal::Parent { .. }, _) => {}
         }
         Ok(check)
     }
