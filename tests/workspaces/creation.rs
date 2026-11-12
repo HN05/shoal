@@ -886,6 +886,17 @@ fn resume_starts_the_agent_waiting_for_a_failed_setup_now_with_the_permission_gi
 }
 
 #[test]
+fn resume_with_focus_runs_the_agent_waiting_for_a_failed_setup_here() {
+    let fixture = failing_setup_fixture();
+    let path = fail_setup(&fixture, "failing");
+    let output = fixture.run(&["resume", &fixture.id("failing"), "--focus"]);
+    assert!(output.status.success(), "{output:?}");
+    assert!(path.join("agent-started").exists());
+    let entries = fixture.ok(&["queue"]);
+    assert_eq!(entries, serde_json::json!([]));
+}
+
+#[test]
 fn resume_checks_every_target_before_it_retries_a_failed_setup() {
     let fixture = failing_setup_fixture();
     fail_setup(&fixture, "failing");

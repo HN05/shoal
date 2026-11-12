@@ -33,10 +33,10 @@ pub struct Options {
 /// `shoal resume`: the selected spaces, or every one for `--all` or when no
 /// space has anything to resume. Stopped chats restore at once; workspaces'
 /// restores queue unless `now`, or `focus`, which restores one agent or
-/// chat in this terminal, and the agents waiting for the failed setups of
-/// named workspaces, which retry them first, queue unless `now`. Without a
-/// terminal every restore queues, which `now` starts at once, since this
-/// process can start none of them. Every target, and a change to the permissions given
+/// chat in this terminal, and so do the agents waiting for the failed
+/// setups of named workspaces, which retry them first. Without a terminal
+/// every restore queues, which `now` starts at once, since this process can
+/// start none of them. Every target, and a change to the permissions given
 /// for every selected agent and chat, is checked before any setup or
 /// restore.
 pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> Result<i32> {
@@ -91,6 +91,7 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
             permission_change::apply(ctx, &[], std::slice::from_ref(chat), &[], change).await?;
             chats::restore_here(ctx, chat, change).await
         }
+        ([], Some([]), [setup]) if focus => setups::retry_here(ctx, setup, change).await,
         _ => {
             ensure!(
                 execution.is_none(),

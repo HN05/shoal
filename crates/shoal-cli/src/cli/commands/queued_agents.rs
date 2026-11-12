@@ -151,7 +151,23 @@ pub(super) async fn start(ctx: &Context, entry: QueueEntryId) -> Result<i32> {
 
 /// Open the tab or session of the admitted launch `entry`.
 async fn start_launch(ctx: &Context, entry: &QueueEntryId) -> Result<()> {
-    let (queued, plan) = plan(ctx, entry).await?;
+    let (queued, plan) = launch_plan(ctx, entry).await?;
+    let opens = queued.entry.opens.as_ref();
+    super::workspaces::start_queued(ctx, plan, opens, &queued.entry.name).await
+}
+
+/// Run the launch `entry`, which this process marked starting for itself,
+/// here, holding its slot until its agent takes it over.
+pub(super) async fn run_here(ctx: &Context, entry: &QueueEntryId) -> Result<i32> {
+    let (_, plan) = launch_plan(ctx, entry).await?;
+    super::workspaces::execute_add(ctx, plan).await
+}
+
+/// The plan of the starting launch `entry`, building on the branch of the
+/// done blocker it waited for, refusing one that no longer opens the
+/// existing workspace it was queued for.
+async fn launch_plan(ctx: &Context, entry: &QueueEntryId) -> Result<(QueuedPlan, AddPlan)> {
+    let (queued, mut plan) = plan(ctx, entry).await?;
     if let Some(workspace) = &queued.entry.opens {
         let workspace =
             crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace))
@@ -163,10 +179,8 @@ async fn start_launch(ctx: &Context, entry: &QueueEntryId) -> Result<()> {
             workspace.name
         );
     }
-    let mut plan = plan;
     plan.creation.build_on(queued.entry.base.clone());
-    let opens = queued.entry.opens.as_ref();
-    super::workspaces::start_queued(ctx, plan, opens, &queued.entry.name).await
+    Ok((queued, plan))
 }
 
 pub(super) async fn entries(ctx: &Context) -> Result<Vec<QueueEntry>> {

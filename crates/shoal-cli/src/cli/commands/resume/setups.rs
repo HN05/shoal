@@ -1,9 +1,9 @@
 //! A workspace whose setup failed, or never started, resumes by retrying its
-//! setup, after which the agent waiting in the queue for it starts as the
-//! queue admits it, or at once for `--now`.
+//! setup, after which the agent waiting in the queue for it starts: as the
+//! queue admits it, at once for `--now`, or in this terminal for `--focus`.
 use anyhow::{Context as _, Result};
 
-use super::targets::Selected;
+use super::{permission_change, targets::Selected};
 use crate::client::output::{batch::Failure, resume::SetUp};
 use crate::{
     cli::{
@@ -11,6 +11,7 @@ use crate::{
         context::Context,
         ui,
     },
+    config::permissions::PermissionChange,
     model::{QueueEntry, Workspace},
     state::{QueueKind, QueueState},
 };
@@ -115,6 +116,25 @@ async fn retry_starting(
         workspace,
         launch: Some(launch),
     })
+}
+
+/// Retry `setup`, then start the agent waiting for it in this terminal,
+/// which the queue leaves to this process meanwhile, making `change` to the
+/// permissions it starts with.
+pub(super) async fn retry_here(
+    ctx: &Context,
+    setup: &FailedSetup,
+    change: Option<&PermissionChange>,
+) -> Result<i32> {
+    let name = &setup.workspace.name;
+    let launch = (setup.launch.as_ref())
+        .with_context(|| format!("no agent waits for the setup of {name} to start here"))?;
+    let setups = std::slice::from_ref(setup);
+    permission_change::apply(ctx, &[], &[], setups, change).await?;
+    let _held = queued_agents::Hold::start(&ctx.paths, &launch.id).await;
+    set_up(ctx, &setup.workspace).await?;
+    let entry = crate::client::queue::start_here(&ctx.paths, &launch.id).await?;
+    queued_agents::run_here(ctx, &entry.id).await
 }
 
 /// Run `workspace`'s setup and its post-setup hook again.

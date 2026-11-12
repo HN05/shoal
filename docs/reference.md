@@ -408,8 +408,8 @@ otherwise a picker listing every workspace with what it would restore, stopped
 work first, and the stopped chats; with nothing to resume anywhere it reports that without a picker.
 A named workspace whose setup failed, or never started, retries its setup as
 `shoal setup` does, after which the agent waiting for it in the queue starts
-as the queue admits it, or at once with `--now`, under the permissions
-`--permission` changes; `--focus` is refused there.
+as a restored agent would: as the queue admits it, at once with `--now`, or in
+this terminal with `--focus`, under the permissions `--permission` changes.
 Such workspaces resume together with the other spaces named, every one of
 which is checked before any setup runs.
 Completion describes each workspace the same way.
