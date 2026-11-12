@@ -488,11 +488,7 @@ async fn branch_workspace(
 /// current checkout or workspace, without asking.
 async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<RepositoryId>> {
     let repos = crate::client::repositories::list(&ctx.paths).await?;
-    let positional = match &args.repository {
-        Some(StartTarget::Repository(named)) => Some(named.as_str()),
-        _ => None,
-    };
-    let named = (args.repository_override.as_deref()).or(positional);
+    let named = (args.repository_override.as_deref()).or(positional_repository(args));
     if let Some(Ok(selector)) = named.map(|named| ui::repository_selector(named.to_owned()))
         && let Ok(repo) = crate::repository::select(&repos, selector).await
     {
@@ -504,6 +500,16 @@ async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<Repos
         }
     }
     super::issues::current_repository_id(ctx, &repos).await
+}
+
+/// The repository the positional argument may name: a repository's, or a
+/// number, which names a repository of that name until the start decides it
+/// names an issue.
+fn positional_repository(args: &StartArgs) -> Option<&str> {
+    match &args.repository {
+        Some(StartTarget::Repository(named) | StartTarget::Number(named)) => Some(named),
+        _ => None,
+    }
 }
 
 /// The issue and PR the arguments name by URL.

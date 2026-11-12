@@ -274,3 +274,14 @@ fn a_branchless_start_without_a_terminal_begins_in_a_background_place() {
     assert_eq!(branchless_place(false, Here), Here);
     assert_eq!(branchless_place(true, Beside), Beside);
 }
+
+#[test]
+fn a_numeric_positional_may_name_the_repository_whose_modes_apply() {
+    let positional = |args: &[&str]| positional_repository(&start(args)).map(str::to_owned);
+    assert_eq!(
+        positional(&["007", "--branch", "topic"]).as_deref(),
+        Some("007")
+    );
+    assert_eq!(positional(&["repo"]).as_deref(), Some("repo"));
+    assert_eq!(positional(&["https://forge.example/o/r/issues/7"]), None);
+}
