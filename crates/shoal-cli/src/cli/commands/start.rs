@@ -60,14 +60,18 @@ async fn start(ctx: &Context, mut args: StartArgs) -> Result<i32> {
 }
 
 /// Refuse what a start in the existing workspace `--in` names takes in no
-/// role, before its picker opens: a mode no start takes, or a repository,
-/// which is the workspace's.
+/// role, before its picker opens: a mode no start takes, a repository,
+/// which is the workspace's, or what the worker mode, which always starts
+/// the workspace's own agent, takes only for a new space.
 fn ensure_in_fits(args: &StartArgs) -> Result<()> {
     if args.in_workspace.is_none() {
         return Ok(());
     }
     if let Some(mode) = &args.mode {
         modes::ensure_startable(mode)?;
+    }
+    if args.mode == Some(modes::ModeName::DEFAULT) && !asks_chat(args) {
+        ensure_worker_fits(args)?;
     }
     let repository = args.repository_override.is_some()
         || (args.repository.as_deref())
@@ -110,11 +114,13 @@ fn ensure_fits(args: &StartArgs, kind: SpaceKind, mode: Option<&modes::ModeName>
 }
 
 /// Refuse what only a new space takes in a start of the worker of the
-/// existing workspace `--in` names.
+/// existing workspace `--in` names, picked or yet to be.
 fn ensure_worker_fits(args: &StartArgs) -> Result<()> {
-    let Some(Some(workspace)) = &args.in_workspace else {
+    let Some(workspace) = &args.in_workspace else {
         return Ok(());
     };
+    let workspace =
+        (workspace.as_ref()).map_or_else(|| "<workspace>".to_owned(), ToString::to_string);
     if let Some(Some(issue)) = &args.issue {
         anyhow::bail!(
             "--issue names a new space's issue; link it to the workspace with `shoal link issue {issue} assigned --space {workspace}`"

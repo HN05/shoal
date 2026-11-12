@@ -70,10 +70,15 @@ fn a_workspaces_worker_refuses_what_only_a_new_space_takes() {
 fn a_start_in_a_workspace_refuses_what_no_role_takes_before_its_picker() {
     let fits = |args: &[&str]| ensure_in_fits(&start(args));
     fits(&["--in", "--mode", "chat", "--issue", "7"]).unwrap();
+    // The worker mode starts the workspace's own agent, so what only a new
+    // space takes is refused before the picker too.
+    fits(&["--in", "--mode", "worker"]).unwrap();
     for args in [
         &["--in", "--mode", "setup"][..],
         &["repo", "--in"],
         &["--in", "--repo", "repo"],
+        &["--in", "--mode", "worker", "--name", "Other"],
+        &["--in", "--mode", "worker", "--issue", "7"],
     ] {
         assert!(fits(args).is_err(), "{args:?}");
     }
