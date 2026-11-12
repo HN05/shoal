@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::{Backend, ForgeKind},
+    backends::{ForgeKind, Items},
     items::item::Current,
     numbers::{CommentId, PullNumber},
     review::{
@@ -21,7 +21,7 @@ use crate::{
 /// How the forge asks for reviews, answers review threads and submits
 /// reviews of a PR's diff.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
-pub(crate) trait Reviews: Backend {
+pub(crate) trait Reviews: Items {
     /// The users and teams the repository's PRs can ask for a review.
     async fn reviewers(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>>;
 

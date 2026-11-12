@@ -1157,7 +1157,7 @@ waiting one with what holds it back, as does every chat that links the PR, but
 none of them owns it, lends it a build nor reaches it with its scope. The runner is
 registered per repository with the user's own login, never for a user,
 organisation or instance, or on GitHub one runner per job, and what the forge
-does its own way is a `Backend` operation, so another forge adds an
+does its own way is a `Runners` operation, so another forge adds an
 implementation, not daemon code. Container jobs and forges other than Forgejo
 and GitHub remain proposals.
 

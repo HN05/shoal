@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::{Activity, Backend},
+    backends::{Activity, Items},
     items::{action::Acted, link::ItemKind, reaction::Subject},
     numbers::CommentId,
     review::view::Details,

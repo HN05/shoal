@@ -89,8 +89,10 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `shoal-subprocess`, `shoal-forge-derive` and `shoal-time`; it takes the
   account to act as, while scope, approvals, identity choice and workspace
   records stay in the daemon. What one forge does its own way belongs in its
-  `Backend` implementation, never in a match on the forge kind, and reading an
-  issue, PR or run by its kind goes through `ForgeRepo`'s one operation for it.
+  implementation of `Backend` or of the area trait over it that covers it,
+  such as `Runs`, in that area's module of the forge, never in a match on the
+  forge kind, and reading an issue, PR or run by its kind goes through
+  `ForgeRepo`'s one operation for it.
 - Apps use Shoal's protocol through the `shoal-client` crate, with no
   compatibility promise: the protocol changes freely and only the exact
   version match protects a client. The CLI and apps share that crate's

@@ -3,7 +3,7 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ForgeRepo, account::Account, backends::Backend, items::item::ItemState, numbers::IssueNumber,
+    ForgeRepo, account::Account, backends::Items, items::item::ItemState, numbers::IssueNumber,
 };
 
 /// An issue's title, description and labels, with the URL of its number.

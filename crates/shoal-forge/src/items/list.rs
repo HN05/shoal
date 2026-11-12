@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::Items,
     capability::Capability,
     items::{
         item::{Item, ItemState},

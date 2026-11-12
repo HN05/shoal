@@ -4,7 +4,7 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::backends::Backend;
+use crate::backends::{Backend, Items};
 use crate::state::states;
 use crate::{ForgeRepo, items::link::ItemKind};
 

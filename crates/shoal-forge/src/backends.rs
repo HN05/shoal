@@ -1,6 +1,8 @@
-//! What differs between forges. Each forge implements [`Backend`];
-//! [`ForgeKind`] names the one a repository uses and forwards each call to
-//! it, so a new forge implements the trait and adds its variant here.
+//! What differs between forges. Each forge implements [`Backend`] and,
+//! in a module of its own for each, the area traits over it, such as
+//! [`Items`] and [`Runs`]; [`ForgeKind`] names the one a repository uses
+//! and forwards each call to it, so a new forge implements the traits and
+//! adds its variant here.
 pub mod bitbucket;
 pub(crate) mod forgejo;
 pub(crate) mod github;
@@ -11,22 +13,10 @@ pub(crate) mod rest;
 use anyhow::Result;
 use serde_json::Value;
 
-use anyhow::Context;
-
 use crate::{
     ForgeRepo,
     account::Account,
     capability::{Capability, Support},
-    items::{
-        action::Edit,
-        comment::Found,
-        create::{Head, NewIssue, NewPull},
-        item::{Current, Item, ItemState},
-        link::ItemKind,
-        list,
-        reaction::Subject,
-    },
-    numbers::{IssueNumber, PullNumber},
     repo::locator::ItemRoute,
     transport::{api::Request, resend::Transient, response::Response},
 };
@@ -110,11 +100,12 @@ macro_rules! dispatch {
 
 mod area;
 pub(crate) use area::{
-    Activity, Attachments, Checks, Conventions, Merging, Reactions, Reviews, Runners, Runs,
+    Activity, Attachments, Checks, Conventions, Items, Merging, Reactions, Reviews, Runners, Runs,
 };
 
-/// What a forge does its own way. Methods that need the repository take it
-/// as `repo`.
+/// What a forge does its own way that every area needs: its identity and
+/// support, routes and endpoints, sign-in, requests and pages. Methods that
+/// need the repository take it as `repo`.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
 pub(crate) trait Backend {
     /// Whether `host`, a repository without a path, answers this forge's
@@ -172,10 +163,6 @@ pub(crate) trait Backend {
     /// The field that holds a commit's full ID in a list of PR commits.
     fn commit_field(&self) -> &'static str;
 
-    /// The ref a remote of the repository keeps PR `number`'s head
-    /// commit under, where the forge keeps one after its branch goes.
-    fn pull_head_ref(&self, number: PullNumber) -> Option<String>;
-
     /// What a failed read as the user most likely needs.
     fn login_hint(&self) -> &'static str;
 
@@ -221,117 +208,6 @@ pub(crate) trait Backend {
     /// A list page's items, and whether another page follows.
     fn page<'a>(&self, response: &'a Value, size: usize) -> Option<(&'a [Value], bool)>;
 
-    /// The item an item endpoint returned as `value`; an issue read that
-    /// returns a PR is refused.
-    fn current(
-        &self,
-        repo: &ForgeRepo,
-        kind: ItemKind,
-        number: u64,
-        value: &Value,
-    ) -> Result<Current>;
-
-    /// Whether issues and PRs share one sequence, so a number names one item.
-    fn numbers_items_together(&self) -> bool;
-
-    /// Issues or PRs that `search` matches, newest first, through the
-    /// forge's search where it has one: the first `search.limit` matches at
-    /// least. The caller drops items beyond the limit and those in a state
-    /// the search leaves out.
-    async fn list_items(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        kind: ItemKind,
-        search: &list::Search,
-    ) -> Result<Vec<Item>>;
-
-    /// An issue's state; a PR's number is refused.
-    async fn issue_state(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: IssueNumber,
-    ) -> Result<ItemState> {
-        rest::issue_state(repo, account, number).await
-    }
-
-    /// An open issue.
-    async fn issue_details(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: IssueNumber,
-    ) -> Result<Current> {
-        rest::issue_details(repo, account, number).await
-    }
-
-    /// The URLs of the open issues the forge records as blocking an issue.
-    /// A forge that records no blocking issues lists none.
-    async fn open_issue_blockers(
-        &self,
-        _repo: &ForgeRepo,
-        _account: &Account,
-        _number: IssueNumber,
-    ) -> Result<Vec<String>> {
-        Ok(Vec::new())
-    }
-
-    /// The PR `number`, for checking out its head.
-    async fn pull_details(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: PullNumber,
-    ) -> Result<Current> {
-        repo.read(account, ItemKind::Pr, number.get())
-            .await
-            .hint_login(self)
-    }
-
-    /// Read what `edit` needs beyond `current` before it is planned.
-    async fn prepare_edit(
-        &self,
-        _repo: &ForgeRepo,
-        _account: &Account,
-        _edit: &Edit,
-        _current: &mut Current,
-    ) -> Result<()> {
-        Ok(())
-    }
-
-    /// The requests that change `current` as `edit` says, in order.
-    fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>>;
-
-    /// Post `body` as a comment on the item.
-    fn comment(&self, repo: &ForgeRepo, item: &Item, body: &str) -> Request;
-
-    /// Close or reopen the item.
-    fn set_state(&self, repo: &ForgeRepo, item: &Item, state: ItemState) -> Result<Request>;
-
-    /// Where activity records a posted comment: its source, and the
-    /// response field that holds its ID.
-    fn comment_key(&self) -> (&'static str, &'static str);
-
-    /// Where activity records a reply in a review thread.
-    fn reply_key(&self) -> (&'static str, &'static str);
-
-    /// The open PRs that may have `head` as their head, filtered as far
-    /// as the forge can.
-    async fn open_pulls_from(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        head: &Head<'_>,
-    ) -> Result<Vec<Value>>;
-
-    /// Whether a listed PR's head is `head`.
-    fn has_head(&self, repo: &ForgeRepo, pull: &Value, head: &Head<'_>) -> bool;
-
-    /// The request that reads `branch`, and the JSON pointer to its commit
-    /// in the response.
-    fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str);
-
     /// Whether `account` may push branches to the repository.
     async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool>;
 
@@ -339,33 +215,9 @@ pub(crate) trait Backend {
     /// forge creates when the account has none.
     async fn fork(&self, repo: &ForgeRepo, account: &Account) -> Result<String>;
 
-    /// The request that opens `pull`.
-    fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request;
-
-    /// The request that opens `issue`.
-    fn new_issue(&self, repo: &ForgeRepo, issue: &NewIssue) -> Request;
-
-    /// Whether a new issue's labels are added after opening it, because
-    /// opening it cannot set them by name.
-    fn labels_issue_after_opening(&self) -> bool;
-
     /// The login `account` signs in to the forge as; none when it reads
     /// anonymously.
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>>;
-
-    /// Whether the login of `account` wrote `comment` of item `number`.
-    async fn wrote(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        _kind: ItemKind,
-        _number: u64,
-        comment: &Found,
-    ) -> Result<bool> {
-        let login = (self.own_login(repo, account).await?)
-            .context("editing a comment needs a login on the forge")?;
-        Ok(comment.author.eq_ignore_ascii_case(&login))
-    }
 
     /// The default branch a read of the repository's own endpoint returned
     /// as `value`.
@@ -377,17 +229,6 @@ pub(crate) trait Backend {
     async fn repository_id(&self, _repo: &ForgeRepo, _account: &Account) -> Result<Option<u64>> {
         Ok(None)
     }
-
-    /// The request that replaces the body of the comment `subject` of item
-    /// `number`.
-    fn edit_comment(
-        &self,
-        repo: &ForgeRepo,
-        kind: ItemKind,
-        number: u64,
-        subject: Subject,
-        body: &str,
-    ) -> Result<Request>;
 }
 
 /// Adds a backend's login hint to a failed read.

@@ -7,7 +7,7 @@ use serde_json::Value;
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::{Backend, Items},
     capability::Capability,
     items::{
         action::{Action, Edit, MilestoneChange},

@@ -1,4 +1,52 @@
+use serde_json::json;
+
 use super::*;
+use crate::numbers::CommentId;
+
+fn gitlab() -> ForgeRepo {
+    ForgeRepo::parse("git@gitlab.com:group/sub/project.git").unwrap()
+}
+
+#[test]
+fn comment_edits_replace_the_body_of_an_items_note() {
+    let repo = gitlab();
+    let pull = repo.item_endpoint(ItemKind::Pr, 7);
+    let inline = GitLab
+        .edit_comment(
+            &repo,
+            ItemKind::Pr,
+            7,
+            Subject::ReviewComment(CommentId::new(40)),
+            "Why?",
+        )
+        .unwrap();
+    assert_eq!(
+        inline,
+        Request::new(
+            HttpMethod::Put,
+            format!("{pull}/notes/40"),
+            Some(json!({"body": "Why?"})),
+        )
+    );
+    let issue = GitLab
+        .edit_comment(
+            &repo,
+            ItemKind::Issue,
+            3,
+            Subject::Comment(CommentId::new(41)),
+            "Fixed",
+        )
+        .unwrap();
+    assert_eq!(
+        issue.endpoint,
+        format!("{}/notes/41", repo.item_endpoint(ItemKind::Issue, 3))
+    );
+    assert!(
+        GitLab
+            .edit_comment(&repo, ItemKind::Pr, 7, Subject::Item, "Body")
+            .is_err()
+    );
+}
 
 #[test]
 fn open_blocking_issues_are_the_open_is_blocked_by_links() {
@@ -39,12 +87,6 @@ fn closed_merge_request_searches_list_all_to_include_merged_ones() {
         search_endpoint(ItemKind::Pr, &search),
         "merge_requests?state=opened"
     );
-}
-use crate::numbers::CommentId;
-use serde_json::json;
-
-fn gitlab() -> ForgeRepo {
-    ForgeRepo::parse("git@gitlab.com:group/sub/project.git").unwrap()
 }
 
 #[test]
@@ -121,45 +163,4 @@ fn issues_use_their_own_numbers_routes_and_states() {
     let mut merged = issue;
     merged["state"] = json!("merged");
     assert!(gitlab().current(ItemKind::Issue, 3, &merged).is_err());
-}
-
-#[test]
-fn comment_edits_replace_the_body_of_an_items_note() {
-    let repo = gitlab();
-    let pull = repo.item_endpoint(ItemKind::Pr, 7);
-    let inline = GitLab
-        .edit_comment(
-            &repo,
-            ItemKind::Pr,
-            7,
-            Subject::ReviewComment(CommentId::new(40)),
-            "Why?",
-        )
-        .unwrap();
-    assert_eq!(
-        inline,
-        Request::new(
-            HttpMethod::Put,
-            format!("{pull}/notes/40"),
-            Some(json!({"body": "Why?"})),
-        )
-    );
-    let issue = GitLab
-        .edit_comment(
-            &repo,
-            ItemKind::Issue,
-            3,
-            Subject::Comment(CommentId::new(41)),
-            "Fixed",
-        )
-        .unwrap();
-    assert_eq!(
-        issue.endpoint,
-        format!("{}/notes/41", repo.item_endpoint(ItemKind::Issue, 3))
-    );
-    assert!(
-        GitLab
-            .edit_comment(&repo, ItemKind::Pr, 7, Subject::Item, "Body")
-            .is_err()
-    );
 }

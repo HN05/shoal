@@ -37,7 +37,8 @@ instead of the PR delivery guidance below.
   such as check states, item snapshots, item URLs and run IDs, live in
   `crates/shoal-forge`, never in `shoal-daemon` or `shoal-cli`; scope, approvals,
   identity choice and workspace records stay in the daemon. Flag a match on
-  the forge kind outside a `Backend` implementation, and a match that picks
+  the forge kind outside a forge's implementation of `Backend` or an area
+  trait over it, a backend `impl` that spans several areas, and a match that picks
   `issue`, `pull` or `run` by an item's kind outside `ForgeRepo`'s one
   operation for it.
 - The minimum Rust version follows current stable; keep the manifest and CI
@@ -482,7 +483,7 @@ instead of the PR delivery guidance below.
   workspace at its commit that starts from the seed, and ends only through the
   forge: stopping it cancels its run there, protection leaves it running, and
   its workspace goes once the execution ends. Forge-specific steps are
-  `Backend` operations; the daemon never matches on the forge kind.
+  operations of the forge's `Runners`; the daemon never matches on the forge kind.
 - Machine-wide memory overload protection is opt-out; sustained CPU protection is
   opt-in. The machine-only `load` level sets the CPU and memory thresholds the
   file leaves out; explicit values win. Stop one connected tracked

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::{Backend, Merging},
+    backends::{Items, Merging},
     capability::Capability,
     items::{
         attach::{Attachment, Holder, Pending},

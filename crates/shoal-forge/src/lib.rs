@@ -23,7 +23,7 @@ pub mod updates;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use backends::{Backend, ForgeKind, Merging};
+use backends::{Backend, ForgeKind, Items, Merging};
 use hosts::{HostType, HostTypes};
 use items::link::LinkKind;
 use numbers::{IssueNumber, PullNumber};
