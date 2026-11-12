@@ -1,7 +1,8 @@
 //! GitLab's merges and reverts of PRs, and the branches they delete.
 use anyhow::{Context, Result};
+use serde_json::json;
 
-use super::{GitLab, merge_request};
+use super::GitLab;
 use crate::{
     ForgeRepo,
     account::Account,
@@ -102,4 +103,25 @@ impl Merging for GitLab {
             repo.repo_endpoint(&format!("repository/branches/{}", encode(branch, false)));
         Request::new(HttpMethod::Delete, endpoint, None)
     }
+}
+
+/// GitLab merges with the project's merge method, optionally squashing, now
+/// or once the pipeline succeeds when `when_pipeline_succeeds`.
+fn merge_request(
+    endpoint: String,
+    method: MergeMethod,
+    delete_branch: bool,
+    when_pipeline_succeeds: bool,
+) -> Result<Request> {
+    if method == MergeMethod::Rebase {
+        return Err(capability::unsupported(&GitLab, Capability::merge(method)));
+    }
+    let mut body = json!({
+        "squash": method == MergeMethod::Squash,
+        "should_remove_source_branch": delete_branch,
+    });
+    if when_pipeline_succeeds {
+        body["merge_when_pipeline_succeeds"] = json!(true);
+    }
+    Ok(Request::new(HttpMethod::Put, endpoint, Some(body)))
 }
