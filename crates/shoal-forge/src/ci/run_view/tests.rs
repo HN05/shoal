@@ -179,7 +179,7 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
             JobState::Waiting,
             JobState::Running,
             JobState::Cancelled,
-            JobState::Failed
+            JobState::Cancelled
         ]
     );
     Ok(())
@@ -233,7 +233,7 @@ fn jobs_are_selected_by_id_or_by_a_name_no_other_job_has() -> Result<()> {
 }
 
 #[test]
-fn a_failed_run_whose_jobs_only_never_ran_was_cancelled() {
+fn a_failed_run_whose_only_stopped_jobs_were_cancelled_was_cancelled() {
     let job = |state| RunJob {
         id: JobId::new(1),
         name: "rust".into(),
@@ -265,7 +265,7 @@ fn filters_need_a_bounded_limit_and_nonempty_names() {
 }
 
 #[tokio::test]
-async fn a_run_cancelled_before_its_job_ran_reports_it_without_reading_its_log() -> Result<()> {
+async fn a_run_whose_jobs_were_cancelled_reports_it_and_keeps_their_logs() -> Result<()> {
     use crate::{
         backends::ForgeKind,
         test_support::{Server, agent_on, repo_on},
@@ -276,10 +276,19 @@ async fn a_run_cancelled_before_its_job_ran_reports_it_without_reading_its_log()
                 {"id": 30, "index_in_repo": 7, "status": "cancelled", "prettyref": "main",
                     "workflow_id": "ci.yml", "commit_sha": "abc"}
             ]}),
+            // `rust` was cancelled while it ran, `musl` before a runner took it.
             "GET /api/v1/repos/team/repo/actions/runs/30/jobs" => json!([
                 {"id": 1, "name": "gate", "status": "success", "run_id": 30, "task_id": 5},
-                {"id": 2, "name": "rust", "status": "cancelled", "run_id": 30, "task_id": 0}
+                {"id": 2, "name": "rust", "status": "cancelled", "run_id": 30, "task_id": 6},
+                {"id": 3, "name": "musl", "status": "cancelled", "run_id": 30, "task_id": 0}
             ]),
+            "GET /api/v1/repos/team/repo/actions/jobs/2/logs" => {
+                return (
+                    200,
+                    Vec::new(),
+                    "Compiling shoal\ncontext canceled\n".into(),
+                );
+            }
             _ => return (404, Vec::new(), Vec::new()),
         };
         (200, Vec::new(), body.to_string().into())
@@ -290,16 +299,16 @@ async fn a_run_cancelled_before_its_job_ran_reports_it_without_reading_its_log()
     let activity = forgejo.run_activity(&account, &run).await?;
     assert_eq!(activity.state(), Some(SnapshotState::Cancelled));
     assert!(activity.failed_jobs.is_empty());
-    let log = forgejo
-        .run_job_log(&account, &run, &JobRef::Id(JobId::new(2)))
-        .await;
-    assert!(log.is_err());
     assert!(
         !server
             .received()
             .iter()
             .any(|request| request.line.contains("/logs")),
-        "a job that never ran has no log to read"
+        "a cancelled job is no failure to read the log of"
     );
+    let log = forgejo
+        .run_job_log(&account, &run, &JobRef::Name("rust".into()))
+        .await?;
+    assert!(log.text.contains("context canceled"));
     Ok(())
 }

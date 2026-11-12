@@ -55,7 +55,8 @@ states!(
         Waiting => "waiting",
         Running => "running",
         Finished => "finished",
-        /// A job cancelled before a runner took it, which has no log.
+        /// A job cancelled before it finished, whether or not a runner
+        /// took it.
         Cancelled => "cancelled",
     }
 );

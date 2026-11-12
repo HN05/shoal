@@ -4351,7 +4351,7 @@ run.
 `shoal view ci` shows a run's state (`waiting` until a runner takes a job,
 `running`, `failed` or `finished`),
 branch, workflow and jobs, each in one of those states or `cancelled` when
-Forgejo cancelled it before a runner took it, so it has no log, and the log
+Forgejo cancelled it, and the log
 tails of its failed jobs as `shoal view`
 shows a PR's; `--job` shows only one job's whole log, in any state and up to
 8 MiB, by its name or, as several jobs may share one, the ID the view lists
@@ -4520,7 +4520,7 @@ seconds, and the daemon queues what its own polling of a ready workspace's linke
 items observes for the next watch, which returns at once; `watch pr`, `watch
 issue` or `watch ci` filters by kind. A run delivers one `ci_completed` update
 when it finishes, with its final state, `cancelled` for a failed run whose
-jobs only stopped by being cancelled before they ran, each failed job's failing step where its
+jobs only stopped by being cancelled, each failed job's failing step where its
 log or Forgejo's step list names one, and a pointer to `shoal view ci`; its watch then ends. `watch <number-or-url>`, `watch pr <number-or-url>` and
 `watch issue <number-or-url>` select an explicit item in the workspace's repository
 without linking it or changing completion policy; explicit PR watches also accept

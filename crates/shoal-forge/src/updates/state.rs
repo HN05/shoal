@@ -33,8 +33,7 @@ states!(
         Running => "running",
         Failed => "failed",
         Finished => "finished",
-        /// A run that stopped short only because jobs were cancelled before
-        /// they ran.
+        /// A run that stopped short only because jobs were cancelled.
         Cancelled => "cancelled",
     }
 );
