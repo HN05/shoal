@@ -10,7 +10,11 @@ use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ForgeRepo, account::Account, backends::Backend, capability::Capability, numbers::CommentId,
+    ForgeRepo,
+    account::Account,
+    backends::{Attachments, Backend},
+    capability::Capability,
+    numbers::CommentId,
 };
 
 /// The largest image Shoal uploads, which is GitHub's limit.

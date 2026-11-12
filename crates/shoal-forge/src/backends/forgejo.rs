@@ -5,6 +5,7 @@ use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
 pub(crate) mod actions;
+mod attachments;
 mod checks;
 mod conventions;
 mod organization;
@@ -12,16 +13,14 @@ mod review;
 mod reviewers;
 mod runners;
 mod runs;
-mod sniff;
 pub(crate) mod threads;
-mod uploads;
 mod version;
 mod view;
 
 use super::{
     Backend, LoginHint,
     github_rest::{self, GitHubShapes},
-    image, link, rest, served_at,
+    rest,
 };
 use crate::{
     ForgeRepo,
@@ -32,7 +31,6 @@ use crate::{
     conventions::draft::DraftMarker,
     items::{
         action::{Edit, MergeMethod, UpdateMethod},
-        attach::{Attachment, Holder, Media},
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState, text},
         link::ItemKind,
@@ -50,9 +48,8 @@ use crate::{
         view::{Details, Review, login},
     },
     transport::{
-        api::{HttpMethod, Request, Upload, encode, full_page},
-        download,
-        response::{Fetched, Response},
+        api::{HttpMethod, Request, encode, full_page},
+        response::Response,
     },
     updates::{DISCUSSION, Entry, Snapshot},
 };
@@ -645,63 +642,6 @@ impl Backend for Forgejo {
             .await
             .context("read the forge's UI settings")?;
         AllowedReactions::only(&settings["allowed_reactions"])
-    }
-
-    /// Forgejo takes the host's token for attachments and raw files on its
-    /// web host; an anonymous request reaches only what anyone may see.
-    async fn download(&self, repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
-        let authorization = account.authorization(repo).await?;
-        download::with_curl(url, authorization).await
-    }
-
-    /// The instance's settings are checked here, since an upload they refuse
-    /// would fail only after its comment or item is posted.
-    async fn check_uploads(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        attachments: &[Attachment],
-    ) -> Result<bool> {
-        let settings = uploads::Settings::read(repo, account).await?;
-        for attachment in attachments {
-            settings.check(attachment)?;
-        }
-        Ok(true)
-    }
-
-    fn upload(
-        &self,
-        repo: &ForgeRepo,
-        holder: Holder,
-        attachment: &Attachment,
-        _repository: Option<u64>,
-    ) -> Result<Request> {
-        let name = encode(attachment.name(), false);
-        let endpoint = match holder {
-            Holder::Item(number) => format!("issues/{number}/assets?name={name}"),
-            Holder::Comment(id) => format!("issues/comments/{id}/assets?name={name}"),
-            Holder::Repository => bail!("Forgejo keeps attached files with items and comments"),
-        };
-        Ok(Request::upload(
-            repo.repo_endpoint(&endpoint),
-            Upload {
-                path: attachment.path.clone(),
-                content_type: attachment.content_type(),
-                field: Some("attachment"),
-            },
-        ))
-    }
-
-    fn uploaded_url(&self, response: &Value) -> Result<String> {
-        served_at(response, "browser_download_url")
-    }
-
-    fn markup(&self, attachment: &Attachment, alt: &str, url: &str) -> String {
-        match attachment.media() {
-            Media::Video => format!("<video src=\"{url}\" controls></video>"),
-            Media::Image => image(alt, url),
-            Media::File => link(alt, url),
-        }
     }
 
     fn edit_comment(

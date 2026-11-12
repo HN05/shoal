@@ -1,12 +1,88 @@
-//! The instance's attachment settings, checked before a comment or item is
-//! posted, since Forgejo takes its files only once it exists.
+//! Forgejo's attached files, kept with the item or comment that shows them.
+//! The instance's attachment settings are checked before a comment or item
+//! is posted, since Forgejo takes its files only once it exists.
 use std::io::Read;
 
 use anyhow::{Context, Result, bail, ensure};
 use serde::Deserialize;
+use serde_json::Value;
 
-use super::sniff;
-use crate::{ForgeRepo, account::Account, items::attach::Attachment, transport::api::Request};
+use super::Forgejo;
+use crate::{
+    ForgeRepo,
+    account::Account,
+    backends::{
+        Attachments,
+        area::{image, link, served_at},
+    },
+    items::attach::{Attachment, Holder, Media},
+    transport::{
+        api::{Request, Upload, encode},
+        download,
+        response::Fetched,
+    },
+};
+
+mod sniff;
+
+impl Attachments for Forgejo {
+    /// The instance's settings are checked here, since an upload they refuse
+    /// would fail only after its comment or item is posted.
+    async fn check_uploads(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        attachments: &[Attachment],
+    ) -> Result<bool> {
+        let settings = Settings::read(repo, account).await?;
+        for attachment in attachments {
+            settings.check(attachment)?;
+        }
+        Ok(true)
+    }
+
+    /// Forgejo takes the host's token for attachments and raw files on its
+    /// web host; an anonymous request reaches only what anyone may see.
+    async fn download(&self, repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
+        let authorization = account.authorization(repo).await?;
+        download::with_curl(url, authorization).await
+    }
+
+    fn upload(
+        &self,
+        repo: &ForgeRepo,
+        holder: Holder,
+        attachment: &Attachment,
+        _repository: Option<u64>,
+    ) -> Result<Request> {
+        let name = encode(attachment.name(), false);
+        let endpoint = match holder {
+            Holder::Item(number) => format!("issues/{number}/assets?name={name}"),
+            Holder::Comment(id) => format!("issues/comments/{id}/assets?name={name}"),
+            Holder::Repository => bail!("Forgejo keeps attached files with items and comments"),
+        };
+        Ok(Request::upload(
+            repo.repo_endpoint(&endpoint),
+            Upload {
+                path: attachment.path.clone(),
+                content_type: attachment.content_type(),
+                field: Some("attachment"),
+            },
+        ))
+    }
+
+    fn uploaded_url(&self, response: &Value) -> Result<String> {
+        served_at(response, "browser_download_url")
+    }
+
+    fn markup(&self, attachment: &Attachment, alt: &str, url: &str) -> String {
+        match attachment.media() {
+            Media::Video => format!("<video src=\"{url}\" controls></video>"),
+            Media::Image => image(alt, url),
+            Media::File => link(alt, url),
+        }
+    }
+}
 
 /// What `GET /settings/attachment` reports.
 #[derive(Debug, Deserialize)]

@@ -7,7 +7,7 @@ use anyhow::{Context, Result, ensure};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::Attachments,
     capability::Capability,
     transport::{
         api::http_body,

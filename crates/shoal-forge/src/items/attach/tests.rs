@@ -1,4 +1,5 @@
 use super::*;
+use crate::backends::Attachments;
 
 fn attachment(path: &str, alt: Option<&str>) -> Attachment {
     Attachment {

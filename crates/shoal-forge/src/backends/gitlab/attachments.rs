@@ -1,9 +1,61 @@
-//! Where GitLab's API serves a file uploaded to a project or group, such as
-//! an image in a description: its web routes take no access token, while the
-//! API serves the same file to a member.
-use anyhow::{Context, Result};
+//! GitLab's attached files, uploaded to the project. Its web routes for a
+//! file uploaded to a project or group, such as an image in a description,
+//! take no access token, while the API serves the same file to a member.
+use anyhow::{Context, Result, ensure};
 
-use crate::transport::api::encode;
+use super::GitLab;
+use crate::{
+    ForgeRepo,
+    account::Account,
+    backends::Attachments,
+    items::attach::{Attachment, Holder},
+    transport::{
+        api::{Request, Upload, encode},
+        download,
+        response::Fetched,
+    },
+};
+
+impl Attachments for GitLab {
+    async fn check_uploads(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _attachments: &[Attachment],
+    ) -> Result<bool> {
+        Ok(false)
+    }
+
+    /// GitLab's web routes for uploads take no access token, so the file
+    /// is read from the API route that serves the same upload.
+    async fn download(&self, repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
+        let endpoint = api_route(url)?;
+        let url = format!("{}://{}/api/v4/{endpoint}", repo.web_scheme, repo.host);
+        let authorization = account.authorization(repo).await?;
+        download::with_curl(&url, authorization).await
+    }
+
+    fn upload(
+        &self,
+        repo: &ForgeRepo,
+        holder: Holder,
+        attachment: &Attachment,
+        _repository: Option<u64>,
+    ) -> Result<Request> {
+        ensure!(
+            holder == Holder::Repository,
+            "GitLab cannot attach files to {holder:?}"
+        );
+        Ok(Request::upload(
+            repo.repo_endpoint("uploads"),
+            Upload {
+                path: attachment.path.clone(),
+                content_type: attachment.content_type(),
+                field: Some("file"),
+            },
+        ))
+    }
+}
 
 /// The API endpoint for the upload at `url`, a web URL naming its project or
 /// group by ID, `/-/project/<id>/uploads/<secret>/<file>`, or by path,

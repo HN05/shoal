@@ -18,7 +18,6 @@ use crate::{
     ci::check_state::CheckState,
     items::{
         action::{Edit, MergeMethod, MilestoneChange, UpdateMethod, changed_set},
-        attach::{Attachment, Holder},
         comment::Found,
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
@@ -43,6 +42,7 @@ use crate::{
     updates::{DISCUSSION, Entry, Snapshot},
 };
 
+mod attachments;
 mod checks;
 mod conventions;
 mod review;
@@ -681,25 +681,6 @@ impl Backend for Bitbucket {
 
     fn default_branch<'a>(&self, value: &'a Value) -> Option<&'a str> {
         value["mainbranch"]["name"].as_str()
-    }
-
-    async fn check_uploads(
-        &self,
-        _repo: &ForgeRepo,
-        _account: &Account,
-        _attachments: &[Attachment],
-    ) -> Result<bool> {
-        Err(capability::unsupported(self, Capability::Attachments))
-    }
-
-    fn upload(
-        &self,
-        _repo: &ForgeRepo,
-        _holder: Holder,
-        _attachment: &Attachment,
-        _repository: Option<u64>,
-    ) -> Result<Request> {
-        Err(capability::unsupported(self, Capability::Attachments))
     }
 
     /// Inline comments are among a pull request's comments.

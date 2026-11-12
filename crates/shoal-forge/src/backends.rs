@@ -19,7 +19,6 @@ use crate::{
     capability::{Capability, Support},
     items::{
         action::{Edit, MergeMethod, UpdateMethod},
-        attach::{Attachment, Holder, Media},
         comment::Found,
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState},
@@ -38,11 +37,7 @@ use crate::{
         thread::Thread,
         view::{Details, Review},
     },
-    transport::{
-        api::Request,
-        resend::Transient,
-        response::{Fetched, Response},
-    },
+    transport::{api::Request, resend::Transient, response::Response},
     updates::Snapshot,
 };
 
@@ -124,7 +119,7 @@ macro_rules! dispatch {
 }
 
 mod area;
-pub(crate) use area::{Checks, Conventions, Runners, Runs};
+pub(crate) use area::{Attachments, Checks, Conventions, Runners, Runs};
 
 /// What a forge does its own way. Methods that need the repository take it
 /// as `repo`.
@@ -629,48 +624,9 @@ pub(crate) trait Backend {
         value["default_branch"].as_str()
     }
 
-    /// Refuse `attachments` the forge or `account` cannot upload, before
-    /// anything is posted. Returns whether the forge keeps uploads with the
-    /// item or comment that shows them rather than with the repository.
-    async fn check_uploads(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        attachments: &[Attachment],
-    ) -> Result<bool>;
-
-    /// The response to a GET of `url`, a file on the forge's web host,
-    /// sent as `account`.
-    async fn download(&self, _repo: &ForgeRepo, _account: &Account, _url: &str) -> Result<Fetched> {
-        Err(crate::capability::unsupported(self, Capability::Downloads))
-    }
-
     /// The repository's numeric ID, where the forge's uploads name it.
     async fn repository_id(&self, _repo: &ForgeRepo, _account: &Account) -> Result<Option<u64>> {
         Ok(None)
-    }
-
-    /// The request that uploads `attachment` to `holder`.
-    fn upload(
-        &self,
-        repo: &ForgeRepo,
-        holder: Holder,
-        attachment: &Attachment,
-        repository: Option<u64>,
-    ) -> Result<Request>;
-
-    /// Where an upload's response says the file is served.
-    fn uploaded_url(&self, response: &Value) -> Result<String> {
-        served_at(response, "url")
-    }
-
-    /// The Markdown that shows an uploaded image or video, or links to
-    /// another file.
-    fn markup(&self, attachment: &Attachment, alt: &str, url: &str) -> String {
-        match attachment.media() {
-            Media::File => link(alt, url),
-            Media::Image | Media::Video => image(alt, url),
-        }
     }
 
     /// The request that replaces the body of the comment `subject` of item
@@ -699,25 +655,6 @@ impl<T> LoginHint<T> for Result<T> {
             None => error.context(backend.login_hint()),
         })
     }
-}
-
-/// The URL in an upload response's `field`.
-fn served_at(response: &Value, field: &str) -> Result<String> {
-    response[field]
-        .as_str()
-        .filter(|url| !url.is_empty())
-        .map(str::to_owned)
-        .context("the forge did not report where it saved the file")
-}
-
-/// The Markdown image of `url`.
-fn image(alt: &str, url: &str) -> String {
-    format!("!{}", link(alt, url))
-}
-
-/// The Markdown link to `url`.
-fn link(text: &str, url: &str) -> String {
-    format!("[{}]({url})", text.replace(['[', ']'], ""))
 }
 
 #[cfg(test)]

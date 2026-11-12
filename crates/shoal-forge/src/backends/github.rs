@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 
 mod actions;
 mod activity;
+mod attachments;
 mod checks;
 mod conventions;
 mod review;
@@ -17,7 +18,7 @@ mod view;
 use super::{
     Backend, LoginHint,
     github_rest::{self, GitHubShapes},
-    image, link, rest,
+    rest,
 };
 use crate::{
     ForgeRepo,
@@ -26,7 +27,6 @@ use crate::{
     conventions::draft::DraftMarker,
     items::{
         action::{Edit, MergeMethod, UpdateMethod},
-        attach::{Attachment, Holder, Media},
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState, text},
         link::ItemKind,
@@ -45,9 +45,8 @@ use crate::{
         view::{Details, Review},
     },
     transport::{
-        api::{HttpMethod, Request, Upload, encode, full_page},
-        download,
-        response::{Fetched, Response},
+        api::{HttpMethod, Request, encode, full_page},
+        response::Response,
     },
     updates::{DISCUSSION, Snapshot},
 };
@@ -592,22 +591,6 @@ impl Backend for GitHub {
         ))
     }
 
-    async fn check_uploads(
-        &self,
-        _repo: &ForgeRepo,
-        _account: &Account,
-        _attachments: &[Attachment],
-    ) -> Result<bool> {
-        Ok(false)
-    }
-
-    /// curl sends the token only to the host a URL names, so the storage
-    /// an attachment redirects to gets none.
-    async fn download(&self, repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
-        let authorization = account.authorization(repo).await?;
-        download::with_curl(url, authorization).await
-    }
-
     /// GitHub uploads name the repository by its numeric ID.
     async fn repository_id(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<u64>> {
         let repository = repo
@@ -617,45 +600,6 @@ impl Backend for GitHub {
             .as_u64()
             .context("GitHub did not report the repository's ID")
             .map(Some)
-    }
-
-    /// GitHub's REST API has no upload endpoint, so this uses the one gh
-    /// itself uses.
-    fn upload(
-        &self,
-        repo: &ForgeRepo,
-        holder: Holder,
-        attachment: &Attachment,
-        repository: Option<u64>,
-    ) -> Result<Request> {
-        ensure!(
-            holder == Holder::Repository,
-            "GitHub cannot attach files to {holder:?}"
-        );
-        let repository = repository.context("GitHub uploads need the repository's ID")?;
-        let content_type = attachment.content_type();
-        let name = encode(attachment.name(), false);
-        let content = encode(content_type, false);
-        Ok(Request::upload(
-            format!(
-                "https://uploads.{}/user-attachments/assets?name={name}&content_type={content}&repository_id={repository}",
-                repo.host
-            ),
-            Upload {
-                path: attachment.path.clone(),
-                content_type,
-                field: None,
-            },
-        ))
-    }
-
-    /// GitHub shows a video's bare URL as a player.
-    fn markup(&self, attachment: &Attachment, alt: &str, url: &str) -> String {
-        match attachment.media() {
-            Media::Video => url.to_owned(),
-            Media::Image => image(alt, url),
-            Media::File => link(alt, url),
-        }
     }
 
     fn edit_comment(

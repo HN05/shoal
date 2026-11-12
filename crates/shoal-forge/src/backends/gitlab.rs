@@ -1,6 +1,6 @@
 //! GitLab's REST shapes: issues and merge requests numbered by `iid`,
 //! projects addressed by their encoded path, and states of its own.
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 
 use crate::{
@@ -15,7 +15,6 @@ use crate::{
     conventions::draft::DraftMarker,
     items::{
         action::{Edit, MergeMethod, MilestoneChange, UpdateMethod, changed_set},
-        attach::{Attachment, Holder},
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
@@ -33,19 +32,18 @@ use crate::{
         view::{AutoMerge, Comment, Details, PrDetails, Review, ReviewComment},
     },
     transport::{
-        api::{HttpMethod, Request, Upload, encode, full_page},
-        download,
-        response::{Fetched, Response},
+        api::{HttpMethod, Request, encode, full_page},
+        response::Response,
     },
     updates::{DISCUSSION, Entry, Snapshot},
 };
 
+mod attachments;
 mod checks;
 mod conventions;
 mod reactions;
 mod review;
 mod runs;
-mod uploads;
 
 use super::{Backend, LoginHint, rest};
 
@@ -767,45 +765,6 @@ impl Backend for GitLab {
         _account: &Account,
     ) -> Result<AllowedReactions> {
         Ok(AllowedReactions::github(true))
-    }
-
-    /// GitLab's web routes for uploads take no access token, so the file
-    /// is read from the API route that serves the same upload.
-    async fn download(&self, repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
-        let endpoint = uploads::api_route(url)?;
-        let url = format!("{}://{}/api/v4/{endpoint}", repo.web_scheme, repo.host);
-        let authorization = account.authorization(repo).await?;
-        download::with_curl(&url, authorization).await
-    }
-
-    async fn check_uploads(
-        &self,
-        _repo: &ForgeRepo,
-        _account: &Account,
-        _attachments: &[Attachment],
-    ) -> Result<bool> {
-        Ok(false)
-    }
-
-    fn upload(
-        &self,
-        repo: &ForgeRepo,
-        holder: Holder,
-        attachment: &Attachment,
-        _repository: Option<u64>,
-    ) -> Result<Request> {
-        ensure!(
-            holder == Holder::Repository,
-            "GitLab cannot attach files to {holder:?}"
-        );
-        Ok(Request::upload(
-            repo.repo_endpoint("uploads"),
-            Upload {
-                path: attachment.path.clone(),
-                content_type: attachment.content_type(),
-                field: Some("file"),
-            },
-        ))
     }
 
     /// Discussion and inline comments are both an item's notes.
