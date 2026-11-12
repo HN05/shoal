@@ -249,7 +249,9 @@ impl Manager {
                         true => DueReading::Read,
                         false => DueReading::Skip,
                     };
-                    let wake = (self.restore_wake(&workspace, &execution, automatic, due)).await?;
+                    let wake = self
+                        .restore_wake(&workspace, &execution, automatic, due)
+                        .await?;
                     restores.insert(id.clone(), (execution, wake));
                     Work::Restore {
                         waiting: waits,

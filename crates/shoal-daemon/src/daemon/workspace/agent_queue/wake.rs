@@ -119,8 +119,13 @@ impl Manager {
                     Work::Launch | Work::OneShot { .. } | Work::Job { .. } => continue,
                 }
             } else if waiters.contains(&restore.execution) {
-                let (execution, automatic) = (&restore.execution, restore.automatic);
-                (self.restore_wake(workspace_id, execution, automatic, DueReading::Skip)).await?
+                self.restore_wake(
+                    workspace_id,
+                    &restore.execution,
+                    restore.automatic,
+                    DueReading::Skip,
+                )
+                .await?
             } else {
                 continue;
             };
