@@ -46,6 +46,12 @@ impl Manager {
         })
     }
 
+    /// What the existing workspace `selector` names saved for `shoal resume`.
+    pub(crate) async fn saved_work(&self, selector: &SpaceSelector) -> Result<Saved> {
+        let workspace = self.workspace(selector).await?;
+        Saved::load(&self.paths, &workspace.id)
+    }
+
     /// Keep the workspace's stopped agents whose execution ended as last
     /// sessions, which hold no agent slot and nothing restores on its own,
     /// recording `stopper` on those it stopped. One a wrapper waits to

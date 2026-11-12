@@ -11,7 +11,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::context::Context,
     config::permissions::PermissionChange,
-    execution::recovery::{Saved, SavedExt as _},
+    execution::recovery::Saved,
     model::{Chat, Workspace},
     protocol::SavedAgent,
 };
@@ -57,7 +57,8 @@ async fn saved_agents(
     let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
         .await?
         .workspace;
-    let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
+    let mut saved =
+        crate::client::saved::read(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
     if let Some(execution) = execution {
         saved.retain_execution(execution, false);
     }

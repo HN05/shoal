@@ -13,7 +13,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, ui},
     config::permissions::PermissionChange,
-    execution::recovery::{Saved, SavedExt as _},
+    execution::recovery::Saved,
     model::{QueueEntry, Workspace},
     protocol::ConfigTarget,
     terminal,
@@ -83,7 +83,7 @@ pub(in crate::cli::commands) async fn queue_stopped(
             crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace))
                 .await?
                 .workspace;
-        let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
+        let mut saved = saved(ctx, &workspace).await?;
         saved.retain(|id| executions.contains(id));
         if !(saved.agents.is_empty() && saved.sessions.is_empty()) {
             queued.push((workspace, saved));
@@ -103,7 +103,7 @@ async fn stopped_agents(
     let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
         .await?
         .workspace;
-    let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
+    let mut saved = saved(ctx, &workspace).await?;
     if let Some(execution) = execution {
         saved.retain_execution(execution, true);
     }
@@ -133,7 +133,7 @@ pub(super) async fn queue_workspace(
     let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
         .await?
         .workspace;
-    let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
+    let mut saved = saved(ctx, &workspace).await?;
     if let Some(execution) = &execution {
         saved.retain_execution(execution, true);
     }
@@ -156,6 +156,11 @@ pub(super) async fn queue_workspace(
     }
     permission_change::apply(ctx, &stopped, &[], change).await?;
     queue_all(ctx, stopped, Vec::new(), Vec::new(), now).await
+}
+
+/// What `workspace` saved.
+async fn saved(ctx: &Context, workspace: &Workspace) -> Result<Saved> {
+    crate::client::saved::read(&ctx.paths, SpaceSelector::id(&workspace.id)).await
 }
 
 /// Refuse, before any is queued, the restores of `stopped` agents that the

@@ -24,7 +24,7 @@ use crate::{
     },
     execution::recovery,
     model::{Chat, Workspace},
-    paths::Paths,
+    paths::{CommandPaths, Paths},
 };
 
 /// How to choose a workspace when the command line names none.
@@ -226,7 +226,7 @@ pub async fn select_stopped_spaces(
         return select_workspaces(ctx, names).await.map(Some);
     }
     let workspaces = match resolve_workspace(ctx, None, Fallback::CurrentDirectory).await? {
-        Resolution::Current(id) if resumable(&ctx.paths, &id).is_some() => {
+        Resolution::Current(id) if resumable(&ctx.paths, &id).await.is_some() => {
             return Ok(Some(vec![SpaceSelector::Id(id)]));
         }
         Resolution::Named(_) | Resolution::Current(_) => {
@@ -234,7 +234,7 @@ pub async fn select_stopped_spaces(
         }
         Resolution::Picker(workspaces) => workspaces,
     };
-    let Some(entries) = resume_entries(ctx, workspaces, saved) else {
+    let Some(entries) = resume_entries(ctx, workspaces, saved).await else {
         return Ok(None);
     };
     require_argument(ctx, "spaces", SPACE)?;
@@ -244,11 +244,15 @@ pub async fn select_stopped_spaces(
 /// Workspaces with stopped work come first, then those with a last session,
 /// then the `saved` chats, then the workspaces with nothing to resume;
 /// `None` when nothing is resumable.
-fn resume_entries(ctx: &Context, workspaces: Vec<Workspace>, saved: &[Chat]) -> Option<Entries> {
-    let mut rows = workspaces
-        .into_iter()
-        .map(|w| (resumable(&ctx.paths, &w.id), w))
-        .collect::<Vec<_>>();
+async fn resume_entries(
+    ctx: &Context,
+    workspaces: Vec<Workspace>,
+    saved: &[Chat],
+) -> Option<Entries> {
+    let mut rows = Vec::new();
+    for workspace in workspaces {
+        rows.push((resumable(&ctx.paths, &workspace.id).await, workspace));
+    }
     if saved.is_empty() && rows.iter().all(|(resumable, _)| resumable.is_none()) {
         return None;
     }
@@ -284,9 +288,9 @@ fn resume_entries(ctx: &Context, workspaces: Vec<Workspace>, saved: &[Chat]) -> 
 /// What `shoal resume` restores in a workspace, such as `stopped: claude,
 /// 1 command`, and whether it is unfinished work rather than only last
 /// sessions; `None` when nothing is saved.
-pub fn resumable(paths: &Paths, workspace_id: &SpaceId) -> Option<(String, bool)> {
-    let saved =
-        <recovery::Saved as recovery::SavedExt>::load(paths, workspace_id).unwrap_or_default();
+pub async fn resumable(paths: &CommandPaths, workspace_id: &SpaceId) -> Option<(String, bool)> {
+    let workspace = SpaceSelector::id(workspace_id);
+    let saved = (crate::client::saved::read(paths, workspace).await).unwrap_or_default();
     if saved.is_empty() {
         return None;
     }

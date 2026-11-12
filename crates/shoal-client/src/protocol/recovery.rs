@@ -3,7 +3,8 @@ use crate::recovery::ReconcileOptions;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
-/// Requests that keep, restore and repair workspace state: checkpoints and reconciliation.
+/// Requests that keep, restore and repair workspace state: checkpoints,
+/// saved work and reconciliation.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RecoveryMethod {
@@ -23,6 +24,8 @@ pub enum RecoveryMethod {
         workspace: SpaceSelector,
         checkpoint: CheckpointNumber,
     },
+    /// What an existing workspace saved for `shoal resume`.
+    Saved { workspace: SpaceSelector },
     /// Inspect one workspace, or all, and with `options` repair what verifies.
     Reconcile {
         workspace: Option<SpaceSelector>,

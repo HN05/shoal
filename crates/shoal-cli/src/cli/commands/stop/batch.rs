@@ -8,7 +8,6 @@ use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     cli::{context::Context, ui},
     client::processes::Selection,
-    execution::recovery,
     model::{PresentSpace, QueueEntry, StoppedChat, Workspace},
     protocol::QueuedLaunches,
 };
@@ -61,7 +60,7 @@ pub(super) async fn stop_each(
         match result {
             Ok(stop) => {
                 let message = stop.message(name);
-                if stop.saved(ctx, space.id()) {
+                if stop.saved(ctx, space.id()).await {
                     resumable.push(space.number().to_string());
                 }
                 let outcome = match stop {
@@ -176,9 +175,10 @@ impl Stop {
     /// Whether this stop of the space `id` saved work for `shoal resume`,
     /// which refuses to resume a workspace without any; a chat stopped
     /// before is left to whoever stopped it.
-    fn saved(&self, ctx: &Context, id: &SpaceId) -> bool {
+    async fn saved(&self, ctx: &Context, id: &SpaceId) -> bool {
         match self {
-            Self::Workspace { .. } => <recovery::Saved as recovery::SavedExt>::load(&ctx.paths, id)
+            Self::Workspace { .. } => crate::client::saved::read(&ctx.paths, SpaceSelector::id(id))
+                .await
                 .is_ok_and(|saved| !saved.is_empty()),
             Self::CancelledRun(_) => false,
             Self::Chat(stopped) => !stopped.already_stopped,

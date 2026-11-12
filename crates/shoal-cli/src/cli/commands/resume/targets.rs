@@ -6,7 +6,7 @@ use anyhow::{Result, bail, ensure};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, context::Context, ui},
-    execution::recovery::{Saved, SavedExt as _},
+    execution::recovery::Saved,
     model::{Chat, PresentSpace, Spaces, Workspace},
 };
 
@@ -155,7 +155,7 @@ async fn stopped_in(
         let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
             .await?
             .workspace;
-        let saved = saved_work(ctx, &workspace, discard)?;
+        let saved = saved_work(ctx, &workspace, discard).await?;
         ensure!(
             !saved.is_empty(),
             "{} has no stopped agents or commands to resume",
@@ -175,7 +175,7 @@ async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(Workspace, Sa
         if workspace.done && !discard {
             continue;
         }
-        let saved = saved_work(ctx, &workspace, discard)?;
+        let saved = saved_work(ctx, &workspace, discard).await?;
         if !saved.is_empty() {
             stopped.push((workspace, saved));
         }
@@ -186,8 +186,9 @@ async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(Workspace, Sa
 /// `workspace`'s stopped work and last sessions: with the agents waiting in
 /// their wrappers, which a resume starts there, except to `discard`, which
 /// leaves them to their wrappers.
-fn saved_work(ctx: &Context, workspace: &Workspace, discard: bool) -> Result<Saved> {
-    let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
+async fn saved_work(ctx: &Context, workspace: &Workspace, discard: bool) -> Result<Saved> {
+    let mut saved =
+        crate::client::saved::read(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
     if discard {
         saved.retain_unattended();
     }

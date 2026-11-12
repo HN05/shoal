@@ -13,11 +13,12 @@ use crate::{
     config::permissions::PermissionChange,
     connection::Daemon,
     executions::STAGGER,
-    model::{PresentSpace, RunningAgent},
+    model::{PresentSpace, RunningAgent, Workspace},
     output::agents::Skipped,
     protocol::{ErrorCode, RemoteError},
+    saved,
     sessions::Origin,
-    space_names::SpaceName,
+    space_names::{SpaceName, SpaceSelector},
 };
 
 /// How many agents restart at once, each holding one of the daemon's
@@ -92,11 +93,49 @@ impl Restart {
             PresentSpace::Chat(chat) => {
                 agents::restart_chat(daemon, &chat.id, joins, run, change).await
             }
-            PresentSpace::Workspace(_) => {
-                let execution = self.agent.execution.clone();
-                agents::restart(daemon, execution, joins, run, options.in_place, change).await
+            PresentSpace::Workspace(workspace) => {
+                self.restart_agent(daemon, workspace, run, options).await
             }
         }
+    }
+
+    /// [`Self::run`] for the agent of `workspace`, naming how to restore it
+    /// when its restart failed.
+    async fn restart_agent(
+        &self,
+        daemon: &impl Daemon,
+        workspace: &Workspace,
+        run: Option<String>,
+        options: &Options,
+    ) -> Result<Option<Origin>> {
+        let (execution, joins) = (self.agent.execution.clone(), self.joins.clone());
+        let (in_place, change) = (options.in_place, options.change.clone());
+        match agents::restart(daemon, execution, joins, run, in_place, change).await {
+            // A restart that waits still restores the agent itself, as a
+            // wrapper waiting for its restore does.
+            Err(error) if waits(&error).is_none() => {
+                Err(with_restore(daemon, workspace, error).await)
+            }
+            restarted => restarted,
+        }
+    }
+}
+
+/// `error`, of the failed restart of `workspace`'s agent, naming how to
+/// restore the agent when the workspace saved stopped work for that, as the
+/// daemon names it for a chat.
+async fn with_restore(
+    daemon: &impl Daemon,
+    workspace: &Workspace,
+    error: anyhow::Error,
+) -> anyhow::Error {
+    let saved = saved::read(daemon, SpaceSelector::id(&workspace.id)).await;
+    match saved.is_ok_and(|saved| saved.is_resumable()) {
+        true => anyhow::anyhow!(
+            "{error:#}; restore it with shoal resume {}",
+            workspace.number
+        ),
+        false => error,
     }
 }
 

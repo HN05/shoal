@@ -11,7 +11,6 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, commands::queued_agents, context::Context, output::Style, ui},
     client::processes::Selection,
-    execution::recovery,
     model::{PresentSpace, StoppedWorkspace, Workspace},
     protocol::{ErrorCode, QueuedLaunches, RemoteError},
 };
@@ -79,8 +78,9 @@ async fn stop_one(ctx: &Context, workspace: &Workspace, yes: bool) -> Result<i32
     }
     let cancelled = stopped.cancelled;
     let other = stop_untracked(ctx, &selector, Selection::Processes).await?;
-    let saved =
-        !<recovery::Saved as recovery::SavedExt>::load(&ctx.paths, &workspace.id)?.is_empty();
+    let saved = !crate::client::saved::read(&ctx.paths, selector.clone())
+        .await?
+        .is_empty();
     let mut message = "Workspace processes stopped".to_owned();
     if other.processes > 0 {
         message = format!("{message}. Stopped {}", other_processes(other.processes));

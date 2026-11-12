@@ -7,7 +7,7 @@ use super::{commands, permission_change, picker, queue, reports, sessions, stale
 use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::Resumed;
 use crate::client::space_names::SpaceSelector;
-use crate::execution::recovery::{LastSessionExt, RecordExt, SavedExt as _};
+use crate::execution::recovery::{LastSessionExt, RecordExt};
 use crate::{
     cli::{context::Context, terminal},
     config::permissions::PermissionChange,
@@ -31,7 +31,8 @@ pub(super) async fn run(
 ) -> Result<i32> {
     let mut inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
     let workspace_id = inspection.workspace.id.clone();
-    let mut saved = Saved::load(&ctx.paths, &workspace_id)?;
+    let mut saved =
+        crate::client::saved::read(&ctx.paths, SpaceSelector::id(&workspace_id)).await?;
     if let Some(execution) = &execution {
         saved.retain_execution(execution, true);
     }

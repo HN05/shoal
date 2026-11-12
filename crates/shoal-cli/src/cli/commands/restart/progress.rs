@@ -16,8 +16,7 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    execution::recovery,
-    model::{PresentSpace, RunningAgent},
+    model::RunningAgent,
     sessions::Origin,
     terminal,
 };
@@ -141,10 +140,7 @@ impl restarts::Progress for Progress<'_> {
             Err(error) => {
                 let (message, error) = match restarts::waits(&error) {
                     Some(waits) => (format!("Pending {name} {position}: {waits}"), error),
-                    None => {
-                        let error = with_restore(self.ctx, &restart.space, error);
-                        (format!("Failed {name} {position}: {error:#}"), error)
-                    }
+                    None => (format!("Failed {name} {position}: {error:#}"), error),
                 };
                 self.report.failed_saying(self.ctx, &message, name, &error);
             }
@@ -157,24 +153,6 @@ impl restarts::Progress for Progress<'_> {
             let names: Vec<_> = spaces.iter().map(|name| name.as_str()).collect();
             eprintln!("Waiting for the turns of {} to end", names.join(", "));
         }
-    }
-}
-
-/// `error`, of the failed restart of the agent of `space`, naming how to
-/// restore the agent when its workspace waits for that. The daemon names how
-/// to restore a chat, and a restart that waits still restores the agent
-/// itself, as a wrapper waiting for its restore does.
-fn with_restore(ctx: &Context, space: &PresentSpace, error: anyhow::Error) -> anyhow::Error {
-    match space {
-        PresentSpace::Workspace(workspace)
-            if recovery::resumable(&ctx.paths, &workspace.id).unwrap_or(false) =>
-        {
-            anyhow::anyhow!(
-                "{error:#}; restore it with shoal resume {}",
-                workspace.number
-            )
-        }
-        _ => error,
     }
 }
 

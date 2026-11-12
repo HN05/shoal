@@ -3,9 +3,21 @@
 use crate::execution_ids::ExecutionId;
 use std::path::PathBuf;
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::{agent::Agent, time::UnixTime};
+use crate::{
+    agent::Agent,
+    connection::{Daemon, request},
+    protocol::RecoveryMethod,
+    space_names::SpaceSelector,
+    time::UnixTime,
+};
+
+/// What the existing workspace `workspace` saved.
+pub async fn read(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Saved> {
+    request(daemon, RecoveryMethod::Saved { workspace }).await
+}
 
 /// What `shoal stop` or overload protection saved for one workspace.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]

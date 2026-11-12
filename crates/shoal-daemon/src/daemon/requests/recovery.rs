@@ -31,6 +31,7 @@ pub(super) async fn handle(
                 .restore_checkpoint(&workspace, checkpoint, caller)
                 .await?,
         ),
+        RecoveryMethod::Saved { workspace } => Body::Saved(manager.saved_work(&workspace).await?),
         RecoveryMethod::Reconcile { workspace, options } => Body::Reconciled(
             manager
                 .reconcile_workspaces(workspace.as_ref(), options)
@@ -44,7 +45,8 @@ impl Scoped for RecoveryMethod {
         Ok(match self {
             RecoveryMethod::Checkpoint { workspace, .. }
             | RecoveryMethod::Checkpoints { workspace, .. }
-            | RecoveryMethod::RestoreCheckpoint { workspace, .. } => Some(workspace),
+            | RecoveryMethod::RestoreCheckpoint { workspace, .. }
+            | RecoveryMethod::Saved { workspace } => Some(workspace),
             RecoveryMethod::Reconcile { .. } => return Err(denied()),
         })
     }
