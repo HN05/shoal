@@ -122,6 +122,8 @@ pub struct RepoConfig {
     #[option(section)]
     pub issue: IssueConfig,
     #[option(section)]
+    pub priority: PriorityConfig,
+    #[option(section)]
     pub review: ReviewConfig,
     #[option(section)]
     pub messages: MessagesConfig,
@@ -700,6 +702,29 @@ pub struct IssueConfig {
     pub plan_label: Option<String>,
     /// Marks an issue whose body holds a settled plan.
     pub planned_label: Option<String>,
+}
+
+/// The priorities a space takes from the labels of the issues it works on.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
+#[serde(default, deny_unknown_fields)]
+#[options(resolved = PrioritySettings)]
+pub struct PriorityConfig {
+    /// The priority each forge label gives a space working on an issue
+    /// with it, unless the space has one set.
+    #[option(named)]
+    pub labels: BTreeMap<String, crate::priority::Priority>,
+}
+
+impl PrioritySettings {
+    /// The highest priority `labels` map to, if any does.
+    pub fn of_labels<'a>(
+        &self,
+        labels: impl IntoIterator<Item = &'a str>,
+    ) -> Option<crate::priority::Priority> {
+        (labels.into_iter())
+            .filter_map(|label| self.labels.get(label).copied())
+            .max()
+    }
 }
 
 /// Whether `shoal merge` merges into the default branch, asks before it

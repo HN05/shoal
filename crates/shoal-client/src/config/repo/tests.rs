@@ -340,3 +340,18 @@ fn the_default_mode_starts_only_in_a_workspace() {
     );
     parse("[modes.worker]\nkind = 'workspace'\n[modes.talk]\nkind = 'chat'\n").unwrap();
 }
+
+#[test]
+fn the_highest_priority_an_issues_labels_map_to_wins() {
+    let config = parse("[priority.labels]\nurgent = 75\n'low-priority' = 25\n").unwrap();
+    let settings = PrioritySettings {
+        labels: config.priority.labels,
+    };
+    let priority = |labels: &[&str]| settings.of_labels(labels.iter().copied());
+    assert_eq!(
+        priority(&["low-priority", "bug", "urgent"]),
+        Some(crate::priority::Priority::URGENT)
+    );
+    assert_eq!(priority(&["bug"]), None);
+    assert!(parse("[priority.labels]\nurgent = 101\n").is_err());
+}
