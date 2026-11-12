@@ -67,6 +67,7 @@ impl Manager {
         hands_over: bool,
     ) -> Result<Chat> {
         let new = NewChat {
+            priority: None,
             narrowing: Default::default(),
             name,
             agent,
@@ -93,6 +94,7 @@ impl Manager {
     ) -> Result<Chat> {
         let workspace = self.chat_workspace(workspace).await?;
         let new = NewChat {
+            priority: None,
             narrowing: Default::default(),
             name,
             agent,
@@ -192,6 +194,7 @@ impl Manager {
             origin,
             hands_over,
             parent,
+            priority,
         } = new;
         let home = self.reserve_chat_home(repository).await?;
         let process = identity::capture(pid)?.context("the chat process is not running")?;
@@ -232,7 +235,13 @@ impl Manager {
         let below = parent.map(|parent| (parent, removing));
         let chat = self
             .store
-            .write(move |tx| insert(tx, chat, &recorded, hands_over, below))
+            .write(move |tx| {
+                let chat = insert(tx, chat, &recorded, hands_over, below)?;
+                if let Some(priority) = priority {
+                    super::spaces::priority::set(tx, &chat.id, priority)?;
+                }
+                Ok(chat)
+            })
             .await?;
         let chat = (self.give_tmp_dir(chat, home.repository.as_ref(), process)).await?;
         self.take_chat_place(&chat).await?;
@@ -651,6 +660,7 @@ pub struct NewChat {
     pub origin: Option<crate::sessions::Origin>,
     pub hands_over: bool,
     pub parent: Option<SpaceId>,
+    pub priority: Option<crate::client::priority::Priority>,
 }
 
 /// The reference a chat's record gives to the workspace it runs in.

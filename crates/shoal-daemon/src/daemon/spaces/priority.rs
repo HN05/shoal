@@ -34,8 +34,7 @@ pub(crate) fn set(db: &Connection, id: &SpaceId, priority: Priority) -> Result<(
 
 impl Manager {
     /// Set `priority` on the space `selector` names for `caller`, whose
-    /// scope reaches it: a caller whose scope has a root of its own gives at
-    /// most its own space's priority, as it gives only permissions it holds.
+    /// scope reaches it.
     pub(crate) async fn set_priority(
         &self,
         caller: Option<&Caller>,
@@ -43,24 +42,52 @@ impl Manager {
         priority: Priority,
     ) -> Result<Prioritized> {
         let space = self.space(selector).await?;
-        let root = self.reach_root(caller).await?;
-        let id = space.id().to_owned();
-        (self.store)
-            .write(move |db| {
-                if let Some(root) = &root {
-                    let own = current(db, root)?;
-                    ensure!(
-                        priority <= own,
-                        "scoped processes give a priority of at most their own space's, {own}"
-                    );
-                }
-                set(db, &id, priority)
-            })
-            .await?;
+        self.given_priority(caller, Some(priority)).await?;
+        self.give_priority(space.id(), Some(priority)).await?;
         Ok(Prioritized {
             space: space.name().to_owned(),
             priority,
         })
+    }
+
+    /// The priority `caller` gives a space it creates or ranks, asking for
+    /// `priority`: what it asks, or with none the default. A caller whose
+    /// scope has a root of its own gives at most its own space's, as it
+    /// gives only permissions it holds, so asking for more is refused and
+    /// asking for none gives its own when that is lower; the user and a
+    /// master session give any.
+    pub(crate) async fn given_priority(
+        &self,
+        caller: Option<&Caller>,
+        priority: Option<Priority>,
+    ) -> Result<Option<Priority>> {
+        let Some(root) = self.reach_root(caller).await? else {
+            return Ok(priority);
+        };
+        let own = self.store.read(move |tx| current(tx, &root)).await?;
+        match priority {
+            Some(priority) => {
+                ensure!(
+                    priority <= own,
+                    "scoped processes give a priority of at most their own space's, {own}"
+                );
+                Ok(Some(priority))
+            }
+            None => Ok((own < Priority::default()).then_some(own)),
+        }
+    }
+
+    /// Set `priority`, when given, on the space `id`.
+    pub(crate) async fn give_priority(
+        &self,
+        id: &SpaceId,
+        priority: Option<Priority>,
+    ) -> Result<()> {
+        let Some(priority) = priority else {
+            return Ok(());
+        };
+        let id = id.clone();
+        self.store.write(move |db| set(db, &id, priority)).await
     }
 }
 

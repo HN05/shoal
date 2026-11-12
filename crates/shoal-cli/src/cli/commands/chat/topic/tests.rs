@@ -38,6 +38,7 @@ fn parsed_start(line: Vec<OsString>) -> StartArgs {
 /// Options a start beside this terminal was given.
 fn options(narrowing: Narrowing) -> Options {
     Options {
+        priority: None,
         agent: None,
         place: ChatPlace::Beside,
         name: None,
@@ -121,6 +122,7 @@ fn a_chat_in_a_workspace_reopens_there() {
     assert_eq!(topic.name, "worker chat");
     let agent: Agent = "claude".parse().unwrap();
     let options = Options {
+        priority: None,
         agent: None,
         place: ChatPlace::Beside,
         name: None,
@@ -155,6 +157,7 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     let agent: Agent = "claude".parse().unwrap();
     let topic = Topic::imported(&repo, &"plan".into(), &links);
     let options = Options {
+        priority: None,
         agent: None,
         place: ChatPlace::Beside,
         name: None,

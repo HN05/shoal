@@ -143,6 +143,11 @@ pub struct StartArgs {
     /// repeatable. A space's agent gives only what it holds itself.
     #[arg(long = "permission", value_name = "KEY=VALUE", value_parser = permission_assignment)]
     pub permissions: Vec<crate::config::permissions::PermissionChange>,
+    /// The new space's priority: low, normal (the default), urgent, or a
+    /// number from 0 to 100; its queued work starts before lower ones'. A
+    /// space's agent gives at most its own space's.
+    #[arg(long)]
+    pub priority: Option<crate::client::priority::Priority>,
     /// The permissions a restored or imported chat was given, as JSON,
     /// which a start in a background place keeps unchecked.
     #[arg(long, hide = true, value_parser = recorded, conflicts_with = "permissions")]
@@ -270,6 +275,7 @@ impl StartArgs {
         let Self {
             mode,
             permissions,
+            priority,
             recorded_narrowing,
             as_chat,
             in_workspace,
@@ -310,6 +316,10 @@ impl StartArgs {
         line.values(
             "permissions",
             permissions.iter().flat_map(|change| change.assignments()),
+        );
+        line.values(
+            "priority",
+            priority.map(|priority| priority.value().to_string()),
         );
         line.values("recorded_narrowing", recorded_narrowing.map(written));
         line.switch("as_chat", *as_chat);
@@ -404,6 +414,7 @@ impl From<CreationArgs> for crate::protocol::CreationOptions {
             name: None,
             skip_setup: args.skip_setup,
             disposable: args.disposable,
+            priority: None,
         }
     }
 }

@@ -803,6 +803,7 @@ async fn a_chat_being_removed_takes_no_new_space() {
         .await
         .unwrap_err();
     let start = super::NewChat {
+        priority: None,
         narrowing: Default::default(),
         mode: "chat".into(),
         name: "late-chat".into(),
@@ -1133,6 +1134,7 @@ async fn a_chat_records_the_mode_its_agent_started_in() {
         .await
         .unwrap();
     let start = super::NewChat {
+        priority: None,
         narrowing: Default::default(),
         mode: "plan".into(),
         name: "repo-plan-7".into(),

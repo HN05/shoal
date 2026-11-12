@@ -118,6 +118,8 @@ fn new_space_flag(
         ("--copy", creation.copy.is_some()),
         ("--skip-setup", creation.options.skip_setup),
         ("--disposable", creation.options.disposable),
+        // `shoal priority` sets an existing workspace's.
+        ("--priority", creation.options.priority.is_some()),
     ];
     (new_space.into_iter())
         .find(|(_, set)| *set)

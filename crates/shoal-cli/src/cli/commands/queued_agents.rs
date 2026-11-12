@@ -59,6 +59,7 @@ pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Resu
         workspace: launch.opens.map(SpaceSelector::Id),
         starts_in_caller: launch.caller_starts,
         blockers: launch.blockers,
+        priority: plan.creation.options.priority,
     };
     let admission = queue::add(&ctx.paths, request).await?;
     Ok(match (admission.start, admission.entry) {

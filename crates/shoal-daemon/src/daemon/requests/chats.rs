@@ -29,12 +29,14 @@ pub(super) async fn handle(
             origin,
             hands_over,
             parent,
+            priority,
         } => {
             if caller.is_none() {
                 (manager.ensure_parent_not_host(workspace.as_ref(), parent.as_ref())).await?;
             }
             let held = (repository.as_ref(), workspace.as_ref());
             ensure_caller_holds(manager, caller, &narrowing, held).await?;
+            let priority = manager.given_priority(caller, priority).await?;
             let new = NewChat {
                 name,
                 agent,
@@ -44,6 +46,7 @@ pub(super) async fn handle(
                 origin,
                 hands_over,
                 parent: manager.space_id(parent.as_ref()).await?,
+                priority,
             };
             Body::Chat(
                 manager

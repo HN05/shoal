@@ -40,6 +40,10 @@ pub enum ChatMethod {
         /// none puts it at the top.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent: Option<SpaceSelector>,
+        /// The priority set on the chat; a scoped caller gives at most its
+        /// own space's.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        priority: Option<crate::priority::Priority>,
     },
     /// Run the stopped chat `chat`, by ID, again as process `pid`, as
     /// [`Self::StartChat`] records a new one, under `narrowing`, which

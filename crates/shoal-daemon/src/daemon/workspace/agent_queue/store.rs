@@ -197,8 +197,8 @@ pub(super) fn insert_launch(
     );
     let now = UnixTime::now();
     tx.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing,scope_space_id)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing,scope_space_id,priority)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
         params![
             launch.id,
             QueueKind::Launch,
@@ -215,6 +215,7 @@ pub(super) fn insert_launch(
             request.mode,
             crate::daemon::store::narrowing_column(&request.narrowing)?,
             launch.scope,
+            request.priority,
         ],
     )?;
     blockers::record(tx, &launch.id, &launch.repository, &request.blockers)?;

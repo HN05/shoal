@@ -128,6 +128,8 @@ fn ensure_worker_fits(args: &StartArgs) -> Result<()> {
         ("--issue", args.issue.is_some()),
         ("--parent", args.parent.is_some()),
         ("--name", args.name.is_some()),
+        // `shoal priority` sets an existing workspace's.
+        ("--priority", args.priority.is_some()),
     ];
     if let Some((flag, _)) = new_space.iter().find(|(_, set)| *set) {
         anyhow::bail!(
@@ -620,6 +622,7 @@ async fn in_new_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> R
         pr: None,
         options: crate::protocol::CreationOptions {
             name: args.name,
+            priority: args.priority,
             ..args.creation.into()
         },
         pull_head: None,

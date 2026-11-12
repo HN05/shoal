@@ -28,6 +28,8 @@ pub struct NewChat<'a> {
     /// The space it goes below; a scoped caller's daemon puts it below the
     /// caller's own space without one.
     pub parent: Option<&'a SpaceSelector>,
+    /// The priority set on it.
+    pub priority: Option<crate::priority::Priority>,
 }
 
 /// Record the `chat` whose agent replaces this process at `home`, running
@@ -55,6 +57,7 @@ pub async fn start(
             origin,
             hands_over,
             parent: chat.parent.cloned(),
+            priority: chat.priority,
         },
     )
     .await

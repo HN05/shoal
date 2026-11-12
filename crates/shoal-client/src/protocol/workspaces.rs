@@ -278,6 +278,9 @@ pub struct CreationOptions {
     /// holds, without asking or keeping a checkpoint, and deletes its branch.
     #[serde(default)]
     pub disposable: bool,
+    /// The priority set on it, which ranks its queued work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<crate::priority::Priority>,
 }
 
 impl CreationOptions {

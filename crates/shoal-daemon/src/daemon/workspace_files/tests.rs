@@ -1532,6 +1532,7 @@ async fn a_chat_without_a_repository_keeps_its_files_in_root_dir() {
     let process =
         crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = crate::daemon::chats::NewChat {
+        priority: None,
         narrowing: Default::default(),
         name: "master".into(),
         agent: "claude".into(),
@@ -1601,6 +1602,7 @@ async fn files_of_a_chat_without_a_repository_stay_with_the_root_dir_it_started_
     let process =
         crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = crate::daemon::chats::NewChat {
+        priority: None,
         narrowing: Default::default(),
         name: "master".into(),
         agent: "claude".into(),

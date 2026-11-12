@@ -211,6 +211,7 @@ impl Launch {
             mode: &launch.mode,
             narrowing: launch.narrowing,
             parent: launch.parent.as_ref(),
+            priority: launch.priority,
         };
         let place = crate::terminal::current_place()
             .await

@@ -81,7 +81,7 @@ agent's queue entry. The daemon starts queued agents as `max_agents` allows
 (`state: queued`, `position`), work close to finished and work that other work
 waits on first (`rank`), higher priority before all else; `shoal queue` lists
 entries and `--now` starts one regardless. `shoal priority <low|normal|urgent|0-100> [space]`
-sets a space's priority, at most your own space's. `--add-blocker <space|queued agent|issue>` (repeatable)
+and `start --priority` set a space's priority, at most your own space's. `--add-blocker <space|queued agent|issue>` (repeatable)
 holds an agent until that work is done, where a bare number is an issue, a
 space is selected by its ID and a queued agent by its entry's ID, and an
 issue's agent is also blocked by the issues its forge records as blocking it;

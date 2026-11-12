@@ -10,7 +10,7 @@ use anyhow::{Result, ensure};
 
 use super::{agent::checked_agent, handoff};
 use crate::client::space_names::{SpaceName, SpaceSelector};
-use crate::client::{agent::AgentSessionId, space_ids::SpaceId};
+use crate::client::{agent::AgentSessionId, priority::Priority, space_ids::SpaceId};
 use crate::{
     agent::{Agent, ModelChoice},
     cli::{
@@ -53,6 +53,8 @@ pub(in crate::cli::commands) struct Options {
     pub parent: Option<SpaceSelector>,
     /// The permissions given to the agent, whatever the mode's.
     pub narrowing: Narrowing,
+    /// The priority set on the chat.
+    pub priority: Option<Priority>,
 }
 
 /// Where a chat runs.
@@ -95,6 +97,7 @@ impl Options {
                 Some(recorded) => Narrowing::Recorded(recorded),
                 None => Narrowing::Requested(PermissionChange::combined(&args.permissions).set),
             },
+            priority: args.priority.take(),
         }
     }
 
@@ -115,6 +118,7 @@ impl Options {
             handoff,
             parent,
             narrowing,
+            priority,
         } = self;
         let (permissions, recorded_narrowing) = narrowing.written();
         // A fork without a session, as a copy imported with new sessions
@@ -133,6 +137,7 @@ impl Options {
             parent,
             permissions,
             recorded_narrowing,
+            priority,
             ..start
         }
     }
@@ -171,6 +176,7 @@ impl Options {
             handoff,
             parent: _,
             narrowing: _,
+            priority: _,
         } = self;
         ConfigSetupArgs {
             here: place == ChatPlace::Here,

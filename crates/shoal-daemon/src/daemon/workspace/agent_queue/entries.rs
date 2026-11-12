@@ -41,13 +41,14 @@ impl Manager {
     /// as it starts a launch in an existing workspace.
     pub(in crate::daemon) async fn queue_add_as(
         &self,
-        request: QueueRequest,
+        mut request: QueueRequest,
         caller: Option<&Caller>,
     ) -> Result<QueueAdmission> {
         ensure!(
             !request.now || request.blockers.is_empty(),
             "a launch that starts now cannot be blocked"
         );
+        request.priority = self.given_priority(caller, request.priority).await?;
         let repository = self.repository(&request.repository).await?;
         let target = match &request.workspace {
             Some(workspace) => Some(self.launch_target(workspace, &repository.id).await?),

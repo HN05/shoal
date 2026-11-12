@@ -56,13 +56,23 @@ fn a_workspaces_worker_refuses_what_only_a_new_space_takes() {
     for (args, flag) in [
         (&["--parent", "2"][..], "--parent"),
         (&["--name", "Login"], "--name"),
+        (&["--priority", "urgent"], "--priority"),
         (&["repo"], "<repository>"),
     ] {
         let error = worker(args).unwrap_err().to_string();
         assert!(error.starts_with(&format!("{flag} ")), "{error}");
     }
     // A chat in the worktree may take its own issue and name.
-    let reader = start(&["--in", "3", "--issue", "7", "--name", "Review"]);
+    let reader = start(&[
+        "--in",
+        "3",
+        "--issue",
+        "7",
+        "--name",
+        "Review",
+        "--priority",
+        "low",
+    ]);
     ensure_fits(&reader, SpaceKind::Chat, Some(&"chat".into())).unwrap();
 }
 

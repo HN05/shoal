@@ -1915,6 +1915,7 @@ shoal queue                                   # Waiting and starting entries; on
 shoal queue start <entry>                     # Starts a waiting entry, or a space's queued restore, now regardless of the limits
 shoal queue start --attach <entry>            # Starts it and attaches this terminal to its agent's session
 shoal queue cancel <entry>                    # Removes a waiting entry; a restore's agent stays stopped
+shoal start <issue-url> --priority urgent      # Its queued launch and new space rank ahead of the rest
 shoal priority urgent [space]                 # Ranks the space's queued work ahead of the rest
 shoal priority 30 [space]                     # Any number from 0 to 100; low is 25, normal 50
 ```
@@ -2086,9 +2087,11 @@ starting an entry is for the user.
 
 `shoal priority` sets a space's priority, which ranks its queued work and the
 work it waits on (see [Queue order](#queue-order)): `low`, `normal` or
-`urgent`, or a number from 0 to 100. It lasts until changed, through `done`
-and conversion. A space's agent sets it on its own space and those below, at
-most to its own space's priority; you and a master session set any.
+`urgent`, or a number from 0 to 100; `shoal start --priority` sets it on the
+new space, and its launch ranks with it while queued. It lasts until changed,
+through `done` and conversion. A space's agent sets it on its own space and those below, at
+most to its own space's priority, and what it starts without `--priority` takes
+its own space's when that is below `normal`; you and a master session set any.
 
 #### Queue order
 

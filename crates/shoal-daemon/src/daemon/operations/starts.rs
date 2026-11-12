@@ -102,7 +102,12 @@ impl Manager {
                 .await;
             opening.new.options.name = title.map(|title| SpaceName::derive(&title, "workspace"));
         }
+        let asked = opening.new.options.priority;
+        let given = self.given_priority(caller, asked).await?;
         let opened = (self.open_for_start(repository, opening, caller)).await?;
+        // A reopened workspace keeps its priority unless one was asked for.
+        let priority = if opened.reused { asked } else { given };
+        self.give_priority(&opened.workspace.id, priority).await?;
         self.prepare_new(opened, issue, preparing, caller).await
     }
 
@@ -165,7 +170,9 @@ impl Manager {
             None => None,
         };
         name_after_issue(&mut split.options, issue.as_ref());
+        let priority = (self.given_priority(caller, split.options.priority)).await?;
         let child = self.create_child(&parent, split).await?;
+        self.give_priority(&child.id, priority).await?;
         let opened = OpenedWorkspace {
             workspace: child,
             reused: false,

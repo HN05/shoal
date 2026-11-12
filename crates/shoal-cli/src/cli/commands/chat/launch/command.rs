@@ -43,6 +43,7 @@ pub(super) fn chat_launch(
         mode: topic.mode.clone(),
         narrowing: options.narrowing.value(),
         parent: options.parent.clone(),
+        priority: options.priority,
         instructions: brief.system,
         opening: brief.first_message,
         model: crate::agents::resolve_model(&settings, agent, options.model.clone()),

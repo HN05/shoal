@@ -126,6 +126,8 @@ pub(in crate::cli) struct ChatLaunch {
     pub narrowing: crate::config::permissions::PermissionsConfig,
     /// The space it goes below.
     pub parent: Option<SpaceSelector>,
+    /// The priority set on it.
+    pub priority: Option<crate::client::priority::Priority>,
     pub settings: Effective,
     /// The rendered chat template.
     pub instructions: String,

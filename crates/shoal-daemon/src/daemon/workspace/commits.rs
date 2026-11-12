@@ -162,6 +162,7 @@ impl Manager {
             name: None,
             skip_setup: true,
             disposable: true,
+            ..Default::default()
         };
         let workspace = self
             .record_commit_workspace(&repo, (directory, name), at, None, None, options)

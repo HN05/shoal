@@ -154,6 +154,7 @@ async fn start_saved(
         (None, ChatRepository::Outside(_)) => chat::Topic::outside_repositories(&chat.mode),
     };
     let options = chat::Options {
+        priority: None,
         narrowing: chat::Narrowing::Recorded(match change {
             Some(change) => change.applied_to(chat.narrowing),
             None => chat.narrowing,

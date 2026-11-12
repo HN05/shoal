@@ -269,6 +269,10 @@ pub struct QueueRequest {
     /// What blocks the launch; it always queues while any remains.
     #[serde(default)]
     pub blockers: Vec<Blocker>,
+    /// The priority of the space the launch creates, which ranks it until
+    /// that space exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<crate::priority::Priority>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

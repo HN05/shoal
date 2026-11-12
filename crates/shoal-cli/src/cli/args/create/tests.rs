@@ -24,6 +24,7 @@ fn a_chats_start_parses_back_from_its_command_line() {
     assert_round_trips(StartArgs {
         mode: Some("plan".into()),
         permissions: changes.to_vec(),
+        priority: Some(crate::client::priority::Priority::URGENT),
         as_chat: true,
         // Without a value, before another flag.
         in_workspace: Some(None),

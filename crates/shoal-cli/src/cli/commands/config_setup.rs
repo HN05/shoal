@@ -50,6 +50,7 @@ fn options(
         (false, false) => chat::ChatPlace::Background,
     };
     chat::Options {
+        priority: None,
         narrowing: chat::Narrowing::Requested(Default::default()),
         agent: Some(agent),
         place,

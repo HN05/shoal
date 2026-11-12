@@ -448,6 +448,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         .await;
     let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let start = |workspace: &Workspace| crate::protocol::ChatMethod::StartChat {
+        priority: None,
         narrowing: Default::default(),
         mode: None,
         repository: Some(repo.id.clone().into()),
@@ -479,6 +480,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
     };
     assert_eq!(workspace, Some(SpaceSelector::id(&worker.id)));
     let new = crate::daemon::chats::NewChat {
+        priority: None,
         narrowing: Default::default(),
         mode: "chat".into(),
         name: "auditing".into(),
@@ -500,6 +502,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
     // A chat it starts goes below a space below its own that it names, never
     // below one outside its tree.
     let below = |parent: &Workspace| crate::protocol::ChatMethod::StartChat {
+        priority: None,
         narrowing: Default::default(),
         mode: None,
         repository: Some(repo.id.clone().into()),

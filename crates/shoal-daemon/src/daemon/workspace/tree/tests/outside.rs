@@ -41,6 +41,7 @@ async fn repositories(
 async fn outside(manager: &Manager, name: &str, parent: Option<&SpaceId>) -> (Chat, ProcessGroup) {
     let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = NewChat {
+        priority: None,
         narrowing: Default::default(),
         name: name.into(),
         agent: "claude".into(),
@@ -163,6 +164,7 @@ async fn a_chat_without_a_repository_takes_children_in_every_repository() {
     assert!(foreign.is_err());
     let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let below_workspace = NewChat {
+        priority: None,
         narrowing: Default::default(),
         name: "below".into(),
         agent: "claude".into(),

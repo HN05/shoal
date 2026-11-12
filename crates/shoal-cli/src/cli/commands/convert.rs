@@ -51,7 +51,7 @@ pub(super) async fn to_workspace(
         options: CreationOptions {
             skip_setup: branch.skip_setup,
             disposable: false,
-            name: None,
+            ..Default::default()
         },
         mode,
     };

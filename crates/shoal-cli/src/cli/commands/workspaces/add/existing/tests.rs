@@ -42,4 +42,12 @@ fn a_start_into_a_workspaces_branch_takes_only_a_forks_parent() {
         ),
         Some("--issue")
     );
+    let prioritized = Creation {
+        options: crate::protocol::CreationOptions {
+            priority: Some(crate::client::priority::Priority::URGENT),
+            ..Default::default()
+        },
+        ..Creation::default()
+    };
+    assert_eq!(flag(&prioritized, &options(true)), Some("--priority"));
 }

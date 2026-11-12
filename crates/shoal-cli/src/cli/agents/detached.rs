@@ -285,6 +285,7 @@ pub(super) async fn start_chat(
         mode,
         narrowing,
         parent,
+        priority,
         settings,
         model,
         restores,
@@ -307,6 +308,7 @@ pub(super) async fn start_chat(
     // This process holds the chat until the session runs, which is not in
     // this terminal.
     let new = crate::client::chats::NewChat {
+        priority: *priority,
         name: chat_name,
         agent: name,
         mode,

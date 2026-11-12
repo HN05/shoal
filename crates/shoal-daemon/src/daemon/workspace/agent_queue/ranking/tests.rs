@@ -6,6 +6,7 @@ use super::*;
 use crate::client::{priority::Priority, resources::Scope, space_names::SpaceSelector};
 use crate::{
     daemon::{
+        scope::Caller,
         test_support::manager,
         workspace::agent_queue::{
             Serving, last_seq,
@@ -294,32 +295,31 @@ async fn a_space_and_a_queued_launch_rank_with_the_priority_set_on_them() {
     limit_globally(&manager, 1);
     add(&manager, &repo, "running").await;
     let workspace = create(&manager, &repo, "worker").await;
+    let selector = SpaceSelector::id(&workspace.id);
+    manager
+        .set_priority(None, &selector, Priority::LOW)
+        .await
+        .unwrap();
     add(&manager, &repo, "earlier").await;
-    let launch = add(&manager, &repo, "launch").await;
+    let urgent = |name| QueueRequest {
+        priority: Some(Priority::URGENT),
+        ..request(&repo, name, false)
+    };
+    manager.queue_add(urgent("launch")).await.unwrap();
     manager
         .queue_add(QueueRequest {
-            workspace: Some(SpaceSelector::id(&workspace.id)),
+            workspace: Some(selector.clone()),
             ..request(&repo, "worker", false)
         })
         .await
         .unwrap();
-    let ids = (workspace.id.clone(), launch.entry.unwrap().id);
-    manager
-        .store
-        .run(move |db| {
-            let (workspace, launch) = &ids;
-            db.execute(
-                "INSERT INTO space_priority(space_id,priority) VALUES (?1,?2)",
-                params![workspace, Priority::LOW],
-            )?;
-            db.execute(
-                "UPDATE agent_queue SET priority=?1 WHERE id=?2",
-                params![Priority::URGENT, launch],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
+    // A space's agent gives at most its own space's priority.
+    let caller = Caller {
+        space_id: workspace.id.clone(),
+        execution: None,
+    };
+    let refused = manager.queue_add_as(urgent("child"), Some(&caller)).await;
+    assert!(refused.is_err());
 
     let waiting: Vec<_> = (manager.queue_entries().await.unwrap().into_iter())
         .filter(|entry| entry.state == QueueState::Queued)

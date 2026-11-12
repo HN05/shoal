@@ -43,6 +43,7 @@ pub async fn chat(
 ) -> (crate::model::Chat, ProcessGroup) {
     let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = crate::daemon::chats::NewChat {
+        priority: None,
         name: name.into(),
         agent: "claude".into(),
         mode: mode.into(),
