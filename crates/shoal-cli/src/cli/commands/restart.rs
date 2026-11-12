@@ -20,11 +20,11 @@ use crate::{
     sessions::Origin,
 };
 
-mod plan;
 mod progress;
+mod selection;
 
-pub(super) use plan::skip_reason;
-use plan::{Restart, Selection, Skipped, running_agents, space_skip_reason, stopped_reason};
+use crate::client::output::agents::Skipped;
+use crate::client::restarts::{Restart, running_agents, space_skip_reason, stopped_reason};
 use progress::Progress;
 
 /// How many agents restart at once, each holding one of the daemon's
@@ -57,9 +57,9 @@ pub(super) async fn run(
     if scoped {
         ensure_named(&targets)?;
     }
-    let selection = Selection::load(ctx, targets).await?;
+    let selection = selection::load(ctx, targets).await?;
     if scoped {
-        selection.ensure_below()?;
+        selection::ensure_below(&selection)?;
     }
     let plan = selection.plan(agent.as_ref(), options.in_place);
     if plan.restarts.is_empty() && plan.skipped.is_empty() {
@@ -98,7 +98,7 @@ pub(super) async fn run(
     };
     if interrupted {
         // The daemon goes on with the restarts it was asked for.
-        let agents = running_agents(ctx).await?;
+        let agents = running_agents(&ctx.paths).await?;
         return progress.interrupted(ctx, &agents, agent.as_ref());
     }
     progress.finish(ctx)
@@ -150,56 +150,59 @@ async fn restart_all(
     }
 }
 
-impl Restart {
-    /// Restart the agent as `options` say, or join its restart, as part of
-    /// `run`, returning the place it runs in now.
-    async fn run(&self, ctx: &Context, run: &str, options: &Options) -> Result<Option<Origin>> {
-        let run = Some(run.to_owned());
-        match &self.space {
-            // The daemon names how to restore a chat whose restart failed.
-            PresentSpace::Chat(chat) => {
-                agents::restart_chat(
-                    &ctx.paths,
-                    &chat.id,
-                    self.joins.clone(),
-                    run,
-                    options.change.clone(),
-                )
-                .await
-            }
-            PresentSpace::Workspace(workspace) => {
-                self.restart_agent(ctx, workspace, run, options).await
-            }
+/// Restart the agent of `restart` as `options` say, or join its restart, as
+/// part of `run`, returning the place it runs in now.
+async fn restart_one(
+    ctx: &Context,
+    restart: &Restart,
+    run: &str,
+    options: &Options,
+) -> Result<Option<Origin>> {
+    let run = Some(run.to_owned());
+    match &restart.space {
+        // The daemon names how to restore a chat whose restart failed.
+        PresentSpace::Chat(chat) => {
+            agents::restart_chat(
+                &ctx.paths,
+                &chat.id,
+                restart.joins.clone(),
+                run,
+                options.change.clone(),
+            )
+            .await
+        }
+        PresentSpace::Workspace(workspace) => {
+            restart_agent(ctx, restart, workspace, run, options).await
         }
     }
+}
 
-    /// [`Self::run`] for the agent of `workspace`, naming how to restore it
-    /// when its restart failed.
-    async fn restart_agent(
-        &self,
-        ctx: &Context,
-        workspace: &Workspace,
-        run: Option<String>,
-        options: &Options,
-    ) -> Result<Option<Origin>> {
-        let execution = self.agent.execution.clone();
-        let joins = self.joins.clone();
-        let (in_place, change) = (options.in_place, options.change.clone());
-        let restarted = agents::restart(&ctx.paths, execution, joins, run, in_place, change).await;
-        restarted.map_err(|error| {
-            // A restart that waits still restores the agent itself, as a
-            // wrapper waiting for its restore does.
-            match recovery::resumable(&ctx.paths, &workspace.id) {
-                Ok(true) if waits(&error).is_none() => {
-                    anyhow::anyhow!(
-                        "{error:#}; restore it with shoal resume {}",
-                        workspace.number
-                    )
-                }
-                _ => error,
+/// [`restart_one`] for the agent of `workspace`, naming how to restore it
+/// when its restart failed.
+async fn restart_agent(
+    ctx: &Context,
+    restart: &Restart,
+    workspace: &Workspace,
+    run: Option<String>,
+    options: &Options,
+) -> Result<Option<Origin>> {
+    let execution = restart.agent.execution.clone();
+    let joins = restart.joins.clone();
+    let (in_place, change) = (options.in_place, options.change.clone());
+    let restarted = agents::restart(&ctx.paths, execution, joins, run, in_place, change).await;
+    restarted.map_err(|error| {
+        // A restart that waits still restores the agent itself, as a
+        // wrapper waiting for its restore does.
+        match recovery::resumable(&ctx.paths, &workspace.id) {
+            Ok(true) if waits(&error).is_none() => {
+                anyhow::anyhow!(
+                    "{error:#}; restore it with shoal resume {}",
+                    workspace.number
+                )
             }
-        })
-    }
+            _ => error,
+        }
+    })
 }
 
 /// What the restart waits for, when `error` answers a restart that goes on
@@ -234,7 +237,7 @@ async fn restart_in_turn(
         } else {
             restarts.remove(0)
         };
-        let result = restart.run(ctx, run, options).await;
+        let result = restart_one(ctx, &restart, run, options).await;
         if result.is_ok() {
             previous = Some(Instant::now());
         }
@@ -257,7 +260,7 @@ async fn restart_together(
     let mut told = false;
     loop {
         if wait {
-            for gone in refresh(&mut waiting, &running_agents(ctx).await?, run) {
+            for gone in refresh(&mut waiting, &running_agents(&ctx.paths).await?, run) {
                 progress.skip(ctx, gone);
             }
         }
@@ -266,7 +269,7 @@ async fn restart_together(
         {
             let restart = waiting.remove(index);
             running.push(async move {
-                let result = restart.run(ctx, run, options).await;
+                let result = restart_one(ctx, &restart, run, options).await;
                 (restart, result)
             });
         }
@@ -308,7 +311,7 @@ async fn next_idle(
 ) -> Result<Option<Restart>> {
     let mut told = false;
     loop {
-        for gone in refresh(restarts, &running_agents(ctx).await?, run) {
+        for gone in refresh(restarts, &running_agents(&ctx.paths).await?, run) {
             progress.skip(ctx, gone);
         }
         if restarts.is_empty() {

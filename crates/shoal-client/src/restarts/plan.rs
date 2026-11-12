@@ -1,51 +1,50 @@
 //! Which agents a run restarts, in what order, and which it skips: those of
 //! workspaces and of chats alike.
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
-pub(super) use crate::client::output::agents::Skipped;
-use crate::client::space_names::SpaceSelector;
 use crate::{
-    cli::{args::SpaceTargets, context::Context, ui},
-    model::{PendingRestart, PresentSpace, RunningAgent, Spaces, Workspace},
+    connection::Daemon,
+    model::{PendingRestart, PresentSpace, RunningAgent, Workspace},
+    output::agents::Skipped,
     state::AgentState,
 };
 
 /// The selected spaces and the agents that run there.
-pub(super) struct Selection {
-    spaces: Vec<PresentSpace>,
-    agents: Vec<RunningAgent>,
+pub struct Selection {
+    pub spaces: Vec<PresentSpace>,
+    pub agents: Vec<RunningAgent>,
     /// The spaces were named, so one without an agent is reported.
-    named: bool,
+    pub named: bool,
 }
 
 /// What a run restarts, in order, and what it skips.
-pub(super) struct Plan {
-    pub(super) restarts: Vec<Restart>,
-    pub(super) skipped: Vec<Skipped>,
+pub struct Plan {
+    pub restarts: Vec<Restart>,
+    pub skipped: Vec<Skipped>,
     /// Names the run to the daemon, which records it on each restart.
-    pub(super) run: String,
+    pub run: String,
 }
 
 /// One agent to restart.
-pub(super) struct Restart {
+pub struct Restart {
     /// The workspace or chat it runs in.
-    pub(super) space: PresentSpace,
-    pub(super) agent: RunningAgent,
+    pub space: PresentSpace,
+    pub agent: RunningAgent,
     /// The restart in progress when the run selected it, which the run
     /// waits for instead of starting another, even once it ends.
-    pub(super) joins: Option<PendingRestart>,
+    pub joins: Option<PendingRestart>,
 }
 
 impl Restart {
     /// Whether the agent can restart without interrupting a turn: it
     /// reported itself that its turn ended, since another agent's report in
     /// the same workspace does not count, or the run joins its restart.
-    pub(super) fn ready(&self) -> bool {
+    pub fn ready(&self) -> bool {
         self.agent.state == Some(AgentState::Idle) || self.joins.is_some()
     }
 
     /// The agent, skipped for `reason`.
-    pub(super) fn skipped(self, reason: impl Into<String>) -> Skipped {
+    pub fn skipped(self, reason: impl Into<String>) -> Skipped {
         Skipped {
             space: self.space.name().clone(),
             agent: self.agent.agent,
@@ -55,46 +54,11 @@ impl Restart {
 }
 
 impl Selection {
-    /// `--all` selects every workspace and chat, names select theirs, and
-    /// neither the picker.
-    pub(super) async fn load(ctx: &Context, targets: SpaceTargets) -> Result<Self> {
-        let named = !targets.all && !targets.space.is_empty();
-        let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
-        let spaces = match targets.all {
-            true => every(spaces),
-            false => {
-                let selected = ui::select_spaces(ctx, targets.space, false).await?;
-                in_order(ctx, &spaces, selected).await?
-            }
-        };
-        let agents = running_agents(ctx).await?;
-        Ok(Self {
-            spaces,
-            agents,
-            named,
-        })
-    }
-
-    /// Refuse a selection that includes the scoped caller's own space,
-    /// before any restarts, as the daemon would refuse its agent.
-    pub(super) fn ensure_below(&self) -> Result<()> {
-        let own = crate::env::own_space();
-        ensure!(
-            own.is_some()
-                && self
-                    .spaces
-                    .iter()
-                    .all(|space| Some(space.id()) != own.as_ref()),
-            "scoped processes restart only the spaces below their own; finish their own with shoal done"
-        );
-        Ok(())
-    }
-
     /// The agents named `agent` to restart, ready ones first, and those that
     /// cannot restart, `in_place` when asked, or already run again. Agents
     /// protection stopped wait for their restore and are left out, and
     /// reported as skipped when their space was named and runs no other.
-    pub(super) fn plan(self, agent: Option<&crate::agent::Agent>, in_place: bool) -> Plan {
+    pub fn plan(self, agent: Option<&crate::agent::Agent>, in_place: bool) -> Plan {
         let mut plan = Plan {
             restarts: Vec::new(),
             skipped: Vec::new(),
@@ -175,42 +139,10 @@ impl Plan {
 }
 
 /// The agents of workspaces and of chats, as a run selects and follows them.
-pub(super) async fn running_agents(ctx: &Context) -> Result<Vec<RunningAgent>> {
-    let mut agents = crate::client::agents::all(&ctx.paths).await?;
-    agents.extend(crate::client::agents::of_chats(&ctx.paths).await?);
+pub async fn running_agents(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
+    let mut agents = crate::agents::all(daemon).await?;
+    agents.extend(crate::agents::of_chats(daemon).await?);
     Ok(agents)
-}
-
-/// Every workspace and chat of `spaces`.
-fn every(spaces: Spaces) -> Vec<PresentSpace> {
-    let workspaces = spaces.workspaces.into_iter().map(PresentSpace::Workspace);
-    let chats = spaces.chats.into_iter().map(PresentSpace::Chat);
-    workspaces.chain(chats).collect()
-}
-
-/// The spaces `selected` names among `spaces`, in its order, each once. A
-/// selector no listed space has is inspected, which names why the daemon
-/// does not know it.
-async fn in_order(
-    ctx: &Context,
-    spaces: &Spaces,
-    selected: Vec<SpaceSelector>,
-) -> Result<Vec<PresentSpace>> {
-    let mut ordered: Vec<PresentSpace> = Vec::new();
-    for selector in selected {
-        let space = match spaces.find(&selector) {
-            Some(space) => space,
-            None => {
-                let inspection =
-                    crate::client::workspaces::inspect(&ctx.paths, selector.clone()).await?;
-                PresentSpace::Workspace(inspection.workspace)
-            }
-        };
-        if ordered.iter().all(|listed| listed.id() != space.id()) {
-            ordered.push(space);
-        }
-    }
-    Ok(ordered)
 }
 
 /// Why a run that restarts `in_place` when asked cannot restart `running`,
@@ -225,7 +157,7 @@ fn run_skip_reason(space: &PresentSpace, running: &RunningAgent, in_place: bool)
 }
 
 /// Why `running`, the agent of `space`, cannot restart, if it cannot.
-pub(super) fn space_skip_reason(space: &PresentSpace, running: &RunningAgent) -> Option<String> {
+pub fn space_skip_reason(space: &PresentSpace, running: &RunningAgent) -> Option<String> {
     match space {
         PresentSpace::Workspace(workspace) => skip_reason(workspace, running),
         PresentSpace::Chat(_) if !running.restorable => {
@@ -257,7 +189,7 @@ fn absent_reason(
 /// Why `running`, the agent of `space`, does not restart when protection
 /// stopped it: it waits for its restore, which `shoal queue start` starts
 /// now.
-pub(super) fn stopped_reason(space: &str, running: &RunningAgent) -> Option<String> {
+pub fn stopped_reason(space: &str, running: &RunningAgent) -> Option<String> {
     let protection = running.stopped.as_ref()?;
     let agent = running
         .agent
@@ -272,10 +204,7 @@ pub(super) fn stopped_reason(space: &str, running: &RunningAgent) -> Option<Stri
 
 /// Why `running` cannot restart in place, if it cannot; `shoal queue move`
 /// refuses such an agent too.
-pub(in crate::cli::commands) fn skip_reason(
-    workspace: &Workspace,
-    running: &RunningAgent,
-) -> Option<String> {
+pub fn skip_reason(workspace: &Workspace, running: &RunningAgent) -> Option<String> {
     let manual = format!("use shoal stop {0} and shoal resume {0}", workspace.number);
     match &running.agent {
         None => Some(format!(

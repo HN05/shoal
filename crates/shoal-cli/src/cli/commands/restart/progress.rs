@@ -8,8 +8,8 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
-use super::plan::Restart;
 use crate::client::output::agents::{Restarted, RestartedAgent, Skipped};
+use crate::client::restarts::Restart;
 use crate::{
     cli::{
         context::Context,

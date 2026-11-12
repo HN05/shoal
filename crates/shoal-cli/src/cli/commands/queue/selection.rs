@@ -3,13 +3,10 @@
 //! rest.
 use anyhow::{Context as _, Result, bail, ensure};
 
+use crate::client::restarts::skip_reason;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    cli::{
-        commands::{queued_agents, restart::skip_reason},
-        context::Context,
-        ui,
-    },
+    cli::{commands::queued_agents, context::Context, ui},
     model::{QueueEntry, QueuePlace},
     state::{QueueKind, QueueState},
 };
