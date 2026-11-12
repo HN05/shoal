@@ -16,6 +16,7 @@ use crate::daemon::{
 };
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
+use crate::execution::recovery::SavedExt as _;
 use crate::paths::CommandPaths;
 use std::{fs, future::Future, os::unix::fs::PermissionsExt};
 
@@ -481,7 +482,7 @@ async fn an_agent_whose_terminal_closes_is_saved_as_stopped() {
     assert_eq!(bounded(agent).await.unwrap().unwrap(), 129);
     assert_eq!(LastSession::all(&manager.paths, &workspace.id).unwrap(), []);
     let saved = Saved::load(&manager.paths, &workspace.id).unwrap();
-    let record = Record::load(&saved.agents[0].1).unwrap().unwrap();
+    let record = Record::load(&saved.agents[0].path).unwrap().unwrap();
     assert_eq!(record.stop_reason.as_deref(), Some("its terminal closed"));
     assert_eq!(record.session, Some("closed-session".into()));
     serving.abort();

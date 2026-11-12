@@ -6,7 +6,7 @@ use anyhow::{Result, bail, ensure};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, context::Context, ui},
-    execution::recovery::Saved,
+    execution::recovery::{Saved, SavedExt as _},
     model::{Chat, PresentSpace, Spaces, Workspace},
 };
 

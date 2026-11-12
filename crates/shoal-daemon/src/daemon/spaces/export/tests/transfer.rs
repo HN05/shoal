@@ -1,5 +1,6 @@
 use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::RecordExt;
+use crate::execution::recovery::SavedExt as _;
 use std::{fs, path::Path, sync::Arc};
 
 use crate::client::agent::AgentSessionId;
@@ -212,7 +213,7 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
     // The stopped agent starts a new session on another machine.
     let saved = recovery::Saved::load(&importing.paths, &restored.opened.workspace.id).unwrap();
     assert_eq!(saved.agents.len(), 1);
-    let record = Record::load(&saved.agents[0].1).unwrap().unwrap();
+    let record = Record::load(&saved.agents[0].path).unwrap().unwrap();
     assert_eq!(record.agent, "claude");
     assert!(record.moved);
     assert_eq!(record.session, None);
@@ -498,7 +499,7 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
     // only a machine with an ID knows it exported; without one, nor any of
     // the session's files, it starts anew.
     let saved = recovery::Saved::load(&manager.paths, &copy.id).unwrap();
-    let record = Record::load(&saved.agents[0].1).unwrap().unwrap();
+    let record = Record::load(&saved.agents[0].path).unwrap().unwrap();
     let forked = crate::process::machine::id().map(|_| "s1");
     assert_eq!(record.session.as_ref().map(AgentSessionId::as_str), forked);
     assert_eq!(record.copied, Some(Copied::default()));

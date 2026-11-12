@@ -166,12 +166,55 @@ fn a_restored_workspace_saves_the_removed_ones_stopped_agents() {
     saved.retain_unattended();
     assert!(saved.commands.is_empty());
     assert_eq!(saved.agents.len(), 1);
-    let path = &saved.agents[0].1;
+    let path = &saved.agents[0].path;
     assert_eq!(Record::load(path).unwrap().unwrap(), agents[0].record);
     assert_eq!(
         std::fs::metadata(path).unwrap().modified().unwrap(),
         agents[0].stopped_at.system_time()
     );
+}
+
+#[test]
+fn saved_agents_carry_their_agent_stop_reason_and_turn() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let workspace = SpaceId::from("workspace");
+    let save = |execution: &str, record: &str| {
+        let path = record_path(&paths, &workspace, &ExecutionId::from(execution));
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, record).unwrap();
+    };
+    save(
+        "busy",
+        r#"{"agent":"claude","stop_reason":"memory pressure"}"#,
+    );
+    save("idle", r#"{"agent":"codex","turn":"idle"}"#);
+    let saved = Saved::load(&paths, &workspace).unwrap();
+    let agents = (saved.agents.iter())
+        .map(|agent| {
+            let name = agent.agent.as_ref().map(ToString::to_string);
+            (
+                agent.id.as_str(),
+                name,
+                agent.stop_reason.as_deref(),
+                agent.idle,
+            )
+        })
+        .collect::<Vec<_>>();
+    // A record without a turn counts as interrupted.
+    assert_eq!(
+        agents,
+        [
+            (
+                "busy",
+                Some("claude".into()),
+                Some("memory pressure"),
+                false
+            ),
+            ("idle", Some("codex".into()), None, true),
+        ]
+    );
+    assert!(saved.agents.iter().all(|agent| agent.stopped_at.is_some()));
 }
 
 #[test]
@@ -205,14 +248,14 @@ fn only_agents_outside_a_waiting_wrapper_receive_the_stopped_commands() {
     };
     save(&ExecutionId::from("waiting"), Restorer::Wrapper(wrapper));
     let saved = Saved::load(&paths, &SpaceId::from("workspace")).unwrap();
-    assert!(waits_in_wrapper(&saved.agents[0].1));
+    assert!(saved.agents[0].waits_in_wrapper);
     assert!(!saved.restores_outside_wrappers());
 
     save(&ExecutionId::from("stopped"), Restorer::User);
     let mut saved = Saved::load(&paths, &SpaceId::from("workspace")).unwrap();
     assert!(saved.restores_outside_wrappers());
     saved.retain_unattended();
-    let kept: Vec<_> = saved.agents.iter().map(|(id, _)| id.as_str()).collect();
+    let kept: Vec<_> = saved.agents.iter().map(|agent| agent.id.as_str()).collect();
     assert_eq!(kept, ["stopped"]);
 }
 
@@ -388,11 +431,12 @@ fn each_agent_keeps_a_last_session_and_a_single_earlier_one_gets_a_file() {
         ]
     );
     saved.retain_execution(&ExecutionId::from("execution"), false);
+    let kept = (saved.sessions.iter()).map(|last| (last.id.as_str(), &last.path));
     assert_eq!(
-        saved.sessions,
+        kept.collect::<Vec<_>>(),
         [(
-            "execution".into(),
-            LastSession::path(
+            "execution",
+            &LastSession::path(
                 &paths,
                 &SpaceId::from("workspace"),
                 &ExecutionId::from("execution")

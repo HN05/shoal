@@ -47,7 +47,7 @@ pub(super) async fn run_all(
                 .agents
                 .into_iter()
                 .chain(saved.sessions)
-                .map(|(id, path)| (workspace.clone(), id, path)),
+                .map(|saved| (workspace.clone(), saved.id, saved.path)),
         );
     }
     // An agent restored here replaces this run's report, so it takes the

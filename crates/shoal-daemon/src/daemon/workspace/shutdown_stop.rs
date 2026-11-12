@@ -14,7 +14,7 @@ use crate::{
         log,
         notifications::{About, NotificationKind},
     },
-    execution::recovery::{self, Saved},
+    execution::recovery::{self, Saved, SavedExt as _},
     model::Workspace,
     protocol::QueuedLaunches,
     state::ChatRestore,
@@ -197,7 +197,7 @@ fn waits_for_resume(
         || saved
             .agents
             .iter()
-            .any(|(execution, _)| !requested.contains(execution) && !queued.contains(execution)))
+            .any(|agent| !requested.contains(&agent.id) && !queued.contains(&agent.id)))
 }
 
 /// How the work of the `waiting` workspaces continues. `shoal resume --all`

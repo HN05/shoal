@@ -8,7 +8,7 @@ use anyhow::{Result, ensure};
 
 use super::Manager;
 use crate::client::space_names::SpaceSelector;
-use crate::execution::recovery::{self, Saved};
+use crate::execution::recovery::{self, Saved, SavedExt as _};
 use crate::protocol::SavedAgent;
 
 /// A workspace process that stopped another workspace's executions, which
@@ -60,7 +60,7 @@ impl Manager {
         let executions = self.workspace_executions(&workspace.id).await?;
         let mut saved = Saved::load(&self.paths, &workspace.id)?;
         saved.retain_unattended();
-        for (id, path) in saved.agents {
+        for recovery::SavedSession { id, path, .. } in saved.agents {
             if executions.iter().any(|execution| execution.id == id) {
                 continue;
             }
@@ -171,10 +171,7 @@ impl Manager {
             workspace.name
         );
         ensure!(
-            !saved
-                .agents
-                .iter()
-                .any(|(_, path)| recovery::waits_in_wrapper(path)),
+            !saved.agents.iter().any(|agent| agent.waits_in_wrapper),
             "the agent of {} restores in the wrapper that waits for it, which keeps its permissions; resume it without --permission",
             workspace.name
         );

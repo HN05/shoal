@@ -79,7 +79,8 @@ async fn stop_one(ctx: &Context, workspace: &Workspace, yes: bool) -> Result<i32
     }
     let cancelled = stopped.cancelled;
     let other = stop_untracked(ctx, &selector, Selection::Processes).await?;
-    let saved = !recovery::Saved::load(&ctx.paths, &workspace.id)?.is_empty();
+    let saved =
+        !<recovery::Saved as recovery::SavedExt>::load(&ctx.paths, &workspace.id)?.is_empty();
     let mut message = "Workspace processes stopped".to_owned();
     if other.processes > 0 {
         message = format!("{message}. Stopped {}", other_processes(other.processes));

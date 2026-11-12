@@ -17,6 +17,7 @@ pub use claim::{RecoveryClaim, claim, discard_saved};
 
 pub use crate::client::executions::{Copied, LastSession, Record, Stage, Stop, StoppedAgent};
 pub(crate) use crate::client::executions::{earlier_place, unnamed_execution};
+pub use crate::client::saved::{Saved, SavedCommand, SavedSession};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::{Agent, ModelChoice},
@@ -736,7 +737,12 @@ pub fn saves_agent(paths: &Paths, workspace_id: &SpaceId) -> Result<bool> {
 /// for `shoal resume` to restore them.
 pub fn stopped_agents(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<StoppedAgent>> {
     let mut agents = Vec::new();
-    for (execution, path) in Saved::load(paths, workspace_id)?.agents {
+    for SavedSession {
+        id: execution,
+        path,
+        ..
+    } in Saved::load(paths, workspace_id)?.agents
+    {
         if let Some(mut record) = Record::load(&path)? {
             record.waiting = None;
             let stopped_at = saved_at(&path).context("read when the agent stopped")?;
@@ -1014,13 +1020,13 @@ impl LastSessionExt for LastSession {
         Ok(Saved::load(paths, workspace_id)?
             .sessions
             .iter()
-            .filter_map(|(_, path)| Self::load(path).ok().flatten())
+            .filter_map(|last| Self::load(&last.path).ok().flatten())
             .collect())
     }
 
     fn forget_all(paths: &Paths, workspace_id: &SpaceId) -> Result<()> {
-        for (_, path) in Saved::load(paths, workspace_id)?.sessions {
-            consume(&path)?;
+        for last in Saved::load(paths, workspace_id)?.sessions {
+            consume(&last.path)?;
         }
         Ok(())
     }
@@ -1138,25 +1144,13 @@ pub(super) async fn wait(link: &mut super::link::Link) -> Result<Waited> {
     }
 }
 
-/// What `shoal stop` or overload protection saved for one workspace.
-#[derive(Debug, Default)]
-pub struct Saved {
-    /// Agent recovery records by execution ID.
-    pub agents: Vec<(ExecutionId, PathBuf)>,
-    /// Last sessions by execution ID.
-    pub sessions: Vec<(ExecutionId, PathBuf)>,
-    pub commands: Vec<SavedCommand>,
+/// Reading what a workspace saved, which the daemon answers requests with.
+pub trait SavedExt: Sized {
+    fn load(paths: &Paths, workspace_id: &SpaceId) -> Result<Self>;
 }
 
-#[derive(Debug)]
-pub struct SavedCommand {
-    pub(crate) id: ExecutionId,
-    pub path: PathBuf,
-    pub argv: Vec<String>,
-}
-
-impl Saved {
-    pub fn load(paths: &Paths, workspace_id: &SpaceId) -> Result<Self> {
+impl SavedExt for Saved {
+    fn load(paths: &Paths, workspace_id: &SpaceId) -> Result<Self> {
         let mut saved = Self::default();
         name_unnamed_session(paths, workspace_id)?;
         let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
@@ -1170,11 +1164,11 @@ impl Saved {
                 continue;
             };
             if let Some(id) = name.strip_suffix(AGENT_SUFFIX) {
-                saved.agents.push((ExecutionId::from(id.to_owned()), path));
+                let id = ExecutionId::from(id.to_owned());
+                saved.agents.push(stopped_agent(id, path));
             } else if let Some(id) = name.strip_suffix(LAST_SESSION_SUFFIX) {
-                saved
-                    .sessions
-                    .push((ExecutionId::from(id.to_owned()), path));
+                let id = ExecutionId::from(id.to_owned());
+                saved.sessions.push(last_session(id, path));
             } else if let Some(id) = name.strip_suffix(COMMAND_SUFFIX) {
                 let record: CommandRecord = serde_json::from_slice(&std::fs::read(&path)?)
                     .with_context(|| format!("read {}", path.display()))?;
@@ -1185,77 +1179,41 @@ impl Saved {
                 });
             }
         }
-        saved.agents.sort();
-        saved.sessions.sort();
+        saved.agents.sort_by(|a, b| a.id.cmp(&b.id));
+        saved.sessions.sort_by(|a, b| a.id.cmp(&b.id));
         saved.commands.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(saved)
     }
+}
 
-    /// Keep only the record or last session of execution `id`; a selected
-    /// agent keeps the workspace's commands too when `with_commands`, so it
-    /// receives them.
-    pub fn retain_execution(&mut self, id: &ExecutionId, with_commands: bool) {
-        let selected = |(agent, _): &(ExecutionId, PathBuf)| agent == id;
-        if self.agents.iter().chain(&self.sessions).any(selected) {
-            self.agents.retain(selected);
-            self.sessions.retain(selected);
-            if !with_commands {
-                self.commands.clear();
-            }
-        } else {
-            self.agents.clear();
-            self.sessions.clear();
-            self.commands.retain(|command| command.id == *id);
-        }
+/// The stopped agent `id` whose record is at `path`.
+fn stopped_agent(id: ExecutionId, path: PathBuf) -> SavedSession {
+    let record = Record::load(&path).ok().flatten();
+    SavedSession {
+        stopped_at: saved_at(&path),
+        agent: record.as_ref().map(|record| record.agent.clone()),
+        stop_reason: record
+            .as_ref()
+            .and_then(|record| record.stop_reason.clone()),
+        idle: record.as_ref().is_some_and(Record::between_turns),
+        waits_in_wrapper: record.is_some_and(|record| waits(&record)),
+        id,
+        path,
     }
+}
 
-    /// The agent of each saved agent and then each last session, `None` for
-    /// one consumed since the workspace's state was read.
-    pub fn agent_names(&self) -> impl Iterator<Item = Result<Option<Agent>>> + '_ {
-        let records = (self.agents.iter())
-            .map(|(_, path)| Record::load(path).map(|record| record.map(|r| r.agent)));
-        let sessions = (self.sessions.iter())
-            .map(|(_, path)| LastSession::load(path).map(|last| last.map(|l| l.agent)));
-        records.chain(sessions)
-    }
-
-    /// Keep only the records of the executions `keep` selects.
-    pub fn retain(&mut self, keep: impl Fn(&ExecutionId) -> bool) {
-        self.agents.retain(|(id, _)| keep(id));
-        self.sessions.retain(|(id, _)| keep(id));
-        self.commands.retain(|command| keep(&command.id));
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.sessions.is_empty() && !self.is_unfinished()
-    }
-
-    /// Whether stopped agents or commands are unfinished work, which last
-    /// sessions are not.
-    pub fn is_unfinished(&self) -> bool {
-        !(self.agents.is_empty() && self.commands.is_empty())
-    }
-
-    /// The executions of the saved agents, last sessions and commands.
-    pub fn execution_ids(&self) -> Vec<ExecutionId> {
-        self.agents
-            .iter()
-            .chain(&self.sessions)
-            .map(|(id, _)| id.clone())
-            .chain(self.commands.iter().map(|command| command.id.clone()))
-            .collect()
-    }
-
-    /// Drop agents whose wrapper is still waiting to restore them, which
-    /// restore on their own and only through that wrapper.
-    pub fn retain_unattended(&mut self) {
-        self.agents.retain(|(_, path)| !waits_in_wrapper(path));
-    }
-
-    /// Whether an agent or last session restores outside a waiting wrapper,
-    /// receiving the stopped commands; a wrapper's restore receives none.
-    pub fn restores_outside_wrappers(&self) -> bool {
-        (self.agents.iter().chain(&self.sessions)).any(|(_, path)| !waits_in_wrapper(path))
+/// The last session `id` saved at `path`, whose agent exited, so it
+/// stopped neither idle nor for a reason Shoal knows.
+fn last_session(id: ExecutionId, path: PathBuf) -> SavedSession {
+    let last = LastSession::load(&path).ok().flatten();
+    SavedSession {
+        stopped_at: saved_at(&path),
+        agent: last.map(|last| last.agent),
+        stop_reason: None,
+        idle: false,
+        waits_in_wrapper: false,
+        id,
+        path,
     }
 }
 
@@ -1281,7 +1239,9 @@ impl<'a> ClaimedChange<'a> {
         let paths = saved
             .iter()
             .flat_map(|saved| saved.agents.iter().chain(&saved.sessions));
-        let claims = paths.map(|(_, path)| claim(path)).collect::<Result<_>>()?;
+        let claims = paths
+            .map(|saved| claim(&saved.path))
+            .collect::<Result<_>>()?;
         Ok(Self {
             saved,
             _claims: claims,
@@ -1292,7 +1252,7 @@ impl<'a> ClaimedChange<'a> {
     pub fn make(self, change: &PermissionChange) -> Result<()> {
         let agents = self.saved.iter().flat_map(|saved| &saved.agents);
         let sessions = self.saved.iter().flat_map(|saved| &saved.sessions);
-        for (_, path) in agents {
+        for SavedSession { path, .. } in agents {
             if let Some(record) = Record::load(path)? {
                 let narrowing = change.applied_to(record.narrowing);
                 rewrite(
@@ -1304,7 +1264,7 @@ impl<'a> ClaimedChange<'a> {
                 )?;
             }
         }
-        for (_, path) in sessions {
+        for SavedSession { path, .. } in sessions {
             if let Some(last) = LastSession::load(path)? {
                 let narrowing = change.applied_to(last.narrowing);
                 rewrite(path, &LastSession { narrowing, ..last })?;
@@ -1342,11 +1302,12 @@ fn rewrite(path: &Path, saved: &impl Serialize) -> Result<()> {
 
 /// Whether a live wrapper waits to restore the agent saved at `path`.
 pub fn waits_in_wrapper(path: &Path) -> bool {
-    Record::load(path).is_ok_and(|record| {
-        record
-            .and_then(|record| record.waiting)
-            .is_some_and(|wrapper| identity::alive(&wrapper).unwrap_or(false))
-    })
+    Record::load(path).is_ok_and(|record| record.is_some_and(|record| waits(&record)))
+}
+
+/// Whether a live wrapper waits to restore the agent of `record`.
+fn waits(record: &Record) -> bool {
+    (record.waiting.as_ref()).is_some_and(|wrapper| identity::alive(wrapper).unwrap_or(false))
 }
 
 /// Whether any workspace has stopped work that waits for `shoal resume`;
@@ -1366,9 +1327,7 @@ pub fn any_pending(paths: &Paths) -> bool {
 /// Whether the workspace has stopped work that waits for `shoal resume`,
 /// which an agent whose wrapper still waits to restore it is not.
 pub fn resumable(paths: &Paths, workspace_id: &SpaceId) -> Result<bool> {
-    let mut saved = Saved::load(paths, workspace_id)?;
-    saved.retain_unattended();
-    Ok(saved.is_unfinished())
+    Ok(Saved::load(paths, workspace_id)?.is_resumable())
 }
 
 /// Pending recovery is unfinished work even when its Git tree is clean.

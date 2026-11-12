@@ -13,7 +13,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, ui},
     config::permissions::PermissionChange,
-    execution::recovery::Saved,
+    execution::recovery::{Saved, SavedExt as _},
     model::{QueueEntry, Workspace},
     protocol::ConfigTarget,
     terminal,
@@ -223,8 +223,8 @@ pub(super) async fn queue_each(
                 Err(error) => failed.push(ui::failure(ctx, "resume", &workspace.name, &error)),
             }
         }
-        for (execution, _) in saved.agents.iter().chain(&saved.sessions) {
-            match queue(ctx, &workspace, execution, now).await {
+        for saved in saved.agents.iter().chain(&saved.sessions) {
+            match queue(ctx, &workspace, &saved.id, now).await {
                 Ok(entry) => queued.push(entry),
                 Err(error) => failed.push(ui::failure(ctx, "resume", &workspace.name, &error)),
             }

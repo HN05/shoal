@@ -48,6 +48,7 @@ pub mod repository_ids;
 pub mod resources;
 pub mod restarts;
 pub mod reviews;
+pub mod saved;
 pub mod scope_tokens;
 pub mod secrets;
 pub mod sessions;

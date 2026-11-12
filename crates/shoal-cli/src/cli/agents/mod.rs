@@ -707,12 +707,8 @@ pub(in crate::cli) async fn trust_saved(ctx: &Context, workspace: &Workspace) {
 
 /// The agents the workspace saves for `shoal resume`.
 fn saved_agents(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<Agent>> {
-    let saved = recovery::Saved::load(paths, workspace_id)?;
-    let mut agents = Vec::new();
-    for agent in saved.agent_names() {
-        agents.extend(agent?);
-    }
-    Ok(agents)
+    let saved = <recovery::Saved as recovery::SavedExt>::load(paths, workspace_id)?;
+    Ok(saved.agent_names().flatten().cloned().collect())
 }
 
 /// Trust the path of `workspace` for each of `agents` as a tracked launch

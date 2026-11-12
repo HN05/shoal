@@ -285,18 +285,14 @@ fn resume_entries(ctx: &Context, workspaces: Vec<Workspace>, saved: &[Chat]) -> 
 /// 1 command`, and whether it is unfinished work rather than only last
 /// sessions; `None` when nothing is saved.
 pub fn resumable(paths: &Paths, workspace_id: &SpaceId) -> Option<(String, bool)> {
-    let saved = recovery::Saved::load(paths, workspace_id).unwrap_or_default();
+    let saved =
+        <recovery::Saved as recovery::SavedExt>::load(paths, workspace_id).unwrap_or_default();
     if saved.is_empty() {
         return None;
     }
     let mut parts = saved
         .agent_names()
-        .map(|agent| {
-            agent
-                .ok()
-                .flatten()
-                .map_or_else(|| "agent".to_owned(), String::from)
-        })
+        .map(|agent| agent.map_or_else(|| "agent".to_owned(), |agent| agent.to_string()))
         .collect::<Vec<_>>();
     match saved.commands.len() {
         0 => {}

@@ -7,7 +7,7 @@ use super::{commands, permission_change, picker, queue, reports, sessions, stale
 use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::Resumed;
 use crate::client::space_names::SpaceSelector;
-use crate::execution::recovery::{LastSessionExt, RecordExt, waits_in_wrapper};
+use crate::execution::recovery::{LastSessionExt, RecordExt, SavedExt as _};
 use crate::{
     cli::{context::Context, terminal},
     config::permissions::PermissionChange,
@@ -45,7 +45,7 @@ pub(super) async fn run(
     }
     let recovery_id = execution
         .as_ref()
-        .or_else(|| (saved.agents.len() == 1).then(|| &saved.agents[0].0));
+        .or_else(|| (saved.agents.len() == 1).then(|| &saved.agents[0].id));
     stale::reconcile(ctx, &inspection, recovery_id).await?;
     inspection =
         crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace_id)).await?;
@@ -57,8 +57,9 @@ pub(super) async fn run(
         reports::commands_only(ctx, &report)?;
         return Ok(0);
     }
-    let (selected_id, selected) = picker::select_agent(ctx, &saved.agents, picker::agent_label)?;
-    if waits_in_wrapper(&selected) {
+    let picked = picker::select_agent(ctx, &saved.agents, picker::agent_label)?;
+    let (selected_id, selected) = (picked.id, picked.path);
+    if picked.waits_in_wrapper {
         saved.retain_execution(&selected_id, true);
         let stopped = vec![(workspace.clone(), saved)];
         return queue::queue_all(ctx, stopped, Vec::new(), Vec::new(), true).await;
@@ -95,7 +96,8 @@ pub(super) async fn continue_last_session(
     here: bool,
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
-    let (id, path) = picker::select_agent(ctx, &saved.sessions, picker::session_label)?;
+    let picked = picker::select_agent(ctx, &saved.sessions, picker::session_label)?;
+    let (id, path) = (picked.id, picked.path);
     permission_change::apply_one(ctx, workspace, &id, change).await?;
     if !here {
         let session = (workspace.clone(), id, path);

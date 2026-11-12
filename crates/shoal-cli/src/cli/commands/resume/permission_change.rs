@@ -11,7 +11,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::context::Context,
     config::permissions::PermissionChange,
-    execution::recovery::{Saved, waits_in_wrapper},
+    execution::recovery::{Saved, SavedExt as _},
     model::{Chat, Workspace},
     protocol::SavedAgent,
 };
@@ -33,7 +33,7 @@ pub(super) async fn check(
     for selector in selectors {
         let (workspace, saved) = saved_agents(ctx, selector, execution).await?;
         ensure!(
-            !saved.agents.iter().any(|(_, path)| waits_in_wrapper(path)),
+            !saved.agents.iter().any(|agent| agent.waits_in_wrapper),
             "the agent of {} restores in the wrapper that waits for it, which keeps its permissions; resume it without --permission",
             workspace.name
         );
@@ -75,9 +75,9 @@ pub(super) async fn apply(
     change: Option<&PermissionChange>,
 ) -> Result<()> {
     let agents = stopped.iter().flat_map(|(workspace, saved)| {
-        (saved.agents.iter().chain(&saved.sessions)).map(|(execution, _)| SavedAgent {
+        (saved.agents.iter().chain(&saved.sessions)).map(|saved| SavedAgent {
             workspace: SpaceSelector::id(&workspace.id),
-            execution: execution.clone(),
+            execution: saved.id.clone(),
         })
     });
     let chats = chats.iter().map(|chat| SpaceSelector::id(&chat.id));

@@ -22,7 +22,7 @@ use crate::{
         ui,
     },
     config::{Config, edit::Change},
-    execution::recovery::Saved,
+    execution::recovery::{Saved, SavedExt as _},
     model::{Execution, MovedRepository, Repository, RepositoryMoves, Workspace},
     protocol::QueuedLaunches,
     repository,

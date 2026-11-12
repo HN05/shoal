@@ -178,9 +178,8 @@ impl Stop {
     /// before is left to whoever stopped it.
     fn saved(&self, ctx: &Context, id: &SpaceId) -> bool {
         match self {
-            Self::Workspace { .. } => {
-                recovery::Saved::load(&ctx.paths, id).is_ok_and(|saved| !saved.is_empty())
-            }
+            Self::Workspace { .. } => <recovery::Saved as recovery::SavedExt>::load(&ctx.paths, id)
+                .is_ok_and(|saved| !saved.is_empty()),
             Self::CancelledRun(_) => false,
             Self::Chat(stopped) => !stopped.already_stopped,
         }
