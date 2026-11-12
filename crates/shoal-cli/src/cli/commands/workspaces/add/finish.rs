@@ -7,7 +7,7 @@ use anyhow::{Context as _, Result};
 use super::{
     place::{HereLaunch, launch_placed},
     queue::failing_entry,
-    source::load_add_issue,
+    source::load_planned_issue,
     target::AddTarget,
     waiting::{AfterSetup, follow_add_setup},
 };
@@ -40,7 +40,7 @@ pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<
         selector: plan.repository.clone(),
         repositories: tokio::sync::OnceCell::new(),
     };
-    let issue = load_add_issue(ctx, &target, plan.issue.clone()).await;
+    let issue = load_planned_issue(ctx, &target, &plan).await;
     // A queued start reports a failed lookup as it reports any other failure.
     let issue = failing_entry(ctx, plan.queue_entry.as_ref(), issue).await?;
     execute_add_with_target(ctx, plan, target, issue).await
@@ -310,7 +310,8 @@ struct AddStart {
     waiting: Option<Box<QueuedLaunch>>,
 }
 
-/// Open the planned workspace, assigned `issue`, and follow its preparation.
+/// Open the planned workspace, assigned `issue` unless the start names the
+/// workspace, which keeps the issue it has, and follow its preparation.
 async fn start_add_workspace<'c>(
     ctx: &'c Context,
     target: &AddTarget,
@@ -336,6 +337,7 @@ async fn start_add_workspace<'c>(
         copy,
         typed,
     } = creation;
+    let issue = issue.filter(|_| workspace.is_none());
     let start = match (workspace, pull_head, existing, copy) {
         (Some(workspace), ..) => WorkspaceStart::Workspace(SpaceSelector::Id(workspace)),
         (None, Some(head), ..) => WorkspaceStart::PullHead {

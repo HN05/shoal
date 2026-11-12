@@ -185,7 +185,7 @@ impl ForgeRepo {
         }
     }
 
-    /// The open issue `number`, which must have a title.
+    /// The issue `number`, open or closed, which must have a title.
     pub async fn issue_details(
         &self,
         account: &account::Account,

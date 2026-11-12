@@ -121,16 +121,19 @@ impl Manager {
         }
     }
 
-    /// The issue `item` names in the repository of `context`, by number or
-    /// URL.
+    /// The open issue `item` names in the repository of `context`, by
+    /// number or URL, or with `closed` one in any state.
     pub async fn issue_details(
         &self,
         context: &ItemContext,
         item: &str,
+        closed: bool,
         caller: Option<&Caller>,
     ) -> Result<IssueDetails> {
         let forge = self.context_forge(context).await?;
-        forge.read_issue(&self.read_account(caller), item).await
+        forge
+            .read_issue(&self.read_account(caller), item, closed)
+            .await
     }
 
     /// The open issues the forge records as blocking the issue `item` names

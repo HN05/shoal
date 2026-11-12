@@ -13,7 +13,7 @@ use crate::{
     forge::items::{link::ItemKind, list::Search},
     git::{self},
     protocol::ItemContext,
-    start_plan::Creation,
+    start_plan::{AddPlan, Creation},
     state::WorkspaceState,
 };
 
@@ -83,6 +83,36 @@ pub(super) async fn load_add_issue(
         Some(input) => {
             let context = read_context(ctx, target).await?;
             Ok(Some(issues::load(ctx, context, &input).await?))
+        }
+        None => Ok(None),
+    }
+}
+
+/// The issue a planned start runs on: the one the workspace it names has,
+/// or else the open one it starts on.
+pub(super) async fn load_planned_issue(
+    ctx: &Context,
+    target: &AddTarget,
+    plan: &AddPlan,
+) -> Result<Option<issues::Issue>> {
+    let input = plan.issue.clone();
+    match plan.workspace {
+        Some(_) => load_linked_issue(ctx, target, input).await,
+        None => load_add_issue(ctx, target, input).await,
+    }
+}
+
+/// The issue `input` that the existing workspace a start goes into already
+/// has, open or closed, since its work goes on whatever the issue's state.
+pub(super) async fn load_linked_issue(
+    ctx: &Context,
+    target: &AddTarget,
+    input: Option<String>,
+) -> Result<Option<issues::Issue>> {
+    match input {
+        Some(input) => {
+            let context = read_context(ctx, target).await?;
+            Ok(Some(issues::load_linked(ctx, context, &input).await?))
         }
         None => Ok(None),
     }

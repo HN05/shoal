@@ -12,7 +12,7 @@ use super::{
     mode::choose_add_mode,
     plan::start_as,
     queue::named_blockers,
-    source::load_add_issue,
+    source::load_linked_issue,
     target::AddTarget,
 };
 use crate::client::space_names::SpaceSelector;
@@ -59,7 +59,7 @@ pub(in crate::cli::commands) async fn start_worker(
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
     // A task after `--` replaces the issue as the agent's subject.
     let issue = match agent.agent.is_some() && args.is_empty() {
-        true => load_add_issue(ctx, &target, workspace.links.issue.clone()).await?,
+        true => load_linked_issue(ctx, &target, workspace.links.issue.clone()).await?,
         false => None,
     };
     let mut plan = worker_plan(&workspace, agent, issue.as_ref(), args);

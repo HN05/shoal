@@ -149,14 +149,34 @@ pub async fn number_kind(
     request(daemon, ItemMethod::NumberKind { context, number }).await
 }
 
-/// The issue `item` names in `context`'s repository, by number or URL,
-/// reassembled from the pieces of JSON the daemon sends it in.
+/// The open issue `item` names in `context`'s repository, by number or
+/// URL, reassembled from the pieces of JSON the daemon sends it in.
 pub async fn issue_details(
     daemon: &impl Daemon,
     context: ItemContext,
     item: String,
 ) -> Result<IssueDetails> {
-    joined(daemon, ItemMethod::IssueDetails { context, item }, "issue").await
+    let method = ItemMethod::IssueDetails {
+        context,
+        item,
+        closed: false,
+    };
+    joined(daemon, method, "issue").await
+}
+
+/// [`issue_details`] of an issue in any state, such as the one a workspace
+/// already has.
+pub async fn linked_issue_details(
+    daemon: &impl Daemon,
+    context: ItemContext,
+    item: String,
+) -> Result<IssueDetails> {
+    let method = ItemMethod::IssueDetails {
+        context,
+        item,
+        closed: true,
+    };
+    joined(daemon, method, "issue").await
 }
 
 /// The open issues the forge records as blocking the issue `item` names in

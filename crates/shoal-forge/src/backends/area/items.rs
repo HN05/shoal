@@ -59,7 +59,7 @@ pub(crate) trait Items: Backend {
         rest::issue_state(repo, account, number).await
     }
 
-    /// An open issue.
+    /// An issue, open or closed.
     async fn issue_details(
         &self,
         repo: &ForgeRepo,

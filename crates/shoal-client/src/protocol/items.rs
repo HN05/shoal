@@ -176,14 +176,16 @@ pub enum ItemMethod {
         context: ItemContext,
         number: u64,
     },
-    /// The issue `item` names in the context's repository, by number or
-    /// URL, answered as pieces of the JSON of
-    /// [`crate::forge::items::issue::IssueDetails`] in one or more
+    /// The open issue `item` names in the context's repository, by number
+    /// or URL, or with `closed` one in any state, answered as pieces of the
+    /// JSON of [`crate::forge::items::issue::IssueDetails`] in one or more
     /// `view_pieces` frames and then `ok`.
     IssueDetails {
         #[serde(flatten)]
         context: ItemContext,
         item: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        closed: bool,
     },
     /// The open issues the forge records as blocking the issue `item`
     /// names in the context's repository, as blockers, answered in one or more `blockers`

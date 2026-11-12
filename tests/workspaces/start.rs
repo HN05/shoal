@@ -695,6 +695,40 @@ fn an_issue_start_reopening_a_busy_workspace_is_refused() {
 }
 
 #[test]
+fn start_in_starts_the_worker_on_its_workspaces_closed_issue() {
+    let fixture = Fixture::new();
+    fixture.add_github_origin();
+    fixture.script_github(&github_issue(37, "Sort the queue", "Body."));
+    let repo = fixture.repo.to_str().unwrap();
+    let bin = fixture.root.path().join("stub-bin");
+    install_test_script_with_mode(
+        bin.join("claude"),
+        "#!/bin/sh\nprintf '%s\\n' \"$@\"\n",
+        0o700,
+    );
+    let start = |args: &[&str]| {
+        fixture
+            .command()
+            .args(args)
+            .args(["--here", "--agent", "claude"])
+            .env("PATH", fixture.restricted_path(&bin))
+            .output()
+            .unwrap()
+    };
+    let opened = start(&["start", "37", "--repo", repo]);
+    assert!(opened.status.success(), "{opened:?}");
+    let id = fixture.ok(&["list"])[0]["id"].as_str().unwrap().to_owned();
+    // The issue closed meanwhile; the workspace's work goes on.
+    let mut closed = github_issue(37, "Sort the queue", "Body.");
+    closed["GET repos/team/project/issues/37"]["body"]["state"] = "closed".into();
+    fixture.script_github(&closed);
+    let output = start(&["start", "--in", &id]);
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Sort the queue"), "{stdout}");
+}
+
+#[test]
 fn start_in_refuses_a_second_worker_beside_a_running_one() {
     let fixture = Fixture::new();
     fixture.add("busy");

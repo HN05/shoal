@@ -328,21 +328,37 @@ pub(in crate::cli) async fn read_context(ctx: &Context, repo: &Repository) -> Re
     Ok(ItemContext::Checkout(repo.id.clone()))
 }
 
-/// The issue `input` names in the repository of `context`, by number or
-/// URL.
+/// The open issue `input` names in the repository of `context`, by number
+/// or URL.
 pub(in crate::cli) async fn load(
     ctx: &Context,
     context: ItemContext,
     input: &str,
 ) -> Result<Issue> {
     let issue = client::issue_details(&ctx.paths, context, input.to_owned()).await?;
-    Ok(Issue {
-        number: issue.number.get(),
-        title: issue.title,
-        url: issue.url,
-        details: issue.details,
-        labels: issue.labels,
-    })
+    Ok(Issue::from(issue))
+}
+
+/// [`load`] of the issue a workspace already has, open or closed.
+pub(in crate::cli) async fn load_linked(
+    ctx: &Context,
+    context: ItemContext,
+    input: &str,
+) -> Result<Issue> {
+    let issue = client::linked_issue_details(&ctx.paths, context, input.to_owned()).await?;
+    Ok(Issue::from(issue))
+}
+
+impl From<crate::forge::items::issue::IssueDetails> for Issue {
+    fn from(issue: crate::forge::items::issue::IssueDetails) -> Self {
+        Self {
+            number: issue.number.get(),
+            title: issue.title,
+            url: issue.url,
+            details: issue.details,
+            labels: issue.labels,
+        }
+    }
 }
 
 /// The URL of the issue `input` names: a number in the repository, or a URL.

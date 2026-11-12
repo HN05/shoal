@@ -97,9 +97,13 @@ pub(super) async fn handle(
         ItemMethod::NumberKind { context, number } => {
             Body::LinkKind(manager.number_kind(&context, number, caller).await?)
         }
-        ItemMethod::IssueDetails { context, item } => {
+        ItemMethod::IssueDetails {
+            context,
+            item,
+            closed,
+        } => {
             let issue = manager
-                .issue_details(&context, &item, caller)
+                .issue_details(&context, &item, closed, caller)
                 .await
                 .and_then(|issue| json_pieces(&issue));
             return Ok(Answer::pages(issue, Body::ViewPieces));

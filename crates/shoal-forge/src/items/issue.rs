@@ -17,10 +17,20 @@ pub struct IssueDetails {
 }
 
 impl ForgeRepo {
-    /// The issue `input` names, a number or URL in this repository.
-    pub async fn read_issue(&self, account: &Account, input: &str) -> Result<IssueDetails> {
+    /// The issue `input` names, a number or URL in this repository: an open
+    /// one, which work starts on, or with `closed` one in any state, such as
+    /// the issue a workspace already has.
+    pub async fn read_issue(
+        &self,
+        account: &Account,
+        input: &str,
+        closed: bool,
+    ) -> Result<IssueDetails> {
         let (number, url) = self.issue(input)?;
-        let issue = self.issue_details(account, number).await?;
+        let issue = match closed {
+            true => self.issue_details(account, number).await?,
+            false => self.open_issue_details(account, number).await?,
+        };
         Ok(IssueDetails {
             number,
             url,
@@ -28,6 +38,18 @@ impl ForgeRepo {
             details: issue.body,
             labels: issue.item.labels,
         })
+    }
+
+    /// The open issue `number`, which must have a title; work starts on no
+    /// closed issue.
+    pub async fn open_issue_details(
+        &self,
+        account: &Account,
+        number: IssueNumber,
+    ) -> Result<crate::items::item::Current> {
+        let issue = self.issue_details(account, number).await?;
+        require_open(issue.item.state)?;
+        Ok(issue)
     }
 
     /// Whether the issue at `url`, in this repository, is closed.
@@ -55,7 +77,7 @@ impl ForgeRepo {
     }
 }
 
-pub(crate) fn require_open(state: ItemState) -> Result<()> {
+fn require_open(state: ItemState) -> Result<()> {
     ensure!(
         state == ItemState::Open,
         "issue is already closed; reopen it before starting an issue workspace"

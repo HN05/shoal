@@ -108,7 +108,9 @@ impl Manager {
             .context("issue lookup needs an origin remote")?;
         let forge = self.forge(&remote).await?;
         let (number, url) = forge.issue(input)?;
-        let issue = forge.issue_details(&self.user_account(), number).await?;
+        let issue = forge
+            .open_issue_details(&self.user_account(), number)
+            .await?;
         Ok(OpenIssue {
             url,
             title: issue.item.title,

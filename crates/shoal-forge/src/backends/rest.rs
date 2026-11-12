@@ -13,7 +13,6 @@ use crate::{
     backends::{Backend, LoginHint},
     ci::check_state::CheckState,
     items::{
-        issue::require_open,
         item::{Current, Item, ItemState},
         link::ItemKind,
         list,
@@ -294,18 +293,15 @@ pub(crate) async fn issue_state(
         .state)
 }
 
-/// An open issue.
+/// An issue, open or closed.
 pub(crate) async fn issue_details(
     repo: &ForgeRepo,
     account: &Account,
     number: IssueNumber,
 ) -> Result<Current> {
-    let issue = repo
-        .read(account, ItemKind::Issue, number.get())
+    repo.read(account, ItemKind::Issue, number.get())
         .await
-        .hint_login(&repo.kind)?;
-    require_open(issue.item.state)?;
-    Ok(issue)
+        .hint_login(&repo.kind)
 }
 
 /// Full commit IDs, refusing anything else so cleanup never matches a prefix.

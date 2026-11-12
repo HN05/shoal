@@ -103,7 +103,11 @@ impl Manager {
     ) -> (Option<String>, Option<String>) {
         let read = async {
             let context = self.link_space(selector).await?.item_context();
-            anyhow::Ok(self.issue_details(&context, input, caller).await?.title)
+            anyhow::Ok(
+                self.issue_details(&context, input, false, caller)
+                    .await?
+                    .title,
+            )
         };
         match read.await {
             Ok(title) => (Some(title), None),

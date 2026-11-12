@@ -362,6 +362,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     let details = |repository: &Repository| ItemMethod::IssueDetails {
         context: ItemContext::Checkout(repository.id.clone()),
         item: "7".into(),
+        closed: false,
     };
     crate::daemon::scope::authorize(&manager, Some(&token), &mut details(&repos[1]))
         .await
