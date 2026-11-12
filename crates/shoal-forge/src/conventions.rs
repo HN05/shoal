@@ -12,7 +12,7 @@ use anyhow::{Result, bail};
 use crate::{
     ForgeKind, ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::Conventions,
     conventions::labels::Label,
     items::{item::Item, link::ItemKind},
     numbers::IssueNumber,

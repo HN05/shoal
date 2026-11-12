@@ -16,7 +16,6 @@ use crate::{
     },
     capability::{self, Capability, Support},
     ci::check_state::CheckState,
-    conventions::Lookup,
     items::{
         action::{Edit, MergeMethod, MilestoneChange, UpdateMethod, changed_set},
         attach::{Attachment, Holder},
@@ -45,6 +44,7 @@ use crate::{
 };
 
 mod checks;
+mod conventions;
 mod review;
 mod runs;
 
@@ -716,19 +716,6 @@ impl Backend for Bitbucket {
             comment_endpoint(repo, kind, number, subject)?,
             Some(json!({ "content": { "raw": body } })),
         ))
-    }
-
-    fn template_lookups(&self, _kind: ItemKind) -> Vec<(&'static str, Lookup)> {
-        Vec::new()
-    }
-
-    fn milestones_endpoint(&self, repo: &ForgeRepo) -> String {
-        repo.repo_endpoint("milestones")
-    }
-
-    /// Bitbucket names a milestone, and issue edits take it by name.
-    fn milestone(&self, listed: &Value) -> Option<(String, u64)> {
-        Some((text(&listed["name"])?, listed["id"].as_u64()?))
     }
 }
 

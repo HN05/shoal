@@ -1,7 +1,7 @@
 //! Milestones, which edits name by title and forges take by ID.
 use anyhow::{Context, Result};
 
-use crate::{ForgeRepo, account::Account, backends::Backend};
+use crate::{ForgeRepo, account::Account, backends::Conventions};
 
 impl ForgeRepo {
     /// The ID the forge's edits take for the repository's milestone titled

@@ -4,7 +4,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{ForgeRepo, account::Account, backends::Backend, capability::Capability};
+use crate::{ForgeRepo, account::Account, backends::Conventions, capability::Capability};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Label {

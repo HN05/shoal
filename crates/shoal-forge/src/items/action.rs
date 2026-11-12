@@ -5,7 +5,6 @@ use std::borrow::Cow;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use crate::state::states;
 use crate::{
     ForgeRepo,
     account::Account,
@@ -23,6 +22,7 @@ use crate::{
     transport::api::Request,
     updates::{Edited, ItemDetails},
 };
+use crate::{backends::Conventions, state::states};
 
 /// Marks a failure after an action's first request reached the forge, such
 /// as a comment posted before attaching its files failed, so a caller does

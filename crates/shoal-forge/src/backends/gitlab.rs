@@ -12,7 +12,7 @@ use crate::{
     },
     capability::{self, Capability, Support},
     ci::check_state::CheckState,
-    conventions::{Lookup, draft::DraftMarker},
+    conventions::draft::DraftMarker,
     items::{
         action::{Edit, MergeMethod, MilestoneChange, UpdateMethod, changed_set},
         attach::{Attachment, Holder},
@@ -41,6 +41,7 @@ use crate::{
 };
 
 mod checks;
+mod conventions;
 mod reactions;
 mod review;
 mod runs;
@@ -825,27 +826,6 @@ impl Backend for GitLab {
             endpoint,
             Some(json!({ "body": body })),
         ))
-    }
-
-    fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {
-        match kind {
-            ItemKind::Pr => vec![(
-                ".gitlab/merge_request_templates",
-                Lookup::File("default.md"),
-            )],
-            ItemKind::Issue => vec![(".gitlab", Lookup::Directory("issue_templates"))],
-        }
-    }
-
-    /// GitLab's scoped labels are named `key::value`.
-    fn exclusive_label(&self, name: &str, _label: &Value) -> bool {
-        name.contains("::")
-    }
-
-    /// The project's milestones and those of the groups above it, which
-    /// lists both open and closed ones unless asked for one state.
-    fn milestones_endpoint(&self, repo: &ForgeRepo) -> String {
-        repo.repo_endpoint("milestones?include_ancestors=true")
     }
 }
 

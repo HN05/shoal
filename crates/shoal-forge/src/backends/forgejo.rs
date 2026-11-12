@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 
 pub(crate) mod actions;
 mod checks;
+mod conventions;
 mod organization;
 mod review;
 mod reviewers;
@@ -28,7 +29,7 @@ use crate::{
     backends::rest::{RestCheck, RestReads, fingerprints},
     capability::{self, Capability, Support},
     ci::check_state::CheckState,
-    conventions::{Lookup, draft::DraftMarker, shared_lookups},
+    conventions::draft::DraftMarker,
     items::{
         action::{Edit, MergeMethod, UpdateMethod},
         attach::{Attachment, Holder, Media},
@@ -712,26 +713,6 @@ impl Backend for Forgejo {
         body: &str,
     ) -> Result<Request> {
         github_rest::edit_comment(repo, subject, body, self)
-    }
-
-    fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {
-        shared_lookups(kind)
-    }
-
-    /// Forgejo lists an organization's labels, which its repositories'
-    /// items take too, apart from the repository's own.
-    async fn labels(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Value>> {
-        let endpoint = repo.repo_endpoint("labels");
-        let (mut labels, organization) = tokio::try_join!(
-            repo.pages(account, &endpoint),
-            organization::labels(repo, account),
-        )?;
-        labels.extend(organization);
-        Ok(labels)
-    }
-
-    fn exclusive_label(&self, _name: &str, label: &Value) -> bool {
-        label["exclusive"].as_bool().unwrap_or(false)
     }
 }
 

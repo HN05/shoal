@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 mod actions;
 mod activity;
 mod checks;
+mod conventions;
 mod review;
 mod reviewers;
 mod runners;
@@ -22,7 +23,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     capability::{Capability, Support},
-    conventions::{Lookup, draft::DraftMarker, shared_lookups},
+    conventions::draft::DraftMarker,
     items::{
         action::{Edit, MergeMethod, UpdateMethod},
         attach::{Attachment, Holder, Media},
@@ -666,20 +667,6 @@ impl Backend for GitHub {
         body: &str,
     ) -> Result<Request> {
         github_rest::edit_comment(repo, subject, body, self)
-    }
-
-    fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {
-        shared_lookups(kind)
-    }
-
-    /// GitHub keeps its own spelling of a label added in another case.
-    fn label_names_fold_case(&self) -> bool {
-        true
-    }
-
-    /// GitHub's issue edits take a milestone's number.
-    fn milestone(&self, listed: &Value) -> Option<(String, u64)> {
-        Some((text(&listed["title"])?, listed["number"].as_u64()?))
     }
 }
 
