@@ -101,7 +101,7 @@ pub(super) async fn restart(ctx: &Context) -> Result<i32> {
     ctx.progress("Stopping daemon", stop_daemon(&ctx.paths, Exit::Restart))
         .await?;
     start_service(ctx).await?;
-    let stopped = crate::execution::recovery::any_pending(&ctx.paths);
+    let stopped = crate::client::saved::waits_for_resume(&ctx.paths).await?;
     emit_stopped_work(ctx, "Daemon restarted", true, Some(stopped))?;
     Ok(0)
 }

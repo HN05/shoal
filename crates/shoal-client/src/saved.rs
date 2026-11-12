@@ -31,6 +31,13 @@ pub async fn summaries(daemon: &impl Daemon) -> Result<Vec<SavedSummary>> {
     pages(daemon, RecoveryMethod::SavedSummaries).await
 }
 
+/// Whether a workspace this caller sees has stopped work that waits for
+/// `shoal resume`.
+pub async fn waits_for_resume(daemon: &impl Daemon) -> Result<bool> {
+    let summaries = summaries(daemon).await?;
+    Ok(summaries.iter().any(|summary| summary.resumable))
+}
+
 /// What a workspace saved, in brief, as listings and pickers show it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SavedSummary {
@@ -43,6 +50,8 @@ pub struct SavedSummary {
     /// It saved stopped agents or commands, which are unfinished work; last
     /// sessions alone are not.
     pub unfinished: bool,
+    /// Its stopped work waits for `shoal resume`.
+    pub resumable: bool,
 }
 
 /// What `shoal stop` or overload protection saved for one workspace.
@@ -160,6 +169,7 @@ impl Saved {
             agents: self.agent_names().map(Option::<&Agent>::cloned).collect(),
             commands: self.commands.len(),
             unfinished: self.is_unfinished(),
+            resumable: self.is_resumable(),
         }
     }
 
