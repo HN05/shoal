@@ -11,9 +11,10 @@ use super::super::{
 };
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    model::PresentSpace,
+    client::processes::Selection,
+    model::{PresentSpace, StoppedWorkspace},
     process::identity,
-    protocol::{Body, QueuedLaunches, RemovalMethod},
+    protocol::{Body, QueuedLaunches, RemovalMethod, UntrackedProcesses},
     removal::InspectionPolicy,
 };
 
@@ -32,13 +33,14 @@ pub(super) async fn handle(
             workspace,
             acknowledge_unproven,
             launches,
+            processes,
         } => {
-            let stopped_by = caller.map(|caller| &caller.space_id);
-            Body::StoppedWorkspace(
-                manager
-                    .stop_workspace_manually(&workspace, acknowledge_unproven, stopped_by, launches)
-                    .await?,
-            )
+            let stop = WorkspaceStop {
+                acknowledge_unproven,
+                launches,
+                processes,
+            };
+            Body::StoppedWorkspace(stop_workspace(manager, &workspace, stop, caller).await?)
         }
         RemovalMethod::StopChat { chat } => {
             let chat = manager.chat(&chat).await?;
@@ -58,14 +60,11 @@ pub(super) async fn handle(
             space,
             selection,
             requester,
-        } => {
-            let requester = requester.and_then(|pid| identity::capture(pid).ok().flatten());
-            Body::StoppedProcesses(
-                manager
-                    .stop_space_processes(&space, selection, requester)
-                    .await?,
-            )
-        }
+        } => Body::StoppedProcesses(
+            manager
+                .stop_space_processes(&space, selection, identity_of(requester))
+                .await?,
+        ),
         RemovalMethod::CheckRemoval {
             workspace,
             include_changes,
@@ -144,6 +143,51 @@ async fn stop_targets(manager: &Manager) -> Result<Vec<PresentSpace>> {
     Ok((workspaces.into_iter().map(PresentSpace::Workspace))
         .chain(chats.map(PresentSpace::Chat))
         .collect())
+}
+
+/// What a [`RemovalMethod::StopWorkspace`] request asks of the stop.
+struct WorkspaceStop {
+    acknowledge_unproven: bool,
+    launches: QueuedLaunches,
+    processes: UntrackedProcesses,
+}
+
+/// Stop `workspace`'s agents and commands as `caller`, then its untracked
+/// processes as `stop` says, reporting whether the stop saved work for
+/// `shoal resume`; a CI job's workspace has its run cancelled instead.
+async fn stop_workspace(
+    manager: &Manager,
+    workspace: &SpaceSelector,
+    stop: WorkspaceStop,
+    caller: Option<&Caller>,
+) -> Result<StoppedWorkspace> {
+    let stopped_by = caller.map(|caller| &caller.space_id);
+    let mut stopped = manager
+        .stop_workspace_manually(
+            workspace,
+            stop.acknowledge_unproven,
+            stopped_by,
+            stop.launches,
+        )
+        .await?;
+    if stopped.cancelled_run.is_some() {
+        return Ok(stopped);
+    }
+    if let UntrackedProcesses::Stop { requester } = stop.processes {
+        let untracked = manager
+            .stop_space_processes(workspace, Selection::Processes, identity_of(requester))
+            .await?;
+        stopped.other_processes = untracked.processes;
+    }
+    // A read that fails reports nothing saved rather than failing the stop.
+    stopped.saved = (manager.saved_work(workspace).await).is_ok_and(|saved| !saved.is_empty());
+    Ok(stopped)
+}
+
+/// The identity of the requesting process `pid`, which a stop of untracked
+/// processes spares with the processes that started it.
+fn identity_of(pid: Option<u32>) -> Option<identity::Identity> {
+    pid.and_then(|pid| identity::capture(pid).ok().flatten())
 }
 
 impl Scoped for RemovalMethod {

@@ -7,7 +7,7 @@ use crate::{
     connection::{Daemon, request},
     model::{PresentSpace, StoppedChat, StoppedWorkspace},
     processes::{Selection, Stopped},
-    protocol::{QueuedLaunches, RemovalMethod},
+    protocol::{QueuedLaunches, RemovalMethod, UntrackedProcesses},
 };
 
 /// The workspaces with running agents or commands, or queued launches,
@@ -22,18 +22,21 @@ pub async fn check(daemon: &impl Daemon, space: SpaceSelector) -> Result<()> {
 }
 
 /// Stop `workspace`'s agents and commands, keeping their sessions, and do
-/// with its queued launches as `launches` says; `acknowledge_unproven`
-/// accepts processes whose exit cannot be proven.
+/// with its queued launches as `launches` says and with its untracked
+/// processes as `processes` says; `acknowledge_unproven` accepts processes
+/// whose exit cannot be proven.
 pub async fn stop_workspace(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
     acknowledge_unproven: bool,
     launches: QueuedLaunches,
+    processes: UntrackedProcesses,
 ) -> Result<StoppedWorkspace> {
     let method = RemovalMethod::StopWorkspace {
         workspace,
         acknowledge_unproven,
         launches,
+        processes,
     };
     request(daemon, method).await
 }

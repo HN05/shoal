@@ -15,6 +15,22 @@ pub enum QueuedLaunches {
     Keep,
 }
 
+/// What a stop at the user's request does with the workspace's processes
+/// Shoal does not track, which nothing saves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UntrackedProcesses {
+    /// Stop them, as `shoal stop` does, other than process `requester` and
+    /// the processes that started it.
+    Stop {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        requester: Option<u32>,
+    },
+    /// Leave them running, as `shoal move root` does, which starts only the
+    /// stopped agents and commands again.
+    Keep,
+}
+
 /// Requests that stop spaces, and remove, clean up, export and restore
 /// workspaces.
 #[derive(Debug, Serialize, Deserialize)]
@@ -30,6 +46,8 @@ pub enum RemovalMethod {
         /// What becomes of the agent launches waiting to start in it, which
         /// the answer lists when the stop cancels them.
         launches: QueuedLaunches,
+        /// What becomes of its untracked processes, which the answer counts.
+        processes: UntrackedProcesses,
     },
     /// Save the chat `chat` for `shoal resume` and stop its agent; a
     /// stopped chat stays as it is.

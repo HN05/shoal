@@ -458,6 +458,7 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
             workspace: workspace.into(),
             acknowledge_unproven,
             launches: crate::protocol::QueuedLaunches::Cancel,
+            processes: crate::protocol::UntrackedProcesses::Keep,
         })
     };
     let restore_now = |workspace: &str, execution: &str, now| {

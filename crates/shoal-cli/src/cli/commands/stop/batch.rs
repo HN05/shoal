@@ -9,7 +9,7 @@ use crate::{
     cli::{context::Context, ui},
     client::processes::Selection,
     model::{PresentSpace, QueueEntry, StoppedChat, Workspace},
-    protocol::QueuedLaunches,
+    protocol::{QueuedLaunches, UntrackedProcesses},
 };
 
 use super::{
@@ -125,6 +125,7 @@ async fn stop_workspace(
         selector.clone(),
         acknowledge_unproven,
         QueuedLaunches::Cancel,
+        UntrackedProcesses::Keep,
     )
     .await?;
     if let Some(run) = stopped.cancelled_run {

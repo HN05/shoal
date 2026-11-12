@@ -275,8 +275,8 @@ impl Manager {
     ) -> Result<StoppedWorkspace> {
         if let Some(run) = self.cancel_job_in(selector).await? {
             return Ok(StoppedWorkspace {
-                cancelled: Vec::new(),
                 cancelled_run: Some(run),
+                ..StoppedWorkspace::default()
             });
         }
         let policy = if acknowledge_unproven {
@@ -299,7 +299,7 @@ impl Manager {
             .await?;
         Ok(StoppedWorkspace {
             cancelled,
-            cancelled_run: None,
+            ..StoppedWorkspace::default()
         })
     }
 

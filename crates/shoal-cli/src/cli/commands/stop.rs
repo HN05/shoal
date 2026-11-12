@@ -14,7 +14,7 @@ use crate::{
     },
     client::processes::Selection,
     model::{PresentSpace, StoppedWorkspace, Workspace},
-    protocol::{ErrorCode, QueuedLaunches, RemoteError},
+    protocol::{ErrorCode, QueuedLaunches, RemoteError, UntrackedProcesses},
 };
 
 mod batch;
@@ -153,6 +153,7 @@ pub(super) async fn stop(
             workspace.clone(),
             acknowledge_unproven,
             launches,
+            UntrackedProcesses::Keep,
         )
     };
     let error = match request_stop(yes).await {

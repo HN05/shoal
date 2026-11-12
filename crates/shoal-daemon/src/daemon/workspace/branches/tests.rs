@@ -1301,6 +1301,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                     workspace: SpaceSelector::id(&workspace.id),
                     acknowledge_unproven: false,
                     launches: crate::protocol::QueuedLaunches::Cancel,
+                    processes: crate::protocol::UntrackedProcesses::Keep,
                 }
                 .into(),
                 false,
