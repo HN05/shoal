@@ -108,12 +108,6 @@ optional assigned issue URL, that issue's title when the linking caller supplied
 list of watched PR URLs, and `opened` and `related` lists of items with their kind,
 URL and known title; acknowledgement-only PR cleanup records have no URL to
 expose. Linking the same issue again records a newly supplied title.
-An issue, PR or CI run is read once, where it enters, into an item reference
-of its repository, kind and number: a command's argument, a protocol field, a
-stored link as it loads, or a forge's answer. Code past that point passes the
-reference and never reads its text again. Stores key items by their canonical
-URL text, read back into a reference as each row loads. A number names an item
-only once the repository it belongs to is known.
 Their `running` flag says whether a tracked execution is running; unverified
 executions after a daemon restart do not count. Their `done` flag says whether a
 completion is recorded.
@@ -142,6 +136,13 @@ interrupts the worker as it interrupted the CLI; a CLI that ends otherwise leave
 it running. The daemon keeps an operation in memory until ten minutes after it
 ends, so a client follows it again by its ID from any event; a restart forgets
 it, and setup and merges fail with their daemon as before.
+
+An issue, PR or CI run is read once, where it enters, into an item reference
+of its repository, kind and number: a command's argument, a protocol field, a
+stored link as it loads, or a forge's answer. Code past that point passes the
+reference and never reads its text again. Stores key items by their canonical
+URL text, read back into a reference as each row loads. A number names an item
+only once the repository it belongs to is known.
 
 The execution wrapper owns terminal I/O, environment delivery, exit codes, and
 command process groups. It retains buffered daemon controls across start, stop,
