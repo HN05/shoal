@@ -88,9 +88,11 @@ pub(super) async fn follow_preparation(
 }
 
 /// Show the output of operation `id` that `next` reports, below a spinner
-/// naming its step, until it ends, returning how it did. An interrupt or
-/// termination cancels it, as it stopped the work when the command ran it;
-/// a second one stops following and leaves it running.
+/// naming its step, until it ends, returning how it did. Each report runs
+/// to its end while the spinner ticks, so a slow one is never restarted. An
+/// interrupt or termination cancels the operation, as it stopped the work
+/// when the command ran it; a second one stops following and leaves it
+/// running.
 async fn show<E>(
     ctx: &Context,
     id: &str,
@@ -101,19 +103,20 @@ async fn show<E>(
     let mut spinner = Spinner::stderr(ctx.json, doing(None));
     let mut cancelled = false;
     loop {
-        let followed = tokio::select! {
-            followed = next() => followed?,
-            _ = interrupt.recv() => {
-                spinner.clear();
-                cancelled = cancel(ctx, id, cancelled).await?;
-                continue;
+        let mut reported = std::pin::pin!(next());
+        let followed = loop {
+            tokio::select! {
+                followed = &mut reported => break followed?,
+                _ = interrupt.recv() => {
+                    spinner.clear();
+                    cancelled = cancel(ctx, id, cancelled).await?;
+                }
+                _ = terminate.recv() => {
+                    spinner.clear();
+                    cancelled = cancel(ctx, id, cancelled).await?;
+                }
+                () = spinner.tick() => {}
             }
-            _ = terminate.recv() => {
-                spinner.clear();
-                cancelled = cancel(ctx, id, cancelled).await?;
-                continue;
-            }
-            () = spinner.tick() => continue,
         };
         match followed {
             Followed::Event(event) => show_progress(ctx, &mut spinner, event.progress),
