@@ -44,11 +44,7 @@ pub(super) async fn run(
     workspace: Option<SpaceSelector>,
     split: Split,
 ) -> Result<i32> {
-    // A supplied branch fails before the parent picker opens.
-    if let Some(branch) = &split.branch {
-        crate::git::check_branch_name(None, branch).await?;
-    }
-    // A named copy fails before the parent picker too.
+    // A named copy fails before the parent picker opens.
     let copy = super::copies::source(ctx, split.copy).await?;
     let parent = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let issue = match &split.issue {

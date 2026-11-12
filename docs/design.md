@@ -122,8 +122,8 @@ and it reports typed steps and its end. The CLI starts an operation and follows
 it through `shoal_client`, as an app does, showing its output where it showed
 it before, so the CLI and apps cannot drift. `shoal start`, `split` and apps open a
 workspace and start its preparation through one request, `StartWorkspace` or
-`StartSplit`: it refuses an agent that cannot run or an issue that is not open
-before creating anything, creates the workspace or reopens the one on the
+`StartSplit`: it refuses an agent that cannot run, an issue that is not open or
+a branch that is not a literal Git branch name before creating anything, creates the workspace or reopens the one on the
 branch, PR head or record it names, assigns the issue, removing a new workspace
 it cannot assign, and starts the operation, which sets it up, links its PR, runs
 a new workspace's post-setup hook and queues the detached agent the request

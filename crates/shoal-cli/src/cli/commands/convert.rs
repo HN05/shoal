@@ -27,9 +27,6 @@ pub(super) async fn to_workspace(
     branch: BranchArgs,
     mode: Option<ModeName>,
 ) -> Result<i32> {
-    if let Some(branch) = &branch.branch {
-        crate::git::check_branch_name(None, branch).await?;
-    }
     let chat = ui::select_space(ctx, space, own_space()).await?;
     let issue = match &branch.issue {
         Some(input) => Some(load_issue(ctx, &chat, input).await?),

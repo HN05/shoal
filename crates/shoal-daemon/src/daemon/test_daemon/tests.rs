@@ -567,6 +567,15 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("no mode triage"), "{error:#}");
+    // Nor does a split on previous-checkout syntax for its branch.
+    let mut previous = split(None);
+    if let OperationMethod::StartSplit { name, .. } = &mut previous {
+        *name = Some("@{-1}".into());
+    }
+    let error = connection::request::<StartedWorkspace>(&agent, previous)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("Git branch"), "{error:#}");
     assert_eq!(code(inspect(&app, "child").await), ErrorCode::NotFound);
     // A mode only a file beside the global config defines is one.
     let paths = &daemon.manager.paths;
