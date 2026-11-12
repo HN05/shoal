@@ -14,6 +14,7 @@ use crate::{
     },
     execution::recovery,
     model::{Chat, PresentSpace, QueueEntry, QueueRequest, Repository, RunningAgent, SpaceTarget},
+    protocol::operations::LaunchRequest,
     repository::Selector,
 };
 
@@ -361,6 +362,25 @@ impl Manager {
         let giver = Some(&caller.space_id);
         (self.ensure_workspace_agent_held(giver, target, &mode, &given)).await?;
         Ok(Some(target))
+    }
+
+    /// The workspace below `caller`'s own space whose worker it queues with
+    /// `launch`, which may not start at once or give permissions the
+    /// caller does not hold.
+    pub(in crate::daemon) async fn worker_target<'a>(
+        &self,
+        caller: &Caller,
+        workspace: &'a mut SpaceSelector,
+        launch: &LaunchRequest,
+    ) -> Result<&'a mut SpaceSelector> {
+        const REFUSAL: &str =
+            "workspace processes can start agents only in the workspaces split from theirs";
+        ensure!(!launch.now, NOT_NOW);
+        let mode = (launch.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT);
+        let target = self.workspace_below(caller, workspace, REFUSAL).await?;
+        let giver = Some(&caller.space_id);
+        (self.ensure_workspace_agent_held(giver, target, &mode, &launch.narrowing)).await?;
+        Ok(target)
     }
 
     /// Confine `caller`'s launch of a new workspace to its own repository,

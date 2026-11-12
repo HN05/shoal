@@ -11,10 +11,7 @@ use crate::{
     hooks::{self, Hook, HookKind},
     model::{QueueEntry, Workspace},
     paths::CommandPaths,
-    protocol::{
-        ConfigTarget,
-        operations::{Failure, Preparation, Prepared, QueuedLaunch, Step},
-    },
+    protocol::operations::{Failure, Preparation, Prepared, QueuedLaunch, Step},
     queued_launches,
     state::WorkspaceState,
 };
@@ -162,13 +159,8 @@ async fn queue_agent(
     launch: QueuedLaunch,
     reporter: &Reporter<'_>,
 ) -> Result<QueueEntry> {
-    let settings = crate::client::workspaces::settings(
-        paths,
-        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
-    )
-    .await?;
     reporter.ensure_running()?;
-    queued_launches::queue_in_workspace(paths, workspace, &settings, launch, None).await
+    queued_launches::queue_in_workspace(paths, workspace, launch, None).await
 }
 
 /// Leave `launch` waiting in the queue of `workspace`, whose setup failed,

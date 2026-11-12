@@ -12,14 +12,20 @@ pub enum QueueMethod {
     QueueAdd {
         request: Box<crate::model::QueueRequest>,
     },
-    /// Queue `agent` in the ready `workspace`, with `prompt` as its first
-    /// message, once it can run there; the daemon starts it detached in the
-    /// default host once the queue admits it. Answers with the entry.
+    /// Queue the worker of the ready `workspace`, the launch the daemon
+    /// resolves `launch` into under the workspace's settings, on the
+    /// workspace's issue unless the launch gives it a task, once `blockers`
+    /// are done and it can run there, linking `pr` as it starts. The daemon
+    /// starts it detached, beside the terminal the launch's `env` names or
+    /// else in the default host, once the queue admits it. Answers with the
+    /// entry.
     QueueAgent {
         workspace: SpaceSelector,
-        agent: crate::agent::Agent,
+        launch: Box<super::operations::LaunchRequest>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        blockers: Vec<crate::model::Blocker>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        prompt: Option<String>,
+        pr: Option<crate::forge::items::reference::ItemInput>,
     },
     ListQueue,
     /// The plan a queued start runs.

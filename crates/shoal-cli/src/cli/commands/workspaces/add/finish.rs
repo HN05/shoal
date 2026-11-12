@@ -213,7 +213,7 @@ pub(super) async fn add_planned(
 /// arguments and fork, at once regardless of the limits when `now`. The
 /// daemon starts it outside this process, so it gets the workspace's own
 /// scope.
-fn queued_launch(
+pub(super) fn queued_launch(
     agent: &ResolvedAddAgent,
     issue: Option<&issues::Issue>,
     (mode, narrowing): (

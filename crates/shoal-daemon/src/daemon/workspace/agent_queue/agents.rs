@@ -1,32 +1,49 @@
-//! Queuing an agent in an existing workspace in one request, as an app
-//! queues one in a ready workspace.
+//! Queuing the worker of an existing workspace in one request, as an app
+//! and `shoal start` queue one in a ready workspace.
 use anyhow::{Context as _, Result};
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    agents::check_queued_launch, daemon::workspace::Manager, model::QueueEntry,
-    protocol::operations::QueuedLaunch, start_plan::queued_agent_request,
+    agents::resolve_launch,
+    daemon::workspace::Manager,
+    forge::items::reference::ItemInput,
+    model::{Blocker, QueueEntry, Workspace},
+    protocol::operations::{LaunchIssue, LaunchRequest},
+    start_plan::queued_agent_request,
 };
 
 impl Manager {
-    /// Queue `agent` in the ready workspace `workspace`, with `prompt` as its
-    /// first message, once it can run there.
+    /// Queue the worker of the ready `workspace` that `launch` asks for,
+    /// resolved under the workspace's settings and on its issue unless the
+    /// launch gives it a task, once `blockers` are done and it can run
+    /// there, linking `pr` as it starts.
     pub(crate) async fn queue_agent(
         &self,
         workspace: &SpaceSelector,
-        agent: crate::agent::Agent,
-        prompt: Option<String>,
+        launch: LaunchRequest,
+        blockers: Vec<Blocker>,
+        pr: Option<ItemInput>,
     ) -> Result<QueueEntry> {
         let workspace = self.workspace(workspace).await?;
-        let launch = QueuedLaunch {
-            prompt,
-            ..QueuedLaunch::new(agent)
-        };
-        check_queued_launch(&launch, &self.workspace_settings(&workspace).await?)?;
-        let request = queued_agent_request(&workspace, launch, None)?;
+        let settings = self.workspace_settings_with_templates(&workspace).await?;
+        let mut launch = resolve_launch(launch, &settings)?;
+        if let Some(issue) = assigned_issue(&workspace) {
+            launch.default_issue(issue);
+        }
+        let mut request = queued_agent_request(&workspace, launch, pr)?;
+        request.blockers = blockers;
         self.queue_add(request)
             .await?
             .entry
             .context("the daemon queued the agent without an entry")
     }
+}
+
+/// The issue `workspace` is assigned, titled as its link recorded it, else
+/// by its URL, without labels: the workspace ranks by its issue's own.
+fn assigned_issue(workspace: &Workspace) -> Option<LaunchIssue> {
+    let url = workspace.links.issue.clone()?;
+    let title = (workspace.links.issue_title.clone()).unwrap_or_else(|| url.to_string());
+    let labels = Vec::new();
+    Some(LaunchIssue { url, title, labels })
 }

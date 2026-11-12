@@ -259,6 +259,22 @@ async fn answers_and_decisions_bind_to_the_record_the_app_showed() {
     assert_eq!(decided.number, pending.number);
 }
 
+/// A request to queue the worker of `workspace` with `launch`.
+fn queue_worker(workspace: &str, launch: LaunchRequest) -> QueueMethod {
+    QueueMethod::QueueAgent {
+        workspace: workspace.into(),
+        launch: Box::new(launch),
+        blockers: Vec::new(),
+        pr: None,
+    }
+}
+
+/// The plan the daemon queued with `entry`.
+async fn queued_plan(daemon: &TestDaemon, entry: &QueueEntry) -> serde_json::Value {
+    let plan = daemon.manager.queued_plan(&entry.id).await.unwrap().plan;
+    serde_json::from_str(&plan).unwrap()
+}
+
 #[tokio::test]
 async fn an_app_queues_an_agent_once_it_can_run() {
     let daemon = TestDaemon::start().await;
@@ -270,10 +286,12 @@ async fn an_app_queues_an_agent_once_it_can_run() {
     .await;
     let worker = daemon.workspace("worker").await;
     let app = daemon.connector();
-    let queue = |agent: &str| QueueMethod::QueueAgent {
-        workspace: SpaceSelector::id(&worker.id),
-        agent: agent.into(),
-        prompt: Some("Fix the build".into()),
+    let queue = |agent: &str| {
+        let launch = LaunchRequest {
+            prompt: Some("Fix the build".into()),
+            ..LaunchRequest::new(Some(agent.into()))
+        };
+        queue_worker(worker.id.as_str(), launch)
     };
     assert!(
         connection::request::<QueueEntry>(&app, queue("undefined"))
@@ -281,13 +299,13 @@ async fn an_app_queues_an_agent_once_it_can_run() {
             .is_err()
     );
     let queued: QueueEntry = connection::request(&app, queue("probe")).await.unwrap();
-    let plan = daemon.manager.queued_plan(&queued.id).await.unwrap().plan;
-    let plan: serde_json::Value = serde_json::from_str(&plan).unwrap();
+    let plan = queued_plan(&daemon, &queued).await;
     // A launcher's `{prompt}` receives it rather than its forwarded arguments.
     assert_eq!(plan["prompt"], "Fix the build");
     assert_eq!(queued.agent, "probe");
 
-    // A workspace's agent queues agents only in the workspaces below its own.
+    // A workspace's agent queues agents only in the workspaces below its own,
+    // when a slot is free.
     let parent = daemon.workspace("parent").await;
     let split = WorkspaceMethod::SplitWorkspace {
         workspace: SpaceSelector::id(&parent.id),
@@ -297,19 +315,62 @@ async fn an_app_queues_an_agent_once_it_can_run() {
     };
     let child = connection::request::<Workspace>(&app, split).await.unwrap();
     let agent = daemon.scoped(&parent).await;
-    let queue_in = |workspace: &str| QueueMethod::QueueAgent {
-        workspace: workspace.into(),
-        agent: "probe".into(),
-        prompt: None,
-    };
+    let probe = || LaunchRequest::new(Some("probe".into()));
     assert_eq!(
-        code(connection::request::<QueueEntry>(&agent, queue_in(parent.id.as_str())).await),
+        code(
+            connection::request::<QueueEntry>(&agent, queue_worker(parent.id.as_str(), probe()))
+                .await
+        ),
         ErrorCode::ScopeDenied
     );
-    let child: QueueEntry = connection::request(&agent, queue_in(child.id.as_str()))
+    let now = LaunchRequest {
+        now: true,
+        ..probe()
+    };
+    assert!(
+        connection::request::<QueueEntry>(&agent, queue_worker(child.id.as_str(), now))
+            .await
+            .is_err()
+    );
+    let child: QueueEntry = connection::request(&agent, queue_worker(child.id.as_str(), probe()))
         .await
         .unwrap();
     assert_eq!(child.agent, "probe");
+}
+
+#[tokio::test]
+async fn a_worker_without_an_agent_or_task_takes_the_default_on_its_issue() {
+    let daemon = TestDaemon::start().await;
+    crate::daemon::test_support::configure(
+        &daemon.manager,
+        "[agent]\ndefault = \"probe\"\n[agents.probe]\ncommand = [\"true\"]\n",
+    )
+    .await;
+    let worker = daemon.workspace("worker").await;
+    let app = daemon.connector();
+    let link = ItemMethod::LinkItem {
+        space: SpaceSelector::id(&worker.id),
+        kind: LinkKind::Issue,
+        item: "40".parse().unwrap(),
+        relation: Relation::Assigned,
+        title: Some("Report".into()),
+    };
+    connection::request::<crate::client::links::Linked>(&app, link)
+        .await
+        .unwrap();
+    let launch = LaunchRequest::new(None);
+    let queued: QueueEntry = connection::request(&app, queue_worker(worker.id.as_str(), launch))
+        .await
+        .unwrap();
+    assert_eq!(queued.agent, "probe");
+    assert_eq!(queued.issue_title.as_deref(), Some("Report"));
+    let plan = queued_plan(&daemon, &queued).await;
+    assert!(
+        plan["issue"]
+            .as_str()
+            .is_some_and(|url| url.ends_with("/40")),
+        "{plan}"
+    );
 }
 
 /// Follow operation `id` from its start to its end.

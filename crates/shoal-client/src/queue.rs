@@ -27,6 +27,35 @@ pub async fn add(daemon: &impl Daemon, request: QueueRequest) -> Result<QueueAdm
     self::request(daemon, QueueMethod::QueueAdd { request }).await
 }
 
+/// The worker of an existing workspace for the daemon to queue and start
+/// detached: what its launch asks for, what it waits for and the PR it
+/// links as it starts.
+pub struct WorkerStart {
+    pub workspace: SpaceSelector,
+    pub launch: crate::protocol::operations::LaunchRequest,
+    pub blockers: Vec<crate::model::Blocker>,
+    pub pr: Option<crate::forge::items::reference::ItemInput>,
+}
+
+/// Queue the worker `start` describes, which the daemon resolves under its
+/// workspace's settings and starts detached once admitted, and return its
+/// entry.
+pub async fn start_agent(daemon: &impl Daemon, start: WorkerStart) -> Result<QueueEntry> {
+    let WorkerStart {
+        workspace,
+        launch,
+        blockers,
+        pr,
+    } = start;
+    let method = QueueMethod::QueueAgent {
+        workspace,
+        launch: Box::new(launch),
+        blockers,
+        pr,
+    };
+    request(daemon, method).await
+}
+
 /// Every queued entry.
 pub async fn entries(daemon: &impl Daemon) -> Result<Vec<QueueEntry>> {
     request(daemon, QueueMethod::ListQueue).await

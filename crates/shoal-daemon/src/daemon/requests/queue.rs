@@ -26,9 +26,14 @@ pub(super) async fn handle(
         }
         QueueMethod::QueueAgent {
             workspace,
-            agent,
-            prompt,
-        } => Body::QueueEntry(manager.queue_agent(&workspace, agent, prompt).await?),
+            launch,
+            blockers,
+            pr,
+        } => Body::QueueEntry(
+            manager
+                .queue_agent(&workspace, *launch, blockers, pr)
+                .await?,
+        ),
         QueueMethod::QueueAdd { request } => {
             Body::QueueAdmission(manager.queue_add_as(*request, caller).await?)
         }
@@ -88,11 +93,9 @@ impl Scoped for QueueMethod {
             QueueMethod::ListQueue | QueueMethod::QueueRemove { .. } => None,
             QueueMethod::QueueAdd { request } => manager.queue_target(caller, request).await?,
             QueueMethod::SetPriority { space, .. } => Some(space),
-            QueueMethod::QueueAgent { workspace, .. } => {
-                const REFUSAL: &str =
-                    "workspace processes can start agents only in the workspaces split from theirs";
-                Some(manager.workspace_below(caller, workspace, REFUSAL).await?)
-            }
+            QueueMethod::QueueAgent {
+                workspace, launch, ..
+            } => Some(manager.worker_target(caller, workspace, launch).await?),
             QueueMethod::QueueRestore {
                 workspace,
                 execution,
