@@ -1,8 +1,5 @@
-//! Undoing a workspace's local merge: the operation that undoes it, and the
-//! tracked worker that moves the default branch back.
-use std::path::PathBuf;
-
-use anyhow::{Context as _, Result};
+//! `shoal unmerge`: the operation that undoes a workspace's local merge.
+use anyhow::Result;
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -12,9 +9,7 @@ use crate::{
         ui::{self, Fallback},
     },
     client::approvals::Undecided,
-    env,
-    execution::UnmergeResult,
-    model::{UnmergePlan, Unmerged},
+    model::Unmerged,
     protocol::operations::OperationSpec,
 };
 
@@ -58,33 +53,4 @@ fn show_unmerged(ctx: &Context, unmerged: &Unmerged) -> Result<()> {
             outln!("Recreated branch {branch} at {}", unmerged.source);
         }
     })
-}
-
-/// Undo the planned merge inside the unmerge execution, writing what it
-/// undid, or why it could not, to `result`.
-pub(in crate::cli::commands) async fn unmerge_worker(
-    ctx: &Context,
-    plan: String,
-    result: PathBuf,
-) -> Result<i32> {
-    let unmerged: UnmergeResult = finish(ctx, plan)
-        .await
-        .map_err(|error| format!("{error:#}"));
-    std::fs::write(&result, serde_json::to_vec(&unmerged)?)
-        .with_context(|| format!("write {}", result.display()))?;
-    Ok(if unmerged.is_ok() { 0 } else { 1 })
-}
-
-async fn finish(ctx: &Context, plan: String) -> Result<Unmerged> {
-    anyhow::ensure!(
-        env::is_scoped(),
-        "unmerge worker requires a tracked execution"
-    );
-    crate::client::executions::check_unmerge(&ctx.paths).await?;
-    let plan: UnmergePlan = serde_json::from_str(&plan)?;
-    anyhow::ensure!(
-        std::env::var(env::WORKSPACE_ID)? == plan.workspace.id,
-        "unmerge worker requires its authorized workspace"
-    );
-    crate::git::unmerge::finish_unmerge(plan).await
 }

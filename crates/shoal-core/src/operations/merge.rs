@@ -1,12 +1,15 @@
-//! Merging a workspace's branch as a tracked execution, whose worker
-//! writes what it merged to a file.
+//! Merging a workspace's branch as a tracked execution, and that
+//! execution's worker, which writes what it merged to a file.
+use std::path::PathBuf;
+
 use anyhow::{Context as _, Result};
 
 use super::Reporter;
 use crate::{
     client::space_names::SpaceSelector,
+    env,
     execution::{self, MergeResult},
-    model::{MergeOptions, MergedBranch},
+    model::{MergeOptions, MergePlan, MergedBranch},
     paths::CommandPaths,
     protocol::operations::Step,
 };
@@ -37,4 +40,29 @@ async fn run_merge(
         false => serde_json::from_slice(&written).context("read the merge result")?,
     };
     merged.map_err(anyhow::Error::msg)
+}
+
+/// Merge the planned branch inside the merge execution, writing what it
+/// merged, or why it could not, to `result`.
+pub async fn merge_worker(paths: &CommandPaths, plan: String, result: PathBuf) -> Result<i32> {
+    let merged: MergeResult = finish(paths, plan)
+        .await
+        .map_err(|error| format!("{error:#}"));
+    std::fs::write(&result, serde_json::to_vec(&merged)?)
+        .with_context(|| format!("write {}", result.display()))?;
+    Ok(if merged.is_ok() { 0 } else { 1 })
+}
+
+async fn finish(paths: &CommandPaths, plan: String) -> Result<MergedBranch> {
+    anyhow::ensure!(
+        env::is_scoped(),
+        "merge worker requires a tracked execution"
+    );
+    crate::client::executions::check_merge(paths).await?;
+    let plan: MergePlan = serde_json::from_str(&plan)?;
+    anyhow::ensure!(
+        std::env::var(env::WORKSPACE_ID)? == plan.workspace.id,
+        "merge worker requires its authorized workspace"
+    );
+    crate::git::repo::finish_merge(plan).await
 }

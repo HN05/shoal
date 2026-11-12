@@ -1,7 +1,8 @@
 //! The worker the daemon starts for an operation: it reads its order on
 //! standard input, does the work with the caller's scope, and reports its
 //! steps and its end. What it and its processes write reaches the daemon
-//! as the operation's output.
+//! as the operation's output. The merge and unmerge it runs as tracked
+//! executions have workers of their own here too.
 mod failures;
 mod merge;
 mod open_pull;
@@ -22,6 +23,8 @@ use crate::{
     protocol::operations::{Ended, OperationSpec, Order, Outcome, Report, Step},
 };
 pub use failures::{Failed, error};
+pub use merge::merge_worker;
+pub use unmerge::unmerge_worker;
 
 /// Reports the steps of one operation, and whether it was cancelled.
 struct Reporter<'a> {

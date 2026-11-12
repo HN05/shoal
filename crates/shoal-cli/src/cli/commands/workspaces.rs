@@ -31,7 +31,7 @@ pub(super) use done::{done, undone};
 pub(in crate::cli) use environment::agent_environment;
 pub(super) use environment::environment;
 pub(super) use list::list;
-pub(super) use merge::{merge, merge_worker};
+pub(super) use merge::merge;
 pub(super) use naming::{request_name, set_name};
 pub(super) use open::open;
 pub(super) use removal::{ensure_batch_removable, leaving};
@@ -42,7 +42,7 @@ pub(super) use setup::{
     SetUp, copy_ignored_worker, follow_setup, run_post_setup, setup, setup_workspace, skip_setup,
 };
 pub(super) use status::status;
-pub(super) use unmerge::{unmerge, unmerge_worker};
+pub(super) use unmerge::unmerge;
 pub(super) use waiting::awaits_setup;
 pub(super) use watch::watch_items;
 

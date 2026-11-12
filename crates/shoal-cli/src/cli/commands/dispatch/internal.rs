@@ -74,10 +74,10 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             terminal::watch_place(&ctx, HostName::Herdr, place, None).await
         }
         InternalCommand::Merge { result, plan } => {
-            workspaces::merge_worker(&ctx, plan, result).await
+            crate::operations::merge_worker(&ctx.paths, plan, result).await
         }
         InternalCommand::Unmerge { result, plan } => {
-            workspaces::unmerge_worker(&ctx, plan, result).await
+            crate::operations::unmerge_worker(&ctx.paths, plan, result).await
         }
         InternalCommand::CopyIgnored { exclude, setup_cmd } => {
             workspaces::copy_ignored_worker(&exclude, setup_cmd).await
