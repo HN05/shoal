@@ -675,7 +675,10 @@ async fn new_pull(
     default_draft: bool,
 ) -> Result<NewPull> {
     let issue = match &workspace.links.issue {
-        Some(issue) => Some(issue.issue()?),
+        Some(issue) => {
+            issue.belongs_to(forge)?;
+            Some(issue.issue()?)
+        }
         None => None,
     };
     let title = match (options.title, &workspace.links.issue_title, issue) {

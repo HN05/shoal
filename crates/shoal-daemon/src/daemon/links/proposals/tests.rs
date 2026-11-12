@@ -502,3 +502,30 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .count();
     assert_eq!(asked, 1);
 }
+
+#[tokio::test]
+async fn approving_again_refuses_an_item_posted_before_the_origin_moved() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let mut request = store_issue_proposal(&manager, &LinkSpace::from(workspace)).await;
+    request.url = Some("https://forge.example/team/old/issues/7".parse().unwrap());
+    // The new origin's issue 7 is another issue, which nothing may edit.
+    let moved = ForgeRepo::parse("https://forge.example/team/new").unwrap();
+    let account = manager.user_account();
+    let finished = manager
+        .finish_proposed(&mut request, &moved, &account, ItemKind::Issue)
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{finished:#}").contains("different repository"),
+        "{finished:#}"
+    );
+}

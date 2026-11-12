@@ -491,6 +491,7 @@ impl Manager {
             .url
             .clone()
             .context("the proposal has no opened item")?;
+        url.belongs_to(forge)?;
         let number = url.number().get();
         let follow_up = request.follow_up().cloned().unwrap_or_default();
         let item = forge
@@ -821,6 +822,7 @@ async fn ensure_pull_head(
         .url
         .as_ref()
         .context("the proposal has no opened PR")?;
+    url.belongs_to(forge)?;
     let number = url.pull()?;
     let item = forge.read(account, ItemKind::Pr, number.get()).await?.item;
     let branch = workspace.require_branch("opening a PR")?;
