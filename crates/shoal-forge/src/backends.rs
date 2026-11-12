@@ -54,10 +54,6 @@ use crate::{
     },
     updates::Snapshot,
 };
-use bitbucket::Bitbucket;
-use forgejo::Forgejo;
-use github::GitHub;
-use gitlab::GitLab;
 
 crate::state::states!(
     /// The API a forge host serves.
@@ -111,24 +107,25 @@ impl ForgeKind {
     }
 }
 
-/// Run `$body` with `$backend` bound to the backend `$kind` names.
+/// Run `$body` with `$backend` bound to the backend `$kind` names. Area
+/// modules below this one forward their traits' methods through it.
 macro_rules! dispatch {
     ($kind:expr, $backend:ident => $body:expr) => {
         match $kind {
-            ForgeKind::GitHub => {
-                let $backend = GitHub;
+            $crate::backends::ForgeKind::GitHub => {
+                let $backend = $crate::backends::github::GitHub;
                 $body
             }
-            ForgeKind::Forgejo => {
-                let $backend = Forgejo;
+            $crate::backends::ForgeKind::Forgejo => {
+                let $backend = $crate::backends::forgejo::Forgejo;
                 $body
             }
-            ForgeKind::GitLab => {
-                let $backend = GitLab;
+            $crate::backends::ForgeKind::GitLab => {
+                let $backend = $crate::backends::gitlab::GitLab;
                 $body
             }
-            ForgeKind::Bitbucket => {
-                let $backend = Bitbucket;
+            $crate::backends::ForgeKind::Bitbucket => {
+                let $backend = $crate::backends::bitbucket::Bitbucket;
                 $body
             }
         }
