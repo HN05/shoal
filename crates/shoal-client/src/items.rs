@@ -161,6 +161,28 @@ pub async fn act(
         kind,
         item,
         action,
+        confirmed: None,
+    };
+    request(daemon, method).await
+}
+
+/// Carry out `action`, a merge of the PR `item` names or of the linked
+/// one, which the daemon refuses unless the merge still has the warning
+/// `confirmed` names; without it, the merge goes ahead whatever it warns
+/// about.
+pub async fn merge(
+    daemon: &impl Daemon,
+    context: ItemContext,
+    item: Option<String>,
+    action: Action,
+    confirmed: Option<crate::model::ConfirmedWarning>,
+) -> Result<Item> {
+    let method = ItemMethod::ItemAction {
+        context,
+        kind: ItemKind::Pr,
+        item,
+        action,
+        confirmed,
     };
     request(daemon, method).await
 }

@@ -374,6 +374,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
         kind: crate::forge::items::link::ItemKind::Issue,
         item: Some("7".into()),
         action: crate::forge::items::action::Action::Close,
+        confirmed: None,
     };
     crate::daemon::scope::authorize(&manager, Some(&token), &mut close)
         .await
@@ -423,6 +424,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
         kind: crate::forge::items::link::ItemKind::Pr,
         item: Some("1".into()),
         action: crate::forge::items::action::Action::CancelAutoMerge,
+        confirmed: None,
     };
     let merging = crate::daemon::scope::authorize(&manager, Some(&token), &mut merge).await;
     assert!(merging.is_err());

@@ -4,14 +4,17 @@
 //! fast without one.
 use crate::client::space_ids::SpaceId;
 use crate::forge::numbers::PullNumber;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::{Manager, conflicts::recorded},
-    forge::{ForgeRepo, items::link::ItemKind},
+    forge::{
+        ForgeRepo,
+        items::{action::Action, item::Item, link::ItemKind},
+    },
     git::{self, default_branch::DefaultBranchLookup},
-    model::{ChangedOnBothSides, MergeWarning},
+    model::{ChangedOnBothSides, ConfirmedWarning, MergeWarning},
     protocol::ItemContext,
 };
 
@@ -39,6 +42,28 @@ impl Manager {
             url: Some(url),
             ..warning
         }))
+    }
+
+    /// Carry out `action`, a merge of the PR `input` names or of the
+    /// space's linked one, unless its warning is no longer the one the user
+    /// `confirmed`.
+    pub async fn confirmed_merge(
+        &self,
+        context: &ItemContext,
+        input: Option<String>,
+        action: Action,
+        confirmed: &ConfirmedWarning,
+    ) -> Result<Item> {
+        ensure!(
+            matches!(action, Action::Merge { .. } | Action::AutoMerge { .. }),
+            "only a merge confirms a merge warning"
+        );
+        let current = self.merge_warning(context, input.clone()).await?;
+        ensure!(
+            current == confirmed.warning,
+            "the merge warning changed since you confirmed the merge; run shoal pr merge again"
+        );
+        self.item_action(context, ItemKind::Pr, input, action).await
     }
 
     /// The warning for merging the workspace's HEAD into the default branch,

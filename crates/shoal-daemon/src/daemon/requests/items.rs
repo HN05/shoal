@@ -149,7 +149,13 @@ pub(super) async fn handle(
             kind,
             item,
             action,
-        } => Body::Item(manager.item_action(&context, kind, item, action).await?),
+            confirmed,
+        } => Body::Item(match confirmed {
+            Some(confirmed) => {
+                (manager.confirmed_merge(&context, item, action, &confirmed)).await?
+            }
+            None => manager.item_action(&context, kind, item, action).await?,
+        }),
         ItemMethod::MergeWarning { context, item } => {
             Body::MergeWarning(manager.merge_warning(&context, item).await?)
         }

@@ -11,7 +11,7 @@ use crate::{
     forge::items::{
         action::{Action, MergeMethod},
         create::NewIssue,
-        item::ItemState,
+        item::{Item, ItemState},
         link::ItemKind,
     },
     protocol::ItemContext,
@@ -176,29 +176,34 @@ fn merge(method: Option<MergeMethod>, delete_branch: bool, auto: bool) -> (Actio
 }
 
 /// Carry out `action`, a merge or its withdrawal, on the PR `selector`
-/// names, unless the user declines a merge the daemon warns about.
+/// names, unless the user declines a merge the daemon warns about; `yes`
+/// merges whatever it warns about.
 async fn merge_pr(
     ctx: &Context,
     selector: ItemSelector,
     action: Action,
     outcome: &str,
-    confirmed: bool,
+    yes: bool,
 ) -> Result<i32> {
     // An invalid action fails before a picker asks for its context.
     action.validate(ItemKind::Pr)?;
     let context = item_context(ctx, &selector).await?;
-    let mut item = selector.item;
-    if !confirmed && !matches!(action, Action::CancelAutoMerge) {
-        let warning =
-            crate::client::forge_reads::merge_warning(&ctx.paths, context.clone(), item.clone())
-                .await?;
-        // The merge is of the PR the user confirmed, even if the space's
-        // link changed meanwhile.
-        if let Some(confirmed) = super::merge_warning::confirm(ctx, warning)? {
-            item = Some(confirmed);
-        }
+    let item = selector.item;
+    if matches!(action, Action::CancelAutoMerge) {
+        return act_in(ctx, context, item, ItemKind::Pr, action, outcome).await;
     }
-    act_in(ctx, context, item, ItemKind::Pr, action, outcome).await
+    let confirmed = match yes {
+        true => None,
+        false => Some(super::merge_warning::confirm_pull(ctx, &context, item.clone()).await?),
+    };
+    let auto_merge = matches!(action, Action::AutoMerge { .. });
+    let item = crate::client::items::merge(&ctx.paths, context, item, action, confirmed).await?;
+    // The forge merges now a PR whose checks already pass.
+    let outcome = match auto_merge && item.state == ItemState::Merged {
+        true => "PR merged",
+        false => outcome,
+    };
+    report(ctx, &item, outcome)
 }
 
 async fn act(
@@ -229,14 +234,11 @@ async fn act_in(
     action: Action,
     outcome: &str,
 ) -> Result<i32> {
-    // The forge merges now a PR whose checks already pass.
-    let auto_merge = matches!(action, Action::AutoMerge { .. });
     let item = crate::client::items::act(&ctx.paths, context, kind, item, action).await?;
-    let outcome = if auto_merge && item.state == ItemState::Merged {
-        "PR merged"
-    } else {
-        outcome
-    };
-    ctx.emit(&format!("{outcome}: {}", item.url), &item)?;
+    report(ctx, &item, outcome)
+}
+
+fn report(ctx: &Context, item: &Item, outcome: &str) -> Result<i32> {
+    ctx.emit(&format!("{outcome}: {}", item.url), item)?;
     Ok(0)
 }

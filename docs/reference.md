@@ -3948,7 +3948,9 @@ When the last check of a workspace that links the PR found files
 `Sensitive files changed on both sides by PR #12 and main: src/version.rs`;
 `--yes` merges without asking, and without a terminal they refuse and name it.
 They read only that record, so a PR without one, a record of another head or
-base branch, or a PR no workspace links merges without a question.
+base branch, or a PR no workspace links merges without a question. A merge is
+refused when its warning changed while the question was open, including a
+warning that appeared where none was.
 `delete-branch` deletes the branch of a merged or closed PR on the forge, such
 as one merged on the forge's website, never a local branch, with your own
 login; workspace processes cannot. It refuses an open PR, a branch in a fork,

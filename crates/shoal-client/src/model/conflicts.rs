@@ -52,6 +52,13 @@ pub struct MergeWarning {
     pub url: Option<String>,
 }
 
+/// The warning a user confirmed before merging a PR, `None` when the merge
+/// warned about nothing, which the merge must still have.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfirmedWarning {
+    pub warning: Option<MergeWarning>,
+}
+
 impl std::fmt::Display for MergeWarning {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (subject, target) = (&self.subject, &self.target);

@@ -159,3 +159,37 @@ async fn a_pr_finds_the_record_of_the_workspace_that_links_it() {
     // A PR into another branch merges nothing the check of main found.
     assert!(warning("PR #7".into(), recorded, &into("release")).is_none());
 }
+
+#[tokio::test]
+async fn a_merge_is_refused_once_its_warning_is_not_the_one_confirmed() {
+    let (_root, manager, workspace) = changed_on_both_sides().await;
+    let checkout = manager.repository(&workspace.repository_id).await.unwrap();
+    crate::daemon::test_support::git(
+        &checkout.path,
+        &["remote", "add", "origin", "https://github.com/team/repo"],
+    );
+    let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
+    // Nothing links PR 7, so merging it warns about nothing.
+    let confirmed = ConfirmedWarning {
+        warning: Some(MergeWarning {
+            subject: "PR #7".into(),
+            target: "main".into(),
+            files: vec!["version".into()],
+            url: Some("https://github.com/team/repo/pull/7".into()),
+        }),
+    };
+    let merge = Action::Merge {
+        method: crate::forge::items::action::MergeMethod::Merge,
+        delete_branch: false,
+    };
+    let refused = manager
+        .confirmed_merge(&context, Some("7".into()), merge, &confirmed)
+        .await
+        .unwrap_err();
+    assert!(refused.to_string().contains("changed since you confirmed"));
+    let refused = manager
+        .confirmed_merge(&context, Some("7".into()), Action::Close, &confirmed)
+        .await
+        .unwrap_err();
+    assert!(refused.to_string().contains("only a merge"));
+}

@@ -24,7 +24,7 @@ pub use chats::{Chat, ChatHome, RenamedChat, StoppedChat, chat_mode};
 pub use checkpoints::{Checkpoint, CheckpointCause, CheckpointNumber, RestoredCheckpoint};
 pub use cleanup::CleanupReason;
 pub use completion::{Completion, HandedBack};
-pub use conflicts::{ChangedOnBothSides, ConflictCheck, DiffBase, MergeWarning};
+pub use conflicts::{ChangedOnBothSides, ConfirmedWarning, ConflictCheck, DiffBase, MergeWarning};
 pub use executions::{CopyIgnored, Execution, ExecutionPlan, OwnedPlace};
 pub use holds::{HoldPlacer, WorkspaceHold};
 pub use links::{LinkedItem, Relation, Selected, SelectedItem, SpaceLinks};

@@ -162,7 +162,7 @@ const REQUESTS: &[&str] = &[
     r#"{"merged_pull":{"space":"fix","item":null}}"#,
     r#"{"open_issue":{"workspace":"fix","issue":{"title":"Bug","body":"","labels":[],"assignees":[],"milestone":null,"attachments":[]},"repository":null,"link":false}}"#,
     r#"{"merge_warning":{"workspace":"fix","item":"7"}}"#,
-    r#"{"item_action":{"workspace":"fix","kind":"pr","item":"7","action":{"action":"close"}}}"#,
+    r#"{"item_action":{"workspace":"fix","kind":"pr","item":"7","action":{"action":"merge","method":"squash","delete_branch":false},"confirmed":{"warning":{"subject":"PR #7","target":"main","files":["version"]}}}}"#,
     r#"{"list_items":{"workspace":"fix","kind":"issue","search":{"state":"open","labels":[],"author":null,"text":"crash","limit":30},"repository":null}}"#,
     r#"{"labels":{"workspace":"fix","repository":null}}"#,
     r#"{"reviewers":{"checkout":"repo","item":"12"}}"#,

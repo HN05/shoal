@@ -87,6 +87,11 @@ pub enum ItemMethod {
         kind: crate::forge::items::link::ItemKind,
         item: Option<String>,
         action: crate::forge::items::action::Action,
+        /// For a merge, the warning the user confirmed, which the merge
+        /// must still have; without it, a merge goes ahead whatever it
+        /// warns about.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        confirmed: Option<crate::model::ConfirmedWarning>,
     },
     /// Issues or PRs of the context's repository, or the one `repository`
     /// names, that `search` matches, answered in one or more `items` frames
