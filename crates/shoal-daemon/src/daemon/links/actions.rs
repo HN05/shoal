@@ -89,7 +89,6 @@ impl Manager {
         Ok(item)
     }
 
-    /// The one assigned item of `kind` of the space `id`.
     /// The `kind` item `named` names in the repository of `forge`, else the
     /// one item of `kind` assigned to the space `space`.
     pub(super) async fn named_or_linked(
@@ -110,6 +109,7 @@ impl Manager {
         }
     }
 
+    /// The one assigned item of `kind` of the space `id`.
     pub(super) async fn linked_item(&self, id: &SpaceId, kind: ItemKind) -> Result<ItemRef> {
         let id = id.to_owned();
         let assigned = self
