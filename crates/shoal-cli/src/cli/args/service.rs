@@ -20,7 +20,7 @@ pub enum ServiceCommand {
     },
     /// Replace a downloaded shoal with the latest GitHub release.
     Update,
-    /// Install, start, stop, restart or reload the local daemon.
+    /// Install, start, stop or restart the local daemon.
     Daemon {
         #[command(subcommand)]
         command: DaemonCommand,
@@ -66,6 +66,8 @@ pub enum ConfigCommand {
     },
     /// Rewrite the config with the defaults; the old file becomes config.toml.backup.
     Reset,
+    /// Have the daemon reread the global config without stopping running agents.
+    Reload,
     /// Have an agent write the global config in a chat without a repository,
     /// installing the default config first when there is none.
     Setup(Box<ConfigSetupArgs>),
@@ -143,8 +145,6 @@ pub enum DaemonCommand {
     Start,
     Stop,
     Restart,
-    /// Reread the global config without stopping running agents.
-    Reload,
     /// Run in the foreground, without registering an OS service.
     Run {
         #[arg(long, hide = true)]

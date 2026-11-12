@@ -159,8 +159,8 @@ fn config_show_and_reference_are_available_to_workspace_processes() {
 }
 
 #[test]
-fn only_reloading_the_daemon_is_available_to_workspace_processes() {
-    let reload = Cli::try_parse_from(["shoal", "daemon", "reload"]).unwrap();
+fn only_reloading_the_config_is_available_to_workspace_processes() {
+    let reload = Cli::try_parse_from(["shoal", "config", "reload"]).unwrap();
     assert!(!reload.command.unwrap().is_administrative());
     for verb in ["start", "stop", "restart"] {
         let command = Cli::try_parse_from(["shoal", "daemon", verb]).unwrap();

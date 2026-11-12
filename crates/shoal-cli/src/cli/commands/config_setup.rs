@@ -107,7 +107,7 @@ fn subject(config: &Path) -> String {
          `shoal repo ls` lists, and those repositories' configs. When every repository \
          repeats a setting, tell the user instead of moving it.\n\n\
          Edit `{config}` in place and keep its comments: `shoal config set` is not \
-         available to you. After `shoal daemon reload`, tell the user if the daemon \
+         available to you. After `shoal config reload`, tell the user if the daemon \
          rejected the file."
     )
 }

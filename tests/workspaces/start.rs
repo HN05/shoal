@@ -508,7 +508,7 @@ fn workspace_agents_get_the_agent_and_workspaces_directories_ahead_of_their_prom
     let text = fs::read_to_string(&config).unwrap();
     let text = format!("agent.dirs = ['/tmp', '{}']\n{text}", agent_tmp.display());
     fs::write(&config, text).unwrap();
-    assert!(fixture.run(&["daemon", "reload"]).status.success());
+    assert!(fixture.run(&["config", "reload"]).status.success());
     let agent_tmp = format!(
         "--add-dir={}",
         fs::canonicalize(&agent_tmp).unwrap().display()
@@ -902,7 +902,7 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
         home.display()
     ));
     fs::write(&config, text).unwrap();
-    assert!(fixture.run(&["daemon", "reload"]).status.success());
+    assert!(fixture.run(&["config", "reload"]).status.success());
     install_test_script(
         fixture.repo.join("pre-remove.sh"),
         "#!/bin/sh\ntest ! -f fail-removal || exit 3\n",
@@ -989,7 +989,7 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
             .replace("/codex-{workspace}", "/codex-changed-{workspace}"),
     )
     .unwrap();
-    assert!(fixture.run(&["daemon", "reload"]).status.success());
+    assert!(fixture.run(&["config", "reload"]).status.success());
     fixture.ok(&["rm", "--wait", &fixture.id("early"), "--yes"]);
     fs::write(second_path.join("fail-removal"), "busy").unwrap();
     assert!(
@@ -1030,7 +1030,7 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
     let chat_profile =
         "[agents.claude-chat]\nbase = 'claude-direct'\nenv = { CLAUDE_CONFIG_DIR = '~/chat' }\n";
     fs::write(&config, format!("{text}{chat_profile}")).unwrap();
-    assert!(fixture.run(&["daemon", "reload"]).status.success());
+    assert!(fixture.run(&["config", "reload"]).status.success());
     commit_resource_config(&fixture.repo, "[ports.web]\nenv = 'WEB_PORT'\n");
     fixture.ok(&[
         "repo",
@@ -1135,7 +1135,7 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
     // Removing the repository cleans where each profile ran, though one of
     // them is no longer configured.
     fs::write(&config, &text).unwrap();
-    assert!(fixture.run(&["daemon", "reload"]).status.success());
+    assert!(fixture.run(&["config", "reload"]).status.success());
     fixture.ok(&["repo", "rm", "profiled", "--yes"]);
     for config in [direct.join(".claude.json"), chat.join(".claude.json")] {
         assert!(!trusted(&config), "{}", config.display());

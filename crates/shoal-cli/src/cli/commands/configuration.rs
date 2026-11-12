@@ -1,7 +1,10 @@
 use crate::config_file::ConfigExt;
 use anyhow::{Context as _, Result, ensure};
 
-use crate::client::output::config::{Edited, Reference};
+use crate::client::output::{
+    config::{Edited, Reference},
+    daemon::Reloaded,
+};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
@@ -70,6 +73,19 @@ pub(super) async fn edit(
     Ok(0)
 }
 
+pub(super) async fn reload(ctx: &Context) -> Result<i32> {
+    ensure!(
+        client::reload_config(&ctx.paths).await?,
+        "the daemon is not running; it reads the config when it starts"
+    );
+    ctx.emit_styled(
+        Style::Success,
+        "Daemon reloaded the global config",
+        Reloaded { reloaded: true },
+    )?;
+    Ok(0)
+}
+
 /// Apply a saved global file to a running daemon. The file is already saved,
 /// so a daemon that cannot reload it is a warning rather than a failure.
 pub(super) async fn reload_daemon(ctx: &Context) -> bool {
@@ -77,7 +93,7 @@ pub(super) async fn reload_daemon(ctx: &Context) -> bool {
         .await
         .unwrap_or_else(|error| {
             eprintln!(
-                "warning: the daemon keeps its previous settings: {error:#}; run `shoal daemon reload` or `shoal daemon restart`"
+                "warning: the daemon keeps its previous settings: {error:#}; run `shoal config reload` or `shoal daemon restart`"
             );
             false
         })

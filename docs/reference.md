@@ -85,7 +85,7 @@ directory. Without that link, installation uses the embedded skills.
 cargo install --path .
 shoal daemon install --dry-run     # Preview the OS service definition
 shoal daemon install               # Register and start the per-user service
-shoal daemon stop|start|restart|reload
+shoal daemon stop|start|restart
 shoal status                       # Outside a space: the daemon, notifications, stalls, cleanup
 ```
 
@@ -131,7 +131,7 @@ install <name>` replaces the entire global file with a packaged template;
 copied, so package upgrades leave installed edits alone. Unknown names fail
 without changing either file; installation needs no daemon. `shoal config` edits,
 installs and resets apply to a running daemon at once; after editing the file by
-hand, run `shoal daemon reload`, which scoped processes may also run. Reloading
+hand, run `shoal config reload`, which scoped processes may also run. Reloading
 keeps running agents and leases, and an invalid file leaves the daemon's previous
 settings in place. The CLI reads agent
 settings on each command. The global file's `[machine]` table holds the settings
@@ -2956,7 +2956,7 @@ repository gets `~/shoal/<name>/`, named by `--name` or the source basename with
 default to it and a URL clone lives there as `.checkout`. A local checkout
 already at `~/shoal/<name>/<anything>` keeps that directory. `root_dir =
 "~/Projects"` under `[machine]` (absolute or `~/` path outside Shoal's state
-directory, every checkout and every repository directory; daemon reload required) changes the parent for new
+directory, every checkout and every repository directory; `config reload` required) changes the parent for new
 registrations; symlinks and `..` are resolved before checking and creating the root,
 even across missing components. Existing registrations keep their paths until
 [`move root`](#move-repositories-to-a-new-root) moves them, as do workspaces
@@ -3022,7 +3022,7 @@ repository's config. It bases them on the AI tools installed, the forge hosts
 and Git identities of the registered repositories and their configs, and tells
 you about a setting every repository repeats instead of moving it. It edits the
 file in place, keeping its comments, checks it with `config show`, runs
-`daemon reload` and tells you when the reload rejected the file. When the file
+`config reload` and tells you when the reload rejected the file. When the file
 does not exist, the command first writes the packaged default, as `config
 install default` does. Every launch and restore of the agent gets the file's
 directory as another working directory; `--here` and `--agent` work as for
@@ -5934,7 +5934,7 @@ shoal adopt <path>             # Reclaim a worktree at its recorded path after c
 ```
 
 Each problem shows where you look and names the command that resolves it. When
-the daemon starts and when `daemon reload` rereads its config, it checks that
+the daemon starts and when `config reload` rereads its config, it checks that
 `git` is executable on its PATH, that the host the global
 `terminal.default_host` names is installed, that it can create a
 file in `root_dir`, which registered checkouts set `core.bare` although they have

@@ -606,7 +606,7 @@ fn apps_read_forge_items_through_the_daemon() {
     let config = fs::read_to_string(fixture.root.path().join(".config/shoal/config.toml")).unwrap();
     let command = format!("agent_token = {{ cmd = [{:?}] }}", script.to_str().unwrap());
     fixture.write_config(&config.replace("agent_token = \"agenttoken\"", &command));
-    fixture.ok(&["daemon", "reload"]);
+    fixture.ok(&["config", "reload"]);
     let target = "/team/project/actions/runs/2765/jobs/1";
     responses["GET repos/team/project/commits/head/status?limit=50"]["body"] = json!({
         "total_count": 2, "statuses": [
@@ -639,7 +639,7 @@ fn apps_read_forge_items_through_the_daemon() {
     );
     assert_ne!(user_only, config);
     fixture.write_config(&user_only);
-    fixture.ok(&["daemon", "reload"]);
+    fixture.ok(&["config", "reload"]);
     let shown = runtime
         .block_on(views::read(&app, workspace(), pr_8(), false))
         .unwrap();
@@ -738,11 +738,11 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
     let log = fixture.root.path().join("forge/requests.jsonl");
     let asked = || fs::read_to_string(&log).is_ok_and(|text| text.contains("GET meta"));
     keys(&fixture);
-    fixture.ok(&["daemon", "reload"]);
+    fixture.ok(&["config", "reload"]);
     support::wait::wait_until("the host asked again", asked);
     fixture.respond(json!({}));
     keys(&fixture);
-    fixture.ok(&["daemon", "reload"]);
+    fixture.ok(&["config", "reload"]);
     support::wait::wait_until("the host asked again", asked);
 }
 
@@ -1505,7 +1505,7 @@ fn views_count_reactions_and_mark_the_logins_own() {
 
     // Without a token, a public repository's reactions are still listed.
     fixture.write_config("");
-    fixture.ok(&["daemon", "reload"]);
+    fixture.ok(&["config", "reload"]);
     let view = &fixture.ok(&["view", "issue", "3", "--space", &fixture.id("topic")])[0];
     assert_eq!(view["reactions"][0]["reacted"], false, "{view}");
     assert!(view.get("errors").is_none(), "{view}");
@@ -5522,7 +5522,7 @@ fn a_chats_change_without_a_token_names_the_missing_one() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(
                 stderr.contains("set agent_token, or your own token, under [machine.forges.")
-                    && stderr.contains("shoal daemon reload"),
+                    && stderr.contains("shoal config reload"),
                 "{stderr}"
             );
             assert!(posts.is_empty(), "{posts:?}");

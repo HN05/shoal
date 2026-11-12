@@ -205,7 +205,7 @@ impl Whose {
         };
         Box::new(move |host| {
             format!(
-                "no token for {host}: set {tokens} under [machine.forges.\"{host}\"] in the global config, then run `shoal daemon reload`"
+                "no token for {host}: set {tokens} under [machine.forges.\"{host}\"] in the global config, then run `shoal config reload`"
             )
         })
     }

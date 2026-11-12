@@ -15,7 +15,7 @@ fn proxied_claude() -> Fixture {
          \n[machine.agents.claude]\nproxy = 'cliproxy'",
     );
     fs::write(&config, text).unwrap();
-    let reload = fixture.run(&["daemon", "reload"]);
+    let reload = fixture.run(&["config", "reload"]);
     assert!(reload.status.success(), "{reload:?}");
     fixture.ok(&[
         "repo",

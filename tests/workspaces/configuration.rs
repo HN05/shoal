@@ -139,7 +139,7 @@ fn the_daemon_alerts_about_global_config_problems_on_start_and_reload() {
     )
     .unwrap();
     assert!(!reported(&fixture, "root_dir"));
-    fixture.ok(&["daemon", "reload"]);
+    fixture.ok(&["config", "reload"]);
     wait_until("the reload environment alert", || {
         reported(&fixture, "root_dir")
     });
@@ -175,14 +175,14 @@ fn global_config_changes_reload_a_running_daemon() {
         format!("{edited}\n[machine.simulators]\nmax_booted = 0\n"),
     )
     .unwrap();
-    assert!(!fixture.run(&["daemon", "reload"]).status.success());
+    assert!(!fixture.run(&["config", "reload"]).status.success());
     assert_eq!(policy()["default"], "phone");
     fs::write(
         &config,
         format!("{NO_GRACE}{UNSETTLED}{FORGEJO_HOST}{NO_OVERLOAD_WARNINGS}"),
     )
     .unwrap();
-    assert!(fixture.run(&["daemon", "reload"]).status.success());
+    assert!(fixture.run(&["config", "reload"]).status.success());
     assert!(policy()["default"].is_null());
 }
 

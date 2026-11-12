@@ -1,10 +1,10 @@
 //! Shoal's own status, which `shoal status` shows outside a space; `shoal
-//! daemon start`, `stop`, `reload` and `restart`; and stopping a daemon
-//! that does not answer.
+//! daemon start`, `stop` and `restart`; and stopping a daemon that does not
+//! answer.
 use anyhow::{Result, ensure};
 
 use super::install::install;
-use crate::client::output::daemon::{Reloaded, Running, Status};
+use crate::client::output::daemon::{Running, Status};
 use crate::{
     cli::{client, context::Context, output::Style, ui},
     paths::{CommandPaths, Paths},
@@ -83,19 +83,6 @@ pub(super) async fn stop(ctx: &Context) -> Result<i32> {
     ctx.progress("Stopping daemon", stop_daemon(&ctx.paths, Exit::Stop))
         .await?;
     emit_stopped_work(ctx, "Daemon stopped", false)?;
-    Ok(0)
-}
-
-pub(super) async fn reload(ctx: &Context) -> Result<i32> {
-    ensure!(
-        client::reload_config(&ctx.paths).await?,
-        "the daemon is not running; it reads the config when it starts"
-    );
-    ctx.emit_styled(
-        Style::Success,
-        "Daemon reloaded the global config",
-        Reloaded { reloaded: true },
-    )?;
     Ok(0)
 }
 

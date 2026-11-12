@@ -500,7 +500,7 @@ shoal release hold --workspace 3 --name quay-thread-42
 ```
 
 Configure idle cleanup in a repository's `.shoal.toml`, or for every repository in
-`~/.config/shoal/config.toml` followed by `shoal daemon reload`:
+`~/.config/shoal/config.toml` followed by `shoal config reload`:
 
 ```toml
 [cleanup.auto]

@@ -37,7 +37,7 @@ use crate::cli::args::{
     lifecycle::LifecycleCommand,
     repository::{RepoCommand, RepositoryCommand},
     resources::ResourcesCommand,
-    service::{ConfigCommand, DaemonCommand, ServiceCommand},
+    service::{ConfigCommand, ServiceCommand},
     sessions::SessionsCommand,
     workspace::WorkspaceCommand,
 };
@@ -275,13 +275,7 @@ impl Command {
                                 | ConfigCommand::Setup(_)
                                 | ConfigCommand::Unset { .. }
                         }
-                        | ServiceCommand::Daemon {
-                            command: DaemonCommand::Install { .. }
-                                | DaemonCommand::Run { .. }
-                                | DaemonCommand::Start
-                                | DaemonCommand::Stop
-                                | DaemonCommand::Restart
-                        }
+                        | ServiceCommand::Daemon { .. }
                 )
         )
     }
