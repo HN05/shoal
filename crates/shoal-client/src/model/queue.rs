@@ -6,6 +6,11 @@ use crate::space_names::{SpaceName, SpaceSelector};
 use crate::state::{QueueKind, QueueState};
 use serde::{Deserialize, Serialize};
 
+use crate::forge::items::{
+    link::LinkKind,
+    reference::{ItemInput, ItemRef},
+};
+
 /// An agent launch or restore waiting for, or starting in, a `max_agents`
 /// slot, or a CI job waiting for the runner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -171,19 +176,51 @@ pub struct StoppedWorkspace {
     pub cancelled_run: Option<String>,
 }
 
-/// What blocks work until it clears.
+/// What blocks work until it clears. A URL of another kind than the
+/// variant's is refused as the blocker is read.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", try_from = "BlockerFields")]
 pub enum Blocker {
     /// A space, or for a launch a queued launch of the same repository, by
     /// name or ID.
     Space(String),
     /// An issue, by URL, or by number in the space's repository.
-    Issue(crate::forge::items::reference::ItemInput),
+    Issue(ItemInput),
     /// A PR, by URL.
-    Pr(crate::forge::items::reference::ItemRef),
+    Pr(ItemRef),
     /// A CI run, by URL.
-    CiRun(crate::forge::items::reference::ItemRef),
+    CiRun(ItemRef),
+}
+
+/// How a [`Blocker`] reads, before its URL's kind is checked.
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum BlockerFields {
+    Space(String),
+    Issue(ItemInput),
+    Pr(ItemRef),
+    CiRun(ItemRef),
+}
+
+impl TryFrom<BlockerFields> for Blocker {
+    type Error = anyhow::Error;
+
+    fn try_from(fields: BlockerFields) -> anyhow::Result<Self> {
+        let (blocker, url) = match fields {
+            BlockerFields::Space(space) => return Ok(Self::Space(space)),
+            BlockerFields::Issue(ItemInput::Url(url)) => (
+                Self::Issue(ItemInput::Url(url.clone())),
+                Some((url, LinkKind::Issue)),
+            ),
+            BlockerFields::Issue(number) => (Self::Issue(number), None),
+            BlockerFields::Pr(url) => (Self::Pr(url.clone()), Some((url, LinkKind::Pr))),
+            BlockerFields::CiRun(url) => (Self::CiRun(url.clone()), Some((url, LinkKind::Ci))),
+        };
+        if let Some((url, kind)) = url {
+            anyhow::ensure!(url.kind() == kind, "{url} is no {} URL", kind.noun());
+        }
+        Ok(blocker)
+    }
 }
 
 /// An agent launch `shoal start` asks the daemon to admit or queue. The plan
@@ -244,3 +281,6 @@ pub struct QueuedPlan {
     pub entry: QueueEntry,
     pub plan: String,
 }
+
+#[cfg(test)]
+mod tests;
