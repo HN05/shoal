@@ -270,9 +270,7 @@ impl Workspace {
     /// Its worktree directory's name, the last part of its path, which
     /// `{workspace}` and its terminal session take since it never changes.
     pub fn directory_name(&self) -> &str {
-        (self.path.file_name())
-            .and_then(std::ffi::OsStr::to_str)
-            .unwrap_or_default()
+        directory_name(&self.path)
     }
 
     /// True when `path` (canonical) lies inside this worktree.
@@ -314,4 +312,11 @@ pub struct RenamedWorkspace {
 pub struct Branch {
     pub name: String,
     pub remote: Option<String>,
+}
+
+/// The name of the directory at `path`, its last part.
+pub(super) fn directory_name(path: &Path) -> &str {
+    (path.file_name())
+        .and_then(std::ffi::OsStr::to_str)
+        .unwrap_or_default()
 }

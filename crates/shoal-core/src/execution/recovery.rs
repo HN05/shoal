@@ -23,7 +23,7 @@ use crate::{
     agent::{Agent, ModelChoice},
     config::named_commands,
     fsutil::atomic::{Permissions, ReplaceOptions},
-    model::Workspace,
+    model::{ExecutionSpace, Workspace},
     paths::{CommandPaths, Paths},
     process::identity::{self, Identity},
     protocol::ConfigTarget,
@@ -256,20 +256,14 @@ impl Recovery {
         workspace: &SpaceSelector,
         agent: &super::TrackedAgent,
     ) -> Self {
-        let resolved = async {
-            let workspace = crate::client::workspaces::inspect(paths, workspace.clone())
-                .await?
-                .workspace;
-            let restored = Restored {
-                agent: &agent.name,
-                model: &agent.model,
-                mode: &agent.mode,
-                narrowing: agent.narrowing,
-                session: None,
-            };
-            Self::resolve(paths, &workspace, restored, None, None).await
-        }
-        .await;
+        let restored = Restored {
+            agent: &agent.name,
+            model: &agent.model,
+            mode: &agent.mode,
+            narrowing: agent.narrowing,
+            session: None,
+        };
+        let resolved = Self::resolve_in(paths, workspace, restored, None).await;
         resolved.unwrap_or_else(|error| {
             eprintln!("warning: automatic agent recovery unavailable: {error:#}");
             Self {
@@ -283,6 +277,20 @@ impl Recovery {
                 proxy: None,
             }
         })
+    }
+
+    /// [`Self::resolve`] in the workspace `space` as the daemon records it
+    /// now.
+    async fn resolve_in(
+        paths: &CommandPaths,
+        space: &SpaceSelector,
+        restored: Restored<'_>,
+        stop: Option<&Stop>,
+    ) -> Result<Self> {
+        let workspace = crate::client::workspaces::inspect(paths, space.clone())
+            .await?
+            .workspace;
+        Self::resolve(paths, &workspace, restored, None, stop).await
     }
 
     /// Ask the `restored` session to continue, telling it about its `stop`
@@ -356,7 +364,7 @@ impl Recovery {
     pub(super) async fn restore_command(
         &self,
         paths: &CommandPaths,
-        workspace: &Workspace,
+        space: &ExecutionSpace,
         record: Option<&Path>,
     ) -> (Vec<OsString>, Option<crate::proxy::Proxy>) {
         let launched = || (self.command.clone(), self.proxy.clone());
@@ -373,7 +381,8 @@ impl Recovery {
             mode: &self.mode,
             session: record.session.as_ref(),
         };
-        match Self::resolve(paths, workspace, restored, None, Some(&stop)).await {
+        let space = SpaceSelector::id(&space.id);
+        match Self::resolve_in(paths, &space, restored, Some(&stop)).await {
             Ok(recovery) if !recovery.command.is_empty() => (recovery.command, recovery.proxy),
             Ok(_) => launched(),
             Err(error) => {

@@ -62,7 +62,7 @@ impl Manager {
         );
         Ok(ExecutionPlan {
             id: id.to_owned(),
-            workspace,
+            space: (&workspace).into(),
             scope_token: registration.scope_token,
             setup_cmd: None,
             copy_ignored: None,

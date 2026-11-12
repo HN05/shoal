@@ -13,7 +13,7 @@ use tokio::process::Command;
 pub use crate::client::env::*;
 use crate::{
     config::placeholders,
-    model::{PortReservation, Workspace},
+    model::{ExecutionSpace, PortReservation, Workspace},
     paths::Paths,
 };
 
@@ -245,11 +245,11 @@ pub(crate) fn prepend_path(command: &mut Command, directories: &OsStr) {
 }
 
 /// Shared identity values for hooks, tracked executions and external processes.
-fn workspace_identity(workspace: &Workspace, paths: &Paths) -> BTreeMap<String, OsString> {
+fn workspace_identity(space: &ExecutionSpace, paths: &Paths) -> BTreeMap<String, OsString> {
     BTreeMap::from([
-        (WORKSPACE_ID.into(), workspace.id.clone().into()),
-        (RUN_ID.into(), workspace.id.clone().into()),
-        (WORKSPACE_NAME.into(), workspace.directory_name().into()),
+        (WORKSPACE_ID.into(), space.id.clone().into()),
+        (RUN_ID.into(), space.id.clone().into()),
+        (WORKSPACE_NAME.into(), space.directory_name().into()),
         (STATE_DIR.into(), paths.state.as_os_str().to_owned()),
     ])
 }
@@ -305,13 +305,13 @@ pub fn chat_environment(
 
 /// The workspace environment, without a tracked execution marker.
 pub fn workspace_environment(
-    workspace: &Workspace,
+    space: &ExecutionSpace,
     paths: &Paths,
     ports: &[PortReservation],
     token: &ScopeToken,
 ) -> BTreeMap<String, OsString> {
-    let mut values = workspace_identity(workspace, paths);
-    values.insert(WORKSPACE_PATH.into(), workspace.path.as_os_str().to_owned());
+    let mut values = workspace_identity(space, paths);
+    values.insert(WORKSPACE_PATH.into(), space.path.as_os_str().to_owned());
     values.insert(SCOPE_TOKEN.into(), token.expose().into());
     values.insert(
         RESERVED_PORT_ENV.into(),
@@ -333,14 +333,14 @@ pub fn workspace_environment(
 /// Set shared workspace identity and clear inherited port exports and shell state.
 pub(crate) fn apply_workspace_identity(
     command: &mut Command,
-    workspace: &Workspace,
+    space: &ExecutionSpace,
     paths: &Paths,
 ) {
     for name in inherited_port_exports() {
         command.env_remove(name);
     }
     command
-        .envs(workspace_identity(workspace, paths))
+        .envs(workspace_identity(space, paths))
         .env_remove(SHELL_DIRECTIVE);
 }
 

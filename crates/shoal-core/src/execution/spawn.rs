@@ -296,12 +296,12 @@ pub(super) fn spawn(
     terminal: Option<&Terminal>,
 ) -> Result<Child> {
     let command = match auth {
-        Some(auth) => auth.route(command, &plan.environment, &plan.workspace.path)?,
+        Some(auth) => auth.route(command, &plan.environment, &plan.space.path)?,
         None => command.to_vec(),
     };
     let (program, args) = command.split_first().context("no command to run")?;
     let mut process = Command::new(program);
-    process.args(args).current_dir(&plan.workspace.path);
+    process.args(args).current_dir(&plan.space.path);
     configure_environment(&mut process, paths, plan);
     if let Some(auth) = auth {
         auth.apply(&mut process, &plan.environment);
@@ -379,7 +379,7 @@ fn restore_terminal_stops(process: &mut Command) {
 /// Export the workspace's identity and `[env]`, dropping stale port variables
 /// inherited from an enclosing execution.
 fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) {
-    env::apply_workspace_identity(process, &plan.workspace, paths);
+    env::apply_workspace_identity(process, &plan.space, paths);
     env::apply_configured(process, &plan.environment);
 }
 
@@ -388,7 +388,7 @@ fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionP
 fn export_execution(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) {
     process
         .envs(env::workspace_environment(
-            &plan.workspace,
+            &plan.space,
             paths,
             &plan.ports,
             &plan.scope_token,

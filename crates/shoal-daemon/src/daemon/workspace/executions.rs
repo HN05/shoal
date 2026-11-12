@@ -58,6 +58,8 @@ pub(crate) struct ReattachedExecution {
 #[derive(Debug)]
 pub(crate) struct StartedExecution {
     pub plan: ExecutionPlan,
+    /// The workspace it runs in, as the registration read it.
+    pub workspace: Workspace,
     pub stop: watch::Receiver<bool>,
     pub _git_guard: Option<OwnedMutexGuard<()>>,
 }
@@ -267,7 +269,7 @@ impl Manager {
         Ok(StartedExecution {
             plan: ExecutionPlan {
                 id: registered.id,
-                workspace: registered.workspace,
+                space: (&registered.workspace).into(),
                 scope_token: registered.scope_token,
                 setup_cmd,
                 copy_ignored,
@@ -276,6 +278,7 @@ impl Manager {
                 merge,
                 unmerge,
             },
+            workspace: registered.workspace,
             stop: registered.stop,
             _git_guard: lifetime_guard,
         })

@@ -64,7 +64,7 @@ pub(super) async fn pause_agent(
             );
         }
         Ok(_) if !automatic => {
-            let restore = stop.manual_restore(&plan.workspace.id, &plan.id);
+            let restore = stop.manual_restore(&plan.space.id, &plan.id);
             let _ = writeln!(std::io::stderr(), "{restore}");
         }
         Ok(_) => {}
@@ -104,7 +104,7 @@ async fn await_restore(
                 return Ok(AfterPause::TakeOver { installed, record });
             }
             let (command, proxy) = recovery
-                .restore_command(paths, &plan.workspace, record.as_deref())
+                .restore_command(paths, &plan.space, record.as_deref())
                 .await;
             Ok(AfterPause::Restart {
                 command,
@@ -120,7 +120,7 @@ async fn await_restore(
                     "shoal: agent stopped{}; automatic restore cancelled{}; {}",
                     stop.stated_reason(),
                     cancelled.unwrap_or_default(),
-                    restore_steps(&plan.workspace.id, &plan.id, removed)
+                    restore_steps(&plan.space.id, &plan.id, removed)
                 );
             }
             Ok(AfterPause::Finish)
@@ -156,7 +156,7 @@ fn save_paused_agent(
 ) -> Result<PathBuf> {
     recovery.save(
         paths,
-        &plan.workspace.id,
+        &plan.space.id,
         &plan.id,
         stop.saved_reason(),
         agent_place(mode),
@@ -180,7 +180,7 @@ pub(super) fn save_ending_agent(
     };
     let saved = recovery.save_stopping(
         paths,
-        &plan.workspace.id,
+        &plan.space.id,
         &plan.id,
         stop.saved_reason(),
         agent_place(mode),
@@ -220,11 +220,11 @@ pub(super) fn record_stopped_command(
     command: &[OsString],
     stop: &Halt,
 ) {
-    match recovery::save_command(paths, &plan.workspace.id, &plan.id, command) {
+    match recovery::save_command(paths, &plan.space.id, &plan.id, command) {
         Ok(_) => eprintln!(
             "shoal: command stopped{}; shoal resume {} lists it",
             stop.stated_reason(),
-            plan.workspace.number
+            plan.space.number
         ),
         Err(error) => eprintln!("warning: cannot record stopped command: {error:#}"),
     }

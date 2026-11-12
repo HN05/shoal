@@ -2,7 +2,7 @@
 use super::{MergePlan, PortReservation, UnmergePlan, Workspace};
 use crate::execution_ids::ExecutionId;
 use crate::processes::Identity;
-use crate::space_ids::SpaceId;
+use crate::space_ids::{SpaceId, SpaceNumber};
 use crate::state::ExecutionState;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -41,10 +41,12 @@ pub struct Execution {
 }
 
 /// Everything the execution wrapper needs to launch a tracked command.
+/// What only a workspace has, such as setup, ports and merges, is absent
+/// for a chat.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExecutionPlan {
     pub id: ExecutionId,
-    pub workspace: Workspace,
+    pub space: ExecutionSpace,
     pub scope_token: crate::scope_tokens::ScopeToken,
     /// Absolute setup command path when the execution runs configured setup.
     pub setup_cmd: Option<PathBuf>,
@@ -56,6 +58,33 @@ pub struct ExecutionPlan {
     pub merge: Option<Box<MergePlan>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unmerge: Option<Box<UnmergePlan>>,
+}
+
+/// The space an execution runs in, a workspace or a chat, as its wrapper
+/// reads it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExecutionSpace {
+    pub id: SpaceId,
+    pub number: SpaceNumber,
+    /// The directory its commands run in.
+    pub path: PathBuf,
+}
+
+impl ExecutionSpace {
+    /// The name of the directory its commands run in.
+    pub fn directory_name(&self) -> &str {
+        super::workspaces::directory_name(&self.path)
+    }
+}
+
+impl From<&Workspace> for ExecutionSpace {
+    fn from(workspace: &Workspace) -> Self {
+        Self {
+            id: workspace.id.clone(),
+            number: workspace.number,
+            path: workspace.path.clone(),
+        }
+    }
 }
 
 /// Setup's copy of the main checkout's ignored files.

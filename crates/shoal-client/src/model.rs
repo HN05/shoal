@@ -25,7 +25,7 @@ pub use checkpoints::{Checkpoint, CheckpointCause, CheckpointNumber, RestoredChe
 pub use cleanup::CleanupReason;
 pub use completion::{Completion, HandedBack};
 pub use conflicts::{ChangedOnBothSides, ConfirmedWarning, ConflictCheck, DiffBase, MergeWarning};
-pub use executions::{CopyIgnored, Execution, ExecutionPlan, OwnedPlace};
+pub use executions::{CopyIgnored, Execution, ExecutionPlan, ExecutionSpace, OwnedPlace};
 pub use holds::{HoldPlacer, WorkspaceHold};
 pub use links::{LinkedItem, Relation, Selected, SelectedItem, SpaceLinks};
 pub use merges::{

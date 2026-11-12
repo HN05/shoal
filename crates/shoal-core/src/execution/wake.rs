@@ -56,7 +56,7 @@ pub(super) fn session(
 /// Wake the agent `plan` runs as `wake` says.
 pub(super) fn start(paths: &CommandPaths, plan: &ExecutionPlan, wake: Wake) -> Waker {
     let paths = paths.clone();
-    let workspace = plan.workspace.id.clone();
+    let workspace = plan.space.id.clone();
     let hooked = (wake.when == PromptWake::WhenHookCannot).then(|| plan.id.clone());
     Waker(tokio::spawn(async move {
         // A host that needs the instance refuses prompts without it.

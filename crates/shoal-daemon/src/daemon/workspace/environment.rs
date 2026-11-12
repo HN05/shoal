@@ -71,7 +71,10 @@ impl Manager {
                     tmp_dir.as_deref(),
                 );
                 values.extend(env::workspace_environment(
-                    &workspace, &paths, &ports, &token,
+                    &(&workspace).into(),
+                    &paths,
+                    &ports,
+                    &token,
                 ));
                 let values = values
                     .into_iter()

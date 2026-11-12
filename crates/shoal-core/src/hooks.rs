@@ -41,7 +41,7 @@ impl<'a> HookSpace<'a> {
     fn apply_identity(self, command: &mut Command, paths: &Paths) {
         match self {
             Self::Workspace(workspace) => {
-                env::apply_workspace_identity(command, workspace, paths);
+                env::apply_workspace_identity(command, &workspace.into(), paths);
                 command.env(env::WORKSPACE_PATH, &workspace.path);
             }
             Self::Chat { chat, .. } => {

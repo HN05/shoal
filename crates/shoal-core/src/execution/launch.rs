@@ -225,13 +225,13 @@ impl TrackedLaunch {
                 // The restore command may name another proxy, or none, or
                 // send its requests elsewhere; what the old one reported goes
                 // with it.
-                let (directory, environment) = (&self.plan.workspace.path, &self.plan.environment);
+                let (directory, environment) = (&self.plan.space.path, &self.plan.environment);
                 if let Some(auth) = self.auth.as_mut()
                     && auth
                         .restart_proxy(proxy, &command, directory, environment)
                         .await?
                 {
-                    let (workspace, execution) = (&self.plan.workspace.id, &self.plan.id);
+                    let (workspace, execution) = (&self.plan.space.id, &self.plan.id);
                     crate::proxy::forget_reports(paths, workspace, execution).await;
                     auth.report_proxy(paths, workspace, execution);
                 }
@@ -257,7 +257,7 @@ impl TrackedLaunch {
             return anyhow::anyhow!("only an agent's wrapper continues from the installed shoal");
         };
         let proxied = self.auth.take().is_some_and(|auth| auth.proxy.is_some());
-        let (workspace, execution) = (&self.plan.workspace.id, &self.plan.id);
+        let (workspace, execution) = (&self.plan.space.id, &self.plan.id);
         // What the stopped proxy reported goes with it.
         if proxied {
             crate::proxy::forget_reports(paths, workspace, execution).await;
@@ -380,7 +380,7 @@ async fn prepare_taken_over_launch(
         recovery.automatic,
     );
     let (command, proxy) = recovery
-        .restore_command(paths, &plan.workspace, record.as_deref())
+        .restore_command(paths, &plan.space, record.as_deref())
         .await;
     // The restore command was resolved to go through `proxy`, from the same
     // settings.
@@ -450,9 +450,9 @@ async fn ready_command(
     auth: Option<&mut AgentLaunch>,
 ) -> Result<Vec<OsString>> {
     if let Some(auth) = auth {
-        auth.start_proxy(&command, &plan.workspace.path, &plan.environment)
+        auth.start_proxy(&command, &plan.space.path, &plan.environment)
             .await?;
-        auth.report_proxy(paths, &plan.workspace.id, &plan.id);
+        auth.report_proxy(paths, &plan.space.id, &plan.id);
     }
     execution_command(paths, plan, command, mode)
 }

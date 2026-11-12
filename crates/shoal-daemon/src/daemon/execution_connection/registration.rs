@@ -111,6 +111,7 @@ pub(super) async fn register(
         .await;
     let StartedExecution {
         plan,
+        workspace,
         stop,
         _git_guard,
     } = match begun {
@@ -135,15 +136,15 @@ pub(super) async fn register(
             .track_agent(
                 &plan.id,
                 agent,
-                &plan.workspace.id,
-                &plan.workspace.name,
+                &workspace.id,
+                &workspace.name,
                 recover,
                 std::time::Duration::ZERO,
             )
             .await;
         if let Some(entry) = takes_entry {
             manager.continue_restart(entry, &plan.id).await;
-            manager.consume_queue_entry(entry, &plan.workspace.id).await;
+            manager.consume_queue_entry(entry, &workspace.id).await;
         }
     }
     drop(reserved);
@@ -151,7 +152,7 @@ pub(super) async fn register(
     let execution = Connected {
         id: plan.id.clone(),
         kind,
-        workspace: plan.workspace.clone(),
+        workspace,
         agent,
         recover,
         reattach,

@@ -575,13 +575,14 @@ async fn terminal_child() {
 fn plan(root: &Path) -> ExecutionPlan {
     ExecutionPlan {
         id: ExecutionId::generate(),
-        workspace: Workspace::new_record(
+        space: (&Workspace::new_record(
             "repo".into(),
             "worker".into(),
             root.to_owned(),
             Some("worker".into()),
             crate::state::WorkspaceState::Ready,
-        ),
+        ))
+            .into(),
         scope_token: "test-scope".into(),
         setup_cmd: None,
         copy_ignored: None,

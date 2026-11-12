@@ -55,7 +55,7 @@ impl Shown {
 
 pub(super) fn start(paths: &CommandPaths, plan: &ExecutionPlan, shown: Shown) -> Monitor {
     let paths = paths.clone();
-    let (workspace, execution) = (plan.workspace.id.clone(), plan.id.clone());
+    let (workspace, execution) = (plan.space.id.clone(), plan.id.clone());
     Monitor(tokio::spawn(async move {
         loop {
             if let Some(attached) = shown.attached().await {
