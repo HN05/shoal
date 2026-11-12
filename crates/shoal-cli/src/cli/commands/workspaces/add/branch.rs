@@ -30,14 +30,8 @@ pub(super) async fn settle(
             crate::repository::name(repo)
         )
     })?;
-    let local = remote.as_ref().map_or(name.as_str(), |(_, branch)| branch);
-    let workspaces: Vec<_> = (crate::client::workspaces::list(&ctx.paths).await?)
-        .into_iter()
-        .filter(|workspace| workspace.repository_id == repo.id)
-        .collect();
-    if let Some(workspace) =
-        (workspaces.iter()).find(|workspace| workspace.branch.as_deref() == Some(local))
-    {
+    let workspaces = repository_workspaces(ctx, repo).await?;
+    if let Some(workspace) = on_branch(&workspaces, &name, remote.as_ref()) {
         // A remote branch opens a local one only where it tracks it.
         if remote.is_some() {
             check_opens(ctx, target, &name).await?;
@@ -64,6 +58,37 @@ pub(super) async fn settle(
     creation.branch = Some(name);
     creation.typed = true;
     Ok(None)
+}
+
+/// The workspace of `repo` that already has the branch `name` selects, as
+/// typed or as a remote's, which a start on it goes into.
+pub(in crate::cli::commands) async fn owning_workspace(
+    ctx: &Context,
+    repo: &Repository,
+    name: &str,
+) -> Result<Option<Workspace>> {
+    let remote = git::remote_branch(&repo.path, name).await?;
+    let workspaces = repository_workspaces(ctx, repo).await?;
+    Ok(on_branch(&workspaces, name, remote.as_ref()).cloned())
+}
+
+/// The workspaces of `repo`.
+async fn repository_workspaces(ctx: &Context, repo: &Repository) -> Result<Vec<Workspace>> {
+    Ok((crate::client::workspaces::list(&ctx.paths).await?)
+        .into_iter()
+        .filter(|workspace| workspace.repository_id == repo.id)
+        .collect())
+}
+
+/// The workspace among `workspaces` on the local branch `name` selects: its
+/// own name, or the branch of the `remote` one it names.
+fn on_branch<'a>(
+    workspaces: &'a [Workspace],
+    name: &str,
+    remote: Option<&(String, String)>,
+) -> Option<&'a Workspace> {
+    let local = remote.map_or(name, |(_, branch)| branch);
+    (workspaces.iter()).find(|workspace| workspace.branch.as_deref() == Some(local))
 }
 
 /// The remote and branch `name` names in `repo`, if it names a remote one,

@@ -729,6 +729,26 @@ fn start_in_starts_the_worker_on_its_workspaces_closed_issue() {
 }
 
 #[test]
+fn a_start_on_a_workspaces_branch_takes_a_mode_only_that_workspace_defines() {
+    let fixture = Fixture::with_config(Some("[agents.quick]\ncommand = ['sh', '-c', 'exit 0']\n"));
+    let workspace = fixture.add("topic");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(
+        path.join(".shoal.toml"),
+        "[modes.triage]\ninstructions = 'Triage it.'\n",
+    )
+    .unwrap();
+    let repo = fixture.repo.to_str().unwrap();
+    // The branch's workspace takes the start, as --in does, with its modes.
+    let output = fixture.run(&[
+        "start", repo, "--branch", "topic", "--mode", "triage", "--here", "--agent", "quick",
+    ]);
+    assert!(output.status.success(), "{output:?}");
+    let status = fixture.ok(&["status", &fixture.id("topic")]);
+    assert_eq!(status["workspace"]["mode"], "triage", "{status}");
+}
+
+#[test]
 fn start_in_refuses_a_second_worker_beside_a_running_one() {
     let fixture = Fixture::new();
     fixture.add("busy");

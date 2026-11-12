@@ -459,8 +459,9 @@ fn asked_kind(args: &StartArgs) -> Option<SpaceKind> {
 }
 
 /// The settings whose modes decide the kind: the workspace's `--in` names,
-/// else the repository's [`mode_repository`] finds, else the global
-/// config's. Nothing is asked.
+/// else the workspace that already has the branch `--branch` names, which
+/// the start goes into as `--in` does, else the repository's
+/// [`mode_repository`] finds, else the global config's. Nothing is asked.
 async fn mode_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
     if let Some(Some(workspace)) = &args.in_workspace {
         let target = ConfigTarget::Workspace(workspace.clone());
@@ -468,13 +469,34 @@ async fn mode_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
     }
     match mode_repository(ctx, args).await? {
         Some(id) => {
-            crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Repository(id.into()))
-                .await
+            let target = match branch_workspace(ctx, args, &id).await? {
+                Some(workspace) => ConfigTarget::Workspace(SpaceSelector::Id(workspace)),
+                None => ConfigTarget::Repository(id.into()),
+            };
+            crate::client::workspaces::settings(&ctx.paths, target).await
         }
         None => {
             crate::config::Config::load_with_templates(&ctx.paths)?.resolve(&Default::default())
         }
     }
+}
+
+/// The ID of the workspace of `repository` that already has the branch
+/// `--branch` names, if any.
+async fn branch_workspace(
+    ctx: &Context,
+    args: &StartArgs,
+    repository: &RepositoryId,
+) -> Result<Option<SpaceId>> {
+    let Some(branch) = &args.branch else {
+        return Ok(None);
+    };
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
+    let Some(repo) = repos.iter().find(|repo| repo.id == *repository) else {
+        return Ok(None);
+    };
+    let owner = workspaces::owning_workspace(ctx, repo, branch).await?;
+    Ok(owner.map(|workspace| workspace.id))
 }
 
 /// The ID of the registered repository `--repo` or the positional argument
