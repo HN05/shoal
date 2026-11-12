@@ -7,7 +7,7 @@ use serde_json::Value;
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::{Backend, Merging},
     capability::Capability,
     ci::approval::WaitingRun,
     items::{action::MergeMethod, link::ItemKind, reaction::Reaction},

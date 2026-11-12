@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::{Backend, rest::commit_shas},
+    backends::{Backend, Merging, rest::commit_shas},
     capability::Capability,
     items::{
         action::Edit,

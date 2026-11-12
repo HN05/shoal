@@ -17,7 +17,7 @@ use crate::{
     capability::{self, Capability, Support},
     ci::check_state::CheckState,
     items::{
-        action::{Edit, MergeMethod, MilestoneChange, UpdateMethod, changed_set},
+        action::{Edit, MilestoneChange, changed_set},
         comment::Found,
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
@@ -45,6 +45,7 @@ use crate::{
 mod attachments;
 mod checks;
 mod conventions;
+mod merging;
 mod reactions;
 mod review;
 mod runs;
@@ -378,44 +379,6 @@ impl Backend for Bitbucket {
         })
     }
 
-    fn merge(
-        &self,
-        repo: &ForgeRepo,
-        current: &Current,
-        method: MergeMethod,
-        delete_branch: bool,
-    ) -> Result<Vec<Request>> {
-        let endpoint = repo.item_endpoint(ItemKind::Pr, current.item.number);
-        Ok(vec![merge_request(
-            format!("{endpoint}/merge"),
-            method,
-            delete_branch,
-        )])
-    }
-
-    fn auto_merge(
-        &self,
-        _repo: &ForgeRepo,
-        _current: &Current,
-        _method: MergeMethod,
-        _delete_branch: bool,
-    ) -> Result<Vec<Request>> {
-        Err(capability::unsupported(self, Capability::AutoMerge))
-    }
-
-    fn cancel_auto_merge(&self, _repo: &ForgeRepo, _current: &Current) -> Result<Vec<Request>> {
-        Err(capability::unsupported(self, Capability::AutoMerge))
-    }
-
-    fn update_branch(
-        &self,
-        _repo: &ForgeRepo,
-        _current: &Current,
-        method: UpdateMethod,
-    ) -> Result<Vec<Request>> {
-        Err(capability::unsupported(self, Capability::update(method)))
-    }
-
     fn comment_key(&self) -> (&'static str, &'static str) {
         (DISCUSSION, "id")
     }
@@ -448,11 +411,6 @@ impl Backend for Bitbucket {
     fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str) {
         let endpoint = repo.repo_endpoint(&format!("refs/branches/{}", encode(branch, false)));
         (Request::get(endpoint), "/target/hash")
-    }
-
-    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {
-        let endpoint = repo.repo_endpoint(&format!("refs/branches/{}", encode(branch, false)));
-        Request::new(HttpMethod::Delete, endpoint, None)
     }
 
     async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
@@ -777,20 +735,6 @@ impl RestReads for Bitbucket {
         let pull = repo.read_value(account, ItemKind::Pr, number.get()).await?;
         verdicts(&pull)
     }
-}
-
-/// Bitbucket's strategy for each merge method; rebasing fast-forwards.
-fn merge_request(endpoint: String, method: MergeMethod, delete_branch: bool) -> Request {
-    let strategy = match method {
-        MergeMethod::Merge => "merge_commit",
-        MergeMethod::Squash => "squash",
-        MergeMethod::Rebase => "rebase_fast_forward",
-    };
-    Request::new(
-        HttpMethod::Post,
-        endpoint,
-        Some(json!({ "merge_strategy": strategy, "close_source_branch": delete_branch })),
-    )
 }
 
 /// The newest status of each build, by its key.

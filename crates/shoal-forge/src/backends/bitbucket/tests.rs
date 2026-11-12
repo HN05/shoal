@@ -280,10 +280,6 @@ fn changes_keep_the_title_and_cannot_reopen_pull_requests() {
             .body,
         Some(json!({"state": "open"}))
     );
-    assert_eq!(
-        merge_request("merge".into(), MergeMethod::Rebase, true).body,
-        Some(json!({"merge_strategy": "rebase_fast_forward", "close_source_branch": true}))
-    );
 }
 
 #[test]
