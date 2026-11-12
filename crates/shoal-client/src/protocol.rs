@@ -56,7 +56,7 @@ pub use operations::OperationMethod;
 pub use ports::PortMethod;
 pub use questions::QuestionMethod;
 pub use queue::QueueMethod;
-pub use recovery::RecoveryMethod;
+pub use recovery::{RecoveryMethod, SavedPiece};
 pub use removal::{QueuedLaunches, RemovalMethod};
 pub use repositories::RepositoryMethod;
 pub use request::{Lifetime, Method, Operation, Reattachment, Request};

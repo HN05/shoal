@@ -3,6 +3,12 @@ use crate::recovery::ReconcileOptions;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
+/// A piece of the JSON of a workspace's saved work, which the client joins:
+/// a saved command's arguments alone may outgrow a frame.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SavedPiece(pub String);
+
 /// Requests that keep, restore and repair workspace state: checkpoints,
 /// saved work and reconciliation.
 #[derive(Debug, Serialize, Deserialize)]

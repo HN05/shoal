@@ -914,39 +914,10 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
 /// The frames the daemon answers `method` with, and the JSON their review
 /// pieces join into.
 async fn serve_pieces(manager: &Arc<Manager>, method: serde_json::Value) -> (usize, String) {
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-    let request =
-        serde_json::json!({"protocol": crate::protocol::VERSION, "id": 5, "method": method});
-    let (client, stream) = tokio::net::UnixStream::pair().unwrap();
-    let operation = manager.gates.owned_operation().await;
-    let server = crate::daemon::tests::server(manager.clone());
-    let served = tokio::spawn(crate::daemon::serve(stream, server, operation));
-    let mut client = BufReader::new(client);
-    client
-        .get_mut()
-        .write_all(format!("{request}\n").as_bytes())
-        .await
-        .unwrap();
-    let (mut frames, mut json) = (0, String::new());
-    loop {
-        let mut line = String::new();
-        client.read_line(&mut line).await.unwrap();
-        assert!(line.len() <= crate::protocol::MAX_FRAME, "{}", line.len());
-        let response: serde_json::Value = serde_json::from_str(&line).unwrap();
-        match response["type"].as_str() {
-            Some("review_pieces") => {
-                frames += 1;
-                for piece in response["data"].as_array().unwrap() {
-                    json.push_str(piece.as_str().unwrap());
-                }
-            }
-            Some("ok") => break,
-            _ => panic!("{response}"),
-        }
-    }
-    drop(client);
-    served.await.unwrap().unwrap();
-    (frames, json)
+    let pages = crate::daemon::tests::serve_pages(manager, method).await;
+    let pieces = pages.iter().flat_map(|page| page.as_array().unwrap());
+    let json = pieces.map(|piece| piece.as_str().unwrap()).collect();
+    (pages.len(), json)
 }
 
 /// Finish review after review of the workspace, each with one finding

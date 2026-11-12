@@ -4,27 +4,30 @@
 use crate::execution_ids::ExecutionId;
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     agent::Agent,
-    connection::{Daemon, request},
-    protocol::RecoveryMethod,
+    connection::{Daemon, pages},
+    protocol::{RecoveryMethod, SavedPiece},
     space_ids::SpaceId,
     space_names::SpaceSelector,
     time::UnixTime,
 };
 
-/// What the existing workspace `workspace` saved.
+/// What the existing workspace `workspace` saved, reassembled from the
+/// pieces of JSON the daemon sends it in.
 pub async fn read(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Saved> {
-    request(daemon, RecoveryMethod::Saved { workspace }).await
+    let pieces = pages::<SavedPiece>(daemon, RecoveryMethod::Saved { workspace }).await?;
+    let json: String = pieces.into_iter().map(|piece| piece.0).collect();
+    serde_json::from_str(&json).context("the daemon sent invalid saved work")
 }
 
 /// The workspaces this caller sees that saved stopped agents or commands,
 /// which are unfinished work; last sessions alone are not.
 pub async fn stopped_workspaces(daemon: &impl Daemon) -> Result<Vec<SpaceId>> {
-    request(daemon, RecoveryMethod::StoppedWorkspaces).await
+    pages(daemon, RecoveryMethod::StoppedWorkspaces).await
 }
 
 /// What `shoal stop` or overload protection saved for one workspace.

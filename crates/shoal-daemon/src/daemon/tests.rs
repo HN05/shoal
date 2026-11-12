@@ -105,6 +105,41 @@ pub(super) fn server(manager: Arc<Manager>) -> Server {
     }
 }
 
+/// The data of each frame `manager` answers `method` with before `ok`,
+/// checking that each fits a frame.
+pub(super) async fn serve_pages(
+    manager: &Arc<Manager>,
+    method: serde_json::Value,
+) -> Vec<serde_json::Value> {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    let request =
+        serde_json::json!({"protocol": crate::protocol::VERSION, "id": 5, "method": method});
+    let (client, stream) = UnixStream::pair().unwrap();
+    let operation = manager.gates.owned_operation().await;
+    let served = tokio::spawn(serve(stream, server(manager.clone()), operation));
+    let mut client = BufReader::new(client);
+    client
+        .get_mut()
+        .write_all(format!("{request}\n").as_bytes())
+        .await
+        .unwrap();
+    let mut pages = Vec::new();
+    loop {
+        let mut line = String::new();
+        client.read_line(&mut line).await.unwrap();
+        assert!(line.len() <= crate::protocol::MAX_FRAME, "{}", line.len());
+        let mut response: serde_json::Value = serde_json::from_str(&line).unwrap();
+        match response["type"].as_str() {
+            Some("ok") => break,
+            Some("error") | None => panic!("{response}"),
+            Some(_) => pages.push(response["data"].take()),
+        }
+    }
+    drop(client);
+    served.await.unwrap().unwrap();
+    pages
+}
+
 #[tokio::test]
 async fn a_hangup_cancels_a_request_that_only_reads_state() {
     let (client, mut stream) = UnixStream::pair().unwrap();

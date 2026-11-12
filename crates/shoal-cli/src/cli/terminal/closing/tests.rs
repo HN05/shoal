@@ -400,8 +400,11 @@ async fn inspect(
         assert!(
             matches!(request.method, Method::Operation(Operation::Recovery(RecoveryMethod::Saved { workspace })) if workspace == "workspace")
         );
-        let response = Response::new(request.id, Body::Saved(saved));
-        protocol::write(stream.get_mut(), &response).await.unwrap();
+        let piece = protocol::SavedPiece(serde_json::to_string(&saved).unwrap());
+        for body in [Body::SavedPieces(vec![piece]), Body::Ok] {
+            let response = Response::new(request.id, body);
+            protocol::write(stream.get_mut(), &response).await.unwrap();
+        }
     });
     let lifecycle = workspace_lifecycle(&Context::new(paths, true), &SpaceId::from("workspace"))
         .await

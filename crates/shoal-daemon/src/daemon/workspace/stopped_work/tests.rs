@@ -133,3 +133,30 @@ async fn only_stopped_agents_or_commands_make_a_workspace_stopped() {
         .unwrap();
     assert!(saved.agents.is_empty() && saved.sessions.len() == 1);
 }
+
+#[tokio::test]
+async fn saved_work_larger_than_a_frame_is_read_whole() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "long".into(), None, None, None)
+        .await
+        .unwrap();
+    let state = manager.paths.workspace_state(&workspace.id);
+    std::fs::create_dir_all(&state).unwrap();
+    let argv = ["sh", "-c", &"x".repeat(2 * crate::protocol::MAX_FRAME)];
+    let record = serde_json::json!({ "argv": argv });
+    std::fs::write(state.join("long.command.json"), record.to_string()).unwrap();
+
+    let method = serde_json::json!({"saved": {"workspace": workspace.id}});
+    let pages = crate::daemon::tests::serve_pages(&manager, method).await;
+    assert!(pages.len() > 1, "{}", pages.len());
+    let pieces = pages.iter().flat_map(|page| page.as_array().unwrap());
+    let json: String = pieces.map(|piece| piece.as_str().unwrap()).collect();
+    let saved: crate::client::saved::Saved = serde_json::from_str(&json).unwrap();
+    assert_eq!(saved.commands[0].argv, argv);
+}

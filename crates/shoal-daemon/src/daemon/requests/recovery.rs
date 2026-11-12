@@ -9,7 +9,8 @@ use super::super::{
     workspace::Manager,
 };
 use crate::client::space_names::SpaceSelector;
-use crate::protocol::{Body, RecoveryMethod};
+use crate::execution::recovery::Saved;
+use crate::protocol::{self, Body, RecoveryMethod, SavedPiece};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -31,10 +32,14 @@ pub(super) async fn handle(
                 .restore_checkpoint(&workspace, checkpoint, caller)
                 .await?,
         ),
-        RecoveryMethod::Saved { workspace } => Body::Saved(manager.saved_work(&workspace).await?),
+        RecoveryMethod::Saved { workspace } => {
+            let saved = manager.saved_work(&workspace).await;
+            return Ok(Answer::pages(pieces(saved), Body::SavedPieces));
+        }
         RecoveryMethod::StoppedWorkspaces => {
             let root = manager.reach_root(caller).await?;
-            Body::StoppedWorkspaces(manager.stopped_workspaces(root.as_ref()).await?)
+            let stopped = manager.stopped_workspaces(root.as_ref()).await;
+            return Ok(Answer::pages(stopped, Body::StoppedWorkspaces));
         }
         RecoveryMethod::Reconcile { workspace, options } => Body::Reconciled(
             manager
@@ -42,6 +47,15 @@ pub(super) async fn handle(
                 .await?,
         ),
     }))
+}
+
+/// `saved` as pieces of its JSON, each fitting a frame.
+fn pieces(saved: Result<Saved>) -> Result<Vec<SavedPiece>> {
+    let json = serde_json::to_string(&saved?)?;
+    Ok(protocol::text_pieces(&json)
+        .into_iter()
+        .map(SavedPiece)
+        .collect())
 }
 
 impl Scoped for RecoveryMethod {
