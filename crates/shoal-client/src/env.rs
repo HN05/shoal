@@ -1,8 +1,12 @@
 //! Environment variables Shoal reads or exports. Every `SHOAL_*` name lives
 //! here so wrapper, daemon, process scanning and apps agree on the contract.
-use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    ffi::{OsStr, OsString},
+    path::PathBuf,
+};
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 pub const PREFIX: &str = "SHOAL_";
 
@@ -182,9 +186,45 @@ fn absolute_dir(name: &str, value: Option<OsString>) -> Result<Option<PathBuf>> 
     Ok(Some(dir))
 }
 
+/// Rendered `[env]` values as a shell or another program sets them, with a
+/// preset's directories first on the configured PATH, or else `inherited`.
+pub(crate) fn export_configured(
+    mut values: BTreeMap<String, String>,
+    inherited: Option<OsString>,
+) -> Result<BTreeMap<String, String>> {
+    if let Some(prefix) = values.remove(PATH_PREFIX) {
+        let path = values
+            .get("PATH")
+            .map(OsString::from)
+            .or(inherited)
+            .unwrap_or_default();
+        let joined = joined_path(OsStr::new(&prefix), &path)
+            .ok()
+            .and_then(|joined| joined.into_string().ok());
+        let joined = joined.context("PATH cannot be exported with the preset directories")?;
+        values.insert("PATH".into(), joined);
+    }
+    Ok(values)
+}
+
+/// `directories` followed by `path`'s, without empty entries.
+pub fn joined_path(
+    directories: &OsStr,
+    path: &OsStr,
+) -> Result<OsString, std::env::JoinPathsError> {
+    std::env::join_paths(
+        std::env::split_paths(directories)
+            .chain(std::env::split_paths(path))
+            .filter(|entry| !entry.as_os_str().is_empty()),
+    )
+}
+
 /// The directory for temporary files, which Shoal sets to the workspace's
 /// or chat's own.
 pub const TMPDIR: &str = "TMPDIR";
 
 /// Variables a reserved port may never shadow when exported to a command.
 pub const PROTECTED: [&str; 4] = ["HOME", "PATH", "SHELL", TMPDIR];
+
+#[cfg(test)]
+mod tests;

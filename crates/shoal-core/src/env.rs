@@ -2,7 +2,7 @@
 //! its own; [`crate::client::env`] names every variable.
 use crate::client::scope_tokens::ScopeToken;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use std::{
     collections::BTreeMap,
     ffi::{OsStr, OsString},
@@ -228,27 +228,6 @@ pub fn apply_configured(command: &mut Command, values: &BTreeMap<String, OsStrin
     }
 }
 
-/// Rendered `[env]` values as a shell or another program sets them, with a
-/// preset's directories first on the configured PATH, or else `inherited`.
-pub fn export_configured(
-    mut values: BTreeMap<String, String>,
-    inherited: Option<OsString>,
-) -> Result<BTreeMap<String, String>> {
-    if let Some(prefix) = values.remove(PATH_PREFIX) {
-        let path = values
-            .get("PATH")
-            .map(OsString::from)
-            .or(inherited)
-            .unwrap_or_default();
-        let joined = joined_path(OsStr::new(&prefix), &path)
-            .ok()
-            .and_then(|joined| joined.into_string().ok());
-        let joined = joined.context("PATH cannot be exported with the preset directories")?;
-        values.insert("PATH".into(), joined);
-    }
-    Ok(values)
-}
-
 /// Put the colon-separated `directories` first on the PATH `command` would
 /// get, ahead of any directories an earlier step put there. Directories that
 /// cannot join a PATH leave it unchanged.
@@ -263,17 +242,6 @@ pub(crate) fn prepend_path(command: &mut Command, directories: &OsStr) {
     if let Ok(path) = joined_path(directories, &current) {
         command.env("PATH", path);
     }
-}
-
-pub(crate) fn joined_path(
-    directories: &OsStr,
-    path: &OsStr,
-) -> Result<OsString, std::env::JoinPathsError> {
-    std::env::join_paths(
-        std::env::split_paths(directories)
-            .chain(std::env::split_paths(path))
-            .filter(|entry| !entry.as_os_str().is_empty()),
-    )
 }
 
 /// Shared identity values for hooks, tracked executions and external processes.

@@ -315,12 +315,16 @@ pub async fn held_permissions(
     request(daemon, WorkspaceMethod::HeldPermissions { repository }).await
 }
 
-/// The environment `workspace`'s configuration gives its commands.
+/// The environment `workspace`'s configuration gives its commands, as a
+/// shell sets it: a preset's directories go first on the configured PATH,
+/// or else on `inherited`.
 pub async fn environment(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
+    inherited: Option<std::ffi::OsString>,
 ) -> Result<BTreeMap<String, String>> {
-    request(daemon, WorkspaceMethod::WorkspaceEnv { workspace }).await
+    let values = request(daemon, WorkspaceMethod::WorkspaceEnv { workspace }).await?;
+    crate::env::export_configured(values, inherited)
 }
 
 /// Revoke the environment `token` handed out for `workspace`.

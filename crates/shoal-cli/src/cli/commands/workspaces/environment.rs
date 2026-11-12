@@ -30,8 +30,10 @@ pub(in crate::cli::commands) async fn environment(
             Revoked { revoked: true },
         )?;
     } else {
-        let values = crate::client::workspaces::environment(&ctx.paths, workspace.clone()).await?;
-        let values = crate::env::export_configured(values, std::env::var_os("PATH"))?;
+        let inherited = std::env::var_os("PATH");
+        let values =
+            crate::client::workspaces::environment(&ctx.paths, workspace.clone(), inherited)
+                .await?;
         ctx.show(&values, |values| {
             for (name, value) in values {
                 outln!("{name}={value}");
