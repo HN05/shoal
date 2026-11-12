@@ -220,7 +220,10 @@ fn an_issues_labels_name_its_mode() {
 
 #[test]
 fn a_start_names_an_issue_with_issue_or_positionally() {
-    let issue = |args: &[&str]| named_issue(&start(args)).map(ToString::to_string);
+    let issue = |args: &[&str]| {
+        let named = named_issue(&start(args)).unwrap();
+        named.map(|issue| issue.to_string())
+    };
     let url = "https://forge.example/o/r/issues/7";
     assert_eq!(issue(&["repo", "--issue", "7"]).as_deref(), Some("7"));
     assert_eq!(issue(&["7"]).as_deref(), Some("7"));

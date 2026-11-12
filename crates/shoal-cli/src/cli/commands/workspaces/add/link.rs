@@ -77,12 +77,7 @@ async fn request(
     };
     // A number beside a branch or issue of its own names a repository.
     let names_branch = creation.branch.is_some() || creation.existing.is_some() || issue.is_some();
-    let positional = match positional {
-        StartTarget::Issue(ItemInput::Number(number)) if names_branch => {
-            StartTarget::Repository(number.to_string())
-        }
-        positional => positional,
-    };
+    let positional = positional.decided(names_branch)?;
     if let StartTarget::Repository(named) = positional {
         ensure!(
             repository.is_none(),
@@ -145,7 +140,7 @@ async fn request(
             git::check_branch_name(None, &branch).await?;
             creation.existing = Some(git::remote_ref("origin", &branch));
         }
-        StartTarget::Repository(_) | StartTarget::Issue(_) => {
+        StartTarget::Repository(_) | StartTarget::Number(_) | StartTarget::Issue(_) => {
             unreachable!("returned above")
         }
     }

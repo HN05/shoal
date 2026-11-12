@@ -18,6 +18,9 @@ use crate::forge::{
 pub enum StartTarget {
     /// A repository, by name, ID, path or URL.
     Repository(String),
+    /// A number as given: an issue's, or a repository's name when the start
+    /// names its branch or issue another way, which [`Self::decided`] reads.
+    Number(String),
     Issue(ItemInput),
     Pull(ItemRef),
     /// A branch, by its link: the repository and the branch.
@@ -32,18 +35,21 @@ impl StartTarget {
     /// The repository a link names; none for a repository or issue number.
     pub fn linked_repository(&self) -> Option<&ForgeRepo> {
         match self {
-            Self::Repository(_) | Self::Issue(ItemInput::Number(_)) => None,
+            Self::Repository(_) | Self::Number(_) | Self::Issue(ItemInput::Number(_)) => None,
             Self::Issue(ItemInput::Url(item)) | Self::Pull(item) => Some(item.repository()),
             Self::Branch { repository, .. } => Some(repository),
         }
     }
 
-    /// The issue it names, by number or URL.
-    pub fn issue(&self) -> Option<&ItemInput> {
-        match self {
-            Self::Issue(issue) => Some(issue),
-            _ => None,
-        }
+    /// The target once the start knows whether a number names an issue: a
+    /// number beside a branch or issue of the start's own, `names_branch`,
+    /// names a repository.
+    pub fn decided(self, names_branch: bool) -> Result<Self> {
+        Ok(match self {
+            Self::Number(number) if names_branch => Self::Repository(number),
+            Self::Number(number) => Self::Issue(number.parse()?),
+            target => target,
+        })
     }
 }
 
@@ -55,7 +61,7 @@ impl FromStr for StartTarget {
             .strip_prefix('#')
             .filter(|number| IssueInput::parse(number) == IssueInput::Number);
         match IssueInput::parse(number.unwrap_or(input)) {
-            IssueInput::Number => Ok(Self::Issue(input.parse()?)),
+            IssueInput::Number => Ok(Self::Number(number.unwrap_or(input).to_owned())),
             IssueInput::Url => link(input),
             IssueInput::Invalid => Ok(Self::Repository(input.to_owned())),
         }
@@ -90,7 +96,7 @@ fn link(input: &str) -> Result<StartTarget> {
 impl fmt::Display for StartTarget {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Repository(repository) => f.write_str(repository),
+            Self::Repository(repository) | Self::Number(repository) => f.write_str(repository),
             Self::Issue(issue) => issue.fmt(f),
             Self::Pull(pull) => pull.fmt(f),
             Self::Branch { url, .. } => f.write_str(url),

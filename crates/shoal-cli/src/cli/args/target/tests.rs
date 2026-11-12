@@ -1,14 +1,30 @@
 use super::*;
 
+/// What `input` names once the start knows whether it names a branch.
+fn decided(input: &str, names_branch: bool) -> Result<StartTarget> {
+    input.parse::<StartTarget>()?.decided(names_branch)
+}
+
 #[test]
 fn a_number_or_issue_link_names_an_issue() {
     for input in ["42", "#42"] {
-        let target = input.parse::<StartTarget>().unwrap();
-        assert_eq!(target.issue(), Some(&ItemInput::Number(42)), "{input}");
+        let target = decided(input, false).unwrap();
+        assert_eq!(target, StartTarget::Issue(ItemInput::Number(42)), "{input}");
     }
     let issue = "https://github.com/team/app/issues/7";
-    let target = issue.parse::<StartTarget>().unwrap();
-    assert!(matches!(target.issue(), Some(ItemInput::Url(item)) if item.url() == issue));
+    let target = decided(issue, false).unwrap();
+    assert!(matches!(target, StartTarget::Issue(ItemInput::Url(item)) if item.url() == issue));
+}
+
+#[test]
+fn a_number_beside_a_branch_names_the_repository_as_given() {
+    let overlong = "99999999999999999999";
+    for input in ["007", "0", overlong] {
+        let target = decided(input, true).unwrap();
+        assert_eq!(target, StartTarget::Repository(input.into()), "{input}");
+    }
+    assert!(decided("0", false).is_err());
+    assert!(decided(overlong, false).is_err());
 }
 
 #[test]

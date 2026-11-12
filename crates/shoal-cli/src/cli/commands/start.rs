@@ -229,7 +229,7 @@ async fn issue_mode(
     selector: crate::repository::Selector,
     settings: &Effective,
 ) -> Result<Option<modes::ModeName>> {
-    let Some(input) = named_issue(args) else {
+    let Some(input) = named_issue(args)? else {
         return Ok(None);
     };
     if settings.issue.plan_label.is_none() && settings.issue.planned_label.is_none() {
@@ -238,7 +238,7 @@ async fn issue_mode(
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     let repo = crate::repository::select(&repos, selector).await?;
     let context = super::issues::read_context(ctx, repo).await?;
-    let issue = super::issues::load(ctx, context, input.clone()).await?;
+    let issue = super::issues::load(ctx, context, input).await?;
     let mode = labelled_mode(&settings.issue, &issue.labels);
     Ok(mode.filter(|mode| modes::get(&settings.modes, mode).is_ok()))
 }
@@ -259,12 +259,15 @@ fn labelled_mode(config: &config::Issue, labels: &[String]) -> Option<modes::Mod
 }
 
 /// The issue `--issue` or the positional argument names by number or URL.
-fn named_issue(args: &StartArgs) -> Option<&ItemInput> {
-    match (&args.issue, &args.repository) {
-        (Some(Some(issue)), _) => Some(issue),
-        (_, Some(positional)) => positional.issue(),
+fn named_issue(args: &StartArgs) -> Result<Option<ItemInput>> {
+    Ok(match (&args.issue, &args.repository) {
+        (Some(Some(issue)), _) => Some(issue.clone()),
+        (_, Some(positional)) => match positional.clone().decided(false)? {
+            StartTarget::Issue(issue) => Some(issue),
+            _ => None,
+        },
         _ => None,
-    }
+    })
 }
 
 /// Whether the positional argument links a PR or branch, which only a
@@ -834,7 +837,8 @@ fn positional_target(
     repository: Option<String>,
     issue: Option<Option<ItemInput>>,
 ) -> Result<(Option<String>, Option<Option<ItemInput>>)> {
-    match positional {
+    // A chat takes a positional number as its issue.
+    match positional.decided(false)? {
         StartTarget::Pull(_) | StartTarget::Branch { .. } => anyhow::bail!(
             "a chat starts on an issue, not a PR or branch link; start it in a mode that starts in a workspace, such as -m worker"
         ),
@@ -845,7 +849,7 @@ fn positional_target(
             );
             Ok((repository, Some(Some(positional))))
         }
-        StartTarget::Repository(positional) => {
+        StartTarget::Repository(positional) | StartTarget::Number(positional) => {
             ensure!(
                 repository.is_none(),
                 "a positional repository cannot be combined with --repo"
