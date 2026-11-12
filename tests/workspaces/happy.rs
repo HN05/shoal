@@ -26,6 +26,9 @@ fn process_alive(pid: u32) -> bool {
 
 const HAPPY_ENABLED: &str = "[agents.happy]\nenabled = true\n";
 
+/// No terminal host opens a place: the default one is turned off.
+const NO_HOST: &str = "[terminal]\ndefault_host = 'herdr'\n[terminal.herdr]\nenabled = false\n";
+
 #[test]
 fn happy_agents_are_refused_until_enabled() {
     let fixture = Fixture::new();
@@ -882,7 +885,7 @@ fn a_start_without_a_terminal_hands_a_happy_agent_over_here() {
 #[test]
 fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
     let fixture = Fixture::with_config(Some(&format!(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n{HAPPY_ENABLED}[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n"
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n{NO_HOST}{HAPPY_ENABLED}[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n"
     )));
     let record = install_fake_happy(&fixture);
     let repo = fixture.repo.to_str().unwrap();
@@ -935,7 +938,27 @@ fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
         status["cleanup_reason"]["reason"], "queued_agent",
         "{status}"
     );
-    fixture.ok(&["queue", "cancel", entry["id"].as_str().unwrap()]);
-    fixture.ok(&["stop", &fixture.id("first")]);
+    // Once the slot frees, the daemon starts it the way Happy runs, which
+    // needs no terminal host: its agent runs, rather than the start failing.
+    fixture.ok(&["rm", "--wait", &fixture.id("first"), "--yes"]);
     first.wait().unwrap();
+    let happy = fixture.id("happy");
+    let kinds = || -> Vec<String> {
+        (fixture.ok(&["alerts", "--all"]).as_array().unwrap().iter())
+            .filter(|alert| alert["space_id"] == happy.as_str() || alert["workspace"] == "happy")
+            .map(|alert| alert["kind"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let kinds = wait_for("the queued Happy agent's start", || {
+        let kinds = kinds();
+        kinds
+            .iter()
+            .any(|kind| kind == "agent_exited" || kind == "queue_failed")
+            .then_some(kinds)
+    });
+    assert!(
+        !kinds.iter().any(|kind| kind == "queue_failed"),
+        "{kinds:?}"
+    );
+    fixture.ok(&["stop", &fixture.id("happy")]);
 }
