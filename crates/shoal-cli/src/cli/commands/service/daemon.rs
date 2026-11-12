@@ -80,9 +80,10 @@ pub(super) async fn start(ctx: &Context) -> Result<i32> {
 }
 
 pub(super) async fn stop(ctx: &Context) -> Result<i32> {
-    ctx.progress("Stopping daemon", stop_daemon(&ctx.paths, Exit::Stop))
+    let stopped = ctx
+        .progress("Stopping daemon", stop_daemon(&ctx.paths, Exit::Stop))
         .await?;
-    emit_stopped_work(ctx, "Daemon stopped", false)?;
+    emit_stopped_work(ctx, "Daemon stopped", false, stopped)?;
     Ok(0)
 }
 
@@ -100,15 +101,21 @@ pub(super) async fn restart(ctx: &Context) -> Result<i32> {
     ctx.progress("Stopping daemon", stop_daemon(&ctx.paths, Exit::Restart))
         .await?;
     start_service(ctx).await?;
-    emit_stopped_work(ctx, "Daemon restarted", true)?;
+    let stopped = crate::execution::recovery::any_pending(&ctx.paths);
+    emit_stopped_work(ctx, "Daemon restarted", true, Some(stopped))?;
     Ok(0)
 }
 
 /// Stopping saves running agents and commands, as does a restart for those
-/// that cannot reattach; point to restoring them.
-fn emit_stopped_work(ctx: &Context, message: &str, running: bool) -> Result<()> {
-    let stopped = crate::execution::recovery::any_pending(&ctx.paths);
-    let message = if stopped {
+/// that cannot reattach; point to restoring them when `stopped` says some
+/// wait.
+fn emit_stopped_work(
+    ctx: &Context,
+    message: &str,
+    running: bool,
+    stopped: Option<bool>,
+) -> Result<()> {
+    let message = if stopped == Some(true) {
         format!("{message}; restore stopped work with shoal resume --all")
     } else {
         message.to_owned()
@@ -118,7 +125,7 @@ fn emit_stopped_work(ctx: &Context, message: &str, running: bool) -> Result<()> 
         &message,
         Running {
             running,
-            stopped_work: Some(stopped),
+            stopped_work: stopped,
         },
     )
 }
@@ -130,18 +137,21 @@ async fn start_service(ctx: &Context) -> Result<()> {
         .await
 }
 
-/// Ask the daemon to exit with `exit`, then unload its service. A daemon that
-/// does not answer gets SIGTERM, which stops its work saved first.
-pub(super) async fn stop_daemon(paths: &CommandPaths, exit: Exit) -> Result<()> {
-    if !client::exit(paths, exit).await? {
-        return terminate(paths).await;
-    }
+/// Ask the daemon to exit with `exit`, then unload its service; whether it
+/// left stopped work, when it says. A daemon that does not answer gets
+/// SIGTERM, which stops its work saved first.
+pub(super) async fn stop_daemon(paths: &CommandPaths, exit: Exit) -> Result<Option<bool>> {
+    let Some(exiting) = client::exit(paths, exit).await? else {
+        terminate(paths).await?;
+        return Ok(None);
+    };
+    let stopped = exiting.stopped_work().await;
     client::wait(paths, false).await?;
     // The service manager keeps a daemon's service loaded after it exits.
     if service::installed(paths) {
         service::stop(paths).await?;
     }
-    Ok(())
+    Ok(stopped)
 }
 
 /// Stop a daemon with SIGTERM through the OS service manager, or directly

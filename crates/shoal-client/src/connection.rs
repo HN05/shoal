@@ -366,27 +366,54 @@ pub async fn reload_config(daemon: &impl Daemon) -> Result<bool> {
     }
 }
 
-/// Ask the daemon to exit with `exit`, whatever its release; `false` when no
-/// daemon answers the request, as when none runs, it is still starting, or
-/// its release predates the request. A refusal fails.
-pub async fn exit(daemon: &impl Daemon, exit: Exit) -> Result<bool> {
+/// Ask the daemon to exit with `exit`, whatever its release: the connection
+/// that hears what it left, or `None` when no daemon answers the request, as
+/// when none runs, it is still starting, or its release predates the request.
+/// A refusal fails.
+pub async fn exit(daemon: &impl Daemon, exit: Exit) -> Result<Option<Exiting>> {
     let request = request_to(daemon, exit);
     let asked = async {
-        let mut stream = UnixStream::connect(&daemon.paths().socket).await.ok()?;
-        protocol::write(&mut stream, &request).await.ok()?;
-        protocol::read::<Response>(&mut stream).await.ok()
+        let stream = UnixStream::connect(&daemon.paths().socket).await.ok()?;
+        let mut stream = BufReader::new(stream);
+        protocol::write(stream.get_mut(), &request).await.ok()?;
+        let response = protocol::read_buffered::<Response>(&mut stream)
+            .await
+            .ok()?;
+        Some((response, stream))
     };
     // The answer reads the same in every protocol version.
-    let Ok(Some(response)) = timeout(timing::ADMIN_REQUEST_TIMEOUT, asked).await else {
-        return Ok(false);
+    let Ok(Some((response, stream))) = timeout(timing::ADMIN_REQUEST_TIMEOUT, asked).await else {
+        return Ok(None);
     };
     match response.body {
-        Body::Ok => Ok(true),
+        Body::Ok => Ok(Some(Exiting { stream })),
         Body::Error {
             code: ErrorCode::InvalidRequest | ErrorCode::ProtocolMismatch,
             ..
-        } => Ok(false),
-        body => body.into_result().map(|_| false),
+        } => Ok(None),
+        body => body.into_result().map(|_| None),
+    }
+}
+
+/// A daemon that agreed to exit, on the connection that hears what it left.
+pub struct Exiting {
+    stream: BufReader<UnixStream>,
+}
+
+impl Exiting {
+    /// Whether the daemon left stopped work for `shoal resume`, once its
+    /// work has ended; `None` when it does not say, as a daemon of an
+    /// earlier release does not.
+    pub async fn stopped_work(mut self) -> Option<bool> {
+        let limit = timing::DAEMON_WAIT_TIMEOUT + timing::WORKSPACE_STOP_TIMEOUT;
+        let read = protocol::read_buffered::<Response>(&mut self.stream);
+        match timeout(limit, read).await {
+            Ok(Ok(Response {
+                body: Body::Exited(exited),
+                ..
+            })) => Some(exited.stopped_work),
+            _ => None,
+        }
     }
 }
 

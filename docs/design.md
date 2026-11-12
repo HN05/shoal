@@ -179,7 +179,9 @@ and `shoal daemon stop` to stop work as `shoal stop --all` does, so agents stay
 down until `shoal resume`, except that queued launches in existing workspaces
 stay for the next daemon to start. The request is permanent like reattachment and
 answered before the protocol check, since restarting is how an upgrade reaches
-a daemon of another release; a daemon that does not answer gets SIGTERM.
+a daemon of another release; a daemon that does not answer gets SIGTERM. Once
+its work has ended, the daemon answers again on the same connection whether it
+left stopped work, which `shoal daemon stop` reads to point to `shoal resume`.
 
 Overload protection is configured machine-wide: memory is enabled by default,
 CPU is opt-in and requires sustained aggregate busy time, which leaves out

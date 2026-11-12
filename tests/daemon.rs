@@ -95,12 +95,15 @@ fn cli_connects_to_daemon_and_stops_it() {
             & 0o777,
         0o600
     );
-    let stopped = daemon.run(&["daemon", "stop"]);
+    let stopped = daemon.run(&["--json", "daemon", "stop"]);
     assert!(
         stopped.status.success(),
         "{}",
         String::from_utf8_lossy(&stopped.stderr)
     );
+    // The daemon says it left no stopped work.
+    let stopped: Value = serde_json::from_slice(&stopped.stdout).unwrap();
+    assert_eq!(stopped["stopped_work"], false, "{stopped}");
     assert!(daemon.guard.child.wait().unwrap().success());
     assert!(!daemon.root.path().join("state/daemon.sock").exists());
     let output = daemon.run(&["--json", "status"]);

@@ -112,8 +112,9 @@ struct Server {
     started: Instant,
     /// Running under the OS service manager, which owns shutdown.
     managed: bool,
-    /// Ends the daemon, with what becomes of running work.
-    exit: mpsc::Sender<Ending>,
+    /// Ends the daemon, with what becomes of running work and the client
+    /// that asked.
+    exit: mpsc::Sender<requests::daemon::RequestedExit>,
     capacity: Arc<connections::Capacity>,
 }
 
@@ -219,12 +220,17 @@ pub async fn run(
     );
     let (listener, mut clients) = startup.finish(server.clone()).await;
     let mut quiescence = None;
+    let mut requested_exit = None;
     // A signal may come from a shutdown or a logout, so it saves work.
     let result = loop {
         tokio::select! {
             _ = terminate.recv() => break Ok(Ending::Save),
             _ = interrupt.recv() => break Ok(Ending::Save),
-            Some(ending) = exit_requested.recv() => break Ok(ending),
+            Some(requested) = exit_requested.recv() => {
+                let ending = requested.ending;
+                requested_exit = Some(requested);
+                break Ok(ending);
+            }
             _ = update_tick.tick(), if update.is_some() => {
                 if update.as_ref().is_some_and(auto_update::Update::pending)
                     && let Some(guard) = auto_update::quiesce(&manager)
@@ -263,6 +269,9 @@ pub async fn run(
     // carries its marker.
     manager.oneshot_runs.stop_all().await;
     manager.stop_for_shutdown().await;
+    if let Some(requested) = requested_exit {
+        requested.answer(&manager).await;
+    }
     clients.shutdown().await;
     manager.store.shutdown().await;
     if quiescence.is_some() {

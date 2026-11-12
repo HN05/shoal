@@ -8,10 +8,12 @@ use super::super::{
     Server,
     answer::{Answer, OperationGuard},
     scope::{self, Caller, Scoped, denied},
-    workspace::Manager,
+    workspace::{Ending, Manager},
 };
 use crate::client::space_names::SpaceSelector;
-use crate::protocol::{self, Body, DaemonMethod, DaemonStatus, ErrorCode, ExitRequest, Response};
+use crate::protocol::{
+    self, Body, DaemonMethod, DaemonStatus, ErrorCode, ExitRequest, Exited, Response,
+};
 
 /// The daemon's own requests, which read how it runs.
 pub(super) async fn handle(server: &Server, method: DaemonMethod) -> Result<Answer> {
@@ -54,8 +56,8 @@ async fn status(server: &Server) -> Result<DaemonStatus> {
 }
 
 /// Reply to an exit request the caller's scope allows, then end the daemon
-/// with what the request asks of running work. The daemon ends even when the
-/// client hung up first.
+/// with what the request asks of running work, which answers again once that
+/// work has ended. The daemon ends even when the client hung up first.
 pub(in crate::daemon) async fn exit(
     mut stream: UnixStream,
     request_id: u64,
@@ -73,8 +75,35 @@ pub(in crate::daemon) async fn exit(
     };
     let replied = protocol::write(&mut stream, &Response::new(request_id, body)).await;
     if authorized.is_ok() {
+        let requested = RequestedExit {
+            ending: request.exit.into(),
+            stream,
+            request_id,
+        };
         // A full channel already holds an earlier request, which wins.
-        let _ = server.exit.try_send(request.exit.into());
+        let _ = server.exit.try_send(requested);
     }
     replied
+}
+
+/// An exit a client asked for, with the connection that hears what the
+/// daemon left once its work has ended.
+pub(in crate::daemon) struct RequestedExit {
+    pub ending: Ending,
+    stream: UnixStream,
+    request_id: u64,
+}
+
+impl RequestedExit {
+    /// Tell the client whether ending work left stopped work for `shoal
+    /// resume`, after the reply to its request, which every release reads
+    /// alone.
+    pub async fn answer(mut self, manager: &Manager) {
+        let exited = Exited {
+            stopped_work: crate::execution::recovery::any_pending(&manager.paths),
+        };
+        let response = Response::new(self.request_id, Body::Exited(exited));
+        // The client may have hung up.
+        let _ = protocol::write(&mut self.stream, &response).await;
+    }
 }

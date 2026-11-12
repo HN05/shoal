@@ -24,3 +24,11 @@ pub enum Exit {
     /// Work keeps running and reattaches to the next daemon.
     Restart,
 }
+
+/// What a daemon an exit request ended left, which it sends after its
+/// answer to the request once its work has ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Exited {
+    /// Stopped work waits for `shoal resume`.
+    pub stopped_work: bool,
+}

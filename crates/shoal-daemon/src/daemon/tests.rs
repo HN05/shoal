@@ -50,48 +50,84 @@ async fn reattachment_is_served_at_every_protocol_version_without_scope() {
 
 #[tokio::test]
 async fn an_exit_request_is_served_at_every_protocol_version_except_to_scopes() {
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     let (_root, manager) = crate::daemon::test_support::manager().await;
     let (exit, mut requested) = tokio::sync::mpsc::channel(1);
     let server = Server {
         exit,
         ..server(manager)
     };
-    let ask = |scope: Option<&str>| {
-        // The spelling a service command of another release sends.
-        let request = serde_json::json!({
-            "protocol": 1, "id": 4, "scope": scope, "method": {"exit": "restart"}
-        });
-        let server = server.clone();
-        async move {
-            let (client, stream) = UnixStream::pair().unwrap();
-            let operation = server.manager.gates.owned_operation().await;
-            let served = tokio::spawn(serve(stream, server, operation));
-            let mut client = BufReader::new(client);
-            client
-                .get_mut()
-                .write_all(format!("{request}\n").as_bytes())
-                .await
-                .unwrap();
-            let mut response = String::new();
-            timeout(Duration::from_secs(60), client.read_line(&mut response))
-                .await
-                .unwrap()
-                .unwrap();
-            served.await.unwrap().unwrap();
-            serde_json::from_str::<serde_json::Value>(&response).unwrap()
-        }
-    };
-    let refused = ask(Some("unknown")).await;
+    let (refused, _) = ask_exit(&server, Some("unknown"), "restart").await;
     assert_eq!(refused["data"]["code"], "scope_denied", "{refused}");
     assert!(
         requested.try_recv().is_err(),
         "a refused request ends nothing"
     );
-    let answered = ask(None).await;
+    let (answered, _) = ask_exit(&server, None, "restart").await;
     assert_eq!(answered["id"], 4);
     assert_eq!(answered["type"], "ok", "{answered}");
-    assert_eq!(requested.try_recv().unwrap(), Ending::Detach);
+    assert_eq!(requested.try_recv().unwrap().ending, Ending::Detach);
+}
+
+#[tokio::test]
+async fn an_exit_answers_again_whether_it_left_stopped_work() {
+    let (_root, manager) = crate::daemon::test_support::manager().await;
+    let (exit, mut requested) = tokio::sync::mpsc::channel(1);
+    let server = Server {
+        exit,
+        ..server(manager.clone())
+    };
+    let (_, mut client) = ask_exit(&server, None, "stop").await;
+    crate::execution::recovery::save_record(
+        &manager.paths,
+        &"workspace".into(),
+        &"execution".into(),
+        &crate::execution::TrackedAgent::named("claude"),
+        None,
+        None,
+    )
+    .unwrap();
+    requested.try_recv().unwrap().answer(&manager).await;
+    let exited = read_response(&mut client).await;
+    assert_eq!(exited["id"], 4);
+    assert_eq!(exited["type"], "exited", "{exited}");
+    assert_eq!(exited["data"]["stopped_work"], true);
+}
+
+/// Ask `server` to exit with `exit` as a service command of another
+/// release would, under `scope`: its reply and the connection, which hears
+/// the rest.
+async fn ask_exit(
+    server: &Server,
+    scope: Option<&str>,
+    exit: &str,
+) -> (serde_json::Value, tokio::io::BufReader<UnixStream>) {
+    use tokio::io::{AsyncWriteExt, BufReader};
+    let request = serde_json::json!({
+        "protocol": 1, "id": 4, "scope": scope, "method": {"exit": exit}
+    });
+    let (client, stream) = UnixStream::pair().unwrap();
+    let operation = server.manager.gates.owned_operation().await;
+    let served = tokio::spawn(serve(stream, server.clone(), operation));
+    let mut client = BufReader::new(client);
+    client
+        .get_mut()
+        .write_all(format!("{request}\n").as_bytes())
+        .await
+        .unwrap();
+    let response = read_response(&mut client).await;
+    served.await.unwrap().unwrap();
+    (response, client)
+}
+
+/// The next response `client` reads.
+async fn read_response(client: &mut tokio::io::BufReader<UnixStream>) -> serde_json::Value {
+    use tokio::io::AsyncBufReadExt;
+    let mut response = String::new();
+    timeout(Duration::from_secs(60), client.read_line(&mut response))
+        .await
+        .unwrap()
+        .unwrap();
+    serde_json::from_str(&response).unwrap()
 }
 
 /// A server for `manager`, as the daemon runs it unmanaged.
