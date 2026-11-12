@@ -7,8 +7,8 @@ use super::{
     rank::{self, Ranked, Snapshot},
     state::WaitingOneShot,
 };
-use crate::client::time::UnixTime;
-use crate::daemon::workspace::Manager;
+use crate::client::{space_ids::SpaceId, time::UnixTime};
+use crate::daemon::{approvals::Target, workspace::Manager};
 
 mod edges;
 mod entries;
@@ -19,17 +19,25 @@ impl Manager {
     /// start, each with its rank.
     pub(super) async fn ranked_queue(&self) -> Result<Vec<Ranked>> {
         let oneshots = self.agent_queue.waiting_oneshots();
-        let snapshot = (self.store).read(move |tx| snapshot(tx, &oneshots)).await?;
+        let leases = self.queues.waiters();
+        let snapshot = (self.store)
+            .read(move |tx| snapshot(tx, &oneshots, &leases))
+            .await?;
         Ok(rank::rank(&snapshot))
     }
 }
 
-/// What ranking reads now, with the `oneshots` waiting for a slot.
-fn snapshot(tx: &Transaction<'_>, oneshots: &[WaitingOneShot]) -> Result<Snapshot> {
+/// What ranking reads now, with the `oneshots` waiting for a slot and the
+/// spaces waiting for the `leases` they queue for.
+fn snapshot(
+    tx: &Transaction<'_>,
+    oneshots: &[WaitingOneShot],
+    leases: &[(Target, SpaceId)],
+) -> Result<Snapshot> {
     Ok(Snapshot {
         entries: entries::waiting(tx, oneshots)?,
         spaces: spaces::ranked(tx)?,
-        edges: edges::waits(tx)?,
+        edges: edges::waits(tx, leases)?,
         now: UnixTime::now(),
     })
 }

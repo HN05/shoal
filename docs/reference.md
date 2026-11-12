@@ -2063,6 +2063,16 @@ share of its plan steps done goes first, then the space created earliest, then
 a CI job or review ahead of an agent of the same space, then the entry that
 arrived first.
 
+Work that other work waits on ranks at least as high as that work, through
+any chain of waits: what blocks a queued launch or a space's progress, which
+for an issue is the spaces working on it, for a PR the spaces that opened or
+were assigned it, and for a CI run its queued jobs and those of its workflow
+on the default branch; a workspace's children; the parent of a child with an
+open question; the workspace a stacked one builds on; and the spaces holding a
+lease another space queues for. A chat's children compete with every other
+worker. A CI job ranks with the highest of the spaces its run links, and a
+review with the workspace it reviews.
+
 ### Agent accounts
 
 [`agent.git_profile`](config.md#agent) names one of the global

@@ -396,6 +396,16 @@ pub(crate) fn open_count(db: &Connection, space_id: &SpaceId) -> Result<usize> {
     Ok(usize::try_from(count)?)
 }
 
+/// The workspaces and chats with an open question.
+pub(crate) fn asking_spaces(db: &Connection) -> Result<Vec<SpaceId>> {
+    Ok(db
+        .prepare(&format!(
+            "SELECT DISTINCT {SPACE} FROM questions q WHERE {OPEN}"
+        ))?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// Close the space's open questions, which its finished assignment no
 /// longer waits on, and return their numbers.
 pub(crate) fn close_open(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Vec<ItemNumber>> {

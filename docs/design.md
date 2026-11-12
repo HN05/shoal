@@ -1559,8 +1559,11 @@ the entries, spaces and what waits on what orders admission and the listing
 alike. Its tiers are `finishing` (a space with an open PR or a ready mark, CI
 jobs on PRs and the default branch), `started` (restores of agents that have
 worked) and `new`; an hour's wait raises an entry a tier, so nothing starves.
-Rank flows along one dependency graph from waiting work to what it waits on,
-such as a queued launch to its blockers. CI jobs and reviews have no rank of their
+Rank flows along one dependency graph from waiting work to what it waits on:
+blockers, a workspace parent to its children, a child with an open question to
+its parent, a stacked workspace to its base, and a space queued for a lease to
+its holders. A chat parent passes nothing on, so an orchestrator's children
+compete with every other worker. CI jobs and reviews have no rank of their
 own beyond a job's tier: each takes the rank of the spaces it serves and goes
 ahead of their agents, which wait on it. Within a tier, plan steps done, then
 the space's age, then arrival decide, and `shoal queue` explains a rank taken

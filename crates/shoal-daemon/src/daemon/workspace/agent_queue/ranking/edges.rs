@@ -1,20 +1,29 @@
 //! What waits on what, from the waiting work to the work it waits on:
-//! queued launches on their blockers.
+//! queued launches and spaces on their blockers, a workspace on its
+//! children, a child with an open question on its parent, a stacked
+//! workspace on its base, and a space queued for a lease on the spaces
+//! holding it.
 use anyhow::Result;
 use rusqlite::{Connection, params};
 
 use super::super::rank::{Edge, Node};
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use crate::{
-    daemon::store,
+    daemon::{approvals::Target, progress, questions, store},
     model::{Dependency, QueuedJob},
     state::{BlockerKind, QueueKind, QueueState},
 };
 
-/// Every edge.
-pub(super) fn waits(db: &Connection) -> Result<Vec<Edge>> {
+/// Every edge, with the spaces queued for `leases`.
+pub(super) fn waits(db: &Connection, leases: &[(Target, SpaceId)]) -> Result<Vec<Edge>> {
     let blocking = Blocking::read(db)?;
-    queue_blockers(db, &blocking)
+    let mut edges = queue_blockers(db, &blocking)?;
+    edges.extend(progress_blockers(db, &blocking)?);
+    edges.extend(children(db)?);
+    edges.extend(questions(db)?);
+    edges.extend(bases(db)?);
+    edges.extend(lease_holders(db, leases)?);
+    Ok(edges)
 }
 
 /// What a blocker stands for in the graph: its space, its queued launch, the
@@ -141,6 +150,117 @@ fn queue_blockers(db: &Connection, blocking: &Blocking) -> Result<Vec<Edge>> {
     for (entry, space, kind, target) in rows {
         let waiting = space.map_or(Node::Entry(entry), Node::Space);
         edges.extend(blocking.edges(db, &waiting, kind, &target)?);
+    }
+    Ok(edges)
+}
+
+/// Spaces on the blockers of their progress, those of steps not done among
+/// them.
+fn progress_blockers(db: &Connection, blocking: &Blocking) -> Result<Vec<Edge>> {
+    let ids: Vec<SpaceId> = db
+        .prepare("SELECT space_id FROM space_progress")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut edges = Vec::new();
+    for id in ids {
+        let Some(progress) = progress::current(db, &id)? else {
+            continue;
+        };
+        let waiting = Node::Space(id);
+        for (step, blocker) in progress.all_blockers() {
+            if step.is_some_and(|step| step.done) {
+                continue;
+            }
+            edges.extend(blocking.edges(db, &waiting, blocker.kind, &blocker.target)?);
+        }
+    }
+    Ok(edges)
+}
+
+/// Each workspace on its children, whose work its own waits on. A chat's
+/// children compete with every other worker.
+fn children(db: &Connection) -> Result<Vec<Edge>> {
+    pairs(
+        db,
+        "SELECT p.parent_id,p.space_id FROM space_parents p JOIN workspaces w ON w.id=p.parent_id",
+        Dependency::Parent,
+    )
+}
+
+/// Each child with an open question on its parent.
+fn questions(db: &Connection) -> Result<Vec<Edge>> {
+    let mut edges = Vec::new();
+    for child in questions::asking_spaces(db)? {
+        let parent: Option<SpaceId> = rusqlite::OptionalExtension::optional(db.query_row(
+            "SELECT parent_id FROM space_parents WHERE space_id=?1",
+            [&child],
+            |row| row.get(0),
+        ))?;
+        if let Some(parent) = parent {
+            edges.push(Edge {
+                waiting: Node::Space(child),
+                on: Node::Space(parent),
+                dependency: Dependency::Question,
+            });
+        }
+    }
+    Ok(edges)
+}
+
+/// Each stacked workspace on the workspace it builds on.
+fn bases(db: &Connection) -> Result<Vec<Edge>> {
+    pairs(
+        db,
+        "SELECT id,base_workspace_id FROM workspaces WHERE base_workspace_id IS NOT NULL",
+        Dependency::Stacked,
+    )
+}
+
+/// An edge of `dependency` for each row of `query`, the waiting space
+/// first.
+fn pairs(db: &Connection, query: &str, dependency: Dependency) -> Result<Vec<Edge>> {
+    Ok(db
+        .prepare(query)?
+        .query_map([], |row| {
+            Ok(Edge {
+                waiting: Node::Space(row.get(0)?),
+                on: Node::Space(row.get(1)?),
+                dependency,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Each space queued for a lease on the other spaces holding one of it.
+fn lease_holders(db: &Connection, leases: &[(Target, SpaceId)]) -> Result<Vec<Edge>> {
+    let mut edges = Vec::new();
+    for (target, waiting) in leases {
+        let holders: Vec<SpaceId> = match target {
+            Target::Resource { scope, pool } => db
+                .prepare(
+                    "SELECT DISTINCT workspace_id FROM resource_leases WHERE scope=?1 AND pool=?2",
+                )?
+                .query_map(params![scope, pool], |row| row.get(0))?
+                .collect::<rusqlite::Result<_>>()?,
+            Target::Simulator => db
+                .prepare(
+                    "SELECT DISTINCT json_extract(record,'$.workspace_id') FROM simulators
+                     WHERE json_extract(record,'$.state')='leased'
+                        AND json_extract(record,'$.workspace_id') IS NOT NULL",
+                )?
+                .query_map([], |row| row.get(0))?
+                .collect::<rusqlite::Result<_>>()?,
+            _ => Vec::new(),
+        };
+        edges.extend(
+            (holders.into_iter())
+                .filter(|holder| holder != waiting)
+                .map(|holder| Edge {
+                    waiting: Node::Space(waiting.clone()),
+                    on: Node::Space(holder),
+                    dependency: Dependency::Lease,
+                }),
+        );
     }
     Ok(edges)
 }

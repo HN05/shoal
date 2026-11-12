@@ -78,6 +78,19 @@ impl Queues {
             keep: false,
         }
     }
+
+    /// Each workspace still waiting for a lease, with the target it waits for.
+    pub(crate) fn waiters(&self) -> Vec<(Target, SpaceId)> {
+        let now = Instant::now();
+        let queues = self.0.lock().expect("queues lock");
+        (queues.iter())
+            .flat_map(|(target, queue)| {
+                (queue.iter())
+                    .filter(|w| w.in_progress > 0 || now.duration_since(w.seen) < ABANDONED_AFTER)
+                    .map(|w| (target.clone(), w.workspace_id.clone()))
+            })
+            .collect()
+    }
 }
 
 impl Waiter {
