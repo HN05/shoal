@@ -931,7 +931,9 @@ preparation, which also carries the agent a CLI would run itself, so no
 follower is needed. A persisted
 dependency that only a preparation getting past its post-setup hook releases
 holds it, so a retried setup starts it without the user restating its mode,
-task or permissions, and a failed hook keeps it waiting.
+task or permissions, and a failed hook keeps it waiting. `resume` changes its
+permissions before the setup, and to start it at once holds its entry, which
+admission then passes over, until the setup releases it.
 While the daemon registers an execution it sends the wrapper keepalives, and
 the wrapper's limit bounds the daemon's silence rather than the whole wait, so
 setups queued behind each other's Git gate never fail for being slow; a

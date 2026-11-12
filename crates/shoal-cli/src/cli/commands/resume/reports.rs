@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::fmt::Display;
 
 use crate::client::execution_ids::ExecutionId;
-use crate::client::output::resume::{DiscardedWork, Queued, Resumed, StoppedCommands};
+use crate::client::output::resume::{DiscardedWork, Queued, Resumed, SetUp, StoppedCommands};
 use crate::{
     cli::context::Context, execution::recovery::SavedCommand, model::Workspace, state::QueueState,
 };
@@ -19,13 +19,29 @@ pub(super) fn nothing(ctx: &Context, started: bool) -> Result<()> {
     }
 }
 
-/// Report the `queued` restores.
+/// Report the `queued` restores and the workspaces set up.
 pub(super) fn queued(ctx: &Context, queued: &Queued) -> Result<()> {
     ctx.show(queued, |queued| {
+        set_up(&queued.set_up);
         if let Some(summary) = queued.summary() {
             outln!("{summary}");
         }
     })
+}
+
+/// List each workspace a resume set up again, with where its waiting agent
+/// is.
+fn set_up(set_up: &[SetUp]) {
+    for done in set_up {
+        let name = &done.workspace.name;
+        match done.launch.as_ref().map(|launch| launch.state) {
+            None => outln!("Set up {name}"),
+            Some(QueueState::Queued) => {
+                outln!("Set up {name}; its agent starts from the agent queue")
+            }
+            Some(QueueState::Starting) => outln!("Set up {name}; starting its agent"),
+        }
+    }
 }
 
 /// Operations on the client type [`Queued`] that only the `shoal` command uses.
@@ -59,6 +75,7 @@ pub(super) fn started(
     listed: &[(&Workspace, &ExecutionId)],
 ) -> Result<()> {
     ctx.show(output, |output| {
+        set_up(&output.set_up);
         if in_wrappers > 0 {
             let noun = if in_wrappers == 1 { "agent" } else { "agents" };
             outln!("Starting {in_wrappers} {noun} where they wait to restore");

@@ -804,22 +804,46 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     );
 }
 
-#[test]
-fn a_failed_setup_leaves_its_agent_waiting_until_resume_retries_it() {
-    let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n",
-    ));
+/// One agent slot and a `waiter` agent that records its start.
+pub(super) const WAITER: &str = "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n";
+
+/// A fixture with [`WAITER`] whose setups fail as [`require_fix`] makes
+/// them.
+fn failing_setup_fixture() -> Fixture {
+    let fixture = Fixture::with_config(Some(WAITER));
+    require_fix(&fixture);
+    fixture
+}
+
+/// Make the setup of the workspaces started from now on fail until the
+/// worktree has a `fixed` file.
+pub(super) fn require_fix(fixture: &Fixture) {
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let setup = fixture.repo.join("setup.sh");
     install_test_script(&setup, "#!/bin/sh\n[ -f fixed ]\n");
     commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
+}
+
+/// Start the `waiter` agent on `branch`, whose setup fails and leaves the
+/// agent waiting in the queue, then put the fix in place; the workspace's
+/// path.
+pub(super) fn fail_setup(fixture: &Fixture, branch: &str) -> PathBuf {
     let repo = fixture.repo.to_str().unwrap();
     // Without a terminal its preparation queues the agent, so no follower
     // leaves it waiting.
-    let output = fixture.run(&["start", repo, "--branch", "failing", "--agent", "waiter"]);
+    let output = fixture.run(&["start", repo, "--branch", branch, "--agent", "waiter"]);
     assert!(!output.status.success(), "{output:?}");
-    let failed = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
+    let failed = &fixture.ok(&["status", &fixture.id(branch)])["workspace"];
     assert_eq!(failed["state"], "failed", "{failed}");
+    let path = PathBuf::from(failed["path"].as_str().unwrap());
+    fs::write(path.join("fixed"), "").unwrap();
+    path
+}
+
+#[test]
+fn a_failed_setup_leaves_its_agent_waiting_until_resume_retries_it() {
+    let fixture = failing_setup_fixture();
+    let path = fail_setup(&fixture, "failing");
     // The agent waits for a retried setup without holding a slot.
     let entries = fixture.ok(&["queue"]);
     assert_eq!(entries.as_array().unwrap().len(), 1, "{entries}");
@@ -829,45 +853,10 @@ fn a_failed_setup_leaves_its_agent_waiting_until_resume_retries_it() {
         serde_json::json!(["setup of failing"])
     );
 
-    let path = Path::new(failed["path"].as_str().unwrap());
-    fs::write(path.join("fixed"), "").unwrap();
-    // The waiting agent keeps the permissions it was started with.
-    let changed = fixture.run(&[
-        "resume",
-        &fixture.id("failing"),
-        "--permission",
-        "push=deny",
-    ]);
-    assert!(!changed.status.success(), "{changed:?}");
-    let kept = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
-    assert_eq!(kept["state"], "failed", "{kept}");
-    // So are placement options, since the queue starts the waiting agent.
-    let now = fixture.run(&["resume", &fixture.id("failing"), "--now"]);
-    assert!(!now.status.success(), "{now:?}");
-    let kept = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
-    assert_eq!(kept["state"], "failed", "{kept}");
-    // Other spaces beside it are refused before any setup runs.
-    fixture.ok(&["start", repo, "--branch", "plain", "--skip-setup"]);
-    let mixed = fixture.run(&["resume", &fixture.id("failing"), &fixture.id("plain")]);
-    assert!(!mixed.status.success(), "{mixed:?}");
-    let kept = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
-    assert_eq!(kept["state"], "failed", "{kept}");
-
     // Several failed setups resume together in one result.
-    assert!(
-        !fixture
-            .run(&["start", repo, "--branch", "second"])
-            .status
-            .success()
-    );
-    let second = &fixture.ok(&["status", &fixture.id("second")])["workspace"];
-    fs::write(
-        Path::new(second["path"].as_str().unwrap()).join("fixed"),
-        "",
-    )
-    .unwrap();
+    fail_setup(&fixture, "second");
     let resumed = fixture.ok(&["resume", &fixture.id("failing"), &fixture.id("second")]);
-    assert_eq!(resumed.as_array().unwrap().len(), 2, "{resumed}");
+    assert_eq!(resumed["set_up"].as_array().unwrap().len(), 2, "{resumed}");
     for name in ["failing", "second"] {
         let ready = &fixture.ok(&["status", &fixture.id(name)])["workspace"];
         assert_eq!(ready["state"], "ready", "{ready}");
@@ -875,6 +864,38 @@ fn a_failed_setup_leaves_its_agent_waiting_until_resume_retries_it() {
     wait_until("the waiting agent start", || {
         path.join("agent-started").exists()
     });
+}
+
+#[test]
+fn resume_starts_the_agent_waiting_for_a_failed_setup_now_with_the_permission_given() {
+    let fixture = failing_setup_fixture();
+    let path = fail_setup(&fixture, "failing");
+    let resumed = fixture.ok(&[
+        "resume",
+        &fixture.id("failing"),
+        "--now",
+        "--permission",
+        "push=deny",
+    ]);
+    let launch = &resumed["set_up"][0]["launch"];
+    assert_eq!(launch["state"], "starting", "{resumed}");
+    assert_eq!(launch["narrowing"]["push"], "deny", "{resumed}");
+    wait_until("the waiting agent start", || {
+        path.join("agent-started").exists()
+    });
+}
+
+#[test]
+fn resume_checks_every_target_before_it_retries_a_failed_setup() {
+    let fixture = failing_setup_fixture();
+    fail_setup(&fixture, "failing");
+    let repo = fixture.repo.to_str().unwrap();
+    // A workspace with nothing to resume refuses the selection.
+    fixture.ok(&["start", repo, "--branch", "plain", "--skip-setup"]);
+    let mixed = fixture.run(&["resume", &fixture.id("failing"), &fixture.id("plain")]);
+    assert!(!mixed.status.success(), "{mixed:?}");
+    let kept = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
+    assert_eq!(kept["state"], "failed", "{kept}");
 }
 
 #[test]

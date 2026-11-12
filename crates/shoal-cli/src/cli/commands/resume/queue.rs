@@ -3,11 +3,8 @@
 use crate::client::execution_ids::ExecutionId;
 use anyhow::{Context as _, Result, ensure};
 
-use super::{chats, commands, permission_change, reports, stale, targets::Selected};
-use crate::client::output::{
-    batch::Failure,
-    resume::{Queued, RestoredChat},
-};
+use super::{commands, permission_change, reports, stale, targets::Selected};
+use crate::client::output::resume::Queued;
 use crate::client::saved::{Queuing, Restore};
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
@@ -22,10 +19,10 @@ use crate::{
 
 /// Queue the restores of the stopped agents and last sessions of the
 /// `selected` workspaces below this process's, only `execution`'s when
-/// given, and restore the `selected` chats in a background place, under
-/// `change` when given; the daemon refuses those this process or one
-/// below it did not stop, before any restore, and starts the workspaces'
-/// agents detached.
+/// given, restore the `selected` chats in a background place and retry the
+/// selected failed setups, under `change` when given; the daemon refuses
+/// those this process or one below it did not stop, before any setup or
+/// restore, and starts the workspaces' agents detached.
 pub(super) async fn queue_below(
     ctx: &Context,
     selected: Selected,
@@ -33,15 +30,15 @@ pub(super) async fn queue_below(
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
     let mut stopped = Vec::new();
-    for selector in selected.workspaces.unwrap_or_default() {
+    for selector in selected.workspaces.clone().unwrap_or_default() {
         stopped.push(stopped_agents(ctx, selector, execution.as_ref()).await?);
     }
     for chat in &selected.chats {
         crate::client::chats::check_restore(&ctx.paths, &chat.id).await?;
     }
-    permission_change::apply(ctx, &stopped, &selected.chats, change).await?;
-    let (chats, failed) = chats::restore_each(ctx, &selected.chats, change).await;
-    queue_all(ctx, stopped, chats, failed, false).await
+    permission_change::apply(ctx, &stopped, &selected.chats, &selected.setups, change).await?;
+    let resumed = super::set_up_and_restore_chats(ctx, &selected, change, false).await;
+    queue_all(ctx, stopped, resumed, false).await
 }
 
 /// Executions stopped so their workspaces could move, by workspace.
@@ -126,8 +123,8 @@ pub(super) async fn queue_workspace(
     if matches!(queuing, Queuing::Daemon { .. }) {
         ensure_daemon_starts(ctx, &stopped).await?;
     }
-    permission_change::apply(ctx, &stopped, &[], change).await?;
-    queue_all(ctx, stopped, Vec::new(), Vec::new(), now).await
+    permission_change::apply(ctx, &stopped, &[], &[], change).await?;
+    queue_all(ctx, stopped, Queued::default(), now).await
 }
 
 /// What `workspace` saved.
@@ -164,18 +161,19 @@ pub(super) async fn ensure_daemon_starts(
 /// Queue the restore of every agent and last session `stopped` saves,
 /// starting each at once regardless of the limits when `now`, and report
 /// the commands of workspaces without one, going on after one fails, with
-/// the stopped `chats` restored and the resumes already `failed`.
+/// the stopped chats, setups and failures `resumed` reports already.
 pub(super) async fn queue_all(
     ctx: &Context,
     stopped: Vec<(Workspace, Saved)>,
-    chats: Vec<RestoredChat>,
-    mut failed: Vec<Failure>,
+    resumed: Queued,
     now: bool,
 ) -> Result<i32> {
     let mut queued = queue_each(ctx, stopped, now).await;
-    queued.chats = chats;
+    let mut failed = resumed.failed;
     failed.append(&mut queued.failed);
     queued.failed = failed;
+    queued.chats = resumed.chats;
+    queued.set_up = resumed.set_up;
     reports::queued(ctx, &queued)?;
     Ok(if queued.failed.is_empty() { 0 } else { 1 })
 }
@@ -210,8 +208,8 @@ pub(super) async fn queue_each(
     Queued {
         queued,
         commands,
-        chats: Vec::new(),
         failed,
+        ..Default::default()
     }
 }
 

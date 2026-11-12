@@ -64,7 +64,7 @@ pub(super) async fn run(
     if picked.waits_in_wrapper {
         saved.retain_execution(&selected_id, true);
         let stopped = vec![(workspace.clone(), saved)];
-        return queue::queue_all(ctx, stopped, Vec::new(), Vec::new(), true).await;
+        return queue::queue_all(ctx, stopped, Default::default(), true).await;
     }
     ensure!(
         !active(&selected_id),

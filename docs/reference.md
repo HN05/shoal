@@ -407,12 +407,11 @@ space, resume uses the current workspace when it has something to resume,
 otherwise a picker listing every workspace with what it would restore, stopped
 work first, and the stopped chats; with nothing to resume anywhere it reports that without a picker.
 A named workspace whose setup failed, or never started, retries its setup as
-`shoal setup` does,
-after which the agent waiting for it in the queue starts as the queue admits
-it, with the permissions it was started with, so `--permission`, `--now` and
-`--focus` are refused there. Such
-workspaces resume together and apart from other spaces, which are refused
-beside them before any setup runs.
+`shoal setup` does, after which the agent waiting for it in the queue starts
+as the queue admits it, or at once with `--now`, under the permissions
+`--permission` changes; `--focus` is refused there.
+Such workspaces resume together with the other spaces named, every one of
+which is checked before any setup runs.
 Completion describes each workspace the same way.
 A workspace without stopped agents continues one of its last sessions at once,
 placed as `--now` places an agent, or without a terminal through the queue, started at once, when resumed by itself, left by `shoal stop`
@@ -3092,8 +3091,9 @@ workspace, and sends setup output to stderr. The agent `shoal start` or an app
 launches there waits in the [agent queue](#agent-queue) for the setup,
 holding no slot; once a retried or ignored setup gets past the post-setup
 hook, from the prompt, `shoal setup` or `shoal resume <workspace>`, the queue
-starts it with its mode, task and permissions, linking the PR a start from a
-PR names, and a failed hook keeps it waiting. Then choose explicitly; `--skip`
+starts it with its mode, task and permissions, or `shoal resume` does as its
+options say, linking the PR a start from a PR names, and a failed hook keeps
+it waiting. Then choose explicitly; `--skip`
 leaves what setup did and is not available to workspace processes:
 
 ```sh

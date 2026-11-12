@@ -19,7 +19,8 @@ use crate::{
 /// restoring through its waiting wrapper does, are reported here. An agent
 /// resumes where it stopped when the terminal backend can reuse that place,
 /// otherwise in the backend's background; without a backend one agent
-/// resumes in this terminal unless `resumed` reports chats or failures, and
+/// resumes in this terminal unless `resumed` reports chats, setups or
+/// failures, and
 /// the others are listed for their own terminals.
 pub(super) async fn run_all(
     ctx: &Context,
@@ -48,7 +49,7 @@ pub(super) async fn run_all(
     }
     // An agent restored here replaces this run's report, so it takes the
     // terminal only when there is nothing else to report.
-    let alone = resumed.chats.is_empty() && resumed.failed.is_empty();
+    let alone = resumed.chats.is_empty() && resumed.set_up.is_empty() && resumed.failed.is_empty();
     let single = sessions.len() == 1 && alone && ctx.on_terminal();
     start_sessions(ctx, sessions, single, resumed).await
 }

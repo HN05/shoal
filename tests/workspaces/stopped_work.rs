@@ -1,5 +1,6 @@
 //! What a stop saves of a workspace's agents and commands, and how
 //! `shoal resume` restores it or `--discard` forgets it.
+use super::creation::{WAITER, fail_setup, require_fix};
 use super::*;
 
 /// The workspace's agent runs `agent.sh`, and its restore `resume.sh` with
@@ -273,6 +274,28 @@ fn resume_without_an_agent_reports_stopped_commands_once() {
     assert!(output.status.success(), "{output:?}");
     assert!(!workspace.pending());
     assert!(!workspace.resume(&fixture, &["--focus"]).status.success());
+}
+
+#[test]
+fn resume_retries_a_failed_setup_beside_the_stopped_work_it_resumes() {
+    let fixture = Fixture::with_config(Some(&format!("{WAITER}{AGENT}")));
+    let workspace = Stopped::new(&fixture, "stopped");
+    let command = workspace.start_command(&fixture);
+    workspace.stop(&fixture, vec![command]);
+    require_fix(&fixture);
+    let failing = fail_setup(&fixture, "failing");
+
+    let resumed = fixture.ok(&["resume", &fixture.id("stopped"), &fixture.id("failing")]);
+    assert_eq!(resumed["set_up"].as_array().unwrap().len(), 1, "{resumed}");
+    assert_eq!(
+        resumed["commands"].as_array().unwrap().len(),
+        1,
+        "{resumed}"
+    );
+    assert!(!workspace.pending());
+    wait_until("the waiting agent start", || {
+        failing.join("agent-started").exists()
+    });
 }
 
 #[test]

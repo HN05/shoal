@@ -3,6 +3,7 @@
 //! which one lookup finds by number or ID.
 use anyhow::{Result, bail, ensure};
 
+use super::setups::FailedSetup;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, context::Context, ui},
@@ -50,6 +51,9 @@ pub(super) struct Selected {
     /// By ID, or by a selector the daemon refuses; every workspace with
     /// stopped work for `None`.
     pub workspaces: Option<Vec<SpaceSelector>>,
+    /// The workspaces named whose setup failed, which resume by retrying
+    /// it, once [`super::setups::take_failed`] takes them from the others.
+    pub setups: Vec<FailedSetup>,
 }
 
 impl Selected {
@@ -81,9 +85,8 @@ impl Selected {
     /// The spaces `selectors` name among `spaces`, each once.
     fn resolved(spaces: &Spaces, selectors: Vec<SpaceSelector>) -> Self {
         let mut selected = Self {
-            chats: Vec::new(),
-            running: Vec::new(),
             workspaces: Some(Vec::new()),
+            ..Self::default()
         };
         for selector in selectors {
             selected.add(resolve(spaces, selector));
@@ -95,16 +98,8 @@ impl Selected {
     fn every(saved: Vec<Chat>) -> Self {
         Self {
             chats: saved,
-            running: Vec::new(),
-            workspaces: None,
+            ..Self::default()
         }
-    }
-
-    /// Whether nothing is selected, not even every workspace.
-    pub fn is_empty(&self) -> bool {
-        self.chats.is_empty()
-            && self.running.is_empty()
-            && self.workspaces.as_ref().is_some_and(Vec::is_empty)
     }
 
     /// Refuse the running chats selected, which have nothing to resume.

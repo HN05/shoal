@@ -28,6 +28,16 @@ pub struct ResumedAgent {
     pub reused: bool,
 }
 
+/// A workspace whose failed setup a resume retried and finished.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetUp {
+    pub workspace: Workspace,
+    /// The launch of the agent that waited for the setup, waiting in the
+    /// agent queue or starting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launch: Option<QueueEntry>,
+}
+
 /// What a resume of several spaces did.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Resumed {
@@ -35,6 +45,8 @@ pub struct Resumed {
     pub agents: Vec<ResumedAgent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chats: Vec<RestoredChat>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub set_up: Vec<SetUp>,
     pub failed: Vec<Failure>,
 }
 
@@ -48,13 +60,16 @@ pub struct DiscardedWork {
 }
 
 /// The restores a resume queued, the commands it reported, the saved chats
-/// it restored at once and the spaces it failed for.
+/// it restored at once, the workspaces it set up and the spaces it failed
+/// for.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Queued {
     pub queued: Vec<QueueEntry>,
     pub commands: Vec<StoppedCommands>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chats: Vec<RestoredChat>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub set_up: Vec<SetUp>,
     pub failed: Vec<Failure>,
 }
 
@@ -83,4 +98,11 @@ pub struct RestoredChat {
     pub place: Option<String>,
 }
 
-outputs!(StoppedCommands, Resumed, DiscardedWork, Queued, Reopened);
+outputs!(
+    StoppedCommands,
+    SetUp,
+    Resumed,
+    DiscardedWork,
+    Queued,
+    Reopened
+);

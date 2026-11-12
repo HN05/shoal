@@ -1,10 +1,11 @@
 //! `shoal resume`: choosing how the selected spaces resume, which the
 //! modules below carry out. Restores use saved agent identity and today's
 //! restore configuration; they queue unless asked to start now, the stopped
-//! chats restore at once, a workspace whose setup failed retries it, and
-//! `--discard` forgets the stopped work instead.
+//! chats restore at once, a workspace whose setup failed retries it before
+//! the agent waiting for it starts, and `--discard` forgets the stopped work
+//! instead.
 use crate::client::execution_ids::ExecutionId;
-use crate::client::output::resume::Resumed;
+use crate::client::output::resume::{Queued, Resumed};
 use crate::client::saved::Queuing;
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -32,10 +33,12 @@ pub struct Options {
 /// `shoal resume`: the selected spaces, or every one for `--all` or when no
 /// space has anything to resume. Stopped chats restore at once; workspaces'
 /// restores queue unless `now`, or `focus`, which restores one agent or
-/// chat in this terminal. Without a terminal every restore queues, which
-/// `now` starts at once, since this process can start none of them. A
-/// change to the permissions given is checked for every selected agent and
-/// chat before any restores.
+/// chat in this terminal, and the agents waiting for the failed setups of
+/// named workspaces, which retry them first, queue unless `now`. Without a
+/// terminal every restore queues, which `now` starts at once, since this
+/// process can start none of them. Every target, and a change to the permissions given
+/// for every selected agent and chat, is checked before any setup or
+/// restore.
 pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> Result<i32> {
     let Options {
         execution,
@@ -51,12 +54,8 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
     }
     let named = !targets.space.is_empty();
     let mut selected = Selected::load(ctx, targets).await?;
-    if named
-        && !discard
-        && execution.is_none()
-        && let Some(code) = setups::retry_failed(ctx, &mut selected, change, now || focus).await?
-    {
-        return Ok(code);
+    if named && !discard && execution.is_none() {
+        setups::take_failed(ctx, &mut selected).await?;
     }
     if named
         && !discard
@@ -73,18 +72,23 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
         return queue::queue_below(ctx, selected, execution, change).await;
     }
     let queuing = Queuing::of(ctx.on_terminal(), now);
-    match (selected.chats.as_slice(), selected.workspaces.as_deref()) {
-        ([], Some([workspace])) if discard => {
+    let setups = selected.setups.as_slice();
+    match (
+        selected.chats.as_slice(),
+        selected.workspaces.as_deref(),
+        setups,
+    ) {
+        ([], Some([workspace]), []) if discard => {
             discard::discard_work(ctx, workspace.clone(), execution).await
         }
-        ([], Some([workspace])) if focus || queuing == Queuing::Here { now: true } => {
+        ([], Some([workspace]), []) if focus || queuing == Queuing::Here { now: true } => {
             workspace::run(ctx, workspace.clone(), execution, focus, change).await
         }
-        ([], Some([workspace])) => {
+        ([], Some([workspace]), []) => {
             queue::queue_workspace(ctx, workspace.clone(), execution, queuing, change).await
         }
-        ([chat], Some([])) if focus && execution.is_none() => {
-            permission_change::apply(ctx, &[], std::slice::from_ref(chat), change).await?;
+        ([chat], Some([]), []) if focus && execution.is_none() => {
+            permission_change::apply(ctx, &[], std::slice::from_ref(chat), &[], change).await?;
             chats::restore_here(ctx, chat, change).await
         }
         _ => {
@@ -128,7 +132,7 @@ async fn continue_turns(
     }
     selected.refuse_running()?;
     ensure!(
-        !workspaces_left && selected.chats.is_empty(),
+        !workspaces_left && selected.chats.is_empty() && selected.setups.is_empty(),
         "resume interrupted turns and stopped work separately"
     );
     ensure!(
@@ -155,7 +159,8 @@ fn ensure_below(targets: &SpaceTargets, here: bool) -> Result<()> {
 
 /// Resume the `selected` spaces together, reporting them at once: restore
 /// the stopped chats, making `change` when given, or remove them for
-/// `discard`, and queue the restores of the workspaces' stopped agents,
+/// `discard`, retry the failed setups, and queue the restores of the
+/// workspaces' stopped agents and the agents waiting for those setups,
 /// start them as `queuing` says, or forget the stopped work for `discard`.
 async fn resume_each(
     ctx: &Context,
@@ -165,7 +170,7 @@ async fn resume_each(
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
     let stopped = selected.stopped(ctx, discard).await?;
-    if stopped.is_empty() && selected.chats.is_empty() {
+    if stopped.is_empty() && selected.chats.is_empty() && selected.setups.is_empty() {
         reports::nothing(ctx, discard || queuing == Queuing::Here { now: true })?;
         return Ok(0);
     }
@@ -175,19 +180,43 @@ async fn resume_each(
     if let Queuing::Daemon { .. } = queuing {
         queue::ensure_daemon_starts(ctx, &stopped).await?;
     }
-    permission_change::apply(ctx, &stopped, &selected.chats, change).await?;
-    let (chats, failed) = chats::restore_each(ctx, &selected.chats, change).await;
+    permission_change::apply(ctx, &stopped, &selected.chats, &selected.setups, change).await?;
+    let now = matches!(queuing, Queuing::Here { now } | Queuing::Daemon { now } if now);
+    let resumed = set_up_and_restore_chats(ctx, &selected, change, now).await;
     match queuing {
         Queuing::Here { now: true } => {
             let resumed = Resumed {
-                chats,
-                failed,
+                chats: resumed.chats,
+                set_up: resumed.set_up,
+                failed: resumed.failed,
                 ..Default::default()
             };
             sessions::run_all(ctx, stopped, resumed).await
         }
-        Queuing::Here { now: false } => queue::queue_all(ctx, stopped, chats, failed, false).await,
-        Queuing::Daemon { now } => queue::queue_all(ctx, stopped, chats, failed, now).await,
+        Queuing::Here { now } | Queuing::Daemon { now } => {
+            queue::queue_all(ctx, stopped, resumed, now).await
+        }
+    }
+}
+
+/// Retry the `selected` failed setups, starting the agents waiting for them
+/// at once when `now`, and restore the `selected` stopped chats in a
+/// background place under `change`, going on after one fails, and report
+/// them.
+async fn set_up_and_restore_chats(
+    ctx: &Context,
+    selected: &Selected,
+    change: Option<&PermissionChange>,
+    now: bool,
+) -> Queued {
+    let (set_up, mut failed) = setups::retry_each(ctx, &selected.setups, now).await;
+    let (chats, chats_failed) = chats::restore_each(ctx, &selected.chats, change).await;
+    failed.extend(chats_failed);
+    Queued {
+        chats,
+        set_up,
+        failed,
+        ..Default::default()
     }
 }
 
