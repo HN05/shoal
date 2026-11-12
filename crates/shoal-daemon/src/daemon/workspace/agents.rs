@@ -623,13 +623,15 @@ impl Manager {
     ) -> anyhow::Result<bool> {
         let _gate = self.agent_queue.lock_admission().await;
         anyhow::ensure!(!self.agent_queue.suspended(), "the system is shutting down");
+        // A stop of the execution, which cancels its restore, takes this lock
+        // too, so the restore it finds stays decided.
+        let connections = self.executions.connections().await;
         // The agent's turns count again before it runs, and it reports its
         // own.
         let protected = self.agent_overload(id).await.is_some();
         if protected || self.restart_requested(id).await {
             self.forget_resumed_stop(id).await?;
         }
-        let connections = self.executions.connections().await;
         let stop = connections
             .stop_channel(id)
             .ok_or_else(|| anyhow::anyhow!("execution disconnected"))?;

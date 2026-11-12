@@ -90,3 +90,21 @@ async fn a_stop_request_cancels_the_recorded_stop() {
     assert!(recorded(&manager, id).await.is_some());
     assert_eq!(manager.agent_overload(id).await, None);
 }
+
+#[tokio::test]
+async fn a_resume_after_a_stop_request_leaves_the_agent_stopped() {
+    let (root, manager) = manager().await;
+    let execution = idle_agent(&manager, &root).await;
+    let id = &execution.plan.id;
+    assert!(manager.stop_agent_for_overload("memory pressure").await);
+    let connections = manager.executions.connections().await;
+    assert!(
+        connections
+            .stop(id, &StopRequest::queue_cancel())
+            .await
+            .unwrap()
+    );
+    drop(connections);
+    assert!(!manager.resume_agent_execution(id, None).await.unwrap());
+    assert!(*execution.stop.borrow());
+}
