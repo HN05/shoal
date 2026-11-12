@@ -2,11 +2,13 @@
 use anyhow::{Context, Result};
 use serde_json::Value;
 
-use super::threads::{GitHubThread, threads};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::github_rest,
+    backends::{
+        github::threads::{GitHubThread, threads},
+        github_rest,
+    },
     items::{action::MergeMethod, link::ItemKind},
     numbers::{CommentId, PullNumber},
     review::view::{AutoMerge, Details, Review, login, review_comment, review_state, text_field},

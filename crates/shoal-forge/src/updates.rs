@@ -12,7 +12,7 @@ use shoal_time::UnixTime;
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::{Backend, rest::RestCheck},
+    backends::{Activity, rest::RestCheck},
     ci::check_state::CheckState,
     items::{item::Current, link::LinkKind},
     numbers::{IssueNumber, PullNumber},

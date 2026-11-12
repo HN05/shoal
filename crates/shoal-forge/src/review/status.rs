@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::Activity,
     ci::{approval::WaitingRun, check_state::CheckState},
     items::item::ItemState,
     updates::Snapshot,

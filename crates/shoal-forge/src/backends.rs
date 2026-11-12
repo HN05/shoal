@@ -28,12 +28,7 @@ use crate::{
     },
     numbers::{IssueNumber, PullNumber},
     repo::locator::ItemRoute,
-    review::{
-        status::PrStatus,
-        view::{Details, Review},
-    },
     transport::{api::Request, resend::Transient, response::Response},
-    updates::Snapshot,
 };
 
 crate::state::states!(
@@ -115,7 +110,7 @@ macro_rules! dispatch {
 
 mod area;
 pub(crate) use area::{
-    Attachments, Checks, Conventions, Merging, Reactions, Reviews, Runners, Runs,
+    Activity, Attachments, Checks, Conventions, Merging, Reactions, Reviews, Runners, Runs,
 };
 
 /// What a forge does its own way. Methods that need the repository take it
@@ -353,54 +348,6 @@ pub(crate) trait Backend {
     /// Whether a new issue's labels are added after opening it, because
     /// opening it cannot set them by name.
     fn labels_issue_after_opening(&self) -> bool;
-
-    /// An issue's state and discussion.
-    async fn issue_activity(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: IssueNumber,
-    ) -> Result<Snapshot>;
-
-    /// A PR's state, discussion, reviews, mergeability and checks.
-    async fn pr_activity(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: PullNumber,
-    ) -> Result<Snapshot>;
-
-    /// A PR's state, mergeability, checks and review state.
-    async fn pr_status(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: PullNumber,
-        url: &str,
-    ) -> Result<PrStatus>;
-
-    /// The item's content for a view, with its comments when `comments` is
-    /// set and the forge reads them with the item.
-    async fn view_details(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-        comments: bool,
-    ) -> Result<Details>;
-
-    /// Fills the comments `details` lacks and returns a PR's reviews,
-    /// recording in `errors` the parts it could not read.
-    async fn view_discussion(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-        details: &mut Details,
-        errors: &mut Vec<String>,
-    ) -> Result<Option<Vec<Review>>>;
 
     /// The login `account` signs in to the forge as; none when it reads
     /// anonymously.

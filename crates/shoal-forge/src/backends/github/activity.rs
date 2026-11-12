@@ -1,14 +1,15 @@
-//! GitHub activity and PR status, read through its REST API, which answers
-//! repeated reads as unchanged and reports its rate limit. Snapshots key,
-//! fingerprint and name what they record as they did when `gh` read it
+//! GitHub activity, PR status and item views, read through its REST API, which
+//! answers repeated reads as unchanged and reports its rate limit. Snapshots
+//! key, fingerprint and name what they record as they did when `gh` read it
 //! through GraphQL, so snapshots saved then read as unchanged.
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 
+use super::GitHub;
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::rest::read_pull,
+    backends::{Activity, LoginHint, rest::read_pull},
     ci::check_state::CheckState,
     items::{
         item::{Current, ItemState},
@@ -17,11 +18,67 @@ use crate::{
     numbers::{IssueNumber, PullNumber},
     review::{
         status::{PrState, PrStatus, github_reviews},
-        view::login,
+        view::{Details, Review, login},
     },
     transport::api::Request,
     updates::{Check, DISCUSSION, Entry, Snapshot, id_text},
 };
+
+mod view;
+
+impl Activity for GitHub {
+    async fn issue_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: IssueNumber,
+    ) -> Result<Snapshot> {
+        issue_activity(repo, account, number).await.hint_login(self)
+    }
+
+    async fn pr_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: PullNumber,
+    ) -> Result<Snapshot> {
+        pr_activity(repo, account, number).await
+    }
+
+    async fn pr_status(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: PullNumber,
+        url: &str,
+    ) -> Result<PrStatus> {
+        pr_status(repo, account, number, url).await.hint_login(self)
+    }
+
+    async fn view_details(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        comments: bool,
+    ) -> Result<Details> {
+        view::details(repo, account, kind, number, comments).await
+    }
+
+    /// The comments are read with the item; this reads the reviews.
+    async fn view_discussion(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        _details: &mut Details,
+        _errors: &mut Vec<String>,
+    ) -> Result<Option<Vec<Review>>> {
+        view::reviews(repo, account, kind, number).await
+    }
+}
 
 pub(crate) async fn issue_activity(
     repo: &ForgeRepo,

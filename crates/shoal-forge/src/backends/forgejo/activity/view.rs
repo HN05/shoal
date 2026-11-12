@@ -2,11 +2,13 @@
 use anyhow::{Context, Result};
 use serde_json::Value;
 
-use super::threads::{review_comments, thread_key, threads};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::github_rest,
+    backends::{
+        forgejo::threads::{review_comments, thread_key, threads},
+        github_rest,
+    },
     items::link::ItemKind,
     numbers::{CommentId, PullNumber},
     review::view::{

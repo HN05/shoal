@@ -14,7 +14,6 @@ mod reviews;
 mod runners;
 mod runs;
 pub(crate) mod threads;
-mod view;
 
 use super::{
     Backend, LoginHint,
@@ -36,15 +35,11 @@ use crate::{
     },
     numbers::{CommentId, IssueNumber, PullNumber},
     repo::locator::ItemRoute,
-    review::{
-        status::PrStatus,
-        view::{Details, Review},
-    },
     transport::{
         api::{HttpMethod, Request, encode, full_page},
         response::Response,
     },
-    updates::{DISCUSSION, Snapshot},
+    updates::DISCUSSION,
 };
 
 #[derive(Clone, Copy)]
@@ -292,62 +287,6 @@ impl Backend for GitHub {
 
     fn labels_issue_after_opening(&self) -> bool {
         false
-    }
-
-    async fn issue_activity(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: IssueNumber,
-    ) -> Result<Snapshot> {
-        activity::issue_activity(repo, account, number)
-            .await
-            .hint_login(self)
-    }
-
-    async fn pr_activity(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: PullNumber,
-    ) -> Result<Snapshot> {
-        activity::pr_activity(repo, account, number).await
-    }
-
-    async fn pr_status(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: PullNumber,
-        url: &str,
-    ) -> Result<PrStatus> {
-        activity::pr_status(repo, account, number, url)
-            .await
-            .hint_login(self)
-    }
-
-    async fn view_details(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-        comments: bool,
-    ) -> Result<Details> {
-        view::details(repo, account, kind, number, comments).await
-    }
-
-    /// The comments are read with the item; this reads the reviews.
-    async fn view_discussion(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-        _details: &mut Details,
-        _errors: &mut Vec<String>,
-    ) -> Result<Option<Vec<Review>>> {
-        view::reviews(repo, account, kind, number).await
     }
 
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
