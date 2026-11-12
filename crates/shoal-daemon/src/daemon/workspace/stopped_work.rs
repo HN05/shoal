@@ -24,7 +24,7 @@ pub(super) struct Stopper<'a> {
 /// What a change to the permissions given applies to: stopped agents and
 /// saved chats, which restores run under, and the workspaces whose failed
 /// setup a launch waits for, which it starts under.
-pub(crate) struct Stopped<'a> {
+pub(crate) struct PermissionTargets<'a> {
     pub agents: &'a [SavedAgent],
     pub chats: &'a [SpaceSelector],
     pub launches: &'a [SpaceSelector],
@@ -138,26 +138,26 @@ impl Manager {
         })
     }
 
-    /// Make `change` to the permissions each of the `stopped` agents, chats
-    /// and waiting launches was given, once none of them is refused, for
+    /// Make `change` to the permissions each of the stopped agents, saved
+    /// chats and waiting launches `targets` names was given, once none of them is refused, for
     /// the scoped process of the space `giver`, which gives only what it
     /// holds, or for the user.
     pub async fn change_stopped_permissions(
         &self,
-        stopped: Stopped<'_>,
+        targets: PermissionTargets<'_>,
         change: &crate::config::permissions::PermissionChange,
         giver: Option<&SpaceId>,
     ) -> Result<()> {
         let mut changed = Vec::new();
-        for agent in stopped.agents {
+        for agent in targets.agents {
             changed.push(self.changeable(agent, change, giver).await?);
         }
         let mut saved = Vec::new();
-        for chat in stopped.chats {
+        for chat in targets.chats {
             saved.push(self.changeable_chat(chat, change, giver).await?);
         }
         let mut launches = Vec::new();
-        for workspace in stopped.launches {
+        for workspace in targets.launches {
             launches.push(self.changeable_launch(workspace, change, giver).await?);
         }
         // The chats and the launches change together, refusing one restored,

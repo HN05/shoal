@@ -95,12 +95,12 @@ pub(super) async fn apply(
     let launches = (setups.iter())
         .filter(|setup| setup.launch.is_some())
         .map(|setup| SpaceSelector::id(&setup.workspace.id));
-    let stopped = Stopped {
+    let targets = PermissionTargets {
         agents: agents.collect(),
         chats: chats.collect(),
         launches: launches.collect(),
     };
-    request(ctx, stopped, change).await
+    request(ctx, targets, change).await
 }
 
 /// [`apply`] for the agent or last session `execution` of `workspace`.
@@ -114,31 +114,35 @@ pub(super) async fn apply_one(
         workspace: SpaceSelector::id(&workspace.id),
         execution: execution.clone(),
     };
-    let stopped = Stopped {
+    let targets = PermissionTargets {
         agents: vec![agent],
-        ..Stopped::default()
+        ..PermissionTargets::default()
     };
-    request(ctx, stopped, change).await
+    request(ctx, targets, change).await
 }
 
 /// What a change to the permissions given applies to, as the daemon names
 /// each.
 #[derive(Default)]
-struct Stopped {
+struct PermissionTargets {
     agents: Vec<SavedAgent>,
     chats: Vec<SpaceSelector>,
     /// The workspaces whose failed setup an agent waits for.
     launches: Vec<SpaceSelector>,
 }
 
-/// Have the daemon make `change`, when given, for the `stopped` agents,
+/// Have the daemon make `change`, when given, for the `targets` agents,
 /// chats and waiting launches.
-async fn request(ctx: &Context, stopped: Stopped, change: Option<&PermissionChange>) -> Result<()> {
-    let Stopped {
+async fn request(
+    ctx: &Context,
+    targets: PermissionTargets,
+    change: Option<&PermissionChange>,
+) -> Result<()> {
+    let PermissionTargets {
         agents,
         chats,
         launches,
-    } = stopped;
+    } = targets;
     match change {
         Some(change) if !(agents.is_empty() && chats.is_empty() && launches.is_empty()) => {
             let change = change.clone();

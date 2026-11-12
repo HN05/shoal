@@ -18,7 +18,7 @@ use crate::{
         notifications::NotificationKind,
         queued_starts::tests::STARTED,
         test_support::{global_config, manager, repository},
-        workspace::{Manager, Stopped, capacity::Activity},
+        workspace::{Manager, PermissionTargets, capacity::Activity},
         workspace_files::Attacher,
     },
     model::{QueueAdmission, QueueEntry, QueueRequest, Repository, Workspace},
@@ -1589,13 +1589,13 @@ async fn a_launch_waiting_for_setup_takes_a_permission_change() {
         serde_json::from_value::<PermissionsConfig>(plan["narrowing"].clone()).unwrap_or_default()
     };
     let change_for = async |launches: &[SpaceSelector]| {
-        let stopped = Stopped {
+        let targets = PermissionTargets {
             agents: &[],
             chats: &[],
             launches,
         };
         manager
-            .change_stopped_permissions(stopped, &change, None)
+            .change_stopped_permissions(targets, &change, None)
             .await
     };
 

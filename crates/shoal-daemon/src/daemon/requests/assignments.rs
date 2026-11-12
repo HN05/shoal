@@ -6,7 +6,7 @@ use anyhow::Result;
 use super::super::{
     answer::Answer,
     scope::{Caller, Scoped},
-    workspace::{Manager, Stopped},
+    workspace::{Manager, PermissionTargets},
 };
 use crate::client::space_names::SpaceSelector;
 use crate::protocol::{AssignmentMethod, Body};
@@ -31,12 +31,12 @@ pub(super) async fn handle(
             change,
         } => {
             let giver = caller.map(|caller| &caller.space_id);
-            let stopped = Stopped {
+            let targets = PermissionTargets {
                 agents: &agents,
                 chats: &chats,
                 launches: &launches,
             };
-            (manager.change_stopped_permissions(stopped, &change, giver)).await?;
+            (manager.change_stopped_permissions(targets, &change, giver)).await?;
             Body::Ok
         }
         AssignmentMethod::MarkReady { space, selection } => {

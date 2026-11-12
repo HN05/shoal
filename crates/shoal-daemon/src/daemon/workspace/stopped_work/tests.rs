@@ -3,7 +3,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::{PermissionChange, PermissionsConfig},
     daemon::test_support::{chat, manager, repository},
-    daemon::workspace::Stopped,
+    daemon::workspace::PermissionTargets,
     execution::{
         TrackedAgent,
         recovery::{LastSession, LastSessionExt},
@@ -12,8 +12,8 @@ use crate::{
 };
 
 /// The stopped `agents` and `chats`, without waiting launches.
-fn stopped_of<'a>(agents: &'a [SavedAgent], chats: &'a [SpaceSelector]) -> Stopped<'a> {
-    Stopped {
+fn stopped_of<'a>(agents: &'a [SavedAgent], chats: &'a [SpaceSelector]) -> PermissionTargets<'a> {
+    PermissionTargets {
         agents,
         chats,
         launches: &[],
