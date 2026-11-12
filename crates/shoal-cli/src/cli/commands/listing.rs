@@ -1,5 +1,6 @@
 //! Which workspaces, chats and queued agents `shoal list` shows.
 use crate::client::repository_ids::RepositoryId;
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 
 use crate::{
@@ -46,12 +47,18 @@ impl ListFilter {
             && shown.iter().any(|status| self.keeps_status(*status))
     }
 
-    /// An agent queued in a workspace gives the workspace its status, which
-    /// [`Self::keeps_workspace`] filters; one that opens a new workspace is
-    /// kept by its own.
     pub(super) fn keeps_entry(&self, entry: &QueueEntry) -> bool {
         self.keeps_repository(&entry.repository_id)
-            && (entry.workspace().is_some() || self.keeps_status(ListStatus::of_entry(entry)))
+            && self.keeps_status(ListStatus::of_entry(entry))
+    }
+
+    /// An agent queued in one of the `listed` workspaces, whose row names
+    /// it, or one the filters keep by its own status, which lists in a row
+    /// of its own: an agent of a new workspace, or of one outside the
+    /// caller's scope, since every caller sees every entry.
+    pub(super) fn keeps_listed_entry(&self, entry: &QueueEntry, listed: &[Workspace]) -> bool {
+        let in_listed = |workspace: &SpaceId| listed.iter().any(|w| &w.id == workspace);
+        entry.workspace().is_some_and(in_listed) || self.keeps_entry(entry)
     }
 
     /// A chat without a repository is in none, which a repository filter

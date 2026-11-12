@@ -13,7 +13,7 @@ use crate::config::modes::ModeName;
 use crate::model::{Chat, QueueEntry, Workspace};
 
 /// `workspace_rows` for workspaces, the running and stopped chats and the
-/// agents queued to start in new workspaces in one tree: the spaces whose
+/// agents queued to start in a workspace without a row in one tree: the spaces whose
 /// parent is not listed, each followed by the spaces below it, indented, and
 /// spaces under one parent by their status, then their number. A chat row
 /// names the chat, its status and its agent, and a queued agent's row what
@@ -38,7 +38,8 @@ pub fn workspace_tree_rows(
         .collect()
 }
 
-/// A listed space, or an agent queued to start in a new one.
+/// A listed space, or an agent queued to start in a workspace without a
+/// row: a new one, or one the list leaves out.
 #[derive(Clone, Copy)]
 enum Listed<'a> {
     Workspace(&'a Workspace),
@@ -47,7 +48,7 @@ enum Listed<'a> {
 }
 
 impl<'a> Listed<'a> {
-    /// The space's ID; a queued agent's workspace has none yet.
+    /// The space's ID; a queued agent's row stands for none.
     fn id(&self) -> Option<&'a SpaceId> {
         match self {
             Self::Workspace(workspace) => Some(&workspace.id),
@@ -85,8 +86,8 @@ impl<'a> Listed<'a> {
 /// Listed spaces arranged under their listed parents.
 struct SpaceTree<'a> {
     /// Every listed space with its status, in the order lists show them:
-    /// queued agents' new workspaces, which have no number, after the
-    /// numbered spaces of their status.
+    /// queued agents, whose rows have no number, after the numbered spaces
+    /// of their status.
     spaces: Vec<(Listed<'a>, ListStatus)>,
     statuses: &'a Statuses,
     palette: Palette,
@@ -99,11 +100,12 @@ impl<'a> SpaceTree<'a> {
         statuses: &'a Statuses,
         palette: Palette,
     ) -> Self {
+        let listed: HashSet<&SpaceId> = workspaces.iter().map(|workspace| &workspace.id).collect();
         let workspaces = (workspaces.iter())
             .map(|workspace| (Listed::Workspace(workspace), statuses.of(workspace)));
         let chats = (chats.iter()).map(|chat| (Listed::Chat(chat), ListStatus::of_chat(chat)));
         let queued = (statuses.queued.iter())
-            .filter(|entry| entry.workspace().is_none())
+            .filter(|entry| entry.workspace().is_none_or(|id| !listed.contains(id)))
             .map(|entry| (Listed::Queued(entry), ListStatus::of_entry(entry)));
         let mut spaces: Vec<_> = workspaces.chain(chats).chain(queued).collect();
         spaces.sort_by_key(|(space, status)| (*status, space.number().is_none(), space.number()));
@@ -172,8 +174,8 @@ fn tree_workspace_row(
     )
 }
 
-/// The row of an agent queued to start in a new workspace: the workspace's
-/// name, the agent's mode, its place in the queue, and what it starts.
+/// The row of an agent queued to start in a workspace without a row: the
+/// workspace's name, the agent's mode, its place in the queue, and what it starts.
 fn queued_row(
     entry: &QueueEntry,
     status: ListStatus,
