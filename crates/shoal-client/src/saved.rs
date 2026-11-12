@@ -1,5 +1,6 @@
 //! What a workspace saved for `shoal resume` when its agents and commands
-//! stopped, which the daemon reads from its state.
+//! stopped, which the daemon reads from its state, and how a resume
+//! restores it.
 use crate::execution_ids::ExecutionId;
 use std::path::PathBuf;
 
@@ -35,6 +36,42 @@ pub struct Saved {
     pub sessions: Vec<SavedSession>,
     /// The stopped commands, by execution ID.
     pub commands: Vec<SavedCommand>,
+}
+
+/// How a resume starts the restores it does not run in a terminal of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Queuing {
+    /// Queued as the limits allow, except a workspace's last session, or
+    /// for `now` started by the resuming process where each stopped or in
+    /// the background.
+    Here { now: bool },
+    /// Queued for the daemon to start, which a process without a terminal
+    /// needs, at once regardless of the limits for `now`.
+    Daemon { now: bool },
+}
+
+impl Queuing {
+    /// How a process starts restores: one without a terminal, `on_terminal`
+    /// false, has none to start them beside.
+    pub fn of(on_terminal: bool, now: bool) -> Self {
+        match on_terminal {
+            true => Self::Here { now },
+            false => Self::Daemon { now },
+        }
+    }
+}
+
+/// How a resume that starts restores as a [`Queuing`] says restores one
+/// workspace's saved work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Restore {
+    /// Continue its last session at once where it stopped or in the
+    /// background, from the resuming process.
+    Continue,
+    /// Queue the restore of each agent and last session with
+    /// [`crate::queue::restore`], started at once regardless of the limits
+    /// when `now`.
+    Queue { now: bool },
 }
 
 /// A stopped agent or the last session of one that exited.
@@ -130,9 +167,28 @@ impl Saved {
         self.agents.retain(|agent| !agent.waits_in_wrapper);
     }
 
+    /// How a resume that starts restores as `queuing` says restores this
+    /// work. Without stopped agents, a last session continues at once, as
+    /// resuming the workspace by itself does not wait for a slot it never
+    /// held: from a process with a terminal where it stopped or in the
+    /// background, otherwise through the queue, started now.
+    pub fn restore(&self, queuing: Queuing) -> Restore {
+        let last_session = self.agents.is_empty() && !self.sessions.is_empty();
+        match queuing {
+            Queuing::Here { .. } if last_session => Restore::Continue,
+            Queuing::Here { .. } => Restore::Queue { now: false },
+            Queuing::Daemon { now } => Restore::Queue {
+                now: now || last_session,
+            },
+        }
+    }
+
     /// Whether an agent or last session restores outside a waiting wrapper,
     /// receiving the stopped commands; a wrapper's restore receives none.
     pub fn restores_outside_wrappers(&self) -> bool {
         (self.agents.iter().chain(&self.sessions)).any(|session| !session.waits_in_wrapper)
     }
 }
+
+#[cfg(test)]
+mod tests;

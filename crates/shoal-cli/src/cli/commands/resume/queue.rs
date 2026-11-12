@@ -8,6 +8,7 @@ use crate::client::output::{
     batch::Failure,
     resume::{Queued, RestoredChat},
 };
+use crate::client::saved::{Queuing, Restore};
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -18,29 +19,6 @@ use crate::{
     protocol::ConfigTarget,
     terminal,
 };
-
-/// How a resume starts the restores it does not run in this terminal.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum Queuing {
-    /// Queued as the limits allow, except a workspace's last session, or
-    /// for `now` started by this process where each stopped or in the
-    /// background.
-    Here { now: bool },
-    /// Queued for the daemon to start, which a process without a terminal
-    /// needs, at once regardless of the limits for `now`.
-    Daemon { now: bool },
-}
-
-impl Queuing {
-    /// How a process with `ctx` starts restores: one without a terminal has
-    /// none to start them beside.
-    pub(super) fn of(ctx: &Context, now: bool) -> Self {
-        match ctx.on_terminal() {
-            true => Self::Here { now },
-            false => Self::Daemon { now },
-        }
-    }
-}
 
 /// Queue the restores of the stopped agents and last sessions of the
 /// `selected` workspaces below this process's, only `execution`'s when
@@ -117,12 +95,8 @@ async fn stopped_agents(
     Ok((workspace, saved))
 }
 
-/// Queue the restores of `workspace`'s stopped agents, only `execution`'s
-/// when given, to start as `queuing` says, making `change` when given.
-/// Without stopped agents, a last session continues at once, as resuming
-/// the workspace by itself does not wait for a slot it never held: where it
-/// stopped or in the background, or for a noninteractive process through
-/// the queue, started now.
+/// Restore `workspace`'s stopped agents, only `execution`'s when given, as
+/// [`Saved::restore`] decides for `queuing`, making `change` when given.
 pub(super) async fn queue_workspace(
     ctx: &Context,
     workspace: SpaceSelector,
@@ -141,14 +115,12 @@ pub(super) async fn queue_workspace(
         !saved.is_empty(),
         "no stopped agents or commands for this workspace"
     );
-    let last_session = saved.agents.is_empty() && !saved.sessions.is_empty();
-    let now = match queuing {
-        Queuing::Here { .. } if last_session => {
+    let now = match saved.restore(queuing) {
+        Restore::Continue => {
             return super::workspace::continue_last_session(ctx, &workspace, saved, false, change)
                 .await;
         }
-        Queuing::Here { .. } => false,
-        Queuing::Daemon { now } => now || last_session,
+        Restore::Queue { now } => now,
     };
     let stopped = vec![(workspace, saved)];
     if matches!(queuing, Queuing::Daemon { .. }) {

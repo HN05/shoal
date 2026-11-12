@@ -5,13 +5,13 @@
 //! `--discard` forgets the stopped work instead.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::Resumed;
+use crate::client::saved::Queuing;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, commands::turns::Continuation, context::Context},
     config::permissions::PermissionChange,
 };
 use anyhow::{Result, ensure};
-use queue::Queuing;
 use targets::Selected;
 
 /// How `shoal resume` restores the spaces it selects.
@@ -73,7 +73,7 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
     if scoped && !discard {
         return queue::queue_below(ctx, selected, execution, change).await;
     }
-    let queuing = Queuing::of(ctx, now);
+    let queuing = Queuing::of(ctx.on_terminal(), now);
     match (selected.chats.as_slice(), selected.workspaces.as_deref()) {
         ([], Some([workspace])) if discard => {
             discard::discard_work(ctx, workspace.clone(), execution).await
