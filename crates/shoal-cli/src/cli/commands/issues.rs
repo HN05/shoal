@@ -204,11 +204,7 @@ pub(super) async fn item_repository(
             }
         }
         None if let Some(ItemInput::Url(item)) = input => {
-            ensure!(
-                item.kind() == kind.into(),
-                "{item} is not {}",
-                LinkKind::from(kind).noun()
-            );
+            item.of_kind(kind.into())?;
             let forge = item.repository().clone();
             registered_remote(ctx, &mut repos, forge, retry)
                 .await?

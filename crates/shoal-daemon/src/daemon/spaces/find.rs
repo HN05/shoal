@@ -42,7 +42,7 @@ impl Manager {
         let label = kind.noun();
         let (wanted, number) = match input {
             ItemInput::Url(item) => {
-                ensure!(item.kind() == kind, "{item} is not a {label}");
+                item.of_kind(kind)?;
                 (Some(item.repository().clone()), item.number().get())
             }
             ItemInput::Number(number) => (None, *number),

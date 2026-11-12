@@ -80,7 +80,7 @@ impl ItemRef {
                 Ok(Self::new(repository.clone(), kind, *number, url))
             }
             ItemInput::Url(item) => {
-                ensure!(item.kind() == kind, "{item} is not {}", article(kind));
+                item.of_kind(kind)?;
                 item.belongs_to(repository)?;
                 Ok(item.clone())
             }
@@ -146,6 +146,12 @@ impl ItemRef {
 
     pub fn url(&self) -> &str {
         &self.0.url
+    }
+
+    /// Refuse it unless it is an item of `kind`.
+    pub fn of_kind(&self, kind: LinkKind) -> Result<()> {
+        ensure!(self.kind() == kind, "{self} is not {}", article(kind));
+        Ok(())
     }
 
     /// Refuse it unless it is an item of `repository`, as one recorded
