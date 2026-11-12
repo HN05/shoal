@@ -2114,7 +2114,7 @@ were assigned it, and for a CI run its queued jobs and those of its workflow
 on the default branch; a workspace's children; the parent of a child with an
 open question; the workspace a stacked one builds on; and the spaces holding a
 lease another space queues for. A chat passes its children only a priority
-set on it, so they compete with every other worker. A CI job ranks with the
+set on it or passed down to it, so they compete with every other worker. A CI job ranks with the
 highest of the spaces its run links, taking its priority even when lower, and
 a review with the workspace it reviews. `shoal queue` shows each waiting
 entry's priority and tier, and for each it took from waiting work, that work

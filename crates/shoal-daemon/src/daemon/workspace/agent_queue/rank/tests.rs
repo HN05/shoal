@@ -422,6 +422,27 @@ fn a_chat_passes_its_children_only_a_priority_set_on_it() {
 }
 
 #[test]
+fn a_chat_passes_on_a_priority_its_parent_passed_it() {
+    let mut snapshot = snapshot();
+    for (id, created) in [("top", 1), ("sub", 2), ("worker", 3)] {
+        space(&mut snapshot, id, Tier::New, created);
+    }
+    prioritize(&mut snapshot, "top", Priority::URGENT);
+    for (parent, child) in [("top", "sub"), ("sub", "worker")] {
+        snapshot.edges.push(Edge {
+            waiting: Node::Space(parent.into()),
+            on: Node::Space(child.into()),
+            dependency: Dependency::Parent,
+            carries: Carries::SetPriority,
+        });
+    }
+    entry(&mut snapshot, "worker", restore("worker"));
+    let worker = rank_of(&snapshot, "worker");
+    assert_eq!(worker.priority, Priority::URGENT);
+    assert_eq!(worker.priority_from, inherited("#sub", Dependency::Parent));
+}
+
+#[test]
 fn a_job_takes_the_priority_of_the_space_it_serves_even_when_lower() {
     let mut snapshot = snapshot();
     space(&mut snapshot, "unwanted", Tier::New, 1);

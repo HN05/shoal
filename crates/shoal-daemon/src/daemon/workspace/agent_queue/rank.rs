@@ -109,8 +109,8 @@ pub(crate) struct Edge {
 pub(crate) enum Carries {
     /// Its priority and tier, its own or inherited.
     Rank,
-    /// Only a priority set on its space, as a chat passes to its children,
-    /// which compete with every other worker.
+    /// Only a priority set on its space or passed down to it, as a chat
+    /// passes to its children, which compete with every other worker.
     SetPriority,
 }
 
@@ -215,10 +215,7 @@ fn carried(edge: &Edge, standing: &Standing, snapshot: &Snapshot) -> Option<Queu
             })
         }
         Carries::SetPriority => {
-            let Node::Space(id) = &edge.waiting else {
-                return None;
-            };
-            let priority = snapshot.spaces.get(id)?.priority?;
+            let priority = passed_priority(&edge.waiting, standing, snapshot)?;
             Some(QueueRank {
                 priority,
                 priority_from: from(),
@@ -227,6 +224,19 @@ fn carried(edge: &Edge, standing: &Standing, snapshot: &Snapshot) -> Option<Queu
             })
         }
     }
+}
+
+/// The priority a chat passes its children: the higher of one set on it
+/// and what its own parent passes it.
+fn passed_priority(chat: &Node, standing: &Standing, snapshot: &Snapshot) -> Option<Priority> {
+    let Node::Space(id) = chat else {
+        return None;
+    };
+    let set = snapshot.spaces.get(id).and_then(|space| space.priority);
+    let from_parent = (snapshot.edges.iter())
+        .find(|edge| edge.on == *chat && edge.dependency == Dependency::Parent)
+        .and_then(|edge| carried(edge, standing, snapshot));
+    set.max(from_parent.map(|rank| rank.priority))
 }
 
 /// Raise `held` to each part of `by` that is higher, with what that came

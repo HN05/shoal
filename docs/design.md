@@ -1597,7 +1597,7 @@ higher-priority work keeps coming, as the user chose. Priority and tier each flo
 waiting work to what it waits on:
 blockers, a workspace parent to its children, a child with an open question to
 its parent, a stacked workspace to its base, and a space queued for a lease to
-its holders. A chat parent passes on only a priority set on it, so an
+its holders. A chat parent passes on only a priority set on it or passed down to it, so an
 orchestrator's children compete with every other worker. CI jobs and reviews have no rank of their
 own beyond a job's tier: each takes the rank of the spaces it serves and goes
 ahead of their agents, which wait on it. Within a tier, plan steps done, then
