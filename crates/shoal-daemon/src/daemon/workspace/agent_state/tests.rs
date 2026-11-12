@@ -186,6 +186,40 @@ async fn turn_generations_count_turn_starts_and_continue_after_the_state_goes() 
 }
 
 #[tokio::test]
+async fn an_interrupt_stays_with_the_execution_whose_turn_it_ended() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&manager, &temp).await;
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            for execution in ["first", "second"] {
+                db.execute(
+                    "INSERT INTO executions(id,workspace_id,state) VALUES (?1,?2,'running')",
+                    rusqlite::params![execution, id],
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let selected = SpaceSelector::id(&workspace.id);
+    (manager.end_interrupted_turn(&selected, Some("first".into())))
+        .await
+        .unwrap();
+    // A report that says nothing of an interrupt, from another execution.
+    (manager.set_agent_state(&selected, AgentState::Idle, Some("second".into()), None))
+        .await
+        .unwrap();
+    let interrupted = manager
+        .store
+        .run(|db| interrupted(db, &"second".into()))
+        .await
+        .unwrap();
+    assert!(!interrupted);
+}
+
+#[tokio::test]
 async fn workspaces_show_no_state_while_the_reporting_execution_is_unknown() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&manager, &temp).await;

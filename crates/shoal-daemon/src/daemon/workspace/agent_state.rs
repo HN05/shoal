@@ -694,7 +694,8 @@ fn takes_report(db: &Connection, id: &SpaceId) -> Result<bool> {
 /// start: an idle agent's prompt cache expires as a turn just ended says,
 /// keeps its expiry while the same execution stays idle, and has none
 /// otherwise. A report that `starts` a turn counts it in the space's turn
-/// generation, which a new state continues from the space's last count.
+/// generation, which a new state continues from the space's last count. An
+/// interrupt stays with the execution whose turn it ended.
 /// Whether anything changed.
 fn write_state(db: &Connection, report: &Report, starts: bool) -> Result<bool> {
     let changed = db.execute(
@@ -713,7 +714,8 @@ fn write_state(db: &Connection, report: &Report, starts: bool) -> Result<bool> {
                      THEN prompt_cache_expires_at
              END,
              turn=turn+?6,
-             interrupted=COALESCE(?7,interrupted),
+             interrupted=CASE WHEN execution_id IS excluded.execution_id
+                 THEN COALESCE(?7,interrupted) ELSE COALESCE(?7,0) END,
              state=excluded.state,execution_id=excluded.execution_id
          WHERE state IS NOT excluded.state
              OR execution_id IS NOT excluded.execution_id
