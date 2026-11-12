@@ -91,20 +91,20 @@ impl Manager {
         self.named_forge(own, repository).await
     }
 
-    /// The item `item` names where `place` reads, or the space's linked
-    /// one of `kind`.
+    /// The item `item` names in `forge`, the repository `place` reads in,
+    /// or the space's linked one of `kind`.
     pub(in crate::daemon::links) async fn place_item(
         &self,
         item: Option<ItemInput>,
         place: &ReadPlace,
+        forge: &ForgeRepo,
         kind: ItemKind,
     ) -> Result<ItemRef> {
-        let forge = self.read_place_forge(place).await?;
         let space = match place {
             ReadPlace::Space(space) => Some(space.id()),
             ReadPlace::Checkout(_) => None,
         };
-        self.named_or_linked(item, space, &forge, kind).await
+        self.named_or_linked(item, space, forge, kind).await
     }
 }
 

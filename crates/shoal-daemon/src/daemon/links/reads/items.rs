@@ -176,8 +176,8 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Vec<Reviewer>> {
         let place = self.read_place(context).await?;
-        let pull = self.place_item(item, &place, ItemKind::Pr).await?;
         let forge = self.read_place_forge(&place).await?;
+        let pull = self.place_item(item, &place, &forge, ItemKind::Pr).await?;
         forge
             .reviewers(&self.read_account(caller), pull.pull()?)
             .await
@@ -194,8 +194,8 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Thread> {
         let place = self.read_place(context).await?;
-        let pull = self.place_item(item, &place, ItemKind::Pr).await?;
         let forge = self.read_place_forge(&place).await?;
+        let pull = self.place_item(item, &place, &forge, ItemKind::Pr).await?;
         forge.require(Capability::ResolveThreads)?;
         forge
             .thread(&self.read_account(caller), pull.pull()?, comment)
