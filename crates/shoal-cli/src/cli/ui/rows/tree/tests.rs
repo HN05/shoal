@@ -28,7 +28,7 @@ fn tree_rows_list_children_below_their_parent() {
         kind: crate::model::SpaceKind::Workspace,
         branch: Some("unlisted".into()),
     });
-    let rows = workspace_tree_rows(&workspaces, &[], &Statuses::default(), plain, None);
+    let rows = workspace_tree_rows(&workspaces, &[], &Statuses::default(), &[], plain, None);
     let expected = [
         "○ 1  orphan ",
         "○ 1  parent ",
@@ -60,7 +60,7 @@ fn a_ci_jobs_workspace_lists_under_the_workspace_its_run_links() {
         }))
         .unwrap(),
     ));
-    let rows = workspace_tree_rows(&[job, pull], &[], &Statuses::default(), plain, None);
+    let rows = workspace_tree_rows(&[job, pull], &[], &Statuses::default(), &[], plain, None);
     assert_eq!(rows.len(), 2);
     assert!(rows[0].starts_with("○ 1  pull "), "{rows:?}");
     assert!(rows[1].starts_with("○ 1  └ ci-rust-4 "), "{rows:?}");
@@ -98,7 +98,7 @@ fn spaces_under_one_parent_list_by_status_then_number() {
         numbered("busy-first", 4, true),
     ];
     workspaces[4].state = WorkspaceState::Failed;
-    let rows = workspace_tree_rows(&workspaces, &[], &Statuses::default(), plain, None);
+    let rows = workspace_tree_rows(&workspaces, &[], &Statuses::default(), &[], plain, None);
     let names: Vec<_> = (rows.iter())
         .map(|row| row.split("  ").nth(1).unwrap_or_default().trim())
         .collect();
@@ -142,7 +142,7 @@ fn a_queued_agent_shows_as_its_workspaces_status_or_its_own_row() {
             after_update,
         ],
     };
-    let rows = workspace_tree_rows(&workspaces, &[], &statuses, plain, None);
+    let rows = workspace_tree_rows(&workspaces, &[], &statuses, &[], plain, None);
     assert_eq!(
         rows,
         [
@@ -154,4 +154,28 @@ fn a_queued_agent_shows_as_its_workspaces_status_or_its_own_row() {
             "○ 1  idle       inactive",
         ]
     );
+}
+
+#[test]
+fn rows_name_the_repository_when_they_span_several() {
+    let plain = Palette::stdout(true);
+    let mut other = entry("other", Some(1), None);
+    other.repository_id = "b".into();
+    let workspaces = [workspace("a", "local", "local", WorkspaceState::Ready)];
+    let repositories = [("a".into(), "shoal".into()), ("b".into(), "docs".into())];
+    let rows = |queued| {
+        let statuses = Statuses {
+            stopped: HashSet::new(),
+            queued,
+        };
+        workspace_tree_rows(&workspaces, &[], &statuses, &repositories, plain, None)
+    };
+    assert_eq!(
+        rows(vec![other]),
+        [
+            "○    other  docs   queued (1)  Add onboarding",
+            "○ 1  local  shoal  inactive",
+        ]
+    );
+    assert_eq!(rows(Vec::new()), ["○ 1  local  inactive"]);
 }

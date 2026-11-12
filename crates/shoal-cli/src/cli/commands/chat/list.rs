@@ -18,6 +18,7 @@ pub(in crate::cli::commands) async fn list(ctx: &Context, filter: &ListFilter) -
         &[],
         &chats,
         &Default::default(),
+        &[],
         Palette::stdout(ctx.json),
         output::stdout_width(ctx.json),
     );
