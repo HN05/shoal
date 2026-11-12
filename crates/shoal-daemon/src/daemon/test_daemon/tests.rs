@@ -576,6 +576,16 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("Git branch"), "{error:#}");
+    // The CLI checks a given branch the same way before it opens a picker.
+    let check = |name: &str| WorkspaceMethod::CheckBranchName { name: name.into() };
+    connection::request::<()>(&agent, check("child"))
+        .await
+        .unwrap();
+    assert!(
+        connection::request::<()>(&agent, check("@{-1}"))
+            .await
+            .is_err()
+    );
     assert_eq!(code(inspect(&app, "child").await), ErrorCode::NotFound);
     // A mode only a file beside the global config defines is one.
     let paths = &daemon.manager.paths;

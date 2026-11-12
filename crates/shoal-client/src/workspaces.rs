@@ -87,6 +87,12 @@ pub async fn check_creation(daemon: &impl Daemon, planned: PlannedWorkspace) -> 
     request(daemon, method).await
 }
 
+/// Refuse `name` as a new workspace's branch unless it is a literal Git
+/// branch name.
+pub async fn check_branch_name(daemon: &impl Daemon, name: String) -> Result<()> {
+    request(daemon, WorkspaceMethod::CheckBranchName { name }).await
+}
+
 /// Refuse `blockers` that a launch in `repository` cannot wait for.
 pub async fn check_blockers(
     daemon: &impl Daemon,

@@ -161,6 +161,10 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
+        WorkspaceMethod::CheckBranchName { name } => {
+            crate::git::check_branch_name(None, &name).await?;
+            Body::Ok
+        }
         WorkspaceMethod::CheckBlockers {
             repository,
             blockers,
@@ -369,6 +373,7 @@ impl Scoped for WorkspaceMethod {
                 None
             }
             WorkspaceMethod::CheckBlockers { .. }
+            | WorkspaceMethod::CheckBranchName { .. }
             | WorkspaceMethod::LayeredConfig {
                 target: ConfigTarget::Global,
             } => None,

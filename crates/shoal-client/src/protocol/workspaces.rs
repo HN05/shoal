@@ -87,6 +87,11 @@ pub enum WorkspaceMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent: Option<SpaceSelector>,
     },
+    /// Refuse `name` as a new workspace's branch unless it is a literal Git
+    /// branch name, without creating anything.
+    CheckBranchName {
+        name: String,
+    },
     /// Refuse the `blockers` that a queued launch in `repository`
     /// could not wait for, without queuing anything.
     CheckBlockers {
