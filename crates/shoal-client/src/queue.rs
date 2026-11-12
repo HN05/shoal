@@ -97,7 +97,8 @@ pub async fn restore(
     request(daemon, method).await
 }
 
-/// Keeps a starting entry's slot while it lives, until its agent registers.
+/// Keeps a starting entry's slot, or a waiting entry out of admission for
+/// its holder to start, while it lives, until the entry leaves the queue.
 /// It reconnects after a daemon restart.
 pub struct Hold(tokio::task::JoinHandle<()>);
 
