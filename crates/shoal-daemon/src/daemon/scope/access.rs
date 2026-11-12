@@ -310,7 +310,7 @@ impl Manager {
             let reaches = |space: &SpaceId| {
                 (reached.as_ref()).is_none_or(|reached| reached.iter().any(|id| id == space))
             };
-            entries.retain(|entry| match entry.workspace() {
+            entries.retain(|entry| match entry.space() {
                 Some(workspace) => workspace != &caller.space_id && reaches(workspace),
                 None => entry.queued_by.as_ref().is_some_and(reaches),
             });

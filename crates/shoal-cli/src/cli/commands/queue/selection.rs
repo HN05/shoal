@@ -58,7 +58,7 @@ async fn named(ctx: &Context, selector: String) -> Result<String> {
         return Ok(selector);
     };
     let restore = entries.iter().find(|entry| {
-        entry.kind == QueueKind::Restore && entry.workspace_id.as_ref() == Some(space.id())
+        entry.kind == QueueKind::Restore && entry.space_id.as_ref() == Some(space.id())
     });
     Ok(restore.map_or(selector, |entry| entry.id.to_string()))
 }

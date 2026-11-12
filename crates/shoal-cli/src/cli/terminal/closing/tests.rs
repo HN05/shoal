@@ -18,7 +18,7 @@ async fn kept_completion_waits_for_running_and_unresolved_executions() {
             mode: None,
             model: Default::default(),
             id: "agent".into(),
-            workspace_id: "workspace".into(),
+            space_id: "workspace".into(),
             state,
             wrapper: None,
             child: None,

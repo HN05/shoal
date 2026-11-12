@@ -53,7 +53,7 @@ pub(in crate::cli::commands) async fn start_queued(
     ctx: &Context,
     entry: &QueueEntry,
 ) -> Result<()> {
-    let (Some(workspace), Some(execution)) = (&entry.workspace_id, &entry.execution) else {
+    let (Some(workspace), Some(execution)) = (&entry.space_id, &entry.execution) else {
         anyhow::bail!("the queued restore names no stopped agent");
     };
     let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace))

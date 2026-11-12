@@ -145,7 +145,7 @@ async fn a_start_reopening_a_workspace_that_gained_an_agent_is_refused() {
     assert!(refused.is::<HasAgent>(), "{refused:#}");
     let entries = manager.queue_entries().await.unwrap();
     assert!(
-        entries.iter().all(|entry| entry.workspace_id.is_none()),
+        entries.iter().all(|entry| entry.space_id.is_none()),
         "{entries:?}"
     );
 }

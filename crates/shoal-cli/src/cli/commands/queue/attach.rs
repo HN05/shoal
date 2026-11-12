@@ -76,12 +76,12 @@ async fn agent_terminal_session(
     execution: Option<&ExecutionId>,
 ) -> Result<(SpaceId, String)> {
     let deadline = tokio::time::Instant::now() + WAIT;
-    let mut workspace = entry.workspace().cloned();
+    let mut workspace = entry.space().cloned();
     loop {
         let current = (queued_agents::entries(ctx).await?)
             .into_iter()
             .find(|queued| queued.id == entry.id);
-        if let Some(opened) = current.as_ref().and_then(QueueEntry::workspace) {
+        if let Some(opened) = current.as_ref().and_then(QueueEntry::space) {
             workspace = Some(opened.to_owned());
         }
         if workspace.is_none() && current.is_none() {

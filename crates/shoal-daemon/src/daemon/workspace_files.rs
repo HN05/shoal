@@ -227,7 +227,7 @@ impl Manager {
         Attacher::Agent {
             session: crate::execution::recovery::reported_session(
                 &self.paths,
-                &agent.workspace_id,
+                &agent.space_id,
                 &agent.execution,
             ),
             agent: agent.name,

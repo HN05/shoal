@@ -905,7 +905,7 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
     let entry = admission.entry.unwrap();
     assert!(!admission.start);
     assert_eq!(entry.opens.as_ref(), Some(&child.id));
-    assert_eq!(entry.workspace_id, None);
+    assert_eq!(entry.space_id, None);
     assert_eq!(entry.state, QueueState::Starting);
     assert!(started(&entry.id));
     // A launch that has yet to start keeps its workspace from cleanup.
@@ -1653,10 +1653,7 @@ async fn a_start_gives_its_queue_entry_the_workspace_before_its_setup_runs() {
     let _worker = crate::daemon::operations::fake::take(&started.operation);
     let entries = manager.queue_entries().await.unwrap();
     assert_eq!(entries.len(), 1, "{entries:?}");
-    assert_eq!(
-        entries[0].workspace_id.as_ref(),
-        Some(&started.workspace.id)
-    );
+    assert_eq!(entries[0].space_id.as_ref(), Some(&started.workspace.id));
 }
 
 #[tokio::test]

@@ -58,7 +58,7 @@ impl ListFilter {
     /// caller's scope, since every caller sees every entry.
     pub(super) fn keeps_listed_entry(&self, entry: &QueueEntry, listed: &[Workspace]) -> bool {
         let in_listed = |workspace: &SpaceId| listed.iter().any(|w| &w.id == workspace);
-        entry.workspace().is_some_and(in_listed) || self.keeps_entry(entry)
+        entry.space().is_some_and(in_listed) || self.keeps_entry(entry)
     }
 
     /// A chat without a repository is in none, which a repository filter

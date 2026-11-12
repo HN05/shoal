@@ -104,7 +104,7 @@ pub(super) async fn load(manager: &Manager, workspaces: &[Workspace]) -> Result<
 async fn queued(manager: &Manager) -> Result<HashMap<SpaceId, QueueEntry>> {
     let mut queued = HashMap::new();
     for entry in manager.queue_entries().await? {
-        if let Some(workspace) = entry.workspace() {
+        if let Some(workspace) = entry.space() {
             queued.entry(workspace.to_owned()).or_insert(entry);
         }
     }

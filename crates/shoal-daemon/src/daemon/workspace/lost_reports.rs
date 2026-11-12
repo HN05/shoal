@@ -201,7 +201,7 @@ impl Manager {
             .store
             .run(move |db| store::find_execution(db, &query))
             .await?;
-        let Some(found) = found.filter(|found| found.workspace_id == *space) else {
+        let Some(found) = found.filter(|found| found.space_id == *space) else {
             return Ok(Reporter::Gone);
         };
         // A failed turn's retry and the prompt cache's lifetime read the

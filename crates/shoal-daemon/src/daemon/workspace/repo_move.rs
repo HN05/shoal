@@ -657,7 +657,7 @@ async fn execution_processes(
     for execution in executions {
         let workspace = workspaces
             .iter()
-            .find(|workspace| workspace.id == execution.workspace_id)
+            .find(|workspace| workspace.id == execution.space_id)
             .context("an execution's workspace is missing")?;
         let processes =
             process::execution::Processes::inspect(execution, &workspace.path, &scan).await?;

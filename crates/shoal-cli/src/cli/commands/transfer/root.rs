@@ -92,7 +92,7 @@ async fn stop_running(
     confirmed: bool,
     stopped: &mut Stopped,
 ) -> Result<()> {
-    let workspaces: BTreeSet<_> = executions.iter().map(|e| &e.workspace_id).collect();
+    let workspaces: BTreeSet<_> = executions.iter().map(|e| &e.space_id).collect();
     for workspace in workspaces {
         // A CI job ends with the other jobs of its run, which a stop before
         // cancelled, and its workspace goes with it.
@@ -288,8 +288,8 @@ fn plan(moves: &RepositoryMoves, workspaces: &[Workspace]) -> String {
     for execution in &moves.executions {
         let workspace = workspaces
             .iter()
-            .find(|workspace| workspace.id == execution.workspace_id)
-            .map_or(execution.workspace_id.as_str(), |workspace| &workspace.name);
+            .find(|workspace| workspace.id == execution.space_id)
+            .map_or(execution.space_id.as_str(), |workspace| &workspace.name);
         let what = execution
             .agent
             .as_ref()

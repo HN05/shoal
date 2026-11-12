@@ -120,7 +120,7 @@ impl<'a> SpaceTree<'a> {
             .map(|workspace| (Listed::Workspace(workspace), statuses.of(workspace)));
         let chats = (chats.iter()).map(|chat| (Listed::Chat(chat), ListStatus::of_chat(chat)));
         let queued = (statuses.queued.iter())
-            .filter(|entry| entry.workspace().is_none_or(|id| !listed.contains(id)))
+            .filter(|entry| entry.space().is_none_or(|id| !listed.contains(id)))
             .map(|entry| (Listed::Queued(entry), ListStatus::of_entry(entry)));
         let mut spaces: Vec<_> = workspaces.chain(chats).chain(queued).collect();
         spaces.sort_by_key(|(space, status)| (*status, space.number().is_none(), space.number()));

@@ -481,8 +481,7 @@ impl Manager {
             pids(&after.unreadable)
         );
         if !after.launch_recorded {
-            self.ensure_directory_unused(&execution.workspace_id)
-                .await?;
+            self.ensure_directory_unused(&execution.space_id).await?;
         }
         self.forget_execution(&execution.id).await
     }

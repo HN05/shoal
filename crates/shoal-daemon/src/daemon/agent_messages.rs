@@ -342,7 +342,7 @@ impl Manager {
     async fn agents(&self) -> Result<WorkspaceAgents> {
         Ok(WorkspaceAgents {
             running: self.running_agent_workspaces().await,
-            recorded: self.recorded_agent_workspaces().await?,
+            recorded: self.recorded_agent_spaces().await?,
             queued: self.queued_agent_workspaces().await?,
         })
     }

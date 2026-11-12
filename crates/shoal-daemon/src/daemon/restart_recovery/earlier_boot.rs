@@ -36,7 +36,7 @@ impl Manager {
     async fn keep_unsaved_session(&self, execution: &Execution) -> Result<()> {
         // Its record, or the last session an interrupted pass kept, which
         // keeping it again would replace once its reported session is gone.
-        if saved_path(&self.paths, &execution.workspace_id, &execution.id).exists() {
+        if saved_path(&self.paths, &execution.space_id, &execution.id).exists() {
             return Ok(());
         }
         let id = execution.id.clone();
@@ -53,7 +53,7 @@ impl Manager {
             mode: (execution.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT),
             narrowing: execution.narrowing,
         };
-        let workspace = self.workspace_by_id(&execution.workspace_id).await?;
+        let workspace = self.workspace_by_id(&execution.space_id).await?;
         self.keep_agent_session(&workspace, &agent, &execution.id)
             .await
     }

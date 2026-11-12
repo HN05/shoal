@@ -140,7 +140,7 @@ impl Manager {
     /// stopped because its space was blocked, by name or URL; none for any
     /// other entry.
     async fn blocked_restore(&self, entry: &QueueEntry) -> Result<Option<Vec<String>>> {
-        let (Some(workspace), Some(execution)) = (&entry.workspace_id, &entry.execution) else {
+        let (Some(workspace), Some(execution)) = (&entry.space_id, &entry.execution) else {
             return Ok(None);
         };
         if !self.restore_waits_for_unblock(workspace, execution) {

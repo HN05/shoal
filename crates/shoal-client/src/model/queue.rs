@@ -38,8 +38,8 @@ pub struct QueueEntry {
     /// The 1-based place among waiting entries; `None` once starting.
     pub position: Option<usize>,
     pub created_at: crate::time::UnixTime,
-    /// The workspace a starting launch opened, or a restore's own.
-    pub workspace_id: Option<SpaceId>,
+    /// The space a starting launch opened, or a restore's own.
+    pub space_id: Option<SpaceId>,
     /// The stopped execution a restore restores.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution: Option<ExecutionId>,
@@ -159,9 +159,9 @@ pub struct QueuedJob {
 }
 
 impl QueueEntry {
-    /// The workspace the entry starts its agent in, once known.
-    pub fn workspace(&self) -> Option<&SpaceId> {
-        self.opens.as_ref().or(self.workspace_id.as_ref())
+    /// The space the entry starts its agent in, once known.
+    pub fn space(&self) -> Option<&SpaceId> {
+        self.opens.as_ref().or(self.space_id.as_ref())
     }
 }
 

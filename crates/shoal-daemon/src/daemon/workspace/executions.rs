@@ -782,7 +782,7 @@ impl Manager {
                     "UPDATE executions SET state=?2 WHERE id=?1",
                     params![request.execution, ExecutionState::Running],
                 )?;
-                Ok((execution.workspace_id, agent_execution, execution.narrowing))
+                Ok((execution.space_id, agent_execution, execution.narrowing))
             })
             .await
     }
@@ -845,7 +845,7 @@ impl Manager {
         execution: &Execution,
         scan: &process::Scan,
     ) -> Result<Processes> {
-        let workspace = self.workspace_by_id(&execution.workspace_id).await?;
+        let workspace = self.workspace_by_id(&execution.space_id).await?;
         Processes::inspect(execution, &workspace.path, scan).await
     }
 

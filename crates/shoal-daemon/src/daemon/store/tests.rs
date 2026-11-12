@@ -1561,7 +1561,7 @@ fn mappers_use_named_columns() -> Result<()> {
         EXECUTION_COLUMNS,
         execution,
         serde_json::json!({
-            "id": "execution", "workspace_id": "workspace", "state": "unknown",
+            "id": "execution", "space_id": "workspace", "state": "unknown",
             "wrapper": {"pid": 123, "birth": "wrapper"},
             "child": {"pid": 456, "birth": "child"}, "group_id": 456,
             "agent": "claude"

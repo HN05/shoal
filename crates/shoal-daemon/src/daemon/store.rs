@@ -536,7 +536,7 @@ const EXECUTION_COLUMNS: &str =
 fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
     Ok(Execution {
         id: row.get("id")?,
-        workspace_id: row.get("space_id")?,
+        space_id: row.get("space_id")?,
         state: row.get("state")?,
         wrapper: json_column(row, "wrapper")?,
         child: json_column(row, "child")?,
@@ -567,10 +567,11 @@ pub fn find_execution(db: &Connection, id: &ExecutionId) -> Result<Option<Execut
         .optional()?)
 }
 
-pub fn executions(db: &Connection, workspace_id: &SpaceId) -> Result<Vec<Execution>> {
+/// The executions of the space `space_id`.
+pub fn executions(db: &Connection, space_id: &SpaceId) -> Result<Vec<Execution>> {
     Ok(db
         .prepare(&executions_query())?
-        .query_map([workspace_id], execution)?
+        .query_map([space_id], execution)?
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
@@ -594,7 +595,7 @@ pub struct AgentExecution {
 }
 
 impl AgentExecution {
-    /// How much the execution says about its workspace's agent: one that
+    /// How much the execution says about its space's agent: one that
     /// runs, then one not known to, then a wrapper without one.
     fn weight(&self) -> u8 {
         match (self.state, self.started) {
@@ -605,8 +606,7 @@ impl AgentExecution {
     }
 }
 
-/// The agent execution saying most about each workspace's agent, by
-/// workspace ID.
+/// The agent execution saying most about each space's agent, by space ID.
 pub fn agent_executions(db: &mut Connection) -> Result<HashMap<SpaceId, AgentExecution>> {
     let mut agents: HashMap<SpaceId, AgentExecution> = HashMap::new();
     let mut statement = db.prepare(
@@ -621,11 +621,11 @@ pub fn agent_executions(db: &mut Connection) -> Result<HashMap<SpaceId, AgentExe
         Ok((row.get::<_, SpaceId>(0)?, execution))
     })?;
     for row in rows {
-        let (workspace, execution) = row?;
-        match agents.get(&workspace) {
+        let (space, execution) = row?;
+        match agents.get(&space) {
             Some(known) if known.weight() >= execution.weight() => {}
             _ => {
-                agents.insert(workspace, execution);
+                agents.insert(space, execution);
             }
         }
     }

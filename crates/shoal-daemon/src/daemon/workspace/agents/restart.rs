@@ -63,7 +63,7 @@ impl Manager {
                             stopped: agent.and(stops.get(&execution.id).cloned()),
                             restarted_from: renewal::earlier(renewals, &execution.id),
                             execution: execution.id,
-                            space_id: execution.workspace_id,
+                            space_id: execution.space_id,
                             origin: execution.origin,
                         })
                     })

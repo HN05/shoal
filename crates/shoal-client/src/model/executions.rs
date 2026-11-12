@@ -10,7 +10,8 @@ use std::path::PathBuf;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Execution {
     pub id: ExecutionId,
-    pub workspace_id: SpaceId,
+    /// The space it runs in, a workspace or a chat.
+    pub space_id: SpaceId,
     pub state: ExecutionState,
     pub wrapper: Option<Identity>,
     pub child: Option<Identity>,

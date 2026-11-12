@@ -847,5 +847,5 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
     fake::take(&started.operation).exit(1);
     let entries = daemon.manager.queue_entries().await.unwrap();
     let entry = entries.iter().find(|entry| entry.id == theirs.id).unwrap();
-    assert_eq!(entry.workspace_id, None, "{entry:?}");
+    assert_eq!(entry.space_id, None, "{entry:?}");
 }

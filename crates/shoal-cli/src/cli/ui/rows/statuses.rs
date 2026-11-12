@@ -44,7 +44,7 @@ impl Statuses {
     /// The agents queued to start in `workspace`, in queue order.
     pub(super) fn entries(&self, workspace: &Workspace) -> Vec<&QueueEntry> {
         (self.queued.iter())
-            .filter(|entry| entry.workspace() == Some(&workspace.id))
+            .filter(|entry| entry.space() == Some(&workspace.id))
             .collect()
     }
 

@@ -20,10 +20,7 @@ impl Manager {
             .running_agent_workspaces()
             .await
             .contains(&workspace.id)
-            || self
-                .recorded_agent_workspaces()
-                .await?
-                .contains(&workspace.id)
+            || self.recorded_agent_spaces().await?.contains(&workspace.id)
         {
             bail!(HasAgent(format!(
                 "workspace {space} already has a running agent; attach to it with `shoal attach {space}`, restart it with `shoal restart {space}`, or start a chat beside it with `-m chat`"

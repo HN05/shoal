@@ -159,7 +159,8 @@ pub(crate) const BLOCKED_REASON: &str = "its space is blocked";
 pub(crate) struct CallerAgent {
     pub(crate) execution: ExecutionId,
     pub(crate) name: crate::agent::Agent,
-    pub(crate) workspace_id: SpaceId,
+    /// The space its execution runs in.
+    pub(crate) space_id: SpaceId,
 }
 
 pub(crate) struct Agent {
@@ -831,7 +832,7 @@ impl Manager {
             .executions
             .with_agent(id, |agent| (agent.name.clone(), agent.workspace_id.clone()))
             .await;
-        let (name, workspace_id) = match tracked {
+        let (name, space_id) = match tracked {
             Some(tracked) => tracked,
             None => self.recorded_agent(id).await?,
         };
@@ -839,12 +840,12 @@ impl Manager {
             execution: id.to_owned(),
             // Named as `--agent` and recovery records name it.
             name: name.normalized(),
-            workspace_id,
+            space_id,
         })
     }
 
-    /// The agent and workspace the record of execution `id` names, if it
-    /// ran one.
+    /// The agent and space the record of execution `id` names, if it ran
+    /// one.
     async fn recorded_agent(&self, id: &ExecutionId) -> Option<(crate::agent::Agent, SpaceId)> {
         let execution = id.to_owned();
         let recorded = self
@@ -889,9 +890,9 @@ impl Manager {
         workspaces
     }
 
-    /// Workspaces with a recorded agent execution, connected or not, such as
+    /// Spaces with a recorded agent execution, connected or not, such as
     /// one whose wrapper waits to reattach after a daemon restart.
-    pub(crate) async fn recorded_agent_workspaces(&self) -> anyhow::Result<HashSet<SpaceId>> {
+    pub(crate) async fn recorded_agent_spaces(&self) -> anyhow::Result<HashSet<SpaceId>> {
         let agents = self
             .store
             .run(crate::daemon::store::agent_executions)
