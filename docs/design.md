@@ -1732,8 +1732,10 @@ checkout is never moved.
 Refining an issue before implementation is the plan mode's, which settles it with
 the user in a chat. `repo setup`
 likewise starts one agent, in the built-in `setup` mode in a workspace on the
-`shoal-setup` branch, which drafts the repository config and then asks the user
-whether to commit it, so it arrives as a reviewable commit that every clone
+`shoal-setup` branch. A setup agent asks the user about each setting before it
+writes it, reading the options from the configuration reference, since only the
+user knows which of the settings a project could use they want; it then asks
+whether to commit the repository config, so it arrives as a reviewable commit that every clone
 shares, or, for a repository that won't take that file or settings for one user,
 to save it as the local config in the repository directory's `.shoal/`. Every
 workspace agent already works in that repository directory, so one agent

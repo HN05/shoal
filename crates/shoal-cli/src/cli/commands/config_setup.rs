@@ -92,20 +92,13 @@ pub(in crate::cli::commands) fn topic(config: &Path) -> chat::Topic {
     }
 }
 
-/// What the setup agent of the global config `config` starts on: what the
-/// file holds and what it is based on.
+/// What the setup agent of the global config `config` starts on: which file
+/// it writes and how it saves it.
 fn subject(config: &Path) -> String {
     let config = config.display();
     format!(
         "Set up Shoal's global config, `{config}`, for this machine. Write only that \
-         file, never a repository's config: the `[machine]` settings that describe this \
-         machine, such as `load`, `max_agents`, `max_jobs`, `keep_awake`, the agents of \
-         each tool, `forges`, `git_profiles` and `simulators`, and the defaults every \
-         repository inherits, such as `agent.default`, `git_profile`, `cleanup`, `pr`, \
-         `merge`, `review` and `idle_stop`. Base them on the AI tools installed here, \
-         the forge hosts and Git identities of the registered repositories, which \
-         `shoal repo ls` lists, and those repositories' configs. When every repository \
-         repeats a setting, tell the user instead of moving it.\n\n\
+         file, never a repository's config.\n\n\
          Edit `{config}` in place and keep its comments: `shoal config set` is not \
          available to you. After `shoal config reload`, tell the user if the daemon \
          rejected the file."

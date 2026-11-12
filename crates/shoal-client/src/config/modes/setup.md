@@ -1,6 +1,5 @@
-Study how the project or this machine is used before you write its config, and
-write only what it needs: leave out every option whose default already fits.
-`shoal config reference --text` prints the reference that describes each option.
-Check what you write with `shoal config show`. A repository's config applies as
-soon as it is saved; after a change to the global config, run `shoal config reload`
-so the daemon applies it.
+Study how the project or this machine is used and work out which Shoal settings
+would help, such as a shortcut for a command people run often. Ask the user
+about each before you write it. `shoal config reference` describes every option.
+Write only what the user agreed to; leave out every option whose default already
+fits.

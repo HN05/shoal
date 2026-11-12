@@ -209,7 +209,7 @@ fn setup_takes_its_base_modes_rules_and_its_own_instructions() {
         );
         let first = setup.first_message.unwrap();
         assert!(first.starts_with("Write the config.\n\n"), "{first}");
-        assert!(first.contains("`shoal config reload`"), "{first}");
+        assert!(first.contains("`shoal config reference`"), "{first}");
     }
     let repo = repository();
     let in_checkout = chat(ChatHome::Checkout(&repo), Delivery::Pushed);

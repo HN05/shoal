@@ -117,14 +117,7 @@ fn subject(name: &str, local_config: &Path) -> String {
     let directory = local_config.parent().unwrap_or(local_config).display();
     let local_config = local_config.display();
     format!(
-        "Set up Shoal for the {name} repository; this workspace is on branch {BRANCH}. \
-         Shoal gives each task its own worktree, and the repository config prepares \
-         those worktrees and coordinates what tasks share. Study how the project is \
-         built, tested and run, then draft a config with only what the project needs: \
-         a `setup.command` script that prepares a new worktree, named ports for servers \
-         that several workspaces run at once, `[commands]` for frequent tasks, and \
-         resource pools for services or devices that tasks must not use at the same \
-         time.\n\n\
+        "Set up Shoal for the {name} repository; this workspace is on branch {BRANCH}.\n\n\
          Before you save the config, ask the user with `shoal questions ask` whether to \
          commit it to the repository or save it as the repository's local config, unless \
          they have said already. If the repository already has a committed config \

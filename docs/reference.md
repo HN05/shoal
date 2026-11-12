@@ -2647,10 +2647,12 @@ reports the result or the error. Syncing never pushes or moves workspace branche
 ### Set up config
 
 `repo setup [repository] [--here] [--agent NAME] [-- ARGS]` starts an agent in
-the built-in `setup` mode that writes the repository's config: setup, named
-ports, commands and resource pools. It works in the repository's `shoal-setup`
-workspace, which Shoal opens on that branch when none exists, with the worker
-mode's rules. Once it has a draft, it asks you with `shoal questions ask`
+the built-in `setup` mode that writes the repository's config. It works in the
+repository's `shoal-setup` workspace, which Shoal opens on that branch when none
+exists, with the worker mode's rules. A setup agent studies how the project or
+machine is used, asks you about each setting it would write, reading the options
+from [`shoal config reference`](config.md), and writes only what you agree to.
+Before it saves the repository's config, it asks you with `shoal questions ask`
 whether to commit it or save it locally, unless you have said already, and
 mentions a committed or local config the repository has.
 
@@ -2669,13 +2671,9 @@ arguments after `--` go to the agent.
 
 `config setup [--here] [--agent NAME] [-- ARGS]` starts a `setup` agent in a
 [chat without a repository](#master-session) named `setup`, with the
-`orchestrate` mode's rules and reach, which writes the global `config.toml`:
-the `[machine]` settings and the defaults every repository inherits, never a
-repository's config. It bases them on the AI tools installed, the forge hosts
-and Git identities of the registered repositories and their configs, and tells
-you about a setting every repository repeats instead of moving it. It edits the
-file in place, keeping its comments, checks it with `config show`, runs
-`config reload` and tells you when the reload rejected the file. When the file
+`orchestrate` mode's rules and reach, which writes the global `config.toml`,
+never a repository's config. It edits the file in place, keeping its comments,
+runs `config reload` and tells you when the reload rejected the file. When the file
 does not exist, the command first writes the packaged default, as `config
 install default` does. Every launch and restore of the agent gets the file's
 directory as another working directory; `--here` and `--agent` work as for
