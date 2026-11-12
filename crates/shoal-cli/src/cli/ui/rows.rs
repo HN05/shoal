@@ -57,15 +57,15 @@ pub(super) fn status_cell(status: ListStatus) -> Cell {
     (status.label().into(), Some(status.style()))
 }
 
-/// The workspace's status, with the place of `entry`, the agent queued in
-/// it, followed by its latest review's, such as `waiting, review 17
+/// The workspace's status, with the places of `entries`, the agents queued
+/// in it, followed by its latest review's, such as `waiting, review 17
 /// finished: 1 blocker`.
 fn workspace_status_cell(
     workspace: &Workspace,
     status: ListStatus,
-    entry: Option<&QueueEntry>,
+    entries: &[&QueueEntry],
 ) -> Cell {
-    let (label, style) = statuses::place_cell(status, entry);
+    let (label, style) = statuses::place_cell(status, entries);
     match &workspace.latest_review {
         Some(review) => (
             format!("{label}, review {} {}", review.id, review.status),
@@ -126,7 +126,10 @@ pub fn workspace_rows(
         .iter()
         .map(|w| {
             let status = statuses.of(w);
-            (status, workspace_status_cell(w, status, statuses.entry(w)))
+            (
+                status,
+                workspace_status_cell(w, status, &statuses.entries(w)),
+            )
         })
         .collect();
     rows_with_status(workspaces, repositories, cells, palette, width, true)
@@ -302,10 +305,17 @@ fn title_limit(width: Option<usize>) -> Option<WidthLimit> {
 fn queue_status_cell(entry: &QueueEntry) -> Cell {
     let status = ListStatus::of_entry(entry);
     let label = status.label().to_owned();
-    let mut text = match entry.position {
+    let text = match entry.position {
         Some(position) => format!("{label}, position {position}"),
         None => label,
     };
+    (text + &waiting_reasons(entry), Some(status.style()))
+}
+
+/// What a queue entry waits for besides its place, each after a comma:
+/// `, blocked by api`, `, after an update` or `, held by low disk space`.
+fn waiting_reasons(entry: &QueueEntry) -> String {
+    let mut text = String::new();
     if !entry.blockers.is_empty() {
         text += &format!(", blocked by {}", entry.blockers.join(", "));
     }
@@ -315,7 +325,7 @@ fn queue_status_cell(entry: &QueueEntry) -> Cell {
     if let Some(held) = entry.held_by.filter(|_| entry.state == QueueState::Queued) {
         text += &format!(", held by {}", held_by_label(held));
     }
-    (text, Some(status.style()))
+    text
 }
 
 /// What holds a waiting entry back: `memory: needs 4.0 GiB, 1.2 GiB left`,

@@ -798,8 +798,8 @@ footprint on macOS. `shoal status` adds the process count, and `--json` gives
 state unless ready; for a ready workspace it is, in order of precedence,
 `queued (N)` while nothing Shoal started runs there and an agent waits at place N in
 the [agent queue](#agent-queue) to start in it, or `starting` once the queue
-admits it (another status names that agent after it, as in `process running,
-queued (2)`), `stopped` when stopped agents or commands wait for `shoal resume` and the
+admits it, each followed by what else it waits for as `shoal queue` shows (another
+status names such agents after it, as in `process running, queued (2)`), `stopped` when stopped agents or commands wait for `shoal resume` and the
 workspace is neither done nor [blocked](#progress), `needs input`, `blocked`
 while its progress records what blocks it, `finished` after `shoal done` until
 `shoal done --undo` or `shoal resume` withdraws the completion, also while its

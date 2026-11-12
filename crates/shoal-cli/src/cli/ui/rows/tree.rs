@@ -135,8 +135,8 @@ impl<'a> SpaceTree<'a> {
     ) {
         rows.push(match space {
             Listed::Workspace(workspace) => {
-                let entry = self.statuses.entry(workspace);
-                tree_workspace_row(workspace, (status, entry), depth, self.palette)
+                let entries = self.statuses.entries(workspace);
+                tree_workspace_row(workspace, (status, &entries), depth, self.palette)
             }
             Listed::Chat(chat) => chat_row(chat, depth, self.palette),
             Listed::Queued(entry) => queued_row(entry, status, depth, self.palette),
@@ -151,10 +151,10 @@ impl<'a> SpaceTree<'a> {
     }
 }
 
-/// A workspace's row, with its status and the agent queued in it.
+/// A workspace's row, with its status and the agents queued in it.
 fn tree_workspace_row(
     workspace: &Workspace,
-    (status, entry): (ListStatus, Option<&QueueEntry>),
+    (status, entries): (ListStatus, &[&QueueEntry]),
     depth: usize,
     palette: Palette,
 ) -> (String, [Cell; 8]) {
@@ -166,7 +166,7 @@ fn tree_workspace_row(
             (name, Some(Style::Heading)),
             (String::new(), None),
             workspace_mode_cell(workspace),
-            workspace_status_cell(workspace, status, entry),
+            workspace_status_cell(workspace, status, entries),
             usage_cell(workspace),
             progress_cell(workspace.progress.as_ref()),
             (workspace_text(workspace), None),
@@ -189,7 +189,7 @@ fn queued_row(
             (indented(&entry.name, depth), Some(Style::Heading)),
             (String::new(), None),
             mode_cell(entry.mode.as_ref(), &ModeName::DEFAULT),
-            place_cell(status, Some(entry)),
+            place_cell(status, &[entry]),
             (String::new(), None),
             (String::new(), None),
             (queue_subject(entry), None),
