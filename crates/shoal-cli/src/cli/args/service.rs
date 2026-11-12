@@ -54,7 +54,7 @@ pub enum ConfigCommand {
         #[arg(short = 'r', long = "repo", conflicts_with = "workspace")]
         repository: Option<String>,
     },
-    /// Print the command and configuration reference for this release.
+    /// Print the configuration reference for this release.
     Reference,
     /// Install a packaged global config, keeping the old file as config.toml.backup.
     Install {

@@ -2741,9 +2741,9 @@ checkout from any directory. Named tables
 such as commands and ports show one entry per name. `--json` returns `key`, `value`,
 and `layer` for each entry, and `file` for a template read from a file.
 
-`shoal config reference` prints this reference as bundled with the installed
-release, so agents without network access can read the options; `--json` returns
-it as `reference`.
+`shoal config reference` prints the [configuration reference](config.md) as
+bundled with the installed release, so agents without network access can read
+the options; `--json` returns it as `reference`.
 
 `shoal config set KEY VALUE [KEY VALUE...]` edits the global file without a daemon,
 creating it if absent; `shoal config unset KEY...` removes existing keys or tables

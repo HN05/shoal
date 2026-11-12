@@ -171,7 +171,7 @@ shoal status 3                # A workspace's or chat's activity, issue and PR s
 shoal status pr 12            # Workspaces and chats that link PR 12; also issue, ci or resource
 shoal status                  # Outside a space: the daemon, unread notifications and cleanup failures
 shoal config show 3           # Effective settings and the source of each value
-shoal config reference        # This release's command and configuration reference
+shoal config reference        # This release's configuration reference
 shoal config set agent.default codex
 shoal config set cleanup.auto.enabled true cleanup.auto.idle_minutes 30  # Saved together
 shoal config set agent.default claude --repo my-project

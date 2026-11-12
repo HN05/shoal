@@ -20,8 +20,9 @@ use crate::{
     protocol::ConfigTarget,
 };
 
-/// The reference bundled with this release, readable without network access.
-const REFERENCE: &str = include_str!("../../../../../docs/reference.md");
+/// The configuration reference bundled with this release, readable without
+/// network access.
+const REFERENCE: &str = include_str!("../../../../../docs/config.md");
 
 /// `KEY VALUE` pairs as the changes they set.
 pub(super) fn sets(assignments: Vec<String>) -> Result<Vec<Change>> {
