@@ -335,67 +335,77 @@ async fn a_space_and_a_queued_launch_rank_with_the_priority_set_on_them() {
     );
 }
 
+/// The labels config, with the machine limited to one agent.
+const LABELS: &str = "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n\
+     [priority.labels]\nurgent = 75\nlater = 25\n";
+
+/// Queue a launch in a new workspace `name` of `repo`, whose issue
+/// `number` is labelled `later` and `urgent` in the record of `table`.
+async fn queue_labelled(
+    manager: &Manager,
+    repo: &crate::model::Repository,
+    (name, number): (&str, u32),
+    table: &'static str,
+) -> SpaceSelector {
+    let workspace = create(manager, repo, name).await;
+    let id = workspace.id.clone();
+    let url = format!("https://forge.example/team/{}/issues/{number}", repo.id);
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                params![id, url],
+            )?;
+            db.execute(
+                &format!(
+                    "INSERT INTO {table}(space_id,url,record) VALUES (?1,?2,
+                        json_object('details',json_object('labels',json_array('later','urgent','bug'))))"
+                ),
+                params![id, url],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    manager
+        .queue_add(QueueRequest {
+            workspace: Some(selector.clone()),
+            ..request(repo, name, false)
+        })
+        .await
+        .unwrap();
+    selector
+}
+
+/// The waiting entries' names and priorities, in queue order.
+async fn waiting_priorities(manager: &Manager) -> Vec<(String, Priority)> {
+    (manager.queue_entries().await.unwrap().into_iter())
+        .filter(|entry| entry.state == QueueState::Queued)
+        .map(|entry| (entry.name.to_string(), entry.rank.unwrap().priority))
+        .collect()
+}
+
 #[tokio::test]
 async fn a_space_without_a_priority_set_takes_the_highest_its_issues_labels_map_to() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config(
-        "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n\
-         [priority.labels]\nurgent = 75\nlater = 25\n",
-    ));
+    manager.publish_config(global_config(LABELS));
     add(&manager, &repo, "running").await;
     // Labels as the background poll read them, as a watch read them, and
     // under a priority set on the space.
-    let cases = [
-        ("polled", "space_item_activity", None),
-        ("watched", "pr_activity", None),
-        ("set", "space_item_activity", Some(Priority::LOW)),
-    ];
-    for (number, (name, table, set)) in cases.into_iter().enumerate() {
-        let workspace = create(&manager, &repo, name).await;
-        let selector = SpaceSelector::id(&workspace.id);
-        if let Some(priority) = set {
-            manager
-                .set_priority(None, &selector, priority)
-                .await
-                .unwrap();
-        }
-        let id = workspace.id.clone();
-        let url = format!("https://forge.example/team/repo/issues/{}", number + 1);
-        manager
-            .store
-            .run(move |db| {
-                db.execute(
-                    "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
-                    params![id, url],
-                )?;
-                db.execute(
-                    &format!(
-                        "INSERT INTO {table}(space_id,url,record) VALUES (?1,?2,
-                            json_object('details',json_object('labels',json_array('later','urgent','bug'))))"
-                    ),
-                    params![id, url],
-                )?;
-                Ok(())
-            })
-            .await
-            .unwrap();
-        manager
-            .queue_add(QueueRequest {
-                workspace: Some(selector),
-                ..request(&repo, name, false)
-            })
-            .await
-            .unwrap();
-    }
+    queue_labelled(&manager, &repo, ("polled", 1), "space_item_activity").await;
+    queue_labelled(&manager, &repo, ("watched", 2), "pr_activity").await;
+    let set = queue_labelled(&manager, &repo, ("set", 3), "space_item_activity").await;
+    manager
+        .set_priority(None, &set, Priority::LOW)
+        .await
+        .unwrap();
     add(&manager, &repo, "unlabelled").await;
 
-    let waiting: Vec<_> = (manager.queue_entries().await.unwrap().into_iter())
-        .filter(|entry| entry.state == QueueState::Queued)
-        .map(|entry| (entry.name.to_string(), entry.rank.unwrap().priority))
-        .collect();
     assert_eq!(
-        waiting,
+        waiting_priorities(&manager).await,
         [
             ("polled".into(), Priority::URGENT),
             ("watched".into(), Priority::URGENT),
@@ -406,13 +416,35 @@ async fn a_space_without_a_priority_set_takes_the_highest_its_issues_labels_map_
 }
 
 #[tokio::test]
+async fn a_repository_whose_config_does_not_resolve_maps_no_labels_and_holds_up_no_other() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let broken = register(&manager, &temp, "broken").await;
+    manager.publish_config(global_config(LABELS));
+    add(&manager, &repo, "running").await;
+    queue_labelled(&manager, &broken, ("broken", 1), "space_item_activity").await;
+    queue_labelled(&manager, &repo, ("labelled", 1), "space_item_activity").await;
+    std::fs::write(
+        broken.path.join(".shoal.toml"),
+        "[priority.labels]\nurgent = 101\n",
+    )
+    .unwrap();
+    assert!(manager.repository_settings(&broken.id).await.is_err());
+
+    assert_eq!(
+        waiting_priorities(&manager).await,
+        [
+            ("labelled".into(), Priority::URGENT),
+            ("broken".into(), Priority::NORMAL),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn a_launch_given_no_priority_ranks_with_the_highest_its_issues_labels_map_to() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config(
-        "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n\
-         [priority.labels]\nurgent = 75\nlater = 25\n",
-    ));
+    manager.publish_config(global_config(LABELS));
     add(&manager, &repo, "running").await;
     let labelled = |name, priority| QueueRequest {
         priority,
@@ -426,12 +458,8 @@ async fn a_launch_given_no_priority_ranks_with_the_highest_its_issues_labels_map
     add(&manager, &repo, "unlabelled").await;
     manager.queue_add(labelled("labelled", None)).await.unwrap();
 
-    let waiting: Vec<_> = (manager.queue_entries().await.unwrap().into_iter())
-        .filter(|entry| entry.state == QueueState::Queued)
-        .map(|entry| (entry.name.to_string(), entry.rank.unwrap().priority))
-        .collect();
     assert_eq!(
-        waiting,
+        waiting_priorities(&manager).await,
         [
             ("labelled".into(), Priority::URGENT),
             ("unlabelled".into(), Priority::NORMAL),

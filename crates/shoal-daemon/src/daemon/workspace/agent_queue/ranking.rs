@@ -31,30 +31,32 @@ impl Manager {
                 ))
             })
             .await?;
-        let priorities = self.label_priorities(labelled).await?;
+        let priorities = self.label_priorities(labelled).await;
         spaces::prioritize(&mut snapshot.spaces, priorities);
         Ok(rank::rank(&snapshot))
     }
 
     /// The priority each of the `labelled` spaces takes from its issue's
-    /// labels under its repository's `[priority.labels]`, where one maps.
-    async fn label_priorities(
-        &self,
-        labelled: Vec<spaces::Labelled>,
-    ) -> Result<Vec<(SpaceId, Priority)>> {
+    /// labels under its repository's `[priority.labels]`, where one maps. A
+    /// repository whose settings do not resolve maps none, so its config,
+    /// which every command there reports, holds up no other repository's
+    /// work.
+    async fn label_priorities(&self, labelled: Vec<spaces::Labelled>) -> Vec<(SpaceId, Priority)> {
         let mut settings = HashMap::new();
         let mut priorities = Vec::new();
         for space in labelled {
             if !settings.contains_key(&space.repository) {
-                let resolved = self.repository_settings(&space.repository).await?;
-                settings.insert(space.repository.clone(), resolved.priority.clone());
+                let resolved = self.repository_settings(&space.repository).await;
+                let labels = resolved.ok().map(|resolved| resolved.priority.clone());
+                settings.insert(space.repository.clone(), labels);
             }
             let labels = space.labels.iter().map(String::as_str);
-            if let Some(priority) = settings[&space.repository].of_labels(labels) {
+            let mapped = settings[&space.repository].as_ref();
+            if let Some(priority) = mapped.and_then(|mapped| mapped.of_labels(labels)) {
                 priorities.push((space.id, priority));
             }
         }
-        Ok(priorities)
+        priorities
     }
 }
 
