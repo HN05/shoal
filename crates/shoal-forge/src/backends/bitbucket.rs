@@ -28,11 +28,7 @@ use crate::{
     numbers::{CommentId, IssueNumber, PullNumber},
     repo::locator::ItemRoute,
     review::{
-        diff::Diff,
-        reviewers::Reviewer,
         status::{PrStatus, Verdict},
-        submit::{PlacedReview, Submission},
-        thread::{Target, Thread},
         view::{Comment, Details, PrDetails, Review, ReviewComment},
     },
     transport::{
@@ -47,7 +43,7 @@ mod checks;
 mod conventions;
 mod merging;
 mod reactions;
-mod review;
+mod reviews;
 mod runs;
 
 use super::{Backend, LoginHint, rest};
@@ -429,22 +425,6 @@ impl Backend for Bitbucket {
         Err(capability::unsupported(self, Capability::Forks))
     }
 
-    /// The members of the repository's workspace, by Atlassian account ID.
-    async fn reviewers(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>> {
-        let endpoint = format!("workspaces/{}/members", repo.owner());
-        let members = repo.pages(account, &endpoint).await?;
-        Ok(members
-            .iter()
-            .filter_map(|member| {
-                let user = &member["user"];
-                Some(Reviewer::user(
-                    text(&user["account_id"])?,
-                    user["display_name"].as_str(),
-                ))
-            })
-            .collect())
-    }
-
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {
         let mut source = json!({"branch": {"name": pull.head}});
         if let Some(repository) = &pull.head_repository {
@@ -466,71 +446,6 @@ impl Backend for Bitbucket {
 
     fn labels_issue_after_opening(&self) -> bool {
         false
-    }
-
-    async fn thread(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: PullNumber,
-        comment: CommentId,
-    ) -> Result<Option<Thread>> {
-        let pr = repo.item_endpoint(ItemKind::Pr, number.get());
-        let comments = repo.pages(account, &format!("{pr}/comments")).await?;
-        Ok(find_thread(&comments, comment))
-    }
-
-    fn reply(
-        &self,
-        repo: &ForgeRepo,
-        number: PullNumber,
-        thread: &Thread,
-        body: &str,
-    ) -> Result<Request> {
-        let pr = repo.item_endpoint(ItemKind::Pr, number.get());
-        Ok(Request::new(
-            HttpMethod::Post,
-            format!("{pr}/comments"),
-            Some(json!({ "content": { "raw": body }, "parent": { "id": thread.first } })),
-        ))
-    }
-
-    fn resolution(
-        &self,
-        repo: &ForgeRepo,
-        number: PullNumber,
-        thread: &Thread,
-        resolved: bool,
-    ) -> Result<Request> {
-        let pr = repo.item_endpoint(ItemKind::Pr, number.get());
-        let method = if resolved {
-            HttpMethod::Post
-        } else {
-            HttpMethod::Delete
-        };
-        Ok(Request::new(
-            method,
-            format!("{pr}/comments/{}/resolve", thread.first),
-            None,
-        ))
-    }
-
-    async fn pr_diff(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        current: &Current,
-    ) -> Result<Diff> {
-        review::diff(repo, account, current).await
-    }
-
-    fn review(
-        &self,
-        repo: &ForgeRepo,
-        number: PullNumber,
-        review: &PlacedReview,
-    ) -> Result<Submission> {
-        Ok(review::review(repo, number, review))
     }
 
     async fn issue_activity(
@@ -829,26 +744,6 @@ fn threads(comments: &[Value]) -> (Vec<Comment>, Vec<Review>) {
         general,
         reviews.into_iter().map(|(_, review)| review).collect(),
     )
-}
-
-/// The thread with `comment`, named by its first comment.
-fn find_thread(comments: &[Value], comment: CommentId) -> Option<Thread> {
-    let comments = listed(comments);
-    let root = roots(&comments);
-    comments.iter().find(|value| value["id"] == comment)?;
-    let first = root(comment.get());
-    let start = comments.iter().find(|value| value["id"] == first)?;
-    let replies = comments
-        .iter()
-        .filter_map(|value| value["id"].as_u64())
-        .filter(|id| *id != first && root(*id) == first)
-        .count();
-    Some(Thread {
-        first: CommentId::new(first),
-        replies,
-        resolved: Some(start["resolution"].is_object()),
-        target: Target::Bitbucket,
-    })
 }
 
 fn listed(comments: &[Value]) -> Vec<&Value> {

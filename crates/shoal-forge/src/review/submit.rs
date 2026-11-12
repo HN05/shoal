@@ -12,7 +12,7 @@ use serde_json::Value;
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::Reviews,
     items::{
         action::{Acted, after_post},
         link::ItemKind,

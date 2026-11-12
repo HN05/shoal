@@ -202,28 +202,6 @@ fn inline_threads_become_reviews_with_their_resolution() {
 }
 
 #[test]
-fn replies_find_the_thread_they_belong_to() {
-    let listed = json!([
-        {"id": 2, "resolution": {"type": "comment_resolution"}},
-        {"id": 3, "parent": {"id": 2}},
-        {"id": 4, "parent": {"id": 3}},
-        {"id": 5, "parent": {"id": 2}, "deleted": true},
-        {"id": 6}
-    ]);
-    let listed = listed.as_array().unwrap();
-    let thread = find_thread(listed, CommentId::new(4)).unwrap();
-    assert_eq!(
-        (thread.first.get(), thread.replies, thread.resolved),
-        (2, 2, Some(true))
-    );
-    assert_eq!(
-        find_thread(listed, CommentId::new(6)).unwrap().resolved,
-        Some(false)
-    );
-    assert!(find_thread(listed, CommentId::new(5)).is_none());
-}
-
-#[test]
 fn changes_keep_the_title_and_cannot_reopen_pull_requests() {
     let mut current = bitbucket()
             .current(

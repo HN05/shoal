@@ -24,11 +24,7 @@ use crate::{
     numbers::{CommentId, IssueNumber, PullNumber},
     repo::locator::ItemRoute,
     review::{
-        diff::Diff,
-        reviewers::Reviewer,
         status::{PrStatus, Verdict},
-        submit::{PlacedReview, Submission},
-        thread::{Target, Thread},
         view::{AutoMerge, Comment, Details, PrDetails, Review, ReviewComment},
     },
     transport::{
@@ -43,7 +39,7 @@ mod checks;
 mod conventions;
 mod merging;
 mod reactions;
-mod review;
+mod reviews;
 mod runs;
 
 use super::{Backend, LoginHint, rest};
@@ -432,21 +428,6 @@ impl Backend for GitLab {
         Err(capability::unsupported(self, Capability::Forks))
     }
 
-    /// The project's members, inherited ones included; GitLab asks no
-    /// group for a review.
-    async fn reviewers(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>> {
-        let users = repo.pages(account, &repo.repo_endpoint("users")).await?;
-        Ok(users
-            .iter()
-            .filter_map(|user| {
-                Some(Reviewer::user(
-                    text(&user["username"])?,
-                    user["name"].as_str(),
-                ))
-            })
-            .collect())
-    }
-
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {
         let title = if pull.draft {
             DRAFT.draft_title(&pull.title, true)
@@ -472,54 +453,6 @@ impl Backend for GitLab {
         false
     }
 
-    async fn thread(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: PullNumber,
-        comment: CommentId,
-    ) -> Result<Option<Thread>> {
-        let pr = repo.item_endpoint(ItemKind::Pr, number.get());
-        let discussions = repo.pages(account, &format!("{pr}/discussions")).await?;
-        Ok(find_thread(&discussions, comment))
-    }
-
-    fn reply(
-        &self,
-        repo: &ForgeRepo,
-        number: PullNumber,
-        thread: &Thread,
-        body: &str,
-    ) -> Result<Request> {
-        let Target::GitLab { discussion } = &thread.target else {
-            bail!("not a GitLab review thread");
-        };
-        let pr = repo.item_endpoint(ItemKind::Pr, number.get());
-        Ok(Request::new(
-            HttpMethod::Post,
-            format!("{pr}/discussions/{discussion}/notes"),
-            Some(json!({ "body": body })),
-        ))
-    }
-
-    fn resolution(
-        &self,
-        repo: &ForgeRepo,
-        number: PullNumber,
-        thread: &Thread,
-        resolved: bool,
-    ) -> Result<Request> {
-        let Target::GitLab { discussion } = &thread.target else {
-            bail!("not a GitLab review thread");
-        };
-        let pr = repo.item_endpoint(ItemKind::Pr, number.get());
-        Ok(Request::new(
-            HttpMethod::Put,
-            format!("{pr}/discussions/{discussion}"),
-            Some(json!({ "resolved": resolved })),
-        ))
-    }
-
     /// GitLab lists blocking issues among an issue's links.
     async fn open_issue_blockers(
         &self,
@@ -535,54 +468,6 @@ impl Backend for GitLab {
             .await
             .hint_login(self)?;
         open_blocking(&links)
-    }
-
-    async fn pr_diff(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        current: &Current,
-    ) -> Result<Diff> {
-        review::diff(repo, account, current).await
-    }
-
-    /// Publishing a review publishes every draft the account has pending.
-    async fn check_review(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: PullNumber,
-    ) -> Result<()> {
-        review::check(repo, account, number).await
-    }
-
-    fn review(
-        &self,
-        repo: &ForgeRepo,
-        number: PullNumber,
-        review: &PlacedReview,
-    ) -> Result<Submission> {
-        review::review(repo, number, review)
-    }
-
-    fn discard_draft(
-        &self,
-        repo: &ForgeRepo,
-        number: PullNumber,
-        draft: &Value,
-    ) -> Result<Request> {
-        review::discard_draft(repo, number, draft)
-    }
-
-    async fn review_keys(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: PullNumber,
-        review: &PlacedReview<'_>,
-        _responses: &[Value],
-    ) -> Result<Vec<String>> {
-        review::keys(repo, account, number, review).await
     }
 
     async fn issue_activity(
@@ -923,23 +808,6 @@ fn discussions(discussions: &[Value]) -> (Vec<Comment>, Vec<Review>) {
         }
     }
     (comments, reviews)
-}
-
-/// The discussion with note `comment`, which replies and resolution name.
-fn find_thread(discussions: &[Value], comment: CommentId) -> Option<Thread> {
-    discussions.iter().find_map(|discussion| {
-        let notes = notes(discussion);
-        notes.iter().find(|note| note["id"] == comment)?;
-        let first = notes.first()?;
-        Some(Thread {
-            first: CommentId::new(first["id"].as_u64()?),
-            replies: notes.len() - 1,
-            resolved: first["resolved"].as_bool(),
-            target: Target::GitLab {
-                discussion: text(&discussion["id"])?,
-            },
-        })
-    })
 }
 
 /// A discussion's notes without the ones GitLab writes for events.

@@ -5,6 +5,7 @@ mod checks;
 mod conventions;
 mod merging;
 mod reactions;
+mod reviews;
 mod runners;
 mod runs;
 
@@ -14,5 +15,6 @@ pub(crate) use checks::Checks;
 pub(crate) use conventions::Conventions;
 pub(crate) use merging::Merging;
 pub(crate) use reactions::Reactions;
+pub(crate) use reviews::Reviews;
 pub(crate) use runners::Runners;
 pub(crate) use runs::Runs;

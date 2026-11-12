@@ -1,10 +1,9 @@
 //! The users and teams Forgejo can ask to review the repository's PRs.
 use anyhow::{Context, Result};
 
-use super::organization;
 use crate::{
-    ForgeRepo, account::Account, items::item::text, review::reviewers::Reviewer,
-    transport::api::Request,
+    ForgeRepo, account::Account, backends::forgejo::organization, items::item::text,
+    review::reviewers::Reviewer, transport::api::Request,
 };
 
 /// The users Forgejo offers as reviewers.

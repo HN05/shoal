@@ -4,8 +4,12 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ForgeRepo, account::Account, backends::Backend, items::action::ThreadChange,
-    numbers::CommentId, numbers::PullNumber, transport::api::Request,
+    ForgeRepo,
+    account::Account,
+    backends::Reviews,
+    items::action::ThreadChange,
+    numbers::{CommentId, PullNumber},
+    transport::api::Request,
 };
 
 /// A review thread, found from any of its comments.

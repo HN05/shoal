@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail, ensure};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::Reviews,
     items::{item::Current, link::ItemKind},
     review::submit::{LineComment, Side},
 };

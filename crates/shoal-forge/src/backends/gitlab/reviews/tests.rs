@@ -73,7 +73,7 @@ fn reviews_draft_each_line_then_publish_with_the_body_and_requested_changes() ->
         body: "Why?".into(),
     }];
     let review = placed_review(ReviewVerdict::RequestChanges, "Fix", &diff, &comments)?;
-    let submission = super::review(&repo, PullNumber::new(7), &review)?;
+    let submission = submit(&repo, PullNumber::new(7), &review)?;
     let mr = "projects/group%2Frepo/merge_requests/7";
     assert_eq!(submission.drafts[0].endpoint, format!("{mr}/draft_notes"));
     assert_eq!(
@@ -116,7 +116,7 @@ fn approvals_publish_first_and_approve_the_head() -> Result<()> {
     let repo = ForgeRepo::parse("https://gitlab.com/group/repo.git")?;
     let diff = Diff::default();
     let review = placed_review(ReviewVerdict::Approve, "Fine", &diff, &[])?;
-    let submission = super::review(&repo, PullNumber::new(7), &review)?;
+    let submission = submit(&repo, PullNumber::new(7), &review)?;
     assert!(submission.drafts.is_empty());
     let requests: Vec<_> = (submission.requests.iter())
         .map(|request| (request.endpoint.as_str(), request.body.clone()))
@@ -161,4 +161,30 @@ fn published_notes_are_the_newest_with_each_body_of_the_review() -> Result<()> {
         ["discussion:9", "discussion:8", "discussion:6"]
     );
     Ok(())
+}
+
+#[test]
+fn notes_find_their_discussion() {
+    let listed = json!([
+        {"id": "d1", "notes": [{"id": 1, "system": true}, {"id": 2, "resolved": false}, {"id": 3}]},
+        {"id": "d2", "notes": [{"id": 4, "resolved": true}]}
+    ]);
+    let listed = listed.as_array().unwrap();
+    let thread = find_thread(listed, CommentId::new(3)).unwrap();
+    assert_eq!(
+        (thread.first.get(), thread.replies, thread.resolved),
+        (2, 1, Some(false))
+    );
+    assert_eq!(
+        thread.target,
+        Target::GitLab {
+            discussion: "d1".into()
+        }
+    );
+    assert_eq!(
+        find_thread(listed, CommentId::new(4)).unwrap().resolved,
+        Some(true)
+    );
+    // System notes are events, not comments.
+    assert!(find_thread(listed, CommentId::new(1)).is_none());
 }

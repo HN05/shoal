@@ -1,24 +1,141 @@
-//! GitLab reviews: a merge request's diff as the version GitLab keeps of
-//! it at a head commit, and a review as draft notes on it that GitLab
-//! publishes together with the body and the requested changes.
-use anyhow::{Context, Result, ensure};
+//! GitLab reviews: a merge request's reviewers and discussions, its diff as the
+//! version GitLab keeps of it at a head commit, and a review as draft notes on
+//! it that GitLab publishes together with the body and the requested changes.
+use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
+use super::{GitLab, notes};
 use crate::{
     ForgeRepo,
     account::Account,
+    backends::Reviews,
     items::{
         item::{Current, text},
         link::ItemKind,
     },
-    numbers::PullNumber,
+    numbers::{CommentId, PullNumber},
     review::{
         diff::{Bases, Diff, FileDiff, Placed},
+        reviewers::Reviewer,
         submit::{PlacedReview, ReviewVerdict, Submission},
+        thread::{Target, Thread},
     },
     transport::api::{HttpMethod, Request},
     updates::discussion_key,
 };
+
+impl Reviews for GitLab {
+    /// The project's members, inherited ones included; GitLab asks no
+    /// group for a review.
+    async fn reviewers(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>> {
+        let users = repo.pages(account, &repo.repo_endpoint("users")).await?;
+        Ok(users
+            .iter()
+            .filter_map(|user| {
+                Some(Reviewer::user(
+                    text(&user["username"])?,
+                    user["name"].as_str(),
+                ))
+            })
+            .collect())
+    }
+
+    async fn thread(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: PullNumber,
+        comment: CommentId,
+    ) -> Result<Option<Thread>> {
+        let pr = repo.item_endpoint(ItemKind::Pr, number.get());
+        let discussions = repo.pages(account, &format!("{pr}/discussions")).await?;
+        Ok(find_thread(&discussions, comment))
+    }
+
+    fn reply(
+        &self,
+        repo: &ForgeRepo,
+        number: PullNumber,
+        thread: &Thread,
+        body: &str,
+    ) -> Result<Request> {
+        let Target::GitLab { discussion } = &thread.target else {
+            bail!("not a GitLab review thread");
+        };
+        let pr = repo.item_endpoint(ItemKind::Pr, number.get());
+        Ok(Request::new(
+            HttpMethod::Post,
+            format!("{pr}/discussions/{discussion}/notes"),
+            Some(json!({ "body": body })),
+        ))
+    }
+
+    fn resolution(
+        &self,
+        repo: &ForgeRepo,
+        number: PullNumber,
+        thread: &Thread,
+        resolved: bool,
+    ) -> Result<Request> {
+        let Target::GitLab { discussion } = &thread.target else {
+            bail!("not a GitLab review thread");
+        };
+        let pr = repo.item_endpoint(ItemKind::Pr, number.get());
+        Ok(Request::new(
+            HttpMethod::Put,
+            format!("{pr}/discussions/{discussion}"),
+            Some(json!({ "resolved": resolved })),
+        ))
+    }
+
+    async fn pr_diff(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        current: &Current,
+    ) -> Result<Diff> {
+        diff(repo, account, current).await
+    }
+
+    /// Publishing a review publishes every draft the account has pending.
+    async fn check_review(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: PullNumber,
+    ) -> Result<()> {
+        check(repo, account, number).await
+    }
+
+    fn review(
+        &self,
+        repo: &ForgeRepo,
+        number: PullNumber,
+        review: &PlacedReview,
+    ) -> Result<Submission> {
+        submit(repo, number, review)
+    }
+
+    fn discard_draft(
+        &self,
+        repo: &ForgeRepo,
+        number: PullNumber,
+        draft: &Value,
+    ) -> Result<Request> {
+        discard_draft(repo, number, draft)
+    }
+
+    async fn review_keys(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: PullNumber,
+        review: &PlacedReview<'_>,
+        _responses: &[Value],
+    ) -> Result<Vec<String>> {
+        keys(repo, account, number, review).await
+    }
+}
 
 /// The diff of the merge request's version at its head, with the commits
 /// that version compares, which positions on it name.
@@ -79,11 +196,7 @@ fn changed_file(file: &Value) -> Result<FileDiff> {
 /// The requests that submit `review` of merge request `number`: a draft
 /// note on each line, then publishing them with the body as a summary and
 /// any requested changes, then an approval of the head.
-pub(super) fn review(
-    repo: &ForgeRepo,
-    number: PullNumber,
-    review: &PlacedReview,
-) -> Result<Submission> {
+fn submit(repo: &ForgeRepo, number: PullNumber, review: &PlacedReview) -> Result<Submission> {
     let merge_request = repo.item_endpoint(ItemKind::Pr, number.get());
     let drafts = review
         .comments
@@ -210,6 +323,23 @@ fn published(notes: &Value, author: &Value, review: &PlacedReview) -> Vec<String
         keys.push(discussion_key(&note["id"]));
     }
     keys
+}
+
+/// The discussion with note `comment`, which replies and resolution name.
+fn find_thread(discussions: &[Value], comment: CommentId) -> Option<Thread> {
+    discussions.iter().find_map(|discussion| {
+        let notes = notes(discussion);
+        notes.iter().find(|note| note["id"] == comment)?;
+        let first = notes.first()?;
+        Some(Thread {
+            first: CommentId::new(first["id"].as_u64()?),
+            replies: notes.len() - 1,
+            resolved: first["resolved"].as_bool(),
+            target: Target::GitLab {
+                discussion: text(&discussion["id"])?,
+            },
+        })
+    })
 }
 
 #[cfg(test)]

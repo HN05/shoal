@@ -220,32 +220,6 @@ fn diff_threads_become_reviews_and_other_notes_comments() {
 }
 
 #[test]
-fn notes_find_their_discussion() {
-    let listed = json!([
-        {"id": "d1", "notes": [{"id": 1, "system": true}, {"id": 2, "resolved": false}, {"id": 3}]},
-        {"id": "d2", "notes": [{"id": 4, "resolved": true}]}
-    ]);
-    let listed = listed.as_array().unwrap();
-    let thread = find_thread(listed, CommentId::new(3)).unwrap();
-    assert_eq!(
-        (thread.first.get(), thread.replies, thread.resolved),
-        (2, 1, Some(false))
-    );
-    assert_eq!(
-        thread.target,
-        Target::GitLab {
-            discussion: "d1".into()
-        }
-    );
-    assert_eq!(
-        find_thread(listed, CommentId::new(4)).unwrap().resolved,
-        Some(true)
-    );
-    // System notes are events, not comments.
-    assert!(find_thread(listed, CommentId::new(1)).is_none());
-}
-
-#[test]
 fn issues_use_their_own_numbers_routes_and_states() {
     let issue = json!({"iid": 3, "id": 900, "title": "Bug", "state": "closed",
             "labels": [{"name": "type/bug"}], "assignees": [{"id": 4, "username": "kim"}],

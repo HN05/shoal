@@ -1,7 +1,7 @@
 //! Forgejo, and Gitea, which serves the same API: GitHub's REST shapes
 //! under `/api/v1`, sent with the account's token for the host, else
 //! anonymously.
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 
 pub(crate) mod actions;
@@ -11,8 +11,7 @@ mod conventions;
 mod merging;
 mod organization;
 mod reactions;
-mod review;
-mod reviewers;
+mod reviews;
 mod runners;
 mod runs;
 pub(crate) mod threads;
@@ -42,11 +41,7 @@ use crate::{
     numbers::{CommentId, IssueNumber, PullNumber},
     repo::locator::ItemRoute,
     review::{
-        diff::Diff,
-        reviewers::Reviewer,
         status::{PrStatus, Verdict, forgejo_reviews},
-        submit::{PlacedReview, Submission},
-        thread::{Target, Thread},
         view::{Details, Review, login},
     },
     transport::{
@@ -337,16 +332,6 @@ impl Backend for Forgejo {
         }
     }
 
-    /// The users Forgejo offers as reviewers, and the teams of an
-    /// organization's repository.
-    async fn reviewers(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>> {
-        let (users, teams) = tokio::try_join!(
-            reviewers::users(repo, account),
-            reviewers::teams(repo, account),
-        )?;
-        Ok(users.into_iter().chain(teams).collect())
-    }
-
     /// Forgejo keeps draft state in the title.
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {
         let title = if pull.draft {
@@ -370,58 +355,6 @@ impl Backend for Forgejo {
         true
     }
 
-    async fn thread(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: PullNumber,
-        comment: CommentId,
-    ) -> Result<Option<Thread>> {
-        let reviews = threads::all_review_comments(repo, account, number).await?;
-        Ok(threads::thread(&reviews, comment))
-    }
-
-    /// A reply is a comment of the thread's review on the first comment's
-    /// lines.
-    fn reply(
-        &self,
-        repo: &ForgeRepo,
-        number: PullNumber,
-        thread: &Thread,
-        body: &str,
-    ) -> Result<Request> {
-        let Target::Forgejo {
-            review,
-            path,
-            line,
-            extra_lines,
-        } = &thread.target
-        else {
-            bail!("not a Forgejo review thread");
-        };
-        let side = if *line < 0 {
-            "old_position"
-        } else {
-            "new_position"
-        };
-        Ok(Request::new(
-            HttpMethod::Post,
-            repo.repo_endpoint(&format!("pulls/{number}/reviews/{review}/comments")),
-            Some(json!({ "body": body, "path": path, side: line.abs(),
-                "extra_lines_count": extra_lines })),
-        ))
-    }
-
-    fn resolution(
-        &self,
-        _repo: &ForgeRepo,
-        _number: PullNumber,
-        _thread: &Thread,
-        _resolved: bool,
-    ) -> Result<Request> {
-        Err(capability::unsupported(self, Capability::ResolveThreads))
-    }
-
     async fn open_issue_blockers(
         &self,
         repo: &ForgeRepo,
@@ -429,35 +362,6 @@ impl Backend for Forgejo {
         number: IssueNumber,
     ) -> Result<Vec<String>> {
         github_rest::open_blockers(repo, account, &format!("issues/{number}/dependencies")).await
-    }
-
-    async fn pr_diff(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        current: &Current,
-    ) -> Result<Diff> {
-        review::diff(repo, account, current).await
-    }
-
-    fn review(
-        &self,
-        repo: &ForgeRepo,
-        number: PullNumber,
-        review: &PlacedReview,
-    ) -> Result<Submission> {
-        Ok(review::review(repo, number, review))
-    }
-
-    async fn review_keys(
-        &self,
-        _repo: &ForgeRepo,
-        _account: &Account,
-        _number: PullNumber,
-        _review: &PlacedReview<'_>,
-        responses: &[Value],
-    ) -> Result<Vec<String>> {
-        review::keys(responses.first().context("the review was not posted")?)
     }
 
     async fn issue_activity(

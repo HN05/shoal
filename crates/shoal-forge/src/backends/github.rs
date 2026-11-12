@@ -1,6 +1,6 @@
 //! GitHub: its REST and GraphQL APIs, on GitHub.com or an Enterprise
 //! Server, signed in with the account's token for the host.
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
 mod actions;
@@ -10,8 +10,7 @@ mod checks;
 mod conventions;
 mod merging;
 mod reactions;
-mod review;
-mod reviewers;
+mod reviews;
 mod runners;
 mod runs;
 pub(crate) mod threads;
@@ -38,11 +37,7 @@ use crate::{
     numbers::{CommentId, IssueNumber, PullNumber},
     repo::locator::ItemRoute,
     review::{
-        diff::Diff,
-        reviewers::Reviewer,
         status::PrStatus,
-        submit::{PlacedReview, Submission},
-        thread::{Target, Thread},
         view::{Details, Review},
     },
     transport::{
@@ -283,16 +278,6 @@ impl Backend for GitHub {
         github_rest::create_fork(repo, account).await
     }
 
-    /// The users GitHub can assign the repository's items to, and the
-    /// teams of an organization's repository.
-    async fn reviewers(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>> {
-        let (users, teams) = tokio::try_join!(
-            reviewers::users(repo, account),
-            reviewers::teams(repo, account),
-        )?;
-        Ok(users.into_iter().chain(teams).collect())
-    }
-
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {
         let head = github_rest::head_spec(pull);
         let body = json!({"title": pull.title, "body": pull.body, "head": head,
@@ -307,92 +292,6 @@ impl Backend for GitHub {
 
     fn labels_issue_after_opening(&self) -> bool {
         false
-    }
-
-    async fn thread(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: PullNumber,
-        comment: CommentId,
-    ) -> Result<Option<Thread>> {
-        Ok(threads::thread(
-            &threads::threads(repo, account, number).await?,
-            comment,
-        ))
-    }
-
-    fn reply(
-        &self,
-        repo: &ForgeRepo,
-        number: PullNumber,
-        thread: &Thread,
-        body: &str,
-    ) -> Result<Request> {
-        let endpoint =
-            repo.repo_endpoint(&format!("pulls/{number}/comments/{}/replies", thread.first));
-        Ok(Request::new(
-            HttpMethod::Post,
-            endpoint,
-            Some(json!({ "body": body })),
-        ))
-    }
-
-    fn resolution(
-        &self,
-        _repo: &ForgeRepo,
-        _number: PullNumber,
-        thread: &Thread,
-        resolved: bool,
-    ) -> Result<Request> {
-        let Target::GitHub { node } = &thread.target else {
-            bail!("not a GitHub review thread");
-        };
-        let mutation = if resolved {
-            "resolveReviewThread"
-        } else {
-            "unresolveReviewThread"
-        };
-        Ok(Request::new(
-            HttpMethod::Post,
-            "graphql".into(),
-            Some(json!({
-                "query": format!(
-                    "mutation($id: ID!) {{ {mutation}(input: {{threadId: $id}}) {{ thread {{ isResolved }} }} }}"
-                ),
-                "variables": { "id": node },
-            })),
-        ))
-    }
-
-    async fn pr_diff(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        current: &Current,
-    ) -> Result<Diff> {
-        review::diff(repo, account, current).await
-    }
-
-    fn review(
-        &self,
-        repo: &ForgeRepo,
-        number: PullNumber,
-        review: &PlacedReview,
-    ) -> Result<Submission> {
-        Ok(review::review(repo, number, review))
-    }
-
-    async fn review_keys(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: PullNumber,
-        review: &PlacedReview<'_>,
-        responses: &[Value],
-    ) -> Result<Vec<String>> {
-        let response = responses.first().context("the review was not posted")?;
-        review::keys(repo, account, number, review, response).await
     }
 
     async fn issue_activity(

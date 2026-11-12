@@ -4,7 +4,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ForgeRepo, account::Account, backends::Backend, items::link::ItemKind, numbers::PullNumber,
+    ForgeRepo, account::Account, backends::Reviews, items::link::ItemKind, numbers::PullNumber,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
