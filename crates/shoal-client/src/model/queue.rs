@@ -217,7 +217,7 @@ impl TryFrom<BlockerFields> for Blocker {
             BlockerFields::CiRun(url) => (Self::CiRun(url.clone()), Some((url, LinkKind::Ci))),
         };
         if let Some((url, kind)) = url {
-            anyhow::ensure!(url.kind() == kind, "{url} is no {} URL", kind.noun());
+            url.of_kind(kind)?;
         }
         Ok(blocker)
     }
