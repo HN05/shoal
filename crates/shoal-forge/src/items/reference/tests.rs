@@ -73,3 +73,17 @@ fn an_input_is_a_positive_number_or_an_item_url() -> Result<()> {
     }
     Ok(())
 }
+
+#[test]
+fn a_route_in_a_repository_path_leaves_the_items_own_route_to_decide() -> Result<()> {
+    let url = "https://gitlab.com/a/b/issues/project/-/merge_requests/3";
+    let item: ItemRef = url.parse()?;
+    assert_eq!(item.number(), ItemNumber::Pr(PullNumber::new(3)));
+    assert_eq!(item.repository().path, "a/b/issues/project");
+    let numbered = ItemRef::numbered(item.repository(), LinkKind::Pr, 3)?;
+    assert_eq!(
+        serde_json::from_value::<ItemRef>(serde_json::to_value(&numbered)?)?,
+        item
+    );
+    Ok(())
+}

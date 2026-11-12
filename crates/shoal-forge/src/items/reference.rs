@@ -199,15 +199,20 @@ impl FromStr for ItemRef {
             IssueInput::parse(url) == IssueInput::Url,
             "expected an issue, PR or CI run URL"
         );
-        // A URL whose route names a kind fails as that kind does.
+        // A kind's route may also appear in a repository's path, so every
+        // kind is tried before the first whose route the URL has says why
+        // it fails.
+        let mut routed = None;
         for kind in [LinkKind::Issue, LinkKind::Pr, LinkKind::Ci] {
             match Self::parse_kind(kind, url) {
                 Ok(item) => return Ok(item),
-                Err(error) if ForgeRepo::from_item_url(kind, url).is_ok() => return Err(error),
+                Err(error) if ForgeRepo::from_item_url(kind, url).is_ok() => {
+                    routed.get_or_insert(error);
+                }
                 Err(_) => {}
             }
         }
-        bail!("{url} is no issue, PR or CI run URL")
+        Err(routed.unwrap_or_else(|| anyhow::anyhow!("{url} is no issue, PR or CI run URL")))
     }
 }
 
