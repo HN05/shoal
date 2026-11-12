@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shoal_refs::BranchName;
 
 use crate::{
     ForgeRepo,
@@ -59,8 +60,8 @@ pub struct Details {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrDetails {
-    pub head: String,
-    pub base: String,
+    pub head: BranchName,
+    pub base: BranchName,
     pub draft: bool,
     /// Unknown while the forge computes mergeability, and for drafts and closed PRs.
     pub merge_conflicts: Option<bool>,
@@ -222,7 +223,7 @@ impl PrDetails {
         errors.extend(status.errors);
     }
 
-    pub(crate) fn new(head: String, base: String, draft: bool) -> Self {
+    pub(crate) fn new(head: BranchName, base: BranchName, draft: bool) -> Self {
         Self {
             head,
             base,

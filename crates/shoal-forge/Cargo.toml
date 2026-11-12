@@ -9,7 +9,7 @@ license.workspace = true
 
 [features]
 # Store typed names in SQLite columns.
-rusqlite = ["dep:rusqlite"]
+rusqlite = ["dep:rusqlite", "shoal-refs/rusqlite"]
 # Take typed names as CLI values.
 clap = ["dep:clap"]
 # A loopback forge for the caller's tests.
@@ -24,6 +24,7 @@ rusqlite = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 shoal-forge-derive.workspace = true
+shoal-refs.workspace = true
 shoal-subprocess.workspace = true
 shoal-time.workspace = true
 tokio = { workspace = true, features = ["io-util", "macros", "process", "rt", "sync", "time"] }

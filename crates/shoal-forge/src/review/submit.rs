@@ -8,6 +8,7 @@ use std::{
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shoal_refs::CommitId;
 
 use crate::{
     ForgeRepo,
@@ -36,14 +37,14 @@ pub struct NewReview {
     /// The head commit the review covers. When the PR's head has moved past
     /// it, the review is refused with [`HeadMoved`] before anything is sent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub commit: Option<String>,
+    pub commit: Option<CommitId>,
 }
 
 /// A review bound to a commit the PR's head has moved past, refused before
 /// anything was sent.
 #[derive(Debug)]
 pub struct HeadMoved {
-    pub reviewed: String,
+    pub reviewed: CommitId,
 }
 
 impl std::fmt::Display for HeadMoved {
@@ -278,7 +279,7 @@ impl ForgeRepo {
             verdict: review.verdict,
             body: &review.body,
             comments: diff.place(&review.comments)?,
-            head: current.head_sha.as_deref(),
+            head: current.head_sha.as_ref().map(shoal_refs::CommitId::as_str),
             bases: diff.bases.as_ref(),
         };
         let submission = self.kind.review(self, number, &placed)?;

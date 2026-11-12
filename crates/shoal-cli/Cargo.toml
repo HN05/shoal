@@ -21,6 +21,7 @@ sha2 = "0.11"
 shoal-client = { workspace = true, features = ["clap"] }
 shoal-core.workspace = true
 shoal-forge = { workspace = true, features = ["clap"] }
+shoal-refs.workspace = true
 shoal-subprocess.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }

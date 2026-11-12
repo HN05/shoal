@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use shoal_refs::CommitId;
 use shoal_time::UnixTime;
 
 use crate::{
@@ -36,6 +37,7 @@ pub(crate) const DISCUSSION: &str = "discussion";
 
 mod comments;
 pub(crate) use comments::{Entry, verdict_entries};
+mod commits;
 mod details;
 pub use details::{Edited, ItemDetails};
 mod held;
@@ -93,13 +95,13 @@ pub struct Snapshot {
     #[serde(deserialize_with = "comments::saved")]
     pub(crate) comments: BTreeMap<String, Entry>,
     pub(crate) checks: BTreeMap<String, Check>,
-    /// The PR's head commit, which its checks run on; empty for an issue.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub(crate) head: String,
-    /// The PR's base commit, which its mergeability compares against; empty
+    /// The PR's head commit, which its checks run on; `None` for an issue.
+    #[serde(default, with = "commits", skip_serializing_if = "Option::is_none")]
+    pub(crate) head: Option<CommitId>,
+    /// The PR's base commit, which its mergeability compares against; `None`
     /// for an issue or when the forge does not say.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub(crate) base: String,
+    #[serde(default, with = "commits", skip_serializing_if = "Option::is_none")]
+    pub(crate) base: Option<CommitId>,
     pub(crate) conflict: Option<bool>,
     /// The head and base commits the conflict observation covers.
     #[serde(default)]
@@ -158,11 +160,13 @@ pub(crate) struct FailedJob {
     pub(crate) step: Option<String>,
 }
 
-/// The commits a merge check compares; empty when the forge does not say.
+/// The commits a merge check compares; `None` when the forge does not say.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct MergeRevision {
-    pub(crate) head: String,
-    pub(crate) base: String,
+    #[serde(with = "commits")]
+    pub(crate) head: Option<CommitId>,
+    #[serde(with = "commits")]
+    pub(crate) base: Option<CommitId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -176,8 +180,8 @@ pub(crate) struct Check {
 /// A local merge of `head` into `base`; `conflict` reports its conflicts
 /// and is empty when it merges cleanly.
 pub struct MergeCheck {
-    pub head: String,
-    pub base: String,
+    pub head: CommitId,
+    pub base: CommitId,
     pub conflict: Option<String>,
 }
 
@@ -224,8 +228,8 @@ impl Snapshot {
             Ok(check) => {
                 snapshot.conflict = Some(check.conflict.is_some());
                 snapshot.conflict_at = MergeRevision {
-                    head: check.head,
-                    base: check.base,
+                    head: Some(check.head),
+                    base: Some(check.base),
                 };
                 snapshot.conflict_message = check.conflict;
                 snapshot.conflict_exact = true;
@@ -418,9 +422,9 @@ impl Snapshot {
         self.state
     }
 
-    /// The PR's head commit, empty for an issue.
-    pub fn head(&self) -> &str {
-        &self.head
+    /// The PR's head commit, `None` for an issue.
+    pub fn head(&self) -> Option<&CommitId> {
+        self.head.as_ref()
     }
 
     /// Each check that ran on the head commit, by name. Failures kept from
@@ -428,7 +432,7 @@ impl Snapshot {
     pub fn head_checks(&self) -> impl Iterator<Item = (&str, CheckState)> {
         self.checks
             .values()
-            .filter(|check| self.head.is_empty() || check.revision == self.head)
+            .filter(|check| (self.head.as_ref()).is_none_or(|head| check.revision == head.as_str()))
             .map(|check| (check.name.as_str(), check.state))
     }
 
@@ -442,7 +446,9 @@ impl Snapshot {
     /// Whether the PR's head conflicts with its base; `None` when unknown,
     /// as it is while an observation kept from an earlier head or base stands.
     pub fn head_conflict(&self) -> Option<bool> {
-        let covers = |observed: &str, current: &str| current.is_empty() || observed == current;
+        let covers = |observed: &Option<CommitId>, current: &Option<CommitId>| {
+            current.is_none() || observed == current
+        };
         self.conflict.filter(|_| {
             covers(&self.conflict_at.head, &self.head) && covers(&self.conflict_at.base, &self.base)
         })
@@ -649,7 +655,7 @@ impl Snapshot {
     /// An open PR's mergeability and the CI checks on its head commit, each
     /// under its name. A failed check lookup keeps the previous checks.
     pub(crate) fn record_checks(&mut self, pull: &Current, checks: Result<Vec<RestCheck>>) {
-        let head = pull.head_sha.clone().unwrap_or_default();
+        let head = (pull.head_sha.as_ref()).map_or_else(String::new, CommitId::to_string);
         let checks = checks.map(|checks| {
             checks
                 .into_iter()
@@ -673,12 +679,12 @@ impl Snapshot {
         pull: &Current,
         checks: Result<Vec<(String, Check)>>,
     ) {
-        self.head = pull.head_sha.clone().unwrap_or_default();
-        self.base = pull.base_sha.clone().unwrap_or_default();
+        self.head = pull.head_sha.clone();
+        self.base = pull.base_sha.clone();
         self.conflict = pull.conflict;
         self.conflict_at = MergeRevision {
-            head: pull.head_sha.clone().unwrap_or_default(),
-            base: pull.base_sha.clone().unwrap_or_default(),
+            head: pull.head_sha.clone(),
+            base: pull.base_sha.clone(),
         };
         match checks {
             Ok(checks) => self.checks.extend(checks),

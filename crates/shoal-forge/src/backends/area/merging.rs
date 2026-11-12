@@ -1,6 +1,7 @@
 //! What each forge does its own way with merges and reverts of PRs, and the
 //! branches they delete.
 use anyhow::{Context, Result};
+use shoal_refs::{BranchName, CommitId};
 
 use crate::{
     ForgeRepo, MERGED_HINT,
@@ -27,7 +28,7 @@ pub(crate) trait Merging: Backend {
         repo: &ForgeRepo,
         account: &Account,
         number: PullNumber,
-    ) -> Result<Option<Vec<String>>> {
+    ) -> Result<Option<Vec<CommitId>>> {
         rest::merged_commits(repo, account, number)
             .await
             .context(MERGED_HINT.trim_start_matches("; ").to_owned())
@@ -83,7 +84,7 @@ pub(crate) trait Merging: Backend {
         _account: &Account,
         _current: &Current,
         _revert: &NewRevert,
-    ) -> Result<(PullNumber, String)> {
+    ) -> Result<(PullNumber, BranchName)> {
         Err(crate::capability::unsupported(self, Capability::RevertPrs))
     }
 

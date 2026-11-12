@@ -124,7 +124,11 @@ impl RestReads for Forgejo {
         account: &Account,
         pull: &Current,
     ) -> Result<Vec<RestCheck>> {
-        let head = pull.head_sha.as_deref().context("PR has no head commit")?;
+        let head = pull
+            .head_sha
+            .as_ref()
+            .map(shoal_refs::CommitId::as_str)
+            .context("PR has no head commit")?;
         let endpoint = repo.repo_endpoint(&format!("commits/{head}/status?limit=50"));
         let combined = repo.send(account, &Request::get(endpoint)).await?;
         statuses(&combined)

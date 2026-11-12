@@ -5,6 +5,7 @@
 use crate::client::space_ids::SpaceId;
 use crate::forge::numbers::PullNumber;
 use anyhow::{Context, Result, ensure};
+use shoal_refs::CommitId;
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -36,7 +37,10 @@ impl Manager {
         let current = forge.read(&account, ItemKind::Pr, number.get()).await?;
         let head = current.head_sha.context("the forge names no PR head")?;
         let base = current.item.pr.context("the forge names no PR base")?.base;
-        let merged = Merged { head, target: base };
+        let merged = Merged {
+            head,
+            target: base.into(),
+        };
         let warning = warning(format!("PR #{number}"), recorded, &merged);
         Ok(warning.map(|warning| MergeWarning {
             url: Some(url),
@@ -84,7 +88,10 @@ impl Manager {
         let repo = self.repository(&workspace.repository_id).await?;
         let target = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await?;
         let head = git::resolve_commit(&workspace.path, "HEAD", git::run_isolated).await?;
-        let merged = Merged { head, target };
+        let merged = Merged {
+            head: head.into(),
+            target,
+        };
         let branch = workspace.require_branch("merging")?.to_owned();
         Ok(warning(branch, vec![recorded], &merged))
     }
@@ -140,7 +147,7 @@ fn links_pull(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<bool
 
 /// What a merge brings together: a head and the branch it merges into.
 struct Merged {
-    head: String,
+    head: CommitId,
     target: String,
 }
 

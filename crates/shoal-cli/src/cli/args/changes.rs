@@ -2,6 +2,7 @@
 use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Subcommand};
+use shoal_refs::BranchName;
 
 use crate::client::space_names::SpaceSelector;
 use crate::forge::numbers::CommentId;
@@ -493,7 +494,7 @@ pub struct OpenPullArgs {
     pub files: AttachArgs,
     /// Base branch; defaults to the base workspace's branch, then the default branch.
     #[arg(long)]
-    pub base: Option<String>,
+    pub base: Option<BranchName>,
     /// Open the PR as a draft, overriding [pr] draft.
     #[arg(long, overrides_with = "no_draft")]
     pub draft: bool,
@@ -545,7 +546,7 @@ pub struct PrEditArgs {
     pub edit: EditArgs,
     /// New base branch.
     #[arg(long)]
-    pub base: Option<String>,
+    pub base: Option<BranchName>,
     /// Request a review; repeat for more.
     #[arg(long = "add-reviewer", value_name = "LOGIN")]
     pub add_reviewers: Vec<String>,

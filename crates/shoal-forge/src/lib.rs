@@ -22,6 +22,7 @@ pub mod updates;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
+use shoal_refs::{BranchName, CommitId};
 
 use backends::{Backend, ForgeKind, Items, Merging};
 use hosts::{HostType, HostTypes};
@@ -233,7 +234,7 @@ impl ForgeRepo {
         &self,
         account: &account::Account,
         number: PullNumber,
-    ) -> Result<Option<Vec<String>>> {
+    ) -> Result<Option<Vec<CommitId>>> {
         self.kind.merged_commits(self, account, number).await
     }
 }
@@ -245,10 +246,10 @@ pub struct PullRequest {
     pub title: String,
     pub url: String,
     /// Its head branch, in this repository or in `fork`.
-    pub head: String,
-    pub base: String,
+    pub head: BranchName,
+    pub base: BranchName,
     /// The commit its head branch points to, where the forge reports it.
-    pub head_commit: Option<String>,
+    pub head_commit: Option<CommitId>,
     /// Whether its head branch is in another repository, or in one that was
     /// deleted, so this repository has no branch of it.
     pub fork: bool,
@@ -289,7 +290,7 @@ impl ForgeRepo {
     ) -> Result<PullRequest> {
         let pr = pull.item.pr.context("not a PR")?;
         ensure!(
-            !pr.head.is_empty() && !pr.base.is_empty(),
+            !pr.head.as_str().is_empty() && !pr.base.as_str().is_empty(),
             "PR #{number} has no head or base branch"
         );
         // A deleted fork leaves no head repository.

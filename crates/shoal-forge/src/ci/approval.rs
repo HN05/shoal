@@ -101,7 +101,7 @@ impl ForgeRepo {
     ) -> Result<Vec<WaitingRun>> {
         self.require(Capability::ApproveRuns)?;
         let head = self.open_head(account, number).await?;
-        let runs = self.waiting_runs(account, &head).await?;
+        let runs = self.waiting_runs(account, head.as_str()).await?;
         ensure!(
             !runs.is_empty(),
             "no CI run on the PR's head waits for approval"

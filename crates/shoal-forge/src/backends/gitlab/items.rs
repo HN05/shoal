@@ -2,6 +2,7 @@
 //! on them, and finding a PR by its head.
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
+use shoal_refs::BranchName;
 
 use super::GitLab;
 use crate::{
@@ -42,8 +43,10 @@ impl Items for GitLab {
             ItemKind::Issue => None,
             ItemKind::Pr => Some(PrSummary {
                 head: text(&value["source_branch"])
+                    .map(BranchName::from)
                     .context("merge request has no source branch")?,
                 base: text(&value["target_branch"])
+                    .map(BranchName::from)
                     .context("merge request has no target branch")?,
                 draft: value["draft"]
                     .as_bool()
@@ -84,7 +87,7 @@ impl Items for GitLab {
             head_repository: (kind == ItemKind::Pr && same_project).then(|| repo.path.clone()),
             body: text(&value["description"]).unwrap_or_default(),
             author: text(&value["author"]["username"]),
-            head_sha: text(&value["sha"]),
+            head_sha: text(&value["sha"]).map(Into::into),
             base_sha: None,
             // A fast-forward merge leaves the source branch's head.
             merge_commit: (state == ItemState::Merged)
@@ -93,7 +96,8 @@ impl Items for GitLab {
                         .or_else(|| text(&value["squash_commit_sha"]))
                         .or_else(|| text(&value["sha"]))
                 })
-                .flatten(),
+                .flatten()
+                .map(Into::into),
             conflict,
             merges_now: false,
             reviewers: reviewers.iter().map(|(name, _)| name.clone()).collect(),
@@ -190,7 +194,7 @@ impl Items for GitLab {
             fields.insert("description".into(), body.clone().into());
         }
         if let Some(base) = &edit.base {
-            fields.insert("target_branch".into(), base.clone().into());
+            fields.insert("target_branch".into(), base.as_str().into());
         }
         for (field, labels) in [
             ("add_labels", &edit.add_labels),
@@ -266,7 +270,7 @@ impl Items for GitLab {
         account: &Account,
         head: &Head<'_>,
     ) -> Result<Vec<Value>> {
-        let branch = encode(head.branch, false);
+        let branch = encode(head.branch.as_str(), false);
         let endpoint = format!("merge_requests?state=opened&source_branch={branch}");
         repo.pages(account, &repo.repo_endpoint(&endpoint)).await
     }
@@ -274,7 +278,7 @@ impl Items for GitLab {
     /// Only merge requests within the project: a fork is another project.
     fn has_head(&self, repo: &ForgeRepo, pull: &Value, head: &Head<'_>) -> bool {
         head.repository.eq_ignore_ascii_case(&repo.path)
-            && pull["source_branch"] == head.branch
+            && pull["source_branch"] == head.branch.as_str()
             && pull["source_project_id"] == pull["target_project_id"]
     }
 

@@ -4,6 +4,7 @@
 use std::fmt::Write as _;
 
 use anyhow::Result;
+use shoal_refs::CommitId;
 
 use super::store;
 use crate::client::space_names::SpaceSelector;
@@ -65,7 +66,7 @@ impl Manager {
         let (forge, account) = self.workspace_forge_account(workspace).await?;
         let (number, url) = forge.pull(url)?;
         let current = forge.read(&account, ItemKind::Pr, number.get()).await?;
-        let moved = current.head_sha.as_deref() != Some(head);
+        let moved = current.head_sha.as_ref().map(CommitId::as_str) != Some(head);
         let diff = match moved {
             true => None,
             false => Some(forge.pr_diff(&account, &current).await?),
@@ -137,7 +138,7 @@ pub(super) fn new_review(
         body,
         // A review of the current head is bound to it, so a push before the
         // forge receives it refuses it; one already outdated says so.
-        commit: review.head.clone().filter(|_| outdated.is_none()),
+        commit: (review.head.clone().map(CommitId::from)).filter(|_| outdated.is_none()),
         comments: placed
             .into_iter()
             .map(|finding| LineComment {

@@ -142,7 +142,8 @@ impl Reviews for GitLab {
 async fn diff(repo: &ForgeRepo, account: &Account, current: &Current) -> Result<Diff> {
     let head = current
         .head_sha
-        .as_deref()
+        .as_ref()
+        .map(shoal_refs::CommitId::as_str)
         .context("PR has no head commit")?;
     let merge_request = repo.item_endpoint(ItemKind::Pr, current.item.number);
     let versions = Request::get(format!("{merge_request}/versions"));

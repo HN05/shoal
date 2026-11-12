@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
+use shoal_refs::CommitId;
 
 use super::super::Manager;
 use crate::{
@@ -50,11 +51,11 @@ impl Manager {
             let pull = (forge.read(&account, ItemKind::Pr, number.get()).await)
                 .with_context(|| format!("could not read {url}"))?;
             let state = pull.item.state;
-            match unmarkable_reason(state, pull.head_sha.as_deref(), head) {
+            match unmarkable_reason(state, pull.head_sha.as_ref().map(CommitId::as_str), head) {
                 Some(reason) => pulls.skipped.push(SkippedPr { url, reason }),
                 None => {
                     let head = pull.head_sha.context("PR has no head commit")?;
-                    pulls.heads.insert(url, head);
+                    pulls.heads.insert(url, head.into());
                 }
             }
         }

@@ -1437,7 +1437,7 @@ async fn edits_are_reported_except_the_workspaces_own() {
                 url: "pr",
                 authored: Vec::new(),
                 state: None,
-                edited: Edited::retarget("feature", "main"),
+                edited: Edited::retarget(&"feature".into(), &"main".into()),
             };
             record_own_change(db, &id, change)
         })
@@ -1503,7 +1503,7 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
         let id = parent.id.clone();
         async move {
             let agents = manager.tracked_agents().await;
-            let edited = Edited::retarget(from, to);
+            let edited = Edited::retarget(&from.into(), &to.into());
             manager
                 .store
                 .run(move |db| {

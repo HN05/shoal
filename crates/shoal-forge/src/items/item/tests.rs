@@ -35,7 +35,7 @@ fn pulls_read_the_same_from_both_forges() {
     clean["mergeable_state"] = json!("clean");
     assert!(github.current(ItemKind::Pr, 7, &clean).unwrap().merges_now);
 
-    assert_eq!(current.merge_commit.as_deref(), Some("abc"));
+    assert_eq!(current.merge_commit, Some("abc".into()));
 
     let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
     // An open PR's merge commit is only the forge's test merge.

@@ -2,6 +2,7 @@
 //! on them, and finding a PR by its head.
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
+use shoal_refs::BranchName;
 
 use super::{Forgejo, actions};
 use crate::{
@@ -189,12 +190,13 @@ impl GitHubShapes for Forgejo {
 
     /// Once a PR's branch is deleted, Forgejo reports the PR's own ref as its
     /// head and keeps the branch name only as the head's label.
-    fn head_branch(&self, number: PullNumber, pull: &Value) -> Result<String> {
+    fn head_branch(&self, number: PullNumber, pull: &Value) -> Result<BranchName> {
         let head = github_rest::head_ref(pull)?;
         if head == format!("refs/pull/{number}/head") {
-            return text(&pull["head"]["label"]).context("PR has no head branch");
+            return (text(&pull["head"]["label"]).map(BranchName::from))
+                .context("PR has no head branch");
         }
-        Ok(head)
+        Ok(head.into())
     }
 
     /// Forgejo clears a milestone with ID 0.

@@ -1,5 +1,6 @@
 //! Change a PR's base branch, for stacked workspaces whose base PR merged.
 use anyhow::{Context, Result};
+use shoal_refs::BranchName;
 
 use crate::{
     ForgeRepo,
@@ -13,9 +14,14 @@ use crate::{
 
 impl ForgeRepo {
     /// Retargeting follows the user's merge, so it uses the user's login.
-    pub async fn retarget(&self, account: &Account, number: PullNumber, base: &str) -> Result<()> {
+    pub async fn retarget(
+        &self,
+        account: &Account,
+        number: PullNumber,
+        base: &BranchName,
+    ) -> Result<()> {
         let edit = Action::edit(Edit {
-            base: Some(base.to_owned()),
+            base: Some(base.clone()),
             ..Edit::default()
         });
         self.act(account, ItemKind::Pr, number.get(), &edit)

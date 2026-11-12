@@ -2,6 +2,7 @@
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::params;
+use shoal_refs::{BranchName, CommitId};
 
 use super::{
     pr::{RegistrationKind, current_head},
@@ -55,7 +56,7 @@ impl Manager {
         // The rebase cutoff is HEAD, so commits the merge left out would be
         // dropped from every stacked branch.
         let head = self.check_access(&base.path, current_head(base)).await?;
-        if !merged.contains(&head) {
+        if !merged.iter().any(|commit| *commit == head) {
             return Ok(Some(anyhow::anyhow!(
                 "the merged PRs do not contain the base workspace's HEAD"
             )));
@@ -65,7 +66,7 @@ impl Manager {
             return Ok(None);
         };
         // A watched PR's head need not be the base workspace's branch.
-        let merged_heads: Vec<String> = pulls.into_iter().map(|pull| pull.head).collect();
+        let merged_heads: Vec<BranchName> = pulls.into_iter().map(|pull| pull.head).collect();
         // Reload: they may have moved since. The caller holds the PR gates of
         // those stacked when it read `base`, so one stacked since waits.
         let stacked = self.workspace_by_id(&base.id).await?.stacked_workspaces;
@@ -81,7 +82,7 @@ impl Manager {
         Ok(None)
     }
 
-    async fn base_pr_commits(&self, base: &Workspace, url: &str) -> Result<Option<Vec<String>>> {
+    async fn base_pr_commits(&self, base: &Workspace, url: &str) -> Result<Option<Vec<CommitId>>> {
         let (forge, number, _) = self.pr_forge(&base.path, url).await?;
         forge.merged_commits(&self.user_account(), number).await
     }
@@ -100,8 +101,8 @@ impl Manager {
         &self,
         stacked: &WorkspaceRef,
         base: &Workspace,
-        merged_heads: &[String],
-        target: &str,
+        merged_heads: &[BranchName],
+        target: &BranchName,
         head: &str,
     ) -> Result<()> {
         let workspace = self.workspace_by_id(&stacked.id).await?;
@@ -145,7 +146,7 @@ impl Manager {
         pr: StackedPr<'_>,
         base: &Workspace,
         head: &str,
-        target: &str,
+        target: &BranchName,
     ) -> Result<Option<Retarget>> {
         let StackedPr {
             workspace,
@@ -203,7 +204,7 @@ impl Manager {
 /// The branch the base's merged PRs `pulls` merged into: the base of the
 /// last one that targets no other's head branch, since PRs stacked among
 /// them merged into each other.
-fn merged_into(pulls: &[PullRequest]) -> Option<String> {
+fn merged_into(pulls: &[PullRequest]) -> Option<BranchName> {
     let outside = |pull: &&PullRequest| !pulls.iter().any(|other| other.head == pull.base);
     let last = pulls.iter().rev().find(outside).or(pulls.last());
     last.map(|pull| pull.base.clone())
@@ -214,14 +215,14 @@ fn merged_into(pulls: &[PullRequest]) -> Option<String> {
 struct StackedPr<'a> {
     workspace: &'a Workspace,
     url: &'a str,
-    merged_heads: &'a [String],
+    merged_heads: &'a [BranchName],
 }
 
 /// How retargeting a stacked PR to the branch its base merged into went.
 enum Retarget {
     /// Retargeted from the branch `from`.
     Done {
-        from: String,
+        from: BranchName,
     },
     Failed(anyhow::Error),
 }
@@ -231,7 +232,7 @@ enum Retarget {
 fn base_merged_update(
     url: String,
     base: &Workspace,
-    target: &str,
+    target: &BranchName,
     head: &str,
     retargeted: Option<Retarget>,
 ) -> Update {

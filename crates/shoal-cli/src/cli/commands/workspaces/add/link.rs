@@ -193,15 +193,17 @@ pub(in crate::cli::commands) async fn pull_creation(
         .await?
         .iter()
         .any(|workspace| {
-            workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&pull.head)
+            workspace.repository_id == repo.id
+                && workspace.branch.as_deref() == Some(pull.head.as_str())
         });
     if owned {
-        creation.existing = Some(pull.head);
+        creation.existing = Some(pull.head.into());
     } else {
         if creation.base.is_none() {
-            creation.base = Some(review::fetch_pull_branch(&repo.path, "base", &pull.base).await?);
+            let base = pull.base.as_str();
+            creation.base = Some(review::fetch_pull_branch(&repo.path, "base", base).await?);
         }
-        creation.existing = Some(git::remote_ref("origin", &pull.head));
+        creation.existing = Some(git::remote_ref("origin", pull.head.as_str()));
     }
     creation.pr = Some(pull.url);
     Ok(())
@@ -224,11 +226,11 @@ pub(in crate::cli::commands) async fn fork_head(
         .head_commit
         .clone()
         .with_context(|| format!("PR #{} reports no head commit", pull.number))?;
-    let base = review::fetch_pull_branch(&repo.path, "base", &pull.base).await?;
+    let base = review::fetch_pull_branch(&repo.path, "base", pull.base.as_str()).await?;
     Ok(PullHead {
         number: pull.number,
         reference,
-        commit,
+        commit: commit.into(),
         base: Some(base),
     })
 }

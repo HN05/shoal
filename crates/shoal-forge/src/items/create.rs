@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shoal_refs::{BranchName, CommitId};
 
 use crate::{
     ForgeRepo,
@@ -39,7 +40,7 @@ pub struct NewIssue {
 pub struct PullOptions {
     pub title: Option<String>,
     pub body: Option<String>,
-    pub base: Option<String>,
+    pub base: Option<BranchName>,
     /// Overrides `[pr] draft` when set.
     pub draft: Option<bool>,
     pub labels: Vec<String>,
@@ -51,15 +52,15 @@ pub struct PullOptions {
 }
 
 /// A PR to open from `head` into `base`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewPull {
     pub title: String,
     pub body: String,
-    pub head: String,
+    pub head: BranchName,
     /// `owner/repository` of the fork `head` is in; unset for this repository.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub head_repository: Option<String>,
-    pub base: String,
+    pub base: BranchName,
     pub draft: bool,
     pub labels: Vec<String>,
     pub reviewers: Vec<String>,
@@ -122,12 +123,32 @@ pub struct Created {
     pub unfinished: Option<String>,
 }
 
+/// A PR tests fill in, from and into empty branch names.
+#[cfg(any(test, feature = "test-support"))]
+impl Default for NewPull {
+    fn default() -> Self {
+        Self {
+            title: String::new(),
+            body: String::new(),
+            head: BranchName::from(""),
+            head_repository: None,
+            base: BranchName::from(""),
+            draft: false,
+            labels: Vec::new(),
+            reviewers: Vec::new(),
+            assignees: Vec::new(),
+            milestone: None,
+            attachments: Vec::new(),
+        }
+    }
+}
+
 /// A PR's head: a branch in the PR's repository or in a fork of it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Head<'a> {
     /// `owner/repository` of the repository the branch is in.
     pub repository: &'a str,
-    pub branch: &'a str,
+    pub branch: &'a BranchName,
 }
 
 impl Head<'_> {
@@ -150,15 +171,15 @@ impl ForgeRepo {
 
     /// The commit `branch` points to, as the forge reports it: what a PR
     /// with it as its head would contain.
-    pub async fn branch_commit(&self, account: &Account, branch: &str) -> Result<String> {
-        let (request, pointer) = self.kind.branch_read(self, branch);
+    pub async fn branch_commit(&self, account: &Account, branch: &BranchName) -> Result<CommitId> {
+        let (request, pointer) = self.kind.branch_read(self, branch.as_str());
         let read = self
             .send(account, &request)
             .await
             .with_context(|| format!("could not read branch {branch} of {}", self.path))?;
         read.pointer(pointer)
             .and_then(Value::as_str)
-            .map(str::to_owned)
+            .map(CommitId::from)
             .with_context(|| format!("the forge did not report the commit of branch {branch}"))
     }
 
@@ -167,7 +188,7 @@ impl ForgeRepo {
     pub async fn open_pull_for(
         &self,
         account: &Account,
-        branch: &str,
+        branch: &BranchName,
         head_repository: Option<&str>,
     ) -> Result<Option<u64>> {
         let head = Head {

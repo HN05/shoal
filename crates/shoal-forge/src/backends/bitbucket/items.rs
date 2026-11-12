@@ -2,6 +2,7 @@
 //! commenting on them, and finding a PR by its head.
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
+use shoal_refs::BranchName;
 
 use super::{Bitbucket, literal};
 use crate::{
@@ -46,8 +47,10 @@ impl Items for Bitbucket {
             ItemKind::Issue => None,
             ItemKind::Pr => Some(PrSummary {
                 head: text(&value["source"]["branch"]["name"])
+                    .map(BranchName::from)
                     .context("pull request has no source branch")?,
                 base: text(&value["destination"]["branch"]["name"])
+                    .map(BranchName::from)
                     .context("pull request has no destination branch")?,
                 draft: value["draft"].as_bool().unwrap_or_default(),
             }),
@@ -72,9 +75,9 @@ impl Items for Bitbucket {
             head_repository: text(&value["source"]["repository"]["full_name"]),
             body: text(body).unwrap_or_default(),
             author: text(&value["author"]["account_id"]),
-            head_sha: text(&value["source"]["commit"]["hash"]),
-            base_sha: text(&value["destination"]["commit"]["hash"]),
-            merge_commit: text(&value["merge_commit"]["hash"]),
+            head_sha: text(&value["source"]["commit"]["hash"]).map(Into::into),
+            base_sha: text(&value["destination"]["commit"]["hash"]).map(Into::into),
+            merge_commit: text(&value["merge_commit"]["hash"]).map(Into::into),
             // Bitbucket does not report whether a pull request conflicts.
             conflict: None,
             merges_now: false,
@@ -210,7 +213,7 @@ impl Items for Bitbucket {
         head: &Head<'_>,
     ) -> Result<Vec<Value>> {
         let query = encode(
-            &format!("source.branch.name={}", literal(head.branch)),
+            &format!("source.branch.name={}", literal(head.branch.as_str())),
             false,
         );
         let endpoint = format!("pullrequests?state=OPEN&q={query}");
@@ -218,7 +221,7 @@ impl Items for Bitbucket {
     }
 
     fn has_head(&self, _repo: &ForgeRepo, pull: &Value, head: &Head<'_>) -> bool {
-        pull["source"]["branch"]["name"] == head.branch
+        pull["source"]["branch"]["name"] == head.branch.as_str()
             && pull["source"]["repository"]["full_name"]
                 .as_str()
                 .is_some_and(|name| name.eq_ignore_ascii_case(head.repository))

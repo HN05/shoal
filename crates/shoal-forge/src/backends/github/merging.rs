@@ -1,6 +1,7 @@
 //! GitHub's merges and reverts of PRs, and the branches they delete.
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
+use shoal_refs::BranchName;
 
 use super::GitHub;
 use crate::{
@@ -51,7 +52,7 @@ impl Merging for GitHub {
         ];
         // A fork's branch is not this repository's to delete.
         if delete_branch && current.head_in(repo) {
-            requests.push(self.branch_delete(repo, &pr.head));
+            requests.push(self.branch_delete(repo, pr.head.as_str()));
         }
         Ok(requests)
     }
@@ -94,7 +95,8 @@ impl Merging for GitHub {
             .context("GitHub did not report the PR's node ID")?;
         let head = current
             .head_sha
-            .as_deref()
+            .as_ref()
+            .map(shoal_refs::CommitId::as_str)
             .context("GitHub did not report the PR's head commit")?;
         let method = match method {
             UpdateMethod::Merge => "MERGE",
@@ -116,7 +118,7 @@ impl Merging for GitHub {
         account: &Account,
         current: &Current,
         revert: &NewRevert,
-    ) -> Result<(PullNumber, String)> {
+    ) -> Result<(PullNumber, BranchName)> {
         let response = repo
             .send(account, &revert_request(current, revert)?)
             .await?;
@@ -178,13 +180,14 @@ fn revert_request(current: &Current, revert: &NewRevert) -> Result<Request> {
 const REVERT_PULL: &str = "mutation($id: ID!, $title: String!, $body: String!, $draft: Boolean!) { revertPullRequest(input: {pullRequestId: $id, title: $title, body: $body, draft: $draft}) { revertPullRequest { number headRefName } } }";
 
 /// The number and head branch of the PR a revert's response reports.
-fn reverted(response: &Value) -> Result<(PullNumber, String)> {
+fn reverted(response: &Value) -> Result<(PullNumber, BranchName)> {
     let pull = &response["data"]["revertPullRequest"]["revertPullRequest"];
     let number = pull["number"]
         .as_u64()
         .map(PullNumber::new)
         .context("GitHub did not report the revert's number")?;
-    let head = text(&pull["headRefName"]).context("GitHub did not report the revert's branch")?;
+    let head = (text(&pull["headRefName"]).map(BranchName::from))
+        .context("GitHub did not report the revert's branch")?;
     Ok((number, head))
 }
 

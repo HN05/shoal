@@ -68,7 +68,7 @@ fn findings_on_diff_lines_become_line_comments_and_the_rest_go_in_the_body() {
     assert!(posted.body.ends_with(&format!("_{AUTOMATED_NOTE}_")));
     assert!(!posted.body.contains("0123456789ab"), "{}", posted.body);
     // A review of the current head is bound to it.
-    assert_eq!(posted.commit.as_deref(), Some("0123456789abcdef"));
+    assert_eq!(posted.commit, Some("0123456789abcdef".into()));
     posted.validate().unwrap();
 }
 
@@ -85,7 +85,7 @@ fn a_review_of_a_moved_head_puts_every_finding_in_the_body() {
 #[test]
 fn a_clean_review_posts_its_summary_without_the_note() {
     let posted = new_review(&review(Vec::new()), |_| true, None);
-    assert_eq!(posted.commit.as_deref(), Some("0123456789abcdef"));
+    assert_eq!(posted.commit, Some("0123456789abcdef".into()));
     assert!(posted.body.starts_with("One blocker."), "{}", posted.body);
     assert!(!posted.body.contains(AUTOMATED_NOTE), "{}", posted.body);
     posted.validate().unwrap();

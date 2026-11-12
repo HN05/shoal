@@ -4,6 +4,7 @@ use std::borrow::Cow;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
+use shoal_refs::BranchName;
 
 use crate::{
     ForgeRepo,
@@ -104,7 +105,7 @@ pub enum Action {
 pub struct Edit {
     pub title: Option<String>,
     pub body: Option<String>,
-    pub base: Option<String>,
+    pub base: Option<BranchName>,
     pub add_labels: Vec<String>,
     pub remove_labels: Vec<String>,
     pub add_reviewers: Vec<String>,
@@ -821,7 +822,7 @@ impl ForgeRepo {
             item.number,
             self.path
         );
-        Ok(self.kind.branch_delete(self, &pr.head))
+        Ok(self.kind.branch_delete(self, pr.head.as_str()))
     }
 
     /// Refuse to delete a PR's branch that no longer points to the PR's
@@ -835,12 +836,12 @@ impl ForgeRepo {
             .context("only PRs have a branch to delete")?;
         let head = current
             .head_sha
-            .as_deref()
+            .as_ref()
             .context("the forge did not report the PR's head commit")?;
         let tip = self.branch_commit(account, &pr.head).await?;
         // Bitbucket reports a PR's head as an abbreviated hash.
         ensure!(
-            tip.starts_with(head),
+            tip.as_str().starts_with(head.as_str()),
             "branch {} moved to {tip} after #{} was {}; it holds commits the PR does not have",
             pr.head,
             item.number,

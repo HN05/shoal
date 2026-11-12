@@ -203,10 +203,11 @@ async fn revert_merge(
         crate::client::workspaces::verify(&ctx.paths, SpaceSelector::id(&workspace.id), true)
             .await?;
     let path = &workspace.path;
+    let commits: Vec<String> = merged.commits.iter().map(ToString::to_string).collect();
     let facts = Merged {
-        merge_commit: &merged.merge_commit,
-        head: &merged.head,
-        commits: &merged.commits,
+        merge_commit: merged.merge_commit.as_str(),
+        head: merged.head.as_str(),
+        commits: &commits,
         head_ref: merged.head_ref.as_deref(),
     };
     let merge = Merge::of(path, &facts).await?;

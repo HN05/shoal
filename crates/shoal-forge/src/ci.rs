@@ -12,6 +12,7 @@ pub mod workflow;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shoal_refs::CommitId;
 
 use crate::{
     ForgeRepo,
@@ -146,14 +147,14 @@ impl ForgeRepo {
         self.require_on_server(account, Capability::ci(action))
             .await?;
         let head = self.open_head(account, number).await?;
-        let jobs = self.ci_jobs(account, &head).await?;
+        let jobs = self.ci_jobs(account, head.as_str()).await?;
         let selected = select(&jobs, action, names)?;
         let (operations, checks) = operations(&self.kind, &jobs, &selected, action)?;
         let mut endpoints = Vec::new();
         for operation in operations {
             let endpoint = self
                 .kind
-                .ci_endpoint(self, account, &head, operation)
+                .ci_endpoint(self, account, head.as_str(), operation)
                 .await?;
             push_new(&mut endpoints, endpoint);
         }
@@ -190,7 +191,11 @@ impl ForgeRepo {
         self.kind.locate_job(self, target)
     }
 
-    pub(crate) async fn open_head(&self, account: &Account, number: PullNumber) -> Result<String> {
+    pub(crate) async fn open_head(
+        &self,
+        account: &Account,
+        number: PullNumber,
+    ) -> Result<CommitId> {
         let pull = self.read(account, ItemKind::Pr, number.get()).await?;
         ensure!(pull.item.state == ItemState::Open, "#{number} is not open");
         pull.head_sha.context("PR has no head commit")

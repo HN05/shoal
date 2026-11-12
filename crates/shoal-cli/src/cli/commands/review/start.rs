@@ -258,12 +258,13 @@ async fn pull_request(
         .await?
         .into_iter()
         .find(|workspace| {
-            workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&pull.head)
+            workspace.repository_id == repo.id
+                && workspace.branch.as_deref() == Some(pull.head.as_str())
         });
     let workspace = match owner {
         Some(workspace) => {
-            fetch_pull_branch(&repo.path, "base", &pull.base).await?;
-            update_to_head(ctx, &repo.path, &workspace, &pull.head).await?;
+            fetch_pull_branch(&repo.path, "base", pull.base.as_str()).await?;
+            update_to_head(ctx, &repo.path, &workspace, pull.head.as_str()).await?;
             let workspace =
                 super::super::workspaces::link_pull(ctx, workspace, pull.url.clone()).await?;
             eprintln!(
@@ -273,9 +274,9 @@ async fn pull_request(
             workspace.id
         }
         None => {
-            let tracking = fetch_pull_branch(&repo.path, "base", &pull.base).await?;
+            let tracking = fetch_pull_branch(&repo.path, "base", pull.base.as_str()).await?;
             let creation = crate::start_plan::Creation {
-                existing: Some(git::remote_ref("origin", &pull.head)),
+                existing: Some(git::remote_ref("origin", pull.head.as_str())),
                 base: Some(tracking),
                 pr: Some(pull.url.clone()),
                 options: CreationOptions {
@@ -308,7 +309,7 @@ async fn pull_request(
                 .into_iter()
                 .find(|workspace| {
                     workspace.repository_id == repo.id
-                        && workspace.branch.as_ref() == Some(&pull.head)
+                        && workspace.branch.as_deref() == Some(pull.head.as_str())
                 })
                 .context("the opened PR workspace is missing")?
                 .id
@@ -517,8 +518,8 @@ impl Subject {
             Self::Changes => ReviewTarget::Workspace,
             Self::Pull { pull, .. } => ReviewTarget::Pr {
                 url: pull.url,
-                head: pull.head,
-                base: pull.base,
+                head: pull.head.into(),
+                base: pull.base.into(),
                 post,
             },
         }

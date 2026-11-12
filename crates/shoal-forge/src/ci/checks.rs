@@ -3,6 +3,7 @@ pub(crate) mod plain;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
+use shoal_refs::CommitId;
 
 use crate::{
     ForgeRepo,
@@ -136,7 +137,7 @@ impl ForgeRepo {
         name: &str,
     ) -> Result<CheckLog> {
         let head = self.pull_head(account, url).await?;
-        let checks = self.kind.ci_checks(self, account, &head).await?;
+        let checks = self.kind.ci_checks(self, account, head.as_str()).await?;
         let (location, target) = self.failed_job(&checks, name)?;
         let log = self.job_log(account, location).await?;
         let step = self.kind.failed_step(&log);
@@ -144,7 +145,7 @@ impl ForgeRepo {
     }
 
     /// The head commit of PR `url`, open or not.
-    pub async fn pull_head(&self, account: &Account, url: &str) -> Result<String> {
+    pub async fn pull_head(&self, account: &Account, url: &str) -> Result<CommitId> {
         let (number, _) = self.pull(url)?;
         let pull = self.read(account, ItemKind::Pr, number.get()).await?;
         pull.head_sha.context("PR has no head commit")

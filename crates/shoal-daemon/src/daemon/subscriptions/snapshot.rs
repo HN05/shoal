@@ -218,7 +218,6 @@ fn workspace_links(workspace: &Workspace, activity: &HashMap<String, Snapshot>) 
         .chain(recorded)
         .map(|(relation, kind, url, title)| {
             let observed = activity.get(url);
-            let present = |value: &str| (!value.is_empty()).then(|| value.to_owned());
             Link {
                 id: format!("{}/{relation}/{url}", workspace.id),
                 workspace_id: workspace.id.clone(),
@@ -227,7 +226,7 @@ fn workspace_links(workspace: &Workspace, activity: &HashMap<String, Snapshot>) 
                 relation,
                 title,
                 state: observed.and_then(Snapshot::state),
-                head: observed.and_then(|observed| present(observed.head())),
+                head: observed.and_then(Snapshot::head).map(ToString::to_string),
                 checks: observed.map_or_else(Vec::new, checks),
                 conflict: observed.and_then(Snapshot::head_conflict),
                 lookup_errors: observed.map_or_else(Vec::new, lookup_errors),

@@ -118,9 +118,11 @@ async fn diff(repo: &ForgeRepo, account: &Account, current: &Current) -> Result<
 fn diff_endpoint(repo: &ForgeRepo, current: &Current) -> Result<String> {
     let head = current
         .head_sha
-        .as_deref()
+        .as_ref()
+        .map(shoal_refs::CommitId::as_str)
         .context("PR has no head commit")?;
-    let base = (current.base_sha.as_deref()).context("PR has no destination commit")?;
+    let base = (current.base_sha.as_ref().map(shoal_refs::CommitId::as_str))
+        .context("PR has no destination commit")?;
     Ok(repo.repo_endpoint(&format!("diff/{head}..{base}?topic=true")))
 }
 

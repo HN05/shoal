@@ -176,7 +176,11 @@ async fn checks(
     account: &Account,
     pull: &Current,
 ) -> Result<Vec<(String, Check)>> {
-    let head = pull.head_sha.as_deref().context("PR has no head commit")?;
+    let head = pull
+        .head_sha
+        .as_ref()
+        .map(shoal_refs::CommitId::as_str)
+        .context("PR has no head commit")?;
     let (runs, statuses) = commit_checks(repo, account, head).await?;
     let mut checks = check_runs(head, &runs)?;
     checks.extend(commit_statuses(head, &statuses)?);

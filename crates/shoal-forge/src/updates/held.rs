@@ -1,13 +1,15 @@
 //! Passing CI checks held back while other checks on the PR's head are
 //! pending, so its agent wakes when a check fails or every check has passed.
 use serde::{Deserialize, Serialize};
+use shoal_refs::CommitId;
 
 use crate::updates::{Snapshot, Update};
 
 /// The passing checks of a head commit that are not delivered yet.
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct HeldPasses {
-    head: String,
+    #[serde(with = "super::commits")]
+    head: Option<CommitId>,
     updates: Vec<Update>,
 }
 
@@ -21,8 +23,8 @@ impl HeldPasses {
     /// a failed check, or the last pending one finishing, delivers the passes
     /// held for that head with it. A new head drops the previous head's.
     pub(super) fn deliver(&mut self, snapshot: &Snapshot, observed: Vec<Update>) -> Vec<Update> {
-        if self.head != snapshot.head() {
-            snapshot.head().clone_into(&mut self.head);
+        if self.head.as_ref() != snapshot.head() {
+            self.head = snapshot.head().cloned();
             self.updates.clear();
         }
         let failed = observed.iter().any(|update| {

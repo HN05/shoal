@@ -2,6 +2,7 @@
 //! implements [`GitHubShapes`] for what it serves its own way.
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
+use shoal_refs::BranchName;
 
 use super::LoginHint;
 use crate::{
@@ -38,8 +39,8 @@ pub(crate) trait GitHubShapes {
     }
 
     /// The head branch of PR `number`, read from `pull`.
-    fn head_branch(&self, _number: PullNumber, pull: &Value) -> Result<String> {
-        head_ref(pull)
+    fn head_branch(&self, _number: PullNumber, pull: &Value) -> Result<BranchName> {
+        head_ref(pull).map(BranchName::from)
     }
 
     /// The milestone field's value that clears a milestone.
@@ -167,7 +168,9 @@ pub(crate) fn current(
         ItemKind::Issue => None,
         ItemKind::Pr => Some(PrSummary {
             head: forge.head_branch(PullNumber::new(number), value)?,
-            base: text(&value["base"]["ref"]).context("PR has no base branch")?,
+            base: text(&value["base"]["ref"])
+                .map(BranchName::from)
+                .context("PR has no base branch")?,
             draft: match forge.draft_marker() {
                 Some(marker) => marker.prefix_len(&title).is_some(),
                 None => value["draft"].as_bool().unwrap_or_default(),
@@ -194,10 +197,13 @@ pub(crate) fn current(
         head_repository: text(&value["head"]["repo"]["full_name"]),
         body: text(&value["body"]).unwrap_or_default(),
         author: text(&value["user"]["login"]),
-        head_sha: text(&value["head"]["sha"]),
-        base_sha: text(&value["base"]["sha"]),
+        head_sha: text(&value["head"]["sha"]).map(Into::into),
+        base_sha: text(&value["base"]["sha"]).map(Into::into),
         // GitHub also reports the test merge of an open PR here.
-        merge_commit: merged.then(|| text(&value["merge_commit_sha"])).flatten(),
+        merge_commit: merged
+            .then(|| text(&value["merge_commit_sha"]))
+            .flatten()
+            .map(Into::into),
         conflict,
         merges_now: matches!(
             value["mergeable_state"].as_str(),
@@ -225,7 +231,7 @@ pub(crate) async fn behind(
     else {
         return Ok(None);
     };
-    let path = compare(&encode(&pr.base, true), head);
+    let path = compare(&encode(pr.base.as_str(), true), head.as_str());
     comparison_count(repo, account, &path, field)
         .await
         .map(Some)
@@ -278,7 +284,7 @@ pub(crate) fn edit(
         fields.insert("body".into(), body.clone().into());
     }
     if let Some(base) = &edit.base {
-        fields.insert("base".into(), base.clone().into());
+        fields.insert("base".into(), base.as_str().into());
     }
     let assignment = assignment_fields(current, edit, forge)?;
     // Only the issue endpoint changes a PR's assignees and milestone.
@@ -412,7 +418,7 @@ pub(crate) fn set_state(repo: &ForgeRepo, item: &Item, state: ItemState) -> Requ
 
 /// Whether a listed PR's head is `head`.
 pub(crate) fn has_head(pull: &Value, head: &Head<'_>) -> bool {
-    pull["head"]["ref"] == head.branch
+    pull["head"]["ref"] == head.branch.as_str()
         && pull["head"]["repo"]["full_name"]
             .as_str()
             .is_some_and(|name| name.eq_ignore_ascii_case(head.repository))
@@ -461,7 +467,7 @@ pub(crate) fn head_spec(pull: &NewPull) -> String {
             };
             format!("{}:{}", head.owner(), head.branch)
         }
-        None => pull.head.clone(),
+        None => pull.head.to_string(),
     }
 }
 

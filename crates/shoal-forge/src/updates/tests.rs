@@ -48,8 +48,8 @@ fn conflicts_are_reported_again_for_a_new_head_or_base_once_confirmed() {
         let mut next = Snapshot {
             conflict,
             conflict_at: MergeRevision {
-                head: head.into(),
-                base: base.into(),
+                head: Some(head.into()),
+                base: Some(base.into()),
             },
             ..Default::default()
         };
@@ -274,6 +274,30 @@ fn snapshots_saved_without_a_kind_report_the_next_observations_state() {
     let stored: Snapshot = serde_json::from_str(&serde_json::to_string(&closed).unwrap()).unwrap();
     assert!(stored.changes(&closed, "issue").is_empty());
     assert_eq!(stored.kind, Some(SnapshotKind::Issue));
+}
+
+#[test]
+fn commits_a_snapshot_lacks_are_stored_as_empty_text() {
+    let issue = Snapshot::of(SnapshotKind::Issue, Some(SnapshotState::Open));
+    let stored = serde_json::to_value(&issue).unwrap();
+    assert!(stored.get("head").is_none() && stored.get("base").is_none());
+    assert_eq!(stored["conflict_at"], json!({"head": "", "base": ""}));
+    let read: Snapshot = serde_json::from_value(stored).unwrap();
+    assert_eq!(
+        (read.head, read.conflict_at),
+        (None, MergeRevision::default())
+    );
+    let pr = Snapshot {
+        head: Some("1".into()),
+        conflict_at: MergeRevision {
+            head: Some("1".into()),
+            base: None,
+        },
+        ..Snapshot::default()
+    };
+    let stored = serde_json::to_value(&pr).unwrap();
+    assert_eq!(stored["head"], "1");
+    assert_eq!(stored["conflict_at"], json!({"head": "1", "base": ""}));
 }
 
 #[test]
@@ -675,7 +699,7 @@ fn a_run_with_many_failed_jobs_reports_a_bounded_update() {
 #[test]
 fn head_checks_leave_out_failures_kept_from_an_earlier_head() {
     let mut snapshot = Snapshot {
-        head: "2".into(),
+        head: Some("2".into()),
         ..Snapshot::default()
     };
     for (key, revision) in [("old", "1"), ("new", "2")] {
@@ -695,20 +719,20 @@ fn head_checks_leave_out_failures_kept_from_an_earlier_head() {
 #[test]
 fn a_conflict_kept_from_an_earlier_head_or_base_is_unknown_at_the_new_one() {
     let mut snapshot = Snapshot {
-        head: "1".into(),
-        base: "main".into(),
+        head: Some("1".into()),
+        base: Some("main".into()),
         conflict: Some(true),
         conflict_at: MergeRevision {
-            head: "1".into(),
-            base: "main".into(),
+            head: Some("1".into()),
+            base: Some("main".into()),
         },
         ..Snapshot::default()
     };
     assert_eq!(snapshot.head_conflict(), Some(true));
-    snapshot.base = "main-2".into();
+    snapshot.base = Some("main-2".into());
     assert_eq!(snapshot.head_conflict(), None);
-    snapshot.base = "main".into();
-    snapshot.head = "2".into();
+    snapshot.base = Some("main".into());
+    snapshot.head = Some("2".into());
     assert_eq!(snapshot.head_conflict(), None);
 }
 
@@ -758,7 +782,7 @@ fn own_edits_are_taken_as_seen_leaving_other_changes_reported() {
         .unwrap()
     };
     let mut seen = snapshot("feature", json!([]));
-    seen.adopt_edited(&Edited::retarget("feature", "main"));
+    seen.adopt_edited(&Edited::retarget(&"feature".into(), &"main".into()));
     assert!(seen.changes(&snapshot("main", json!([])), "pr").is_empty());
     let labelled = seen.changes(&snapshot("main", json!(["bug"])), "pr");
     assert_eq!(labelled[0].message, "Labels added: bug");
@@ -779,7 +803,7 @@ fn own_edits_are_taken_as_seen_leaving_other_changes_reported() {
     assert_eq!(updates[0].message, "Labels added: bug");
     // An item not observed yet takes its details from its first observation.
     let mut unobserved = Snapshot::default();
-    unobserved.adopt_edited(&Edited::retarget("feature", "main"));
+    unobserved.adopt_edited(&Edited::retarget(&"feature".into(), &"main".into()));
     assert!(unobserved.details.is_none());
 }
 

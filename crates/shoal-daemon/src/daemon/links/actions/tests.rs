@@ -7,7 +7,8 @@ async fn a_branch_pushed_to_a_fork_on_the_same_forge_names_the_fork_as_its_head(
     let root = tempfile::tempdir().unwrap();
     let path = repository(root.path(), "repo");
     let forge = ForgeRepo::parse("https://github.com/team/repo").unwrap();
-    let head = || head_repository(&path, "topic", &forge);
+    let topic = "topic".into();
+    let head = || head_repository(&path, &topic, &forge);
     git(
         &path,
         &["remote", "add", "origin", "git@github.com:team/repo.git"],

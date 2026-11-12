@@ -4,6 +4,7 @@ use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::daemon::links::proposals::OpenOutcomeExt;
 use anyhow::{Context, Result, bail};
+use shoal_refs::BranchName;
 
 use super::{
     proposals::OpenOutcome,
@@ -388,7 +389,7 @@ fn ensure_branch_head(workspace: &Workspace, item: &Item) -> Result<()> {
     anyhow::ensure!(
         item.pr
             .as_ref()
-            .is_some_and(|pr| workspace.branch.as_ref() == Some(&pr.head)),
+            .is_some_and(|pr| workspace.branch.as_deref() == Some(pr.head.as_str())),
         "{} does not have the workspace branch as its head",
         item.url
     );
@@ -414,7 +415,7 @@ impl Manager {
         // Cleanup holds the workspace's gate, so it cannot remove the
         // workspace between opening the PR and linking it.
         let (workspace, _gate) = self.lock_pr_gate(selector).await?;
-        let branch = workspace.require_branch("shoal pr open")?.to_owned();
+        let branch = BranchName::from(workspace.require_branch("shoal pr open")?);
         self.verify_worktree(&workspace).await?;
         let head = super::pr::current_head(&workspace).await?;
         let push = match push_held {
@@ -519,7 +520,7 @@ impl Manager {
     /// that its review gate refuses; checked before anything is pushed.
     pub(crate) async fn check_pr_review_gate(&self, selector: &SpaceSelector) -> Result<()> {
         let workspace = self.workspace(selector).await?;
-        let Some(branch) = workspace.branch.clone() else {
+        let Some(branch) = workspace.branch.clone().map(BranchName::from) else {
             return Ok(());
         };
         if !self
@@ -679,19 +680,18 @@ async fn new_pull(
         .and_then(|base| base.branch.clone());
     let base = match (options.base, base_branch) {
         (Some(base), _) => base,
-        (None, Some(branch)) => branch,
-        (None, None) => {
-            crate::git::default_branch::resolve(
-                &workspace.path,
-                crate::git::default_branch::DefaultBranchLookup::Discover,
-            )
-            .await?
-        }
+        (None, Some(branch)) => branch.into(),
+        (None, None) => crate::git::default_branch::resolve(
+            &workspace.path,
+            crate::git::default_branch::DefaultBranchLookup::Discover,
+        )
+        .await?
+        .into(),
     };
     Ok(NewPull {
         title,
         body: conventions::pull_description(options.body, issue),
-        head: workspace.require_branch("shoal pr open")?.to_owned(),
+        head: workspace.require_branch("shoal pr open")?.into(),
         head_repository: None,
         base,
         draft: options.draft.unwrap_or(default_draft),
@@ -708,10 +708,10 @@ async fn new_pull(
 /// fetches from, as `origin` is, whatever its push URL.
 pub(super) async fn head_repository(
     worktree: &std::path::Path,
-    branch: &str,
+    branch: &BranchName,
     forge: &ForgeRepo,
 ) -> Result<Option<String>> {
-    let remote = crate::git::push_remote(worktree, branch).await?;
+    let remote = crate::git::push_remote(worktree, branch.as_str()).await?;
     let url = crate::git::remote_url(worktree, &remote).await?;
     let pushed = ForgeRepo::parse(url.trim())
         .with_context(|| format!("the branch's push remote {remote} is not a forge repository"))?;

@@ -3,6 +3,7 @@
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shoal_refs::{BranchName, CommitId};
 
 use crate::backends::{Backend, Items};
 use crate::state::states;
@@ -35,8 +36,8 @@ pub struct Item {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrSummary {
-    pub head: String,
-    pub base: String,
+    pub head: BranchName,
+    pub base: BranchName,
     pub draft: bool,
 }
 
@@ -65,12 +66,12 @@ pub struct Current {
     /// Who opened the item, named as reviewer changes name users.
     pub author: Option<String>,
     /// The commit a PR's head branch points to.
-    pub head_sha: Option<String>,
+    pub head_sha: Option<CommitId>,
     /// The commit a PR's base branch points to, where the forge reports it.
-    pub base_sha: Option<String>,
+    pub base_sha: Option<CommitId>,
     /// The commit a merged PR's merge left at the tip of its base branch: a
     /// merge commit, its squashed commit, or the last of its rebased ones.
-    pub merge_commit: Option<String>,
+    pub merge_commit: Option<CommitId>,
     /// Whether an open PR conflicts with its base; unknown while the forge
     /// computes it. Forgejo reports none for drafts.
     pub conflict: Option<bool>,

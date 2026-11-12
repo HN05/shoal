@@ -4,6 +4,7 @@
 use crate::client::space_ids::SpaceId;
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Context, Result, bail, ensure};
+use shoal_refs::{BranchName, CommitId};
 use std::{
     collections::BTreeSet,
     ffi::OsString,
@@ -588,7 +589,7 @@ impl Manager {
             if let Some(number) = forge
                 .open_pull_for(
                     &account,
-                    workspace.require_branch("opening a PR")?,
+                    &workspace.require_branch("opening a PR")?.into(),
                     head_repository,
                 )
                 .await?
@@ -839,19 +840,19 @@ async fn pull_current(
     account: &Account,
     proposed: &PullSpecification,
 ) -> Result<bool> {
-    let Some(branch) = workspace.branch.as_deref() else {
+    let Some(branch) = workspace.branch.clone().map(BranchName::from) else {
         return Ok(false);
     };
     if proposed.pull.head != branch || super::pr::current_head(workspace).await? != proposed.commit
     {
         return Ok(false);
     }
-    let head_repository = super::actions::head_repository(&workspace.path, branch, forge).await?;
+    let head_repository = super::actions::head_repository(&workspace.path, &branch, forge).await?;
     if head_repository != proposed.pull.head_repository {
         return Ok(false);
     }
     let head = head_commit(workspace, forge, account, head_repository.as_deref()).await?;
-    Ok(head.as_deref() == Some(proposed.commit.as_str()))
+    Ok(head.as_ref().map(CommitId::as_str) == Some(proposed.commit.as_str()))
 }
 
 /// The commit the branch has in the repository a PR from it comes from: the
@@ -861,16 +862,17 @@ async fn head_commit(
     forge: &ForgeRepo,
     account: &Account,
     head_repository: Option<&str>,
-) -> Result<Option<String>> {
+) -> Result<Option<CommitId>> {
     let branch = workspace.require_branch("opening a PR")?;
     match head_repository {
         Some(fork) => {
             let fork = forge.sibling(fork);
-            fork.branch_commit(account, branch).await.map(Some)
+            fork.branch_commit(account, &branch.into()).await.map(Some)
         }
         None => {
             let remote = crate::git::push_remote(&workspace.path, branch).await?;
-            crate::git::pushed_commit(&workspace.path, &remote, branch).await
+            let pushed = crate::git::pushed_commit(&workspace.path, &remote, branch).await?;
+            Ok(pushed.map(CommitId::from))
         }
     }
 }

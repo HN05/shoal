@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
+use shoal_refs::CommitId;
 
 use crate::{
     ForgeRepo,
@@ -54,7 +55,7 @@ pub struct PrStatus {
     pub errors: Vec<String>,
     /// The open PR's head commit, where its runs are looked up.
     #[serde(skip)]
-    pub(crate) head: Option<String>,
+    pub(crate) head: Option<CommitId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,7 +101,7 @@ impl PrStatus {
         }
         self.merge_conflicts = snapshot.conflict;
         self.checks = snapshot.check_results();
-        self.head = Some(snapshot.head).filter(|head| !head.is_empty());
+        self.head = snapshot.head;
     }
 
     /// The review state, or why it could not be read.
@@ -133,7 +134,7 @@ impl ForgeRepo {
         let Some(head) = &status.head else {
             return;
         };
-        match self.waiting_runs(account, head).await {
+        match self.waiting_runs(account, head.as_str()).await {
             Ok(runs) => status.waiting_runs = runs,
             Err(error) => status
                 .errors

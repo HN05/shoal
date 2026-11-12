@@ -115,7 +115,7 @@ fn merge_requests_read_branches_drafts_and_conflicts() {
         }
     );
     assert_eq!(current.conflict, Some(true));
-    assert_eq!(current.head_sha.as_deref(), Some("abc"));
+    assert_eq!(current.head_sha, Some("abc".into()));
     assert_eq!(
         current.head_repository.as_deref(),
         Some("group/sub/project")
@@ -137,10 +137,10 @@ fn merge_requests_read_branches_drafts_and_conflicts() {
     let current = gitlab().current(ItemKind::Pr, 7, &merged).unwrap();
     assert_eq!(current.item.state, ItemState::Merged);
     // A fast-forward merge leaves the source branch's head on the target.
-    assert_eq!(current.merge_commit.as_deref(), Some("head"));
+    assert_eq!(current.merge_commit, Some("head".into()));
     merged["squash_commit_sha"] = json!("squashed");
     let current = gitlab().current(ItemKind::Pr, 7, &merged).unwrap();
-    assert_eq!(current.merge_commit.as_deref(), Some("squashed"));
+    assert_eq!(current.merge_commit, Some("squashed".into()));
     assert!(gitlab().current(ItemKind::Pr, 8, &merged).is_err());
 }
 

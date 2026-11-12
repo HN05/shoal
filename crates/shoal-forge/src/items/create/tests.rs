@@ -187,9 +187,10 @@ fn gitlab_opens_merge_requests_with_draft_titles_and_labeled_issues() {
         gitlab.created_number(&json!({"iid": 4, "id": 90})).unwrap(),
         4
     );
+    let topic = BranchName::from("topic");
     let head = Head {
         repository: "group/sub/repo",
-        branch: "topic",
+        branch: &topic,
     };
     let listed = json!({"source_branch": "topic", "source_project_id": 1, "target_project_id": 1});
     assert!(gitlab.kind.has_head(&gitlab, &listed, &head));
@@ -246,21 +247,22 @@ fn bitbucket_opens_pull_requests_and_issues_without_labels() {
     assert_eq!(bitbucket.created_number(&json!({"id": 9})).unwrap(), 9);
     let listed = json!({"source": {"branch": {"name": "topic"},
             "repository": {"full_name": "Workspace/Repo"}}});
+    let (topic, other) = (BranchName::from("topic"), BranchName::from("other"));
     let head = |repository, branch| Head { repository, branch };
     assert!(
         bitbucket
             .kind
-            .has_head(&bitbucket, &listed, &head("workspace/repo", "topic"))
+            .has_head(&bitbucket, &listed, &head("workspace/repo", &topic))
     );
     assert!(
         !bitbucket
             .kind
-            .has_head(&bitbucket, &listed, &head("workspace/repo", "other"))
+            .has_head(&bitbucket, &listed, &head("workspace/repo", &other))
     );
     assert!(
         !bitbucket
             .kind
-            .has_head(&bitbucket, &listed, &head("someone/repo", "topic"))
+            .has_head(&bitbucket, &listed, &head("someone/repo", &topic))
     );
     let forked = NewPull {
         head_repository: Some("someone/repo".into()),
@@ -318,9 +320,10 @@ fn github_and_forgejo_name_a_fork_head_by_its_owner() {
             "someone:topic"
         );
         let listed = json!({"head": {"ref": "topic", "repo": {"full_name": "Someone/Repo"}}});
+        let topic = BranchName::from("topic");
         let head = |repository| Head {
             repository,
-            branch: "topic",
+            branch: &topic,
         };
         assert!(forge.kind.has_head(&forge, &listed, &head("someone/repo")));
         assert!(!forge.kind.has_head(&forge, &listed, &head("team/repo")));

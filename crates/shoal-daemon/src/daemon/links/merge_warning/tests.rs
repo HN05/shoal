@@ -148,7 +148,7 @@ async fn a_pr_finds_the_record_of_the_workspace_that_links_it() {
     let recorded = manager.recorded_for_pull(url).await.unwrap();
     let head = recorded[0].head.clone();
     let into = |target: &str| Merged {
-        head: head.clone(),
+        head: head.clone().into(),
         target: target.into(),
     };
     let found = warning("PR #7".into(), recorded.clone(), &into("main")).unwrap();

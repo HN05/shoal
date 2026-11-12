@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result};
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::Value;
+use shoal_refs::CommitId;
 
 use crate::{
     ForgeRepo,
@@ -178,7 +179,7 @@ pub(crate) async fn merged_commits(
     repo: &ForgeRepo,
     account: &Account,
     number: PullNumber,
-) -> Result<Option<Vec<String>>> {
+) -> Result<Option<Vec<CommitId>>> {
     let pull = read_pull(repo, account, number).await?;
     if pull.item.state != ItemState::Merged {
         return Ok(None);
@@ -308,14 +309,14 @@ pub(crate) async fn issue_details(
 }
 
 /// Full commit IDs, refusing anything else so cleanup never matches a prefix.
-pub(crate) fn commit_shas(commits: &[Value], field: &str) -> Result<Vec<String>> {
+pub(crate) fn commit_shas(commits: &[Value], field: &str) -> Result<Vec<CommitId>> {
     commits
         .iter()
         .map(|commit| {
             commit[field]
                 .as_str()
                 .filter(|sha| sha.len() == 40 && sha.bytes().all(|byte| byte.is_ascii_hexdigit()))
-                .map(str::to_owned)
+                .map(CommitId::from)
                 .context("PR commit has no full commit ID")
         })
         .collect()

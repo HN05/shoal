@@ -1,6 +1,7 @@
 //! What an item's read reports about it besides its state, such as its
 //! title and labels, and the edits between two observations of it.
 use serde::{Deserialize, Serialize};
+use shoal_refs::BranchName;
 
 use crate::items::item::Current;
 
@@ -20,7 +21,7 @@ pub struct ItemDetails {
     pub(crate) draft: Option<bool>,
     /// A PR's base branch; `None` for an issue.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) base: Option<String>,
+    pub(crate) base: Option<BranchName>,
 }
 
 /// What an action changed of an item's details: the item as it was read
@@ -103,9 +104,9 @@ impl ItemDetails {
 
 impl Edited {
     /// A PR's change of base branch from `from` to `to`.
-    pub fn retarget(from: &str, to: &str) -> Self {
-        let base = |branch: &str| ItemDetails {
-            base: Some(branch.into()),
+    pub fn retarget(from: &BranchName, to: &BranchName) -> Self {
+        let base = |branch: &BranchName| ItemDetails {
+            base: Some(branch.clone()),
             ..ItemDetails::default()
         };
         Self {
