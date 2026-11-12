@@ -110,8 +110,9 @@ impl ForgeRepo {
             return;
         }
         for view in views {
+            // Another repository's PRs are read where their forge is.
             let pull = view.url.clone();
-            if pull.kind() != LinkKind::Pr {
+            if pull.kind() != LinkKind::Pr || pull.belongs_to(self).is_err() {
                 continue;
             }
             let failed: Vec<String> = view

@@ -74,3 +74,20 @@ fn a_failed_check_update_names_the_failed_step_or_why_its_log_is_unavailable() {
     assert!(summary.contains(&"x".repeat(MAX_LOG_ERROR)));
     assert!(!summary.contains(&"x".repeat(MAX_LOG_ERROR + 1)));
 }
+
+#[tokio::test]
+async fn failed_logs_leave_out_another_repositorys_prs() {
+    let forge = ForgeRepo::parse("https://github.com/team/repo").unwrap();
+    let view = serde_json::json!({
+        "url": "https://github.com/them/tool/pull/7", "kind": "pr",
+        "number": 7, "title": "Fix", "state": "open", "author": "them",
+        "created_at": "", "labels": [], "body": "",
+        "pr": {"head": "fix", "base": "main", "draft": false, "merge_conflicts": null,
+            "checks": [{"name": "rust", "result": "failure"}], "review": null},
+    });
+    let mut views = [serde_json::from_value::<ItemView>(view).unwrap()];
+    let account = crate::account::Account::user(crate::account::Logins::default());
+    forge.read_failed_logs(&account, &mut views).await;
+    assert!(views[0].errors.is_empty(), "{:?}", views[0].errors);
+    assert!(views[0].check_logs.is_empty());
+}
