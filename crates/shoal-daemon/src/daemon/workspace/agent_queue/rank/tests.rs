@@ -486,3 +486,18 @@ fn a_job_its_lower_priority_space_waits_on_keeps_that_priority() {
     assert_eq!(order(&snapshot), ["launch", "job"]);
     assert_eq!(rank_of(&snapshot, "job").priority, Priority::LOW);
 }
+
+#[test]
+fn a_launch_ranks_its_space_with_its_priority_until_the_space_has_its_own() {
+    let mut snapshot = snapshot();
+    for (id, created) in [("unread", 1), ("set", 2)] {
+        space(&mut snapshot, id, Tier::New, created);
+    }
+    prioritize(&mut snapshot, "set", Priority::LOW);
+    for id in ["unread", "set"] {
+        entry(&mut snapshot, id, launch(Some(id)));
+        snapshot.entries.last_mut().unwrap().priority = Some(Priority::URGENT);
+    }
+    assert_eq!(rank_of(&snapshot, "unread").priority, Priority::URGENT);
+    assert_eq!(rank_of(&snapshot, "set").priority, Priority::LOW);
+}

@@ -280,6 +280,7 @@ impl Issue {
         LaunchIssue {
             url: self.url.clone(),
             title: self.title.clone(),
+            labels: self.labels.clone(),
         }
     }
 }

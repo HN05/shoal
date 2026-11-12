@@ -92,11 +92,11 @@ pub fn queued_agent_request(
     let env =
         (launch.env.take()).unwrap_or_else(|| crate::terminal::detached_start_environment(None));
     let issue_title = launch.issue.as_ref().map(|issue| issue.title.clone());
+    let issue_labels = (launch.issue.as_ref()).map_or_else(Vec::new, |issue| issue.labels.clone());
     let (agent, now) = (launch.agent.clone(), launch.now);
     let mut plan = AddPlan::agent_in(workspace, launch)?;
     plan.creation.pr = pr;
     Ok(QueueRequest {
-        issue_labels: Vec::new(),
         priority: None,
         repository: (&workspace.repository_id).into(),
         name: workspace.name.clone(),
@@ -104,6 +104,7 @@ pub fn queued_agent_request(
         mode: plan.mode.clone(),
         narrowing: plan.narrowing,
         issue_title,
+        issue_labels,
         plan: serde_json::to_string(&plan)?,
         env,
         now,

@@ -287,11 +287,14 @@ impl QueuedLaunch {
 }
 
 /// The issue a queued agent works on: its URL, which the start looks up
-/// for the prompt, and the title the queue shows.
+/// for the prompt, the title the queue shows and the labels that may give
+/// it a priority.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LaunchIssue {
     pub url: crate::forge::items::reference::ItemRef,
     pub title: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<String>,
 }
 
 impl OperationSpec {

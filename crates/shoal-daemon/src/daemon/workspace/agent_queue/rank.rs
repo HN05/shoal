@@ -35,7 +35,8 @@ pub(crate) struct Entry {
     pub id: QueueEntryId,
     /// What explanations call a launch that has no space yet.
     pub name: String,
-    /// The priority a launch that has no space yet was queued with.
+    /// The priority a launch was queued with, which ranks it while it has
+    /// no space or its space has none of its own.
     pub priority: Option<Priority>,
     pub work: Work,
     pub queued_at: UnixTime,
@@ -61,7 +62,8 @@ pub(crate) enum Work {
 pub(crate) struct Space {
     /// What explanations call it: its number, else its name.
     pub label: String,
-    /// The priority set on it; it has the default without one.
+    /// The priority set on it, else the highest its issue's labels map to;
+    /// it has the default without one.
     pub priority: Option<Priority>,
     /// Its own tier: `Finishing` with an open PR or a ready mark, `Started`
     /// once an agent has worked in it.
@@ -152,7 +154,8 @@ fn own(priority: Priority, tier: Tier) -> QueueRank {
 }
 
 /// Each space's own rank, its tier raised by the aged tiers of the agents
-/// queued in it; a launch without a space stands alone.
+/// queued in it, and its priority, when it has none of its own, by theirs;
+/// a launch without a space stands alone.
 fn own_standing(snapshot: &Snapshot) -> Standing {
     let mut standing: Standing = (snapshot.spaces.iter())
         .map(|(id, space)| {
@@ -166,13 +169,27 @@ fn own_standing(snapshot: &Snapshot) -> Standing {
         };
         let tier = aged(base_tier(entry, snapshot), entry, snapshot.now);
         let held =
+        let unprioritized = !has_priority(&node, snapshot);
             (standing.entry(node)).or_insert_with(|| own(entry.priority.unwrap_or_default(), tier));
         held.tier = held.tier.max(tier);
     }
+        // Its space's issue may not have been read yet, so a launch's
+        // priority from its labels stands in.
+        if let Some(priority) = entry.priority.filter(|_| unprioritized) {
+            held.priority = held.priority.max(priority);
+        }
     standing
 }
 
 /// Raise each node to the highest priority and tier of the work waiting on
+/// Whether `node` is a space with a priority of its own.
+fn has_priority(node: &Node, snapshot: &Snapshot) -> bool {
+    let Node::Space(id) = node else {
+        return false;
+    };
+    (snapshot.spaces.get(id)).is_some_and(|space| space.priority.is_some())
+}
+
 /// it, transitively, remembering what it took each from.
 fn inherit(standing: &mut Standing, snapshot: &Snapshot) {
     let mut changed = true;

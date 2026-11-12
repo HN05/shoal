@@ -55,6 +55,7 @@ fn a_queued_launch_keeps_its_model_arguments_fork_issue_and_place() {
                 .parse()
                 .unwrap(),
             title: "Split the API".into(),
+            labels: Vec::new(),
         }),
         env: Some([("PLACE".to_owned(), "beside".to_owned())].into()),
         ..claude()
