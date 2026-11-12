@@ -35,6 +35,7 @@ pub mod operations;
 pub mod output;
 pub mod paths;
 pub mod preparation;
+pub mod priority;
 pub mod processes;
 pub mod profile;
 pub mod progress;
