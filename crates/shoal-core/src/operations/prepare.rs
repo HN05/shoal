@@ -1,19 +1,16 @@
-//! Preparing a workspace inside an operation's worker: its tracked setup,
-//! failing as the operation reports it, then linking its PR, then its
-//! post-setup hook, failing in turn, then queuing its agent.
-
+//! Preparing a workspace: its tracked setup, failing as the operation
+//! reports it, then linking its PR, then its post-setup hook, failing in
+//! turn, then queuing its agent.
 use anyhow::{Result, ensure};
 
-use crate::client::space_names::SpaceSelector;
+use super::{Failed, Reporter};
 use crate::{
-    cli::{
-        commands::operations::{Failed, Reporter},
-        context::Context,
-    },
+    client::space_names::SpaceSelector,
     execution,
     forge::items::reference::ItemInput,
     hooks::{self, Hook, HookKind},
     model::{QueueEntry, Workspace},
+    paths::CommandPaths,
     protocol::{
         ConfigTarget,
         operations::{Failure, Preparation, Prepared, QueuedLaunch, Step},
@@ -23,24 +20,24 @@ use crate::{
 };
 
 /// Run `steps` in `workspace`, returning it ready with the agent queued.
-pub(in crate::cli::commands) async fn prepare(
-    ctx: &Context,
+pub(super) async fn prepare(
+    paths: &CommandPaths,
     workspace: SpaceSelector,
     steps: Preparation,
     reporter: &Reporter<'_>,
 ) -> Result<Prepared> {
-    let mut workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)
+    let mut workspace = crate::client::workspaces::inspect(paths, workspace)
         .await?
         .workspace;
     if steps.setup {
         reporter.step(Step::SetupStarted).await?;
-        workspace = match run_setup(ctx, &workspace).await {
+        workspace = match run_setup(paths, &workspace).await {
             Ok(set_up) => set_up,
             Err(error) => {
                 // The workspace stays for a retried setup, with the agent
                 // that waits for it and links its PR once it starts.
                 if let Some(launch) = steps.agent.or(steps.waiting) {
-                    leave_waiting(ctx, &workspace, *launch, steps.pr).await;
+                    leave_waiting(paths, &workspace, *launch, steps.pr).await;
                 }
                 return Err(error);
             }
@@ -48,12 +45,12 @@ pub(in crate::cli::commands) async fn prepare(
         reporter.step(Step::Ready).await?;
     }
     if let Some(pr) = steps.pr {
-        workspace = link_pr(ctx, workspace, &pr, reporter).await?;
+        workspace = link_pr(paths, workspace, &pr, reporter).await?;
     }
     // A workspace created without setup runs none of its hooks.
     if steps.post_setup && !workspace.setup_skipped {
         reporter.step(Step::PostSetupStarted).await?;
-        run_post_setup_hook(ctx, &workspace, reporter)
+        run_post_setup_hook(paths, &workspace, reporter)
             .await
             .map_err(|error| {
                 Failed(Failure::HookFailed {
@@ -68,7 +65,7 @@ pub(in crate::cli::commands) async fn prepare(
     }
     let agent = match steps.agent {
         Some(launch) => {
-            let entry = queue_agent(ctx, &workspace, *launch, reporter).await?;
+            let entry = queue_agent(paths, &workspace, *launch, reporter).await?;
             reporter.reached(Step::AgentQueued).await?;
             Some(entry)
         }
@@ -80,9 +77,8 @@ pub(in crate::cli::commands) async fn prepare(
 
 /// Run the setup command as a tracked execution; a setup whose processes
 /// Shoal could not verify, or that never started, keeps its own error.
-async fn run_setup(ctx: &Context, workspace: &Workspace) -> Result<Workspace> {
-    let failure = match execution::setup(&ctx.paths, SpaceSelector::Id(workspace.id.clone())).await
-    {
+async fn run_setup(paths: &CommandPaths, workspace: &Workspace) -> Result<Workspace> {
+    let failure = match execution::setup(paths, SpaceSelector::Id(workspace.id.clone())).await {
         Ok(0) => None,
         Ok(code) => Some(format!("setup command exited with status {code}")),
         Err(error) if error.is::<execution::SetupVerificationFailure>() => return Err(error),
@@ -97,10 +93,9 @@ async fn run_setup(ctx: &Context, workspace: &Workspace) -> Result<Workspace> {
     if let Some(message) = failure {
         return Err(Failed(Failure::SetupFailed { message }).into());
     }
-    let workspace =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id))
-            .await?
-            .workspace;
+    let workspace = crate::client::workspaces::inspect(paths, SpaceSelector::id(&workspace.id))
+        .await?
+        .workspace;
     ensure!(
         workspace.state == WorkspaceState::Ready,
         "workspace setup did not complete"
@@ -111,23 +106,23 @@ async fn run_setup(ctx: &Context, workspace: &Workspace) -> Result<Workspace> {
 /// Run the configured `hooks.post_setup`, if any, until the operation is
 /// cancelled.
 async fn run_post_setup_hook(
-    ctx: &Context,
+    paths: &CommandPaths,
     workspace: &Workspace,
     reporter: &Reporter<'_>,
 ) -> Result<()> {
     let command = crate::client::workspaces::hook(
-        &ctx.paths,
+        paths,
         SpaceSelector::id(&workspace.id),
         HookKind::PostSetup,
     )
     .await?;
     if let Some(command) = command {
-        let configured_env = crate::env::configured_environment(&ctx.paths, workspace).await?;
+        let configured_env = crate::env::configured_environment(paths, workspace).await?;
         hooks::run_until(
             Hook::PostSetup,
             workspace,
             &command,
-            &ctx.paths,
+            paths,
             &configured_env,
             reporter.cancelled(),
         )
@@ -140,18 +135,18 @@ async fn run_post_setup_hook(
 /// unless the operation was cancelled, and return the workspace with it. The
 /// workspace is kept either way, so a refused link only warns.
 async fn link_pr(
-    ctx: &Context,
+    paths: &CommandPaths,
     workspace: Workspace,
     pr: &ItemInput,
     reporter: &Reporter<'_>,
 ) -> Result<Workspace> {
     reporter.ensure_running()?;
-    if !crate::opened_pull::link_or_warn(&ctx.paths, &workspace.id, pr).await {
+    if !crate::opened_pull::link_or_warn(paths, &workspace.id, pr).await {
         return Ok(workspace);
     }
     reporter.reached(Step::PrLinked).await?;
     Ok(
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id))
+        crate::client::workspaces::inspect(paths, SpaceSelector::id(&workspace.id))
             .await?
             .workspace,
     )
@@ -162,30 +157,30 @@ async fn link_pr(
 /// nothing; the queue may start the agent as it admits it, so once queued
 /// it stays.
 async fn queue_agent(
-    ctx: &Context,
+    paths: &CommandPaths,
     workspace: &Workspace,
     launch: QueuedLaunch,
     reporter: &Reporter<'_>,
 ) -> Result<QueueEntry> {
     let settings = crate::client::workspaces::settings(
-        &ctx.paths,
+        paths,
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     reporter.ensure_running()?;
-    queued_launches::queue_in_workspace(&ctx.paths, workspace, &settings, launch, None).await
+    queued_launches::queue_in_workspace(paths, workspace, &settings, launch, None).await
 }
 
 /// Leave `launch` waiting in the queue of `workspace`, whose setup failed,
 /// to start once a retried setup readies it, linking `pr` then, and say so;
 /// a refusal only warns.
 async fn leave_waiting(
-    ctx: &Context,
+    paths: &CommandPaths,
     workspace: &Workspace,
     launch: QueuedLaunch,
     pr: Option<ItemInput>,
 ) {
-    let queued = queued_launches::queue_for_setup(&ctx.paths, workspace, launch, pr);
+    let queued = queued_launches::queue_for_setup(paths, workspace, launch, pr);
     let (name, number) = (&workspace.name, workspace.number);
     match queued.await {
         Ok(entry) => eprintln!(

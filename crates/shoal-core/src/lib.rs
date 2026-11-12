@@ -22,6 +22,7 @@ mod happy;
 pub mod hooks;
 pub mod installed;
 pub mod opened_pull;
+pub mod operations;
 pub mod paths;
 pub mod presets;
 pub mod process;

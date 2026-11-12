@@ -3,10 +3,8 @@ use anyhow::{Context as _, Result, ensure};
 use serde_json::Value;
 
 mod picker;
-mod push;
 
 pub(super) use picker::{decide_row, print_rows};
-pub(super) use push::push_approved;
 
 use super::EXIT_BUSY;
 use crate::client::space_names::SpaceSelector;

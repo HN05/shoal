@@ -9,13 +9,13 @@ use std::{
 
 use crate::client::output::error::{CommandError, ErrorDetail};
 use crate::{
-    cli::commands::operations::Failed,
     client::{
         approvals::{DecisionStatus, Undecided},
         sim::SimulatorState,
     },
     execution::SetupVerificationFailure,
     forge::{ci::check_state::CheckState, review::status::ReviewState},
+    operations::Failed,
     protocol::{ErrorCode, RemoteError},
     refusal::Reason,
     state::{ExecutionState, WorkspaceState},

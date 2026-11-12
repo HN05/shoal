@@ -39,7 +39,6 @@ pub(crate) use content::read_body;
 pub(super) use context::{
     current_context, select_repo_context, select_space_item_context, space_context,
 };
-pub(super) use open::push_and_open;
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
     let (item, action, outcome) = match command {

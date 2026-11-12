@@ -241,10 +241,10 @@ pub(in crate::cli::commands) async fn settle_setup(
         }
         Failure::HookFailed { .. } => Ok(Some(SetUp {
             workspace: *workspace,
-            post_setup: Some(Err(operations::error(failure))),
+            post_setup: Some(Err(crate::operations::error(failure))),
             agent: None,
         })),
-        failure if set_up => Err(operations::error(failure)),
+        failure if set_up => Err(crate::operations::error(failure)),
         failure => handle_setup_failure(ctx, &workspace, failure, retry, waiting).await,
     }
 }
@@ -274,7 +274,7 @@ async fn handle_setup_failure(
         }
     }
     let ran = !matches!(failure, Failure::SetupNotStarted { .. });
-    let error = format!("{:#}", operations::error(failure));
+    let error = format!("{:#}", crate::operations::error(failure));
     let (name, number) = (&workspace.name, workspace.number);
     let failed = if ran {
         "Setup failed"

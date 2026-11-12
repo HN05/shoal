@@ -462,7 +462,7 @@ async fn prepare_after_setup(
         Ok(prepared) => (prepared, Ok(())),
         Err(Unprepared { workspace, failure }) => {
             let agent = None;
-            let error = operations::error(failure);
+            let error = crate::operations::error(failure);
             (Prepared { workspace, agent }, Err(error))
         }
     })

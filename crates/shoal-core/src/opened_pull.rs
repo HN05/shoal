@@ -23,7 +23,7 @@ pub async fn link(paths: &CommandPaths, workspace: Workspace, url: ItemRef) -> R
 
 /// Link PR `url`, a number or URL, as the one workspace `id` was opened on;
 /// whether it did, a refused link having warned.
-pub async fn link_or_warn(paths: &CommandPaths, id: &SpaceId, url: &ItemInput) -> bool {
+pub(crate) async fn link_or_warn(paths: &CommandPaths, id: &SpaceId, url: &ItemInput) -> bool {
     let linked = crate::client::items::watch_pr(paths, SpaceSelector::id(id), url.clone()).await;
     if let Err(error) = &linked {
         eprintln!("warning: cannot link PR {url}: {error:#}");

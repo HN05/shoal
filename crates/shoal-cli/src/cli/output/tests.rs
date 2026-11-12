@@ -49,8 +49,8 @@ fn json_errors_carry_the_specific_code_of_a_daemon_or_cli_refusal() {
     use anyhow::Context as _;
 
     use crate::{
-        cli::commands::operations::Failed,
         execution::SetupVerificationFailure,
+        operations::Failed,
         protocol::operations::Failure,
         refusal::{Reason, Refusal},
     };

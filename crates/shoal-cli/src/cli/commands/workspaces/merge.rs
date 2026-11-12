@@ -7,22 +7,15 @@ use anyhow::{Context as _, Result};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
-        commands::{
-            approvals,
-            operations::{self, Reporter},
-        },
+        commands::{approvals, operations},
         context::Context,
         ui::{self, Fallback},
     },
     client::approvals::Undecided,
     env,
-    execution::{self, MergeResult},
+    execution::MergeResult,
     model::{MergeConfirmation, MergeOptions, MergePlan, MergedBranch},
-    paths::CommandPaths,
-    protocol::{
-        ConfigTarget,
-        operations::{OperationSpec, Step},
-    },
+    protocol::{ConfigTarget, operations::OperationSpec},
 };
 
 /// `push` overrides `[merge] push` when given, and `yes` skips the
@@ -124,35 +117,6 @@ fn show_merged(ctx: &Context, merged: &MergedBranch) -> Result<()> {
             outln!("Pushed {default} to {remote}");
         }
     })
-}
-
-/// Merge `workspace` as `options` say in an operation's worker, as a
-/// tracked execution whose worker writes what it merged to a file.
-pub(in crate::cli::commands) async fn merge_branch(
-    ctx: &Context,
-    workspace: SpaceSelector,
-    options: MergeOptions,
-    reporter: &Reporter<'_>,
-) -> Result<MergedBranch> {
-    reporter.step(Step::MergeStarted).await?;
-    run_merge(&ctx.paths, workspace, options).await
-}
-
-/// Merge `workspace` as a tracked execution, reading what its worker merged,
-/// or why it could not, from the file the worker writes.
-async fn run_merge(
-    paths: &CommandPaths,
-    workspace: SpaceSelector,
-    options: MergeOptions,
-) -> Result<MergedBranch> {
-    let result = tempfile::NamedTempFile::new().context("create the merge result file")?;
-    let code = execution::merge(paths, workspace, options, result.path().to_owned()).await?;
-    let written = std::fs::read(result.path()).context("read the merge result")?;
-    let merged: MergeResult = match written.is_empty() {
-        true => Err(format!("merge exited with status {code}")),
-        false => serde_json::from_slice(&written).context("read the merge result")?,
-    };
-    merged.map_err(anyhow::Error::msg)
 }
 
 /// Merge the planned branch inside the merge execution, writing what it
