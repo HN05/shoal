@@ -181,6 +181,15 @@ impl ForgeRepo {
         }
     }
 
+    /// The URL of the `kind` item numbered `number` in this repository.
+    pub(crate) fn numbered_url(&self, kind: LinkKind, number: u64) -> Result<String> {
+        Ok(match kind {
+            LinkKind::Issue => self.kind.issue_route().url_of(self, number),
+            LinkKind::Pr => self.kind.pull_route().url_of(self, number),
+            LinkKind::Ci => self.run_url(crate::numbers::RunNumber::new(number))?,
+        })
+    }
+
     /// The repository a `kind` item URL belongs to.
     pub fn from_item_url(kind: LinkKind, url: &str) -> Result<Self> {
         let (repository, forge) = item_repository(kind, url)?;

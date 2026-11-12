@@ -100,11 +100,16 @@ impl ForgeRepo {
             .map(RunNumber::new)
             .or_else(|| self.kind.locate_run(self, input))
             .with_context(|| format!("{input} is not a CI run of {}", self.repository_url()))?;
+        Ok((number, self.run_url(number)?))
+    }
+
+    /// The web URL of the run numbered `number`, without a job.
+    pub(crate) fn run_url(&self, number: RunNumber) -> Result<String> {
         let route = self
             .kind
             .run_route()
             .ok_or_else(|| capability::unsupported(&self.kind, Capability::ReadRuns))?;
-        Ok((number, format!("{}{route}{number}", self.repository_url())))
+        Ok(format!("{}{route}{number}", self.repository_url()))
     }
 
     /// The run `input`, its web URL or the number in it, names, once the

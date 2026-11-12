@@ -9,5 +9,6 @@ pub mod link;
 pub mod list;
 mod milestone;
 pub mod reaction;
+pub mod reference;
 mod retarget;
 pub mod revert;

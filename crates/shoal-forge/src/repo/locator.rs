@@ -60,6 +60,17 @@ impl ItemRoute {
             .context(self.diagnostic(ISSUE_URL, "invalid PR URL"))
     }
 
+    /// The URL of the item numbered `number` in `repo` by this route.
+    pub(crate) fn url_of(self, repo: &ForgeRepo, number: impl std::fmt::Display) -> String {
+        format!(
+            "{}://{}/{}{marker}{number}",
+            repo.web_scheme,
+            repo.host,
+            repo.path,
+            marker = self.marker(),
+        )
+    }
+
     pub fn resolve(self, repo: &ForgeRepo, input: &str) -> Result<(u64, String)> {
         let (number, url) = if IssueInput::parse(input) == IssueInput::Url {
             let item = self.url(input)?;
@@ -72,16 +83,7 @@ impl ItemRoute {
             );
             (item.number, item.url.to_owned())
         } else {
-            (
-                input,
-                format!(
-                    "{}://{}/{}{marker}{input}",
-                    repo.web_scheme,
-                    repo.host,
-                    repo.path,
-                    marker = self.marker(),
-                ),
-            )
+            (input, self.url_of(repo, input))
         };
         ensure!(
             IssueInput::parse(number) == IssueInput::Number,
