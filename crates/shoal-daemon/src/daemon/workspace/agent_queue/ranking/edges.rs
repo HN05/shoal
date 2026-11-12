@@ -184,7 +184,7 @@ fn progress_blockers(db: &Connection, blocking: &Blocking) -> Result<Vec<Edge>> 
 }
 
 /// Each space on its children, whose work its own waits on. A chat passes
-/// on only a priority set on it, so that its children compete with every
+/// on only a priority of its own, so that its children compete with every
 /// other worker.
 fn children(db: &Connection) -> Result<Vec<Edge>> {
     Ok(db

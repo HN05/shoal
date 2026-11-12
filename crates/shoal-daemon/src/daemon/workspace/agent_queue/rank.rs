@@ -111,8 +111,9 @@ pub(crate) struct Edge {
 pub(crate) enum Carries {
     /// Its priority and tier, its own or inherited.
     Rank,
-    /// Only a priority set on its space or passed down to it, as a chat
-    /// passes to its children, which compete with every other worker.
+    /// Only a priority of its space's own, set or from its issue's labels,
+    /// or passed down to it, as a chat passes to its children, which
+    /// compete with every other worker.
     SetPriority,
 }
 
@@ -168,20 +169,19 @@ fn own_standing(snapshot: &Snapshot) -> Standing {
             continue;
         };
         let tier = aged(base_tier(entry, snapshot), entry, snapshot.now);
-        let held =
         let unprioritized = !has_priority(&node, snapshot);
+        let held =
             (standing.entry(node)).or_insert_with(|| own(entry.priority.unwrap_or_default(), tier));
         held.tier = held.tier.max(tier);
-    }
         // Its space's issue may not have been read yet, so a launch's
         // priority from its labels stands in.
         if let Some(priority) = entry.priority.filter(|_| unprioritized) {
             held.priority = held.priority.max(priority);
         }
+    }
     standing
 }
 
-/// Raise each node to the highest priority and tier of the work waiting on
 /// Whether `node` is a space with a priority of its own.
 fn has_priority(node: &Node, snapshot: &Snapshot) -> bool {
     let Node::Space(id) = node else {
@@ -190,6 +190,7 @@ fn has_priority(node: &Node, snapshot: &Snapshot) -> bool {
     (snapshot.spaces.get(id)).is_some_and(|space| space.priority.is_some())
 }
 
+/// Raise each node to the highest priority and tier of the work waiting on
 /// it, transitively, remembering what it took each from.
 fn inherit(standing: &mut Standing, snapshot: &Snapshot) {
     let mut changed = true;
@@ -243,8 +244,8 @@ fn carried(edge: &Edge, standing: &Standing, snapshot: &Snapshot) -> Option<Queu
     }
 }
 
-/// The priority a chat passes its children: the higher of one set on it
-/// and what its own parent passes it.
+/// The priority a chat passes its children: the higher of its own, set or
+/// from its issue's labels, and what its own parent passes it.
 fn passed_priority(chat: &Node, standing: &Standing, snapshot: &Snapshot) -> Option<Priority> {
     let Node::Space(id) = chat else {
         return None;
