@@ -102,12 +102,14 @@ impl Stopped {
         agent["id"].as_str().unwrap().to_owned()
     }
 
-    /// Stop the workspace with `shoal stop` and wait for `children` to end.
-    fn stop(&self, fixture: &Fixture, children: Vec<Child>) {
-        fixture.ok(&["stop", &fixture.id(self.name)]);
+    /// Stop the workspace with `shoal stop`, wait for `children` to end,
+    /// and return what the stop reported.
+    fn stop(&self, fixture: &Fixture, children: Vec<Child>) -> Value {
+        let stopped = fixture.ok(&["stop", &fixture.id(self.name)]);
         for child in children {
             child.wait_with_output().unwrap();
         }
+        stopped
     }
 
     /// Keep the agent `shoal stop` left as the last session of `execution`
@@ -204,7 +206,8 @@ fn stop_saves_agents_and_commands_preserving_work_and_leases() {
     let before = fixture.ok(&["status", &fixture.id("stopped")]);
     let agent = workspace.start_agent(&fixture);
     let command = workspace.start_command(&fixture);
-    workspace.stop(&fixture, vec![agent, command]);
+    let stopped = workspace.stop(&fixture, vec![agent, command]);
+    assert_eq!(stopped["saved"], true, "{stopped}");
 
     let after = fixture.ok(&["status", &fixture.id("stopped")]);
     assert_eq!(after["workspace"]["state"], before["workspace"]["state"]);

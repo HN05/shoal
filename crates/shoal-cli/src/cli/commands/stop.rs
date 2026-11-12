@@ -12,7 +12,6 @@ use crate::{
     cli::{
         args::lifecycle::StopArgs, commands::queued_agents, context::Context, output::Style, ui,
     },
-    client::processes::Selection,
     model::{PresentSpace, StoppedWorkspace, Workspace},
     protocol::{ErrorCode, QueuedLaunches, RemoteError, UntrackedProcesses},
 };
@@ -24,7 +23,6 @@ mod targets;
 
 use batch::{stop_all, stop_each};
 pub(super) use processes::processes;
-use processes::stop_untracked;
 use targets::check_each;
 pub(super) use targets::{ensure_below, resolve};
 
@@ -62,7 +60,8 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
 /// Stop `workspace`, reporting it alone.
 async fn stop_one(ctx: &Context, workspace: &Workspace, yes: bool) -> Result<i32> {
     let selector = SpaceSelector::id(&workspace.id);
-    let stopped = stop(ctx, &selector, yes, QueuedLaunches::Cancel).await?;
+    let launches = QueuedLaunches::Cancel;
+    let stopped = stop(ctx, &selector, yes, launches, other_processes_stop()).await?;
     if let Some(run) = &stopped.cancelled_run {
         // The job runs until its runner stops it, and its workspace goes then.
         ctx.emit_styled(
@@ -79,14 +78,15 @@ async fn stop_one(ctx: &Context, workspace: &Workspace, yes: bool) -> Result<i32
         )?;
         return Ok(0);
     }
-    let cancelled = stopped.cancelled;
-    let other = stop_untracked(ctx, &selector, Selection::Processes).await?;
-    let saved = !crate::client::saved::read(&ctx.paths, selector.clone())
-        .await?
-        .is_empty();
+    let StoppedWorkspace {
+        cancelled,
+        other_processes: processes,
+        saved,
+        ..
+    } = stopped;
     let mut message = "Workspace processes stopped".to_owned();
-    if other.processes > 0 {
-        message = format!("{message}. Stopped {}", other_processes(other.processes));
+    if processes > 0 {
+        message = format!("{message}. Stopped {}", other_processes(processes));
     }
     if !cancelled.is_empty() {
         message = format!("{message}. {}", removed_launches(cancelled.len()));
@@ -104,7 +104,7 @@ async fn stop_one(ctx: &Context, workspace: &Workspace, yes: bool) -> Result<i32
             stopped: true,
             saved,
             already_stopped: false,
-            other_processes: other.processes,
+            other_processes: processes,
             cancelled,
             cancelled_run: None,
         },
@@ -136,16 +136,25 @@ pub(super) fn other_processes(count: usize) -> String {
     }
 }
 
+/// What plain `shoal stop` does with a workspace's untracked processes:
+/// it stops them, other than this process and those that started it.
+pub(super) fn other_processes_stop() -> UntrackedProcesses {
+    UntrackedProcesses::Stop {
+        requester: Some(std::process::id()),
+    }
+}
+
 /// Stop `workspace`, doing with the agent launches waiting to start in it
-/// what `launches` says, and return those the stop removed from the queue,
-/// or the run the forge was asked to cancel for a CI job's workspace.
-/// An execution Shoal cannot prove ended stops only once the user confirms
-/// it did, or with `yes`.
+/// what `launches` says and with its untracked processes what `processes`
+/// says, and return what the stop did, or the run the forge was asked to
+/// cancel for a CI job's workspace. An execution Shoal cannot prove ended
+/// stops only once the user confirms it did, or with `yes`.
 pub(super) async fn stop(
     ctx: &Context,
     workspace: &SpaceSelector,
     yes: bool,
     launches: QueuedLaunches,
+    processes: UntrackedProcesses,
 ) -> Result<StoppedWorkspace> {
     let request_stop = |acknowledge_unproven| {
         crate::client::stopping::stop_workspace(
@@ -153,7 +162,7 @@ pub(super) async fn stop(
             workspace.clone(),
             acknowledge_unproven,
             launches,
-            UntrackedProcesses::Keep,
+            processes,
         )
     };
     let error = match request_stop(yes).await {

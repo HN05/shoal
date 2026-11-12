@@ -24,7 +24,7 @@ use crate::{
     },
     config::{Config, edit::Change},
     model::{Execution, MovedRepository, Repository, RepositoryMoves, Workspace},
-    protocol::QueuedLaunches,
+    protocol::{QueuedLaunches, UntrackedProcesses},
     repository,
 };
 
@@ -108,6 +108,7 @@ async fn stop_running(
                     &SpaceSelector::id(workspace),
                     confirmed,
                     QueuedLaunches::Keep,
+                    UntrackedProcesses::Keep,
                 ),
             )
             .await;

@@ -68,7 +68,7 @@ async fn ensure_spaces(ctx: &Context, selectors: &[SpaceSelector]) -> Result<()>
 
 /// Stop the untracked processes of `space` that `selection` takes, other
 /// than this one and the processes that started it.
-pub(super) async fn stop_untracked(
+async fn stop_untracked(
     ctx: &Context,
     space: &SpaceSelector,
     selection: Selection,
