@@ -2624,6 +2624,22 @@ fn start_takes_the_mode_an_issues_labels_name() {
     assert!(rows.contains("worker") && rows.contains("plan"), "{rows}");
     assert_eq!(started_in(), (false, true));
 
+    // In an existing workspace, the issue's mode starts a chat in its
+    // worktree, in the workspace's repository.
+    fixture.add("reader");
+    let reader = fixture.id("reader");
+    let (output, rows) = fixture.pick_in(
+        &fixture.repo,
+        &[
+            "start", "--in", &reader, "--issue", "9", "--agent", "pi", "--here",
+        ],
+        "",
+        "",
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.is_empty(), "{rows}");
+    assert_eq!(started_in(), (false, true));
+
     // An issue of an unregistered repository is not read in this one, so
     // the start still offers to register it.
     let (output, transcript) = fixture.terminal_command(

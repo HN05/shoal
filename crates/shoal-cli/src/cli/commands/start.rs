@@ -306,34 +306,48 @@ fn fitting_kind(args: &StartArgs) -> Option<SpaceKind> {
 /// them all, by the current repository's settings or else the global
 /// config's.
 async fn picked_mode(ctx: &Context, args: &mut StartArgs) -> Result<modes::ModeName> {
-    let names_repository = [&args.repository, &args.repository_override]
-        .iter()
-        .any(|named| named.is_some())
-        || args.issue.is_some();
-    let selector = match names_repository {
-        true => Some(checked_repository(ctx, args).await?),
-        false => None,
-    };
-    let settings = match &selector {
-        Some(selector) => {
+    let selector = picking_repository(ctx, args).await?;
+    let settings = match (&selector, &args.in_workspace) {
+        (Some(selector), None) => {
             let target = ConfigTarget::Repository(selector.clone());
             crate::client::workspaces::settings(&ctx.paths, target).await?
         }
-        None => mode_settings(ctx, args).await?,
+        _ => mode_settings(ctx, args).await?,
     };
     let model = args.model.clone().into();
     chat::checked_agent(&settings, args.agent.clone(), &model)?;
+    let fit = ui::ModeFit {
+        kind: None,
+        repository: selector.is_some().then_some(true),
+    };
     if let Some(selector) = selector
         && let Some(mode) = issue_mode(ctx, args, selector, &settings).await?
     {
         return Ok(mode);
     }
-    // A start in an existing workspace's worktree is in its repository.
-    let fit = ui::ModeFit {
-        kind: None,
-        repository: (names_repository || args.in_workspace.is_some()).then_some(true),
-    };
     ModeChoice::Pick.chosen(ctx, &settings.modes, fit)
+}
+
+/// The repository a start whose mode is picked goes in, if the arguments
+/// name one: that of the existing workspace `--in` names, whose worktree
+/// the start is in whatever its mode, else the [`checked_repository`] they
+/// name.
+async fn picking_repository(
+    ctx: &Context,
+    args: &mut StartArgs,
+) -> Result<Option<crate::repository::Selector>> {
+    if let Some(Some(workspace)) = &args.in_workspace {
+        let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.clone()).await?;
+        return Ok(Some((&inspection.workspace.repository_id).into()));
+    }
+    let names_repository = [&args.repository, &args.repository_override]
+        .iter()
+        .any(|named| named.is_some())
+        || args.issue.is_some();
+    Ok(match names_repository {
+        true => Some(checked_repository(ctx, args).await?),
+        false => None,
+    })
 }
 
 /// The repository the start goes in, resolved and checked with its parent
