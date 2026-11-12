@@ -15,11 +15,12 @@ pub(in crate::cli::commands) async fn list(
     // Listing chats first ends finished ones, returning their workspaces to the user.
     let chats = chat::listed(ctx, filter).await?;
     let mut workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-    let statuses = ui::Statuses {
+    let mut statuses = ui::Statuses {
         stopped: ui::stopped_workspaces(&ctx.paths, &workspaces),
-        queued: queued_agents::listed(ctx, filter).await?,
+        queued: queued_agents::entries(ctx).await?,
     };
     workspaces.retain(|workspace| filter.keeps_workspace(workspace, &statuses.shown(workspace)));
+    (statuses.queued).retain(|entry| filter.keeps_listed_entry(entry, &workspaces));
     let rows = ui::workspace_tree_rows(
         &workspaces,
         &chats,

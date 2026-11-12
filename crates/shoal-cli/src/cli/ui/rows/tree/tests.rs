@@ -135,17 +135,20 @@ fn a_queued_agent_shows_as_its_workspaces_status_or_its_own_row() {
             entry("in-waits", Some(2), Some(&workspaces[0].id)),
             entry("starts", None, None),
             entry("in-runs", Some(3), Some(&workspaces[2].id)),
+            // A scoped caller lists only its own workspaces, but every entry.
+            entry("elsewhere", Some(4), Some(&"unlisted".into())),
         ],
     };
     let rows = workspace_tree_rows(&workspaces, &[], &statuses, plain, None);
     assert_eq!(
         rows,
         [
-            "◐ 3  runs    process running, queued (3)",
-            "◌    starts  starting                     Add onboarding",
-            "○ 2  waits   queued (2)",
-            "○    new     queued (1)                   Add onboarding",
-            "○ 1  idle    inactive",
+            "◐ 3  runs       process running, queued (3)",
+            "◌    starts     starting                     Add onboarding",
+            "○ 2  waits      queued (2)",
+            "○    new        queued (1)                   Add onboarding",
+            "○    elsewhere  queued (4)                   Add onboarding",
+            "○ 1  idle       inactive",
         ]
     );
 }
