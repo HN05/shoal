@@ -2,6 +2,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
+use shoal_refs::CommitId;
 
 use crate::{
     fsutil::off_runtime,
@@ -147,10 +148,9 @@ async fn merge_branch(plan: MergePlan) -> Result<MergedBranch> {
         default_refresh,
         push: _,
     } = plan;
-    let branch = branch.as_str();
     let default = default_refresh.branch.clone();
-    let default_ref = git::local_ref(&default);
-    clean_branch(&workspace.path, branch).await?;
+    let default_ref = git::local_ref(default.as_str());
+    clean_branch(&workspace.path, branch.as_str()).await?;
     ensure!(
         git_run(&workspace.path, &["rev-parse", "HEAD"])
             .await?
@@ -166,10 +166,10 @@ async fn merge_branch(plan: MergePlan) -> Result<MergedBranch> {
         "default branch changed before merging; retry"
     );
     let previous = default_refresh.commit.clone();
-    let merged = |commit: String, updated: bool, fast_forward: bool| MergedBranch {
+    let merged = |commit: CommitId, updated: bool, fast_forward: bool| MergedBranch {
         workspace_id: workspace.id.clone(),
         repository_id: repo.id.clone(),
-        branch: branch.to_owned(),
+        branch: branch.clone(),
         default_branch: default.clone(),
         previous_commit: previous.clone(),
         commit,
@@ -178,18 +178,34 @@ async fn merge_branch(plan: MergePlan) -> Result<MergedBranch> {
         default_refresh,
         pushed_to: None,
     };
-    if git::is_ancestor(&repo.path, &source, &previous, git::isolated_command).await? {
+    if git::is_ancestor(
+        &repo.path,
+        source.as_str(),
+        previous.as_str(),
+        git::isolated_command,
+    )
+    .await?
+    {
         return Ok(merged(previous.clone(), false, true));
     }
-    let fast_forward =
-        git::is_ancestor(&repo.path, &previous, &source, git::isolated_command).await?;
+    let fast_forward = git::is_ancestor(
+        &repo.path,
+        previous.as_str(),
+        source.as_str(),
+        git::isolated_command,
+    )
+    .await?;
     match checkout {
         Some(checkout) => {
-            clean_branch(&checkout, &default).await?;
-            let output = git::bounded(git::merge_commit(&checkout, branch, &source))
-                .capture()
-                .await
-                .context("merge into default branch")?;
+            clean_branch(&checkout, default.as_str()).await?;
+            let output = git::bounded(git::merge_commit(
+                &checkout,
+                branch.as_str(),
+                source.as_str(),
+            ))
+            .capture()
+            .await
+            .context("merge into default branch")?;
             if !output.status.success() {
                 // Leave the checkout as it was; conflicts belong in the workspace.
                 let _ = git_run(&checkout, &["merge", "--abort"]).await;
@@ -205,13 +221,13 @@ async fn merge_branch(plan: MergePlan) -> Result<MergedBranch> {
                 fast_forward,
                 "{default} is not checked out and {branch} does not fast-forward it; run git merge {default} in the workspace, then retry"
             );
-            git::fast_forward_local(&repo.path, &source, &default_ref).await?;
+            git::fast_forward_local(&repo.path, source.as_str(), &default_ref).await?;
         }
     }
     let commit = git_run(&repo.path, &["rev-parse", "--verify", &default_ref])
         .await?
         .trim()
-        .to_owned();
+        .into();
     Ok(merged(commit, true, fast_forward))
 }
 
@@ -223,7 +239,7 @@ pub(crate) async fn rollback_merge(plan: &MergePlan) -> Result<()> {
     };
     let branch = &plan.default_refresh.branch;
     ensure!(
-        git::head_branch(checkout, true, git_run).await?.as_deref() == Some(branch),
+        git::head_branch(checkout, true, git_run).await?.as_deref() == Some(branch.as_str()),
         "default checkout changed branches during the merge; recover it manually"
     );
     let head = git_run(checkout, &["rev-parse", "HEAD"]).await?;
@@ -234,7 +250,7 @@ pub(crate) async fn rollback_merge(plan: &MergePlan) -> Result<()> {
     // unstaged edits. Git refuses an index lock; never remove someone else's lock.
     git_run(
         checkout,
-        &["reset", "--merge", &plan.default_refresh.commit],
+        &["reset", "--merge", plan.default_refresh.commit.as_str()],
     )
     .await
     .context("could not roll back interrupted merge; inspect the default checkout")?;

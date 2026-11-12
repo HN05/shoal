@@ -147,12 +147,12 @@ pub async fn finish_unmerge(plan: UnmergePlan) -> Result<Unmerged> {
     ensure_unchanged(&plan).await?;
     let replayed = match plan.tip == plan.result {
         true => {
-            move_default(&plan, &plan.previous).await?;
+            move_default(&plan, plan.previous.as_str()).await?;
             0
         }
         false => replay(&plan).await?,
     };
-    let commit = tip_commit(&plan.repo.path, &git::local_ref(default)).await?;
+    let commit = tip_commit(&plan.repo.path, &git::local_ref(default.as_str())).await?;
     let branch_recreated = recreate_branch(&plan).await?;
     Ok(Unmerged {
         workspace_id: plan.workspace.id,
@@ -161,7 +161,7 @@ pub async fn finish_unmerge(plan: UnmergePlan) -> Result<Unmerged> {
         default_branch: plan.default_branch,
         source: plan.source,
         previous_commit: plan.tip,
-        commit,
+        commit: commit.into(),
         replayed,
         branch_recreated,
     })
@@ -174,11 +174,11 @@ pub async fn finish_unmerge(plan: UnmergePlan) -> Result<Unmerged> {
 async fn ensure_unchanged(plan: &UnmergePlan) -> Result<()> {
     let (repo, default) = (&plan.repo.path, &plan.default_branch);
     ensure!(
-        !pushed(repo, default, &plan.result).await?,
+        !pushed(repo, default.as_str(), plan.result.as_str()).await?,
         "{default}'s upstream got the merge of {} during the unmerge, so nothing changed; retry to see how to revert it",
         plan.branch
     );
-    let current = tip_commit(repo, &git::local_ref(default)).await?;
+    let current = tip_commit(repo, &git::local_ref(default.as_str())).await?;
     ensure!(
         current == plan.tip,
         "{default} changed during the unmerge, so nothing changed; retry"
@@ -251,26 +251,26 @@ async fn move_default(plan: &UnmergePlan, target: &str) -> Result<()> {
         ensure_unchanged(plan).await?;
         // Moving the ref under a checkout would leave its files behind.
         ensure!(
-            git::checkout_of(&plan.repo.path, default, git_run)
+            git::checkout_of(&plan.repo.path, default.as_str(), git_run)
                 .await?
                 .is_none(),
             "{default} was checked out during the unmerge, so nothing changed; retry"
         );
-        let reference = git::local_ref(default);
+        let reference = git::local_ref(default.as_str());
         let args = [
             "update-ref",
             "-m",
             "shoal unmerge",
             &reference,
             target,
-            &plan.tip,
+            plan.tip.as_str(),
         ];
         git_run(&plan.repo.path, &args)
             .await
             .with_context(|| format!("move {default} to {target}"))?;
         return Ok(());
     };
-    clean_branch(checkout, default).await?;
+    clean_branch(checkout, default.as_str()).await?;
     let collisions = git::checkpoint::ignored_collisions(checkout, target, target).await?;
     ensure!(
         collisions.is_empty(),
@@ -279,7 +279,7 @@ async fn move_default(plan: &UnmergePlan, target: &str) -> Result<()> {
     );
     ensure_unchanged(plan).await?;
     ensure!(
-        checkout_at(checkout, default, &plan.tip).await?,
+        checkout_at(checkout, default.as_str(), plan.tip.as_str()).await?,
         "{default}'s checkout changed during the unmerge, so nothing changed; retry"
     );
     git_run(checkout, &["reset", "--keep", target])
@@ -296,7 +296,7 @@ async fn move_default(plan: &UnmergePlan, target: &str) -> Result<()> {
 /// were.
 async fn replay(plan: &UnmergePlan) -> Result<u64> {
     let repo = &plan.repo.path;
-    let worktree = add_replay_worktree(repo, &plan.tip).await?;
+    let worktree = add_replay_worktree(repo, plan.tip.as_str()).await?;
     let replayed = replay_in(plan, &worktree).await;
     remove_replay_worktree(repo).await?;
     let (commit, replayed) = replayed?;
@@ -308,10 +308,14 @@ async fn replay(plan: &UnmergePlan) -> Result<u64> {
 /// the commit it makes and how many first-parent commits it replayed.
 async fn replay_in(plan: &UnmergePlan, worktree: &Path) -> Result<(String, u64)> {
     let default = &plan.default_branch;
-    let output = git::bounded(rebase_command(worktree, &plan.previous, &plan.result))
-        .capture()
-        .await
-        .context("replay the default branch")?;
+    let output = git::bounded(rebase_command(
+        worktree,
+        plan.previous.as_str(),
+        plan.result.as_str(),
+    ))
+    .capture()
+    .await
+    .context("replay the default branch")?;
     if !output.status.success() {
         bail!(
             "replaying the commits after {} merged onto {default} failed, so nothing changed; unmerge the later merges first\n{}{}",
@@ -321,13 +325,20 @@ async fn replay_in(plan: &UnmergePlan, worktree: &Path) -> Result<(String, u64)>
         );
     }
     let commit = tip_commit(worktree, "HEAD").await?;
-    if holds_commits_of(worktree, &commit, &plan.source, &plan.previous).await? {
+    if holds_commits_of(
+        worktree,
+        &commit,
+        plan.source.as_str(),
+        plan.previous.as_str(),
+    )
+    .await?
+    {
         bail!(
             "replaying the commits after {} merged would bring its commits back into {default}, so nothing changed; unmerge the merges that contain them first",
             plan.branch
         );
     }
-    let replayed = first_parent_chain(worktree, &commit, &plan.previous)
+    let replayed = first_parent_chain(worktree, &commit, plan.previous.as_str())
         .await?
         .map_or(0, |chain| chain.len());
     Ok((commit, replayed as u64))
@@ -431,11 +442,11 @@ fn rebase_command(worktree: &Path, onto: &str, upstream: &str) -> tokio::process
 /// Recreate the merged branch at its merged commit when cleanup deleted it,
 /// so its commits stay on a branch; whether it did.
 async fn recreate_branch(plan: &UnmergePlan) -> Result<bool> {
-    let reference = git::local_ref(&plan.branch);
+    let reference = git::local_ref(plan.branch.as_str());
     if git::ref_exists(&plan.repo.path, &reference, git::isolated_command).await? {
         return Ok(false);
     }
-    git::branch::create(&plan.repo.path, &plan.branch, &plan.source).await?;
+    git::branch::create(&plan.repo.path, plan.branch.as_str(), plan.source.as_str()).await?;
     Ok(true)
 }
 

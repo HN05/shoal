@@ -3,6 +3,7 @@
 //! the default branch back or replays the history after it.
 use anyhow::{Context, Result, bail};
 use rusqlite::OptionalExtension;
+use shoal_refs::{BranchName, CommitId};
 
 use super::{clean_checkout, local_commit, records::RecordedMerge};
 use crate::client::space_ids::SpaceId;
@@ -49,14 +50,15 @@ impl Manager {
     pub async fn prepare_unmerge(&self, selector: &SpaceSelector) -> Result<UnmergePlan> {
         let workspace = self.workspace(selector).await?;
         let repo = self.repository(&workspace.repository_id).await?;
-        let default =
-            git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
-        let branch = workspace.require_branch("unmerging")?.to_owned();
+        let default = BranchName::from(
+            git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?,
+        );
+        let branch = BranchName::from(workspace.require_branch("unmerging")?);
         let held = self.held_merges(&repo, &default).await?;
         let (merge, later) = latest_merge_of(&held, &branch)
             .with_context(|| format!("{default} holds no local merge of {branch} to undo"))?;
         ensure_unpushed(&repo, &default, merge).await?;
-        self.ensure_unmanaged_checkout(&repo, &default, "unmerge")
+        self.ensure_unmanaged_checkout(&repo, default.as_str(), "unmerge")
             .await?;
         let checkout = clean_checkout(&repo, &default).await?;
         let tip = local_commit(&repo, &default).await?;
@@ -92,30 +94,34 @@ fn removed_name(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<String
 /// The latest of the `held` merges of `branch`, and the merges after it.
 fn latest_merge_of<'a>(
     held: &'a [RecordedMerge],
-    branch: &str,
+    branch: &BranchName,
 ) -> Option<(&'a RecordedMerge, &'a [RecordedMerge])> {
     let index = held
         .iter()
-        .rposition(|recorded| recorded.merge.branch == branch)?;
+        .rposition(|recorded| recorded.merge.branch == *branch)?;
     Some((&held[index], &held[index + 1..]))
 }
 
 /// Refuse to undo a merge whose result the default branch's upstream holds,
 /// as the last fetch saw it: others may have its commits.
-async fn ensure_unpushed(repo: &Repository, default: &str, merge: &RecordedMerge) -> Result<()> {
-    if !pushed(&repo.path, default, &merge.merge.result).await? {
-        return Ok(());
-    }
+async fn ensure_unpushed(
+    repo: &Repository,
+    default: &BranchName,
+    merge: &RecordedMerge,
+) -> Result<()> {
     let (branch, previous, result) = (
         &merge.merge.branch,
-        &merge.merge.previous,
-        &merge.merge.result,
+        merge.merge.previous.as_str(),
+        merge.merge.result.as_str(),
     );
+    if !pushed(&repo.path, default.as_str(), result).await? {
+        return Ok(());
+    }
     // A merge commit made on the default branch reverts as one; a
     // fast-forward, by each commit it brought, unless merges among them,
     // which git revert takes only one at a time, need the inverse diff.
     let merge_commit = !merged_parents(&repo.path, result).await?.is_empty()
-        && tip_commit(&repo.path, &format!("{result}^1")).await? == *previous;
+        && tip_commit(&repo.path, &format!("{result}^1")).await? == previous;
     let revert = if merge_commit {
         format!("git revert -m 1 {result}")
     } else if merges_between(&repo.path, previous, result).await? {
@@ -135,21 +141,21 @@ async fn ensure_unpushed(repo: &Repository, default: &str, merge: &RecordedMerge
 /// first.
 async fn ensure_replayable(
     repo: &Repository,
-    tip: &str,
+    tip: &CommitId,
     merge: &RecordedMerge,
     later: &[RecordedMerge],
 ) -> Result<()> {
     let path = &repo.path;
     let (source, previous, branch) = (
-        &merge.merge.source,
-        &merge.merge.previous,
+        merge.merge.source.as_str(),
+        merge.merge.previous.as_str(),
         &merge.merge.branch,
     );
-    let chain = first_parent_chain(path, tip, &merge.merge.result)
+    let chain = first_parent_chain(path, tip.as_str(), merge.merge.result.as_str())
         .await?
         .with_context(|| format!("the history after {branch} merged does not follow its first parents, so it cannot be replayed"))?;
     for recorded in later {
-        if holds_commits_of(path, &recorded.merge.source, source, previous).await? {
+        if holds_commits_of(path, recorded.merge.source.as_str(), source, previous).await? {
             bail!(
                 "the later merge of {} contains {branch}'s commits, so replaying it would bring them back; unmerge it first with shoal unmerge {}",
                 recorded.merge.branch,

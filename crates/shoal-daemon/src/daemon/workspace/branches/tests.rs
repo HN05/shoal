@@ -1862,7 +1862,7 @@ async fn a_pushing_merge_approval_covers_no_other_local_commits_of_main() {
     let Specification::Merge(merge) = &widened.specification else {
         panic!("merge specification expected");
     };
-    assert_eq!(merge.unpushed.as_deref(), Some(local.as_str()));
+    assert_eq!(merge.unpushed, Some(local.as_str().into()));
     assert!(
         widened.reason.contains("1 commit that origin/main lacks"),
         "{}",

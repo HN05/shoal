@@ -87,11 +87,11 @@ struct Following {
 impl Following {
     fn pulled(self, repo: &Repository, commit: String) -> PulledBranch {
         PulledBranch {
-            branch: self.branch,
+            branch: self.branch.into(),
             repository_id: repo.id.clone(),
             updated: commit != self.previous_commit,
-            previous_commit: self.previous_commit,
-            commit,
+            previous_commit: self.previous_commit.into(),
+            commit: commit.into(),
             skipped: None,
         }
     }
@@ -281,8 +281,8 @@ impl Manager {
         {
             return Ok(Refresh::Unchanged(PulledBranch::unchanged(
                 repo,
-                branch,
-                previous_commit,
+                &branch.into(),
+                previous_commit.into(),
                 format!(
                     "{branch} has no upstream and the repository has no remotes; nothing to refresh"
                 ),

@@ -7,6 +7,7 @@ use std::{collections::BTreeMap, fmt, str::FromStr};
 
 use anyhow::{Result, bail, ensure};
 use serde::{Deserialize, Serialize};
+use shoal_refs::{BranchName, CommitId};
 
 use crate::space_names::SpaceSelector;
 use crate::{
@@ -207,8 +208,8 @@ pub struct SimulatorSpecification {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MergeSpecification {
-    pub branch: String,
-    pub head: String,
+    pub branch: BranchName,
+    pub head: CommitId,
     /// Where the merge pushes the default branch afterwards: the remote and
     /// the ref there, so another destination needs another decision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -217,7 +218,7 @@ pub struct MergeSpecification {
     /// besides the merge's, so other local commits need another decision;
     /// none otherwise, so a sync of the default branch needs none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub unpushed: Option<String>,
+    pub unpushed: Option<CommitId>,
     /// The sensitive files the merge brings to a default branch that changed
     /// them too, so a warning recorded after the decision needs another.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -233,9 +234,9 @@ pub struct UnmergeSpecification {
     /// The record of the merge it undoes, which tells apart merges of the
     /// same commit.
     pub merge: i64,
-    pub branch: String,
-    pub source: String,
-    pub result: String,
+    pub branch: BranchName,
+    pub source: CommitId,
+    pub result: CommitId,
 }
 
 /// A secret grant covers the configured source; changing the command or the

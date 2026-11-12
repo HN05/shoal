@@ -3,14 +3,15 @@ use super::{MergeWarning, Repository, Workspace};
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
+use shoal_refs::{BranchName, CommitId};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PulledBranch {
-    pub branch: String,
+    pub branch: BranchName,
     pub repository_id: RepositoryId,
-    pub previous_commit: String,
-    pub commit: String,
+    pub previous_commit: CommitId,
+    pub commit: CommitId,
     pub updated: bool,
     /// Why a merge source was left as it is instead of refreshed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -18,9 +19,14 @@ pub struct PulledBranch {
 }
 
 impl PulledBranch {
-    pub fn unchanged(repo: &Repository, branch: &str, commit: String, skipped: String) -> Self {
+    pub fn unchanged(
+        repo: &Repository,
+        branch: &BranchName,
+        commit: CommitId,
+        skipped: String,
+    ) -> Self {
         Self {
-            branch: branch.to_owned(),
+            branch: branch.clone(),
             repository_id: repo.id.clone(),
             previous_commit: commit.clone(),
             commit,
@@ -35,10 +41,10 @@ impl PulledBranch {
 pub struct MergedBranch {
     pub workspace_id: SpaceId,
     pub repository_id: RepositoryId,
-    pub branch: String,
-    pub default_branch: String,
-    pub previous_commit: String,
-    pub commit: String,
+    pub branch: BranchName,
+    pub default_branch: BranchName,
+    pub previous_commit: CommitId,
+    pub commit: CommitId,
     /// False when the default branch already contained the workspace branch.
     pub updated: bool,
     /// True when the default branch fast-forwarded instead of a merge commit.
@@ -55,9 +61,9 @@ pub struct MergedBranch {
 pub struct MergePlan {
     pub workspace: Workspace,
     /// The workspace's branch, which merges.
-    pub branch: String,
+    pub branch: BranchName,
     pub repo: Repository,
-    pub source: String,
+    pub source: CommitId,
     pub checkout: Option<PathBuf>,
     pub merge_temporaries: Vec<PathBuf>,
     pub default_refresh: PulledBranch,
@@ -71,20 +77,20 @@ pub struct MergePlan {
 pub struct UnmergePlan {
     pub workspace: Workspace,
     pub repo: Repository,
-    pub default_branch: String,
+    pub default_branch: BranchName,
     /// The default branch's checkout, if it has one.
     pub checkout: Option<PathBuf>,
     /// The merge's record.
     pub merge: i64,
-    pub branch: String,
+    pub branch: BranchName,
     /// The branch's commit that merged.
-    pub source: String,
+    pub source: CommitId,
     /// The default branch's commit before the merge, and after it.
-    pub previous: String,
-    pub result: String,
+    pub previous: CommitId,
+    pub result: CommitId,
     /// The default branch's commit when the unmerge was planned: the
     /// merge's result when it is the latest merge, a later commit otherwise.
-    pub tip: String,
+    pub tip: CommitId,
 }
 
 /// A merge undone: the default branch moved back from `previous_commit` to
@@ -93,12 +99,12 @@ pub struct UnmergePlan {
 pub struct Unmerged {
     pub workspace_id: SpaceId,
     pub repository_id: RepositoryId,
-    pub branch: String,
-    pub default_branch: String,
+    pub branch: BranchName,
+    pub default_branch: BranchName,
     /// The branch's commit that had merged.
-    pub source: String,
-    pub previous_commit: String,
-    pub commit: String,
+    pub source: CommitId,
+    pub previous_commit: CommitId,
+    pub commit: CommitId,
     /// The commits after the merge replayed onto the commit before it; none
     /// when it was the latest merge.
     pub replayed: u64,
@@ -119,7 +125,7 @@ pub struct MergePush {
 impl MergePush {
     /// Where `default` goes, as `origin`, or as `origin/release` when the
     /// remote branch has another name.
-    pub fn destination(&self, default: &str) -> String {
+    pub fn destination(&self, default: &BranchName) -> String {
         match self.branch() == default {
             true => self.remote.clone(),
             false => self.remote_branch(),
@@ -152,9 +158,9 @@ pub struct MergeOptions {
 /// The commits, push destination and warning a user confirmed for a merge.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MergeConfirmation {
-    pub head: String,
+    pub head: CommitId,
     /// The local default branch's commit the merge goes onto.
-    pub default_commit: String,
+    pub default_commit: CommitId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push: Option<MergePush>,
     /// The sensitive files changed on both sides that the question named.
@@ -167,12 +173,12 @@ pub struct MergeConfirmation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MergePreview {
     pub workspace_id: SpaceId,
-    pub branch: String,
+    pub branch: BranchName,
     /// The branch's commit that merges.
-    pub head: String,
-    pub default_branch: String,
+    pub head: CommitId,
+    pub default_branch: BranchName,
     /// The local default branch's commit the merge goes onto.
-    pub default_commit: String,
+    pub default_commit: CommitId,
     /// Commits of the branch that the default branch lacks.
     pub commits: u64,
     /// Where the default branch is pushed afterwards, if it is.
@@ -205,7 +211,7 @@ impl MergePreview {
 
     /// The default branch's commit when the push publishes commits of it
     /// besides the merge's.
-    pub fn unpushed_default(&self) -> Option<String> {
+    pub fn unpushed_default(&self) -> Option<CommitId> {
         (self.push_to.is_some() && self.unpushed > 0).then(|| self.default_commit.clone())
     }
 

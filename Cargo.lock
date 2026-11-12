@@ -1351,6 +1351,7 @@ dependencies = [
  "shoal-client",
  "shoal-forge",
  "shoal-proxy",
+ "shoal-refs",
  "shoal-subprocess",
  "tempfile",
  "tokio",

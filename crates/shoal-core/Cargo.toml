@@ -30,6 +30,7 @@ sha2 = "0.11"
 shoal-client = { workspace = true, features = ["clap", "rusqlite"] }
 shoal-forge = { workspace = true, features = ["clap", "rusqlite"] }
 shoal-proxy.workspace = true
+shoal-refs = { workspace = true, features = ["rusqlite"] }
 shoal-subprocess.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }

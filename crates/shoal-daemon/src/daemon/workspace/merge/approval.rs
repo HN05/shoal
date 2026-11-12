@@ -87,10 +87,10 @@ impl Manager {
             );
         };
         let workspace = self.workspace_by_id(&request.space_id).await?;
-        let head = git::status::local_branch_commit(&workspace.path, &merge.branch)
+        let head = git::status::local_branch_commit(&workspace.path, merge.branch.as_str())
             .await
             .with_context(|| format!("could not check {} for approval", merge.branch))?;
-        if workspace.branch.as_ref() == Some(&merge.branch)
+        if workspace.branch.as_deref() == Some(merge.branch.as_str())
             && head.as_deref() == Some(merge.head.as_str())
         {
             return Ok(());

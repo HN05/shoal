@@ -52,7 +52,7 @@ fn merge_preview_names_its_direction_push_warning_and_open_prs() {
             .description()
             .ends_with("push main to origin/release.")
     );
-    preview.branch = "b".repeat(300);
+    preview.branch = "b".repeat(300).into();
     assert_eq!(preview.reason().len(), crate::validate::MAX_REASON_LEN);
     assert!(preview.reason().ends_with('…'));
 }

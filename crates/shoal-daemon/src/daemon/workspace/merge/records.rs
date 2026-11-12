@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use rusqlite::{Connection, params};
+use shoal_refs::{BranchName, CommitId};
 
 use super::tracking_ref;
 use crate::{
@@ -23,17 +24,17 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LocalMerge {
     pub repository_id: RepositoryId,
-    pub default_branch: String,
+    pub default_branch: BranchName,
     pub workspace_id: SpaceId,
     /// The workspace's name when it merged.
     pub workspace: String,
-    pub branch: String,
+    pub branch: BranchName,
     /// The branch's commit that merged.
-    pub source: String,
+    pub source: CommitId,
     /// The default branch's commit before the merge.
-    pub previous: String,
+    pub previous: CommitId,
     /// The default branch's commit the merge left it at.
-    pub result: String,
+    pub result: CommitId,
 }
 
 /// A stored [`LocalMerge`].
@@ -82,10 +83,11 @@ impl Manager {
         let repo = &plan.repo.path;
         let default = &plan.default_refresh.branch;
         let previous = &plan.default_refresh.commit;
-        let Some(tip) = git::status::local_branch_commit(repo, default).await? else {
+        let Some(tip) = git::status::local_branch_commit(repo, default.as_str()).await? else {
             return Ok(());
         };
-        let Some(result) = merge_result(repo, &tip, previous, &plan.source).await? else {
+        let merged = merge_result(repo, &tip, previous.as_str(), plan.source.as_str()).await?;
+        let Some(result) = merged.map(CommitId::from) else {
             return Ok(());
         };
         let merge = LocalMerge {
@@ -108,13 +110,13 @@ impl Manager {
     pub(crate) async fn held_merges(
         &self,
         repo: &Repository,
-        default: &str,
+        default: &BranchName,
     ) -> Result<Vec<RecordedMerge>> {
-        let tip = git::unmerge::tip_commit(&repo.path, &git::local_ref(default)).await?;
+        let tip = git::unmerge::tip_commit(&repo.path, &git::local_ref(default.as_str())).await?;
         let mut held = Vec::new();
         let mut gone = Vec::new();
         for recorded in self.recorded_merges(repo, default).await? {
-            let result = &recorded.merge.result;
+            let result = recorded.merge.result.as_str();
             match git::is_ancestor(&repo.path, result, &tip, git::isolated_command).await? {
                 true => held.push(recorded),
                 false => gone.push(recorded.id),
@@ -129,7 +131,8 @@ impl Manager {
     /// A default branch the unmerge left as it was changes nothing.
     async fn record_unmerge(&self, plan: &UnmergePlan) -> Result<()> {
         let repo = &plan.repo.path;
-        let Some(now) = git::status::local_branch_commit(repo, &plan.default_branch).await? else {
+        let now = git::status::local_branch_commit(repo, plan.default_branch.as_str()).await?;
+        let Some(now) = now.map(CommitId::from) else {
             return Ok(());
         };
         if now == plan.tip {
@@ -156,13 +159,13 @@ impl Manager {
 
     /// The merges into `repo`'s `default` that its upstream holds, as the
     /// last fetch saw it.
-    async fn pushed_merges(&self, repo: &Repository, default: &str) -> Result<Vec<i64>> {
-        let Some(tracking) = tracking_ref(&repo.path, default).await? else {
+    async fn pushed_merges(&self, repo: &Repository, default: &BranchName) -> Result<Vec<i64>> {
+        let Some(tracking) = tracking_ref(&repo.path, default.as_str()).await? else {
             return Ok(Vec::new());
         };
         let mut pushed = Vec::new();
         for recorded in self.recorded_merges(repo, default).await? {
-            let result = &recorded.merge.result;
+            let result = recorded.merge.result.as_str();
             if git::is_ancestor(&repo.path, result, &tracking, git::isolated_command).await? {
                 pushed.push(recorded.id);
             }
@@ -173,9 +176,9 @@ impl Manager {
     async fn recorded_merges(
         &self,
         repo: &Repository,
-        default: &str,
+        default: &BranchName,
     ) -> Result<Vec<RecordedMerge>> {
-        let (id, default) = (repo.id.clone(), default.to_owned());
+        let (id, default) = (repo.id.clone(), default.clone());
         self.store.run(move |db| list(db, &id, &default)).await
     }
 
@@ -194,17 +197,18 @@ impl Manager {
 /// message, so other changes to the default branch rewrite no record.
 async fn replayed_commits(
     plan: &UnmergePlan,
-    now: &str,
-) -> Result<Option<HashMap<String, String>>> {
+    now: &CommitId,
+) -> Result<Option<HashMap<CommitId, CommitId>>> {
     let repo = &plan.repo.path;
+    let (previous, now) = (plan.previous.as_str(), now.as_str());
     let (Some(replayed), Some(replays)) = (
-        first_parent_chain(repo, &plan.tip, &plan.result).await?,
-        first_parent_chain(repo, now, &plan.previous).await?,
+        first_parent_chain(repo, plan.tip.as_str(), plan.result.as_str()).await?,
+        first_parent_chain(repo, now, previous).await?,
     ) else {
         return Ok(None);
     };
     if replayed.len() != replays.len()
-        || holds_commits_of(repo, now, &plan.source, &plan.previous).await?
+        || holds_commits_of(repo, now, plan.source.as_str(), previous).await?
     {
         return Ok(None);
     }
@@ -213,7 +217,9 @@ async fn replayed_commits(
             return Ok(None);
         }
     }
-    let mut rewritten: HashMap<String, String> = replayed.into_iter().zip(replays).collect();
+    let mut rewritten: HashMap<CommitId, CommitId> = (replayed.into_iter().map(CommitId::from))
+        .zip(replays.into_iter().map(CommitId::from))
+        .collect();
     rewritten.insert(plan.result.clone(), plan.previous.clone());
     Ok(Some(rewritten))
 }
@@ -225,8 +231,8 @@ fn replace_replayed(
     tx: &rusqlite::Transaction<'_>,
     undone: i64,
     repository_id: &RepositoryId,
-    default: &str,
-    rewritten: &HashMap<String, String>,
+    default: &BranchName,
+    rewritten: &HashMap<CommitId, CommitId>,
 ) -> Result<()> {
     delete(tx, &[undone])?;
     for recorded in list(tx, repository_id, default)? {
@@ -258,7 +264,7 @@ fn insert(db: &Connection, merge: &LocalMerge) -> Result<()> {
 fn list(
     db: &Connection,
     repository_id: &RepositoryId,
-    default: &str,
+    default: &BranchName,
 ) -> Result<Vec<RecordedMerge>> {
     let mut statement = db.prepare(
         "SELECT id,repository_id,default_branch,workspace_id,workspace,branch,
@@ -288,10 +294,10 @@ fn list(
 fn rewrite(
     db: &Connection,
     recorded: &RecordedMerge,
-    rewritten: &HashMap<String, String>,
+    rewritten: &HashMap<CommitId, CommitId>,
 ) -> Result<()> {
     let merge = &recorded.merge;
-    let commit = |commit: &String| rewritten.get(commit).unwrap_or(commit).clone();
+    let commit = |commit: &CommitId| rewritten.get(commit).unwrap_or(commit).clone();
     let (previous, result) = (commit(&merge.previous), commit(&merge.result));
     if (&previous, &result) != (&merge.previous, &merge.result) {
         db.execute(
