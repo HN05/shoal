@@ -1,8 +1,9 @@
 -- An execution, and the agent-queue entry that restores or opened one,
 -- belong to a space, a workspace or a chat, whose IDs never collide, so
 -- neither references a space table. Removing a space removes them, as
--- removing a workspace did; a conversion, which moves the space's row to
--- the other table, removes them itself.
+-- removing a workspace did. A conversion moves the space's row to the
+-- other table, which keeps them: a chat that becomes a workspace carries
+-- its own over, while a workspace that becomes a chat removes them itself.
 ALTER TABLE executions RENAME COLUMN workspace_id TO space_id;
 DROP INDEX executions_workspace;
 CREATE INDEX executions_space ON executions(space_id);

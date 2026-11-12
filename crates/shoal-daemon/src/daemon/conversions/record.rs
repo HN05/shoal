@@ -466,9 +466,10 @@ pub(crate) fn replace_workspace(
     Ok(released)
 }
 
-/// Delete the executions of the space `id` and the queue entries that
-/// restore or opened them, which removing a space deletes but a row that
-/// moves to the other table keeps.
+/// Delete the executions of the workspace `id`, which a chat replaces, and
+/// the queue entries that restore or opened them; the triggers that delete
+/// them with a removed space leave them to a row that moves to the other
+/// table.
 fn forget_executions(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     tx.execute("DELETE FROM executions WHERE space_id=?1", [id])?;
     tx.execute("DELETE FROM agent_queue WHERE space_id=?1", [id])?;
