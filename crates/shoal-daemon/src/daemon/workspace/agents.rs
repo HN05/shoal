@@ -33,7 +33,6 @@ mod chat_questions;
 mod forks;
 mod idle_stop;
 mod interrupts;
-mod queue_move;
 mod restart;
 pub use restart::RestartWaits;
 pub(crate) use restart::{Outcome, Renewals, Restart, Restarts, forget_ended_renewals, restarted};
@@ -48,13 +47,6 @@ pub(crate) trait ProtectionExt {
     fn restart() -> Self;
 
     fn is_restart(&self) -> bool;
-
-    /// `shoal queue move` of a running agent, whose wrapper waits for the
-    /// agent queue to start its restore. Wrappers handle it as any
-    /// protection stop they restore.
-    fn queue_move() -> Self;
-
-    fn is_queue_move(&self) -> bool;
 
     /// An idle agent of a done workspace whose cleanup is held, which Shoal
     /// stops to free memory.
@@ -80,8 +72,7 @@ pub(crate) trait ProtectionExt {
     fn is_blocked(&self) -> bool;
 
     /// Whether `[overload.recovery]` decides its restore, as for a stop that
-    /// load or disk space caused; `shoal queue move` and idle stops restore
-    /// whatever it says.
+    /// load or disk space caused; idle stops restore whatever it says.
     fn follows_overload_recovery(&self) -> bool;
 
     /// Whether a done assignment cancels its restore. An idle stop's restore
@@ -108,17 +99,6 @@ impl ProtectionExt for Protection {
 
     fn is_restart(&self) -> bool {
         self.reason == RESTART_REASON
-    }
-
-    fn queue_move() -> Self {
-        Self {
-            reason: MOVE_REASON.into(),
-            resumes_when: "the agent queue starts it".into(),
-        }
-    }
-
-    fn is_queue_move(&self) -> bool {
-        self.reason == MOVE_REASON
     }
 
     fn idle_held() -> Self {
@@ -152,7 +132,7 @@ impl ProtectionExt for Protection {
     }
 
     fn follows_overload_recovery(&self) -> bool {
-        !self.is_queue_move() && !self.is_idle()
+        !self.is_idle()
     }
 
     fn ends_with_assignment(&self) -> bool {
@@ -162,9 +142,6 @@ impl ProtectionExt for Protection {
 
 /// The stop reason a restarted agent's wrapper shows and saves.
 const RESTART_REASON: &str = "restarted by shoal restart";
-
-/// The stop reason of an agent `shoal queue move` sent to the queue.
-const MOVE_REASON: &str = "moved in the agent queue by shoal queue move";
 
 /// The stop reason of an idle agent of a done workspace whose cleanup is held.
 const IDLE_HELD_REASON: &str = "idle in a done workspace whose cleanup is held";

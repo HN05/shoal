@@ -1,13 +1,10 @@
-//! The entry a `shoal queue` command acts on and the place a move takes,
-//! named or picked. A named entry is checked before a picker asks for the
-//! rest.
-use anyhow::{Context as _, Result, bail, ensure};
+//! The entry a `shoal queue` command acts on, named or picked.
+use anyhow::{Context as _, Result, ensure};
 
-use crate::client::restarts::skip_reason;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{commands::queued_agents, context::Context, ui},
-    model::{QueueEntry, QueuePlace},
+    model::QueueEntry,
     state::{QueueKind, QueueState},
 };
 
@@ -78,79 +75,6 @@ pub(super) async fn pick_entry(
         .find(|entry| entry.id == id)
         .cloned()
         .context("picker returned an unknown entry")
-}
-
-/// Pick the place of what `selector` names, in front of another waiting
-/// entry or last, once it is known to be a waiting entry or a workspace.
-pub(super) async fn pick_place(ctx: &Context, selector: &str) -> Result<QueuePlace> {
-    let moved = move_target(ctx, selector).await?;
-    ensure!(
-        ctx.interactive(),
-        "name the position to move {selector} to, or last"
-    );
-    let mut others = waiting(ctx).await?;
-    others.retain(|entry| moved.as_ref().is_none_or(|moved| moved.id != entry.id));
-    let name = moved.as_ref().map_or(selector, |entry| entry.name.as_str());
-    let place = ui::pick_place(
-        ctx,
-        &format!("Move {name} in front of> "),
-        labelled(ctx, &others).await?,
-    )?;
-    Ok(match place {
-        ui::Place::Before(id) => QueuePlace::Before(id.into()),
-        ui::Place::Last => QueuePlace::Last,
-    })
-}
-
-/// The waiting entry `selector` names, or `None` for a workspace whose
-/// running agent can move.
-async fn move_target(ctx: &Context, selector: &str) -> Result<Option<QueueEntry>> {
-    let entries = queued_agents::entries(ctx).await?;
-    match entries.into_iter().find(|entry| entry.id == selector) {
-        None => {
-            movable_agent(ctx, selector).await?;
-            Ok(None)
-        }
-        Some(entry) => {
-            ensure!(
-                entry.state == QueueState::Queued,
-                "{} is already starting",
-                entry.name
-            );
-            Ok(Some(entry))
-        }
-    }
-}
-
-/// Refuse a workspace `selector` names unless the one agent running there
-/// can restore in place, as the daemon checks again before stopping it.
-async fn movable_agent(ctx: &Context, selector: &str) -> Result<()> {
-    let not_queued = || format!("{selector} is not in the agent queue");
-    let workspace = SpaceSelector::parse(selector).with_context(not_queued)?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)
-        .await
-        .with_context(not_queued)?
-        .workspace;
-    let name = &workspace.name;
-    let agents = crate::client::agents::all(&ctx.paths)
-        .await
-        .with_context(|| format!("{selector} is not in the agent queue"))?;
-    let agents: Vec<_> = agents
-        .into_iter()
-        .filter(|running| running.space_id == workspace.id)
-        .collect();
-    let running = match agents.as_slice() {
-        [running] => running,
-        [] => bail!("{name} is not in the agent queue and runs no agent"),
-        _ => bail!(
-            "{name} runs several agents; stop them with shoal stop {}",
-            workspace.number
-        ),
-    };
-    match skip_reason(&workspace, running) {
-        Some(reason) => bail!("{name} cannot move: {reason}"),
-        None => Ok(()),
-    }
 }
 
 /// `entries` as picker entries: each ID with its listing row.

@@ -24,9 +24,6 @@ pub(super) async fn run(
         }
         None => listing::list(ctx, repository).await,
         Some(QueueCommand::Start { entry, attach }) => changes::start(ctx, entry, attach).await,
-        Some(QueueCommand::Move { entry, position }) => {
-            changes::move_entry(ctx, entry, position).await
-        }
         Some(QueueCommand::Cancel { entry }) => changes::cancel(ctx, entry).await,
     }
 }

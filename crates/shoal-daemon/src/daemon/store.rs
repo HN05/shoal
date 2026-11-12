@@ -581,7 +581,7 @@ pub struct AgentExecution {
     pub agent: crate::agent::Agent,
     pub state: ExecutionState,
     /// Whether its wrapper runs the agent now, rather than waiting to start
-    /// it or to restore one protection or a queue move stopped.
+    /// it or to restore one protection stopped.
     pub started: bool,
 }
 

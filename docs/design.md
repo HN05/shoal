@@ -1549,21 +1549,16 @@ a limit cannot keep each other from restoring. Its entry names the execution
 without referencing its row, which ended with the agent, and leaves the queue
 once the recovery record or last session is gone. A last session's admitted
 restore counts as a launch, having no slot to take over.
-`shoal queue` starts, moves and cancels entries, and the daemon owns their
-order, `agent_queue.seq`: a move gives the waiting entries' numbers to them in
-their new order in one transaction, so it lasts across restarts, and positions
-count waiting entries machine-wide, as admission does. For the same reason
+`shoal queue` starts and cancels entries, and the daemon owns their order:
+there is no hand-placed order, which would fight the order the daemon
+decides, and positions count waiting entries machine-wide, as admission does.
+For the same reason
 every caller sees the whole queue, while acting on an entry keeps the scope
 rules. Each waiting entry carries what held it back at the last admission
 pass: memory, with what it needs and what is left, disk, a limit, a full
 permit pool or a critical or missing reading, so a wait never goes
 unexplained; the stagger is too brief to report, and the work an entry waits
-for stays in `waiting_for`. Moving a running agent
-stops it as `shoal restart` does rather than as `shoal stop` does, so its
-wrapper keeps the terminal and restores it there once the queue starts it. That
-restore waits only for a free slot and holds none, whatever the overload policy,
-since the user rather than protection sent it back, and lets daemon updates
-through, since its turn may take long.
+for stays in `waiting_for`.
 The queue stores
 the CLI's launch plan opaquely and creates nothing until a slot frees, so a
 waiting entry costs no worktree and branches from the default branch current

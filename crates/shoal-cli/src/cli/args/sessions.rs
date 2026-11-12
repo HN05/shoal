@@ -8,7 +8,6 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::args::{AgentParser, SpaceTargets, permission_assignment},
-    model::QueuePlace,
     sessions::HostName,
 };
 
@@ -98,7 +97,7 @@ pub enum SessionsCommand {
         )]
         permissions: Vec<crate::config::permissions::PermissionChange>,
     },
-    /// List the agent queue, or start, move or cancel an entry.
+    /// List the agent queue, or start or cancel an entry.
     ///
     /// The queue holds the agent launches and restores of every repository
     /// waiting for a slot under max_agents, named by workspace. Without a
@@ -161,33 +160,11 @@ pub enum QueueCommand {
         #[arg(long)]
         attach: bool,
     },
-    /// Move an entry to another position, or stop a running agent and
-    /// queue its restore there.
-    Move {
-        /// Entry by its ID, or a workspace with a running agent by number or
-        /// ID; omit to choose an entry.
-        entry: Option<String>,
-        /// 1-based position as shoal queue numbers them, or last; omit to
-        /// choose the entry to move in front of.
-        #[arg(value_parser = queue_position)]
-        position: Option<QueuePlace>,
-    },
     /// Cancel a waiting entry; a cancelled restore leaves its agent stopped.
     Cancel {
         /// Entry by its ID; omit to choose one.
         entry: Option<String>,
     },
-}
-
-/// A position as `shoal queue` numbers entries, or `last`.
-fn queue_position(input: &str) -> Result<QueuePlace, String> {
-    if input == "last" {
-        return Ok(QueuePlace::Last);
-    }
-    match input.parse() {
-        Ok(position) if position > 0 => Ok(QueuePlace::Position(position)),
-        _ => Err("expected a position from 1, or last".into()),
-    }
 }
 
 #[derive(Debug, Subcommand)]

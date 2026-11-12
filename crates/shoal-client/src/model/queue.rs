@@ -116,25 +116,6 @@ pub struct StoppedWorkspace {
     pub cancelled_run: Option<String>,
 }
 
-/// An entry `shoal queue move` placed.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MovedEntry {
-    pub entry: QueueEntry,
-    /// The entry is the restore of a running agent the move stopped.
-    pub stopped: bool,
-}
-
-/// Where `shoal queue move` places an entry among the waiting ones.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum QueuePlace {
-    /// The 1-based position, as `shoal queue` numbers them.
-    Position(usize),
-    /// In front of the entry with this ID.
-    Before(crate::queue::QueueEntryId),
-    Last,
-}
-
 /// What blocks work until it clears.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

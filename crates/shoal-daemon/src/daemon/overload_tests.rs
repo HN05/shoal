@@ -22,7 +22,6 @@ use std::{fs, future::Future, os::unix::fs::PermissionsExt};
 mod agent_restart;
 mod idle_cleanup;
 mod idle_stop;
-mod queue_move;
 mod restart;
 
 #[tokio::test]

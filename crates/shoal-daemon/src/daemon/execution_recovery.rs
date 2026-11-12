@@ -81,7 +81,6 @@ pub(super) async fn pause(
     let Some(protection) = manager.agent_overload(execution_id).await else {
         return Ok(Action::Stop(requested_cancel(manager, execution_id).await));
     };
-    let moved = protection.is_queue_move();
     let follows_policy = protection.follows_overload_recovery();
     // Stop survivors before anything can cancel the restore, so every outcome
     // leaves only processes Shoal cannot stop. The wrapper finishes on each,
@@ -116,7 +115,7 @@ pub(super) async fn pause(
             await_stopped(manager, execution_id, workspace_id, stopped, notices).await?;
             // Every process the agent left has stopped writing.
             manager.checkpoint_after_agent(workspace_id).await;
-            admit_restore(manager, execution_id, workspace_id, moved, hold).await
+            admit_restore(manager, execution_id, workspace_id, hold).await
         } => ready,
     };
     let resume = async {
@@ -229,10 +228,9 @@ async fn admit_restore(
     manager: &Manager,
     execution_id: &ExecutionId,
     workspace_id: &SpaceId,
-    moved: bool,
     hold: &mut Option<OwnedRwLockReadGuard<()>>,
 ) -> Result<Grant> {
-    if !moved && !manager.restore_waits_for_update(workspace_id, execution_id) {
+    if !manager.restore_waits_for_update(workspace_id, execution_id) {
         return manager
             .admit_agent_restore(execution_id, workspace_id)
             .await;

@@ -40,12 +40,6 @@ pub enum QueueMethod {
     StartedLaunch {
         entry: QueueEntryId,
     },
-    /// Move a waiting entry, named by ID, to `place`, or stop a running
-    /// agent and place its restore there.
-    QueueMove {
-        entry: String,
-        place: crate::model::QueuePlace,
-    },
     /// Keep a starting entry's slot while the connection stays open.
     QueueHold {
         entry: QueueEntryId,

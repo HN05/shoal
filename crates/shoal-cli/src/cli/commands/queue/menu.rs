@@ -12,7 +12,6 @@ use crate::{
 enum Action {
     Start,
     StartAttached,
-    Move,
     Cancel,
 }
 
@@ -24,7 +23,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<i32> {
         return listing::list(ctx, None).await;
     }
     let entry = selection::pick_entry(ctx, &waiting, "Queue> ").await?;
-    let mut actions = vec![(Action::Move, "Move"), (Action::Cancel, "Cancel")];
+    let mut actions = vec![(Action::Cancel, "Cancel")];
     if !crate::env::inherits_scope(&ctx.paths.state) {
         actions.insert(0, (Action::Start, "Start now"));
         // A CI job runs without a session.
@@ -37,7 +36,6 @@ pub(super) async fn choose(ctx: &Context) -> Result<i32> {
     match action {
         Action::Start => changes::start(ctx, entry, false).await,
         Action::StartAttached => changes::start(ctx, entry, true).await,
-        Action::Move => changes::move_entry(ctx, entry, None).await,
         Action::Cancel => changes::cancel(ctx, entry).await,
     }
 }

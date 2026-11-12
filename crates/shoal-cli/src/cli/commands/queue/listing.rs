@@ -7,7 +7,7 @@ use crate::cli::{
 };
 
 /// List the entries of `repository`, of every repository without one,
-/// each led by the ID that `shoal queue start`, `move` and `cancel` take.
+/// each led by the ID that `shoal queue start` and `cancel` take.
 pub(super) async fn list(ctx: &Context, repository: Option<String>) -> Result<i32> {
     let filter = ListFilter::resolve(ctx, repository, Vec::new()).await?;
     let entries = queued_agents::listed(ctx, &filter).await?;

@@ -4,8 +4,8 @@ use crate::{
     daemon::{
         test_support::manager,
         workspace::agent_queue::tests::{
-            add, await_restore, bounded, connected_agent, create, limit_globally, register,
-            request, started, stopped_agents,
+            add, await_restore, bounded, create, limit_globally, register, request, started,
+            stopped_agents,
         },
     },
     model::{Blocker, QueueRequest},
@@ -99,54 +99,6 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
     assert_eq!(cancelled, [launch.id]);
     // A launch of a new workspace stays queued.
     assert_eq!(waiting(&manager).await, ["later"]);
-}
-
-#[tokio::test]
-async fn moved_entries_keep_their_new_place_and_start_in_it() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    limit_globally(&manager, 1);
-    let first = add(&manager, &repo, "first").await.entry.unwrap();
-    for name in ["a", "b", "c"] {
-        add(&manager, &repo, name).await;
-    }
-    let moved = manager
-        .queue_move(&manager.queued("c").await, QueuePlace::Position(1), None)
-        .await
-        .unwrap();
-    assert_eq!((moved.entry.position, moved.stopped), (Some(1), false));
-    assert_eq!(waiting(&manager).await, ["c", "a", "b"]);
-    manager
-        .queue_move(&manager.queued("c").await, QueuePlace::Last, None)
-        .await
-        .unwrap();
-    assert_eq!(waiting(&manager).await, ["a", "b", "c"]);
-    let c = (manager.selected_entry(&manager.queued("c").await, None))
-        .await
-        .unwrap();
-    let moved = manager
-        .queue_move(&manager.queued("b").await, QueuePlace::Before(c.id), None)
-        .await
-        .unwrap();
-    assert_eq!(moved.entry.position, Some(2));
-    manager
-        .queue_move(&manager.queued("a").await, QueuePlace::Position(3), None)
-        .await
-        .unwrap();
-    assert_eq!(waiting(&manager).await, ["b", "c", "a"]);
-    // A starting entry has no place to move from.
-    manager
-        .queue_move(&manager.queued("first").await, QueuePlace::Last, None)
-        .await
-        .unwrap_err();
-
-    manager.fail_queue_entry(&first.id, "gone").await.unwrap();
-    manager.dispatch_queue().await.unwrap();
-    let b = (manager.selected_entry(&manager.queued("b").await, None))
-        .await
-        .unwrap();
-    assert!(started(&b.id));
-    assert_eq!(waiting(&manager).await, ["c", "a"]);
 }
 
 #[tokio::test]
@@ -329,19 +281,6 @@ async fn workspace_processes_see_the_whole_queue_and_act_only_below_theirs() {
         .await
         .unwrap_err();
     manager
-        .queue_move(
-            &manager.queued("two").await,
-            QueuePlace::Position(1),
-            caller,
-        )
-        .await
-        .unwrap_err();
-    manager
-        .queue_move(&manager.queued("one").await, QueuePlace::Last, caller)
-        .await
-        .unwrap();
-    assert_eq!(waiting(&manager).await, ["two", "other", "one"]);
-    manager
         .queue_remove(&manager.queued("one").await, caller)
         .await
         .unwrap();
@@ -366,90 +305,4 @@ async fn workspace_processes_see_the_whole_queue_and_act_only_below_theirs() {
             .await
             .is_err()
     );
-}
-
-#[tokio::test]
-async fn a_moved_running_agent_restores_after_the_entries_ahead_of_it() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    limit_globally(&manager, 1);
-    let api = create(&manager, &repo, "api").await;
-    let (execution, mut stop) = connected_agent(&manager, &api).await;
-    let next = add(&manager, &repo, "next").await.entry.unwrap();
-
-    let moved = manager
-        .queue_move(&manager.queued("api").await, QueuePlace::Last, None)
-        .await
-        .unwrap();
-    assert!(moved.stopped);
-    assert_eq!(
-        (moved.entry.kind, moved.entry.position),
-        (QueueKind::Restore, Some(2))
-    );
-    assert!(stop.has_changed().unwrap() && *stop.borrow_and_update());
-    assert_eq!(waiting(&manager).await, ["next", "api"]);
-    // Until its processes are proven stopped the agent keeps its slot.
-    manager.dispatch_queue().await.unwrap();
-    assert!(!started(&next.id));
-
-    // Its wrapper queues the restore again as it waits, which keeps its place.
-    manager.queue_agent_restore(&execution).await.unwrap();
-    let restoring = await_restore(&manager, &execution).await;
-    manager.dispatch_queue().await.unwrap();
-    assert!(started(&next.id));
-    assert_eq!(waiting(&manager).await, ["api"]);
-    assert!(!manager.queue_entries().await.unwrap()[1].waits_for_update);
-    // It needs only a free slot, without healthy readings.
-    manager.fail_queue_entry(&next.id, "gone").await.unwrap();
-    manager.dispatch_queue().await.unwrap();
-    assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Queue);
-}
-
-#[tokio::test]
-async fn only_restorable_agents_move_and_only_for_unscoped_callers() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    limit_globally(&manager, 1);
-    let api = create(&manager, &repo, "api").await;
-    let (execution, stop) = connected_agent(&manager, &api).await;
-    // A place outside the queue stops nothing.
-    manager
-        .queue_move(&manager.queued("api").await, QueuePlace::Position(2), None)
-        .await
-        .unwrap_err();
-    assert!(!stop.has_changed().unwrap());
-    assert!(!manager.agent_was_overloaded(&execution).await);
-    assert!(manager.queue_entries().await.unwrap().is_empty());
-    let caller = Caller {
-        space_id: create(&manager, &repo, "parent").await.id,
-        execution: None,
-    };
-    manager
-        .queue_move(
-            &manager.queued("api").await,
-            QueuePlace::Last,
-            Some(&caller),
-        )
-        .await
-        .unwrap_err();
-    manager
-        .queue_move(&manager.queued("parent").await, QueuePlace::Last, None)
-        .await
-        .unwrap_err();
-
-    manager
-        .track_agent(
-            &execution,
-            &crate::execution::TrackedAgent::named("custom"),
-            &api.id,
-            &api.name,
-            false,
-            std::time::Duration::ZERO,
-        )
-        .await;
-    manager
-        .queue_move(&manager.queued("api").await, QueuePlace::Last, None)
-        .await
-        .unwrap_err();
-    assert!(manager.queue_entries().await.unwrap().is_empty());
 }

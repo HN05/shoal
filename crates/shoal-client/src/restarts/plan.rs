@@ -202,9 +202,8 @@ pub(super) fn stopped_reason(space: &str, running: &RunningAgent) -> Option<Stri
     ))
 }
 
-/// Why `running` cannot restart in place, if it cannot; `shoal queue move`
-/// refuses such an agent too.
-pub fn skip_reason(workspace: &Workspace, running: &RunningAgent) -> Option<String> {
+/// Why `running` cannot restart in place, if it cannot.
+fn skip_reason(workspace: &Workspace, running: &RunningAgent) -> Option<String> {
     let manual = format!("use shoal stop {0} and shoal resume {0}", workspace.number);
     match &running.agent {
         None => Some(format!(

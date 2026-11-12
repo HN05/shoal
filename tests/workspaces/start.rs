@@ -4,7 +4,7 @@ use super::chats::{
     chat_args, chat_session_fixture, install_recording_agent, journal, save_running_chat,
 };
 use super::forge::{forge_origin, github_issue, install_api_curl, script_api};
-use super::zmx::{agent_in_session, created_zmx_session, wait_zmx_sessions_ended, zmx_calls};
+use super::zmx::{created_zmx_session, wait_zmx_sessions_ended, zmx_calls};
 use super::*;
 
 #[test]
@@ -2438,11 +2438,8 @@ fn add_queues_agents_past_max_agents_until_removed() {
     // A queued entry creates nothing until it starts.
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 
-    // Entries move to a position and leave the queue when cancelled.
+    // Entries leave the queue when cancelled.
     fixture.ok(&["start", repo, "third", "--here", "--agent", "waiter"]);
-    let moved = fixture.ok(&["queue", "move", &fixture.queued("third"), "1"]);
-    assert_eq!(moved["entry"]["position"], 1, "{moved}");
-    assert_eq!(moved["stopped"], false, "{moved}");
     let names = |entries: serde_json::Value| -> Vec<String> {
         entries
             .as_array()
@@ -2451,13 +2448,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
             .map(|entry| entry["name"].as_str().unwrap().to_owned())
             .collect()
     };
-    assert_eq!(names(fixture.ok(&["queue"])), ["third", "second"]);
-    // A target that names nothing fails before a picker asks for its place.
-    let missing = fixture.run(&["queue", "move", "missing"]);
-    assert!(!missing.status.success());
-    // So does a workspace whose agent cannot restore in place.
-    let unrestorable = fixture.run(&["queue", "move", &fixture.id("first")]);
-    assert!(!unrestorable.status.success());
+    assert_eq!(names(fixture.ok(&["queue"])), ["second", "third"]);
     let cancelled = fixture.ok(&["queue", "cancel", &fixture.queued("third")]);
     assert_eq!(cancelled["name"], "third", "{cancelled}");
     assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
@@ -2573,44 +2564,6 @@ fn queue_start_attaches_to_the_started_agents_session() {
         .unwrap();
     assert_eq!(attached, ["attach", opened[1].as_str()]);
 
-    // An agent Shoal stopped is offered as stopped beside the workspace's
-    // other sessions, here another agent's; picking it starts its own
-    // waiting restore and attaches to its session once it runs there.
-    let moved = fixture.ok(&["queue", "move", &fixture.id("second"), "1"]);
-    assert_eq!(moved["stopped"], true, "{moved}");
-    let status = fixture.ok(&["status", &fixture.id("second")]);
-    let stopped_execution = (status["executions"].as_array().unwrap().iter())
-        .find(|execution| !execution["stopped"].is_null())
-        .map(|execution| execution["id"].clone())
-        .unwrap();
-    let other = agent_in_session(&fixture, "second", "second-shell");
-    let (_, rows) = fixture.pick(&["attach", &fixture.id("second")], "none", "");
-    let stopped: Vec<_> = rows.lines().filter(|row| row.contains("stopped")).collect();
-    assert_eq!(stopped.len(), 1, "{rows}");
-    let choice = stopped[0].split('\t').next().unwrap_or_default();
-    let (output, rows) = fixture.pick(&["attach", &fixture.id("second")], choice, "");
-    assert!(output.status.success(), "{output:?}\n{rows}");
-    let attached = zmx_calls(&fixture)
-        .into_iter()
-        .rfind(|call| call[0] == "attach")
-        .unwrap();
-    assert_eq!(attached, ["attach", opened[1].as_str()]);
-    // The stopped agent runs again as the same execution, in its wrapper.
-    let status = fixture.ok(&["status", &fixture.id("second")]);
-    let executions = status["executions"].as_array().unwrap();
-    assert!(
-        executions
-            .iter()
-            .all(|execution| execution["stopped"].is_null()),
-        "{status}"
-    );
-    assert!(
-        executions
-            .iter()
-            .any(|execution| execution["id"] == stopped_execution),
-        "{status}"
-    );
-
     // A start that fails ends the wait at once: this one's agent is gone
     // by the time the queue starts it.
     let missing = home.join("bin/shoal-test-missing-agent");
@@ -2635,7 +2588,6 @@ fn queue_start_attaches_to_the_started_agents_session() {
     fixture.ok(&["stop", &fixture.id("second")]);
     fixture.ok(&["stop", &fixture.id("first")]);
     first.wait().unwrap();
-    drop(other);
     wait_zmx_sessions_ended(home);
 }
 

@@ -9,7 +9,7 @@ use tokio::{io::AsyncReadExt as _, sync::oneshot};
 use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, open, request, stream_closed},
-    model::{MovedEntry, QueueAdmission, QueueEntry, QueuePlace, QueueRequest, QueuedPlan},
+    model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan},
     protocol::QueueMethod,
 };
 
@@ -53,15 +53,6 @@ pub async fn started_workspace(
 /// Take the entry `entry` names by ID out of the queue.
 pub async fn remove(daemon: &impl Daemon, entry: String) -> Result<QueueEntry> {
     request(daemon, QueueMethod::QueueRemove { entry }).await
-}
-
-/// Move the entry `entry` names by ID to `place` in the queue.
-pub async fn move_entry(
-    daemon: &impl Daemon,
-    entry: String,
-    place: QueuePlace,
-) -> Result<MovedEntry> {
-    request(daemon, QueueMethod::QueueMove { entry, place }).await
 }
 
 /// Record `workspace` as the one the starting `entry` opened, or the

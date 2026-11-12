@@ -14,7 +14,7 @@ use crate::client::space_names::SpaceName;
 use crate::{
     daemon::{log, workspace::Manager},
     forge::ForgeRepo,
-    model::{QueuePlace, QueuedJob, Repository},
+    model::{QueuedJob, Repository},
     state::{QueueKind, QueueState},
 };
 
@@ -158,7 +158,7 @@ fn queue_job(
         ],
     )?;
     if let Some(restore) = queued_restore(tx, &job.space_ids)? {
-        crate::daemon::workspace::agent_queue::place_entry(tx, &id, &QueuePlace::Before(restore))?;
+        crate::daemon::workspace::agent_queue::place_entry(tx, &id, &restore)?;
     }
     Ok(())
 }

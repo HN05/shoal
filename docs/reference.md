@@ -1893,8 +1893,6 @@ shoal resume -A                               # Queues the restore of every stop
 shoal queue                                   # Waiting and starting entries; on a terminal, pick one to act on
 shoal queue start <entry>                     # Starts a waiting entry, or a space's queued restore, now regardless of the limits
 shoal queue start --attach <entry>            # Starts it and attaches this terminal to its agent's session
-shoal queue move <entry> 1                    # Moves an entry to position 1; without a position, pick its place
-shoal queue move 5 last                       # Stops workspace 5's running agent and queues its restore last
 shoal queue cancel <entry>                    # Removes a waiting entry; a restore's agent stays stopped
 ```
 
@@ -1981,7 +1979,7 @@ stop's restore waits there, opening where the agent ran. A daemon restart or a
 lost connection keeps the order; an entry whose waiting wrapper has not
 reattached within two minutes is removed, leaving its record to `shoal resume`.
 `shoal resume` of an agent whose wrapper waits uses this entry: the restore
-keeps its place and waits only for a slot, as after `shoal queue move`, and
+keeps its place and waits only for a slot, and
 `--now` or `--focus` starts it at once in its wrapper.
 
 A restore that `shoal resume` or a signal stop queues joins the back of the
@@ -2036,8 +2034,8 @@ among them,
 `repository_limit`, `permits` or `reading`) and
 `base` once a launch starts on a blocker's branch, while `list --json` stays
 a list of workspaces. Each line starts with the entry's ID, which `queue
-start`, `move` and `cancel` take. On a terminal, `shoal queue` picks a waiting entry and
-then starts it, with or without attaching, moves or cancels it.
+start` and `cancel` take. On a terminal, `shoal queue` picks a waiting entry and
+then starts it, with or without attaching, or cancels it.
 
 `queue start` starts a waiting entry, by its ID or, for a queued restore, by
 its space's number or ID, now regardless of the limits, as `--now` does, or restores an idle agent waiting for an update; it refuses a launch
@@ -2047,16 +2045,9 @@ to ten minutes since setup comes first, for the session the agent runs in and
 attaches to it as `shoal attach` does. `queue cancel` removes a waiting entry: a
 cancelled restore stops the waiting wrapper as `shoal stop` does and leaves the
 agent for `shoal resume`. `shoal rm` also removes a waiting launch by its ID;
-a starting entry belongs to its workspace. `queue move` moves a waiting entry to a 1-based position, or
-`last`; without a position on a terminal it picks the entry to place it in
-front of, or the last place. The order lasts across daemon restarts. Moving a
-workspace whose agent runs stops the agent as `shoal restart` does and places
-its restore, which its wrapper waits for in the same terminal and which needs
-only a free slot, whatever the overload policy; like `restart`, it refuses a
-disconnected agent or one without a restore command. Every caller sees every
-entry. Scoped callers may cancel the entries for the workspaces below their
-own or move them back, never ahead; starting an entry and moving a running
-agent are for the user.
+a starting entry belongs to its workspace. Every caller sees every entry.
+Scoped callers may cancel the entries for the workspaces below their own;
+starting an entry is for the user.
 
 ### Agent accounts
 
@@ -3269,8 +3260,8 @@ as a starting agent before it has run, and a job's recent start counts
 against an agent's as an agent's counts against a job's. With
 `runner.permit`, a job waits until its pool has a free permit and holds one
 while it runs. Until a job is admitted, any other runner may take it. `queue
-start` admits a job regardless of the limits, `queue move` moves it, and
-`queue cancel` passes it over, leaving it to other runners. A PR's job whose PR
+start` admits a job regardless of the limits, and `queue cancel` passes it
+over, leaving it to other runners. A PR's job whose PR
 has a newer head when it is admitted is passed over too.
 
 An admitted job runs the forge's runner at nice 10, as a tracked execution in a

@@ -1,14 +1,10 @@
-//! `shoal queue start`, `move` and `cancel`: the requests that change the
-//! queue, and what they report.
+//! `shoal queue start` and `cancel`: the requests that change the queue,
+//! and what they report.
 use anyhow::{Result, ensure};
 
 use super::selection;
 use crate::client::queue;
-use crate::{
-    cli::context::Context,
-    model::{QueueEntry, QueuePlace},
-    state::QueueKind,
-};
+use crate::{cli::context::Context, model::QueueEntry, state::QueueKind};
 
 /// `shoal queue start`: start the entry now, regardless of the limits, and
 /// with `attach` attach this terminal to its agent's session.
@@ -57,33 +53,6 @@ pub(super) async fn cancel(ctx: &Context, entry: Option<String>) -> Result<i32> 
     Ok(0)
 }
 
-/// `shoal queue move`: place the entry, or a running agent's restore, at
-/// `position`, or in front of the entry chosen on a terminal.
-pub(super) async fn move_entry(
-    ctx: &Context,
-    entry: Option<String>,
-    position: Option<QueuePlace>,
-) -> Result<i32> {
-    require_scope_token(ctx)?;
-    let entry = selection::selected(ctx, entry, "Move> ").await?;
-    let place = match position {
-        Some(place) => place,
-        None => selection::pick_place(ctx, &entry).await?,
-    };
-    let moved = queue::move_entry(&ctx.paths, entry, place).await?;
-    let place = ordinal(moved.entry.position.unwrap_or_default());
-    let message = if moved.stopped {
-        format!(
-            "Stopped {}; its restore is {place} in the queue",
-            moved.entry.name
-        )
-    } else {
-        format!("Moved {}; it is {place} in the queue", moved.entry.name)
-    };
-    ctx.emit(&message, &moved)?;
-    Ok(0)
-}
-
 /// Refuse a workspace process that cleared its scope token, which the
 /// daemon would take for the user; with the token it confines the change.
 fn require_scope_token(ctx: &Context) -> Result<()> {
@@ -93,18 +62,3 @@ fn require_scope_token(ctx: &Context) -> Result<()> {
     );
     Ok(())
 }
-
-/// `n` as an English ordinal: 1st, 2nd, 3rd, 4th, 11th, 21st.
-fn ordinal(n: usize) -> String {
-    let suffix = match (n % 10, n % 100) {
-        (_, 11..=13) => "th",
-        (1, _) => "st",
-        (2, _) => "nd",
-        (3, _) => "rd",
-        _ => "th",
-    };
-    format!("{n}{suffix}")
-}
-
-#[cfg(test)]
-mod tests;

@@ -41,9 +41,6 @@ pub(super) async fn handle(
         QueueMethod::StartedLaunch { entry } => {
             Body::StartedLaunch(manager.started_launch(&entry).await?)
         }
-        QueueMethod::QueueMove { entry, place } => {
-            Body::MovedEntry(manager.queue_move(&entry, place, caller).await?)
-        }
         QueueMethod::QueueAttach { entry, workspace } => {
             manager.queue_attach(&entry, &workspace).await?;
             Body::Ok
@@ -83,9 +80,7 @@ impl Scoped for QueueMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             // Each answer confines the entries to those below the caller.
-            QueueMethod::ListQueue
-            | QueueMethod::QueueRemove { .. }
-            | QueueMethod::QueueMove { .. } => None,
+            QueueMethod::ListQueue | QueueMethod::QueueRemove { .. } => None,
             QueueMethod::QueueAdd { request } => manager.queue_target(caller, request).await?,
             QueueMethod::QueueAgent { workspace, .. } => {
                 const REFUSAL: &str =

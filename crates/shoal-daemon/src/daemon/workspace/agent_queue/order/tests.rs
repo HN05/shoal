@@ -5,29 +5,9 @@ fn ids(names: &[&str]) -> Vec<String> {
 }
 
 #[test]
-fn entries_move_to_a_position_in_front_of_an_entry_or_last() {
+fn an_entry_moves_in_front_of_another_ahead_of_or_behind_it() {
     let queue = ids(&["a", "b", "c", "d"]);
-    let moved = |entry, place| reorder(&queue, entry, &place).unwrap();
-    assert_eq!(moved("d", QueuePlace::Position(1)), ["d", "a", "b", "c"]);
-    assert_eq!(moved("a", QueuePlace::Position(3)), ["b", "c", "a", "d"]);
-    assert_eq!(moved("b", QueuePlace::Position(4)), ["a", "c", "d", "b"]);
-    assert_eq!(moved("a", QueuePlace::Last), ["b", "c", "d", "a"]);
-    // In front of an entry, whether it is ahead of or behind the moved one.
-    assert_eq!(
-        moved("a", QueuePlace::Before("d".into())),
-        ["b", "c", "a", "d"]
-    );
-    assert_eq!(
-        moved("d", QueuePlace::Before("b".into())),
-        ["a", "d", "b", "c"]
-    );
-}
-
-#[test]
-fn positions_outside_the_queue_are_refused() {
-    let queue = ids(&["a", "b"]);
-    for position in [0, 3] {
-        assert!(reorder(&queue, "a", &QueuePlace::Position(position)).is_err());
-    }
-    assert!(reorder(&queue, "a", &QueuePlace::Before("gone".into())).is_err());
+    assert_eq!(reorder(&queue, "a", "d").unwrap(), ["b", "c", "a", "d"]);
+    assert_eq!(reorder(&queue, "d", "b").unwrap(), ["a", "d", "b", "c"]);
+    assert!(reorder(&queue, "a", "gone").is_err());
 }

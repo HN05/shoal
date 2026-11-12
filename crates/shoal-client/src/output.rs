@@ -122,7 +122,6 @@ outputs!(
     crate::model::MergedBranch,
     crate::model::Unmerged,
     crate::model::LocalConfigEdit,
-    crate::model::MovedEntry,
     crate::model::MovedRepository,
     crate::model::PortOverview,
     crate::model::PortReservation,

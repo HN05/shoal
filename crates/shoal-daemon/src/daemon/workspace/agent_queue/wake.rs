@@ -5,7 +5,6 @@
 //! asked for it.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
-use crate::daemon::workspace::agents::ProtectionExt;
 use crate::execution::recovery::RecordExt;
 use std::collections::HashSet;
 
@@ -139,7 +138,6 @@ impl Manager {
         for row in restores {
             if self.restore_waits_for_update(&row.workspace, &row.execution)
                 && !self.restore_waits_for_unblock(&row.workspace, &row.execution)
-                && !self.moved_in_queue(&row.execution).await
             {
                 waiting.insert(row.id);
             }
@@ -148,8 +146,8 @@ impl Manager {
     }
 
     /// What the queued restore of `execution` in `workspace_id`, which a
-    /// waiting wrapper carries out, waits for: a slot after `shoal queue
-    /// move` or once `shoal resume` asked for it, no longer `automatic`,
+    /// waiting wrapper carries out, waits for: a slot once `shoal resume`
+    /// asked for it, no longer `automatic`,
     /// otherwise what its recovery record says. Whether an update is due
     /// only matters once its agent `waits`, and free disk space must have
     /// recovered as for any other restore, since disk protection stops
@@ -161,7 +159,7 @@ impl Manager {
         automatic: bool,
         waits: bool,
     ) -> Result<Wake> {
-        if !automatic || self.moved_in_queue(execution).await {
+        if !automatic {
             return Ok(Wake::Slot);
         }
         if !self.restore_waits_for_update(workspace_id, execution) {
@@ -213,13 +211,6 @@ impl Manager {
     /// protection on, the latest reading found the cleanup threshold free.
     fn restore_disk_ready(&self) -> bool {
         !self.config().machine.overload.disk.enabled || self.config_state.disk_space_recovered()
-    }
-
-    /// Whether `shoal queue move` stopped the agent of `execution`.
-    async fn moved_in_queue(&self, execution: &ExecutionId) -> bool {
-        self.agent_overload(execution)
-            .await
-            .is_some_and(|protection| protection.is_queue_move())
     }
 
     /// Whether the recovery record of `execution` says Shoal stopped it

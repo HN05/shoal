@@ -163,7 +163,7 @@ shoal                         # Inbox when something needs you, else workspaces;
 shoal repo                    # Interactive repository menu
 shoal inbox                   # Questions, approvals, agents needing input, failures, ready work, demos; --print to list
 shoal list                    # Workspaces, chats and queued agents; --print to list
-shoal queue                   # Agents waiting for a slot under the agent limits; start, move or cancel one
+shoal queue                   # Agents waiting for a slot under the agent limits; start or cancel one
 shoal list --chats            # Running chats
 shoal list --repo my-project  # Only one repository's workspaces, chats and queued agents
 shoal list --status needs-input,failed  # Only rows with these statuses

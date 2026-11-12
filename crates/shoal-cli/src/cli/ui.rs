@@ -23,8 +23,6 @@
 //!   ([`PickerView::transition`]).
 //! - [`several`]: choosing several items at once; Tab selects each and
 //!   Ctrl-A all of them ([`pick_many`]).
-//! - [`place`]: a place in an ordered list, in front of one of its items or
-//!   last ([`pick_place`]).
 //! - [`workspaces`]: the workspace a command acts on, named, current or
 //!   picked ([`select_workspace`]), listed by what the command needs of it,
 //!   or picked among running chats as well as a space ([`select_space`],
@@ -42,7 +40,6 @@ mod keys;
 mod linked;
 mod modes;
 mod picker;
-mod place;
 mod prompt;
 mod rows;
 mod several;
@@ -53,7 +50,6 @@ pub use keys::Key;
 pub use linked::pick_linked;
 pub use modes::{ModeChoice, ModeFit};
 pub use picker::*;
-pub use place::{Place, pick_place};
 pub use prompt::*;
 pub use rows::*;
 pub use several::{Report, confirm_losses, failure, pick_many};

@@ -1,6 +1,5 @@
-//! What `shoal queue` does to a waiting entry: start it now, cancel it, or
-//! move it to another place, and the cancelling of the launches a stopped
-//! workspace waits for. Each holds the queue gate, so dispatch cannot start
+//! What `shoal queue` does to a waiting entry: start it now or cancel it,
+//! and the cancelling of the launches a stopped workspace waits for. Each holds the queue gate, so dispatch cannot start
 //! the entry meanwhile.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
@@ -12,16 +11,14 @@ use rusqlite::params;
 use super::{
     Grant,
     blockers::Readiness,
-    order,
-    store::{ENTRY_COLUMNS, WaitingRestore, entry as queue_entry, record_waiting_restore},
+    store::{ENTRY_COLUMNS, entry as queue_entry},
 };
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope::Caller,
         workspace::{Manager, StopRequest},
     },
-    model::{MovedEntry, QueueEntry, QueuePlace, QueuedJob},
+    model::{QueueEntry, QueuedJob},
     state::{QueueKind, QueueState},
 };
 
@@ -221,6 +218,11 @@ impl Manager {
         Ok(())
     }
 
+    /// Delete the entry `id` if it still waits, returning whether it did.
+    async fn delete_waiting_entry(&self, id: QueueEntryId) -> Result<bool> {
+        self.store.run(move |db| delete_waiting(db, &id)).await
+    }
+
     /// Delete the waiting job `entry`, leaving its `job` to other runners,
     /// returning whether it still waited.
     async fn pass_over_job(&self, entry: &QueueEntry, job: &QueuedJob) -> Result<bool> {
@@ -241,116 +243,6 @@ impl Manager {
                 Ok(deleted)
             })
             .await
-    }
-
-    /// Delete the entry `id` if it still waits, returning whether it did.
-    async fn delete_waiting_entry(&self, id: QueueEntryId) -> Result<bool> {
-        self.store.run(move |db| delete_waiting(db, &id)).await
-    }
-
-    /// Move the waiting entry `selector` names to `place`, or stop the
-    /// agent running in the workspace it names and place its restore there.
-    /// Scoped callers may only move an entry back, never ahead of others or
-    /// a running agent.
-    pub async fn queue_move(
-        &self,
-        selector: &str,
-        place: QueuePlace,
-        caller: Option<&Caller>,
-    ) -> Result<MovedEntry> {
-        let _gate = self.agent_queue.lock_admission().await;
-        let entry = match self.find_entry(selector, caller).await? {
-            Some(entry) => entry,
-            None if caller.is_some() => bail!("{selector} is not in the agent queue"),
-            None => return self.move_running_agent(&selector.parse()?, place).await,
-        };
-        ensure!(
-            entry.state == QueueState::Queued,
-            "{} is already starting",
-            entry.name
-        );
-        let position = self.place_entry(entry.id.clone(), place, caller).await?;
-        self.agent_queue.wake();
-        Ok(MovedEntry {
-            entry: QueueEntry {
-                position: Some(position),
-                ..entry
-            },
-            stopped: false,
-        })
-    }
-
-    /// Record `restore`, which no entry has yet, at `place`, returning its
-    /// entry's ID.
-    async fn place_restore(
-        &self,
-        restore: WaitingRestore,
-        place: QueuePlace,
-    ) -> Result<QueueEntryId> {
-        self.store
-            .write(move |tx| record_placed_restore(tx, &restore, &place))
-            .await
-    }
-
-    /// Place the waiting entry `id` at `place`, only further back for a
-    /// scoped `caller`, returning its new position.
-    async fn place_entry(
-        &self,
-        id: QueueEntryId,
-        place: QueuePlace,
-        caller: Option<&Caller>,
-    ) -> Result<usize> {
-        let back_only = caller.is_some();
-        self.store
-            .write(move |tx| {
-                let moved = order::place(tx, id.as_str(), &place)?;
-                ensure!(
-                    !back_only || moved.to >= moved.from,
-                    "workspace processes can only move queue entries back"
-                );
-                Ok(moved.to)
-            })
-            .await
-    }
-
-    /// Stop the agent running in the workspace `selector` names and place
-    /// its restore, which its wrapper waits for, at `place`. The place is
-    /// taken before the stop, so a place that cannot be taken stops nothing;
-    /// the wrapper's own queueing then keeps it.
-    async fn move_running_agent(
-        &self,
-        selector: &SpaceSelector,
-        place: QueuePlace,
-    ) -> Result<MovedEntry> {
-        let workspace = self
-            .workspace(selector)
-            .await
-            .with_context(|| format!("{selector} is not in the agent queue"))?;
-        let execution = self.movable_agent(&workspace).await?;
-        let agent = self
-            .agent_name(&execution)
-            .await
-            .context("the agent disconnected")?;
-        let restore = WaitingRestore {
-            workspace,
-            execution: execution.clone(),
-            agent,
-        };
-        let id = self.place_restore(restore, place).await?;
-        if let Err(error) = self.stop_for_queue_move(&execution).await {
-            self.delete_waiting_entry(id).await?;
-            return Err(error);
-        }
-        let entry = self
-            .queue_entries()
-            .await?
-            .into_iter()
-            .find(|entry| entry.id == id)
-            .context("the restore already left the agent queue")?;
-        Ok(MovedEntry {
-            entry,
-            stopped: true,
-        })
     }
 }
 
@@ -377,27 +269,6 @@ fn delete_waiting_launches(
         .collect::<rusqlite::Result<Vec<_>>>()?;
     tx.execute(&format!("DELETE {WAITING}"), selection)?;
     Ok(launches)
-}
-
-/// Record `restore` at `place` in one transaction, refusing an agent whose
-/// restore already has an entry.
-fn record_placed_restore(
-    tx: &rusqlite::Transaction<'_>,
-    restore: &WaitingRestore,
-    place: &QueuePlace,
-) -> Result<QueueEntryId> {
-    ensure!(
-        !crate::daemon::store::exists(
-            tx,
-            "SELECT 1 FROM agent_queue WHERE execution_id=?1",
-            [&restore.execution],
-        )?,
-        "the restore of {} is already in the agent queue",
-        restore.workspace.name
-    );
-    let id = record_waiting_restore(tx, restore)?;
-    order::place(tx, id.as_str(), place)?;
-    Ok(id)
 }
 
 #[cfg(test)]
