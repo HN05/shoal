@@ -21,10 +21,12 @@ pub(in crate::cli::commands) async fn list(
     };
     workspaces.retain(|workspace| filter.keeps_workspace(workspace, &statuses.shown(workspace)));
     (statuses.queued).retain(|entry| filter.keeps_listed_entry(entry, &workspaces));
+    let repositories = crate::client::repositories::list(&ctx.paths).await?;
     let rows = ui::workspace_tree_rows(
         &workspaces,
         &chats,
         &statuses,
+        &ui::repository_choices(repositories).await,
         Palette::stdout(ctx.json),
         output::stdout_width(ctx.json),
     );

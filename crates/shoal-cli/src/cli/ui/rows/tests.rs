@@ -121,7 +121,7 @@ fn usage_shows_cpu_once_measured_and_memory_in_binary_units() {
     workspaces[0].usage = Some(usage(Some(50.0), 1 << 20));
     workspaces[0].links.issue_title = Some("Title".into());
     workspaces[1].links.issue_title = Some("Title".into());
-    let rows = workspace_tree_rows(&workspaces, &[], &Statuses::default(), plain, None);
+    let rows = workspace_tree_rows(&workspaces, &[], &Statuses::default(), &[], plain, None);
     assert_eq!(
         rows,
         [
@@ -398,7 +398,7 @@ fn a_chat_in_a_workspace_shows_the_workspace() {
     }))
     .unwrap();
     let plain = Palette::stdout(true);
-    let rows = workspace_tree_rows(&[], &[chat], &Statuses::default(), plain, None);
+    let rows = workspace_tree_rows(&[], &[chat], &Statuses::default(), &[], plain, None);
     assert_eq!(
         rows,
         ["◐ 4  worker-chat  in worker  process running  claude"]
@@ -415,7 +415,8 @@ fn a_chat_shows_its_agents_turn_state_with_its_marker() {
         .unwrap()
     };
     let plain = Palette::stdout(true);
-    let row = |chat: Chat| workspace_tree_rows(&[], &[chat], &Statuses::default(), plain, None);
+    let row =
+        |chat: Chat| workspace_tree_rows(&[], &[chat], &Statuses::default(), &[], plain, None);
     let state = |state: &str| serde_json::json!({"state": state, "since": 0});
     let running = serde_json::Value::Null;
     assert_eq!(
@@ -453,6 +454,7 @@ fn spaces_show_a_mode_other_than_their_kinds_usual_one() {
         &[worker.clone(), orchestrate],
         &[chat],
         &Statuses::default(),
+        &[],
         plain,
         None,
     );
@@ -466,7 +468,7 @@ fn spaces_show_a_mode_other_than_their_kinds_usual_one() {
     );
     // A column no row has a mode for is left out.
     assert_eq!(
-        workspace_tree_rows(&[worker], &[], &Statuses::default(), plain, None),
+        workspace_tree_rows(&[worker], &[], &Statuses::default(), &[], plain, None),
         ["○ 1  worker  inactive"]
     );
 }
@@ -504,6 +506,7 @@ fn rows_show_the_steps_done_and_the_status_line_in_place_of_the_title() {
         &[working, planned],
         &[],
         &Statuses::default(),
+        &[],
         Palette::stdout(true),
         None,
     );
