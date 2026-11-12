@@ -50,6 +50,7 @@ impl Manager {
             job,
             run,
             space_ids,
+            default_branch: false,
         })
     }
 

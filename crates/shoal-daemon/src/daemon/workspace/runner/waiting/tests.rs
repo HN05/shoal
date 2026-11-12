@@ -208,6 +208,7 @@ async fn a_workspaces_job_goes_ahead_of_its_agents_queued_restore() {
             reference: None,
         },
         space_ids,
+        default_branch: false,
     };
     let (unlinked, linked) = (
         queued("unlinked", Vec::new()),
@@ -230,4 +231,23 @@ async fn a_workspaces_job_goes_ahead_of_its_agents_queued_restore() {
         .map(|entry| entry.name.into())
         .collect();
     assert_eq!(order, ["first", "ci-linked-1", "restore", "ci-unlinked-1"]);
+}
+
+#[test]
+fn only_a_run_on_the_known_default_branch_is_on_it() {
+    let run = |trigger| JobRun {
+        url: String::new(),
+        workflow: None,
+        commit: "abc".into(),
+        trigger,
+        reference: None,
+    };
+    let main = run(Trigger::Branch("main".into()));
+    assert!(on_branch(&main, Some("main")));
+    assert!(!on_branch(&main, None));
+    assert!(!on_branch(
+        &run(Trigger::Branch("topic".into())),
+        Some("main")
+    ));
+    assert!(!on_branch(&run(Trigger::Other), Some("main")));
 }

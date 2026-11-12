@@ -96,6 +96,9 @@ pub struct QueuedJob {
     /// owns the branch it ran on, first, then the chats that link its PR.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub space_ids: Vec<SpaceId>,
+    /// Whether its run is on the repository's default branch.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub default_branch: bool,
 }
 
 impl QueueEntry {

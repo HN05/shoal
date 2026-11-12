@@ -13,7 +13,11 @@ use super::{Registration, runner_labels};
 use crate::client::space_names::SpaceName;
 use crate::{
     daemon::{log, workspace::Manager},
-    forge::ForgeRepo,
+    forge::{
+        ForgeRepo,
+        ci::runner::{JobRun, Trigger},
+    },
+    git::default_branch::{self, DefaultBranchLookup},
     model::{QueuedJob, Repository},
     state::{QueueKind, QueueState},
 };
@@ -74,17 +78,26 @@ impl Manager {
             .store
             .write(move |tx| forget_unlisted_jobs(tx, &id, &listed))
             .await?;
+        let default_branch = default_branch::resolve(&repository.path, DefaultBranchLookup::Cached)
+            .await
+            .ok();
         for job in waiting {
             if known.contains(&job.handle) {
                 continue;
             }
             let run = forge.job_run(&account, job.run).await?;
-            let job = self.link_job(&forge, &repository.id, job, run).await?;
+            let mut job = self.link_job(&forge, &repository.id, job, run).await?;
+            job.default_branch = on_branch(&job.run, default_branch.as_deref());
             let id = repository.id.clone();
             self.store.write(move |tx| queue_job(tx, &id, &job)).await?;
         }
         Ok(())
     }
+}
+
+/// Whether `run` is on `branch`, the repository's default branch when known.
+fn on_branch(run: &JobRun, branch: Option<&str>) -> bool {
+    matches!(&run.trigger, Trigger::Branch(on) if Some(on.as_str()) == branch)
 }
 
 /// Drop `repository_id`'s waiting job entries and passed-over jobs whose
