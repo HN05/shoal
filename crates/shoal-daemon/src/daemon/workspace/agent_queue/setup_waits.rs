@@ -11,12 +11,13 @@ use crate::{
     config::permissions::PermissionsConfig,
     daemon::{store, workspace::Manager},
     model::QueueEntry,
-    state::{BlockerKind, QueueKind, QueueState},
+    state::{QueueKind, QueueState},
 };
 
-/// The waiting launches a failed setup of the workspace `?1` holds back.
-const AWAITING_SETUP: &str = "FROM agent_queue WHERE kind=?2 AND state=?3 AND id IN
-    (SELECT entry_id FROM agent_queue_blockers WHERE kind=?4 AND target=?1)";
+/// The waiting launches that open the workspace `?1`, which wait for its
+/// failed setup, as `shoal resume` finds them among the queue's entries.
+const AWAITING_SETUP: &str =
+    "FROM agent_queue WHERE kind=?2 AND state=?3 AND opens_workspace_id=?1";
 
 impl Manager {
     /// The launch waiting for the setup of `workspace`, if one does.
@@ -28,8 +29,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let query = format!("SELECT {ENTRY_COLUMNS} {AWAITING_SETUP}");
-                let kinds = (QueueKind::Launch, QueueState::Queued, BlockerKind::Setup);
-                let selection = params![workspace, kinds.0, kinds.1, kinds.2];
+                let selection = params![workspace, QueueKind::Launch, QueueState::Queued];
                 Ok(db.query_row(&query, selection, entry).optional()?)
             })
             .await
@@ -37,7 +37,8 @@ impl Manager {
 
     /// Give each launch `given` names the permissions beside it, in its
     /// plan, which its agent starts under, and in the entry the queue
-    /// shows, refusing them all when one no longer waits for a setup.
+    /// shows, refusing them all when one no longer waits to open its
+    /// workspace.
     pub(crate) async fn give_launches_awaiting_setup(
         &self,
         given: Vec<(QueueEntryId, PermissionsConfig)>,
@@ -53,11 +54,11 @@ impl Manager {
                 for (id, column, planned) in given {
                     let updated = tx.execute(
                         "UPDATE agent_queue SET narrowing=?2,plan=json_set(plan,'$.narrowing',json(?3))
-                         WHERE id=?1 AND state=?4 AND json_valid(plan) AND id IN
-                            (SELECT entry_id FROM agent_queue_blockers WHERE kind=?5)",
-                        params![id, column, planned, QueueState::Queued, BlockerKind::Setup],
+                         WHERE id=?1 AND state=?4 AND json_valid(plan)
+                            AND opens_workspace_id IS NOT NULL",
+                        params![id, column, planned, QueueState::Queued],
                     )?;
-                    ensure!(updated == 1, "{id} no longer waits for a setup");
+                    ensure!(updated == 1, "{id} no longer waits to open its workspace");
                 }
                 Ok(())
             })
