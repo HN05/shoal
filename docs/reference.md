@@ -6002,12 +6002,12 @@ PR watches, merge acknowledgements, `notify`, `messages`, `ask`, `questions`,
 Processes carrying a Shoal scope token are confined to their own worktree:
 `status`, inspect, execute, `diff`, `setup`, and resources. They may read
 effective configuration for their own workspace and their space's repository,
-but cannot change configuration.
+and make the daemon reread it with `config reload`, but cannot change
+configuration.
 They `merge` only with [approval](#merge-into-the-default-branch) and cannot
 reach spaces other than the ones below theirs, create spaces other than below
 theirs, remove spaces other than those below theirs without holds, read
-notifications, or administer repositories or the daemon service, except `daemon
-reload`; nested commands
+notifications, or administer repositories or the daemon service; nested commands
 keep the scope. A command whose ancestor carries scope for the same state directory
 gets the CLI's scoped refusals even after the token is removed from its
 environment. Scope is cooperative and does not restrict direct filesystem or
