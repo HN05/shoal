@@ -126,7 +126,8 @@ pub enum AgentMethod {
     AgentSession {
         workspace: SpaceSelector,
     },
-    /// A message to the agents of a workspace or running chat.
+    /// A message to the agents of a workspace or running chat, answered
+    /// with the space it reached.
     SendAgentMessage {
         space: SpaceSelector,
         message: String,

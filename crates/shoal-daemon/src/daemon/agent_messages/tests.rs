@@ -236,6 +236,58 @@ async fn run_agent(
 }
 
 #[tokio::test]
+async fn a_message_to_one_space_says_when_its_agent_reads_it() {
+    let (temp, manager) = manager().await;
+    let running = workspace(&temp, &manager, "running").await;
+    let _execution = run_agent(&manager, &running).await;
+    let create = |name: &str| {
+        manager.create_workspace(&running.repository_id, name.into(), None, None, None)
+    };
+    let queued = create("queued").await.unwrap();
+    // Queued without the check that claude is on PATH, which CI lacks.
+    let launch = crate::protocol::operations::QueuedLaunch::new("claude".into());
+    let request = crate::start_plan::queued_agent_request(&queued, launch, None).unwrap();
+    manager.queue_add(request).await.unwrap();
+    let without = create("without").await.unwrap();
+    let repo = manager.repository(&running.repository_id).await.unwrap();
+    let (chat, _process) =
+        crate::daemon::test_support::chat(&manager, "planning", "chat", Some(&repo), None).await;
+    let send = |id: &SpaceId| {
+        let selector = SpaceSelector::id(id);
+        let manager = &manager;
+        async move {
+            manager
+                .send_space_message(&selector, "Rebase".into(), Vec::new(), &Attacher::User)
+                .await
+                .unwrap()
+        }
+    };
+    fn ids(spaces: &crate::client::output::messages::ReachedSpaces) -> Vec<&SpaceId> {
+        let spaces = spaces.workspaces.iter().chain(&spaces.chats);
+        spaces.map(|space| &space.id).collect()
+    }
+    let reached = send(&running.id).await;
+    assert_eq!(reached.now.workspaces[0].number, running.number);
+    assert_eq!(ids(&reached.now), [&running.id]);
+    let reached = send(&queued.id).await;
+    assert_eq!(ids(&reached.on_start), [&queued.id]);
+    let reached = send(&without.id).await;
+    assert_eq!(ids(&reached.without_agent), [&without.id]);
+    assert_eq!(
+        (ids(&reached.now), ids(&reached.on_start)),
+        (vec![], vec![])
+    );
+    let reached = send(&chat.id).await;
+    assert_eq!(names(&reached.now.chats), ["planning"]);
+    // The space without an agent holds the message for one that starts.
+    let messages = manager
+        .agent_messages(&SpaceSelector::id(&without.id))
+        .await
+        .unwrap();
+    assert_eq!(messages.len(), 1);
+}
+
+#[tokio::test]
 async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
     let (temp, manager) = manager().await;
     let parent = workspace(&temp, &manager, "parent").await;

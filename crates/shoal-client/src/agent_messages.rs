@@ -26,15 +26,16 @@ pub struct AgentMessage {
     pub attachments: Vec<PathBuf>,
 }
 
-/// Queue `message` with `attachments` for the agents of `space`; the chat
-/// `sender_chat` names, when its agent sends it, attaches its files.
+/// Queue `message` with `attachments` for the agents of `space`, returning
+/// the space it reached; the chat `sender_chat` names, when its agent sends
+/// it, attaches its files.
 pub async fn send(
     daemon: &impl Daemon,
     space: SpaceSelector,
     message: String,
     attachments: Vec<NewFile>,
     sender_chat: Option<SpaceId>,
-) -> Result<()> {
+) -> Result<Reached> {
     let method = AgentMethod::SendAgentMessage {
         space,
         message,

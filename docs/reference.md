@@ -5104,7 +5104,11 @@ lists each copy's path as an `Attached file:` line, or in `attachments` with
 `--json`; a message may be its files alone. The copies stay as other
 [attached files](#attached-files) do, and `shoal files` lists them. Agents read messages with
 `shoal messages` or `shoal watch`, which delete each message once they have
-printed it.
+printed it. The command names the space it reached, by number, ID and name,
+under `now` when its agent runs connected, `on_start` when its agent receives
+it once it next runs, or `without_agent` when it has no agent and the message
+waits for one to start there, each with `workspaces` and `chats` with
+`--json`.
 
 `--all` queues the message for every agent, and `--repo` for every agent of
 the repository it names, or without a value the current checkout's or
@@ -5113,12 +5117,11 @@ stopped, and each workspace, except one being removed, whose agent runs,
 working or idle, or is stopped, waits for its restore, is queued to start or
 restore, or has a wrapper waiting to reattach, as after a daemon restart. An
 agent that runs connected receives it now, and any other once it next runs;
-the message starts none of them, except an idle agent Shoal stopped
-whose restore waits for an update, as a message to its space alone starts it. It lists the spaces that receive it now, and those that receive it
-once their agent next runs, in `now` and `on_start` with `--json`, each with
-`workspaces` and `chats`; a workspace process reaches only the workspaces
-below its own. Workspaces without any agent get nothing, since a message
-waits there until an agent reads it. A space that refuses the message, such as
+the message starts none of them, except an idle agent Shoal stopped whose
+restore waits for an update, as a message to its space alone starts it. It
+lists the spaces it reached as a message to one space does; a workspace
+process reaches only the workspaces below its own. Workspaces without any
+agent get nothing, since a message waits there until an agent reads it. A space that refuses the message, such as
 one whose unread messages are full or that is being removed, is listed with
 why under `refused` while the others still receive it, and the command then
 exits 1. Sending the same message again does not repeat it to agents that

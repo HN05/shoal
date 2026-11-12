@@ -429,7 +429,12 @@ fn a_chats_hooks_report_its_failed_turn_and_wake_it_for_its_messages() {
     let sent = fixture.request(serde_json::json!({"send_agent_message":{
         "space": fixture.id("planning"), "message": "Plan the next step"
     }}));
-    assert_eq!(sent["type"], "ok", "{sent}");
+    assert_eq!(sent["type"], "reached", "{sent}");
+    assert_eq!(
+        sent["data"]["now"]["chats"][0]["id"],
+        fixture.id("planning"),
+        "{sent}"
+    );
     // A hang guard only: the message ends the wait.
     wait_until("the wake hook to exit", || {
         hook.try_wait().unwrap().is_some()
@@ -516,6 +521,10 @@ fn a_message_to_all_reaches_running_chats_but_not_workspaces_without_an_agent() 
         fixture.ok(&["messages", &fixture.id("idle")]),
         serde_json::json!([])
     );
+    // A message to the workspace alone waits there for an agent to start.
+    let idle = fixture.id("idle");
+    let sent = fixture.ok(&["messages", "send", "--space", &idle, "Rebase"]);
+    assert_eq!(sent["without_agent"]["workspaces"][0]["id"], idle, "{sent}");
     agent.kill().unwrap();
     agent.wait().unwrap();
     for conflicting in [["--all", "--space"], ["--all", "--repo"]] {

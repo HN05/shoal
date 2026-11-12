@@ -5,6 +5,7 @@
 //! workspace is removed (see [`crate::daemon::workspace_files`]).
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, ensure};
@@ -197,33 +198,48 @@ impl Manager {
         .await
     }
 
-    /// [`Self::send_agent_message`] to the workspace, or
-    /// [`Self::send_chat_message`] to the chat, `selector` names.
+    /// [`Self::send_to_space`] to the space `selector` names; the
+    /// space it reached, by whether its agent runs, receives it once it next
+    /// runs, or has no agent to read it until one starts there.
     pub async fn send_space_message(
         &self,
         selector: &SpaceSelector,
         message: String,
         attachments: Vec<NewFile>,
         attacher: &Attacher,
+    ) -> Result<Reached> {
+        let space = self.space(selector).await?;
+        let reader = self.reader(&self.agents().await?, &space);
+        self.send_to_space(&space, message, attachments, attacher)
+            .await?;
+        let mut reached = Reached::default();
+        outcome(&mut reached, reader, Ok(())).space(&space);
+        Ok(reached)
+    }
+
+    /// [`Self::send_agent_message`] to the workspace, or
+    /// [`Self::send_chat_message`] to the chat, `space`.
+    async fn send_to_space(
+        &self,
+        space: &PresentSpace,
+        message: String,
+        attachments: Vec<NewFile>,
+        attacher: &Attacher,
     ) -> Result<()> {
-        match self.space(selector).await? {
-            PresentSpace::Workspace(workspace) => {
-                self.send_agent_message(
-                    &SpaceSelector::id(&workspace.id),
-                    message,
-                    attachments,
-                    attacher,
-                )
-                .await
+        let selector = SpaceSelector::id(space.id());
+        match space {
+            PresentSpace::Workspace(_) => {
+                self.send_agent_message(&selector, message, attachments, attacher)
+                    .await
             }
-            PresentSpace::Chat(chat) => {
-                self.send_chat_message(&SpaceSelector::id(&chat.id), message, attachments, attacher)
+            PresentSpace::Chat(_) => {
+                self.send_chat_message(&selector, message, attachments, attacher)
                     .await
             }
         }
     }
 
-    /// [`Self::send_space_message`] to every workspace and chat with an
+    /// [`Self::send_to_space`] to every workspace and chat with an
     /// agent, running, reattaching, stopped, queued or waiting for its
     /// restore, but the sending chat `sender_chat`, of `repository` when it
     /// names one, or only to the workspaces below `below`, the sender's own
@@ -244,44 +260,26 @@ impl Manager {
         below: Option<&SpaceId>,
         sender_chat: Option<&SpaceId>,
     ) -> Result<Reached> {
-        let (workspaces, chats) = self.recipients(repository, below, sender_chat).await?;
         let mut reached = Reached::default();
-        for (workspace, runs) in workspaces {
+        for (space, reader) in self.recipients(repository, below, sender_chat).await? {
             let sent = self
-                .send_agent_message(
-                    &SpaceSelector::id(&workspace.id),
-                    message.clone(),
-                    attachments.clone(),
-                    attacher,
-                )
+                .send_to_space(&space, message.clone(), attachments.clone(), attacher)
                 .await;
-            outcome(&mut reached, runs, sent)
-                .workspace(recipient(&PresentSpace::Workspace(workspace)));
-        }
-        for chat in chats {
-            let sent = self
-                .send_chat_message(
-                    &SpaceSelector::id(&chat.id),
-                    message.clone(),
-                    attachments.clone(),
-                    attacher,
-                )
-                .await;
-            let runs = chat.restore.is_none();
-            outcome(&mut reached, runs, sent).chat(recipient(&PresentSpace::Chat(chat)));
+            outcome(&mut reached, reader, sent).space(&space);
         }
         Ok(reached)
     }
 
-    /// The [`Self::workspace_recipients`] and, unless `below` names the
-    /// sender's workspace, the [`Self::chat_recipients`] of `repository`
-    /// when it names one.
+    /// The spaces with an agent, each with its [`Reader`]: the
+    /// [`Self::workspace_recipients`] and, unless `below` names the sender's
+    /// workspace, the [`Self::chat_recipients`] of `repository` when it
+    /// names one.
     async fn recipients(
         &self,
         repository: Option<&Selector>,
         below: Option<&SpaceId>,
         sender_chat: Option<&SpaceId>,
-    ) -> Result<(Vec<(Workspace, bool)>, Vec<Chat>)> {
+    ) -> Result<Vec<(PresentSpace, Reader)>> {
         let repository = match repository {
             Some(repository) => Some(self.repository(repository.clone()).await?.id),
             None => None,
@@ -296,38 +294,31 @@ impl Manager {
                     .await?
             }
         };
-        Ok((workspaces, chats))
+        let agents = self.agents().await?;
+        Ok((workspaces.into_iter().map(PresentSpace::Workspace))
+            .chain(chats.into_iter().map(PresentSpace::Chat))
+            .map(|space| {
+                let reader = self.reader(&agents, &space);
+                (space, reader)
+            })
+            .filter(|(_, reader)| *reader != Reader::Nobody)
+            .collect())
     }
 
-    /// The workspaces with an agent, by name, each with whether its agent
-    /// runs connected, except those being removed, of `repository` when it names one;
-    /// only the workspaces below `below` when it names one.
+    /// The workspaces, except those being removed, of `repository` when it
+    /// names one; only the workspaces below `below` when it names one.
     async fn workspace_recipients(
         &self,
         repository: Option<&RepositoryId>,
         below: Option<&SpaceId>,
-    ) -> Result<Vec<(Workspace, bool)>> {
-        let running = self.running_agent_workspaces().await;
-        let recorded = self.recorded_agent_workspaces().await?;
-        let queued = self.queued_agent_workspaces().await?;
-        let mut recipients = Vec::new();
-        for workspace in self.list_workspaces_within(below).await? {
-            if Some(&workspace.id) == below
-                || repository.is_some_and(|repository| *repository != workspace.repository_id)
-                || workspace.state == WorkspaceState::Removing
-            {
-                continue;
-            }
-            let runs = running.contains(&workspace.id);
-            if runs
-                || recorded.contains(&workspace.id)
-                || queued.contains(&workspace.id)
-                || self.has_saved_agent(&workspace.id)
-            {
-                recipients.push((workspace, runs));
-            }
-        }
-        Ok(recipients)
+    ) -> Result<Vec<Workspace>> {
+        let mut workspaces = self.list_workspaces_within(below).await?;
+        workspaces.retain(|workspace| {
+            Some(&workspace.id) != below
+                && repository.is_none_or(|repository| *repository == workspace.repository_id)
+                && workspace.state != WorkspaceState::Removing
+        });
+        Ok(workspaces)
     }
 
     /// The chats, running or stopped, but `sender_chat`, by name, of
@@ -344,6 +335,38 @@ impl Manager {
         });
         chats.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(chats)
+    }
+
+    /// The workspaces whose agents run, and those with an agent's execution
+    /// recorded or queued.
+    async fn agents(&self) -> Result<WorkspaceAgents> {
+        Ok(WorkspaceAgents {
+            running: self.running_agent_workspaces().await,
+            recorded: self.recorded_agent_workspaces().await?,
+            queued: self.queued_agent_workspaces().await?,
+        })
+    }
+
+    /// Who reads a message queued for `space`, given the workspaces'
+    /// `agents`: a chat always has an agent, which runs until it stops; a
+    /// workspace's agent runs connected, or is reattaching, stopped, queued
+    /// or waiting for its restore, or the workspace has none.
+    fn reader(&self, agents: &WorkspaceAgents, space: &PresentSpace) -> Reader {
+        match space {
+            PresentSpace::Workspace(workspace) if agents.running.contains(&workspace.id) => {
+                Reader::Now
+            }
+            PresentSpace::Workspace(workspace)
+                if agents.recorded.contains(&workspace.id)
+                    || agents.queued.contains(&workspace.id)
+                    || self.has_saved_agent(&workspace.id) =>
+            {
+                Reader::OnStart
+            }
+            PresentSpace::Workspace(_) => Reader::Nobody,
+            PresentSpace::Chat(chat) if chat.restore.is_none() => Reader::Now,
+            PresentSpace::Chat(_) => Reader::OnStart,
+        }
     }
 
     pub(crate) async fn queue_agent_message(
@@ -529,14 +552,34 @@ impl Manager {
     }
 }
 
+/// The workspaces whose agents run, and those with an agent's execution
+/// recorded, such as one whose wrapper waits to reattach, or queued to start
+/// or restore.
+struct WorkspaceAgents {
+    running: Vec<SpaceId>,
+    recorded: HashSet<SpaceId>,
+    queued: HashSet<SpaceId>,
+}
+
+/// Who reads a message queued for a space.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reader {
+    /// Its running agent, now.
+    Now,
+    /// Its agent, once it next runs.
+    OnStart,
+    /// No agent, until one starts there.
+    Nobody,
+}
+
 /// Where a space goes in `reached` once a message to it was `sent`: among
-/// those that refused it, or else those whose agent `runs` or those whose
-/// agent receives it once it next runs.
-fn outcome(reached: &mut Reached, runs: bool, sent: Result<()>) -> Outcome<'_> {
-    match sent {
-        Ok(()) if runs => Outcome::Reached(&mut reached.now),
-        Ok(()) => Outcome::Reached(&mut reached.on_start),
-        Err(error) => Outcome::Refused(&mut reached.refused, format!("{error:#}")),
+/// those that refused it, or else by its `reader`.
+fn outcome(reached: &mut Reached, reader: Reader, sent: Result<()>) -> Outcome<'_> {
+    match (sent, reader) {
+        (Err(error), _) => Outcome::Refused(&mut reached.refused, format!("{error:#}")),
+        (Ok(()), Reader::Now) => Outcome::Reached(&mut reached.now),
+        (Ok(()), Reader::OnStart) => Outcome::Reached(&mut reached.on_start),
+        (Ok(()), Reader::Nobody) => Outcome::Reached(&mut reached.without_agent),
     }
 }
 
@@ -547,17 +590,20 @@ enum Outcome<'a> {
 }
 
 impl Outcome<'_> {
-    fn workspace(self, space: Recipient) {
-        match self {
-            Self::Reached(spaces) => spaces.workspaces.push(space),
-            Self::Refused(refused, error) => refused.workspaces.push(refusal(space, error)),
-        }
-    }
-
-    fn chat(self, space: Recipient) {
-        match self {
-            Self::Reached(spaces) => spaces.chats.push(space),
-            Self::Refused(refused, error) => refused.chats.push(refusal(space, error)),
+    /// Add `space` to the list among its kind's.
+    fn space(self, space: &PresentSpace) {
+        let recipient = recipient(space);
+        match (self, space) {
+            (Self::Reached(spaces), PresentSpace::Workspace(_)) => {
+                spaces.workspaces.push(recipient)
+            }
+            (Self::Reached(spaces), PresentSpace::Chat(_)) => spaces.chats.push(recipient),
+            (Self::Refused(refused, error), PresentSpace::Workspace(_)) => {
+                refused.workspaces.push(refusal(recipient, error))
+            }
+            (Self::Refused(refused, error), PresentSpace::Chat(_)) => {
+                refused.chats.push(refusal(recipient, error))
+            }
         }
     }
 }

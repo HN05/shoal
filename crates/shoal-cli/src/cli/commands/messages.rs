@@ -1,7 +1,7 @@
 //! `shoal messages send` queues a message for a space's agents, or with
 //! `--all` for every agent of the workspaces and chats, running, stopped or
 //! queued, or with `--repo` for those of one repository, the current one
-//! without a value;
+//! without a value, and lists the spaces it reached;
 //! `shoal messages` shows the space's undelivered messages once.
 use std::path::{Path, PathBuf};
 
@@ -19,7 +19,7 @@ use crate::{
         agent_messages::{self, AgentMessage},
         files::NewFile,
         links::Updates,
-        output::messages::{ReachedSpaces, Refused},
+        output::messages::{Reached, ReachedSpaces, Refused},
     },
     forge::items::attach::Attachment,
     repository::Selector,
@@ -62,16 +62,10 @@ async fn send_to_space(
     attachments: Vec<NewFile>,
 ) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    agent_messages::send(
-        &ctx.paths,
-        space.clone(),
-        message,
-        attachments,
-        crate::env::chat(),
-    )
-    .await?;
-    ctx.emit("Message queued.", ())?;
-    Ok(0)
+    let sender_chat = crate::env::chat();
+    let reached =
+        agent_messages::send(&ctx.paths, space, message, attachments, sender_chat).await?;
+    show_sent(ctx, &reached)
 }
 
 /// Every agent's spaces, only those of `repository` when it names one.
@@ -85,13 +79,19 @@ async fn send_to_all(
     let reached =
         agent_messages::send_to_all(&ctx.paths, repository, message, attachments, sender_chat)
             .await?;
-    ctx.show(&reached, |reached| {
+    show_sent(ctx, &reached)
+}
+
+/// The spaces a message `reached`, exiting 1 when one refused it.
+fn show_sent(ctx: &Context, reached: &Reached) -> Result<i32> {
+    ctx.show(reached, |reached| {
         if reached.is_empty() {
             outln!("No workspace or chat has an agent.");
             return;
         }
         show_reached("Message queued for:", &reached.now);
         show_reached("Queued for when their agent next runs:", &reached.on_start);
+        show_reached("Queued until an agent starts in:", &reached.without_agent);
         show_refused(&reached.refused);
     })?;
     Ok(if reached.refused.is_empty() { 0 } else { 1 })

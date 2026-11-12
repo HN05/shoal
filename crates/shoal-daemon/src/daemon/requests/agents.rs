@@ -157,10 +157,11 @@ pub(super) async fn handle(
             sender_chat,
         } => {
             let attacher = manager.attacher(caller, sender_chat.as_ref()).await;
-            manager
-                .send_space_message(&space, message, attachments, &attacher)
-                .await?;
-            Body::Ok
+            Body::Reached(
+                manager
+                    .send_space_message(&space, message, attachments, &attacher)
+                    .await?,
+            )
         }
         AgentMethod::SendAllAgentMessage {
             repository,
