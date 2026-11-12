@@ -2,6 +2,7 @@
 //! integrations that never notifies, completes, or changes cleanup.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::{agent::AgentSessionId, space_ids::SpaceId};
+use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
 use anyhow::{Result, ensure};
@@ -121,6 +122,18 @@ pub(crate) fn reported_by_execution(
             |row| row.get(0),
         )
         .optional()?)
+}
+
+/// The turn state each execution reported last, and whether an interrupt
+/// ended its last turn.
+pub(crate) fn reported_turns(db: &Connection) -> Result<HashMap<ExecutionId, (AgentState, bool)>> {
+    Ok(db
+        .prepare(
+            "SELECT execution_id,state,interrupted FROM space_agent_state
+             WHERE execution_id IS NOT NULL",
+        )?
+        .query_map([], |row| Ok((row.get(0)?, (row.get(1)?, row.get(2)?))))?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// Every space's last reported state.

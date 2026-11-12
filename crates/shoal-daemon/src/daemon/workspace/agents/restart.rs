@@ -6,11 +6,11 @@ use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::daemon::workspace::agents::ProtectionExt;
 use anyhow::{Context, Result, anyhow, ensure};
-use std::collections::HashMap;
 use tokio::sync::oneshot;
 
 use super::{Agent, Manager, stops};
 use crate::daemon::log;
+use crate::daemon::workspace::agent_state;
 use crate::{
     config::permissions::PermissionChange, daemon::store, execution::recovery, model::RunningAgent,
     protocol::Protection, sessions::Origin, state::AgentState,
@@ -30,7 +30,11 @@ impl Manager {
         let (executions, reported, stops) = (self.store)
             .read(|db| {
                 let executions = store::all_executions(db)?;
-                Ok((executions, reported_turns(db)?, stops::all(db)?))
+                Ok((
+                    executions,
+                    agent_state::reported_turns(db)?,
+                    stops::all(db)?,
+                ))
             })
             .await?;
         let connections = self.executions.connections().await;
@@ -404,18 +408,6 @@ impl Manager {
             .with_agent(id, |agent| agent.restarts.finish_if(ends, &outcome))
             .await;
     }
-}
-
-/// The turn state each execution reported last, and whether an interrupt
-/// ended its last turn.
-fn reported_turns(db: &rusqlite::Connection) -> Result<HashMap<ExecutionId, (AgentState, bool)>> {
-    Ok(db
-        .prepare(
-            "SELECT execution_id,state,interrupted FROM space_agent_state
-             WHERE execution_id IS NOT NULL",
-        )?
-        .query_map([], |row| Ok((row.get(0)?, (row.get(1)?, row.get(2)?))))?
-        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// A restart that continues after its request was answered, once the
