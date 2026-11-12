@@ -161,7 +161,7 @@ impl Launch {
     async fn start_beside(&self, ctx: &Context) -> Result<bool> {
         let chat = &self.chat;
         let waits_for_user = command::waits_for_user(chat, &self.options);
-        let placement = terminal::Placement::of(&chat.settings, &chat.mode, false, waits_for_user);
+        let placement = terminal::Placement::of(&chat.settings, &chat.mode, None, waits_for_user);
         let handoff = match placement {
             terminal::Placement::Background => Some(handoff::Handoff::create(None)?),
             terminal::Placement::Focus => None,

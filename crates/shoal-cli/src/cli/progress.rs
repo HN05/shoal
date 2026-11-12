@@ -40,7 +40,7 @@ impl Spinner<io::Stderr> {
     pub fn stderr(json: bool, message: &str) -> Self {
         let stderr = io::stderr();
         let term = std::env::var_os("TERM");
-        let shown = shows(json, stderr.is_terminal(), term.as_deref());
+        let shown = shows(!json && stderr.is_terminal(), term.as_deref());
         Self::new(shown, message, stderr)
     }
 }
@@ -88,8 +88,10 @@ impl<W: Write> Spinner<W> {
     }
 }
 
-fn shows(json: bool, terminal: bool, term: Option<&std::ffi::OsStr>) -> bool {
-    !json && terminal && term != Some(std::ffi::OsStr::new("dumb"))
+/// Whether progress shows for text, rather than JSON, written to a terminal
+/// when `text_terminal`, whose `TERM` is `term`.
+fn shows(text_terminal: bool, term: Option<&std::ffi::OsStr>) -> bool {
+    text_terminal && term != Some(std::ffi::OsStr::new("dumb"))
 }
 
 struct Line<W: Write> {

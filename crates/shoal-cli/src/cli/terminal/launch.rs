@@ -48,7 +48,8 @@ pub(in crate::cli) async fn start_add(
         "workspace processes cannot allocate workspaces"
     );
     let host = beside(ctx, settings);
-    let placement = Placement::of(settings, &plan.mode(), focus, !plan.runs_unattended());
+    let requested = focus.then_some(Placement::Focus);
+    let placement = Placement::of(settings, &plan.mode(), requested, !plan.runs_unattended());
     naming::name_plan(ctx, host.options.name_template.clone(), plan, issue).await?;
     let Some(places) = host.places() else {
         return Ok(false);
@@ -646,17 +647,16 @@ pub(in crate::cli) enum Placement {
 }
 
 impl Placement {
-    /// Where a launch in `mode` goes under `settings`: focused when `focus`
-    /// asks, else as its `focus` setting says, else focused when it waits
-    /// for the user.
+    /// Where a launch in `mode` goes under `settings`: where it was
+    /// `requested`, else as its `focus` setting says, else focused when it
+    /// waits for the user.
     pub(in crate::cli) fn of(
         settings: &Effective,
         mode: &ModeName,
-        focus: bool,
+        requested: Option<Self>,
         waits_for_user: bool,
     ) -> Self {
-        let setting = focus.then_some(true).or(settings.focus(mode));
-        Self::choose(setting, waits_for_user)
+        requested.unwrap_or_else(|| Self::choose(settings.focus(mode), waits_for_user))
     }
 
     /// The `focus` setting, otherwise focus a launch that waits for the user.

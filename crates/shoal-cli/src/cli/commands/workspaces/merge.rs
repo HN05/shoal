@@ -44,8 +44,12 @@ pub(in crate::cli::commands) async fn merge(
         // An agent's merge asks the user through its approval instead, which
         // names the files the agent's --yes passed over.
         false => {
-            let pushing = push && settings.merge.confirm && !env::is_scoped();
-            confirm_merge(ctx, &workspace, push, pushing).await?
+            let pushing = match push {
+                false => Pushing::No,
+                true if settings.merge.confirm && !env::is_scoped() => Pushing::AskingFirst,
+                true => Pushing::WithoutAsking,
+            };
+            confirm_merge(ctx, &workspace, pushing).await?
         }
     };
     let options = MergeOptions { push, confirmed };
@@ -65,20 +69,29 @@ pub(in crate::cli::commands) async fn merge(
     }
 }
 
-/// Ask before merging `workspace`, showing what the merge does, when it
-/// pushes and `pushing` asks for that, or when it brings the default branch
+/// Whether a merge pushes the default branch, and whether it asks the user
+/// before it does.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Pushing {
+    No,
+    AskingFirst,
+    WithoutAsking,
+}
+
+/// Ask before merging `workspace`, showing what the merge does, when
+/// `pushing` asks before it pushes, or when it brings the default branch
 /// sensitive files it changed too; return what the user confirmed, if
 /// asked. The daemon checks the merge first, so a merge it refuses or the
 /// user declines changes nothing.
 async fn confirm_merge(
     ctx: &Context,
     workspace: &SpaceSelector,
-    push: bool,
-    pushing: bool,
+    pushing: Pushing,
 ) -> Result<Option<MergeConfirmation>> {
+    let push = pushing != Pushing::No;
     let preview =
         crate::client::workspaces::preview_merge(&ctx.paths, workspace.clone(), push).await?;
-    if !pushing && preview.warning.is_none() {
+    if pushing != Pushing::AskingFirst && preview.warning.is_none() {
         return Ok(None);
     }
     anyhow::ensure!(

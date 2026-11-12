@@ -5,19 +5,20 @@ use anyhow::{Result, ensure};
 use super::targets::Selected;
 use crate::{
     cli::{commands::workspaces, context::Context, output::Style},
+    config::permissions::PermissionChange,
     model::Workspace,
 };
 
 /// Retry the setup of the selected workspaces whose setup failed, when the
 /// selection names only such workspaces, and report them together; `None`
-/// when it names none. Other spaces beside them, a `changing`
-/// --permission, which the agents waiting for those setups cannot take, and
+/// when it names none. Other spaces beside them, a `change` to the
+/// permissions, which the agents waiting for those setups cannot take, and
 /// `placing` options, since the queue starts those agents as it admits them,
 /// are refused before any setup runs.
 pub(super) async fn retry_failed(
     ctx: &Context,
     selected: &mut Selected,
-    changing: bool,
+    change: Option<&PermissionChange>,
     placing: bool,
 ) -> Result<Option<i32>> {
     let failed = take_failed(ctx, selected).await?;
@@ -30,7 +31,7 @@ pub(super) async fn retry_failed(
         first.name
     );
     ensure!(
-        !changing,
+        change.is_none(),
         "the setup of {} failed, and the agent waiting for it keeps the permissions it was started with; resume it without --permission",
         first.name
     );

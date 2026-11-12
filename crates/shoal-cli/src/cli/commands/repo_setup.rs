@@ -49,11 +49,12 @@ pub(super) async fn start(
     // Chosen before anything is created, so a declined agent leaves no
     // workspace.
     let target = ConfigTarget::Repository(selector.clone());
-    let Some(agent) = agents::default_agent(ctx, target, options.agent).await? else {
+    let Some(agent) = agents::default_agent(ctx, target, options.agent.clone()).await? else {
         return Ok(0);
     };
     let local_config = local_config(ctx, selector).await?;
     let prompt = subject(repository::name(&repo), &local_config);
+    let launch = add_options(&options, prompt, ctx.on_terminal());
     workspaces::add(
         ctx,
         Some(repo.id.clone().into()),
@@ -61,26 +62,21 @@ pub(super) async fn start(
         None,
         workspaces::AgentLaunch::Explicit(Some(agent)),
         options.args,
-        add_options(options.here, options.model, prompt, ctx.on_terminal()),
+        launch,
     )
     .await
 }
 
-/// How the setup agent starts on `prompt`: the user waits for it, so it
-/// skips the queue and, from a call `on_terminal`, takes a focused tab
-/// whatever the `focus` setting says. A call without a terminal starts it
-/// detached, with nothing to focus.
-fn add_options(
-    here: bool,
-    model: ModelChoice,
-    prompt: String,
-    on_terminal: bool,
-) -> workspaces::AddOptions {
+/// How the setup agent starts on `prompt` as `options` ask: the user waits
+/// for it, so it skips the queue and, from a call `on_terminal`, takes a
+/// focused tab whatever the `focus` setting says. A call without a terminal
+/// starts it detached, with nothing to focus.
+fn add_options(options: &Options, prompt: String, on_terminal: bool) -> workspaces::AddOptions {
     workspaces::AddOptions {
-        here,
+        here: options.here,
         focus: on_terminal,
         now: true,
-        model,
+        model: options.model.clone(),
         mode: Some(ModeChoice::Named(modes::ModeName::SETUP)),
         prompt: Some(prompt),
         ..Default::default()

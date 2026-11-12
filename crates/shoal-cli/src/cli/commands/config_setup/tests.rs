@@ -34,9 +34,10 @@ fn the_subject_names_the_global_config() {
     );
 }
 
-fn place(here: bool, on_terminal: bool) -> ChatPlace {
-    let args = ConfigSetupArgs {
-        here,
+/// The arguments of a plain `shoal config setup`.
+fn setup_args() -> ConfigSetupArgs {
+    ConfigSetupArgs {
+        here: false,
         agent: None,
         model: Default::default(),
         name: None,
@@ -44,22 +45,30 @@ fn place(here: bool, on_terminal: bool) -> ChatPlace {
         restore: None,
         handoff: None,
         args: Vec::new(),
-    };
+    }
+}
+
+/// Where the setup chat `args` ask for starts, from a call `on_terminal`.
+fn place(args: ConfigSetupArgs, on_terminal: bool) -> ChatPlace {
     let agent = Agent::unchecked("claude".into());
     options(args, agent, Default::default(), on_terminal).place
 }
 
 #[test]
 fn the_setup_chat_opens_in_a_focused_place_beside_a_terminal() {
-    assert_eq!(place(false, true), ChatPlace::Beside);
+    assert_eq!(place(setup_args(), true), ChatPlace::Beside);
 }
 
 #[test]
 fn the_setup_chat_starts_in_the_background_without_a_terminal() {
-    assert_eq!(place(false, false), ChatPlace::Background);
+    assert_eq!(place(setup_args(), false), ChatPlace::Background);
 }
 
 #[test]
 fn the_setup_chat_runs_here_when_asked() {
-    assert_eq!(place(true, false), ChatPlace::Here);
+    let args = ConfigSetupArgs {
+        here: true,
+        ..setup_args()
+    };
+    assert_eq!(place(args, false), ChatPlace::Here);
 }

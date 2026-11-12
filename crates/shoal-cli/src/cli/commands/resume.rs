@@ -54,8 +54,7 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
     if named
         && !discard
         && execution.is_none()
-        && let Some(code) =
-            setups::retry_failed(ctx, &mut selected, change.is_some(), now || focus).await?
+        && let Some(code) = setups::retry_failed(ctx, &mut selected, change, now || focus).await?
     {
         return Ok(code);
     }

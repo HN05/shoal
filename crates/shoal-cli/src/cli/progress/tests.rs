@@ -3,21 +3,20 @@ use super::*;
 #[tokio::test(start_paused = true)]
 async fn output_mode_suppresses_progress_even_when_work_crosses_the_draw_delay() {
     use std::ffi::OsStr;
-    for (json, terminal, term) in [
-        (true, true, Some(OsStr::new("xterm-256color"))),
-        (false, true, Some(OsStr::new("dumb"))),
-        (false, false, Some(OsStr::new("xterm-256color"))),
-        (true, false, None),
+    for (text_terminal, term) in [
+        (true, Some(OsStr::new("dumb"))),
+        (false, Some(OsStr::new("xterm-256color"))),
+        (false, None),
     ] {
         let mut output = Vec::new();
-        let spinner = Spinner::new(shows(json, terminal, term), "Working", &mut output);
+        let spinner = Spinner::new(shows(text_terminal, term), "Working", &mut output);
         let result = spin(spinner, async {
             tokio::time::sleep(Duration::from_secs(2)).await;
             7
         })
         .await;
         assert_eq!(result, 7);
-        assert!(output.is_empty(), "{json} {terminal} {term:?}");
+        assert!(output.is_empty(), "{text_terminal} {term:?}");
     }
 }
 

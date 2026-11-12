@@ -138,36 +138,35 @@ pub struct Palette {
 
 impl Palette {
     pub fn stdout(json: bool) -> Self {
-        Self::detect(io::stdout().is_terminal(), json)
+        Self::detect(!json && io::stdout().is_terminal())
     }
 
     pub fn stderr(json: bool) -> Self {
-        Self::detect(io::stderr().is_terminal(), json)
+        Self::detect(!json && io::stderr().is_terminal())
     }
 
     /// For rows a picker shows on the terminal, wherever they are written.
     pub fn picker() -> Self {
-        Self::detect(true, false)
+        Self::detect(true)
     }
 
-    fn detect(terminal: bool, json: bool) -> Self {
+    /// The palette for text, rather than JSON, written to a terminal when
+    /// `text_terminal`.
+    fn detect(text_terminal: bool) -> Self {
         Self::for_environment(
-            terminal,
-            json,
+            text_terminal,
             std::env::var_os("NO_COLOR").as_deref(),
             std::env::var_os("TERM").as_deref(),
         )
     }
 
     fn for_environment(
-        terminal: bool,
-        json: bool,
+        text_terminal: bool,
         no_color: Option<&OsStr>,
         term: Option<&OsStr>,
     ) -> Self {
         Self {
-            enabled: terminal
-                && !json
+            enabled: text_terminal
                 && !no_color.is_some_and(|value| !value.is_empty())
                 && term != Some(OsStr::new("dumb")),
         }

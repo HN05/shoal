@@ -2,19 +2,17 @@ use super::*;
 
 #[test]
 fn color_requires_a_human_terminal_without_an_opt_out() {
-    for (terminal, json, no_color, term, enabled) in [
-        (true, false, None, None, true),
-        (false, false, None, None, false),
-        (true, true, None, None, false),
-        (true, false, Some("1"), None, false),
-        (true, false, Some("0"), None, false),
-        (true, false, Some(""), None, true),
-        (true, false, None, Some("dumb"), false),
-        (true, false, None, Some("xterm-256color"), true),
+    for (text_terminal, no_color, term, enabled) in [
+        (true, None, None, true),
+        (false, None, None, false),
+        (true, Some("1"), None, false),
+        (true, Some("0"), None, false),
+        (true, Some(""), None, true),
+        (true, None, Some("dumb"), false),
+        (true, None, Some("xterm-256color"), true),
     ] {
         let palette = Palette::for_environment(
-            terminal,
-            json,
+            text_terminal,
             no_color.map(OsStr::new),
             term.map(OsStr::new),
         );

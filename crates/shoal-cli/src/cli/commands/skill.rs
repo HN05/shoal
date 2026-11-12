@@ -279,17 +279,16 @@ impl Installation<'_> {
     fn refresh_skill(&mut self, name: &'static str, contents: &str) -> Result<()> {
         let path = skill_file(self.directory, name);
         let expected = Entry::copy(contents.as_bytes());
-        let present = exists(&path)?;
-        // A concurrent refresh may already have written this version.
-        let current = expected.matches(&path)?;
+        let found = Found::read(&path, &expected)?;
+        let present = found != Found::Missing;
         let replace = real_directory(&self.directory.join(name))?
-            && (self.owns(name, &path, present, current)?
+            && (self.owns(name, &path, found)?
                 || present && replace_changed(self.mode, name, &path, contents)?);
         if !replace {
             self.keep(name, present);
             return Ok(());
         }
-        if !current {
+        if found != Found::Current {
             install(&path, contents)?;
             self.outcome.changed = true;
         }
@@ -298,17 +297,18 @@ impl Installation<'_> {
         Ok(())
     }
 
-    /// Whether Shoal still owns skill `name` at `path`; `current` says whether
-    /// that file already holds this version.
-    fn owns(&self, name: &str, path: &Path, present: bool, current: bool) -> Result<bool> {
-        Ok(match self.record.skills.get(name) {
+    /// Whether Shoal still owns skill `name` at `path`, where it `found`
+    /// what that file holds.
+    fn owns(&self, name: &str, path: &Path, found: Found) -> Result<bool> {
+        Ok(match (self.record.skills.get(name), found) {
             // A file the record does not list is Shoal's only from before
             // the record existed.
-            None => !self.recorded || !present || current,
+            (None, _) => !self.recorded || found != Found::Other,
             // An install reclaims a kept skill that matches this version.
-            Some(Entry::Kept) => (!present || current) && self.mode != Mode::Refresh,
-            Some(previous) if present => current || previous.matches(path)?,
-            Some(_) => self.mode != Mode::Refresh,
+            (Some(Entry::Kept), _) => found != Found::Other && self.mode != Mode::Refresh,
+            (Some(_), Found::Current) => true,
+            (Some(previous), Found::Other) => previous.matches(path)?,
+            (Some(_), Found::Missing) => self.mode != Mode::Refresh,
         })
     }
 
@@ -430,6 +430,29 @@ fn real_directory(path: &Path) -> Result<bool> {
         Ok(metadata) => Ok(metadata.is_dir()),
         Err(error) if record::is_absent(&error) => Ok(true),
         Err(error) => Err(error).with_context(|| format!("inspect {}", path.display())),
+    }
+}
+
+/// What a skill's file holds, against the version this release bundles.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Found {
+    Missing,
+    /// Another version, or one the user changed.
+    Other,
+    Current,
+}
+
+impl Found {
+    /// What the file at `path` holds against `expected`, this version.
+    fn read(path: &Path, expected: &Entry) -> Result<Self> {
+        // A concurrent refresh may already have written this version.
+        Ok(if expected.matches(path)? {
+            Self::Current
+        } else if exists(path)? {
+            Self::Other
+        } else {
+            Self::Missing
+        })
     }
 }
 
