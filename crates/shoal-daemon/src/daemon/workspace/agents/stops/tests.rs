@@ -92,6 +92,26 @@ async fn a_stop_request_cancels_the_recorded_stop() {
 }
 
 #[tokio::test]
+async fn a_stop_that_loses_leaves_the_winners_handoff() {
+    use crate::execution::recovery::{Record, RecordExt};
+    let (root, manager) = manager().await;
+    let execution = idle_agent(&manager, &root).await;
+    let id = &execution.plan.id;
+    assert!(manager.stop_agent_for_overload("memory pressure").await);
+    let lost = manager
+        .protect(id, &Protection::load("disk space"), None, None)
+        .await;
+    assert!(lost.is_none());
+    let workspace = (manager.executions)
+        .with_agent(id, |agent| agent.workspace_id.clone())
+        .await
+        .unwrap();
+    let path = crate::execution::recovery::record_path(&manager.paths, &workspace, id);
+    let record = Record::load(&path).unwrap().unwrap();
+    assert_eq!(record.stop_reason.as_deref(), Some("memory pressure"));
+}
+
+#[tokio::test]
 async fn a_resume_after_a_stop_request_leaves_the_agent_stopped() {
     let (root, manager) = manager().await;
     let execution = idle_agent(&manager, &root).await;

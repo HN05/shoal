@@ -6,9 +6,10 @@ use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::HashMap;
 
-use super::{Manager, Protection, ProtectionExt, restart};
+use super::{Agent, Manager, Protection, ProtectionExt, restart};
 use crate::daemon::log;
 use crate::{state::AgentState, time::UnixTime};
+use std::path::{Path, PathBuf};
 
 /// The stop recorded for execution `id`.
 fn get(db: &Connection, id: &ExecutionId) -> Result<Option<Protection>> {
@@ -38,6 +39,24 @@ pub(super) fn all(db: &Connection) -> Result<HashMap<ExecutionId, Protection>> {
             Ok((row.get(0)?, protection))
         })?
         .collect::<rusqlite::Result<_>>()?)
+}
+
+/// What a stop saves for the agent's restore before it is delivered: the
+/// reason and turn its recovery record keeps, and whether the stop goes only
+/// with it saved.
+pub(crate) struct Handoff<'a> {
+    pub reason: &'a str,
+    pub turn: Option<AgentState>,
+    pub required: bool,
+}
+
+/// Remove the recovery handoff of a stop that could not be delivered.
+fn discard_handoff(handoff: Option<&Path>) {
+    if let Some(handoff) = handoff
+        && let Err(error) = crate::execution::recovery::consume(handoff)
+    {
+        log!("unused recovery handoff not removed: {error:#}");
+    }
 }
 
 /// What still holds when a stop chosen between turns is recorded: the agent
@@ -187,9 +206,17 @@ impl Manager {
     }
 
     /// Send the stop recorded for the agent of `id` to its wrapper, unless
-    /// something else stops it meanwhile, such as `shoal restart`, holding
-    /// back a daemon update until the wrapper's connection takes over.
-    pub(super) async fn deliver_stop(&self, id: &ExecutionId) -> Result<()> {
+    /// something else stops it meanwhile, such as `shoal restart`, saving
+    /// its `handoff` first, so a wrapper terminated before it saves its own
+    /// can still be resumed, and holding back a daemon update until the
+    /// wrapper's connection takes over. Both happen under the lock every
+    /// stop of the agent takes, so no other stop overwrites or removes the
+    /// handoff meanwhile. Whether the handoff was saved.
+    pub(super) async fn deliver_stop(
+        &self,
+        id: &ExecutionId,
+        handoff: Handoff<'_>,
+    ) -> Result<bool> {
         self.executions
             .with_agent(id, |agent| {
                 anyhow::ensure!(
@@ -197,12 +224,44 @@ impl Manager {
                     "{} is already stopping",
                     agent.name
                 );
+                let saved = self.save_handoff(id, agent, &handoff)?;
                 // The monitor holds an operation, so no update can take the lock.
                 agent.update_hold = self.gates.try_owned_operation();
-                (agent.stop.send(true)).with_context(|| format!("{} disconnected", agent.name))
+                if let Err(error) = agent.stop.send(true) {
+                    discard_handoff(saved.as_deref());
+                    return Err(error).with_context(|| format!("{} disconnected", agent.name));
+                }
+                Ok(saved.is_some())
             })
             .await
             .context("the agent disconnected")?
+    }
+
+    /// Save the recovery `handoff` of `agent`, the agent of `id`: its path,
+    /// or none when it could not be saved and the stop goes without one.
+    fn save_handoff(
+        &self,
+        id: &ExecutionId,
+        agent: &Agent,
+        handoff: &Handoff<'_>,
+    ) -> Result<Option<PathBuf>> {
+        let saved = crate::execution::recovery::save_record(
+            &self.paths,
+            &agent.workspace_id,
+            id,
+            &agent.tracked(),
+            Some(handoff.reason),
+            handoff.turn,
+        )
+        .context("save the agent's recovery record");
+        match saved {
+            Ok(path) => Ok(Some(path)),
+            Err(error) if handoff.required => Err(error),
+            Err(error) => {
+                log!("recovery handoff not saved: {error:#}");
+                Ok(None)
+            }
+        }
     }
 
     /// Restore the protection stop of an agent whose wrapper reattached

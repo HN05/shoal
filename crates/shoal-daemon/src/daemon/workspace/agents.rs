@@ -1016,85 +1016,64 @@ impl Manager {
             turn: turn.generation,
             cache_expired_at,
         });
-        let (tracked, mut stopped) = self.stop_target(id, protection, turn).await?;
-        let handoff = self.save_stop_handoff(&stopped, &tracked, protection, turn);
+        let mut stopped = self.stop_target(id, protection, turn).await?;
         // Nothing presses an idle stop, so it waits for a record that
         // restores the agent.
-        if handoff.is_err() && protection.is_idle() {
-            return None;
+        let handoff = stops::Handoff {
+            reason: &protection.reason,
+            turn,
+            required: protection.is_idle(),
+        };
+        match (self.decide_stop(id, &stopped.protection, between, handoff)).await {
+            Ok(saved) => {
+                stopped.handoff_saved = saved;
+                Some(stopped)
+            }
+            Err(error) => {
+                let (name, reason) = (&stopped.name, &protection.reason);
+                log!("{name} not stopped for {reason}: {error:#}");
+                None
+            }
         }
-        stopped.handoff_saved = handoff.is_ok();
-        if let Err(error) = self.decide_stop(id, &stopped.protection, between).await {
-            let (name, reason) = (&stopped.name, &protection.reason);
-            log!("{name} not stopped for {reason}: {error:#}");
-            discard_unused_handoff(handoff);
-            return None;
-        }
-        Some(stopped)
     }
 
-    /// The identity of the tracked agent of `id`, and how a stop for
-    /// `protection` in `turn` stops it.
+    /// How a stop for `protection` in `turn` stops the tracked agent of `id`.
     async fn stop_target(
         &self,
         id: &ExecutionId,
         protection: &Protection,
         turn: Option<AgentState>,
-    ) -> Option<(TrackedAgent, StoppedAgent)> {
+    ) -> Option<StoppedAgent> {
         (self.executions)
-            .with_agent(id, |agent| {
-                let stopped = StoppedAgent {
-                    id: id.clone(),
-                    name: agent.name.clone(),
-                    workspace: agent.workspace.clone(),
-                    workspace_id: agent.workspace_id.clone(),
-                    recover: agent.recover,
-                    handoff_saved: false,
-                    protection: restored_after(protection, turn),
-                };
-                (agent.tracked(), stopped)
+            .with_agent(id, |agent| StoppedAgent {
+                id: id.clone(),
+                name: agent.name.clone(),
+                workspace: agent.workspace.clone(),
+                workspace_id: agent.workspace_id.clone(),
+                recover: agent.recover,
+                handoff_saved: false,
+                protection: restored_after(protection, turn),
             })
             .await
     }
 
-    /// Save the recovery handoff of the `stopped` agent before its stop is
-    /// delivered, so a wrapper terminated under pressure can still be
-    /// resumed.
-    fn save_stop_handoff(
-        &self,
-        stopped: &StoppedAgent,
-        tracked: &TrackedAgent,
-        protection: &Protection,
-        turn: Option<AgentState>,
-    ) -> anyhow::Result<std::path::PathBuf> {
-        let saved = crate::execution::recovery::save_record(
-            &self.paths,
-            &stopped.workspace_id,
-            &stopped.id,
-            tracked,
-            Some(&protection.reason),
-            turn,
-        );
-        if let Err(error) = &saved {
-            log!("overload recovery handoff not saved: {error:#}");
-        }
-        saved
-    }
-
     /// Record that `protection` stops the agent of `id`, chosen `between`
-    /// turns when given, and deliver the stop, forgetting the record when it
-    /// cannot be delivered.
+    /// turns when given, and deliver the stop with its `handoff`, forgetting
+    /// the record when it cannot be delivered. Only the stop recorded saves
+    /// a handoff, so one that loses leaves the winner's. Whether the handoff
+    /// was saved.
     async fn decide_stop(
         &self,
         id: &ExecutionId,
         protection: &Protection,
         between: Option<stops::Between>,
-    ) -> anyhow::Result<()> {
+        handoff: stops::Handoff<'_>,
+    ) -> anyhow::Result<bool> {
         anyhow::ensure!(
             self.record_agent_stop(id, protection, between).await?,
             "it is stopped already or no longer idle in the turn it was chosen in"
         );
-        let delivered = self.deliver_stop(id).await;
+        let delivered = self.deliver_stop(id, handoff).await;
         if delivered.is_err() {
             self.forget_agent_stop(id).await;
         }
@@ -1219,15 +1198,6 @@ fn restored_after(protection: &Protection, turn: Option<AgentState>) -> Protecti
             resumes_when: "an update arrives for it".into(),
         },
         _ => protection.clone(),
-    }
-}
-
-/// Remove the recovery handoff saved for a stop that did not happen.
-fn discard_unused_handoff(handoff: anyhow::Result<std::path::PathBuf>) {
-    if let Ok(handoff) = handoff
-        && let Err(error) = crate::execution::recovery::consume(&handoff)
-    {
-        log!("unused recovery handoff not removed: {error:#}");
     }
 }
 
