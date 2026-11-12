@@ -11,6 +11,7 @@ use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
     client::{sim::CleanRequestStatus, space_names::SpaceName},
+    forge::items::reference::ItemRef,
     model::{Execution, LinkedItem, PortReservation, Relation, Repository, SpaceLinks, Workspace},
     state::{ExecutionState, WorkspaceState},
 };
@@ -486,11 +487,19 @@ pub fn recorded_items(
     )?
     .query_map(rusqlite::params![workspace_id, relation], |row| {
         Ok(LinkedItem {
-            url: row.get(1)?,
+            url: linked_url(row)?,
             title: row.get(2)?,
         })
     })?
     .collect()
+}
+
+/// The URL of a linked item's row, read as the kind the row records.
+fn linked_url(row: &Row<'_>) -> rusqlite::Result<ItemRef> {
+    let url: String = row.get(1)?;
+    ItemRef::parse_kind(row.get(0)?, &url).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(1, rusqlite::types::Type::Text, error.into())
+    })
 }
 
 const PORT_COLUMNS: &str = "workspace_id,name,port,env_var,reason";
