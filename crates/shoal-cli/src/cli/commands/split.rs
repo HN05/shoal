@@ -6,7 +6,7 @@ use crate::client::repository_ids::RepositoryId;
 use anyhow::Result;
 
 use crate::client::space_names::{SpaceName, SpaceSelector};
-use crate::client::{operations::NewSplit, output::split::Child};
+use crate::client::{output::split::Child, preparation::NewSplit};
 use crate::{
     cli::{
         args::create::CopyArgs,
@@ -142,7 +142,7 @@ async fn commit_owner(
 /// Split the child `split` describes and start preparing it.
 pub(super) async fn start_child(ctx: &Context, split: NewSplit) -> Result<StartedWorkspace> {
     let env = crate::env::without_secrets();
-    crate::client::operations::start_split(&ctx.paths, split, env).await
+    crate::client::preparation::start_split(&ctx.paths, split, env).await
 }
 
 /// Run the child's setup and post-setup hook; `None` when setup failed.

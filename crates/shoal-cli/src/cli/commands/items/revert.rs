@@ -9,8 +9,8 @@ use super::{
     content::read_content,
     open::{print_warnings, publish, report_proposed},
 };
-use crate::client::operations::{self, NewSplit, NewWorkspace};
 use crate::client::output::items::Revert;
+use crate::client::preparation::{self, NewSplit, NewWorkspace};
 use crate::client::space_names::SpaceSelector;
 use crate::client::{forge_reads, items};
 use crate::{
@@ -188,7 +188,7 @@ async fn start_workspace(
         parent: chat.map(SpaceSelector::Id),
         ..NewWorkspace::new(Selector::Id(repository), WorkspaceStart::Name(name))
     };
-    operations::start_workspace(&ctx.paths, new, crate::env::without_secrets()).await
+    preparation::start_workspace(&ctx.paths, new, crate::env::without_secrets()).await
 }
 
 /// Revert the merge on the workspace's branch as tracked commands of that

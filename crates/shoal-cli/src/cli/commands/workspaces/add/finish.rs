@@ -11,7 +11,7 @@ use super::{
     target::AddTarget,
     waiting::{AfterSetup, follow_add_setup},
 };
-use crate::client::operations::NewWorkspace;
+use crate::client::preparation::NewWorkspace;
 use crate::client::space_names::SpaceSelector;
 use crate::client::{agent::AgentSessionId, queue::QueueEntryId};
 use crate::{
@@ -363,7 +363,7 @@ async fn start_add_workspace(
         waiting,
     };
     let env = crate::env::without_secrets();
-    let started = crate::client::operations::start_workspace(&ctx.paths, new, env);
+    let started = crate::client::preparation::start_workspace(&ctx.paths, new, env);
     ctx.progress("Opening workspace", started).await
 }
 
