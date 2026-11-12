@@ -3,7 +3,7 @@ use anyhow::{Result, ensure};
 
 use super::acquisition::Finish;
 use crate::client::leases;
-use crate::client::output::acquisition::{NotAcquired, Released};
+use crate::client::output::acquisition::Released;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
@@ -36,7 +36,7 @@ pub(super) async fn acquire(
                 &hold,
             )
         },
-        |message| NotAcquired::busy(None, message),
+        std::convert::identity,
     )
 }
 

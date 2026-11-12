@@ -30,12 +30,70 @@ pub enum Acquisition<T> {
 
 impl<T> Acquisition<T> {
     fn approval(request: Box<ApprovalRequest>) -> Self {
-        if request.status == DecisionStatus::Denied {
-            Self::ApprovalDenied(request)
-        } else {
-            Self::ApprovalPending(request)
+        match RefusalCode::approval(&request) {
+            RefusalCode::ApprovalDenied => Self::ApprovalDenied(request),
+            _ => Self::ApprovalPending(request),
         }
     }
+}
+
+impl<T: Leased> Acquisition<T> {
+    /// Why the acquisition was not granted: none once it was, nor for busy
+    /// capacity of a kind without a name.
+    pub fn refusal(&self) -> Option<RefusalCode> {
+        match self {
+            Self::Acquired(_) => None,
+            Self::Busy(_) => T::BUSY,
+            Self::ApprovalPending(_) => Some(RefusalCode::ApprovalPending),
+            Self::ApprovalDenied(_) => Some(RefusalCode::ApprovalDenied),
+        }
+    }
+}
+
+crate::states!(
+    /// Why a request was not granted, as output names it.
+    RefusalCode {
+        /// A resource pool's capacity is taken.
+        ResourceBusy => "resource_busy",
+        /// Every simulator Shoal may run is taken.
+        SimulatorBusy => "simulator_busy",
+        /// The request waits for an approval.
+        ApprovalPending => "approval_pending",
+        /// The approval it asked for was denied.
+        ApprovalDenied => "approval_denied",
+    }
+);
+
+impl RefusalCode {
+    /// Why a request that waits for or was denied `request` is not granted.
+    pub fn approval(request: &ApprovalRequest) -> Self {
+        match request.status {
+            DecisionStatus::Denied => Self::ApprovalDenied,
+            _ => Self::ApprovalPending,
+        }
+    }
+}
+
+/// What an acquisition leases, and the refusal busy capacity of its kind
+/// names.
+pub trait Leased {
+    const BUSY: Option<RefusalCode>;
+}
+
+impl Leased for Simulator {
+    const BUSY: Option<RefusalCode> = Some(RefusalCode::SimulatorBusy);
+}
+
+impl Leased for ResourceLease {
+    const BUSY: Option<RefusalCode> = Some(RefusalCode::ResourceBusy);
+}
+
+impl Leased for SecretGrant {
+    const BUSY: Option<RefusalCode> = None;
+}
+
+impl Leased for WorkspaceHold {
+    const BUSY: Option<RefusalCode> = None;
 }
 
 impl<T: TryFrom<Body, Error = anyhow::Error>> TryFrom<Body> for Acquisition<T> {

@@ -7,7 +7,6 @@ use anyhow::{Context as _, Result};
 
 use super::start::Chosen;
 use crate::client::leases::{self, Acquisition, PortAcquisition};
-use crate::client::output::acquisition::NotAcquired;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
@@ -164,7 +163,7 @@ async fn lease_simulator(
         declined => Ok(Err(declined.finish(
             ctx,
             |_| Ok(()),
-            |message| NotAcquired::busy(Some("simulator_busy"), message),
+            std::convert::identity,
         )?)),
     }
 }

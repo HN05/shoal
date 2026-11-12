@@ -37,10 +37,10 @@ pub(super) async fn acquire(
     outcome.finish(
         ctx,
         |lease| ctx.emit(&describe(&lease, Palette::stdout(ctx.json)), &lease),
-        |message| NotAcquired {
+        |refused| NotAcquired {
             pool: Some(request.pool.clone()),
             resource: request.resource.clone(),
-            ..NotAcquired::busy(Some("resource_busy"), message)
+            ..refused
         },
     )
 }

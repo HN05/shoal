@@ -1,7 +1,7 @@
 //! What a lease, hold or secret request prints when it gets nothing.
 use serde::{Deserialize, Serialize};
 
-use crate::{approvals::ApprovalRequest, output::outputs};
+use crate::{approvals::ApprovalRequest, leases::RefusalCode, output::outputs};
 
 /// A request that acquired nothing: its capacity is busy, or it waits for
 /// or was denied an approval.
@@ -9,9 +9,9 @@ use crate::{approvals::ApprovalRequest, output::outputs};
 pub struct NotAcquired {
     /// Always false.
     pub acquired: bool,
-    /// Why, such as `resource_busy` or `approval_pending`.
+    /// Why, when it has a name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub code: Option<String>,
+    pub code: Option<RefusalCode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
     /// A resource request's pool and member.
@@ -25,11 +25,11 @@ pub struct NotAcquired {
 }
 
 impl NotAcquired {
-    /// Busy capacity, with `code` naming what was busy when it says.
-    pub fn busy(code: Option<&str>, message: &str) -> Self {
+    /// Refused for `code`, with `message` saying what holds the capacity.
+    pub fn busy(code: Option<RefusalCode>, message: &str) -> Self {
         Self {
             acquired: false,
-            code: code.map(str::to_owned),
+            code,
             message: Some(message.to_owned()),
             pool: None,
             resource: None,

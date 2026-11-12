@@ -4,7 +4,6 @@ use anyhow::Result;
 
 use super::acquisition::{Finish, obtain};
 use crate::client::leases;
-use crate::client::output::acquisition::NotAcquired;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
@@ -34,7 +33,7 @@ pub(super) async fn acquire(
     outcome.finish(
         ctx,
         |grant| ctx.emit(&describe(&grant), &grant),
-        |message| NotAcquired::busy(None, message),
+        std::convert::identity,
     )
 }
 

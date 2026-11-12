@@ -9,8 +9,8 @@ pub(super) use picker::{decide_row, print_rows};
 pub(super) use push::push_approved;
 
 use super::EXIT_BUSY;
-use crate::client::output::acquisition::NotAcquired;
 use crate::client::space_names::SpaceSelector;
+use crate::client::{leases::RefusalCode, output::acquisition::NotAcquired};
 use crate::{
     cli::{
         args::approvals::ApprovalsArgs,
@@ -424,17 +424,12 @@ fn details(request: &ApprovalRequest) -> Vec<String> {
 }
 
 pub(super) fn declined(ctx: &Context, request: &ApprovalRequest) -> Result<i32> {
-    let code = if request.status == DecisionStatus::Denied {
-        "approval_denied"
-    } else {
-        "approval_pending"
-    };
     ctx.emit_styled(
         Style::Warning,
         &describe(request),
         NotAcquired {
             acquired: false,
-            code: Some(code.to_owned()),
+            code: Some(RefusalCode::approval(request)),
             message: None,
             pool: None,
             resource: None,

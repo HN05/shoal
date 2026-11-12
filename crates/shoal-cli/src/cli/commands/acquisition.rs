@@ -5,27 +5,29 @@ use super::{EXIT_BUSY, approvals};
 use crate::client::output::acquisition::NotAcquired;
 use crate::{
     cli::{context::Context, output::Style},
-    client::leases::{Acquisition, retry},
+    client::leases::{Acquisition, Leased, retry},
 };
 
 pub(super) trait Finish<T> {
-    /// Domain handlers supply their successful payload and capacity details;
-    /// approval rendering and exit status are shared by every acquisition.
+    /// Domain handlers supply their successful payload and what busy
+    /// capacity adds to the refusal; approval rendering, refusal codes and
+    /// exit status are shared by every acquisition.
     fn finish(
         self,
         ctx: &Context,
         acquired: impl FnOnce(T) -> Result<()>,
-        busy: impl FnOnce(&str) -> NotAcquired,
+        busy: impl FnOnce(NotAcquired) -> NotAcquired,
     ) -> Result<i32>;
 }
 
-impl<T> Finish<T> for Acquisition<T> {
+impl<T: Leased> Finish<T> for Acquisition<T> {
     fn finish(
         self,
         ctx: &Context,
         acquired: impl FnOnce(T) -> Result<()>,
-        busy: impl FnOnce(&str) -> NotAcquired,
+        busy: impl FnOnce(NotAcquired) -> NotAcquired,
     ) -> Result<i32> {
+        let refusal = self.refusal();
         match self {
             Self::Acquired(value) => {
                 acquired(value)?;
@@ -35,7 +37,8 @@ impl<T> Finish<T> for Acquisition<T> {
                 approvals::declined(ctx, &request)
             }
             Self::Busy(message) => {
-                ctx.emit_styled(Style::Warning, &message, busy(&message))?;
+                let refused = busy(NotAcquired::busy(refusal, &message));
+                ctx.emit_styled(Style::Warning, &message, refused)?;
                 Ok(EXIT_BUSY)
             }
         }
