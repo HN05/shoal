@@ -279,7 +279,7 @@ fn narrowing(json: &str) -> Result<crate::config::permissions::PermissionsConfig
     serde_json::from_str(json).map_err(|error| error.to_string())
 }
 
-/// Arguments of the add worker.
+// Arguments of the add worker.
 #[derive(Debug, Args)]
 pub struct AddWorkerArgs {
     #[arg(long)]

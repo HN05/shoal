@@ -125,7 +125,7 @@ pub struct SshArgs {
     pub confirmation: ConfirmationArgs,
 }
 
-/// Arguments of `shoal move root`.
+// Arguments of `shoal move root`.
 #[derive(Debug, Args)]
 pub struct RootArgs {
     /// New root directory, saved as root_dir first; omit to use the configured one.

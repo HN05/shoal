@@ -15,8 +15,8 @@ pub enum DiagnosticsCommand {
     },
 }
 
-/// Arguments of `shoal alerts` without a subcommand, which lists or follows
-/// notifications.
+// Arguments of `shoal alerts` without a subcommand, which lists or follows
+// notifications.
 #[derive(Debug, Args)]
 pub struct AlertsArgs {
     /// Include notifications already shown.

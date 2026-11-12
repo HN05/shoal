@@ -84,7 +84,7 @@ pub struct CleanupArgs {
     pub yes: bool,
 }
 
-/// Arguments of `shoal stop`.
+// Arguments of `shoal stop`.
 #[derive(Debug, Args)]
 pub struct StopArgs {
     #[command(flatten)]
@@ -112,7 +112,7 @@ pub struct StopArgs {
     pub leftovers: bool,
 }
 
-/// Arguments of `shoal rm`.
+// Arguments of `shoal rm`.
 #[derive(Debug, Args)]
 pub struct RmArgs {
     #[arg(value_name = "SPACE")]

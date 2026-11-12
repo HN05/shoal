@@ -151,7 +151,7 @@ pub enum WorkspaceCommand {
 
 pub use crate::config::repo::DesktopApp;
 
-/// Arguments of `shoal log`.
+// Arguments of `shoal log`.
 #[derive(Debug, Args)]
 pub struct LogArgs {
     pub space: Option<SpaceSelector>,

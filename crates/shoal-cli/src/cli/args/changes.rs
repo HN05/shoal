@@ -387,7 +387,7 @@ pub enum IssueCommand {
     },
 }
 
-/// Arguments of `shoal pr merge`.
+// Arguments of `shoal pr merge`.
 #[derive(Debug, Args)]
 pub struct PrMergeArgs {
     #[command(flatten)]
