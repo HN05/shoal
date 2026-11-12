@@ -136,10 +136,8 @@ pub(super) async fn add_planned(
         queue_entry: queue_entry.clone(),
         waiting: own.filter(|_| launch.is_none()),
     };
+    // The daemon gave the starting entry the workspace before its setup.
     let started = start_add_workspace(ctx, &target, start, issue.as_ref()).await?;
-    if let Some(entry) = &queue_entry {
-        queued_agents::attach(ctx, entry, &started.workspace).await?;
-    }
     let (branch, name) = (started.workspace.branch_or_name(), &started.workspace.name);
     let label = match place_name {
         Some(place) => place.render(branch, name),
