@@ -1429,6 +1429,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "shoal-refs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "rusqlite",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "shoal-subprocess"
 version = "0.1.0"
 dependencies = [
