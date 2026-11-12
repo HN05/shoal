@@ -16,7 +16,7 @@ use crate::{
         space_processes::Selection,
         workspace::{Manager, StopRequest, executions::Save},
     },
-    forge::{ForgeRepo, ci::runner::took_job},
+    forge::ci::runner::took_job,
 };
 
 /// How long a runner may run after the forge finished its job's run, as it
@@ -52,7 +52,7 @@ impl Manager {
         if job.runner_id.is_some() && !took_job(&self.job_directory(&job.id)) {
             return Ok(None);
         }
-        let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
+        let forge = self.item_forge(&job.job.run.url).await?;
         let url = self.reported_run_url(&forge, job);
         if self.runners.take_run_read(&job.id)
             && !(forge.view_run(&self.user_account(), &url).await?.state).unfinished()
@@ -60,7 +60,7 @@ impl Manager {
             self.runners.run_finished(&job.id);
         }
         let outlived = (self.runners.finished_for(&job.id)).is_some_and(|since| since >= GRACE);
-        Ok(outlived.then_some(url))
+        Ok(outlived.then(|| url.to_string()))
     }
 
     /// Stop the runner of `job`, saving nothing: its run is over.

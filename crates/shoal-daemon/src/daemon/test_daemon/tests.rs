@@ -149,7 +149,7 @@ async fn done_renames_and_links_go_through_the_protocol() {
     let link = ItemMethod::LinkItem {
         space: SpaceSelector::id(&workspace.id),
         kind: LinkKind::Issue,
-        url: "40".into(),
+        item: "40".parse().unwrap(),
         relation: Relation::Related,
         title: Some("Report".into()),
     };
@@ -160,7 +160,7 @@ async fn done_renames_and_links_go_through_the_protocol() {
         space: SpaceSelector::id(&workspace.id),
         relation: Relation::Related,
         kind: Some(LinkKind::Issue),
-        url: Some("40".into()),
+        item: Some("40".parse().unwrap()),
     };
     connection::request::<()>(&app, unlink()).await.unwrap();
     assert_eq!(
@@ -448,7 +448,7 @@ async fn an_existing_branch_reopens_its_workspace_without_its_post_setup_hook() 
     let mut open = start_workspace(&daemon, WorkspaceStart::Branch("api".into()));
     if let OperationMethod::StartWorkspace { base, pr, .. } = &mut open {
         *base = None;
-        *pr = Some("https://github.com/team/repo/pull/7".into());
+        *pr = Some("https://github.com/team/repo/pull/7".parse().unwrap());
     }
     let started: StartedWorkspace = connection::request(&app, open).await.unwrap();
     assert!(started.reused);
@@ -459,7 +459,7 @@ async fn an_existing_branch_reopens_its_workspace_without_its_post_setup_hook() 
     };
     assert!(!steps.setup && !steps.post_setup);
     assert_eq!(
-        steps.pr.as_deref(),
+        steps.pr.as_ref().map(ToString::to_string).as_deref(),
         Some("https://github.com/team/repo/pull/7")
     );
     worker.exit(1);
@@ -528,7 +528,7 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
             ..
         } = &mut create
         {
-            *requested = issue.map(Into::into);
+            *requested = issue.map(|issue| issue.parse().unwrap());
             *queued = agent;
         }
         create
@@ -536,7 +536,7 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
     for refused in [
         create(None, Some(launch("undefined", None))),
         create(None, Some(launch("claude", Some("triage")))),
-        create(Some("not an issue"), None),
+        create(Some("https://forge.example/team/other/issues/1"), None),
     ] {
         assert!(
             connection::request::<StartedWorkspace>(&app, refused)

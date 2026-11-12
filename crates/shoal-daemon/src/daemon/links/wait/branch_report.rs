@@ -1,5 +1,6 @@
 //! What a workspace branch's local merge check reports to its watch, and
 //! how it reads as an observation.
+use crate::forge::items::reference::ItemRef;
 use anyhow::Result;
 
 use crate::{
@@ -24,8 +25,8 @@ pub(super) enum BranchReport {
 }
 
 /// What the branch of a space following `items` reports.
-pub(super) fn branch_report(items: &[(String, LinkKind)]) -> BranchReport {
-    if items.iter().any(|(_, kind)| *kind == LinkKind::Pr) {
+pub(super) fn branch_report(items: &[ItemRef]) -> BranchReport {
+    if items.iter().any(|item| item.kind() == LinkKind::Pr) {
         BranchReport::ChangedOnBothSides
     } else {
         BranchReport::Conflicts

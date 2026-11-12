@@ -152,7 +152,7 @@ pub fn pick_item(
     prompt: &str,
     kind: &str,
     items: Vec<crate::forge::items::item::Item>,
-) -> Result<String> {
+) -> Result<u64> {
     ensure!(!items.is_empty(), "no open {kind}");
     let entries = items
         .into_iter()
@@ -163,7 +163,7 @@ pub fn pick_item(
             )
         })
         .collect();
-    pick(ctx, prompt, entries)
+    Ok(pick(ctx, prompt, entries)?.parse()?)
 }
 
 /// Choose a typed value; labels are display-only, even when they repeat.

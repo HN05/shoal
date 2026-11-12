@@ -1,7 +1,7 @@
 //! The forge and the accounts item actions go out with: the user's own
 //! logins for reads and the user's decisions, the agent account for the rest.
 use crate::client::space_ids::SpaceId;
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 
 use crate::{
     config::{
@@ -9,7 +9,7 @@ use crate::{
         forges::{Forges, Whose},
     },
     daemon::workspace::Manager,
-    forge::{ForgeRepo, account::Account, items::link::ItemKind},
+    forge::{ForgeRepo, account::Account},
     model::{Repository, Workspace},
     protocol::ItemContext,
 };
@@ -177,21 +177,6 @@ impl Manager {
             Place::Chat { checkout, .. } | Place::Checkout(checkout) => {
                 self.checkout_forge(checkout).await
             }
-        }
-    }
-
-    /// The `named` item, else the one item of `kind` linked to the place's
-    /// space.
-    pub(in crate::daemon::links) async fn named_or_linked(
-        &self,
-        named: Option<String>,
-        place: &Place,
-        kind: ItemKind,
-    ) -> Result<String> {
-        match (named, place.space_id()) {
-            (Some(named), _) => Ok(named),
-            (None, Some(id)) => self.linked_item(id, kind).await,
-            (None, None) => bail!(super::NOTHING_LINKED),
         }
     }
 }

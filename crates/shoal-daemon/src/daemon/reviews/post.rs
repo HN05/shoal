@@ -1,6 +1,7 @@
 //! Posting a finished PR review on the PR as a comment review by the
 //! workspace's agent account: findings on lines the PR's diff shows become
 //! line comments, the rest go in the body with the summary.
+use crate::forge::items::reference::ItemRef;
 use std::fmt::Write as _;
 
 use anyhow::Result;
@@ -60,12 +61,13 @@ impl Manager {
         &self,
         review: &Review,
         workspace: &Workspace,
-        url: &str,
+        pull: &ItemRef,
         head: &CommitId,
     ) -> Result<String> {
         let (forge, account) = self.workspace_forge_account(workspace).await?;
-        let (number, url) = forge.pull(url)?;
-        let current = forge.read(&account, ItemKind::Pr, number.get()).await?;
+        let current = forge
+            .read(&account, ItemKind::Pr, pull.pull()?.get())
+            .await?;
         let moved = current.head_sha.as_ref() != Some(head);
         let diff = match moved {
             true => None,
@@ -77,15 +79,16 @@ impl Manager {
         };
         let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
         let action = Action::Review(new_review(review, shows, moved.then_some(head)));
+        let url = pull.to_string();
         match self
-            .item_action(&context, ItemKind::Pr, Some(url.clone()), action)
+            .item_action(&context, ItemKind::Pr, Some(pull.clone().into()), action)
             .await
         {
             Ok(_) => Ok(url),
             // Nothing was sent, and the lines no longer match.
             Err(error) if error.downcast_ref::<HeadMoved>().is_some() => {
                 let action = Action::Review(new_review(review, |_| false, Some(head)));
-                self.item_action(&context, ItemKind::Pr, Some(url.clone()), action)
+                self.item_action(&context, ItemKind::Pr, Some(pull.clone().into()), action)
                     .await?;
                 Ok(url)
             }

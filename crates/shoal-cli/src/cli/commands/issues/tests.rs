@@ -1,8 +1,10 @@
 use super::*;
 use crate::forge::numbers::IssueNumber;
+use anyhow::Result;
 
 async fn repository_for<'a>(repos: &'a [Repository], url: &str) -> Result<&'a Repository> {
-    repository_with_remote(repos, ForgeRepo::from_issue_url(url)?, "retry").await
+    let issue = ItemRef::parse_kind(LinkKind::Issue, url)?;
+    repository_with_remote(repos, issue.repository().clone(), "retry").await
 }
 
 #[test]
@@ -12,11 +14,13 @@ fn forge_urls_match_transports_and_reject_other_repositories() {
         repo,
         ForgeRepo::parse("ssh://git@github.com:2222/team/repo").unwrap()
     );
-    assert_eq!(repo.issue("42").unwrap().0, IssueNumber::new(42));
+    let issue = |input: &str| {
+        let input = input.parse::<ItemInput>()?;
+        ItemRef::in_repository(&repo, LinkKind::Issue, &input)?.issue()
+    };
+    assert_eq!(issue("42").unwrap(), IssueNumber::new(42));
     assert_eq!(
-        repo.issue("https://github.com/team/repo/issues/42#comment")
-            .unwrap()
-            .0,
+        issue("https://github.com/team/repo/issues/42#comment").unwrap(),
         IssueNumber::new(42)
     );
     for input in [
@@ -27,7 +31,7 @@ fn forge_urls_match_transports_and_reject_other_repositories() {
         "https://github.com/team/other/issues/42",
         "https://github.com/team/repo/pull/42",
     ] {
-        assert!(repo.issue(input).is_err(), "{input}");
+        assert!(issue(input).is_err(), "{input}");
     }
     assert!(ForgeRepo::parse("/tmp/repo").is_err());
 }
@@ -55,8 +59,10 @@ async fn issue_urls_select_exactly_one_registered_repository() {
     // host is resolved.
     let url = "https://code.example/group/sub/repo/-/issues/7";
     assert_eq!(repository_for(&repos, url).await.unwrap().id, "d");
-    let pull = ForgeRepo::from_pull_url("https://code.example/group/sub/repo/-/merge_requests/3");
-    let pull = repository_with_remote(&repos, pull.unwrap(), "retry").await;
+    let pull: ItemRef = "https://code.example/group/sub/repo/-/merge_requests/3"
+        .parse()
+        .unwrap();
+    let pull = repository_with_remote(&repos, pull.repository().clone(), "retry").await;
     assert_eq!(pull.unwrap().id, "d");
     assert!(
         repository_for(&repos, "https://forge.example/team/repo/issues/7")
@@ -107,7 +113,7 @@ fn issue_names_are_portable_bounded_and_stable() {
     let mut issue = Issue {
         number: 34,
         title: "Fix `API`: $(touch /tmp/no); 日本語".into(),
-        url: "url".into(),
+        url: "https://forge.example/team/repo/issues/34".parse().unwrap(),
         details: "body".into(),
         labels: Vec::new(),
     };
@@ -124,7 +130,7 @@ fn issue_names_are_portable_bounded_and_stable() {
     assert_eq!(issue.branch_name(), "issue-34");
     let subject = issue.subject();
     assert!(
-        (subject.text).contains("#34: 日本語 to the\nurl\n"),
+        (subject.text).contains("#34: 日本語 to the\nhttps://forge.example/team/repo/issues/34\n"),
         "{}",
         subject.text
     );

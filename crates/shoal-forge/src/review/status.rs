@@ -41,7 +41,7 @@ crate::state::states!(ReviewState {
 /// its error instead of failing the request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrStatus {
-    pub url: String,
+    pub url: crate::items::reference::ItemRef,
     pub state: Option<PrState>,
     /// Unknown while the forge computes mergeability, and for drafts and closed PRs.
     pub merge_conflicts: Option<bool>,
@@ -66,7 +66,7 @@ pub struct CheckResult {
 }
 
 impl PrStatus {
-    pub fn new(url: String, state: Option<PrState>) -> Self {
+    pub fn new(url: crate::items::reference::ItemRef, state: Option<PrState>) -> Self {
         Self {
             url,
             state,
@@ -79,7 +79,7 @@ impl PrStatus {
         }
     }
 
-    pub fn failed(url: String, error: &anyhow::Error) -> Self {
+    pub fn failed(url: crate::items::reference::ItemRef, error: &anyhow::Error) -> Self {
         Self {
             errors: vec![format!("{error:#}")],
             ..Self::new(url, None)
@@ -117,13 +117,17 @@ impl PrStatus {
 
 impl ForgeRepo {
     /// Each failed lookup is recorded on the result instead of failing it.
-    pub async fn pr_status(&self, account: &Account, url: &str) -> PrStatus {
+    pub async fn pr_status(
+        &self,
+        account: &Account,
+        pull: &crate::items::reference::ItemRef,
+    ) -> PrStatus {
         let result = async {
-            let (number, _) = self.pull(url)?;
-            self.kind.pr_status(self, account, number, url).await
+            let number = pull.pull()?;
+            self.kind.pr_status(self, account, number, pull).await
         }
         .await;
-        let mut status = result.unwrap_or_else(|error| PrStatus::failed(url.into(), &error));
+        let mut status = result.unwrap_or_else(|error| PrStatus::failed(pull.clone(), &error));
         self.record_waiting_runs(account, &mut status).await;
         status
     }

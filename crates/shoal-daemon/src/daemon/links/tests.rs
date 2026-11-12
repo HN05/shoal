@@ -56,7 +56,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
         .link_item(
             &SpaceSelector::id(&id),
             LinkKind::Issue,
-            "40",
+            &"40".parse().unwrap(),
             Relation::Opened,
             Some("Report".into()),
             None,
@@ -67,7 +67,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
         .link_item(
             &SpaceSelector::id(&id),
             LinkKind::Issue,
-            issue,
+            &issue.parse().unwrap(),
             Relation::Opened,
             Some("Follow-up".into()),
             None,
@@ -78,7 +78,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
         .link_item(
             &SpaceSelector::id(&id),
             LinkKind::Pr,
-            "41",
+            &"41".parse().unwrap(),
             Relation::Related,
             None,
             None,
@@ -89,7 +89,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
         .link_item(
             &SpaceSelector::id(&id),
             LinkKind::Issue,
-            "40",
+            &"40".parse().unwrap(),
             Relation::Related,
             Some("Report".into()),
             None,
@@ -103,12 +103,11 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
     assert_eq!(
         links.opened,
         [LinkedItem {
-            kind: LinkKind::Issue,
-            url: issue.into(),
+            url: issue.parse().unwrap(),
             title: Some("Follow-up".into()),
         }]
     );
-    let related: Vec<_> = links.related.iter().map(|item| item.url.as_str()).collect();
+    let related: Vec<_> = links.related.iter().map(|item| item.url.url()).collect();
     assert_eq!(related, [pr, issue]);
     let linked = link_events(&manager, EventKind::Linked).await;
     assert_eq!(linked.len(), 3);
@@ -119,7 +118,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
             .link_item(
                 &SpaceSelector::id(&id),
                 LinkKind::Issue,
-                "https://github.com/other/repo/issues/1",
+                &"https://github.com/other/repo/issues/1".parse().unwrap(),
                 Relation::Related,
                 Some("Report".into()),
                 None,
@@ -133,7 +132,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
             &SpaceSelector::id(&id),
             Relation::Related,
             Some(LinkKind::Pr),
-            Some("41"),
+            Some(&"41".parse().unwrap()),
         )
         .await
         .unwrap();
@@ -143,7 +142,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
                 &SpaceSelector::id(&id),
                 Relation::Related,
                 Some(LinkKind::Pr),
-                Some("41")
+                Some(&"41".parse().unwrap())
             )
             .await
             .is_err()
@@ -178,7 +177,7 @@ async fn assigned_relation_uses_the_issue_link() {
         .link_item(
             &SpaceSelector::id(&id),
             LinkKind::Issue,
-            "7",
+            &"7".parse().unwrap(),
             Relation::Assigned,
             Some("Fix".into()),
             None,
@@ -186,7 +185,7 @@ async fn assigned_relation_uses_the_issue_link() {
         .await
         .unwrap();
     let links = manager.workspace_by_id(&id).await.unwrap().links;
-    assert_eq!(links.issue.as_deref(), Some(issue));
+    assert_eq!(links.issue.as_ref().map(|url| url.url()), Some(issue));
     assert!(links.opened.is_empty() && links.related.is_empty());
     assert_eq!(
         link_events(&manager, EventKind::Linked).await[0].relation,
@@ -223,7 +222,7 @@ async fn a_moved_worktree_takes_no_recorded_relations() {
             .link_item(
                 &SpaceSelector::id(&id),
                 LinkKind::Issue,
-                "40",
+                &"40".parse().unwrap(),
                 Relation::Related,
                 Some("Report".into()),
                 None
@@ -288,8 +287,10 @@ async fn an_issue_linked_without_its_title_gets_the_forges() {
         ],
     );
     let selector = SpaceSelector::id(&workspace.id);
-    let link = |input, relation| {
-        manager.link_item(&selector, LinkKind::Issue, input, relation, None, None)
+    let link = |input: &str, relation| {
+        let input = input.parse().unwrap();
+        let (manager, selector) = (&manager, &selector);
+        async move { (manager.link_item(selector, LinkKind::Issue, &input, relation, None, None)).await }
     };
     for (input, relation) in [("5", Relation::Assigned), ("6", Relation::Related)] {
         assert_eq!(link(input, relation).await.unwrap().title_error, None);

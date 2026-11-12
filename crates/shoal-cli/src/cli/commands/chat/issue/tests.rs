@@ -14,7 +14,9 @@ fn a_chat_on_an_issue_is_named_after_its_title_without_asking() {
     let issue = Issue {
         number: 1211,
         title: "Attach to chats".into(),
-        url: "https://forge.example/team/shoal/issues/1211".into(),
+        url: "https://forge.example/team/shoal/issues/1211"
+            .parse()
+            .unwrap(),
         details: String::new(),
         labels: Vec::new(),
     };
@@ -28,8 +30,15 @@ fn a_chat_on_an_issue_is_named_after_its_title_without_asking() {
         panic!("expected a start");
     };
     assert_eq!(
-        (start.repository.as_deref(), start.issue),
-        (Some("id"), Some(Some(issue.url.clone())))
+        (
+            start
+                .repository
+                .as_ref()
+                .map(ToString::to_string)
+                .as_deref(),
+            start.issue
+        ),
+        (Some("id"), Some(Some(issue.url.clone().into())))
     );
     assert_eq!(topic.links[0].0, Relation::Assigned);
 }

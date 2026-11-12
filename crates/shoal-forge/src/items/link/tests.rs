@@ -25,12 +25,14 @@ fn links_of_unresolved_hosts_use_the_forge_their_routes_name() {
             LinkKind::Ci,
         ),
     ] {
-        let selection = Selection::parse(Some(url.into()), None).unwrap();
-        assert_eq!(selection.kind, Some(target), "{url}");
         let link = Link::parse(url).unwrap();
         assert_eq!(link.repository.kind, kind, "{url}");
+        let LinkTarget::Item(item) = link.target else {
+            panic!("{url} names no item");
+        };
+        assert_eq!(item.kind(), target, "{url}");
         assert_eq!(
-            item(target, url).unwrap().1,
+            item.number().get(),
             url.rsplit('/').next().unwrap().parse::<u64>().unwrap()
         );
     }
@@ -70,19 +72,19 @@ fn links_preserve_branch_names_and_validate_item_routes() {
         Link::parse("https://github.com/team/repo/issues/1")
             .unwrap()
             .target,
-        LinkTarget::Issue
+        LinkTarget::Item(item) if item.kind() == LinkKind::Issue
     ));
     assert!(matches!(
         Link::parse("https://forge.example/team/repo/pulls/2")
             .unwrap()
             .target,
-        LinkTarget::Pr
+        LinkTarget::Item(item) if item.kind() == LinkKind::Pr
     ));
     assert!(matches!(
         Link::parse("https://gitlab.com/group/project/-/merge_requests/2")
             .unwrap()
             .target,
-        LinkTarget::Pr
+        LinkTarget::Item(item) if item.kind() == LinkKind::Pr
     ));
     for url in [
         "https://github.com/team/repo/issues/0",
@@ -95,56 +97,16 @@ fn links_preserve_branch_names_and_validate_item_routes() {
 }
 
 #[test]
-fn selections_leave_bare_number_kinds_open_and_match_urls() {
-    let selection = Selection::parse(Some("505".into()), None).unwrap();
-    assert_eq!(selection.kind, None);
-    assert_eq!(selection.input.as_deref(), Some("505"));
-    assert!(Selection::parse(Some("505".into()), Some("506".into())).is_err());
-    assert!(Selection::parse(Some("0".into()), None).is_err());
-    let selection = Selection::parse(Some("pr".into()), Some("505".into())).unwrap();
-    assert_eq!(selection.kind, Some(LinkKind::Pr));
-    assert_eq!(selection.input.as_deref(), Some("505"));
-    assert!(
-        Selection::parse(
-            Some("pr".into()),
-            Some("https://github.com/team/repo/issues/1".into())
-        )
-        .is_err()
-    );
-    assert!(
-        Selection::parse(Some("issue".into()), None)
-            .unwrap()
-            .input
-            .is_none()
-    );
-}
-
-#[test]
-fn run_links_select_runs_by_url_or_after_ci() {
+fn run_links_name_the_run_without_its_job() {
     let url = "https://forge.example/team/repo/actions/runs/2765/jobs/1";
     let link = Link::parse(url).unwrap();
-    assert!(matches!(link.target, LinkTarget::Run));
+    assert!(matches!(&link.target, LinkTarget::Item(item) if item.kind() == LinkKind::Ci));
     assert_eq!(
         link.repository.run(url).unwrap(),
         (
             RunNumber::new(2765),
             "https://forge.example/team/repo/actions/runs/2765".into()
         )
-    );
-    let selection = Selection::parse(Some(url.into()), None).unwrap();
-    assert_eq!(selection.kind, Some(LinkKind::Ci));
-    let selection = Selection::parse(Some("ci".into()), Some("2765".into())).unwrap();
-    assert_eq!(selection.kind, Some(LinkKind::Ci));
-    assert!(
-        Selection::parse(
-            Some("ci".into()),
-            Some("https://forge.example/team/repo/pulls/2".into())
-        )
-        .is_err()
-    );
-    assert!(
-        Selection::parse(Some("pr".into()), Some(url.into())).is_err(),
-        "a run URL is not a PR"
     );
 }
 
@@ -191,35 +153,6 @@ fn item_links_of_every_forge_are_told_from_repositories() {
     for repository in ["https://github.com/team/repo", "my-project", "42"] {
         assert!(!is_item_link(repository), "{repository}");
     }
-}
-
-#[test]
-fn an_item_url_names_its_number_in_its_own_repository_only() {
-    let url = "https://github.com/team/repo/pull/4";
-    assert!(names_item(
-        LinkKind::Pr,
-        url,
-        "git@github.com:team/repo.git",
-        4
-    ));
-    assert!(!names_item(
-        LinkKind::Pr,
-        url,
-        "git@github.com:team/repo.git",
-        5
-    ));
-    assert!(!names_item(
-        LinkKind::Pr,
-        url,
-        "git@github.com:team/other.git",
-        4
-    ));
-    assert!(!names_item(
-        LinkKind::Issue,
-        url,
-        "git@github.com:team/repo.git",
-        4
-    ));
 }
 
 #[test]

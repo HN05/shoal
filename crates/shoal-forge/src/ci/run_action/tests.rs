@@ -172,9 +172,10 @@ fn runs_read_their_branch_workflow_commit_and_state_from_the_forge() -> Result<(
 
 #[test]
 fn run_references_are_positive_numbers() {
-    assert!(validate_run_reference("12").is_ok());
-    assert!(validate_run_reference("ci.yml").is_err());
-    assert!(validate_run_reference("0").is_err());
+    let repo = ForgeRepo::parse("https://github.com/team/repo").unwrap();
+    assert!(repo.run("12").is_ok());
+    assert!(repo.run("ci.yml").is_err());
+    assert!(repo.run("0").is_err());
 }
 
 #[tokio::test]

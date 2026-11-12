@@ -486,7 +486,6 @@ pub fn recorded_items(
     )?
     .query_map(rusqlite::params![workspace_id, relation], |row| {
         Ok(LinkedItem {
-            kind: row.get(0)?,
             url: row.get(1)?,
             title: row.get(2)?,
         })

@@ -232,7 +232,7 @@ async fn links_cannot_change_while_a_checkpoint_is_restored() {
         .link_item(
             &SpaceSelector::id(&f.workspace.id),
             LinkKind::Pr,
-            "5",
+            &"5".parse().unwrap(),
             Relation::Related,
             None,
             None,

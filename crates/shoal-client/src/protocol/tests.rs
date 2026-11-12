@@ -98,7 +98,7 @@ fn pr_actions_preserve_existing_wire_fields() {
     for (action, url, clear) in [
         (
             Action::Watch {
-                url: "https://forge.example/team/repo/pulls/7".into(),
+                url: "https://forge.example/team/repo/pulls/7".parse().unwrap(),
             },
             Some("https://forge.example/team/repo/pulls/7"),
             false,
@@ -132,12 +132,12 @@ fn pr_actions_preserve_existing_wire_fields() {
 
 #[test]
 fn selective_unwatch_round_trips_and_rejects_conflicting_actions() {
-    let wire = json!({"set_pr": {"space": "worker", "url": null, "clear": false, "unwatch": "7"}});
+    let wire = json!({"set_pr": {"space": "worker", "url": null, "clear": false, "unwatch": "https://forge.example/team/repo/pulls/7"}});
     let decoded: ItemMethod = serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(serde_json::to_value(decoded).unwrap(), wire);
     for action in [
-        json!({"clear": true, "unwatch": "7"}),
-        json!({"clear": false, "url": "8", "unwatch": "7"}),
+        json!({"clear": true, "unwatch": "https://forge.example/team/repo/pulls/7"}),
+        json!({"clear": false, "url": "https://forge.example/team/repo/pulls/8", "unwatch": "https://forge.example/team/repo/pulls/7"}),
     ] {
         assert!(serde_json::from_value::<crate::links::pr::Action>(action).is_err());
     }
@@ -146,7 +146,7 @@ fn selective_unwatch_round_trips_and_rejects_conflicting_actions() {
 #[test]
 fn pr_actions_reject_conflicting_wire_fields() {
     let error = serde_json::from_value::<ItemMethod>(
-        json!({"set_pr": {"space": "worker", "url": "7", "clear": true}}),
+        json!({"set_pr": {"space": "worker", "url": "https://forge.example/team/repo/pulls/7", "clear": true}}),
     )
     .unwrap_err();
     assert!(
@@ -154,8 +154,10 @@ fn pr_actions_reject_conflicting_wire_fields() {
         "{error}"
     );
     assert!(
-        serde_json::from_value::<ItemMethod>(json!({"set_pr": {"space": "worker", "url": "7"}}))
-            .is_err()
+        serde_json::from_value::<ItemMethod>(
+            json!({"set_pr": {"space": "worker", "url": "https://forge.example/team/repo/pulls/7"}})
+        )
+        .is_err()
     );
 }
 
@@ -444,7 +446,11 @@ async fn ready_outcomes_too_large_for_a_frame_arrive_in_pages() {
         marks: (0..400)
             .map(|n| ReviewMark {
                 kind: Some(crate::forge::items::link::ItemKind::Pr),
-                url: Some(format!("https://forge.invalid/team/project/pulls/{n}")),
+                url: Some(
+                    format!("https://forge.invalid/team/project/pulls/{}", n + 1)
+                        .parse()
+                        .unwrap(),
+                ),
                 head: format!("{n:040}"),
                 created_at: crate::time::UnixTime::from_seconds(1),
                 stale: Some(false),
@@ -453,7 +459,9 @@ async fn ready_outcomes_too_large_for_a_frame_arrive_in_pages() {
             .collect(),
         skipped: (0..400)
             .map(|n| SkippedPr {
-                url: format!("https://forge.invalid/team/project/pulls/{}", 400 + n),
+                url: format!("https://forge.invalid/team/project/pulls/{}", 400 + n)
+                    .parse()
+                    .unwrap(),
                 reason: "the PR is merged".into(),
             })
             .collect(),

@@ -26,7 +26,7 @@ pub struct Creation {
     pub git_profile: Option<String>,
     /// The PR whose head branch is opened; it is linked once the workspace is ready.
     #[serde(default)]
-    pub pr: Option<String>,
+    pub pr: Option<crate::forge::items::reference::ItemInput>,
     #[serde(default)]
     pub options: CreationOptions,
     /// The head of a PR from a fork, opened in a workspace at a commit.
@@ -87,7 +87,7 @@ pub struct ResolvedAddAgent {
 pub fn queued_agent_request(
     workspace: &Workspace,
     mut launch: QueuedLaunch,
-    pr: Option<String>,
+    pr: Option<crate::forge::items::reference::ItemInput>,
 ) -> Result<QueueRequest> {
     let env =
         (launch.env.take()).unwrap_or_else(|| crate::terminal::detached_start_environment(None));
@@ -122,7 +122,7 @@ pub struct AddPlan {
     pub place_name: Option<PlaceName>,
     /// The found issue's URL; its body can exceed what the environment of
     /// the place a host opens carries, so the worker looks it up again.
-    pub issue: Option<String>,
+    pub issue: Option<crate::forge::items::reference::ItemRef>,
     pub agent: ResolvedAddAgent,
     pub args: Vec<OsString>,
     /// The agent's subject when no issue gives it one, which a launcher
@@ -218,9 +218,9 @@ impl AddPlan {
         self.agent.agent.clone()
     }
 
-    /// The found issue's URL.
-    pub fn issue_url(&self) -> Option<&str> {
-        self.issue.as_deref()
+    /// The found issue.
+    pub fn issue(&self) -> Option<&crate::forge::items::reference::ItemRef> {
+        self.issue.as_ref()
     }
 
     /// The mode the agent starts in.

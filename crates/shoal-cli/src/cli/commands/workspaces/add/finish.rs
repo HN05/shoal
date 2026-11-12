@@ -25,6 +25,7 @@ use crate::{
         output::{Palette, Style},
         shell, terminal,
     },
+    forge::items::reference::ItemInput,
     model::{QueueEntry, Workspace},
     paths::CommandPaths,
     protocol::{
@@ -341,7 +342,10 @@ async fn start_add_workspace<'c>(
     let start = match (workspace, pull_head, existing, copy) {
         (Some(workspace), ..) => WorkspaceStart::Workspace(SpaceSelector::Id(workspace)),
         (None, Some(head), ..) => WorkspaceStart::PullHead {
-            url: pr.clone().context("a PR head needs its PR")?,
+            url: match &pr {
+                Some(ItemInput::Url(url)) => url.clone(),
+                _ => anyhow::bail!("a PR head needs its PR's URL"),
+            },
             head,
         },
         (None, None, Some(branch), _) => WorkspaceStart::Branch(branch),
@@ -366,7 +370,7 @@ async fn start_add_workspace<'c>(
         git_profile,
         parent,
         options,
-        issue: issue.map(|issue| issue.url.clone()),
+        issue: issue.map(|issue| issue.url.clone().into()),
         pr,
         agent,
         queue_entry,

@@ -69,9 +69,9 @@ pub(super) fn record(
 ) -> Result<()> {
     for blocker in blockers {
         let (kind, target) = match blocker {
-            Blocker::Issue(url) => (BlockerKind::Issue, url.clone()),
-            Blocker::Pr(url) => (BlockerKind::Pr, url.clone()),
-            Blocker::CiRun(url) => (BlockerKind::CiRun, url.clone()),
+            Blocker::Issue(url) => (BlockerKind::Issue, url.to_string()),
+            Blocker::Pr(url) => (BlockerKind::Pr, url.to_string()),
+            Blocker::CiRun(url) => (BlockerKind::CiRun, url.to_string()),
             Blocker::Space(selector) => space(db, Some(entry), repository, selector)?,
         };
         db.execute(

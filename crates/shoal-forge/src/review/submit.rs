@@ -259,7 +259,8 @@ impl ForgeRepo {
         number: PullNumber,
         review: &NewReview,
     ) -> Result<Acted> {
-        let _submitting = Submitting::start(self.item_url(ItemKind::Pr, number.get())?).await;
+        let _submitting =
+            Submitting::start(self.item_url(ItemKind::Pr, number.get())?.to_string()).await;
         let current = self.read(account, ItemKind::Pr, number.get()).await?;
         if let Some(reviewed) = &review.commit
             && current.head_sha.as_ref() != Some(reviewed)

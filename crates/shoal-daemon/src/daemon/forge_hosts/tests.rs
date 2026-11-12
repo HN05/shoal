@@ -3,7 +3,11 @@ use std::{sync::Arc, time::Duration};
 use super::Change;
 use crate::{
     config::Config,
-    forge::{ForgeRepo, backends::ForgeKind, hosts::HostType},
+    forge::{
+        backends::ForgeKind,
+        hosts::HostType,
+        items::{link::LinkKind, reference::ItemRef},
+    },
 };
 
 #[tokio::test]
@@ -45,11 +49,9 @@ async fn recorded_hosts_parse_as_their_forge_once_the_daemon_learns_them() {
         .await
         .unwrap();
     manager.learn_recorded_forge_hosts().await.unwrap();
-    let repo = ForgeRepo::from_issue_url(url).unwrap();
-    assert_eq!(
-        repo.pull("8").unwrap().1,
-        "https://ghe.recorded.example/team/repo/pull/8"
-    );
+    let issue: ItemRef = url.parse().unwrap();
+    let pull = ItemRef::numbered(issue.repository(), LinkKind::Pr, 8).unwrap();
+    assert_eq!(pull.url(), "https://ghe.recorded.example/team/repo/pull/8");
 }
 
 #[tokio::test]
@@ -60,13 +62,13 @@ async fn reloaded_pins_reach_link_parsing_and_removed_ones_leave_it() {
         Config::from_toml("[machine.forges.\"gitlab.reload.example\"]\ntype = \"forgejo\"\n")
             .unwrap();
     manager.publish_config(config);
-    assert!(ForgeRepo::from_issue_url(url).unwrap().issue(url).is_ok());
+    assert!(url.parse::<ItemRef>().is_ok());
     // An answer a probe resolved before the reload does not replace it.
     crate::forge::hosts::learn("gitlab.reload.example", ForgeKind::GitLab);
-    assert!(ForgeRepo::from_issue_url(url).unwrap().issue(url).is_ok());
+    assert!(url.parse::<ItemRef>().is_ok());
     manager.publish_config(Config::default());
     // Without the pin, the host parses as what it was learned to serve.
-    assert!(ForgeRepo::from_issue_url(url).unwrap().issue(url).is_err());
+    assert!(url.parse::<ItemRef>().is_err());
 }
 
 #[test]

@@ -151,9 +151,9 @@ const REQUESTS: &[&str] = &[
     r#"{"demo_progress":{"workspace":"fix","launch":"l1"}}"#,
     r#"{"stop_demos":{"workspace":"fix","name":"web"}}"#,
     // Issues and PRs.
-    r#"{"link_item":{"space":"fix","kind":"issue","url":"1","relation":"related"}}"#,
-    r#"{"unlink_items":{"space":"fix","relation":"assigned","kind":null,"url":null}}"#,
-    r#"{"set_pr":{"space":"fix","url":"7","clear":false}}"#,
+    r#"{"link_item":{"space":"fix","kind":"issue","item":"1","relation":"related"}}"#,
+    r#"{"unlink_items":{"space":"fix","relation":"assigned","kind":null,"item":null}}"#,
+    r#"{"set_pr":{"space":"fix","url":"https://forge.example/team/app/pulls/7","clear":false}}"#,
     r#"{"pr_wait":{"workspace":"fix","timeout_secs":60}}"#,
     r#"{"watch_items":{"space":"fix","selection":{"kind":null,"input":"7"},"timeout_secs":null}}"#,
     r#"{"acknowledge_pr_updates":{"space":"fix","deliveries":["d1"],"messages":[3]}}"#,
@@ -247,9 +247,9 @@ const REQUESTS: &[&str] = &[
     // Subscriptions.
     r#"{"subscribe":{"topics":["workspaces","questions"]}}"#,
     // Operations that create a workspace.
-    r#"{"start_workspace":{"repository":"app","name":"fix","issue":"42","agent":{"agent":"claude","prompt":null}}}"#,
+    r#"{"start_workspace":{"repository":"app","name":"fix","issue":"https://forge.example/team/app/issues/42","agent":{"agent":"claude","prompt":null}}}"#,
     r#"{"start_split":{"workspace":"fix","name":"part","base":"HEAD"}}"#,
-    r#"{"convert_to_workspace":{"chat":"app-chat","branch":"fix","issue":"42"}}"#,
+    r#"{"convert_to_workspace":{"chat":"app-chat","branch":"fix","issue":"https://forge.example/team/app/issues/42"}}"#,
 ];
 
 #[test]
@@ -274,7 +274,7 @@ fn a_workspace_start_keeps_its_json() {
     for wire in [
         r#"{"start_workspace":{"repository":"app","branch":"origin/fix","path":"/work/fix","git_profile":"work"}}"#,
         r#"{"start_workspace":{"repository":"app","typed":"fix/login","base":"main"}}"#,
-        r#"{"start_workspace":{"repository":"app","pull_head":{"url":"https://example.com/pulls/7","head":{"number":7,"reference":"refs/pull/7/head","commit":"abc"}},"parent":"c1","options":{"skip_setup":true,"disposable":false},"pr":"7","env":{"PATH":"/bin"}}}"#,
+        r#"{"start_workspace":{"repository":"app","pull_head":{"url":"https://forge.example/team/app/pulls/7","head":{"number":7,"reference":"refs/pull/7/head","commit":"abc"}},"parent":"c1","options":{"skip_setup":true,"disposable":false},"pr":"https://forge.example/team/app/pulls/7","env":{"PATH":"/bin"}}}"#,
     ] {
         let method: Method = serde_json::from_str(wire).unwrap();
         assert_eq!(serde_json::to_string(&method).unwrap(), wire);

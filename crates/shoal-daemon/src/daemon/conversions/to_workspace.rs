@@ -2,6 +2,7 @@
 //! worktree and its setup, after which its agent restarts there when its
 //! turn ends.
 use crate::client::space_ids::SpaceId;
+use crate::forge::items::reference::ItemInput;
 use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context as _, Result, bail, ensure};
@@ -22,7 +23,7 @@ use crate::{
 /// `options` say, with its agent in `mode`.
 pub(crate) struct WorkspaceConversion {
     pub branch: String,
-    pub issue: Option<String>,
+    pub issue: Option<crate::forge::items::reference::ItemInput>,
     pub base: Option<String>,
     pub options: CreationOptions,
     pub mode: ModeName,
@@ -145,10 +146,10 @@ impl Manager {
 
     /// Assign `chat` the open issue `input` names in its repository, which
     /// the workspace it becomes keeps.
-    async fn link_converted_issue(&self, chat: &Chat, input: &str) -> Result<()> {
+    async fn link_converted_issue(&self, chat: &Chat, input: &ItemInput) -> Result<()> {
         let checkout = self.chat_checkout_path(chat).await?;
         let OpenIssue { url, title } = self.read_open_issue(&checkout, input).await?;
-        self.set_issue(&SpaceSelector::id(&chat.id), &url, Some(title))
+        self.set_issue(&SpaceSelector::id(&chat.id), &url.into(), Some(title))
             .await
     }
 

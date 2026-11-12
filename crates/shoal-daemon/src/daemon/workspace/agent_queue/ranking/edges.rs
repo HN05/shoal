@@ -72,11 +72,11 @@ impl Blocking {
     /// of its workflow when a job of it shows which that is.
     fn run_jobs(&self, url: &str) -> Vec<Node> {
         let workflow = (self.jobs.iter())
-            .find(|(_, job)| job.run.url == url)
+            .find(|(_, job)| job.run.url.url() == url)
             .and_then(|(_, job)| job.run.workflow.as_deref());
         (self.jobs.iter())
             .filter(|(_, job)| {
-                job.run.url == url
+                job.run.url.url() == url
                     || (job.default_branch
                         && workflow
                             .is_some_and(|workflow| job.run.workflow.as_deref() == Some(workflow)))
@@ -121,7 +121,12 @@ fn pr_spaces(db: &Connection, url: &str) -> Result<Vec<SpaceId>> {
     for id in ids {
         let links = store::space_links(db, &id)?;
         let opened = links.opened.iter().map(|item| &item.url);
-        if links.prs.iter().chain(opened).any(|linked| linked == url) {
+        if links
+            .prs
+            .iter()
+            .chain(opened)
+            .any(|linked| linked.url() == url)
+        {
             spaces.push(id);
         }
     }

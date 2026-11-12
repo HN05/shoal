@@ -71,7 +71,14 @@ fn a_chat_started_elsewhere_parses_back_to_its_options_with_its_name_and_agent()
         let mut start = parsed_start(topic.relaunch.command_line(named));
         assert!(start.as_chat);
         assert_eq!(start.mode, Some(crate::config::modes::ModeName::CHAT));
-        assert_eq!(start.repository.as_deref(), Some("repo"));
+        assert_eq!(
+            start
+                .repository
+                .as_ref()
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("repo")
+        );
         assert_eq!(
             Options::taken_from(&mut start),
             Options {
@@ -164,8 +171,7 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     // The process the import starts in a new tab takes the issue as given.
     let start = parsed_start(topic.relaunch.command_line(named));
     assert_eq!(start.issue, None);
-    let issue =
-        templates::IssueFields::at(&start.linked_issue.unwrap(), start.linked_issue_title).unwrap();
+    let issue = templates::IssueFields::at(&start.linked_issue.unwrap(), start.linked_issue_title);
     assert_eq!((issue.number, issue.title.as_str()), (7, "Decide"));
     let Relaunch::Start(unlinked) =
         Topic::imported(&repo, &"plan".into(), &SpaceLinks::default()).relaunch

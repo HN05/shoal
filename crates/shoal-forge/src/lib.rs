@@ -26,7 +26,6 @@ use shoal_refs::{BranchName, CommitId};
 
 use backends::{Backend, ForgeKind, Items, Merging};
 use hosts::{HostType, HostTypes};
-use items::link::LinkKind;
 use numbers::{IssueNumber, PullNumber};
 use repo::remote_url::{RemoteUrl, Transport};
 
@@ -196,17 +195,6 @@ impl ForgeRepo {
         Ok(issue)
     }
 
-    /// The repository an issue URL belongs to.
-    pub fn from_issue_url(url: &str) -> Result<Self> {
-        Self::from_item_url(LinkKind::Issue, url)
-    }
-
-    /// The repository an issue URL belongs to, on the forge `hosts` says
-    /// its host serves.
-    pub async fn resolve_issue_url(url: &str, hosts: &impl HostTypes) -> Result<Self> {
-        Self::resolve_item_url(LinkKind::Issue, url, hosts).await
-    }
-
     /// The user, organization or workspace the repository belongs to.
     pub(crate) fn owner(&self) -> &str {
         self.path.split('/').next().unwrap_or_default()
@@ -216,14 +204,14 @@ impl ForgeRepo {
         format!("{}://{}/{}", self.web_scheme, self.host, self.path)
     }
 
-    pub fn issue(&self, input: &str) -> Result<(IssueNumber, String)> {
+    pub(crate) fn issue(&self, input: &str) -> Result<(IssueNumber, String)> {
         let (number, url) = self.kind.issue_route().resolve(self, input)?;
         Ok((IssueNumber::new(number), url))
     }
 }
 
 impl ForgeRepo {
-    pub fn pull(&self, input: &str) -> Result<(PullNumber, String)> {
+    pub(crate) fn pull(&self, input: &str) -> Result<(PullNumber, String)> {
         let (number, url) = self.kind.pull_route().resolve(self, input)?;
         Ok((PullNumber::new(number), url))
     }
@@ -244,7 +232,7 @@ impl ForgeRepo {
 pub struct PullRequest {
     pub number: PullNumber,
     pub title: String,
-    pub url: String,
+    pub url: items::reference::ItemRef,
     /// Its head branch, in this repository or in `fork`.
     pub head: BranchName,
     pub base: BranchName,
@@ -259,35 +247,24 @@ pub struct PullRequest {
 }
 
 impl ForgeRepo {
-    /// The repository a PR URL belongs to.
-    pub fn from_pull_url(url: &str) -> Result<Self> {
-        Self::from_item_url(LinkKind::Pr, url)
-    }
-
-    /// The repository a PR URL belongs to, on the forge `hosts` says its
-    /// host serves.
-    pub async fn resolve_pull_url(url: &str, hosts: &impl HostTypes) -> Result<Self> {
-        Self::resolve_item_url(LinkKind::Pr, url, hosts).await
-    }
-
-    /// The PR `input` names, with where its head is.
+    /// The PR `pull`, of this repository, with where its head is.
     pub async fn pull_request(
         &self,
         account: &account::Account,
-        input: &str,
+        pull: &items::reference::ItemRef,
     ) -> Result<PullRequest> {
-        let (number, url) = self.pull(input)?;
-        let pull = self.kind.pull_details(self, account, number).await?;
-        self.checkout_details(number, url, pull)
+        let number = pull.pull()?;
+        let details = self.kind.pull_details(self, account, number).await?;
+        self.checkout_details(pull.clone(), details)
     }
 
-    /// The PR `pull`, read as `number` at `url`, with where its head is.
+    /// The PR `url`, as the forge read it in `pull`, with where its head is.
     fn checkout_details(
         &self,
-        number: PullNumber,
-        url: String,
+        url: items::reference::ItemRef,
         pull: items::item::Current,
     ) -> Result<PullRequest> {
+        let number = url.pull()?;
         let pr = pull.item.pr.context("not a PR")?;
         ensure!(
             !pr.head.as_str().is_empty() && !pr.base.as_str().is_empty(),

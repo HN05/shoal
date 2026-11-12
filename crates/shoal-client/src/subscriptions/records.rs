@@ -149,7 +149,7 @@ pub struct Link {
     pub id: String,
     pub workspace_id: SpaceId,
     pub kind: LinkKind,
-    pub url: String,
+    pub url: crate::forge::items::reference::ItemRef,
     pub relation: Relation,
     pub title: Option<String>,
     /// Absent until the daemon has looked.

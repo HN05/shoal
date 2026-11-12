@@ -281,7 +281,7 @@ pub enum ReviewTarget {
     /// A PR's head branch against its base branch, both as fetched from
     /// origin, posted there when `post` is set.
     Pr {
-        url: String,
+        url: crate::forge::items::reference::ItemRef,
         head: BranchName,
         base: BranchName,
         post: bool,

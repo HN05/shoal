@@ -28,13 +28,13 @@ fn merge_preview_names_its_direction_push_warning_and_open_prs() {
         files: vec!["version".into()],
         url: None,
     });
-    preview.open_prs = vec!["https://forge/pulls/12".into()];
+    preview.open_prs = vec!["https://forge/o/r/pulls/12".parse().unwrap()];
     let description = preview.description();
     for part in [
         "(3 commits)",
         "push main to origin.",
         ": version.",
-        "https://forge/pulls/12",
+        "https://forge/o/r/pulls/12",
     ] {
         assert!(description.contains(part), "{part:?} in {description}");
     }

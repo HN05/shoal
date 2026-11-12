@@ -6,8 +6,12 @@ use std::ffi::OsString;
 use super::Options;
 use crate::client::{space_ids::SpaceId, space_names::SpaceSelector};
 use crate::{
-    cli::{agents::ChatRepository, args::create::StartArgs},
+    cli::{
+        agents::ChatRepository,
+        args::{create::StartArgs, target::StartTarget},
+    },
     config::templates,
+    forge::items::reference::ItemRef,
     model::{Chat, ChatHome, LinkedItem, Relation, Repository, SpaceLinks, Workspace},
     repository,
 };
@@ -168,7 +172,7 @@ pub(super) fn with_saved(
 /// The `shoal start` arguments of a chat in the checkout of `repo`.
 fn in_checkout(repo: &Repository) -> StartArgs {
     StartArgs {
-        repository: Some(repo.id.to_string()),
+        repository: Some(StartTarget::Repository(repo.id.to_string())),
         ..Default::default()
     }
 }
@@ -193,11 +197,11 @@ impl Relaunch {
         }))
     }
 
-    /// The same command, starting its chat on the issue at `url`.
-    pub(super) fn on_issue(self, url: &str) -> Self {
+    /// The same command, starting its chat on `issue`.
+    pub(super) fn on_issue(self, issue: &ItemRef) -> Self {
         match self {
             Self::Start(start) => Self::Start(Box::new(StartArgs {
-                issue: Some(Some(url.to_owned())),
+                issue: Some(Some(issue.clone().into())),
                 ..*start
             })),
             Self::ConfigSetup => Self::ConfigSetup,

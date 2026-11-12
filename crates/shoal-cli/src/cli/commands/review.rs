@@ -54,7 +54,12 @@ pub(super) async fn run(ctx: &Context, command: ReviewCommand) -> Result<i32> {
             undo,
         } => {
             let outcome = match (outcome, undo) {
-                (Some(kind), false) => Some(crate::reviews::Outcome::new(kind, reason, issue, of)?),
+                (Some(kind), false) => Some(crate::reviews::Outcome::new(
+                    kind,
+                    reason,
+                    issue.map(|issue| issue.to_string()),
+                    of,
+                )?),
                 _ => None,
             };
             answer::resolve(ctx, finding, outcome).await

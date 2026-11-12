@@ -11,12 +11,13 @@ use crate::{
         workspace::Manager,
     },
     forge::{
-        ForgeRepo, PullRequest,
+        PullRequest,
         account::Account,
         capability::Capability,
         items::{
             issue::IssueDetails,
             link::{ItemKind, LinkKind, Selection},
+            reference::{ItemInput, ItemRef},
         },
         numbers::CommentId,
         review::{reviewers::Reviewer, thread::Thread},
@@ -66,21 +67,20 @@ impl Manager {
         elsewhere: bool,
         account: &Account,
     ) -> Result<SelectedItem> {
-        let input = selection.input.as_deref().context(NOTHING_LINKED)?;
+        let input = selection.input.as_ref().context(NOTHING_LINKED)?;
         // A URL names its item in any repository, so the checkout's origin
         // need not decide.
         if elsewhere && let Some((_, item)) = self.item_at_url(selection).await? {
             return Ok(item);
         }
         let forge = self.checkout_forge(checkout).await?;
-        let kind = match selection.kind {
-            Some(kind) => kind,
-            None => forge.item_kind(account, input.parse()?).await?.into(),
+        let kind = match (selection.kind, input) {
+            (Some(kind), _) => kind,
+            (None, ItemInput::Number(number)) => forge.item_kind(account, *number).await?.into(),
+            (None, ItemInput::Url(item)) => item.kind(),
         };
-        let (_, url) = forge.item(kind, input)?;
         Ok(SelectedItem {
-            url,
-            kind,
+            url: ItemRef::in_repository(&forge, kind, input)?,
             relations: Vec::new(),
         })
     }
@@ -126,13 +126,14 @@ impl Manager {
     pub async fn issue_details(
         &self,
         context: &ItemContext,
-        item: &str,
+        item: &ItemInput,
         closed: bool,
         caller: Option<&Caller>,
     ) -> Result<IssueDetails> {
         let forge = self.context_forge(context).await?;
+        let issue = ItemRef::in_repository(&forge, LinkKind::Issue, item)?;
         forge
-            .read_issue(&self.read_account(caller), item, closed)
+            .read_issue(&self.read_account(caller), &issue, closed)
             .await
     }
 
@@ -141,18 +142,16 @@ impl Manager {
     pub async fn issue_blockers(
         &self,
         context: &ItemContext,
-        item: &str,
+        item: &ItemInput,
         caller: Option<&Caller>,
     ) -> Result<Vec<Blocker>> {
         let forge = self.context_forge(context).await?;
-        let (number, _) = forge.issue(item)?;
+        let issue = ItemRef::in_repository(&forge, LinkKind::Issue, item)?;
         let account = self.read_account(caller);
-        let mut blockers = Vec::new();
-        for url in forge.open_issue_blockers(&account, number).await? {
-            let (_, url) = ForgeRepo::from_issue_url(&url)?.issue(&url)?;
-            blockers.push(Blocker::Issue(url));
-        }
-        Ok(blockers)
+        let blockers = forge.open_issue_blockers(&account, issue.issue()?).await?;
+        Ok((blockers.into_iter())
+            .map(|issue| Blocker::Issue(issue.into()))
+            .collect())
     }
 
     /// The PR `item` names in the repository of `context`, with where its
@@ -160,11 +159,12 @@ impl Manager {
     pub async fn pull_request(
         &self,
         context: &ItemContext,
-        item: &str,
+        item: &ItemInput,
         caller: Option<&Caller>,
     ) -> Result<PullRequest> {
         let forge = self.context_forge(context).await?;
-        forge.pull_request(&self.read_account(caller), item).await
+        let pull = ItemRef::in_repository(&forge, LinkKind::Pr, item)?;
+        forge.pull_request(&self.read_account(caller), &pull).await
     }
 
     /// Who the PR `item` names in the repository of `context`, or the
@@ -172,14 +172,15 @@ impl Manager {
     pub async fn reviewers(
         &self,
         context: &ItemContext,
-        item: Option<String>,
+        item: Option<ItemInput>,
         caller: Option<&Caller>,
     ) -> Result<Vec<Reviewer>> {
         let place = self.read_place(context).await?;
-        let input = self.place_item(item, &place, ItemKind::Pr).await?;
+        let pull = self.place_item(item, &place, ItemKind::Pr).await?;
         let forge = self.read_place_forge(&place).await?;
-        let (number, _) = forge.pull(&input)?;
-        forge.reviewers(&self.read_account(caller), number).await
+        forge
+            .reviewers(&self.read_account(caller), pull.pull()?)
+            .await
     }
 
     /// The review thread of `comment` on the PR `item` names in the
@@ -188,17 +189,16 @@ impl Manager {
     pub async fn review_thread(
         &self,
         context: &ItemContext,
-        item: Option<String>,
+        item: Option<ItemInput>,
         comment: CommentId,
         caller: Option<&Caller>,
     ) -> Result<Thread> {
         let place = self.read_place(context).await?;
-        let input = self.place_item(item, &place, ItemKind::Pr).await?;
+        let pull = self.place_item(item, &place, ItemKind::Pr).await?;
         let forge = self.read_place_forge(&place).await?;
         forge.require(Capability::ResolveThreads)?;
-        let (number, _) = forge.pull(&input)?;
         forge
-            .thread(&self.read_account(caller), number, comment)
+            .thread(&self.read_account(caller), pull.pull()?, comment)
             .await
     }
 }
@@ -211,7 +211,6 @@ async fn linked_kind(space: &LinkSpace, number: u64) -> Result<Option<LinkKind>>
         items: (space.links().items().into_iter())
             .map(|item| SelectedItem {
                 url: item.url,
-                kind: item.kind,
                 relations: Vec::new(),
             })
             .collect(),

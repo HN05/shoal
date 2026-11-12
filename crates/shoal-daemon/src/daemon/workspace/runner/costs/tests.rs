@@ -6,7 +6,7 @@ use crate::daemon::test_support::{manager, repository};
 fn queued(workflow: &str, name: &str) -> QueuedJob {
     serde_json::from_value(json!({
         "job": {"handle": "h", "id": 1, "run": 1, "name": name, "labels": ["shoal"]},
-        "run": {"url": "", "workflow": workflow, "commit": "abc", "trigger": "other"},
+        "run": {"url": "https://forge.example/team/repo/actions/runs/1", "workflow": workflow, "commit": "abc", "trigger": "other"},
     }))
     .unwrap()
 }

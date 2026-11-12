@@ -55,7 +55,7 @@ fn a_ci_jobs_workspace_lists_under_the_workspace_its_run_links() {
     job.job = Some(Box::new(
         serde_json::from_value(serde_json::json!({
             "job": {"handle": "h", "id": 4, "run": 1, "name": "rust", "labels": ["shoal"]},
-            "run": {"url": "", "workflow": "ci.yml", "commit": "abc", "trigger": {"pull": {"number": 12}}},
+            "run": {"url": "https://forge.example/team/repo/actions/runs/1", "workflow": "ci.yml", "commit": "abc", "trigger": {"pull": {"number": 12}}},
             "space_ids": [pull.id],
         }))
         .unwrap(),

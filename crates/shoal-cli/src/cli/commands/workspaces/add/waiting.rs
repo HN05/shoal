@@ -16,7 +16,7 @@ use crate::protocol::operations::{Preparation, QueuedLaunch};
 /// What preparing the added workspace does after setup: linking `pr`, then
 /// the post-setup hook, then queuing `agent`.
 pub(super) struct AfterSetup {
-    pub pr: Option<String>,
+    pub pr: Option<crate::forge::items::reference::ItemInput>,
     pub agent: Option<Box<QueuedLaunch>>,
     /// The agent that waits for a retried setup should setup fail.
     pub waiting: Option<WaitingAgent>,

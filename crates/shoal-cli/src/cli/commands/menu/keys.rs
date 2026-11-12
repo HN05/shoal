@@ -13,7 +13,7 @@ use crate::{
             changes::ChangesCommand,
             coordination::{CoordinationCommand, QuestionsArgs},
             create::{CreateCommand, StartArgs},
-            items::{ItemArgs, ItemsCommand, ViewArgs},
+            items::{ItemArgs, ItemWord, ItemsCommand, ViewArgs},
             lifecycle::{LifecycleCommand, RmArgs, StopArgs},
             repository::{RepoCommand, RepositoryCommand},
             sessions::SessionsCommand,
@@ -194,7 +194,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             url: Some(url),
         } => Command::Items(ItemsCommand::View(ViewArgs {
             items: ItemArgs {
-                kind_or_url: Some(url),
+                kind_or_url: Some(ItemWord::Item(url.into())),
                 item: None,
                 space: Some(SpaceSelector::Id(space)),
             },

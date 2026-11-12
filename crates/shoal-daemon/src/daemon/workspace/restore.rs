@@ -354,7 +354,7 @@ impl Manager {
             && let Err(error) = self
                 .set_issue(
                     &SpaceSelector::id(workspace_id),
-                    url,
+                    &url.clone().into(),
                     links.issue_title.clone(),
                 )
                 .await

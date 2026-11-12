@@ -1,6 +1,7 @@
 //! Whether an issue, PR or CI run that blocks work has cleared: an issue
 //! once it closes, a PR once it merges or closes, and a CI run once it, or a
 //! run of its workflow on the default branch that started after it, passes.
+use crate::items::reference::ItemRef;
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -10,10 +11,7 @@ use crate::{
     account::Account,
     ci::run_action::Run,
     hosts::HostTypes,
-    items::{
-        item::ItemState,
-        link::{ItemKind, LinkKind},
-    },
+    items::{item::ItemState, link::ItemKind},
 };
 
 /// What a blocker's lookup found.
@@ -37,23 +35,21 @@ type Newest = Result<(String, Option<Run>), String>;
 #[derive(Debug, Default)]
 pub struct NewestRuns(HashMap<Workflow, Newest>);
 
-/// Whether the `kind` item at `url`, on the forge `hosts` says its host
-/// serves, has cleared; `newest` keeps the runs read for CI runs.
+/// Whether `item`, on the forge `hosts` says its host serves, has cleared;
+/// `newest` keeps the runs read for CI runs.
 pub async fn clearance(
-    kind: LinkKind,
-    url: &str,
+    item: &ItemRef,
     hosts: &impl HostTypes,
     account: &Account,
     newest: &mut NewestRuns,
 ) -> Result<Clearance> {
-    let forge = ForgeRepo::resolve_item_url(kind, url, hosts).await?;
-    let (number, _) = forge.item(kind, url)?;
-    match kind.item() {
-        Some(item) => {
-            let current = forge.read(account, item, number).await?;
-            Ok(item_clearance(item, current.item.state))
+    let forge = item.forge(hosts).await?;
+    match item.kind().item() {
+        Some(kind) => {
+            let current = forge.read(account, kind, item.number().get()).await?;
+            Ok(item_clearance(kind, current.item.state))
         }
-        None => forge.run_clearance(account, url, newest).await,
+        None => forge.run_clearance(account, item, newest).await,
     }
 }
 
@@ -73,10 +69,10 @@ impl ForgeRepo {
     async fn run_clearance(
         &self,
         account: &Account,
-        url: &str,
+        run: &ItemRef,
         newest: &mut NewestRuns,
     ) -> Result<Clearance> {
-        let run = self.view_run(account, url).await?;
+        let run = self.view_run(account, run).await?;
         if run.passed() {
             return Ok(Clearance::Cleared("it passed".into()));
         }

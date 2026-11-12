@@ -203,7 +203,7 @@ fn wrapped_items_fill_lines_up_to_the_width() {
 fn mark_labels_name_the_marked_item() {
     let mark = |kind, url: Option<&str>| ReviewMark {
         kind,
-        url: url.map(Into::into),
+        url: url.map(|url| url.parse().unwrap()),
         head: "abc".into(),
         created_at: UnixTime::from_seconds(0),
         stale: None,

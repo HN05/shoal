@@ -18,7 +18,7 @@ fn a_started_run_is_linked_only_where_shoal_reads_runs() -> Result<()> {
         &started("https://codeberg.org/team/repo/actions/runs/2765"),
     );
     assert_eq!(
-        link.map(|item| item.url).as_deref(),
+        link.map(|item| item.url).as_ref().map(|url| url.url()),
         Some("https://codeberg.org/team/repo/actions/runs/2765")
     );
     // Bitbucket reports a pipeline's URL but Shoal reads no pipelines, so

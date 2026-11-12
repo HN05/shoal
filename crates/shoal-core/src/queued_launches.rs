@@ -20,7 +20,7 @@ pub async fn queue_in_workspace(
     workspace: &Workspace,
     settings: &Effective,
     launch: QueuedLaunch,
-    pr: Option<String>,
+    pr: Option<crate::forge::items::reference::ItemInput>,
 ) -> Result<QueueEntry> {
     check_queued_launch(&launch, settings)?;
     let request = queued_agent_request(workspace, launch, pr)?;
@@ -37,7 +37,7 @@ pub async fn queue_for_setup(
     paths: &CommandPaths,
     workspace: &Workspace,
     mut launch: QueuedLaunch,
-    pr: Option<String>,
+    pr: Option<crate::forge::items::reference::ItemInput>,
 ) -> Result<QueueEntry> {
     launch.now = false;
     let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));

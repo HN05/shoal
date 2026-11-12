@@ -16,7 +16,7 @@ pub enum ItemMethod {
     LinkItem {
         space: SpaceSelector,
         kind: crate::forge::items::link::LinkKind,
-        url: String,
+        item: crate::forge::items::reference::ItemInput,
         relation: crate::model::Relation,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         title: Option<String>,
@@ -26,7 +26,7 @@ pub enum ItemMethod {
         space: SpaceSelector,
         relation: crate::model::Relation,
         kind: Option<crate::forge::items::link::LinkKind>,
-        url: Option<String>,
+        item: Option<crate::forge::items::reference::ItemInput>,
     },
     SetPr {
         space: SpaceSelector,
@@ -55,13 +55,13 @@ pub enum ItemMethod {
     /// or the workspace's linked one.
     RevertPull {
         space: SpaceSelector,
-        item: Option<String>,
+        item: Option<crate::forge::items::reference::ItemInput>,
         options: crate::forge::items::create::PullOptions,
     },
     /// A merged PR with what reverting its merge with Git needs.
     MergedPull {
         space: SpaceSelector,
-        item: Option<String>,
+        item: Option<crate::forge::items::reference::ItemInput>,
     },
     /// Open an issue in the context's repository, or the one `repository`
     /// names, linking it to the workspace when `link` is set.
@@ -77,7 +77,7 @@ pub enum ItemMethod {
     MergeWarning {
         #[serde(flatten)]
         context: ItemContext,
-        item: Option<String>,
+        item: Option<crate::forge::items::reference::ItemInput>,
     },
     /// Change an issue or PR of the context's repository: the one `item`
     /// names, or the workspace's linked one of `kind`.
@@ -85,7 +85,7 @@ pub enum ItemMethod {
         #[serde(flatten)]
         context: ItemContext,
         kind: crate::forge::items::link::ItemKind,
-        item: Option<String>,
+        item: Option<crate::forge::items::reference::ItemInput>,
         action: crate::forge::items::action::Action,
         /// For a merge, the warning the user confirmed, which the merge
         /// must still have; without it, a merge goes ahead whatever it
@@ -116,7 +116,7 @@ pub enum ItemMethod {
     Reviewers {
         #[serde(flatten)]
         context: ItemContext,
-        item: Option<String>,
+        item: Option<crate::forge::items::reference::ItemInput>,
     },
     /// The selected issues and PRs as the forge reports them, with the logs
     /// of failed checks, answered as pieces of the JSON of
@@ -166,7 +166,7 @@ pub enum ItemMethod {
     ReviewThread {
         #[serde(flatten)]
         context: ItemContext,
-        item: Option<String>,
+        item: Option<crate::forge::items::reference::ItemInput>,
         comment: CommentId,
     },
     /// The kind of the item numbered `number`: in a space, that of the
@@ -183,7 +183,7 @@ pub enum ItemMethod {
     IssueDetails {
         #[serde(flatten)]
         context: ItemContext,
-        item: String,
+        item: crate::forge::items::reference::ItemInput,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         closed: bool,
     },
@@ -193,14 +193,14 @@ pub enum ItemMethod {
     IssueBlockers {
         #[serde(flatten)]
         context: ItemContext,
-        item: String,
+        item: crate::forge::items::reference::ItemInput,
     },
     /// The PR `item` names in the context's repository, with where its
     /// head is.
     PullRequest {
         #[serde(flatten)]
         context: ItemContext,
-        item: String,
+        item: crate::forge::items::reference::ItemInput,
     },
     /// Linked items, or an explicit one, for the client to look up; with
     /// `elsewhere`, also an issue, PR or CI run of another repository by its

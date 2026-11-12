@@ -1,4 +1,5 @@
 use super::*;
+use crate::items::link::LinkKind;
 use crate::items::{
     item::{Current, Item, ItemState, PrSummary},
     link::ItemKind,
@@ -9,7 +10,7 @@ fn pull(head_repository: Option<&str>) -> Current {
         item: Item {
             kind: ItemKind::Pr,
             number: 7,
-            url: String::new(),
+            url: "https://forge.example/team/repo/pulls/1".parse().unwrap(),
             title: "Fix".into(),
             state: ItemState::Open,
             labels: Vec::new(),
@@ -43,8 +44,7 @@ fn a_prs_head_is_in_a_fork_unless_this_repository_has_it() {
     let details = |repository| {
         forge
             .checkout_details(
-                PullNumber::new(7),
-                "https://forge.example/team/repo/pulls/7".into(),
+                "https://forge.example/team/repo/pulls/7".parse().unwrap(),
                 pull(repository),
             )
             .unwrap()
@@ -65,7 +65,10 @@ fn a_prs_head_is_in_a_fork_unless_this_repository_has_it() {
         ..pull(Some("team/repo"))
     };
     let read = forge
-        .checkout_details(PullNumber::new(7), String::new(), without_head)
+        .checkout_details(
+            "https://forge.example/team/repo/pulls/7".parse().unwrap(),
+            without_head,
+        )
         .unwrap();
     assert_eq!((read.base.as_str(), read.head_commit), ("main", None));
 }
@@ -125,7 +128,7 @@ fn bitbucket_items_use_pull_request_routes() {
     let url = format!("{base}/pull-requests/5");
     assert_eq!(repo.pull("5").unwrap(), (PullNumber::new(5), url.clone()));
     assert_eq!(
-        ForgeRepo::from_pull_url(&format!("{url}/diff")).unwrap(),
+        ForgeRepo::from_item_url(LinkKind::Pr, &format!("{url}/diff")).unwrap(),
         repo
     );
     assert!(repo.pull(&format!("{base}/pulls/5")).is_err());
@@ -176,9 +179,9 @@ fn gitlab_items_use_their_own_routes() {
         (format!("{base}/-/merge_requests/5"), "pr"),
     ] {
         let discovered = if kind == "issue" {
-            ForgeRepo::from_issue_url(&url)
+            ForgeRepo::from_item_url(LinkKind::Issue, &url)
         } else {
-            ForgeRepo::from_pull_url(&url)
+            ForgeRepo::from_item_url(LinkKind::Pr, &url)
         };
         assert_eq!(discovered.unwrap(), repo, "{url}");
     }
@@ -240,9 +243,12 @@ async fn a_named_repository_is_a_url_or_a_path_on_the_same_host() {
 
 #[test]
 fn pull_urls_name_their_repository() {
-    let repo = ForgeRepo::from_pull_url("https://github.com/team/repo/pull/56/files").unwrap();
+    let repo = ForgeRepo::from_item_url(LinkKind::Pr, "https://github.com/team/repo/pull/56/files")
+        .unwrap();
     assert_eq!(repo, ForgeRepo::parse("git@github.com:team/repo").unwrap());
-    assert!(ForgeRepo::from_pull_url("https://github.com/team/repo/issues/56").is_err());
+    assert!(
+        ForgeRepo::from_item_url(LinkKind::Pr, "https://github.com/team/repo/issues/56").is_err()
+    );
 }
 
 #[test]
@@ -346,10 +352,14 @@ fn item_repository_discovery_defers_number_validation() {
     for (route, discover, lookup) in [
         (
             "issues",
-            ForgeRepo::from_issue_url as fn(&str) -> Result<ForgeRepo>,
+            (|url| ForgeRepo::from_item_url(LinkKind::Issue, url)) as fn(&str) -> Result<ForgeRepo>,
             issue_number as fn(&ForgeRepo, &str) -> _,
         ),
-        ("pull", ForgeRepo::from_pull_url, pull_number),
+        (
+            "pull",
+            |url| ForgeRepo::from_item_url(LinkKind::Pr, url),
+            pull_number,
+        ),
     ] {
         for tail in [
             "56/?query#fragment",
@@ -369,7 +379,7 @@ fn item_repository_discovery_defers_number_validation() {
     }
     let url = "https://forge.example/team/Repo/pulls/56/?query#fragment";
     assert_eq!(
-        ForgeRepo::from_pull_url(url).unwrap(),
+        ForgeRepo::from_item_url(LinkKind::Pr, url).unwrap(),
         ForgeRepo::parse("git@forge.example:team/Repo.git").unwrap()
     );
 }

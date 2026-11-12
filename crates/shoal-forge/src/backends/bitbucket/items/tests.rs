@@ -37,7 +37,9 @@ fn pull_requests_read_branches_drafts_and_reviewers() {
         Item {
             kind: ItemKind::Pr,
             number: 7,
-            url: "https://bitbucket.org/workspace/repo/pull-requests/7".into(),
+            url: "https://bitbucket.org/workspace/repo/pull-requests/7"
+                .parse()
+                .unwrap(),
             title: "Fix".into(),
             state: ItemState::Closed,
             labels: Vec::new(),

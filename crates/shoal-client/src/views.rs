@@ -1,6 +1,7 @@
 //! What `shoal view` reads through the daemon: issues and PRs as the forge
 //! reports them, with failed checks' logs, and CI runs with their jobs and
 //! failed jobs' logs, in the order they were selected.
+use crate::forge::items::reference::ItemInput;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -68,14 +69,15 @@ async fn read_runs(
 ) -> Vec<ShownRun> {
     let mut runs = Vec::new();
     for item in items {
-        if item.kind != LinkKind::Ci {
+        if item.kind() != LinkKind::Ci {
             continue;
         }
-        let read = read_run(daemon, Some(context), &item.url).await;
+        let run = ItemInput::Url(item.url.clone());
+        let read = read_run(daemon, Some(context), &run).await;
         let read = read
             .map(RunRead::Read)
             .unwrap_or_else(|error| RunRead::Failed {
-                url: item.url.clone(),
+                url: item.url.to_string(),
                 errors: vec![format!("{error:#}")],
             });
         runs.push(ShownRun {
@@ -97,7 +99,7 @@ fn in_selection_order(
     let (mut views, mut runs) = (views.into_iter(), runs.into_iter());
     items
         .iter()
-        .filter_map(|item| match item.kind.item() {
+        .filter_map(|item| match item.kind().item() {
             Some(_) => views.next().map(|view| {
                 Shown::Item(ShownItem {
                     view: Box::new(view),
@@ -114,7 +116,7 @@ fn in_selection_order(
 pub async fn read_run(
     daemon: &impl Daemon,
     context: Option<&ItemContext>,
-    run: &str,
+    run: &ItemInput,
 ) -> Result<RunView> {
     let mut view = run_with_jobs(daemon, context, run).await?;
     read_failed_job_logs(daemon, context, run, &mut view).await;
@@ -125,9 +127,9 @@ pub async fn read_run(
 async fn run_with_jobs(
     daemon: &impl Daemon,
     context: Option<&ItemContext>,
-    run: &str,
+    run: &ItemInput,
 ) -> Result<RunView> {
-    let (context, input) = (context.cloned(), run.to_owned());
+    let (context, input) = (context.cloned(), run.clone());
     let run = connection::request(
         daemon,
         CiMethod::ViewCiRun {
@@ -156,7 +158,7 @@ async fn run_with_jobs(
 async fn read_failed_job_logs(
     daemon: &impl Daemon,
     context: Option<&ItemContext>,
-    run: &str,
+    run: &ItemInput,
     view: &mut RunView,
 ) {
     let failed = view
@@ -180,12 +182,12 @@ async fn read_failed_job_logs(
 pub async fn job_log(
     daemon: &impl Daemon,
     context: Option<&ItemContext>,
-    run: &str,
+    run: &ItemInput,
     job: JobRef,
 ) -> Result<CheckLog> {
     let method = CiMethod::CiRunJobLog {
         context: context.cloned(),
-        run: run.into(),
+        run: run.clone(),
         job,
     };
     connection::joined(daemon, method, "job log").await

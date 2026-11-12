@@ -10,6 +10,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{agents::ChatRepository, context::Context, ui},
     config::{Effective, templates},
+    forge::items::reference::ItemInput,
     model::{Repository, SpaceKind, Workspace},
     protocol::ConfigTarget,
     repository,
@@ -19,7 +20,7 @@ use crate::{
 /// where `Some(None)` asks for one.
 pub(in crate::cli::commands) struct Subject {
     pub mode: ui::ModeChoice,
-    pub issue: Option<Option<String>>,
+    pub issue: Option<Option<ItemInput>>,
     /// The issue an imported chat is linked to, as [`Topic::linked_issue`].
     pub linked_issue: Option<templates::IssueFields>,
 }
@@ -38,7 +39,7 @@ pub(in crate::cli::commands) async fn start(
     let started = async {
         let mut options = options.for_caller(ctx)?;
         let repo = match &subject.issue {
-            Some(input) => issue::repository(ctx, input.as_deref(), repository).await?,
+            Some(input) => issue::repository(ctx, input.as_ref(), repository).await?,
             None => chosen(ctx, repository).await?,
         };
         check_parent(ctx, Some(&repo), None, options.parent.as_ref()).await?;
@@ -159,7 +160,7 @@ async fn on_issue(
     repo: &Repository,
     settings: &Effective,
     topic: Topic,
-    issue: Option<Option<String>>,
+    issue: Option<Option<ItemInput>>,
 ) -> Result<Topic> {
     let Some(input) = issue else {
         return Ok(topic);

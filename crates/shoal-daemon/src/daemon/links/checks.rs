@@ -9,7 +9,10 @@ use crate::{
         ForgeRepo,
         capability::Capability,
         ci::checks::{CheckLog, failed_log_summary, validate_check_name},
-        items::link::{LinkKind, Selection},
+        items::{
+            link::{LinkKind, Selection},
+            reference::ItemRef,
+        },
         updates::Update,
     },
     protocol::ItemContext,
@@ -32,9 +35,13 @@ impl Manager {
         for index in 0..updates.len() {
             let update = &updates[index];
             let Some(check) = &update.check else { continue };
+            // An update with a check is of the PR its URL names.
+            let Ok(pull) = ItemRef::parse_kind(LinkKind::Pr, &update.url) else {
+                continue;
+            };
             if !check.result.failed()
                 || !self
-                    .pull_forge(&update.url)
+                    .item_forge(&pull)
                     .await
                     .is_ok_and(|forge| forge.supports(Capability::ReadJobLogs))
             {
@@ -42,7 +49,7 @@ impl Manager {
             }
             let selection = Selection {
                 kind: Some(LinkKind::Pr),
-                input: Some(update.url.clone()),
+                input: Some(pull.into()),
             };
             let log = self.check_log(&context, &selection, &check.name).await;
             let Some(summary) = failed_log_summary(log) else {
@@ -75,8 +82,8 @@ impl Manager {
         let place = self.place(context).await?;
         let (forge, account) = self.place_forge_account(&place).await?;
         let space = self.context_space_if_any(context).await?;
-        let url = self.check_log_pr(space.as_ref(), &forge, selection).await?;
-        forge.failed_check_log(&account, &url, name).await
+        let pull = self.check_log_pr(space.as_ref(), &forge, selection).await?;
+        forge.failed_check_log(&account, &pull, name).await
     }
 
     /// The URL of the one PR `selection` names on `forge`, which in a
@@ -86,13 +93,13 @@ impl Manager {
         space: Option<&LinkSpace>,
         forge: &ForgeRepo,
         selection: &Selection,
-    ) -> Result<String> {
+    ) -> Result<ItemRef> {
         if !matches!(selection.kind, None | Some(LinkKind::Pr)) {
             bail!(ONE_PR);
         }
         let Some(space) = space else {
-            let input = (selection.input.as_deref()).context(super::actions::NOTHING_LINKED)?;
-            return Ok(forge.pull(input)?.1);
+            let input = (selection.input.as_ref()).context(super::actions::NOTHING_LINKED)?;
+            return ItemRef::in_repository(forge, LinkKind::Pr, input);
         };
         let selection = Selection {
             kind: Some(LinkKind::Pr),
@@ -101,7 +108,7 @@ impl Manager {
         // Of the linked PRs, only an assigned one is read without a number.
         let prs = (self.selection_items(space, &selection, super::wait::followed_items)).await?;
         match prs.as_slice() {
-            [(url, LinkKind::Pr)] => Ok(url.clone()),
+            [pull] if pull.kind() == LinkKind::Pr => Ok(pull.clone()),
             _ => bail!(ONE_PR),
         }
     }

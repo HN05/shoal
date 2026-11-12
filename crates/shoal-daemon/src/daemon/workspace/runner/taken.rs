@@ -3,6 +3,7 @@
 //! then records that job, and a job of another run than the claimed one
 //! waits until its workspace is at that run's commit; a workspace that
 //! cannot move fails the job instead of running it on the wrong commit.
+use crate::forge::items::reference::ItemRef;
 use anyhow::{Context, Result};
 use rusqlite::params;
 
@@ -59,7 +60,7 @@ impl Manager {
         runner: RunnerId,
         took: TookRun,
     ) -> Result<()> {
-        let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
+        let forge = self.item_forge(&job.job.run.url).await?;
         let account = self.user_account();
         let taken_run = self.taken_run(&forge, job, took.run).await?;
         let taken_job = WaitingJob {
@@ -121,7 +122,7 @@ impl Manager {
     /// The web URL of the run `job`'s runner took a job of: the one it
     /// reported, which a claim read before the daemon followed the report
     /// does not name yet, else the claim's.
-    pub(super) fn reported_run_url(&self, forge: &ForgeRepo, job: &ClaimedJob) -> String {
+    pub(super) fn reported_run_url(&self, forge: &ForgeRepo, job: &ClaimedJob) -> ItemRef {
         match reported_run(&self.job_directory(&job.id)) {
             Ok(Some(took)) if took.run != job.job.job.run => forge
                 .run_page(took.run)

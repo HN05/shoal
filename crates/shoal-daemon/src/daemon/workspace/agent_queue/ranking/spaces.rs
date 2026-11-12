@@ -88,7 +88,7 @@ fn space(db: &Connection, row: &Row) -> Result<Space> {
 fn has_open_pr(db: &Connection, id: &SpaceId) -> Result<bool> {
     let links = store::space_links(db, id)?;
     let opened = (links.opened.iter())
-        .filter(|item| item.kind == LinkKind::Pr)
+        .filter(|item| item.kind() == LinkKind::Pr)
         .map(|item| &item.url);
     for url in links.prs.iter().chain(opened) {
         // The background poll's observation is current; a watch's cursor

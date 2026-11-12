@@ -1,5 +1,5 @@
 use super::*;
-use crate::{ci::JobState, numbers::RunId};
+use crate::{ci::JobState, items::link::LinkKind, numbers::RunId};
 
 fn run(id: u64, state: JobState) -> Run {
     Run {
@@ -94,8 +94,8 @@ async fn blocking_runs_of_one_workflow_share_one_read_of_the_default_branch() ->
     let account = agent_on(&server, "agent");
     let mut newest = NewestRuns::default();
     for number in [10, 11] {
-        let url = format!("{}/actions/runs/{number}", forgejo.repository_url());
-        let found = forgejo.run_clearance(&account, &url, &mut newest).await?;
+        let run = ItemRef::numbered(&forgejo, LinkKind::Ci, number)?;
+        let found = forgejo.run_clearance(&account, &run, &mut newest).await?;
         let fixed = format!("{}/actions/runs/12", forgejo.repository_url());
         assert_eq!(
             found,

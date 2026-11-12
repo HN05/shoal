@@ -169,7 +169,7 @@ async fn a_blocked_chat_stops_after_its_turn_and_restores_once_unblocked() {
     let (root, manager) = manager().await;
     let (_repo, chat, mut process) = running_chat(root.path(), &manager).await;
     let selector = SpaceSelector::id(&chat.id);
-    let blocker = Blocker::Pr("https://github.com/team/app/pull/8".into());
+    let blocker = Blocker::Pr("https://github.com/team/app/pull/8".parse().unwrap());
     let add = ProgressChange::AddBlocker {
         blocker: blocker.clone(),
         step: None,
@@ -259,7 +259,7 @@ async fn done_cancels_a_blocked_chats_restore_and_removes_its_blockers() {
     let (_repo, chat, mut process) = running_chat(root.path(), &manager).await;
     let selector = SpaceSelector::id(&chat.id);
     let add = ProgressChange::AddBlocker {
-        blocker: Blocker::Pr("https://github.com/team/app/pull/8".into()),
+        blocker: Blocker::Pr("https://github.com/team/app/pull/8".parse().unwrap()),
         step: None,
         reason: "Needs the API".into(),
     };

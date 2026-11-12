@@ -5,7 +5,7 @@ fn item(kind: ItemKind) -> Item {
     Item {
         kind,
         number: 12,
-        url: "https://forge.example/team/repo/pulls/12".into(),
+        url: "https://forge.example/team/repo/pulls/12".parse().unwrap(),
         title: "Fix".into(),
         state: ItemState::Open,
         labels: Vec::new(),

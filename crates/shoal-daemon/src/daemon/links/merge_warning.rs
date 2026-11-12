@@ -3,7 +3,6 @@
 //! sides. It reads that record and checks nothing again, so merging stays as
 //! fast without one.
 use crate::client::space_ids::SpaceId;
-use crate::forge::numbers::PullNumber;
 use anyhow::{Context, Result, ensure};
 use shoal_refs::CommitId;
 
@@ -12,7 +11,12 @@ use crate::{
     daemon::workspace::{Manager, conflicts::recorded},
     forge::{
         ForgeRepo,
-        items::{action::Action, item::Item, link::ItemKind},
+        items::{
+            action::Action,
+            item::Item,
+            link::ItemKind,
+            reference::{ItemInput, ItemRef},
+        },
     },
     git::{self, default_branch::DefaultBranchLookup},
     model::{ChangedOnBothSides, ConfirmedWarning, MergeWarning},
@@ -26,9 +30,10 @@ impl Manager {
     pub async fn merge_warning(
         &self,
         context: &ItemContext,
-        input: Option<String>,
+        input: Option<ItemInput>,
     ) -> Result<Option<MergeWarning>> {
-        let (forge, number, url) = self.pull_to_merge(context, input).await?;
+        let (forge, url) = self.pull_to_merge(context, input).await?;
+        let number = url.pull()?;
         let recorded = self.recorded_for_pull(url.clone()).await?;
         if recorded.is_empty() {
             return Ok(None);
@@ -55,7 +60,7 @@ impl Manager {
     pub async fn confirmed_merge(
         &self,
         context: &ItemContext,
-        input: Option<String>,
+        input: Option<ItemInput>,
         action: Action,
         confirmed: &ConfirmedWarning,
     ) -> Result<Item> {
@@ -63,13 +68,15 @@ impl Manager {
             matches!(action, Action::Merge { .. } | Action::AutoMerge { .. }),
             "only a merge confirms a merge warning"
         );
-        let (_, _, url) = self.pull_to_merge(context, input).await?;
-        let current = self.merge_warning(context, Some(url.clone())).await?;
+        let (_, url) = self.pull_to_merge(context, input).await?;
+        let current = self
+            .merge_warning(context, Some(url.clone().into()))
+            .await?;
         ensure!(
             current == confirmed.warning,
             "the merge warning changed since you confirmed the merge; run shoal pr merge again"
         );
-        self.item_action(context, ItemKind::Pr, Some(url), action)
+        self.item_action(context, ItemKind::Pr, Some(url.into()), action)
             .await
     }
 
@@ -96,35 +103,34 @@ impl Manager {
         Ok(warning(branch, vec![recorded], &merged))
     }
 
-    /// The forge, number and URL of the PR `input` names in the repository
-    /// of `context`, or of the space's linked PR.
+    /// The forge and the PR `input` names in the repository of `context`, or
+    /// the space's linked PR.
     async fn pull_to_merge(
         &self,
         context: &ItemContext,
-        input: Option<String>,
-    ) -> Result<(ForgeRepo, PullNumber, String)> {
-        let (forge, input) = match context {
+        input: Option<ItemInput>,
+    ) -> Result<(ForgeRepo, ItemRef)> {
+        match context {
             ItemContext::Checkout(selector) => {
                 let checkout = self.repository(selector).await?;
                 let input = input.context(super::actions::NOTHING_LINKED)?;
-                (self.checkout_forge(&checkout).await?, input)
+                let forge = self.checkout_forge(&checkout).await?;
+                let pull = ItemRef::in_repository(&forge, ItemKind::Pr.into(), &input)?;
+                Ok((forge, pull))
             }
             _ => {
                 let space = self.context_space(context).await?;
-                let input = match input {
-                    Some(input) => input,
-                    None => self.linked_item(space.id(), ItemKind::Pr).await?,
-                };
-                (self.space_forge(&space).await?, input)
+                let forge = self.space_forge(&space).await?;
+                let pull =
+                    (self.named_or_linked(input, Some(space.id()), &forge, ItemKind::Pr)).await?;
+                Ok((forge, pull))
             }
-        };
-        let (number, url) = forge.pull(&input)?;
-        Ok((forge, number, url))
+        }
     }
 
-    /// The records of the workspaces that link the PR at `url` which list
+    /// The records of the workspaces that link the PR `url` which list
     /// files changed on both sides.
-    async fn recorded_for_pull(&self, url: String) -> Result<Vec<ChangedOnBothSides>> {
+    async fn recorded_for_pull(&self, url: ItemRef) -> Result<Vec<ChangedOnBothSides>> {
         self.store
             .run(move |db| {
                 let mut found = Vec::new();
@@ -139,10 +145,10 @@ impl Manager {
     }
 }
 
-/// Whether the workspace `id` links the PR at `url`.
-fn links_pull(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<bool> {
+/// Whether the workspace `id` links the PR `url`.
+fn links_pull(db: &rusqlite::Connection, id: &SpaceId, url: &ItemRef) -> Result<bool> {
     let links = super::wait::linked_items(db, id, Some(ItemKind::Pr))?;
-    Ok(links.iter().any(|(linked, _)| linked == url))
+    Ok(links.contains(url))
 }
 
 /// What a merge brings together: a head and the branch it merges into.

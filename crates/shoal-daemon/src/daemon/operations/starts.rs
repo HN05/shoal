@@ -60,8 +60,8 @@ pub(crate) struct Split {
 /// environment `env`.
 pub(crate) struct Preparing {
     /// An issue number or URL the workspace is assigned.
-    pub issue: Option<String>,
-    pub pr: Option<String>,
+    pub issue: Option<crate::forge::items::reference::ItemInput>,
+    pub pr: Option<crate::forge::items::reference::ItemInput>,
     pub agent: Option<Box<QueuedLaunch>>,
     /// The agent the caller starts itself once setup succeeds, which waits
     /// in the queue should setup fail.
@@ -92,7 +92,7 @@ impl Manager {
             check_queued_launch(agent, &settings)?;
         }
         let issue = match &preparing.issue {
-            Some(input) => Some(self.read_open_issue(&repo.path, input).await?),
+            Some(issue) => Some(self.read_open_issue(&repo.path, issue).await?),
             None => None,
         };
         name_after_issue(&mut opening.new.options, issue.as_ref());
@@ -134,8 +134,8 @@ impl Manager {
         preparing: &Preparing,
     ) -> Option<String> {
         let input = match &opening.start {
-            WorkspaceStart::PullHead { url, .. } => url.as_str(),
-            _ => preparing.pr.as_deref()?,
+            WorkspaceStart::PullHead { url, .. } => &url.clone().into(),
+            _ => preparing.pr.as_ref()?,
         };
         match self.read_pull_title(checkout, input).await {
             Ok(title) => Some(title),
@@ -161,7 +161,7 @@ impl Manager {
             check_queued_launch(agent, &settings)?;
         }
         let issue = match &preparing.issue {
-            Some(input) => Some(self.read_open_issue(&parent.path, input).await?),
+            Some(issue) => Some(self.read_open_issue(&parent.path, issue).await?),
             None => None,
         };
         name_after_issue(&mut split.options, issue.as_ref());
@@ -303,7 +303,7 @@ impl Manager {
     ) -> Result<StartedWorkspace> {
         if let Some(OpenIssue { url, title }) = issue
             && let Err(error) = self
-                .set_issue(&SpaceSelector::id(&workspace.id), &url, Some(title))
+                .set_issue(&SpaceSelector::id(&workspace.id), &url.into(), Some(title))
                 .await
         {
             if !reused {

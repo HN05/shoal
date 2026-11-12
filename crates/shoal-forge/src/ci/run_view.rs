@@ -121,27 +121,35 @@ fn numbered_job(jobs: &[RunJob], job: &JobRef) -> JobRef {
 }
 
 impl ForgeRepo {
-    /// The run `input`, its web URL or the number in it, names.
-    pub async fn view_run(&self, account: &Account, input: &str) -> Result<Run> {
+    /// The run `run`.
+    pub async fn view_run(
+        &self,
+        account: &Account,
+        run: &crate::items::reference::ItemRef,
+    ) -> Result<Run> {
         self.require(Capability::ReadRuns)?;
-        self.read_run(account, input).await
+        self.read_run(account, run).await
     }
 
-    /// The jobs of the run `input` names.
-    pub async fn run_jobs(&self, account: &Account, input: &str) -> Result<Vec<RunJob>> {
-        let run = self.view_run(account, input).await?;
+    /// The jobs of the run `run`.
+    pub async fn run_jobs(
+        &self,
+        account: &Account,
+        run: &crate::items::reference::ItemRef,
+    ) -> Result<Vec<RunJob>> {
+        let run = self.view_run(account, run).await?;
         self.jobs_of(account, &run).await
     }
 
-    /// The whole log of the job `job` of the run `input` names.
+    /// The whole log of the job `job` of the run `run`.
     pub async fn run_job_log(
         &self,
         account: &Account,
-        input: &str,
+        run: &crate::items::reference::ItemRef,
         job: &JobRef,
     ) -> Result<CheckLog> {
         self.require(Capability::ReadJobLogs)?;
-        let run = self.view_run(account, input).await?;
+        let run = self.view_run(account, run).await?;
         let jobs = self.jobs_of(account, &run).await?;
         let job = find_job(&run, &jobs, job)?;
         ensure!(
@@ -162,10 +170,14 @@ impl ForgeRepo {
         })
     }
 
-    /// The activity of the run `input` names: its state and, once it failed,
-    /// its failed jobs with the steps that failed where their logs say.
-    pub async fn run_activity(&self, account: &Account, input: &str) -> Result<Snapshot> {
-        let run = self.view_run(account, input).await?;
+    /// The activity of the run `run`: its state and, once it failed, its
+    /// failed jobs with the steps that failed where their logs say.
+    pub async fn run_activity(
+        &self,
+        account: &Account,
+        run: &crate::items::reference::ItemRef,
+    ) -> Result<Snapshot> {
+        let run = self.view_run(account, run).await?;
         // A run held for approval has yet to run, whatever state the forge
         // gives it, so its watch goes on.
         let state = match run.waiting {

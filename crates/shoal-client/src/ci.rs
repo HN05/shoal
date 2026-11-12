@@ -1,5 +1,6 @@
 //! CI on a space's forge: listing, starting, rerunning, cancelling and
 //! approving runs and checks, and reading check logs.
+use crate::forge::items::reference::ItemInput;
 use std::collections::BTreeMap;
 
 use anyhow::Result;
@@ -25,7 +26,7 @@ use crate::{
 pub async fn runs(
     daemon: &impl Daemon,
     context: ItemContext,
-    pr: Option<String>,
+    pr: Option<ItemInput>,
     filter: RunFilter,
 ) -> Result<Vec<Run>> {
     pages(
@@ -40,7 +41,11 @@ pub async fn runs(
 }
 
 /// The run `run` names.
-pub async fn run(daemon: &impl Daemon, context: Option<ItemContext>, run: String) -> Result<Run> {
+pub async fn run(
+    daemon: &impl Daemon,
+    context: Option<ItemContext>,
+    run: ItemInput,
+) -> Result<Run> {
     request(daemon, CiMethod::ViewCiRun { context, run }).await
 }
 
@@ -65,7 +70,7 @@ pub async fn start(
 pub async fn act_on_run(
     daemon: &impl Daemon,
     context: Option<ItemContext>,
-    run: String,
+    run: ItemInput,
     action: CiAction,
     failed: bool,
 ) -> Result<RunActed> {
@@ -83,7 +88,7 @@ pub async fn act_on_run(
 pub async fn act_on_checks(
     daemon: &impl Daemon,
     context: ItemContext,
-    item: Option<String>,
+    item: Option<ItemInput>,
     action: CiAction,
     checks: Vec<String>,
 ) -> Result<CiActed> {
@@ -101,8 +106,8 @@ pub async fn act_on_checks(
 pub async fn approve(
     daemon: &impl Daemon,
     context: ItemContext,
-    run: Option<String>,
-    pr: Option<String>,
+    run: Option<ItemInput>,
+    pr: Option<ItemInput>,
 ) -> Result<RunsApproved> {
     request(daemon, CiMethod::ApproveCiRuns { context, run, pr }).await
 }

@@ -3,6 +3,7 @@
 //! repository's runner, and the command of the forge's own runner that runs
 //! one job. Shoal decides which job runs when; the forge's runner runs its
 //! steps.
+use crate::items::{link::LinkKind, reference::ItemRef};
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -49,7 +50,7 @@ pub enum Trigger {
 /// The run a job belongs to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JobRun {
-    pub url: String,
+    pub url: ItemRef,
     /// Its workflow file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow: Option<String>,
@@ -162,8 +163,8 @@ impl ForgeRepo {
 
     /// The web URL of the run with API ID `id`, which a forge whose runner
     /// takes another run's job serves the run's page under.
-    pub fn run_page(&self, id: RunId) -> Result<String> {
-        Ok(self.run(&id.to_string())?.1)
+    pub fn run_page(&self, id: RunId) -> Result<ItemRef> {
+        ItemRef::numbered(self, LinkKind::Ci, id.get())
     }
 
     /// Whether `run` is for a PR whose head moved past its commit.
@@ -171,8 +172,8 @@ impl ForgeRepo {
         let Trigger::Pull { number } = run.trigger else {
             return Ok(false);
         };
-        let (_, url) = self.pull(&number.to_string())?;
-        Ok(self.pull_head(account, &url).await? != run.commit)
+        let pull = ItemRef::numbered(self, LinkKind::Pr, number.get())?;
+        Ok(self.pull_head(account, &pull).await? != run.commit)
     }
 
     /// Register a runner named `name` for this repository alone, or, on a

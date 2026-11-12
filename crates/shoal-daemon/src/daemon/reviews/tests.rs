@@ -1231,7 +1231,7 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
     held.admitted().await;
     let mut ended = manager.reviews.ended.subscribe();
     let target = ReviewTarget::Pr {
-        url: "https://forge.example/team/repo/pulls/8".into(),
+        url: "https://forge.example/team/repo/pulls/8".parse().unwrap(),
         head: "topic".into(),
         base: "main".into(),
         post: false,

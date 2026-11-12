@@ -34,7 +34,8 @@ use crate::{
         items::attach::{self, Attachment},
         items::create::{NewIssue, NewPull},
         items::item::{Item, Opened},
-        items::link::ItemKind,
+        items::link::{ItemKind, LinkKind},
+        items::reference::{ItemInput, ItemRef},
     },
     model::Workspace,
 };
@@ -467,10 +468,10 @@ impl Manager {
     async fn keep_posted(
         &self,
         request: &mut ApprovalRequest,
-        url: &str,
+        url: &ItemRef,
         follow_up: Edit,
     ) -> Result<()> {
-        request.url = Some(url.to_owned());
+        request.url = Some(url.clone());
         request.set_follow_up(Some(follow_up));
         self.save_proposal(request.clone())
             .await
@@ -490,7 +491,7 @@ impl Manager {
             .url
             .clone()
             .context("the proposal has no opened item")?;
-        let (number, _) = forge.item(kind.into(), &url)?;
+        let number = url.number().get();
         let follow_up = request.follow_up().cloned().unwrap_or_default();
         let item = forge
             .finish_item(account, kind, number, &follow_up)
@@ -516,7 +517,7 @@ impl Manager {
         let target = super::actions::Target {
             kind: ItemKind::Issue,
             number: item.number,
-            url: item.url.clone(),
+            url: item.url.to_string(),
         };
         while let Some(finding) = request.findings().first().cloned() {
             let unfinished = self
@@ -685,14 +686,14 @@ impl Manager {
         &self,
         request: &ApprovalRequest,
         space: Option<&LinkSpace>,
-        input: &str,
-    ) -> Result<(String, Option<String>)> {
+        input: &ItemInput,
+    ) -> Result<(ItemRef, Option<String>)> {
         let (forge, account) = self.proposal_forge_account(request, space).await?;
-        let (number, url) = forge.issue(input)?;
+        let url = ItemRef::in_repository(&forge, LinkKind::Issue, input)?;
         let target = super::actions::Target {
             kind: ItemKind::Issue,
-            number: number.get(),
-            url: url.clone(),
+            number: url.number().get(),
+            url: url.to_string(),
         };
         let comment = comment(finding(request)?);
         let unfinished = self
@@ -818,9 +819,9 @@ async fn ensure_pull_head(
 ) -> Result<()> {
     let url = request
         .url
-        .as_deref()
+        .as_ref()
         .context("the proposal has no opened PR")?;
-    let (number, _) = forge.pull(url)?;
+    let number = url.pull()?;
     let item = forge.read(account, ItemKind::Pr, number.get()).await?.item;
     let branch = workspace.require_branch("opening a PR")?;
     ensure!(

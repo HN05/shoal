@@ -15,6 +15,7 @@ use crate::{
             create::PullOptions,
             item::Opened,
             link::ItemKind,
+            reference::ItemInput,
             revert::{MergedPull, NewRevert, revert_options},
         },
     },
@@ -28,7 +29,7 @@ impl Manager {
     pub async fn revert_pull(
         &self,
         selector: &SpaceSelector,
-        input: Option<String>,
+        input: Option<ItemInput>,
         options: PullOptions,
         caller: Option<&Caller>,
     ) -> Result<OpenOutcome> {
@@ -70,12 +71,8 @@ impl Manager {
             );
         }
         let (forge, account) = (self.space_forge(&space).await?, self.agent_account());
-        let input = match input {
-            Some(input) => input,
-            None => self.linked_item(space.id(), ItemKind::Pr).await?,
-        };
-        let (number, _) = forge.pull(&input)?;
-        let current = forge.merged(&account, number).await?;
+        let pull = (self.named_or_linked(input, Some(space.id()), &forge, ItemKind::Pr)).await?;
+        let current = forge.merged(&account, pull.pull()?).await?;
         let options = revert_options(&current.item, options);
         let required = &settings.pr.required_labels;
         conventions::require(&forge, &account, ItemKind::Pr, required, &options.labels).await?;
@@ -110,17 +107,13 @@ impl Manager {
     pub async fn merged_pull(
         &self,
         selector: &SpaceSelector,
-        input: Option<String>,
+        input: Option<ItemInput>,
     ) -> Result<MergedPull> {
         let space = self.link_space(selector).await?;
         self.verify_space(&space).await?;
         let (forge, account) = (self.space_forge(&space).await?, self.agent_account());
-        let input = match input {
-            Some(input) => input,
-            None => self.linked_item(space.id(), ItemKind::Pr).await?,
-        };
-        let (number, _) = forge.pull(&input)?;
-        forge.merged_pull(&account, number).await
+        let pull = (self.named_or_linked(input, Some(space.id()), &forge, ItemKind::Pr)).await?;
+        forge.merged_pull(&account, pull.pull()?).await
     }
 }
 

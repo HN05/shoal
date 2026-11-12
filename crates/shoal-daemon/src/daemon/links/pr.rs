@@ -1,7 +1,6 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
-use crate::forge::numbers::PullNumber;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
@@ -16,7 +15,15 @@ use crate::{
         store,
         workspace::{Manager, PrGuard},
     },
-    forge::{ForgeRepo, account::Account, items::link::ItemKind, review::status::PrStatus},
+    forge::{
+        ForgeRepo,
+        account::Account,
+        items::{
+            link::{ItemKind, LinkKind},
+            reference::{ItemInput, ItemRef},
+        },
+        review::status::PrStatus,
+    },
     git,
     model::Workspace,
     repository,
@@ -81,10 +88,10 @@ impl Manager {
         let kind = match action {
             Action::Clear => None,
             Action::Unwatch { url } => {
-                (self.without_pr_watch(chat.origin_path(), &id, &url)).await?
+                (self.without_pr_watch(chat.origin_path(), &id, url)).await?
             }
             Action::Watch { url } => {
-                let (_, _, url) = self.pr_forge(chat.origin_path(), &url).await?;
+                let (_, url) = self.pr_forge(chat.origin_path(), &url).await?;
                 Some(self.adding_pr_watch(&id, url).await?)
             }
             Action::Acknowledge => bail!("a chat has no branch whose merge it acknowledges"),
@@ -138,9 +145,9 @@ impl Manager {
         let kind = match action {
             Action::Clear => None,
             Action::Unwatch { url } => {
-                (self.without_pr_watch(&workspace.path, &workspace.id, &url)).await?
+                (self.without_pr_watch(&workspace.path, &workspace.id, url)).await?
             }
-            Action::Watch { url } => Some(self.with_pr_watch(&workspace, &url, check).await?),
+            Action::Watch { url } => Some(self.with_pr_watch(&workspace, url, check).await?),
             Action::Acknowledge => Some(RegistrationKind::Acknowledgement {
                 head: current_head(&workspace).await?,
             }),
@@ -164,19 +171,21 @@ impl Manager {
     async fn with_pr_watch(
         &self,
         workspace: &Workspace,
-        input: &str,
+        input: ItemInput,
         check: WatchCheck,
     ) -> Result<RegistrationKind> {
-        let (forge, number, url) = self.pr_forge(&workspace.path, input).await?;
+        let (forge, url) = self.pr_forge(&workspace.path, &input).await?;
         // Detect missing tools or login and invalid PRs now.
         if check == WatchCheck::Lookup {
-            forge.merged_commits(&self.user_account(), number).await?;
+            forge
+                .merged_commits(&self.user_account(), url.pull()?)
+                .await?;
         }
         self.adding_pr_watch(&workspace.id, url).await
     }
 
     /// The PR watches of the space `id` with `url` among them.
-    async fn adding_pr_watch(&self, id: &SpaceId, url: String) -> Result<RegistrationKind> {
+    async fn adding_pr_watch(&self, id: &SpaceId, url: ItemRef) -> Result<RegistrationKind> {
         let (mut urls, mut merged_head) = match self.pr_registration(id).await? {
             Some(Registration {
                 kind: RegistrationKind::Watch { urls, merged_head },
@@ -197,9 +206,9 @@ impl Manager {
         &self,
         checkout: &std::path::Path,
         id: &SpaceId,
-        input: &str,
+        input: ItemInput,
     ) -> Result<Option<RegistrationKind>> {
-        let (_, _, url) = self.pr_forge(checkout, input).await?;
+        let (_, url) = self.pr_forge(checkout, &input).await?;
         let Some(Registration {
             kind:
                 RegistrationKind::Watch {
@@ -219,16 +228,16 @@ impl Manager {
         Ok((!urls.is_empty()).then_some(RegistrationKind::Watch { urls, merged_head }))
     }
 
-    /// The forge of the repository whose origin `checkout` has, with the
-    /// number and canonical URL of the PR `input` names there.
+    /// The forge of the repository whose origin `checkout` has, with the PR
+    /// `input` names there.
     pub(super) async fn pr_forge(
         &self,
         checkout: &std::path::Path,
-        input: &str,
-    ) -> Result<(ForgeRepo, PullNumber, String)> {
+        input: &ItemInput,
+    ) -> Result<(ForgeRepo, ItemRef)> {
         let forge = (self.guarded_forge(checkout, "PR lookup needs an origin remote")).await?;
-        let (number, url) = forge.pull(input)?;
-        Ok((forge, number, url))
+        let pull = ItemRef::in_repository(&forge, LinkKind::Pr, input)?;
+        Ok((forge, pull))
     }
 
     /// The forge of the repository whose origin `checkout` has, reading the
@@ -438,13 +447,14 @@ impl Manager {
     async fn all_prs_merged(
         &self,
         workspace: &Workspace,
-        urls: &[String],
+        urls: &[ItemRef],
         head: &str,
     ) -> Result<bool> {
         let mut contains_head = false;
         for url in urls {
-            let (forge, number, _) = self.pr_forge(&workspace.path, url).await?;
-            let Some(commits) = forge.merged_commits(&self.user_account(), number).await? else {
+            let (forge, pull) = self.pr_forge(&workspace.path, &url.clone().into()).await?;
+            let account = self.user_account();
+            let Some(commits) = forge.merged_commits(&account, pull.pull()?).await? else {
                 return Ok(false);
             };
             contains_head |= commits.iter().any(|commit| commit == head);
@@ -468,8 +478,8 @@ impl Manager {
 /// A workspace's PR registration replacing its previous one.
 struct RegistrationChange {
     registration: Option<Registration>,
-    added: Vec<String>,
-    removed: Vec<String>,
+    added: Vec<ItemRef>,
+    removed: Vec<ItemRef>,
 }
 
 impl RegistrationChange {
@@ -506,14 +516,14 @@ impl RegistrationChange {
                 EventKind::Linked,
                 crate::model::Relation::Assigned,
                 ItemKind::Pr,
-                url,
+                url.url(),
             )?;
         }
         Ok(())
     }
 }
 
-fn watched_urls(registration: Option<&Registration>) -> &[String] {
+fn watched_urls(registration: Option<&Registration>) -> &[ItemRef] {
     match registration {
         Some(Registration {
             kind: RegistrationKind::Watch { urls, .. },

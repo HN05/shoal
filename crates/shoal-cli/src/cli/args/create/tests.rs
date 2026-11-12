@@ -29,7 +29,7 @@ fn a_chats_start_parses_back_from_its_command_line() {
         in_workspace: Some(None),
         parent: Some(SpaceSelector::from("7")),
         here: true,
-        issue: Some(Some("12".into())),
+        issue: Some(Some("12".parse().unwrap())),
         agent: Some("codex".parse().unwrap()),
         name: Some("named".into()),
         model: ModelArgs {
@@ -39,7 +39,7 @@ fn a_chats_start_parses_back_from_its_command_line() {
         session: Some("s1".into()),
         fork_session: true,
         restore: Some(SpaceId::from("c1")),
-        linked_issue: Some("https://forge.example/team/repo/issues/7".into()),
+        linked_issue: Some("https://forge.example/team/repo/issues/7".parse().unwrap()),
         linked_issue_title: Some("Decide".into()),
         handoff: Some("/tmp/shoal-chat.1".into()),
         args: ["--search", "-x"].map(OsString::from).to_vec(),
@@ -61,7 +61,7 @@ fn a_chats_start_parses_back_from_its_command_line() {
 fn a_workspaces_start_parses_back_from_its_command_line() {
     assert_round_trips(StartArgs {
         mode: Some("worker".into()),
-        repository: Some("shoal".into()),
+        repository: Some("shoal".parse().unwrap()),
         repository_override: Some("team/shoal".into()),
         branch: Some("feature".into()),
         issue: Some(None),
@@ -78,7 +78,7 @@ fn a_workspaces_start_parses_back_from_its_command_line() {
         ..Default::default()
     });
     assert_round_trips(StartArgs {
-        repository: Some("shoal".into()),
+        repository: Some("shoal".parse().unwrap()),
         focus: true,
         copy: CopyArgs {
             copy: Some(None),
@@ -87,7 +87,7 @@ fn a_workspaces_start_parses_back_from_its_command_line() {
         ..Default::default()
     });
     assert_round_trips(StartArgs {
-        repository: Some("shoal".into()),
+        repository: Some("shoal".parse().unwrap()),
         branch: Some("origin/feature".into()),
         now: true,
         ..Default::default()

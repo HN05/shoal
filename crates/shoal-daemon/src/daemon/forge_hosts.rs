@@ -13,7 +13,7 @@ use crate::{
         ForgeRepo,
         backends::ForgeKind,
         hosts::{self, HostType, HostTypes},
-        items::link::LinkKind,
+        items::reference::ItemRef,
     },
 };
 
@@ -57,19 +57,9 @@ impl Manager {
         ForgeRepo::resolve(remote, &self.forge_hosts()).await
     }
 
-    /// The forge a PR URL's repository is on.
-    pub(crate) async fn pull_forge(&self, url: &str) -> Result<ForgeRepo> {
-        ForgeRepo::resolve_pull_url(url, &self.forge_hosts()).await
-    }
-
-    /// The forge a CI run URL's repository is on.
-    pub(crate) async fn run_url_forge(&self, url: &str) -> Result<ForgeRepo> {
-        ForgeRepo::resolve_run_url(url, &self.forge_hosts()).await
-    }
-
-    /// The forge the `kind` item URL's repository is on.
-    pub(crate) async fn item_url_forge(&self, kind: LinkKind, url: &str) -> Result<ForgeRepo> {
-        ForgeRepo::resolve_item_url(kind, url, &self.forge_hosts()).await
+    /// The forge the repository of `item` is on.
+    pub(crate) async fn item_forge(&self, item: &ItemRef) -> Result<ForgeRepo> {
+        item.forge(&self.forge_hosts()).await
     }
 
     /// The forge `host` serves and what decided it, asking it over

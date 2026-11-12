@@ -245,7 +245,7 @@ async fn scoped_callers_set_only_their_own_progress_read_below_and_unblock_below
     assert!(allowed(&mut read(&child)).await);
     assert!(!allowed(&mut read(&other)).await);
     // A coordinator removes what blocks a space below, and only removes.
-    let blocker = crate::model::Blocker::Issue("7".into());
+    let blocker = crate::model::Blocker::Issue("7".parse().unwrap());
     let unblock = |space: &Workspace| AgentMethod::SetProgress {
         space: SpaceSelector::id(&space.id),
         change: ProgressChange::RemoveBlocker {
@@ -394,8 +394,8 @@ async fn blockers_name_spaces_and_forge_items_and_are_journaled() {
     let run = "https://github.com/team/app/actions/runs/9";
     for blocker in [
         Blocker::Space(api.id.to_string()),
-        Blocker::Pr(pr.into()),
-        Blocker::CiRun(run.into()),
+        Blocker::Pr(pr.parse().unwrap()),
+        Blocker::CiRun(run.parse().unwrap()),
     ] {
         manager
             .set_progress(&selector, add(blocker, None))
@@ -404,7 +404,7 @@ async fn blockers_name_spaces_and_forge_items_and_are_journaled() {
     }
     // A step it does not have, and the space itself, are refused.
     let refused = [
-        add(Blocker::Pr(pr.into()), Some(1)),
+        add(Blocker::Pr(pr.parse().unwrap()), Some(1)),
         add(Blocker::Space(blocked.id.to_string()), None),
     ];
     for change in refused {
@@ -447,7 +447,7 @@ async fn completion_removes_the_spaces_blockers() {
     let [blocked] = workspaces(&manager, &temp, ["blocked"]).await;
     let selector = SpaceSelector::id(&blocked.id);
     let add = ProgressChange::AddBlocker {
-        blocker: Blocker::Pr("https://github.com/team/app/pull/8".into()),
+        blocker: Blocker::Pr("https://github.com/team/app/pull/8".parse().unwrap()),
         step: None,
         reason: "Needs it".into(),
     };
@@ -479,7 +479,13 @@ async fn becoming_blocked_notifies_once_until_the_space_clears() {
         .set_progress(&selector, ProgressChange::Steps(steps))
         .await
         .unwrap();
-    let pr = |number: u32| Blocker::Pr(format!("https://github.com/team/app/pull/{number}"));
+    let pr = |number: u32| {
+        Blocker::Pr(
+            format!("https://github.com/team/app/pull/{number}")
+                .parse()
+                .unwrap(),
+        )
+    };
     let add = |number, step| ProgressChange::AddBlocker {
         blocker: pr(number),
         step,

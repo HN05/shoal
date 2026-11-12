@@ -281,7 +281,7 @@ fn restored_rules_name_the_issue_the_space_links() {
         settings("[rules.worker]\ntext = 'On #{issue.number}, {issue.title}: {issue.url}'\n");
     let mut linked = workspace();
     let url = "https://forge.example/team/repo/issues/7";
-    linked.links.issue = Some(url.into());
+    linked.links.issue = Some(url.parse().unwrap());
     linked.links.issue_title = Some("Decide".into());
     let issue = IssueFields::linked(&linked.links);
     let place = Place::Workspace {

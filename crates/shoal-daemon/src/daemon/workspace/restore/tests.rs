@@ -119,7 +119,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO space_issue(space_id,url) VALUES (?1,'https://forge/issue/1')",
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,'https://forge/team/repo/issues/1')",
                 [id],
             )?;
             Ok(())
@@ -145,8 +145,8 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
     assert!(!removed.checkpoint.files_omitted);
     assert_eq!(removed.cause, EventCause::Manual);
     assert_eq!(
-        removed.links.issue.as_deref(),
-        Some("https://forge/issue/1")
+        removed.links.issue.as_ref().map(|url| url.url()),
+        Some("https://forge/team/repo/issues/1")
     );
     assert_eq!(removed.expires_at, removed.checkpoint.expires_at);
     let reference = git::checkpoint::reference(removed.checkpoint.commit.as_str());
@@ -302,13 +302,13 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
         .await
         .unwrap();
     assert_eq!(
-        workspace.links.issue.as_deref(),
+        workspace.links.issue.as_ref().map(|url| url.url()),
         Some("https://github.com/acme/repo/issues/1")
     );
     let recorded = |items: &[crate::model::LinkedItem]| {
         items
             .iter()
-            .map(|item| (item.url.clone(), item.title.clone()))
+            .map(|item| (item.url.to_string(), item.title.clone()))
             .collect::<Vec<_>>()
     };
     assert_eq!(
@@ -480,7 +480,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         .link_item(
             &SpaceSelector::id(&workspace.id),
             LinkKind::Pr,
-            "3",
+            &"3".parse().unwrap(),
             Relation::Related,
             None,
             None,
@@ -491,7 +491,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         .link_item(
             &SpaceSelector::id(&workspace.id),
             LinkKind::Pr,
-            "4",
+            &"4".parse().unwrap(),
             Relation::Related,
             None,
             None,
@@ -503,7 +503,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
             &SpaceSelector::id(&workspace.id),
             Relation::Related,
             Some(LinkKind::Pr),
-            Some("4"),
+            Some(&"4".parse().unwrap()),
         )
         .await
         .unwrap();
@@ -511,7 +511,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         .link_item(
             &SpaceSelector::id(&workspace.id),
             LinkKind::Issue,
-            "7",
+            &"7".parse().unwrap(),
             Relation::Assigned,
             Some("Report".into()),
             None,
@@ -538,7 +538,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
             .link_item(
                 &SpaceSelector::id(&workspace.id),
                 LinkKind::Pr,
-                "5",
+                &"5".parse().unwrap(),
                 Relation::Related,
                 None,
                 None,
@@ -566,11 +566,11 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         .links
         .related
         .iter()
-        .map(|item| item.url.as_str())
+        .map(|item| item.url.url())
         .collect();
     assert_eq!(urls, ["https://github.com/acme/repo/pull/3"]);
     assert_eq!(
-        saved.links.issue.as_deref(),
+        saved.links.issue.as_ref().map(|url| url.url()),
         Some("https://github.com/acme/repo/issues/7")
     );
 }

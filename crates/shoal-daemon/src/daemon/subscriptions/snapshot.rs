@@ -212,12 +212,12 @@ fn workspace_links(workspace: &Workspace, activity: &HashMap<String, Snapshot>) 
     .flat_map(|(relation, items)| {
         items
             .iter()
-            .map(move |item| (relation, item.kind, &item.url, item.title.clone()))
+            .map(move |item| (relation, item.kind(), &item.url, item.title.clone()))
     });
     assigned
         .chain(recorded)
         .map(|(relation, kind, url, title)| {
-            let observed = activity.get(url);
+            let observed = activity.get(url.url());
             Link {
                 id: format!("{}/{relation}/{url}", workspace.id),
                 workspace_id: workspace.id.clone(),

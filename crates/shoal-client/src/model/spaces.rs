@@ -38,7 +38,7 @@ pub enum SpaceTarget {
     /// An issue, PR or CI run number or URL.
     Item {
         kind: crate::forge::items::link::LinkKind,
-        input: String,
+        input: crate::forge::items::reference::ItemInput,
     },
     /// A resource pool or member with a lease.
     Resource { name: String },

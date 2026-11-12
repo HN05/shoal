@@ -58,9 +58,9 @@ async fn forge_blockers_clear_as_their_lookups_say_and_failures_keep_them() {
     let (temp, manager) = manager().await;
     let [blocked] = workspaces(&manager, &temp, ["blocked"]).await;
     for blocker in [
-        Blocker::Issue(ISSUE.into()),
-        Blocker::Pr(PR.into()),
-        Blocker::CiRun(RUN.into()),
+        Blocker::Issue(ISSUE.parse().unwrap()),
+        Blocker::Pr(PR.parse().unwrap()),
+        Blocker::CiRun(RUN.parse().unwrap()),
     ] {
         block(&manager, &blocked, blocker).await;
     }

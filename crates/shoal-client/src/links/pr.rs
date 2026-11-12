@@ -3,6 +3,8 @@
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
+use crate::forge::items::reference::{ItemInput, ItemRef};
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "RegistrationRecord", into = "RegistrationRecord")]
 pub struct Registration {
@@ -13,7 +15,7 @@ pub struct Registration {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RegistrationKind {
     Watch {
-        urls: Vec<String>,
+        urls: Vec<ItemRef>,
         merged_head: Option<String>,
     },
     /// Manual acknowledgement is tied to exactly this commit.
@@ -23,9 +25,9 @@ pub enum RegistrationKind {
 /// Preserve legacy single-watch records while extending watch sets and completion.
 #[derive(Serialize, Deserialize)]
 struct RegistrationRecord {
-    url: Option<String>,
+    url: Option<ItemRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    urls: Option<Vec<String>>,
+    urls: Option<Vec<ItemRef>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     merged_head: Option<String>,
     head: Option<String>,
@@ -44,7 +46,6 @@ impl TryFrom<RegistrationRecord> for Registration {
             (None, Some(urls), None, merged_head) => {
                 ensure!(
                     !urls.is_empty()
-                        && urls.iter().all(|url| !url.is_empty())
                         && urls.iter().collect::<std::collections::HashSet<_>>().len()
                             == urls.len(),
                     "invalid PR watches: expected nonempty, unique URLs"
@@ -93,8 +94,13 @@ impl From<Registration> for RegistrationRecord {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "ActionFields", into = "ActionFields")]
 pub enum Action {
-    Watch { url: String },
-    Unwatch { url: String },
+    /// Watch the PR a number or URL names.
+    Watch {
+        url: ItemInput,
+    },
+    Unwatch {
+        url: ItemInput,
+    },
     Acknowledge,
     Clear,
 }
@@ -102,10 +108,10 @@ pub enum Action {
 /// The existing SetPr fields remain flattened on the wire.
 #[derive(Serialize, Deserialize)]
 struct ActionFields {
-    url: Option<String>,
+    url: Option<ItemInput>,
     clear: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    unwatch: Option<String>,
+    unwatch: Option<ItemInput>,
 }
 
 impl TryFrom<ActionFields> for Action {

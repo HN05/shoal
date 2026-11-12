@@ -17,7 +17,6 @@ use crate::{
         ui,
     },
     config::{Config, repo::ConfigLayers},
-    forge::items::link::Link,
     git,
     model::Repository,
     start_plan::Creation,
@@ -55,23 +54,16 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
         ..Default::default()
     };
     ensure_agent_available(ctx, agent.as_ref())?;
-    let link = Link::parse(&target).ok();
-    let source = match &link {
-        Some(link) => link.repository.repository_url(),
-        None => target.clone(),
+    let source = match target.linked_repository() {
+        Some(linked) => linked.repository_url(),
+        None => target.to_string(),
     };
     let repo = register(ctx, source).await?;
-    let input = match link {
-        Some(_) => AddInput {
-            positional: Some(target),
-            repository: Some(repo.id.into()),
-            issue: None,
-        },
-        None => AddInput {
-            positional: None,
-            repository: Some(repo.id.into()),
-            issue: None,
-        },
+    let positional = target.linked_repository().is_some().then_some(target);
+    let input = AddInput {
+        positional,
+        repository: Some(repo.id.into()),
+        issue: None,
     };
     let creation = Creation {
         branch,

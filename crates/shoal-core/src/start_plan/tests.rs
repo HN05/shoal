@@ -51,7 +51,9 @@ fn a_queued_launch_keeps_its_model_arguments_fork_issue_and_place() {
         args: vec!["Take the child part".into()],
         fork: Some("parent-session".into()),
         issue: Some(LaunchIssue {
-            url: "https://forge.example/team/project/issues/7".into(),
+            url: "https://forge.example/team/project/issues/7"
+                .parse()
+                .unwrap(),
             title: "Split the API".into(),
         }),
         env: Some([("PLACE".to_owned(), "beside".to_owned())].into()),
@@ -68,7 +70,7 @@ fn a_queued_launch_keeps_its_model_arguments_fork_issue_and_place() {
     assert_eq!(plan.args, ["Take the child part"]);
     assert_eq!(plan.fork, Some("parent-session".into()));
     assert_eq!(
-        plan.issue_url(),
+        plan.issue().map(|issue| issue.url()),
         Some("https://forge.example/team/project/issues/7")
     );
 
@@ -81,11 +83,14 @@ fn a_queued_launch_keeps_its_model_arguments_fork_issue_and_place() {
 
     // One that waits for a failed setup links its start's PR once it starts.
     let pr = "https://forge.example/team/project/pulls/8";
-    let request =
-        super::queued_agent_request(&child, claude(), Some(pr.into())).expect("the launch queues");
+    let request = super::queued_agent_request(&child, claude(), Some(pr.parse().unwrap()))
+        .expect("the launch queues");
     let plan: super::AddPlan = serde_json::from_str(&request.plan).expect("the plan parses");
     assert!(plan.opens(&child));
-    assert_eq!(plan.creation.pr.as_deref(), Some(pr));
+    assert_eq!(
+        plan.creation.pr.map(|pr| pr.to_string()).as_deref(),
+        Some(pr)
+    );
 }
 
 #[test]

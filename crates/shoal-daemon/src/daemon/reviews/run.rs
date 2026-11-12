@@ -396,7 +396,7 @@ impl Manager {
     async fn pull_discussion(
         &self,
         workspace: &Workspace,
-        url: &str,
+        url: &crate::forge::items::reference::ItemRef,
     ) -> Option<crate::forge::review::view::Details> {
         let (forge, account) = match self.workspace_forge_account(workspace).await {
             Ok(found) => found,

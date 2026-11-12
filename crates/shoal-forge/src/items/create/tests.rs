@@ -33,7 +33,9 @@ async fn an_issue_whose_read_fails_after_posting_comes_back_as_posted() {
         Item {
             kind: ItemKind::Issue,
             number: 7,
-            url: format!("http://{}/team/repo/issues/7", server.host),
+            url: format!("http://{}/team/repo/issues/7", server.host)
+                .parse()
+                .unwrap(),
             title: "Flaky".into(),
             state: ItemState::Open,
             labels: vec!["bug".into()],

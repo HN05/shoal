@@ -3,6 +3,7 @@
 //! each job, which takes one job its labels match and ends with it. GitHub
 //! picks that job, so a job-started hook reports the run it belongs to and
 //! waits for the daemon when it is not the claimed one's.
+use crate::items::{link::LinkKind, reference::ItemRef};
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context, Result};
@@ -203,7 +204,10 @@ fn job_run(value: &Value) -> Result<JobRun> {
         _ => (Trigger::Other, None),
     };
     Ok(JobRun {
-        url: text(&value["html_url"]).context("Actions run has no URL")?,
+        url: ItemRef::parse_kind(
+            LinkKind::Ci,
+            &text(&value["html_url"]).context("Actions run has no URL")?,
+        )?,
         workflow: text(&value["path"])
             .map(|path| path.rsplit('/').next().unwrap_or_default().to_owned()),
         commit: text(&value["head_sha"]).context("Actions run has no commit")?,

@@ -41,7 +41,7 @@ pub(crate) trait Activity: Backend {
         repo: &ForgeRepo,
         account: &Account,
         number: PullNumber,
-        url: &str,
+        pull: &crate::items::reference::ItemRef,
     ) -> Result<PrStatus>;
 
     /// The item's content for a view, with its comments when `comments` is

@@ -6,8 +6,11 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{client, context::Context, ui},
     forge::{
-        ForgeRepo, IssueInput,
-        items::link::{ItemKind, LinkKind, Selection},
+        ForgeRepo,
+        items::{
+            link::{ItemKind, LinkKind, Selection},
+            reference::{ItemInput, ItemRef},
+        },
     },
     git,
     model::{PresentSpace, Repository},
@@ -72,16 +75,16 @@ async fn current_root() -> Result<Option<std::path::PathBuf>> {
     }
 }
 
-/// The registered repository whose origin the issue URL belongs to, which
-/// the user may register when none has it, if `offer`.
+/// The registered repository whose origin the issue `issue` belongs to,
+/// which the user may register when none has it, if `offer`.
 pub(super) async fn repository_for(
     ctx: &Context,
     repos: &mut Vec<Repository>,
-    url: &str,
+    issue: &ItemRef,
     offer: bool,
 ) -> Result<RepositoryId> {
     let (forge, retry) = (
-        ForgeRepo::from_issue_url(url)?,
+        issue.repository().clone(),
         "shoal start <repository> --issue <url>",
     );
     if !offer {
@@ -93,16 +96,13 @@ pub(super) async fn repository_for(
     registered_remote(ctx, repos, forge, retry).await
 }
 
-/// The only registered repository whose origin the issue or PR at `url`
-/// belongs to, or none when no registered repository has that origin.
+/// The only registered repository whose origin `item` belongs to, or none
+/// when no registered repository has that origin.
 pub(super) async fn registered_for_item<'a>(
     repos: &'a [Repository],
-    url: &str,
+    item: &ItemRef,
 ) -> Result<Option<&'a Repository>> {
-    let Ok(forge) = ForgeRepo::from_pull_url(url).or_else(|_| ForgeRepo::from_issue_url(url))
-    else {
-        return Ok(None);
-    };
+    let forge = item.repository().clone();
     match repository_with_remote(repos, forge, "--repo <ID>").await {
         Ok(repo) => Ok(Some(repo)),
         Err(error) if error.is::<UnregisteredRemote>() => Ok(None),
@@ -186,7 +186,7 @@ async fn repository_with_remote<'a>(
 pub(super) async fn item_repository(
     ctx: &Context,
     kind: ItemKind,
-    input: Option<&str>,
+    input: Option<&ItemInput>,
     repository: Option<String>,
     retry: &str,
 ) -> Result<Repository> {
@@ -203,10 +203,13 @@ pub(super) async fn item_repository(
                 None => selector,
             }
         }
-        None if let Some(input) =
-            input.filter(|input| IssueInput::parse(input) == IssueInput::Url) =>
-        {
-            let forge = ForgeRepo::from_item_url(kind.into(), input)?;
+        None if let Some(ItemInput::Url(item)) = input => {
+            ensure!(
+                item.kind() == kind.into(),
+                "{item} is not {}",
+                LinkKind::from(kind).noun()
+            );
+            let forge = item.repository().clone();
             registered_remote(ctx, &mut repos, forge, retry)
                 .await?
                 .into()
@@ -223,7 +226,7 @@ pub(super) async fn item_repository(
 pub(in crate::cli) struct Issue {
     pub(in crate::cli) number: u64,
     pub(in crate::cli) title: String,
-    pub(super) url: String,
+    pub(super) url: ItemRef,
     pub(super) details: String,
     pub(in crate::cli) labels: Vec<String>,
 }
@@ -271,7 +274,7 @@ impl Issue {
             issue: Some(crate::config::templates::IssueFields {
                 number: self.number,
                 title: self.title.clone(),
-                url: self.url.clone(),
+                url: self.url.to_string(),
             }),
         }
     }
@@ -333,9 +336,9 @@ pub(in crate::cli) async fn read_context(ctx: &Context, repo: &Repository) -> Re
 pub(in crate::cli) async fn load(
     ctx: &Context,
     context: ItemContext,
-    input: &str,
+    input: impl Into<ItemInput>,
 ) -> Result<Issue> {
-    let issue = client::issue_details(&ctx.paths, context, input.to_owned()).await?;
+    let issue = client::issue_details(&ctx.paths, context, input.into()).await?;
     Ok(Issue::from(issue))
 }
 
@@ -343,9 +346,9 @@ pub(in crate::cli) async fn load(
 pub(in crate::cli) async fn load_linked(
     ctx: &Context,
     context: ItemContext,
-    input: &str,
+    input: impl Into<ItemInput>,
 ) -> Result<Issue> {
-    let issue = client::linked_issue_details(&ctx.paths, context, input.to_owned()).await?;
+    let issue = client::linked_issue_details(&ctx.paths, context, input.into()).await?;
     Ok(Issue::from(issue))
 }
 
@@ -361,11 +364,15 @@ impl From<crate::forge::items::issue::IssueDetails> for Issue {
     }
 }
 
-/// The URL of the issue `input` names: a number in the repository, or a URL.
-pub(in crate::cli) async fn url(ctx: &Context, repo: &Repository, input: &str) -> Result<String> {
+/// The issue `input` names: a number in the repository, or a URL.
+pub(in crate::cli) async fn issue(
+    ctx: &Context,
+    repo: &Repository,
+    input: &ItemInput,
+) -> Result<ItemRef> {
     let selection = Selection {
         kind: Some(LinkKind::Issue),
-        input: Some(input.to_owned()),
+        input: Some(input.clone()),
     };
     let context = read_context(ctx, repo).await?;
     let selected = client::select_items(&ctx.paths, context, selection, true).await?;

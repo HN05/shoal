@@ -49,9 +49,9 @@ impl Activity for GitLab {
         repo: &ForgeRepo,
         account: &Account,
         number: PullNumber,
-        url: &str,
+        pull: &crate::items::reference::ItemRef,
     ) -> Result<PrStatus> {
-        rest::pr_status(self, repo, account, number, url).await
+        rest::pr_status(self, repo, account, number, pull).await
     }
 
     async fn view_details(

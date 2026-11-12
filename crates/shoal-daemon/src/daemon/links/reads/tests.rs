@@ -54,7 +54,7 @@ async fn a_checkout_without_an_origin_selects_an_item_by_its_url() {
     let url = "https://github.com/team/other/issues/7";
     let selection = Selection {
         kind: Some(LinkKind::Issue),
-        input: Some(url.into()),
+        input: Some(url.parse().unwrap()),
     };
 
     let selected = manager
@@ -62,5 +62,5 @@ async fn a_checkout_without_an_origin_selects_an_item_by_its_url() {
         .await
         .unwrap();
     assert_eq!(selected.items.len(), 1);
-    assert_eq!(selected.items[0].url, url);
+    assert_eq!(selected.items[0].url, url.parse().unwrap());
 }

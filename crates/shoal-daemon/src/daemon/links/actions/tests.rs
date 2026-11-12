@@ -59,7 +59,9 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
     let item = |number: u64| Item {
         kind: ItemKind::Issue,
         number,
-        url: format!("https://forge.example/team/repo/issues/{number}"),
+        url: format!("https://forge.example/team/repo/issues/{number}")
+            .parse()
+            .unwrap(),
         title: "Follow-up".into(),
         state: ItemState::Open,
         labels: Vec::new(),

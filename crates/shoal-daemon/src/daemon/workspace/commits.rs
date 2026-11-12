@@ -68,7 +68,7 @@ impl Manager {
     pub async fn open_pull_head(
         &self,
         repository: crate::repository::Selector,
-        url: String,
+        url: crate::forge::items::reference::ItemRef,
         head: PullHead,
         parent: Option<SpaceId>,
         options: CreationOptions,
@@ -177,15 +177,16 @@ impl Manager {
     async fn pull_workspace(
         &self,
         repository_id: &RepositoryId,
-        url: &str,
+        url: &crate::forge::items::reference::ItemRef,
         number: PullNumber,
     ) -> Result<Option<Workspace>> {
         let made_for = Some(MadeFor::Pr(number));
         Ok(self.list_workspaces().await?.into_iter().find(|workspace| {
             workspace.repository_id == *repository_id
-                && workspace.at.as_ref().is_some_and(|at| {
-                    at.made_for == made_for || workspace.links.prs.iter().any(|pr| pr == url)
-                })
+                && workspace
+                    .at
+                    .as_ref()
+                    .is_some_and(|at| at.made_for == made_for || workspace.links.prs.contains(url))
         }))
     }
 

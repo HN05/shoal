@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn failed_views_omit_details_and_round_trip() {
     let view = ItemView {
-        url: "https://forge.example/o/r/issues/1".into(),
+        url: "https://forge.example/o/r/issues/1".parse().unwrap(),
         kind: ItemKind::Issue,
         details: None,
         check_logs: Vec::new(),

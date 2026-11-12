@@ -6,7 +6,7 @@ use crate::{
         scope::{self, Caller},
         test_support::{commit, configure, git, install_test_script, manager, repository},
     },
-    forge::{ForgeRepo, test_support::Server},
+    forge::{ForgeRepo, items::reference::ItemRef, test_support::Server},
     protocol::AssignmentMethod,
 };
 use std::sync::{
@@ -14,10 +14,15 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+/// The URL `forge` gives its `kind` item numbered `number`.
+fn url_of(forge: &ForgeRepo, kind: LinkKind, number: u64) -> String {
+    ItemRef::numbered(forge, kind, number).unwrap().to_string()
+}
+
 fn select(kind: Option<LinkKind>, input: Option<&str>) -> Selection {
     Selection {
         kind,
-        input: input.map(str::to_owned),
+        input: input.map(|input| input.parse().unwrap()),
     }
 }
 
@@ -89,8 +94,8 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         &["remote", "add", "origin", &github.remote()],
     );
     let forge = ForgeRepo::parse(&github.remote()).unwrap();
-    let (_, pr) = forge.pull("12").unwrap();
-    let (_, issue) = forge.issue("7").unwrap();
+    let pr = url_of(&forge, LinkKind::Pr, 12);
+    let issue = url_of(&forge, LinkKind::Issue, 7);
     let head = current_head(&workspace).await.unwrap();
     github.push(&head);
 
@@ -104,7 +109,10 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         .await
         .unwrap()
         .marks;
-    assert_eq!((marks[0].kind, marks[0].url.as_deref()), (None, None));
+    assert_eq!(
+        (marks[0].kind, marks[0].url.as_ref().map(|url| url.url())),
+        (None, None)
+    );
     assert!(
         manager
             .mark_ready(
@@ -121,9 +129,9 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     assert_eq!(
         listed[0].links,
         crate::model::SpaceLinks {
-            issue: Some(issue.clone()),
+            issue: Some(issue.parse().unwrap()),
             issue_title: None,
-            prs: vec![pr.clone()],
+            prs: vec![pr.parse().unwrap()],
             ..Default::default()
         }
     );
@@ -141,7 +149,9 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         .await
         .unwrap()
         .marks;
-    let mut marked: Vec<_> = marks.iter().map(|mark| mark.url.clone().unwrap()).collect();
+    let mut marked: Vec<_> = (marks.iter())
+        .map(|mark| mark.url.as_ref().unwrap().to_string())
+        .collect();
     marked.sort();
     let mut expected = vec![issue.clone(), pr.clone()];
     expected.sort();
@@ -205,7 +215,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         .workspace
         .review
         .iter()
-        .find(|mark| mark.url.as_ref() == Some(&pr))
+        .find(|mark| mark.url.as_ref() == Some(&pr.parse().unwrap()))
         .unwrap();
     assert_eq!(
         (pr_mark.head.as_str(), pr_mark.stale),
@@ -318,13 +328,13 @@ async fn ready_skips_linked_prs_that_are_closed_or_at_another_head() {
         &["remote", "add", "origin", &github.remote()],
     );
     let forge = ForgeRepo::parse(&github.remote()).unwrap();
-    let (_, pr) = forge.pull("12").unwrap();
-    let (_, issue) = forge.issue("7").unwrap();
+    let pr = url_of(&forge, LinkKind::Pr, 12);
+    let issue = url_of(&forge, LinkKind::Issue, 7);
     link(&manager, workspace.id.as_str(), &pr, Some(&issue)).await;
     github.push(&current_head(&workspace).await.unwrap());
     let marked_urls = |ready: &ReadyMarks| -> Vec<String> {
         (ready.marks.iter())
-            .filter_map(|mark| mark.url.clone())
+            .filter_map(|mark| mark.url.as_ref().map(ToString::to_string))
             .collect()
     };
 
@@ -341,7 +351,7 @@ async fn ready_skips_linked_prs_that_are_closed_or_at_another_head() {
         .unwrap();
     assert_eq!(marked_urls(&ready), std::slice::from_ref(&issue));
     assert_eq!(ready.skipped.len(), 1);
-    assert_eq!(ready.skipped[0].url, pr);
+    assert_eq!(ready.skipped[0].url.url(), pr);
 
     // A merged PR stays unmarked whatever its head, and selecting it fails.
     github.push(&current_head(&workspace).await.unwrap());
@@ -355,8 +365,8 @@ async fn ready_skips_linked_prs_that_are_closed_or_at_another_head() {
         .await
         .unwrap();
     assert_eq!(marked_urls(&ready), [issue]);
-    let skipped: Vec<_> = ready.skipped.iter().map(|skip| &skip.url).collect();
-    assert_eq!(skipped, [&pr]);
+    let skipped: Vec<_> = ready.skipped.iter().map(|skip| skip.url.url()).collect();
+    assert_eq!(skipped, [pr.as_str()]);
     for selection in [
         select(Some(LinkKind::Pr), Some("12")),
         select(Some(LinkKind::Pr), None),
@@ -367,7 +377,11 @@ async fn ready_skips_linked_prs_that_are_closed_or_at_another_head() {
         assert!(marked.is_err());
     }
     let stored = manager.workspace_by_id(&workspace.id).await.unwrap().review;
-    assert!(stored.iter().all(|mark| mark.url.as_ref() != Some(&pr)));
+    assert!(
+        stored
+            .iter()
+            .all(|mark| mark.url.as_ref() != Some(&pr.parse().unwrap()))
+    );
 }
 
 #[tokio::test]
@@ -642,10 +656,11 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         &workspace.path,
         &["remote", "add", "origin", &github.remote()],
     );
-    let (_, pr) = ForgeRepo::parse(&github.remote())
-        .unwrap()
-        .pull("12")
-        .unwrap();
+    let pr = url_of(
+        &ForgeRepo::parse(&github.remote()).unwrap(),
+        LinkKind::Pr,
+        12,
+    );
     link(&manager, workspace.id.as_str(), &pr, None).await;
     github.push(&current_head(&workspace).await.unwrap());
     let draft = || github.draft();

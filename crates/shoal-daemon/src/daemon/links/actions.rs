@@ -24,6 +24,7 @@ use crate::{
             create::{NewPull, PullOptions},
             item::{Item, ItemState, Opened},
             link::ItemKind,
+            reference::{ItemInput, ItemRef},
         },
         updates::Edited,
     },
@@ -43,7 +44,7 @@ impl Manager {
         &self,
         context: &ItemContext,
         kind: ItemKind,
-        input: Option<String>,
+        input: Option<ItemInput>,
         action: Action,
     ) -> Result<Item> {
         action.validate(kind)?;
@@ -65,16 +66,13 @@ impl Manager {
         &self,
         space: LinkSpace,
         kind: ItemKind,
-        input: Option<String>,
+        input: Option<ItemInput>,
         action: Action,
     ) -> Result<Item> {
         self.verify_space(&space).await?;
         let forge = self.space_forge(&space).await?;
-        let input = match input {
-            Some(input) => input,
-            None => self.linked_item(space.id(), kind).await?,
-        };
-        let (number, url) = forge.item(kind.into(), &input)?;
+        let item = (self.named_or_linked(input, Some(space.id()), &forge, kind)).await?;
+        let (number, url) = (item.number().get(), item.to_string());
         let account = if users_decision(&action) {
             self.user_account()
         } else {
@@ -92,13 +90,29 @@ impl Manager {
     }
 
     /// The one assigned item of `kind` of the space `id`.
-    pub(super) async fn linked_item(&self, id: &SpaceId, kind: ItemKind) -> Result<String> {
+    /// The `kind` item `named` names in the repository of `forge`, else the
+    /// one item of `kind` assigned to the space `space`.
+    pub(super) async fn named_or_linked(
+        &self,
+        named: Option<ItemInput>,
+        space: Option<&SpaceId>,
+        forge: &ForgeRepo,
+        kind: ItemKind,
+    ) -> Result<ItemRef> {
+        match (named, space) {
+            (Some(named), _) => ItemRef::in_repository(forge, kind.into(), &named),
+            (None, Some(id)) => self.linked_item(id, kind).await,
+            (None, None) => bail!(NOTHING_LINKED),
+        }
+    }
+
+    pub(super) async fn linked_item(&self, id: &SpaceId, kind: ItemKind) -> Result<ItemRef> {
         let id = id.to_owned();
         let assigned = self
             .store
             .run(move |db| super::wait::linked_items(db, &id, Some(kind)))
             .await?;
-        only_assigned(kind, assigned.into_iter().map(|(url, _)| url).collect())
+        only_assigned(kind, assigned)
     }
 
     /// Apply `action` from the repository's registered checkout, which no
@@ -107,12 +121,13 @@ impl Manager {
         &self,
         id: &RepositoryId,
         kind: ItemKind,
-        input: &str,
+        input: &ItemInput,
         action: Action,
     ) -> Result<Item> {
         let checkout = self.repository(id).await?;
         let forge = self.checkout_forge(&checkout).await?;
-        let (number, url) = forge.item(kind.into(), input)?;
+        let url = ItemRef::in_repository(&forge, kind.into(), input)?;
+        let number = url.number().get();
         let account = if users_decision(&action) {
             self.user_account()
         } else {
@@ -143,7 +158,7 @@ impl Manager {
     pub(crate) async fn set_draft(
         &self,
         space: &LinkSpace,
-        urls: &[String],
+        urls: &[ItemRef],
         draft: bool,
     ) -> Result<()> {
         if urls.is_empty() {
@@ -156,7 +171,7 @@ impl Manager {
             ..Edit::default()
         });
         for url in urls {
-            let (number, url) = forge.pull(url)?;
+            let (number, url) = (url.pull()?, url.to_string());
             let item = forge.read(&account, ItemKind::Pr, number.get()).await?.item;
             let pending = item.state == ItemState::Open
                 && item.pr.as_ref().is_some_and(|pr| pr.draft != draft);
@@ -180,12 +195,12 @@ impl Manager {
     pub(crate) async fn write_progress_section(
         &self,
         space: &LinkSpace,
-        url: &str,
+        pull: &ItemRef,
         section: Option<&str>,
     ) -> Result<()> {
         let forge = self.space_forge(space).await?;
         let account = self.agent_account();
-        let (number, url) = forge.pull(url)?;
+        let (number, url) = (pull.pull()?, pull.to_string());
         let current = forge.read(&account, ItemKind::Pr, number.get()).await?;
         if current.item.state != ItemState::Open {
             return Ok(());
@@ -507,9 +522,10 @@ impl Manager {
     /// that its head is the workspace branch.
     pub(super) async fn link_open_pull(&self, workspace: &Workspace, item: &Item) -> Result<()> {
         ensure_branch_head(workspace, item)?;
+        let url = item.url.clone();
         self.set_pr_gated(
             &SpaceSelector::id(&workspace.id),
-            watch(item),
+            super::pr::Action::Watch { url: url.into() },
             super::pr::WatchCheck::Known,
         )
         .await
@@ -560,21 +576,23 @@ impl Manager {
         let (id, url, title) = (space.to_owned(), item.url.clone(), item.title.clone());
         let recorded = self
             .store
-            .write(move |tx| record_opened(tx, &id, kind, &url, &title))
+            .write(move |tx| record_opened(tx, &id, kind, url.url(), &title))
             .await
             .with_context(|| format!("{} was opened, but recording it failed", item.url))?;
         if !recorded || !link {
             return Ok((false, (!recorded).then(|| removal_warning(&item.url))));
         }
+        let url = item.url.clone();
         let linked = match kind {
             ItemKind::Issue => {
                 let title = Some(item.title.clone());
-                self.set_issue_gated(&SpaceSelector::id(space), &item.url, title)
+                self.set_issue_gated(&SpaceSelector::id(space), &url.into(), title)
                     .await
             }
             ItemKind::Pr => {
                 let check = super::pr::WatchCheck::Known;
-                self.set_pr_gated(&SpaceSelector::id(space), watch(item), check)
+                let watch = super::pr::Action::Watch { url: url.into() };
+                self.set_pr_gated(&SpaceSelector::id(space), watch, check)
                     .await
             }
         };
@@ -595,12 +613,6 @@ impl Manager {
         self.store
             .run(move |db| super::accepts_links(db, &id))
             .await
-    }
-}
-
-fn watch(item: &Item) -> super::pr::Action {
-    super::pr::Action::Watch {
-        url: item.url.clone(),
     }
 }
 
@@ -626,8 +638,8 @@ fn record_opened(
 /// The item a mark names as the forge reports it; none for a workspace mark
 /// or a failed read.
 async fn marked_item(forge: &ForgeRepo, account: &Account, mark: &ReviewMark) -> Option<Item> {
-    let (kind, url) = (mark.kind?, mark.url.as_deref()?);
-    let (number, _) = forge.item(kind.into(), url).ok()?;
+    let (kind, url) = (mark.kind?, mark.url.as_ref()?);
+    let number = url.number().get();
     Some(forge.read(account, kind, number).await.ok()?.item)
 }
 
@@ -640,7 +652,7 @@ pub(super) fn required_labels(settings: &Effective, kind: ItemKind) -> &[String]
 }
 
 /// The warning for an item created after removal started.
-fn removal_warning(url: &str) -> String {
+fn removal_warning(url: &ItemRef) -> String {
     format!("{url} was opened, but removal started first, so the workspace does not link it")
 }
 
@@ -656,7 +668,7 @@ async fn new_pull(
     default_draft: bool,
 ) -> Result<NewPull> {
     let issue = match &workspace.links.issue {
-        Some(url) => Some(forge.issue(url)?.0),
+        Some(issue) => Some(issue.issue()?),
         None => None,
     };
     let title = match (options.title, &workspace.links.issue_title, issue) {
@@ -732,7 +744,7 @@ pub(in crate::daemon::links) const NOTHING_LINKED: &str =
     "outside a workspace or chat, nothing is linked; pass a number or URL";
 
 /// The one assigned item of `kind` among `assigned`.
-fn only_assigned(kind: ItemKind, assigned: Vec<String>) -> Result<String> {
+fn only_assigned(kind: ItemKind, assigned: Vec<ItemRef>) -> Result<ItemRef> {
     match (kind, assigned.as_slice()) {
         (_, [url]) => Ok(url.clone()),
         (ItemKind::Issue, _) => bail!("no issue is linked; pass a number or URL"),

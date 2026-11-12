@@ -17,7 +17,10 @@ use crate::{
     config::Effective,
     forge::{
         IssueInput, PullRequest,
-        items::link::{ItemKind, Link, LinkTarget},
+        items::{
+            link::{ItemKind, LinkKind},
+            reference::{ItemInput, ItemRef},
+        },
     },
     git,
     model::{Chat, Repository, Workspace},
@@ -47,7 +50,7 @@ pub(super) enum Target {
         post: Option<bool>,
     },
     Pull {
-        input: String,
+        input: ItemInput,
         repository: Option<String>,
         /// `--post` or `--no-post`; otherwise `[review] post` decides.
         post: Option<bool>,
@@ -59,7 +62,7 @@ impl Target {
     /// apply only to PRs.
     pub fn new(
         workspace: Option<String>,
-        pr: Option<String>,
+        pr: Option<ItemInput>,
         repository: Option<String>,
         post: Option<bool>,
     ) -> Result<Self> {
@@ -67,14 +70,14 @@ impl Target {
         let url = url.filter(|input| IssueInput::parse(input) == IssueInput::Url);
         let input = match (pr, url) {
             (Some(input), _) => input,
-            (None, Some(input)) => match Link::parse(&input)?.target {
-                LinkTarget::Pr => input,
-                LinkTarget::Issue => {
+            (None, Some(input)) => match input.parse::<ItemRef>() {
+                Ok(pull) if pull.kind() == LinkKind::Pr => pull.into(),
+                Ok(issue) if issue.kind() == LinkKind::Issue => {
                     bail!(
                         "shoal review run takes a workspace or a PR; settle an issue's plan with shoal start --mode plan --issue {input}"
                     )
                 }
-                LinkTarget::Run | LinkTarget::Branch(_) => bail!("expected a PR URL"),
+                _ => bail!("expected a PR URL"),
             },
             (None, None) => {
                 ensure!(
@@ -159,7 +162,7 @@ pub(super) async fn start(
 }
 
 /// The chat's one linked PR, with the chat's repository.
-async fn chat_pull(ctx: &Context, chat: &Chat) -> Result<(Repository, String)> {
+async fn chat_pull(ctx: &Context, chat: &Chat) -> Result<(Repository, ItemInput)> {
     let url = match chat.links.prs.as_slice() {
         [url] => url.clone(),
         [] => bail!("{} links no PR; pass --pr or a PR URL", chat.name),
@@ -170,7 +173,7 @@ async fn chat_pull(ctx: &Context, chat: &Chat) -> Result<(Repository, String)> {
         .into_iter())
     .find(|repo| Some(&repo.id) == chat.repository_id.as_ref())
     .with_context(|| format!("{}'s repository is not registered", chat.name))?;
-    Ok((repo, url))
+    Ok((repo, url.into()))
 }
 
 /// Refuse an agent reviewer that could not review before a PR's workspace
@@ -225,7 +228,7 @@ impl Reviewer {
 
 /// The PR `input` names in the repository of `context`, before a
 /// workspace is opened or updated for it.
-async fn read_pull(ctx: &Context, context: ItemContext, input: String) -> Result<PullRequest> {
+async fn read_pull(ctx: &Context, context: ItemContext, input: ItemInput) -> Result<PullRequest> {
     let read = client::pull_request(&ctx.paths, context, input);
     ctx.progress("Reading PR", read).await
 }
@@ -278,7 +281,7 @@ async fn pull_request(
             let creation = crate::start_plan::Creation {
                 existing: Some(git::remote_ref("origin", pull.head.as_str())),
                 base: Some(tracking),
-                pr: Some(pull.url.clone()),
+                pr: Some(pull.url.clone().into()),
                 options: CreationOptions {
                     name: Some(SpaceName::derive(&pull.title, "workspace")),
                     ..Default::default()
@@ -348,7 +351,7 @@ async fn fork_pull_workspace(
             skip_setup: true,
             ..Default::default()
         },
-        pr: Some(pull.url.clone()),
+        pr: Some(pull.url.clone().into()),
         ..NewWorkspace::new((&repo.id).into(), start)
     };
     let env = crate::env::without_secrets();

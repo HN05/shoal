@@ -9,7 +9,7 @@ fn decisions_take_only_the_details_that_apply() {
     };
     let duplicate = ProposalDecision {
         reason: Some("Known".into()),
-        duplicate_of: Some(Duplicate::Issue("12".into())),
+        duplicate_of: Some(Duplicate::Issue("12".parse().unwrap())),
         ..ProposalDecision::default()
     };
     assert!(edit.validate(&Target::PrOpen, true).is_ok());

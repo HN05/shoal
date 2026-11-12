@@ -14,7 +14,10 @@ use crate::{
         workspace::Manager,
     },
     forge::{
-        items::link::{ItemKind, LinkKind, Selection},
+        items::{
+            link::{ItemKind, LinkKind, Selection},
+            reference::ItemRef,
+        },
         updates::Snapshot,
     },
     repository,
@@ -23,13 +26,13 @@ use crate::{
 pub(super) const NO_LINKED_ITEMS: &str =
     "no linked items of the selected kind; register one with shoal link";
 impl Manager {
-    /// The canonical URL of an explicitly selected item, linked or not, of
-    /// the repository whose origin `checkout` has, or of a CI run of any.
+    /// The explicitly selected item, linked or not, of the repository whose
+    /// origin `checkout` has, or of a CI run of any.
     pub(crate) async fn explicit_item(
         &self,
         checkout: &std::path::Path,
         selection: &Selection,
-    ) -> Result<Option<(String, LinkKind)>> {
+    ) -> Result<Option<ItemRef>> {
         let Some(input) = &selection.input else {
             return Ok(None);
         };
@@ -43,8 +46,8 @@ impl Manager {
             LinkKind::Ci => self.named_run_forge(input).await?,
             LinkKind::Issue | LinkKind::Pr => None,
         };
-        let (_, url) = named.unwrap_or(forge).item(kind, input)?;
-        Ok(Some((url, kind)))
+        let item = ItemRef::in_repository(&named.unwrap_or(forge), kind, input)?;
+        Ok(Some(item))
     }
 
     /// The explicitly selected item, or the space's linked items of the
@@ -53,7 +56,7 @@ impl Manager {
         &self,
         space: &LinkSpace,
         selection: &Selection,
-    ) -> Result<Vec<(String, LinkKind)>> {
+    ) -> Result<Vec<ItemRef>> {
         let items = self.selection_items(space, selection, shown_items).await?;
         ensure!(
             !items.is_empty() || selection.kind.is_none(),
@@ -69,7 +72,7 @@ impl Manager {
         &self,
         space: &LinkSpace,
         selection: &Selection,
-    ) -> Result<Vec<(String, LinkKind)>> {
+    ) -> Result<Vec<ItemRef>> {
         let items = self
             .selection_items(space, selection, followed_items)
             .await?;
@@ -93,7 +96,7 @@ impl Manager {
         space: &LinkSpace,
         selection: &Selection,
         linked: LinkedItems,
-    ) -> Result<Vec<(String, LinkKind)>> {
+    ) -> Result<Vec<ItemRef>> {
         if let Some(item) = self.explicit_item(space.origin_path(), selection).await? {
             return Ok(vec![item]);
         }
@@ -124,8 +127,7 @@ pub(super) fn links_kind(
 
 /// The workspace's items of a kind, or of every kind, that one use of its
 /// links covers.
-type LinkedItems =
-    fn(&rusqlite::Connection, &SpaceId, Option<LinkKind>) -> Result<Vec<(String, LinkKind)>>;
+type LinkedItems = fn(&rusqlite::Connection, &SpaceId, Option<LinkKind>) -> Result<Vec<ItemRef>>;
 
 /// The items a watch of `kind`, or of every kind, follows: the assigned
 /// issue and PRs, and the linked runs whose finish it has yet to deliver.
@@ -133,17 +135,14 @@ pub(crate) fn followed_items(
     db: &rusqlite::Connection,
     id: &SpaceId,
     kind: Option<LinkKind>,
-) -> Result<Vec<(String, LinkKind)>> {
+) -> Result<Vec<ItemRef>> {
     with_runs(db, id, kind, unfinished_runs)
 }
 
 /// The items the background poll reads for integrations: the assigned issue
 /// and PRs, and the linked runs its own baseline has not seen finish, apart
 /// from what watches delivered.
-pub(super) fn polled_items(
-    db: &rusqlite::Connection,
-    id: &SpaceId,
-) -> Result<Vec<(String, LinkKind)>> {
+pub(super) fn polled_items(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     with_runs(db, id, None, unpolled_runs)
 }
 
@@ -153,11 +152,11 @@ fn shown_items(
     db: &rusqlite::Connection,
     id: &SpaceId,
     kind: Option<LinkKind>,
-) -> Result<Vec<(String, LinkKind)>> {
+) -> Result<Vec<ItemRef>> {
     let links = crate::daemon::store::space_links(db, id)?;
     Ok((links.items().into_iter())
-        .filter(|item| kind.is_none_or(|kind| item.kind == kind))
-        .map(|item| (item.url, item.kind))
+        .filter(|item| kind.is_none_or(|kind| item.kind() == kind))
+        .map(|item| item.url)
         .collect())
 }
 
@@ -167,33 +166,29 @@ fn with_runs(
     db: &rusqlite::Connection,
     id: &SpaceId,
     kind: Option<LinkKind>,
-    runs: fn(&rusqlite::Connection, &SpaceId) -> Result<Vec<String>>,
-) -> Result<Vec<(String, LinkKind)>> {
-    let assigned = match kind {
+    runs: fn(&rusqlite::Connection, &SpaceId) -> Result<Vec<ItemRef>>,
+) -> Result<Vec<ItemRef>> {
+    let mut items = match kind {
         None => linked_items(db, id, None)?,
         Some(kind) => match kind.item() {
             Some(kind) => linked_items(db, id, Some(kind))?,
             None => Vec::new(),
         },
     };
-    let mut items = assigned
-        .into_iter()
-        .map(|(url, kind)| (url, kind.into()))
-        .collect::<Vec<_>>();
     if matches!(kind, None | Some(LinkKind::Ci)) {
-        items.extend(runs(db, id)?.into_iter().map(|url| (url, LinkKind::Ci)));
+        items.extend(runs(db, id)?);
     }
     Ok(items)
 }
 
 /// Every run the workspace links, oldest first, once.
-fn linked_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<String>> {
+fn linked_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let urls = db
         .prepare(
             "SELECT url FROM space_items WHERE space_id=?1 AND kind=?2
              ORDER BY created_at, rowid",
         )?
-        .query_map(params![id, LinkKind::Ci], |row| row.get::<_, String>(0))?
+        .query_map(params![id, LinkKind::Ci], |row| row.get::<_, ItemRef>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut runs = Vec::new();
     for url in urls {
@@ -206,11 +201,11 @@ fn linked_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<String>> {
 
 /// The workspace's linked runs, except those whose finish the workspace's
 /// cursor holds as delivered, which ends their watch.
-fn unfinished_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<String>> {
+fn unfinished_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let mut runs = linked_runs(db, id)?;
     let mut delivered = Vec::new();
     for url in &runs {
-        let record = cursor_record(db, id, url)?;
+        let record = cursor_record(db, id, url.url())?;
         if record.is_some_and(|record| record.pending.is_empty() && record.snapshot.run_finished())
         {
             delivered.push(url.clone());
@@ -223,12 +218,12 @@ fn unfinished_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<String
 /// The workspace's linked runs the background poll has yet to see finish,
 /// or to queue the finish of on the workspace's cursor; the two are
 /// recorded apart, so a run is polled until both have it.
-fn unpolled_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<String>> {
+fn unpolled_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let mut runs = linked_runs(db, id)?;
     let mut finished = Vec::new();
     for url in &runs {
-        let observed = observed_item(db, id, url)?;
-        let queued = cursor_record(db, id, url)?;
+        let observed = observed_item(db, id, url.url())?;
+        let queued = cursor_record(db, id, url.url())?;
         if observed.is_some_and(|snapshot| snapshot.run_finished())
             && queued.is_some_and(|record| record.snapshot.run_finished())
         {
@@ -244,7 +239,7 @@ pub(crate) fn linked_items(
     db: &rusqlite::Connection,
     id: &SpaceId,
     kind: Option<ItemKind>,
-) -> Result<Vec<(String, ItemKind)>> {
+) -> Result<Vec<ItemRef>> {
     let mut items = Vec::new();
     if kind != Some(ItemKind::Issue) {
         let registration: Option<String> = db
@@ -261,18 +256,18 @@ pub(crate) fn linked_items(
             .map(|text| serde_json::from_str(&text))
             .transpose()?
         {
-            items.extend(urls.into_iter().map(|url| (url, ItemKind::Pr)));
+            items.extend(urls);
         }
     }
     if kind != Some(ItemKind::Pr) {
-        let url: Option<String> = db
+        let url: Option<ItemRef> = db
             .query_row(
                 "SELECT url FROM space_issue WHERE space_id=?1",
                 [id],
                 |row| row.get(0),
             )
             .optional()?;
-        items.extend(url.into_iter().map(|url| (url, ItemKind::Issue)));
+        items.extend(url);
     }
     Ok(items)
 }
@@ -284,10 +279,10 @@ pub(crate) fn watches_open_pr(db: &rusqlite::Connection, id: &SpaceId) -> Result
 }
 
 /// The PRs the workspace watches that no poll has seen merged or closed.
-pub(crate) fn open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<String>> {
+pub(crate) fn open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let mut open = Vec::new();
-    for (url, _) in linked_items(db, id, Some(ItemKind::Pr))? {
-        if observed_item(db, id, &url)?.is_none_or(|snapshot| !snapshot.concluded()) {
+    for url in linked_items(db, id, Some(ItemKind::Pr))? {
+        if observed_item(db, id, url.url())?.is_none_or(|snapshot| !snapshot.concluded()) {
             open.push(url);
         }
     }

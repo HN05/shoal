@@ -396,7 +396,7 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
     let open = |commit: String| {
         manager.open_pull_head(
             (&repo.id).into(),
-            url.clone(),
+            url.clone().parse().unwrap(),
             crate::protocol::PullHead {
                 number: PullNumber::new(9),
                 reference: "refs/pull/9/head".into(),
@@ -568,7 +568,7 @@ async fn reopening_a_prs_workspace_records_the_prs_base() {
     let open = |base: Option<&str>| {
         manager.open_pull_head(
             (&repo.id).into(),
-            "https://forge.example/team/repo/pulls/5".into(),
+            "https://forge.example/team/repo/pulls/5".parse().unwrap(),
             crate::protocol::PullHead {
                 number: PullNumber::new(5),
                 reference: "refs/pull/5/head".into(),
@@ -625,7 +625,7 @@ async fn a_restored_prs_workspace_drops_a_base_that_is_gone() {
     let opened = manager
         .open_pull_head(
             (&repo.id).into(),
-            "https://forge.example/team/repo/pulls/6".into(),
+            "https://forge.example/team/repo/pulls/6".parse().unwrap(),
             crate::protocol::PullHead {
                 number: PullNumber::new(6),
                 reference: "refs/pull/6/head".into(),
@@ -713,7 +713,7 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
                 commit: head.into(),
                 base: None,
             };
-            let url = "https://forge.example/team/repo/pulls/4".into();
+            let url = "https://forge.example/team/repo/pulls/4".parse().unwrap();
             (manager.open_pull_head(
                 (&repo.id).into(),
                 url,
@@ -849,7 +849,7 @@ async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
     manager
         .open_pull_head(
             (&other.id).into(),
-            "https://forge.example/team/other/pulls/3".into(),
+            "https://forge.example/team/other/pulls/3".parse().unwrap(),
             crate::protocol::PullHead {
                 number: PullNumber::new(3),
                 reference: "refs/pull/3/head".into(),

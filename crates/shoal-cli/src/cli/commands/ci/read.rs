@@ -10,9 +10,12 @@ use crate::{
         context::Context,
     },
     client::views,
-    forge::ci::{
-        run_action::{Run, validate_run_reference},
-        run_view::{JobRef, RunFilter, RunView, validate_filter},
+    forge::{
+        ci::{
+            run_action::Run,
+            run_view::{JobRef, RunFilter, RunView, validate_filter},
+        },
+        items::reference::ItemInput,
     },
     model::Relation,
     protocol::ItemContext,
@@ -27,9 +30,9 @@ pub(in crate::cli::commands) async fn view(
     job: Option<JobRef>,
     web: bool,
 ) -> Result<i32> {
-    let run = items.item.context("view ci needs a run's number or URL")?;
-    validate_run_reference(&run)?;
-    let context = super::input_context(ctx, items.space, repo, Some(&run)).await?;
+    let run = (items.selection()?.input).context("view ci needs a run's number or URL")?;
+    let url = matches!(run, ItemInput::Url(_));
+    let context = super::input_context(ctx, items.space, repo, url).await?;
     if web {
         return open(ctx, context, run).await;
     }
@@ -47,7 +50,7 @@ pub(in crate::cli::commands) async fn view(
 }
 
 /// Open the run in the browser, by its URL the forge reports.
-async fn open(ctx: &Context, context: Option<ItemContext>, run: String) -> Result<i32> {
+async fn open(ctx: &Context, context: Option<ItemContext>, run: ItemInput) -> Result<i32> {
     items_view::may_open_browser(ctx)?;
     let run = crate::client::ci::run(&ctx.paths, context, run).await?;
     items_view::open_urls(ctx, vec![run.url])
@@ -58,11 +61,11 @@ pub(super) async fn list(
     ctx: &Context,
     space: Option<SpaceSelector>,
     repo: Option<String>,
-    pr: Option<String>,
+    pr: Option<ItemInput>,
     filter: RunFilter,
 ) -> Result<i32> {
     validate_filter(&filter)?;
-    let context = select_space_item_context(ctx, space, repo, pr.as_deref()).await?;
+    let context = select_space_item_context(ctx, space, repo, pr.as_ref()).await?;
     let runs = crate::client::ci::runs(&ctx.paths, context, pr, filter).await?;
     ctx.show(&runs, render_runs)?;
     Ok(0)

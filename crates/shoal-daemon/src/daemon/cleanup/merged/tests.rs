@@ -44,7 +44,7 @@ impl Fixture {
             .store
             .run(move |db| {
                 db.execute(
-                    "INSERT INTO space_issue(space_id,url) VALUES (?1,'issue')",
+                    "INSERT INTO space_issue(space_id,url) VALUES (?1,'http://127.0.0.1:1/team/repo/issues/1')",
                     [id],
                 )?;
                 Ok(())

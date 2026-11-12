@@ -16,6 +16,7 @@ use crate::{
     forge::items::{
         link::{ItemKind, LinkKind, Selection},
         list::Search,
+        reference::ItemInput,
     },
     model::{ReadyMarks, Relation, ReviewMark},
     protocol::ItemContext,
@@ -24,7 +25,7 @@ use crate::{
 /// The space and the items selected in it, with the kind of a bare number
 /// resolved.
 pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(SpaceSelector, Selection)> {
-    let selection = Selection::parse(items.kind_or_url, items.item)?;
+    let selection = items.selection()?;
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
     let context = super::items::space_context(ctx, space.clone()).await?;
     let selection = resolve_kind(ctx, context, selection).await?;
@@ -40,8 +41,8 @@ pub(super) async fn in_context(
     items: ItemArgs,
     repo: Option<String>,
 ) -> Result<(ItemContext, Selection)> {
-    let selection = Selection::parse(items.kind_or_url, items.item)?;
-    let input = selection.input.as_deref();
+    let selection = items.selection()?;
+    let input = selection.input.as_ref();
     let context = super::items::select_space_item_context(ctx, items.space, repo, input).await?;
     Ok((context, selection))
 }
@@ -71,11 +72,10 @@ async fn resolve_kind(
     context: ItemContext,
     selection: Selection,
 ) -> Result<Selection> {
-    let (None, Some(input)) = (selection.kind, &selection.input) else {
+    let (None, Some(ItemInput::Number(number))) = (selection.kind, &selection.input) else {
         return Ok(selection);
     };
-    let number = input.parse::<u64>()?;
-    let kind = client::number_kind(&ctx.paths, context, number).await?;
+    let kind = client::number_kind(&ctx.paths, context, *number).await?;
     Ok(Selection {
         kind: Some(kind),
         ..selection
@@ -84,7 +84,7 @@ async fn resolve_kind(
 
 pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
     let (items, relation) = items.split()?;
-    let selected = Selection::parse(items.kind_or_url, items.item)?;
+    let selected = items.selection()?;
     ensure!(
         selected.input.is_some() || ctx.interactive(),
         "link needs an issue or PR number, or an issue, PR or CI run URL"
@@ -99,12 +99,8 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
         } => (kind, input),
         Selection { kind, .. } => pick_open_item(ctx, context.clone(), kind).await?,
     };
-    let item = crate::model::LinkedItem {
-        kind,
-        url: input,
-        title: None,
-    };
-    let linked = crate::client::items::link(&ctx.paths, &space, relation, &item).await?;
+    let linked =
+        crate::client::items::link(&ctx.paths, &space, relation, kind, input, None).await?;
     if let Some(error) = linked.title_error {
         eprintln!("Issue title unavailable: {error}");
     }
@@ -142,7 +138,7 @@ async fn pick_open_item(
     ctx: &Context,
     context: ItemContext,
     kind: Option<LinkKind>,
-) -> Result<(LinkKind, String)> {
+) -> Result<(LinkKind, ItemInput)> {
     let kind = match kind {
         Some(LinkKind::Ci) => bail!("link ci needs a run's number or URL"),
         kind => kind.and_then(LinkKind::item),
@@ -160,7 +156,7 @@ async fn pick_open_item(
         ItemKind::Issue => ui::pick_item(ctx, "Issue> ", "issues", items)?,
         ItemKind::Pr => ui::pick_item(ctx, "Pull request> ", "pull requests", items)?,
     };
-    Ok((kind.into(), number))
+    Ok((kind.into(), ItemInput::Number(number)))
 }
 
 pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {

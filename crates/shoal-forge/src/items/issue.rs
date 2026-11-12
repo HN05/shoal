@@ -3,40 +3,44 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ForgeRepo, account::Account, backends::Items, items::item::ItemState, numbers::IssueNumber,
+    ForgeRepo,
+    account::Account,
+    backends::Items,
+    items::{item::ItemState, link::LinkKind, reference::ItemRef},
+    numbers::IssueNumber,
 };
 
 /// An issue's title, description and labels, with the URL of its number.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IssueDetails {
     pub number: IssueNumber,
-    pub url: String,
+    pub url: ItemRef,
     pub title: String,
     pub details: String,
     pub labels: Vec<String>,
 }
 
 impl ForgeRepo {
-    /// The issue `input` names, a number or URL in this repository: an open
-    /// one, which work starts on, or with `closed` one in any state, such as
-    /// the issue a workspace already has.
+    /// The issue `issue`, of this repository: an open one, which work
+    /// starts on, or with `closed` one in any state, such as the issue a
+    /// workspace already has.
     pub async fn read_issue(
         &self,
         account: &Account,
-        input: &str,
+        issue: &ItemRef,
         closed: bool,
     ) -> Result<IssueDetails> {
-        let (number, url) = self.issue(input)?;
-        let issue = match closed {
+        let number = issue.issue()?;
+        let details = match closed {
             true => self.issue_details(account, number).await?,
             false => self.open_issue_details(account, number).await?,
         };
         Ok(IssueDetails {
             number,
-            url,
-            title: issue.item.title,
-            details: issue.body,
-            labels: issue.item.labels,
+            url: issue.clone(),
+            title: details.item.title,
+            details: details.body,
+            labels: details.item.labels,
         })
     }
 
@@ -52,19 +56,22 @@ impl ForgeRepo {
         Ok(issue)
     }
 
-    /// Whether the issue at `url`, in this repository, is closed.
-    pub async fn issue_url_closed(&self, account: &Account, url: &str) -> Result<bool> {
-        let (number, _) = self.issue(url)?;
-        Ok(self.issue_state(account, number).await? == ItemState::Closed)
+    /// Whether the issue `issue`, of this repository, is closed.
+    pub async fn issue_closed(&self, account: &Account, issue: &ItemRef) -> Result<bool> {
+        let state = self.issue_state(account, issue.issue()?).await?;
+        Ok(state == ItemState::Closed)
     }
 
-    /// The URLs of the open issues the forge records as blocking issue `number`.
+    /// The open issues the forge records as blocking issue `number`.
     pub async fn open_issue_blockers(
         &self,
         account: &Account,
         number: IssueNumber,
-    ) -> Result<Vec<String>> {
-        self.kind.open_issue_blockers(self, account, number).await
+    ) -> Result<Vec<ItemRef>> {
+        let urls = self.kind.open_issue_blockers(self, account, number).await?;
+        (urls.iter())
+            .map(|url| ItemRef::parse_kind(LinkKind::Issue, url))
+            .collect()
     }
 
     /// An issue's state; a PR's number is refused.

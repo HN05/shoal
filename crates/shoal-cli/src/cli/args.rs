@@ -15,6 +15,7 @@ pub mod repository;
 pub mod resources;
 pub mod service;
 pub mod sessions;
+pub mod target;
 pub mod transfer;
 pub mod workspace;
 
@@ -22,8 +23,8 @@ use std::path::PathBuf;
 
 use clap::Args;
 
+use crate::agent::Agent;
 use crate::client::space_names::SpaceSelector;
-use crate::{agent::Agent, forge::IssueInput};
 
 #[derive(Debug, Default, Args)]
 pub struct ConfirmationArgs {
@@ -83,12 +84,51 @@ impl From<ModelArgs> for crate::agent::ModelChoice {
     }
 }
 
-/// An issue or PR argument, where `#42` means `42`.
-pub(in crate::cli) fn item_reference(input: &str) -> Result<String, std::convert::Infallible> {
-    Ok(match input.strip_prefix('#') {
-        Some(number) if IssueInput::parse(number) == IssueInput::Number => number.to_owned(),
-        _ => input.to_owned(),
-    })
+/// An issue, PR or CI run argument: its number, `#42` included, or URL.
+pub(in crate::cli) fn item_input(
+    input: &str,
+) -> Result<crate::forge::items::reference::ItemInput, String> {
+    input.parse().map_err(|error| format!("{error:#}"))
+}
+
+/// An issue argument: its number or URL.
+pub(in crate::cli) fn issue_input(
+    input: &str,
+) -> Result<crate::forge::items::reference::ItemInput, String> {
+    kind_input(input, crate::forge::items::link::LinkKind::Issue)
+}
+
+/// A PR argument: its number or URL.
+pub(in crate::cli) fn pull_input(
+    input: &str,
+) -> Result<crate::forge::items::reference::ItemInput, String> {
+    kind_input(input, crate::forge::items::link::LinkKind::Pr)
+}
+
+/// A CI run argument: the number in its web URL, or the URL.
+pub(in crate::cli) fn run_input(
+    input: &str,
+) -> Result<crate::forge::items::reference::ItemInput, String> {
+    kind_input(input, crate::forge::items::link::LinkKind::Ci)
+}
+
+/// A `kind` item argument: its number or a URL of that kind.
+fn kind_input(
+    input: &str,
+    kind: crate::forge::items::link::LinkKind,
+) -> Result<crate::forge::items::reference::ItemInput, String> {
+    use crate::forge::{IssueInput, items::reference::ItemRef};
+    match IssueInput::parse(input) {
+        IssueInput::Url => ItemRef::parse_kind(kind, input)
+            .map(Into::into)
+            .map_err(|error| format!("{error:#}")),
+        IssueInput::Number => item_input(input),
+        IssueInput::Invalid if input.starts_with('#') => item_input(input),
+        IssueInput::Invalid => Err(format!(
+            "expected the {} number or URL, not {input}",
+            kind.noun()
+        )),
+    }
 }
 
 /// The change one `--permission KEY=VALUE` makes, `KEY=mode` dropping the

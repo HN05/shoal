@@ -20,7 +20,7 @@ use crate::{
 /// filled, and records its error instead of failing the request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ItemView {
-    pub url: String,
+    pub url: crate::items::reference::ItemRef,
     pub kind: ItemKind,
     #[serde(flatten)]
     pub details: Option<Details>,
@@ -138,12 +138,12 @@ impl ForgeRepo {
         &self,
         account: &Account,
         kind: ItemKind,
-        url: &str,
+        item: &crate::items::reference::ItemRef,
         comments: bool,
     ) -> ItemView {
         let mut errors = Vec::new();
         let details = match self
-            .details(account, kind, url, comments, &mut errors)
+            .details(account, kind, item, comments, &mut errors)
             .await
         {
             Ok(details) => Some(details),
@@ -153,7 +153,7 @@ impl ForgeRepo {
             }
         };
         ItemView {
-            url: url.into(),
+            url: item.clone(),
             kind,
             details,
             check_logs: Vec::new(),
@@ -165,21 +165,18 @@ impl ForgeRepo {
         &self,
         account: &Account,
         kind: ItemKind,
-        url: &str,
+        item: &crate::items::reference::ItemRef,
         comments: bool,
         errors: &mut Vec<String>,
     ) -> Result<Details> {
-        let number = match kind {
-            ItemKind::Issue => self.issue(url)?.0.get(),
-            ItemKind::Pr => self.pull(url)?.0.get(),
-        };
+        let number = item.number().get();
         let content = self
             .kind
             .view_details(self, account, kind, number, comments);
         let status = async {
             match kind {
                 ItemKind::Pr => Some(tokio::join!(
-                    self.pr_status(account, url),
+                    self.pr_status(account, item),
                     self.kind.behind(self, account, PullNumber::new(number))
                 )),
                 ItemKind::Issue => None,

@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 
 use crate::{
     config::{Settings, modes},
-    forge::items::link::LinkKind,
+    forge::items::reference::ItemRef,
     model::{ChatHome, SpaceKind, SpaceLinks, Workspace},
 };
 
@@ -191,20 +191,18 @@ pub struct IssueFields {
 
 impl IssueFields {
     /// The fields of the issue `links` assign, for an agent restored
-    /// without its subject; none for an issue URL Shoal cannot read.
+    /// without its subject.
     pub fn linked(links: &SpaceLinks) -> Option<Self> {
-        Self::at(links.issue.as_ref()?, links.issue_title.clone())
+        Some(Self::at(links.issue.as_ref()?, links.issue_title.clone()))
     }
 
-    /// The fields of the issue at `url`, titled `title`, without asking the
-    /// forge; none for a URL Shoal cannot read.
-    pub fn at(url: &str, title: Option<String>) -> Option<Self> {
-        let (_, number) = crate::forge::items::link::item(LinkKind::Issue, url).ok()?;
-        Some(Self {
-            number,
+    /// The fields of `issue`, titled `title`, without asking the forge.
+    pub fn at(issue: &ItemRef, title: Option<String>) -> Self {
+        Self {
+            number: issue.number().get(),
             title: title.unwrap_or_default(),
-            url: url.to_owned(),
-        })
+            url: issue.to_string(),
+        }
     }
 }
 

@@ -161,7 +161,7 @@ fn recorded_urls(
     Ok(Some(
         items
             .into_iter()
-            .map(|(url, _)| url)
+            .map(|url| url.to_string())
             .chain(branch)
             .collect(),
     ))
@@ -225,7 +225,7 @@ pub(in crate::daemon::links) fn record_received_change(
 fn follows(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<bool> {
     Ok(followed_items(db, id, None)?
         .iter()
-        .any(|(followed, _)| followed == url))
+        .any(|followed| followed.url() == url))
 }
 
 /// Queue an update for the workspace's next watch of `update.url`, ahead of

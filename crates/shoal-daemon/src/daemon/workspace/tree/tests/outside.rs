@@ -361,7 +361,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     // its agent account, and changes them as its own space acting there.
     let details = |repository: &Repository| ItemMethod::IssueDetails {
         context: ItemContext::Checkout(repository.id.clone()),
-        item: "7".into(),
+        item: "7".parse().unwrap(),
         closed: false,
     };
     crate::daemon::scope::authorize(&manager, Some(&token), &mut details(&repos[1]))
@@ -373,7 +373,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     let mut close = ItemMethod::ItemAction {
         context: ItemContext::Checkout(repos[1].id.clone()),
         kind: crate::forge::items::link::ItemKind::Issue,
-        item: Some("7".into()),
+        item: Some("7".parse().unwrap()),
         action: crate::forge::items::action::Action::Close,
         confirmed: None,
     };
@@ -423,7 +423,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     let mut merge = ItemMethod::ItemAction {
         context: ItemContext::Chat(SpaceSelector::id(&master.id)),
         kind: crate::forge::items::link::ItemKind::Pr,
-        item: Some("1".into()),
+        item: Some("1".parse().unwrap()),
         action: crate::forge::items::action::Action::CancelAutoMerge,
         confirmed: None,
     };

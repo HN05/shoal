@@ -6,8 +6,7 @@ use std::path::Path;
 pub use crate::client::repository::*;
 use crate::{
     forge::{
-        ForgeRepo, IssueInput,
-        items::link::{self, LinkKind},
+        items::{link::LinkKind, reference::ItemRef},
         repo::remote_url::RemoteUrl,
     },
     git,
@@ -171,15 +170,15 @@ struct ItemOf {
 impl ItemOf {
     /// The repository of the item `value` is the URL of, if it is one.
     async fn find(repositories: &[Repository], value: &str) -> Result<Option<Self>> {
-        let Some((kind, repository)) = item_repository(value) else {
+        let Ok(item) = value.parse::<ItemRef>() else {
             return Ok(None);
         };
-        let kind = match kind {
+        let kind = match item.kind() {
             LinkKind::Issue => "an issue URL",
             LinkKind::Pr => "a PR URL",
             LinkKind::Ci => "a CI run URL",
         };
-        let repository = repository.repository_url();
+        let repository = item.repository().repository_url();
         let registered = find_by_identity(repositories, &repository).await?;
         Ok(Some(Self {
             kind,
@@ -205,22 +204,11 @@ impl std::fmt::Display for ItemOf {
 impl std::error::Error for NotRegistered {}
 
 /// A local checkout or clone URL that registration can accept, which an
-/// item's URL is not.
+/// item's URL is not. An item's URL ends in its number, so no repository URL
+/// is taken for one, as a GitLab group named `tree` would be for a branch.
 pub fn registrable(selector: &str) -> bool {
     Path::new(selector).exists()
-        || RemoteUrl::parse(selector).is_some() && item_repository(selector).is_none()
-}
-
-/// The kind and repository of the issue, PR or CI run `url` names, if it
-/// names one. Each ends in a number, so no repository URL is taken for one,
-/// as a GitLab group named `tree` would be taken for a branch.
-fn item_repository(url: &str) -> Option<(LinkKind, ForgeRepo)> {
-    if IssueInput::parse(url) != IssueInput::Url {
-        return None;
-    }
-    [LinkKind::Issue, LinkKind::Pr, LinkKind::Ci]
-        .into_iter()
-        .find_map(|kind| Some((kind, link::item(kind, url).ok()?.0)))
+        || RemoteUrl::parse(selector).is_some() && selector.parse::<ItemRef>().is_err()
 }
 
 pub async fn find_by_identity<'a>(

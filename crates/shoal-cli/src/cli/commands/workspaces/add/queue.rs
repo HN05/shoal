@@ -33,7 +33,7 @@ pub(super) async fn named_blockers(
     let mut blockers = Vec::new();
     for input in named {
         blockers.push(match commands::blockers::parse(input)? {
-            Blocker::Issue(issue) => Blocker::Issue(issues::url(ctx, repo, &issue).await?),
+            Blocker::Issue(issue) => Blocker::Issue(issues::issue(ctx, repo, &issue).await?.into()),
             blocker => blocker,
         });
     }
@@ -146,7 +146,7 @@ async fn issue_blockers(
     issue: &issues::Issue,
 ) -> Result<Vec<Blocker>> {
     let context = issues::read_context(ctx, target.repository(ctx).await?).await?;
-    match client::issue_blockers(&ctx.paths, context, issue.url.clone()).await {
+    match client::issue_blockers(&ctx.paths, context, issue.url.clone().into()).await {
         Ok(blockers) => Ok(blockers),
         Err(error) => {
             eprintln!(

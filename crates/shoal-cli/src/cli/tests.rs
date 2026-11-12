@@ -97,36 +97,39 @@ fn agent_cli_and_config_spellings_remain_compatible() {
 
 #[test]
 fn link_arguments_end_with_a_relation_and_accept_hash_numbers() {
-    let items = |args: &[&str]| {
+    use crate::forge::items::link::LinkKind;
+    let split = |args: &[&str]| {
         let parsed = Cli::try_parse_from(args).unwrap();
         let Some(Command::Items(ItemsCommand::Link { items })) = parsed.command else {
             panic!("wrong command")
         };
-        let (items, relation) = items.split().unwrap();
-        (items.kind_or_url, items.item, relation)
+        items.split()
+    };
+    let items = |args: &[&str]| {
+        let (items, relation) = split(args).unwrap();
+        let selection = items.selection().unwrap();
+        let input = selection.input.map(|input| input.to_string());
+        (selection.kind, input, relation)
     };
     assert_eq!(
         items(&["shoal", "link", "#42", "assigned"]),
-        (Some("42".into()), None, Relation::Assigned)
+        (None, Some("42".into()), Relation::Assigned)
     );
     assert_eq!(
         items(&["shoal", "link", "pr", "#42", "related"]),
-        (Some("pr".into()), Some("42".into()), Relation::Related)
+        (Some(LinkKind::Pr), Some("42".into()), Relation::Related)
     );
     assert_eq!(
         items(&["shoal", "link", "opened"]),
         (None, None, Relation::Opened)
     );
-    for unchanged in [
-        "#",
-        "#x",
-        "##42",
-        "https://forge.example/team/repo/issues/1",
-    ] {
-        assert_eq!(
-            items(&["shoal", "link", unchanged, "assigned"]),
-            (Some(unchanged.into()), None, Relation::Assigned)
-        );
+    let url = "https://forge.example/team/repo/issues/1";
+    assert_eq!(
+        items(&["shoal", "link", url, "assigned"]),
+        (Some(LinkKind::Issue), Some(url.into()), Relation::Assigned)
+    );
+    for refused in ["#", "#x", "##42"] {
+        assert!(split(&["shoal", "link", refused, "assigned"]).is_err());
     }
     assert!(Cli::try_parse_from(["shoal", "link"]).is_err());
     assert!(Cli::try_parse_from(["shoal", "link", "pr", "1", "2", "assigned"]).is_err());
@@ -333,7 +336,14 @@ fn start_takes_an_optional_in_and_issue_and_refuses_flags_its_space_cannot_use()
     assert_eq!(inside.in_workspace, Some(None));
     // A positional issue reaches the start, which refuses a repository.
     let on_issue = start(&["37", "--in", "4"]).unwrap();
-    assert_eq!(on_issue.repository.as_deref(), Some("37"));
+    assert_eq!(
+        on_issue
+            .repository
+            .as_ref()
+            .map(ToString::to_string)
+            .as_deref(),
+        Some("37")
+    );
     assert_eq!(on_issue.in_workspace, Some(Some("4".into())));
     // The mode alone decides the kind of space.
     for refused in [

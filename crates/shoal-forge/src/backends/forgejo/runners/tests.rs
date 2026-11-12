@@ -54,7 +54,7 @@ fn a_run_names_the_pr_or_branch_whose_ref_serves_its_commit() {
     );
     let read = job_run(&repo(), &pull).unwrap();
     assert_eq!(
-        read.url,
+        read.url.url(),
         "https://forge.example/team/repo/actions/runs/15252"
     );
     assert_eq!(read.workflow.as_deref(), Some("ci.yml"));

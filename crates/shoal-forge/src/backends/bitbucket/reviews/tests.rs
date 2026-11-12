@@ -11,7 +11,7 @@ fn the_diff_runs_from_the_merge_base_to_the_head() -> Result<()> {
         item: Item {
             kind: ItemKind::Pr,
             number: 3,
-            url: String::new(),
+            url: "https://forge.example/team/repo/pulls/1".parse().unwrap(),
             title: "Fix".into(),
             state: ItemState::Open,
             labels: Vec::new(),

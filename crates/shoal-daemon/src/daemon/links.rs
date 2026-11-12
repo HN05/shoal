@@ -38,7 +38,10 @@ use crate::{
         scope::Caller,
         workspace::{Manager, review},
     },
-    forge::items::link::{ItemKind, LinkKind},
+    forge::items::{
+        link::{ItemKind, LinkKind},
+        reference::{ItemInput, ItemRef},
+    },
     model::{LinkedItem, Relation},
     state::WorkspaceState,
 };
@@ -51,7 +54,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         kind: LinkKind,
-        input: &str,
+        input: &ItemInput,
         relation: Relation,
         title: Option<String>,
         caller: Option<&Caller>,
@@ -70,7 +73,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         kind: LinkKind,
-        input: &str,
+        input: &ItemInput,
         relation: Relation,
         title: Option<String>,
         caller: Option<&Caller>,
@@ -78,7 +81,7 @@ impl Manager {
         match (relation, kind) {
             (Relation::Assigned, LinkKind::Issue) => self.set_issue(selector, input, title).await,
             (Relation::Assigned, LinkKind::Pr) => {
-                let url = input.to_owned();
+                let url = input.clone();
                 self.set_pr(selector, Action::Watch { url }).await
             }
             (Relation::Assigned, LinkKind::Ci) => bail!(
@@ -98,7 +101,7 @@ impl Manager {
     async fn issue_title(
         &self,
         selector: &SpaceSelector,
-        input: &str,
+        input: &ItemInput,
         caller: Option<&Caller>,
     ) -> (Option<String>, Option<String>) {
         let read = async {
@@ -122,7 +125,7 @@ impl Manager {
         selector: &SpaceSelector,
         relation: Relation,
         kind: Option<LinkKind>,
-        input: Option<&str>,
+        input: Option<&ItemInput>,
     ) -> Result<()> {
         ensure!(
             input.is_none() || kind.is_some(),
@@ -146,17 +149,16 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         relation: Relation,
-        input: &str,
+        input: &ItemInput,
         caller: Option<&Caller>,
     ) -> Result<()> {
         let space = self.link_space(selector).await?;
         let context = space.item_context();
         let place = (self.run_input_place(Some(&context), input, caller)).await?;
-        let (_, url) = place.forge.run(input)?;
+        let url = ItemRef::in_repository(&place.forge, LinkKind::Ci, input)?;
         let run = (place.forge.view_run(&place.account, &url).await)
             .with_context(|| format!("could not read CI run {url}"))?;
         let item = LinkedItem {
-            kind: LinkKind::Ci,
             url,
             title: run.workflow,
         };
@@ -169,13 +171,13 @@ impl Manager {
         selector: &SpaceSelector,
         relation: Relation,
         kind: LinkKind,
-        input: &str,
+        input: &ItemInput,
         title: Option<String>,
     ) -> Result<()> {
         let space = self.link_space(selector).await?;
         self.verify_space(&space).await?;
-        let url = self.item_url(&space, kind, input).await?;
-        let item = LinkedItem { kind, url, title };
+        let url = self.space_item(&space, kind, input).await?;
+        let item = LinkedItem { url, title };
         self.record_items(space.id(), vec![(relation, item)]).await
     }
 
@@ -186,12 +188,12 @@ impl Manager {
         selector: &SpaceSelector,
         relation: Relation,
         kind: Option<LinkKind>,
-        input: Option<&str>,
+        input: Option<&ItemInput>,
     ) -> Result<()> {
         let space = self.link_space(selector).await?;
         self.verify_space(&space).await?;
         let url = match (kind, input) {
-            (Some(kind), Some(input)) => Some(self.item_url(&space, kind, input).await?),
+            (Some(kind), Some(input)) => Some(self.space_item(&space, kind, input).await?),
             _ => None,
         };
         let removed = self
@@ -227,7 +229,7 @@ impl Manager {
             .write(move |tx| {
                 for (relation, item) in &items {
                     let title = item.title.as_deref();
-                    record(tx, &id, *relation, item.kind, &item.url, title)?;
+                    record(tx, &id, *relation, item.kind(), item.url.url(), title)?;
                 }
                 Ok(())
             })
@@ -241,11 +243,11 @@ impl Manager {
         id: &SpaceId,
         relation: Relation,
         kind: Option<LinkKind>,
-        url: Option<String>,
+        url: Option<ItemRef>,
     ) -> Result<usize> {
         let id = id.to_owned();
         self.store
-            .write(move |tx| remove(tx, &id, relation, kind, url.as_deref()))
+            .write(move |tx| remove(tx, &id, relation, kind, url.as_ref().map(ItemRef::url)))
             .await
     }
 
@@ -253,7 +255,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         kind: Option<ItemKind>,
-        input: Option<&str>,
+        input: Option<&ItemInput>,
     ) -> Result<()> {
         if input.is_none() {
             self.require_assigned(selector, kind).await?;
@@ -262,9 +264,7 @@ impl Manager {
             self.clear_issue(selector, input).await?;
         }
         if kind != Some(ItemKind::Issue) {
-            let action = input.map_or(Action::Clear, |url| Action::Unwatch {
-                url: url.to_owned(),
-            });
+            let action = input.map_or(Action::Clear, |url| Action::Unwatch { url: url.clone() });
             self.set_pr(selector, action).await?;
         }
         Ok(())
@@ -296,9 +296,14 @@ impl Manager {
         Ok(())
     }
 
-    /// The canonical URL of an issue or PR of the space's repository, or of
-    /// a CI run of any.
-    async fn item_url(&self, space: &LinkSpace, kind: LinkKind, input: &str) -> Result<String> {
+    /// The issue or PR of the space's repository, or the CI run of any,
+    /// that `input` names.
+    async fn space_item(
+        &self,
+        space: &LinkSpace,
+        kind: LinkKind,
+        input: &ItemInput,
+    ) -> Result<ItemRef> {
         let forge = match kind {
             // A run's URL may name another repository.
             LinkKind::Ci => match self.named_run_forge(input).await? {
@@ -310,7 +315,7 @@ impl Manager {
                 self.guarded_forge(space.origin_path(), missing).await?
             }
         };
-        Ok(forge.item(kind, input)?.1)
+        ItemRef::in_repository(&forge, kind, input)
     }
 }
 
@@ -406,11 +411,12 @@ pub(crate) fn forget_assigned(
     db: &Connection,
     id: &SpaceId,
     kind: ItemKind,
-    urls: &[String],
+    urls: &[ItemRef],
 ) -> Result<()> {
-    forget_activity(db, id, urls)?;
-    review::forget(db, id, urls)?;
-    for url in urls {
+    let urls: Vec<String> = urls.iter().map(ToString::to_string).collect();
+    forget_activity(db, id, &urls)?;
+    review::forget(db, id, &urls)?;
+    for url in &urls {
         events::record_link(db, id, EventKind::Unlinked, Relation::Assigned, kind, url)?;
     }
     Ok(())

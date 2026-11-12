@@ -1632,7 +1632,7 @@ esac
                 "--agent",
                 "codex",
             ],
-            "a positive number or an issue URL",
+            "issue number or URL",
         ),
         (
             vec![
@@ -2019,7 +2019,7 @@ fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
             parent: None,
             options: Default::default(),
             env: None,
-            issue: Some("316".into()),
+            issue: Some("316".parse().unwrap()),
             pr: None,
             agent: None,
             queue_entry: None,
@@ -2053,7 +2053,7 @@ fn an_apps_workspace_on_an_issue_takes_its_title_without_a_name() {
         parent: None,
         options: Default::default(),
         env: None,
-        issue: Some("316".into()),
+        issue: Some("316".parse().unwrap()),
         pr: None,
         agent: None,
         queue_entry: None,

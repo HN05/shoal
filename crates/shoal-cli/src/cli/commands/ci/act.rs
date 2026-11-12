@@ -13,18 +13,18 @@ use crate::{
         CiAction,
         approval::RunsApproved,
         run::{StartedRun, validate_run},
-        run_action::validate_run_reference,
         workflow::is_workflow_url,
     },
+    forge::items::reference::ItemInput,
     protocol::ItemContext,
 };
 
 pub(super) async fn start(ctx: &Context, args: RunArgs) -> Result<i32> {
     // Refuse bad arguments before the workspace picker asks for anything.
     validate_run(args.workflow.as_deref(), args.branch.as_deref())?;
-    let workflow = args.workflow.as_deref();
-    let context = super::input_context(ctx, args.space, args.repo.name, workflow).await?;
-    let follow = follow_hint(context.as_ref(), workflow.is_some_and(is_workflow_url));
+    let url = args.workflow.as_deref().is_some_and(is_workflow_url);
+    let context = super::input_context(ctx, args.space, args.repo.name, url).await?;
+    let follow = follow_hint(context.as_ref(), url);
     let inputs = args.inputs.into_iter().collect();
     let started = ci::start(&ctx.paths, context, args.workflow, args.branch, inputs).await?;
     for warning in &started.warnings {
@@ -43,13 +43,11 @@ pub(super) async fn act(
     failed: bool,
 ) -> Result<i32> {
     let subject = target.subject;
-    if let Some(run) = &subject.run {
-        validate_run_reference(run)?;
-    }
     match subject.run.clone() {
         Some(run) => {
             let (space, repo) = (subject.space.clone(), subject.repo.name.clone());
-            let context = super::input_context(ctx, space, repo, Some(&run)).await?;
+            let url = matches!(run, ItemInput::Url(_));
+            let context = super::input_context(ctx, space, repo, url).await?;
             act_on_run(ctx, context, run, action, failed).await
         }
         None => {
@@ -62,9 +60,6 @@ pub(super) async fn act(
 /// Approve the run `subject` names, otherwise every waiting run on its PR's
 /// head.
 pub(super) async fn approve(ctx: &Context, subject: Subject) -> Result<i32> {
-    if let Some(run) = &subject.run {
-        validate_run_reference(run)?;
-    }
     let context = subject_context(ctx, &subject).await?;
     let approved = ci::approve(&ctx.paths, context, subject.run, subject.pr).await?;
     ctx.emit(&approved_text(&approved), &approved)?;
@@ -79,7 +74,7 @@ async fn subject_context(ctx: &Context, subject: &Subject) -> Result<ItemContext
         ctx,
         subject.space.clone(),
         subject.repo.name.clone(),
-        subject.pr.as_deref(),
+        subject.pr.as_ref(),
     )
     .await
 }
@@ -97,7 +92,7 @@ fn approved_text(approved: &RunsApproved) -> String {
 async fn act_on_run(
     ctx: &Context,
     context: Option<ItemContext>,
-    run: String,
+    run: ItemInput,
     action: CiAction,
     failed: bool,
 ) -> Result<i32> {
@@ -111,7 +106,7 @@ async fn act_on_run(
 async fn act_on_checks(
     ctx: &Context,
     context: ItemContext,
-    item: Option<String>,
+    item: Option<ItemInput>,
     action: CiAction,
     checks: Vec<String>,
 ) -> Result<i32> {

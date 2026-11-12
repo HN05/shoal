@@ -72,7 +72,9 @@ async fn approving_runs_stops_at_the_first_that_fails() {
     let github = repo_on(&server, ForgeKind::GitHub, "team/repo");
     let account = agent_on(&server, "user");
     let waiting = [1, 2, 3].map(|id| WaitingRun {
-        url: format!("http://{}/team/repo/actions/runs/{id}", server.host),
+        url: format!("http://{}/team/repo/actions/runs/{id}", server.host)
+            .parse()
+            .unwrap(),
         workflow: None,
     });
     let (approved, result) = github.approve_runs(&account, &waiting).await;

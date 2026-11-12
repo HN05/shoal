@@ -21,6 +21,7 @@ use crate::{
         ui::{self, Entries, WidthLimit},
     },
     client::notifications::{self, Notification},
+    forge::items::reference::ItemRef,
 };
 
 const ADD_ENTRY: &str = "add-workspace";
@@ -50,7 +51,7 @@ pub(super) enum Row {
     /// A mark of a workspace or chat, on its item or on itself.
     Ready {
         space: SpaceId,
-        url: Option<String>,
+        url: Option<crate::forge::items::reference::ItemRef>,
     },
     /// A running demo, by its name.
     Demo {
@@ -123,7 +124,8 @@ impl Row {
             Self::Failed(workspace) => format!("failed:{workspace}"),
             Self::Blocked(space) => format!("blocked:{space}"),
             Self::Ready { space, url } => {
-                format!("ready:{space}:{}", url.as_deref().unwrap_or_default())
+                let url = url.as_ref().map(ItemRef::url).unwrap_or_default();
+                format!("ready:{space}:{url}")
             }
             Self::Demo { workspace, name } => format!("demo:{workspace}:{name}"),
             Self::Untracked(path) => format!("untracked:{}", encode_path(path)),
@@ -176,7 +178,7 @@ impl Row {
             "blocked" => Self::Blocked(space),
             "ready" => Self::Ready {
                 space,
-                url: (!detail.is_empty()).then(|| detail.to_owned()),
+                url: (!detail.is_empty()).then(|| detail.parse()).transpose()?,
             },
             "demo" => Self::Demo {
                 workspace: space,

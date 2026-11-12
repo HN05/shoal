@@ -131,7 +131,7 @@ async fn waits_come_from_blockers_questions_stacks_and_leases() {
         .unwrap();
     let blocked = manager
         .queue_add(QueueRequest {
-            blockers: vec![Blocker::Issue(issue.into())],
+            blockers: vec![Blocker::Issue(issue.parse().unwrap())],
             ..request(&repo, "blocked", false)
         })
         .await

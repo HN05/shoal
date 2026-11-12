@@ -1,12 +1,12 @@
 //! Finding the spaces that link an issue, PR or CI run, or hold a resource.
 use crate::client::space_ids::SpaceId;
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Result, ensure};
 
 use crate::{
     daemon::{links::wait::linked_items, store, workspace::Manager},
     forge::{
-        ForgeRepo, IssueInput,
-        items::link::{self, LinkKind},
+        ForgeRepo,
+        items::{link::LinkKind, reference::ItemInput},
     },
     model::{PresentSpace, Relation, SpaceTarget},
 };
@@ -36,22 +36,16 @@ impl Manager {
     async fn linking_spaces(
         &self,
         kind: LinkKind,
-        input: &str,
+        input: &ItemInput,
         within: Option<Vec<SpaceId>>,
     ) -> Result<Vec<SpaceId>> {
         let label = kind.noun();
-        let wanted = match IssueInput::parse(input) {
-            IssueInput::Url => Some(link::item(kind, input)?),
-            IssueInput::Number => None,
-            IssueInput::Invalid => bail!("{label} must be a number or URL"),
-        };
-        let number = match &wanted {
-            Some((_, number)) => *number,
-            None => input
-                .parse::<u64>()
-                .ok()
-                .filter(|number| *number > 0)
-                .with_context(|| format!("invalid {label} number"))?,
+        let (wanted, number) = match input {
+            ItemInput::Url(item) => {
+                ensure!(item.kind() == kind, "{item} is not a {label}");
+                (Some(item.repository().clone()), item.number().get())
+            }
+            ItemInput::Number(number) => (None, *number),
         };
         let links = self
             .store
@@ -64,13 +58,13 @@ impl Manager {
                 for id in ids.into_iter().filter(|id| within_ids(&within, id)) {
                     // Only an issue or PR can be assigned.
                     if let Some(kind) = kind.item() {
-                        for (url, _) in linked_items(db, &id, Some(kind))? {
+                        for url in linked_items(db, &id, Some(kind))? {
                             links.push((id.clone(), url));
                         }
                     }
                     for relation in [Relation::Opened, Relation::Related] {
                         for item in store::recorded_items(db, &id, relation)? {
-                            if item.kind == kind {
+                            if item.kind() == kind {
                                 links.push((id.clone(), item.url));
                             }
                         }
@@ -81,15 +75,11 @@ impl Manager {
             .await?;
         let mut matches: Vec<(SpaceId, ForgeRepo)> = Vec::new();
         for (id, url) in links {
-            let Ok((repository, linked)) = link::item(kind, &url) else {
-                continue;
-            };
-            let found = linked == number
-                && wanted
-                    .as_ref()
-                    .is_none_or(|(wanted, _)| *wanted == repository);
+            let repository = url.repository();
+            let found = url.number().get() == number
+                && wanted.as_ref().is_none_or(|wanted| wanted == repository);
             if found && !matches.iter().any(|(matched, _)| *matched == id) {
-                matches.push((id, repository));
+                matches.push((id, repository.clone()));
             }
         }
         ensure!(!matches.is_empty(), "no space links {label} {input}");

@@ -4,7 +4,10 @@ use super::Manager;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{spaces::status::Records, store},
-    forge::{ForgeRepo, IssueInput, items::link},
+    forge::{
+        ForgeRepo,
+        items::{link, reference::ItemInput},
+    },
     git,
     model::{DiffSummary, Inspection, Selected, SelectedItem, Workspace, WorktreeStatus},
     repository,
@@ -120,10 +123,9 @@ impl Manager {
             Some(item) => vec![item],
             None => (self.selected_items(space, selection).await?)
                 .into_iter()
-                .map(|(url, kind)| SelectedItem {
+                .map(|url| SelectedItem {
                     relations: space.links().relations_of(&url),
                     url,
-                    kind,
                 })
                 .collect(),
         };
@@ -158,19 +160,14 @@ impl Manager {
         &self,
         selection: &link::Selection,
     ) -> Result<Option<(ForgeRepo, SelectedItem)>> {
-        let (Some(kind), Some(input)) = (selection.kind, selection.input.as_deref()) else {
+        let Some(ItemInput::Url(item)) = &selection.input else {
             return Ok(None);
         };
-        if IssueInput::parse(input) != IssueInput::Url {
-            return Ok(None);
-        }
-        let forge = self.item_url_forge(kind, input).await?;
-        let (_, url) = forge.item(kind, input)?;
+        let forge = self.item_forge(item).await?;
         Ok(Some((
             forge,
             SelectedItem {
-                url,
-                kind,
+                url: item.clone(),
                 relations: Vec::new(),
             },
         )))

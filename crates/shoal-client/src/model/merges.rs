@@ -195,7 +195,7 @@ pub struct MergePreview {
     /// Open PRs the workspace watches, which `shoal pr merge` merges on the
     /// forge instead.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub open_prs: Vec<String>,
+    pub open_prs: Vec<crate::forge::items::reference::ItemRef>,
 }
 
 impl MergePreview {

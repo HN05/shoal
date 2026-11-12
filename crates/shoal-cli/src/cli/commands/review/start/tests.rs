@@ -6,7 +6,7 @@ fn urls_and_the_pr_flag_select_a_pr_and_forge_options_require_one() {
     for (workspace, pr) in [(Some(url), None), (None, Some("7"))] {
         let target = Target::new(
             workspace.map(String::from),
-            pr.map(String::from),
+            pr.map(|pr| pr.parse().unwrap()),
             Some("repo".into()),
             Some(false),
         )

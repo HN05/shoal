@@ -7,7 +7,7 @@ use crate::{
     daemon::workspace::Manager,
     forge::{
         clearance::{Clearance, NewestRuns, clearance},
-        items::link::LinkKind,
+        items::{link::LinkKind, reference::ItemRef},
     },
     state::BlockerKind,
 };
@@ -26,7 +26,13 @@ impl Manager {
                 BlockerKind::CiRun => LinkKind::Ci,
                 BlockerKind::Space | BlockerKind::Launch | BlockerKind::Setup => continue,
             };
-            let lookup = match clearance(link, &target, &hosts, &account, &mut newest).await {
+            // The blockers table keeps each target as the text it was
+            // recorded with, which a forge blocker's URL is read from here.
+            let cleared = async {
+                let item = ItemRef::parse_kind(link, &target)?;
+                clearance(&item, &hosts, &account, &mut newest).await
+            };
+            let lookup = match cleared.await {
                 Ok(Clearance::Cleared(how)) => Lookup::Cleared(how),
                 Ok(Clearance::Open) => Lookup::Open,
                 Err(error) => Lookup::Failed(format!("{error:#}")),

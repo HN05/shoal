@@ -25,7 +25,7 @@ fn review(findings: Vec<Finding>) -> Review {
         workspace_id: "work".into(),
         workspace: "fix-login".into(),
         target: ReviewTarget::Pr {
-            url: "https://forge.example/team/repo/pulls/4".into(),
+            url: "https://forge.example/team/repo/pulls/4".parse().unwrap(),
             head: "fix-login".into(),
             base: "main".into(),
             post: true,

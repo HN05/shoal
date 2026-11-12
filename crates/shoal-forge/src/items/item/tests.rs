@@ -15,7 +15,7 @@ fn pulls_read_the_same_from_both_forges() {
         Item {
             kind: ItemKind::Pr,
             number: 7,
-            url: "https://github.com/team/repo/pull/7".into(),
+            url: "https://github.com/team/repo/pull/7".parse().unwrap(),
             title: "Fix".into(),
             state: ItemState::Merged,
             labels: vec!["bug".into()],
@@ -42,7 +42,10 @@ fn pulls_read_the_same_from_both_forges() {
     let pull = json!({"number": 7, "title": "wip: Fix", "state": "open", "merged": false,
             "merge_commit_sha": "abc", "labels": [], "head": {"ref": "topic", "repo": null}, "base": {"ref": "main"}});
     let current = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
-    assert_eq!(current.item.url, "https://forge.example/team/repo/pulls/7");
+    assert_eq!(
+        current.item.url.url(),
+        "https://forge.example/team/repo/pulls/7"
+    );
     assert_eq!(current.item.state, ItemState::Open);
     assert!(current.item.pr.unwrap().draft);
     assert_eq!(current.head_repository, None);
@@ -66,7 +69,10 @@ fn issue_reads_refuse_prs_and_other_numbers() {
             "assignees": [{"login": "kim"}, {"login": "lee"}], "milestone": {"id": 5, "title": "v2"},
             "pull_request": null});
     let current = forgejo.current(ItemKind::Issue, 3, &issue).unwrap();
-    assert_eq!(current.item.url, "https://forge.example/team/repo/issues/3");
+    assert_eq!(
+        current.item.url.url(),
+        "https://forge.example/team/repo/issues/3"
+    );
     assert_eq!(current.item.pr, None);
     assert_eq!(current.item.assignees, ["kim", "lee"]);
     assert_eq!(current.item.milestone.as_deref(), Some("v2"));

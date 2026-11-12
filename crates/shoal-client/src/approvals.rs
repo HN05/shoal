@@ -303,7 +303,7 @@ pub struct ApprovalRequest {
     /// The issue or PR an approved proposal opened, or the issue a denied
     /// one duplicates; decided proposals are no longer stored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub url: Option<String>,
+    pub url: Option<crate::forge::items::reference::ItemRef>,
     /// What deciding a proposal could not finish, such as attaching the
     /// files of a duplicate's comment that was posted.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -563,7 +563,7 @@ pub struct ProposalDecision {
 #[serde(rename_all = "snake_case")]
 pub enum Duplicate {
     /// An issue number or URL in the same repository.
-    Issue(String),
+    Issue(crate::forge::items::reference::ItemInput),
     /// Another pending issue proposal, by its number.
     Approval(ItemNumber),
 }

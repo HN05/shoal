@@ -9,6 +9,7 @@
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
+use crate::forge::items::reference::ItemRef;
 use crate::forge::numbers::RunnerId;
 use std::collections::HashSet;
 
@@ -21,7 +22,7 @@ use crate::{
         notifications::NotificationKind,
         workspace::{Manager, capacity::Activity},
     },
-    forge::{ForgeRepo, ci::CiAction},
+    forge::ci::CiAction,
     model::QueuedJob,
     process::{execution::Processes, identity},
     state::ExecutionState,
@@ -204,7 +205,7 @@ impl Manager {
         let Some(job) = self.workspace_claim(&workspace.id).await? else {
             return Ok(None);
         };
-        Ok(Some(self.cancel_job_run(&job).await?))
+        Ok(Some(self.cancel_job_run(&job).await?.to_string()))
     }
 
     /// Cancel on the forge the run of a job still running in the workspace
@@ -250,8 +251,8 @@ impl Manager {
     /// Cancel `job`'s run on the forge its URL names, or the run its
     /// runner reported taking a job of, also once its runner is gone,
     /// returning the cancelled run's URL.
-    pub(super) async fn cancel_job_run(&self, job: &ClaimedJob) -> Result<String> {
-        let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
+    pub(super) async fn cancel_job_run(&self, job: &ClaimedJob) -> Result<ItemRef> {
+        let forge = self.item_forge(&job.job.run.url).await?;
         let account = self.user_account();
         let url = self.reported_run_url(&forge, job);
         let run = forge.find_run(&account, &url, CiAction::Cancel).await?;

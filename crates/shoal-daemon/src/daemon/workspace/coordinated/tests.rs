@@ -264,7 +264,7 @@ async fn a_blocked_child_tells_its_coordinator_rather_than_the_user() {
     // The child's own agent records what blocks it.
     let reporting = start_agent(&manager, &child).await;
     let add = ProgressChange::AddBlocker {
-        blocker: crate::model::Blocker::Pr("https://github.com/team/app/pull/8".into()),
+        blocker: crate::model::Blocker::Pr("https://github.com/team/app/pull/8".parse().unwrap()),
         step: None,
         reason: "Needs the API".into(),
     };

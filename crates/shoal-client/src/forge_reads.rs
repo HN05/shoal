@@ -1,6 +1,7 @@
 //! What a space or a registered checkout reads from its forge through the
 //! daemon, which chooses the account: the agent account for a workspace
 //! process or a chat's agent, the user's own logins otherwise.
+use crate::forge::items::reference::ItemInput;
 use anyhow::{Context, Result};
 
 use crate::space_names::SpaceSelector;
@@ -154,7 +155,7 @@ pub async fn number_kind(
 pub async fn issue_details(
     daemon: &impl Daemon,
     context: ItemContext,
-    item: String,
+    item: ItemInput,
 ) -> Result<IssueDetails> {
     let method = ItemMethod::IssueDetails {
         context,
@@ -169,7 +170,7 @@ pub async fn issue_details(
 pub async fn linked_issue_details(
     daemon: &impl Daemon,
     context: ItemContext,
-    item: String,
+    item: ItemInput,
 ) -> Result<IssueDetails> {
     let method = ItemMethod::IssueDetails {
         context,
@@ -184,7 +185,7 @@ pub async fn linked_issue_details(
 pub async fn issue_blockers(
     daemon: &impl Daemon,
     context: ItemContext,
-    item: String,
+    item: ItemInput,
 ) -> Result<Vec<Blocker>> {
     pages(daemon, ItemMethod::IssueBlockers { context, item }).await
 }
@@ -193,7 +194,7 @@ pub async fn issue_blockers(
 pub async fn pull_request(
     daemon: &impl Daemon,
     context: ItemContext,
-    item: String,
+    item: ItemInput,
 ) -> Result<PullRequest> {
     request(daemon, ItemMethod::PullRequest { context, item }).await
 }
@@ -203,7 +204,7 @@ pub async fn pull_request(
 pub async fn reviewers(
     daemon: &impl Daemon,
     context: ItemContext,
-    item: Option<String>,
+    item: Option<ItemInput>,
 ) -> Result<Vec<Reviewer>> {
     pages(daemon, ItemMethod::Reviewers { context, item }).await
 }
@@ -213,7 +214,7 @@ pub async fn reviewers(
 pub async fn review_thread(
     daemon: &impl Daemon,
     context: ItemContext,
-    item: Option<String>,
+    item: Option<ItemInput>,
     comment: CommentId,
 ) -> Result<Thread> {
     let method = ItemMethod::ReviewThread {
@@ -230,7 +231,7 @@ pub async fn review_thread(
 pub async fn merge_warning(
     daemon: &impl Daemon,
     context: ItemContext,
-    item: Option<String>,
+    item: Option<ItemInput>,
 ) -> Result<Option<MergeWarning>> {
     request(daemon, ItemMethod::MergeWarning { context, item }).await
 }
@@ -240,7 +241,7 @@ pub async fn merge_warning(
 pub async fn merged_pull(
     daemon: &impl Daemon,
     space: SpaceSelector,
-    item: Option<String>,
+    item: Option<ItemInput>,
 ) -> Result<MergedPull> {
     request(daemon, ItemMethod::MergedPull { space, item }).await
 }

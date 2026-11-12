@@ -7,7 +7,7 @@ fn reverts_go_through_graphql_and_report_the_new_branch() {
         item: Item {
             kind: ItemKind::Pr,
             number: 7,
-            url: String::new(),
+            url: "https://forge.example/team/repo/pulls/1".parse().unwrap(),
             title: "Fix".into(),
             state: ItemState::Merged,
             labels: Vec::new(),

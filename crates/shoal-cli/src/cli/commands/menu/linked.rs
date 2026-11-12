@@ -5,7 +5,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         Command,
-        args::items::{ItemArgs, ItemsCommand, ViewArgs},
+        args::items::{ItemArgs, ItemWord, ItemsCommand, ViewArgs},
         context::Context,
         ui,
     },
@@ -25,7 +25,7 @@ pub(super) async fn view_command(ctx: &Context, space: Option<SpaceSelector>) ->
     let (url, web) = ui::pick_linked(ctx, &items, browse)?;
     Ok(Command::Items(ItemsCommand::View(ViewArgs {
         items: ItemArgs {
-            kind_or_url: Some(url),
+            kind_or_url: Some(ItemWord::Item(url.into())),
             item: None,
             space: Some(space),
         },

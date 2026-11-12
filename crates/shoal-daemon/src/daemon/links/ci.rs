@@ -7,7 +7,7 @@ use crate::{
     daemon::{events, workspace::Manager},
     forge::{
         ci::{CiActed, CiAction, checks::validate_check_name},
-        items::link::ItemKind,
+        items::{link::ItemKind, reference::ItemInput},
     },
     protocol::ItemContext,
 };
@@ -18,7 +18,7 @@ impl Manager {
     pub async fn ci_action(
         &self,
         context: &ItemContext,
-        item: Option<String>,
+        item: Option<ItemInput>,
         action: CiAction,
         checks: Vec<String>,
     ) -> Result<CiActed> {
@@ -27,8 +27,8 @@ impl Manager {
         }
         let place = self.place(context).await?;
         let (forge, account) = self.place_forge_account(&place).await?;
-        let input = self.named_or_linked(item, &place, ItemKind::Pr).await?;
-        let (number, url) = forge.pull(&input)?;
+        let pull = (self.named_or_linked(item, place.space_id(), &forge, ItemKind::Pr)).await?;
+        let (number, url) = (pull.pull()?, pull.to_string());
         let plan = forge
             .plan_ci(&account, number, action, &checks)
             .await

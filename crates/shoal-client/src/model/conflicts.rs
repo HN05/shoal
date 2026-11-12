@@ -50,7 +50,7 @@ pub struct MergeWarning {
     /// The URL of the PR the warning is about, so the merge the user
     /// confirms is of that PR; none for a branch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub url: Option<String>,
+    pub url: Option<crate::forge::items::reference::ItemRef>,
 }
 
 /// The warning a user confirmed before merging a PR, `None` when the merge

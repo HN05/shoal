@@ -11,7 +11,10 @@ fn rate_limited_checks_are_reported_as_unread() {
         }),
         ..Snapshot::default()
     };
-    let mut status = PrStatus::new("pr".into(), Some(PrState::Open));
+    let mut status = PrStatus::new(
+        "https://forge.example/team/repo/pulls/1".parse().unwrap(),
+        Some(PrState::Open),
+    );
     status.record_snapshot(snapshot);
     assert!(status.checks.is_empty());
     assert_eq!(status.errors.len(), 1, "{:?}", status.errors);

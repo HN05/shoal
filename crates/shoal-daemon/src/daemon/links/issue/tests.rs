@@ -24,23 +24,31 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
     );
     let url = "https://github.com/team/repo/issues/316";
     manager
-        .set_issue(&SpaceSelector::id(&workspace.id), url, None)
+        .set_issue(
+            &SpaceSelector::id(&workspace.id),
+            &url.parse().unwrap(),
+            None,
+        )
         .await
         .unwrap();
     manager
         .set_issue(
             &SpaceSelector::id(&workspace.id),
-            "316",
+            &"316".parse().unwrap(),
             Some("Show titles".into()),
         )
         .await
         .unwrap();
     manager
-        .set_issue(&SpaceSelector::id(&workspace.id), "316", None)
+        .set_issue(
+            &SpaceSelector::id(&workspace.id),
+            &"316".parse().unwrap(),
+            None,
+        )
         .await
         .unwrap();
     let links = manager.workspace_by_id(&workspace.id).await.unwrap().links;
-    assert_eq!(links.issue.as_deref(), Some(url));
+    assert_eq!(links.issue.as_ref().map(|url| url.url()), Some(url));
     assert_eq!(links.issue_title.as_deref(), Some("Show titles"));
     let linked: Vec<_> = manager
         .workspace_events(None, 100)
@@ -59,7 +67,11 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
     assert_eq!(linked[0].url, url);
     assert!(
         manager
-            .set_issue(&SpaceSelector::id(&workspace.id), "317", None)
+            .set_issue(
+                &SpaceSelector::id(&workspace.id),
+                &"317".parse().unwrap(),
+                None
+            )
             .await
             .is_err()
     );
@@ -67,7 +79,7 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
         manager
             .set_issue(
                 &SpaceSelector::id(&workspace.id),
-                "https://github.com/other/repo/issues/316",
+                &"https://github.com/other/repo/issues/316".parse().unwrap(),
                 None
             )
             .await
@@ -89,11 +101,14 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
             .issue
             .unwrap()
             .url,
-        url
+        url.parse().unwrap()
     );
     assert!(
         reopened
-            .clear_issue(&SpaceSelector::id(&workspace.id), Some("317"))
+            .clear_issue(
+                &SpaceSelector::id(&workspace.id),
+                Some(&"317".parse().unwrap())
+            )
             .await
             .is_err()
     );
@@ -105,7 +120,10 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
             .is_some()
     );
     reopened
-        .clear_issue(&SpaceSelector::id(&workspace.id), Some("316"))
+        .clear_issue(
+            &SpaceSelector::id(&workspace.id),
+            Some(&"316".parse().unwrap()),
+        )
         .await
         .unwrap();
     assert!(reopened.workspace_events(None, 100).await.unwrap().iter().any(
@@ -120,7 +138,11 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
             .is_none()
     );
     reopened
-        .set_issue(&SpaceSelector::id(&workspace.id), "317", None)
+        .set_issue(
+            &SpaceSelector::id(&workspace.id),
+            &"317".parse().unwrap(),
+            None,
+        )
         .await
         .unwrap();
     assert!(
@@ -139,6 +161,7 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
             .unwrap()
             .unwrap()
             .url
+            .url()
             .ends_with("/317")
     );
     reopened.store.shutdown().await;

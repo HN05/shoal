@@ -15,6 +15,7 @@ use crate::{
         ui::{self, Fallback},
     },
     config::modes::ModeName,
+    forge::items::reference::ItemInput,
     model::{SpaceKind, Workspace},
     protocol::{CreationOptions, ItemContext},
 };
@@ -44,7 +45,7 @@ pub(super) async fn to_workspace(
     let new = crate::client::conversions::NewWorkspace {
         chat,
         branch: name,
-        issue: issue.map(|issue| issue.url),
+        issue: issue.map(|issue| issue.url.into()),
         base: branch.base,
         // The workspace keeps the chat's name.
         options: CreationOptions {
@@ -95,8 +96,8 @@ fn own_space() -> Fallback {
 }
 
 /// The issue `input` names, read where the chat reads its forge.
-async fn load_issue(ctx: &Context, chat: &SpaceSelector, input: &str) -> Result<Issue> {
-    super::issues::load(ctx, ItemContext::Chat(chat.clone()), input).await
+async fn load_issue(ctx: &Context, chat: &SpaceSelector, input: &ItemInput) -> Result<Issue> {
+    super::issues::load(ctx, ItemContext::Chat(chat.clone()), input.clone()).await
 }
 
 /// The branch name the issue linked to the chat `chat` gives, refusing a
@@ -107,7 +108,7 @@ async fn linked_issue_branch(ctx: &Context, chat: &SpaceSelector) -> Result<Stri
         .find(|candidate| chat.selects(&candidate.id, candidate.number))
         .and_then(|chat| chat.links.issue.clone())
         .context("name the workspace's branch, or pass --issue or link the chat's issue first")?;
-    Ok(load_issue(ctx, chat, &linked).await?.branch_name())
+    Ok(load_issue(ctx, chat, &linked.into()).await?.branch_name())
 }
 
 /// Print what the conversion did to `workspace`, which is or becomes a

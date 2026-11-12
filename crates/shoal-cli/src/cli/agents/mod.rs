@@ -154,11 +154,17 @@ pub(in crate::cli) async fn link_chat(
     chat: &Chat,
     links: &[(Relation, LinkedItem)],
 ) {
+    let space = SpaceSelector::id(&chat.id);
     for (relation, item) in links {
-        if let Err(error) =
-            crate::client::items::link(&ctx.paths, &SpaceSelector::id(&chat.id), *relation, item)
-                .await
-        {
+        let linked = crate::client::items::link(
+            &ctx.paths,
+            &space,
+            *relation,
+            item.kind(),
+            item.url.clone().into(),
+            item.title.clone(),
+        );
+        if let Err(error) = linked.await {
             eprintln!("shoal: {} was not linked to the chat: {error:#}", item.url);
         }
     }

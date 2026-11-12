@@ -9,7 +9,10 @@ use crate::{
     forge::{
         ForgeRepo,
         account::Account,
-        items::link::{ItemKind, Selection},
+        items::{
+            link::Selection,
+            reference::{ItemInput, ItemRef},
+        },
         review::view::ItemView,
     },
     model::SelectedItem,
@@ -31,7 +34,7 @@ impl Manager {
         let place = self.read_place(context).await?;
         let items = self.view_selection(&place, selection, &account).await?;
         // Nothing to read, so no forge is needed, as for a local repository.
-        if !items.iter().any(|item| item.kind.item().is_some()) {
+        if !items.iter().any(|item| item.kind().item().is_some()) {
             return Ok(Viewed {
                 items,
                 views: Vec::new(),
@@ -78,13 +81,10 @@ impl Manager {
         selection: &Selection,
         account: &Account,
     ) -> Result<Selection> {
-        let (None, Some(input)) = (selection.kind, &selection.input) else {
+        let (None, Some(ItemInput::Number(number))) = (selection.kind, &selection.input) else {
             return Ok(selection.clone());
         };
-        let Ok(number) = input.parse::<u64>() else {
-            return Ok(selection.clone());
-        };
-        let kind = self.space_number_kind(space, number, account).await?;
+        let kind = self.space_number_kind(space, *number, account).await?;
         Ok(Selection {
             kind: Some(kind),
             input: selection.input.clone(),
@@ -101,9 +101,9 @@ impl Manager {
         comments: bool,
     ) -> Vec<ItemView> {
         futures_util::future::join_all(items.iter().filter_map(|item| {
-            let kind = item.kind.item()?;
+            let kind = item.kind().item()?;
             Some(async move {
-                match self.item_forge(own, kind, &item.url).await {
+                match self.viewed_item_forge(own, &item.url).await {
                     Ok(forge) => forge.view(account, kind, &item.url, comments).await,
                     Err(error) => ItemView {
                         url: item.url.clone(),
@@ -118,12 +118,11 @@ impl Manager {
         .await
     }
 
-    /// The repository the item at `url` is in: `own`, or the other one its
-    /// URL names.
-    async fn item_forge(&self, own: &ForgeRepo, kind: ItemKind, url: &str) -> Result<ForgeRepo> {
-        if own.item(kind.into(), url).is_ok() {
+    /// The repository `item` is in: `own`, or the other one its URL names.
+    async fn viewed_item_forge(&self, own: &ForgeRepo, item: &ItemRef) -> Result<ForgeRepo> {
+        if item.repository() == own {
             return Ok(own.clone());
         }
-        self.item_url_forge(kind.into(), url).await
+        self.item_forge(item).await
     }
 }

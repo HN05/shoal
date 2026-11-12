@@ -101,7 +101,9 @@ fn merge_requests_read_branches_drafts_and_conflicts() {
         Item {
             kind: ItemKind::Pr,
             number: 7,
-            url: "https://gitlab.com/group/sub/project/-/merge_requests/7".into(),
+            url: "https://gitlab.com/group/sub/project/-/merge_requests/7"
+                .parse()
+                .unwrap(),
             title: "Draft: Fix".into(),
             state: ItemState::Open,
             labels: vec!["bug".into()],
@@ -151,7 +153,7 @@ fn issues_use_their_own_numbers_routes_and_states() {
             "milestone": {"id": 40, "iid": 1, "title": "v2"}});
     let current = gitlab().current(ItemKind::Issue, 3, &issue).unwrap();
     assert_eq!(
-        current.item.url,
+        current.item.url.url(),
         "https://gitlab.com/group/sub/project/-/issues/3"
     );
     assert_eq!(current.item.state, ItemState::Closed);

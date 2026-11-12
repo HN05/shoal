@@ -13,7 +13,7 @@ use crate::{
         terminal::{self, Recorded},
         ui,
     },
-    forge::{IssueInput, items::link::Selection},
+    forge::IssueInput,
     model::{SpaceDetail, SpaceTarget},
     protocol::ConfigTarget,
 };
@@ -123,7 +123,12 @@ fn status_target(first: Option<&str>, item: Option<String>) -> Result<Option<Spa
             if matches!(first, "pr" | "issue" | "ci")
                 || IssueInput::parse(first) == IssueInput::Url =>
         {
-            let selection = Selection::parse(Some(first.to_owned()), item)?;
+            let items = crate::cli::args::items::ItemArgs {
+                kind_or_url: Some(first.parse()?),
+                item,
+                space: None,
+            };
+            let selection = items.selection()?;
             Ok(Some(SpaceTarget::Item {
                 kind: selection.kind.context("expected an issue, PR or CI run")?,
                 input: selection

@@ -1,5 +1,6 @@
 //! Forgejo's runner API and `forgejo-runner`: the job search, a run's event,
 //! repository runners, and `forgejo-runner one-job` on the host backend.
+use crate::items::{link::LinkKind, reference::ItemRef};
 use std::ffi::OsString;
 
 use anyhow::{Context, Result};
@@ -149,7 +150,7 @@ fn job_run(repo: &ForgeRepo, value: &Value) -> Result<JobRun> {
         (_, None) => (Trigger::Other, None),
     };
     Ok(JobRun {
-        url: format!("{}/actions/runs/{number}", repo.repository_url()),
+        url: ItemRef::numbered(repo, LinkKind::Ci, number)?,
         workflow: value["workflow_id"].as_str().map(str::to_owned),
         commit: field(value, "commit_sha")?,
         trigger,

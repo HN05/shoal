@@ -14,7 +14,7 @@ use crate::{
 pub(in crate::cli::commands) async fn confirm_pull(
     ctx: &Context,
     context: &ItemContext,
-    item: Option<String>,
+    item: Option<crate::forge::items::reference::ItemInput>,
 ) -> Result<ConfirmedWarning> {
     let warning =
         crate::client::forge_reads::merge_warning(&ctx.paths, context.clone(), item).await?;

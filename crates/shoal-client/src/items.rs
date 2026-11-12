@@ -11,49 +11,53 @@ use crate::{
         create::{NewIssue, PullOptions},
         item::Item,
         link::{ItemKind, LinkKind, Selection},
+        reference::ItemInput,
     },
     links::{OpenOutcome, Updates, pr::Action as PrAction},
-    model::{LinkedItem, Relation},
+    model::Relation,
     protocol::{Body, ItemContext, ItemMethod},
 };
 
-/// Link `item` to `space` as `relation`.
+/// Link the `kind` item `item` names to `space` as `relation`, with the
+/// title lists show when the caller knows it.
 pub async fn link(
     daemon: &impl Daemon,
     space: &SpaceSelector,
     relation: Relation,
-    item: &LinkedItem,
+    kind: LinkKind,
+    item: ItemInput,
+    title: Option<String>,
 ) -> Result<crate::links::Linked> {
     let method = ItemMethod::LinkItem {
         space: space.clone(),
-        kind: item.kind,
-        url: item.url.clone(),
+        kind,
+        item,
         relation,
-        title: item.title.clone(),
+        title,
     };
     request(daemon, method).await
 }
 
 /// Unlink `space`'s items of `relation`, only those of `kind` or the one
-/// `url` names when given.
+/// `item` names when given.
 pub async fn unlink(
     daemon: &impl Daemon,
     space: SpaceSelector,
     relation: Relation,
     kind: Option<LinkKind>,
-    url: Option<String>,
+    item: Option<ItemInput>,
 ) -> Result<()> {
     let method = ItemMethod::UnlinkItems {
         space,
         relation,
         kind,
-        url,
+        item,
     };
     request(daemon, method).await
 }
 
 /// Link and watch the PR `url` as the one `space` was opened on.
-pub async fn watch_pr(daemon: &impl Daemon, space: SpaceSelector, url: String) -> Result<()> {
+pub async fn watch_pr(daemon: &impl Daemon, space: SpaceSelector, url: ItemInput) -> Result<()> {
     let action = PrAction::Watch { url };
     request(daemon, ItemMethod::SetPr { space, action }).await
 }
@@ -136,7 +140,7 @@ pub async fn open_issue(
 pub async fn revert_pull(
     daemon: &impl Daemon,
     space: SpaceSelector,
-    item: Option<String>,
+    item: Option<ItemInput>,
     options: PullOptions,
 ) -> Result<OpenOutcome> {
     let method = ItemMethod::RevertPull {
@@ -153,7 +157,7 @@ pub async fn act(
     daemon: &impl Daemon,
     context: ItemContext,
     kind: ItemKind,
-    item: Option<String>,
+    item: Option<ItemInput>,
     action: Action,
 ) -> Result<Item> {
     let method = ItemMethod::ItemAction {
@@ -173,7 +177,7 @@ pub async fn act(
 pub async fn merge(
     daemon: &impl Daemon,
     context: ItemContext,
-    item: Option<String>,
+    item: Option<ItemInput>,
     action: Action,
     confirmed: Option<crate::model::ConfirmedWarning>,
 ) -> Result<Item> {

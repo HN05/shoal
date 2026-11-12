@@ -2,7 +2,11 @@
 use clap::{Args, Subcommand, ValueEnum};
 
 use crate::client::space_names::SpaceSelector;
-use crate::{cli::args::BodyArgs, client::item_numbers::ItemNumber};
+use crate::{
+    cli::args::{BodyArgs, issue_input},
+    client::item_numbers::ItemNumber,
+    forge::items::reference::ItemInput,
+};
 
 #[derive(Debug, Default, Args)]
 pub struct ApprovalsArgs {
@@ -33,8 +37,13 @@ pub struct ApprovalsArgs {
     #[arg(long, requires = "deny")]
     pub reason: Option<String>,
     /// Deny an issue proposal as a duplicate of this issue number or URL.
-    #[arg(long, requires = "deny", conflicts_with = "duplicate_of_approval")]
-    pub duplicate_of: Option<String>,
+    #[arg(
+        long,
+        requires = "deny",
+        conflicts_with = "duplicate_of_approval",
+        value_parser = issue_input
+    )]
+    pub duplicate_of: Option<ItemInput>,
     /// Deny an issue proposal as a duplicate of another pending proposal,
     /// by its number.
     #[arg(long, requires = "deny")]

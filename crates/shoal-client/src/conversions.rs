@@ -19,7 +19,7 @@ pub struct NewWorkspace {
     /// The branch the workspace works on, an existing one or a new one.
     pub branch: String,
     /// The issue to link, by number or URL.
-    pub issue: Option<String>,
+    pub issue: Option<crate::forge::items::reference::ItemInput>,
     /// The branch a new branch starts from.
     pub base: Option<String>,
     pub options: CreationOptions,

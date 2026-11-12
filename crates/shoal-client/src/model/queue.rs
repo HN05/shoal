@@ -179,11 +179,11 @@ pub enum Blocker {
     /// name or ID.
     Space(String),
     /// An issue, by URL, or by number in the space's repository.
-    Issue(String),
+    Issue(crate::forge::items::reference::ItemInput),
     /// A PR, by URL.
-    Pr(String),
+    Pr(crate::forge::items::reference::ItemRef),
     /// A CI run, by URL.
-    CiRun(String),
+    CiRun(crate::forge::items::reference::ItemRef),
 }
 
 /// An agent launch `shoal start` asks the daemon to admit or queue. The plan

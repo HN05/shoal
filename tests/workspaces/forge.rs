@@ -2356,7 +2356,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     let start = shoal_client::protocol::OperationMethod::StartWorkspace {
         repository: fixture.repo.to_str().unwrap().into(),
         start: shoal_client::protocol::operations::WorkspaceStart::PullHead {
-            url: url.into(),
+            url: url.parse().unwrap(),
             head: shoal_client::protocol::PullHead {
                 number: shoal_client::forge::numbers::PullNumber::new(8),
                 reference: "refs/pull/8/head".into(),
@@ -2370,7 +2370,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
         parent: None,
         options: Default::default(),
         issue: None,
-        pr: Some(url.into()),
+        pr: Some(url.parse().unwrap()),
         agent: Some(Box::new(
             shoal_client::protocol::operations::QueuedLaunch::new("reviewer".into()),
         )),
@@ -2486,7 +2486,11 @@ fn an_apps_workspace_linking_a_pr_takes_its_title_without_a_name() {
         parent: None,
         options: Default::default(),
         issue: None,
-        pr: Some("https://forge.example/team/project/pulls/7".into()),
+        pr: Some(
+            "https://forge.example/team/project/pulls/7"
+                .parse()
+                .unwrap(),
+        ),
         agent: None,
         waiting: None,
         env: None,

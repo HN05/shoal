@@ -23,7 +23,6 @@ use crate::{
     },
     client::progress::Progress,
     config::modes::ModeName,
-    forge::items::link,
     model::{
         Chat, Dependency, HeldBy, QueueEntry, QueueRank, Repository, ReviewMark, Tier, Workspace,
         WorkspaceUsage,
@@ -450,11 +449,7 @@ pub fn mark_label(mark: &ReviewMark) -> String {
     let (Some(kind), Some(url)) = (mark.kind, &mark.url) else {
         return "workspace".into();
     };
-    let name = kind.noun();
-    match link::item(kind.into(), url) {
-        Ok((_, number)) => format!("{name} #{number}"),
-        Err(_) => name.into(),
-    }
+    format!("{} #{}", kind.noun(), url.number().get())
 }
 
 /// Each workspace's repository name, or empty cells when all share one.

@@ -18,6 +18,7 @@ use crate::{
         shell, terminal,
         ui::{self, Fallback},
     },
+    forge::items::reference::ItemInput,
     model::{SpaceRef, Workspace},
     paths::CommandPaths,
     protocol::{
@@ -33,7 +34,7 @@ use super::issues::Issue;
 /// What `shoal split` asks for besides the parent.
 pub(super) struct Split {
     pub branch: Option<String>,
-    pub issue: Option<String>,
+    pub issue: Option<ItemInput>,
     pub base: Option<String>,
     pub copy: CopyArgs,
     pub options: CreationOptions,
@@ -70,7 +71,7 @@ pub(super) async fn run(
         copy: copy.map(|copy| copy.source),
         base: split.base,
         options,
-        issue: issue.as_ref().map(|issue| issue.url.clone()),
+        issue: issue.map(|issue| issue.url.into()),
         ..NewSplit::new(parent.clone(), name)
     };
     let preparing = start_child(ctx, start).await?;
@@ -210,9 +211,9 @@ fn report(ctx: &Context, child: &Workspace) -> Result<()> {
 }
 
 /// The issue `input` names in the parent workspace's repository.
-async fn load_issue(ctx: &Context, parent: &SpaceSelector, input: &str) -> Result<Issue> {
+async fn load_issue(ctx: &Context, parent: &SpaceSelector, input: &ItemInput) -> Result<Issue> {
     let context = ItemContext::Workspace(parent.clone());
-    super::issues::load(ctx, context, input).await
+    super::issues::load(ctx, context, input.clone()).await
 }
 
 /// The parent and child spaces of a space, when it has any.

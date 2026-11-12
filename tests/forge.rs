@@ -465,7 +465,7 @@ fn apps_read_forge_items_through_the_daemon() {
     let checkout = || ItemContext::Checkout(repository.clone().into());
     let pr_8 = || Selection {
         kind: Some(LinkKind::Pr),
-        input: Some("8".into()),
+        input: Some("8".parse().unwrap()),
     };
 
     // The user's app reads as the user, from a workspace or a registered
@@ -482,7 +482,7 @@ fn apps_read_forge_items_through_the_daemon() {
             .block_on(forge_reads::reviewers(
                 &app,
                 context.clone(),
-                Some("8".into()),
+                Some("8".parse().unwrap()),
             ))
             .unwrap();
         assert_eq!(
@@ -525,7 +525,7 @@ fn apps_read_forge_items_through_the_daemon() {
     // A number without a kind takes the one the forge reports for it.
     let bare_8 = || Selection {
         kind: None,
-        input: Some("8".into()),
+        input: Some("8".parse().unwrap()),
     };
     let shown = runtime
         .block_on(views::read(&app, workspace(), bare_8(), false))
@@ -551,9 +551,13 @@ fn apps_read_forge_items_through_the_daemon() {
         .block_on(forge_reads::select_items(&app, checkout(), bare_8(), false))
         .unwrap();
     assert_eq!(selected.items.len(), 1);
-    assert_eq!(selected.items[0].kind, LinkKind::Pr);
+    assert_eq!(selected.items[0].kind(), LinkKind::Pr);
     let issue = runtime
-        .block_on(forge_reads::issue_details(&app, workspace(), "3".into()))
+        .block_on(forge_reads::issue_details(
+            &app,
+            workspace(),
+            "3".parse().unwrap(),
+        ))
         .unwrap();
     assert_eq!(
         (
@@ -564,7 +568,11 @@ fn apps_read_forge_items_through_the_daemon() {
         (3, "Crash", "Steps")
     );
     let pull = runtime
-        .block_on(forge_reads::pull_request(&app, checkout(), "8".into()))
+        .block_on(forge_reads::pull_request(
+            &app,
+            checkout(),
+            "8".parse().unwrap(),
+        ))
         .unwrap();
     assert_eq!((pull.number.get(), pull.head.as_str()), (8, "topic"));
     let reads = fixture.requests();
@@ -585,7 +593,11 @@ fn apps_read_forge_items_through_the_daemon() {
         .unwrap();
     assert_eq!(labels.len(), 1);
     let issue = runtime
-        .block_on(forge_reads::issue_details(&agent, workspace(), "3".into()))
+        .block_on(forge_reads::issue_details(
+            &agent,
+            workspace(),
+            "3".parse().unwrap(),
+        ))
         .unwrap();
     assert_eq!(issue.number.get(), 3);
     let reads = fixture.requests();
@@ -5101,7 +5113,7 @@ fn runs_of_another_repository_are_read_linked_and_acted_on_by_the_user() {
         json!({"view_ci_run": {"run": other}}),
         json!({"ci_run_jobs": {"workspace": fixture.id("topic"), "run": other}}),
         json!({"ci_run_action": {"run": other, "action": "cancel", "failed": false}}),
-        json!({"link_item": {"space": fixture.id("topic"), "kind": "ci", "url": other,
+        json!({"link_item": {"space": fixture.id("topic"), "kind": "ci", "item": other,
             "relation": "related"}}),
         json!({"watch_items": {"space": fixture.id("topic"), "selection": {"kind": "ci",
             "input": other}, "timeout_secs": 1}}),

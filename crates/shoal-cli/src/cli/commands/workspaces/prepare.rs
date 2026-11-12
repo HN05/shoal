@@ -13,6 +13,7 @@ use crate::{
         context::Context,
     },
     execution,
+    forge::items::reference::ItemInput,
     hooks::{self, Hook, HookKind},
     model::{QueueEntry, Workspace},
     protocol::{
@@ -143,7 +144,7 @@ async fn run_post_setup_hook(
 async fn link_pr(
     ctx: &Context,
     workspace: Workspace,
-    pr: &str,
+    pr: &ItemInput,
     reporter: &Reporter<'_>,
 ) -> Result<Workspace> {
     reporter.ensure_running()?;
@@ -184,7 +185,7 @@ async fn leave_waiting(
     ctx: &Context,
     workspace: &Workspace,
     launch: QueuedLaunch,
-    pr: Option<String>,
+    pr: Option<ItemInput>,
 ) {
     let queued = queued_launches::queue_for_setup(&ctx.paths, workspace, launch, pr);
     let (name, number) = (&workspace.name, workspace.number);

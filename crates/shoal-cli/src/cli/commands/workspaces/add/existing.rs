@@ -19,6 +19,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::{commands::issues, context::Context},
+    forge::items::reference::ItemInput,
     model::Workspace,
     protocol::CreationOptions,
     start_plan::{AddPlan, Creation, ResolvedAddAgent},
@@ -59,7 +60,9 @@ pub(in crate::cli::commands) async fn start_worker(
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
     // A task after `--` replaces the issue as the agent's subject.
     let issue = match agent.agent.is_some() && args.is_empty() {
-        true => load_linked_issue(ctx, &target, workspace.links.issue.clone()).await?,
+        true => {
+            load_linked_issue(ctx, &target, workspace.links.issue.clone().map(Into::into)).await?
+        }
         false => None,
     };
     let mut plan = worker_plan(&workspace, agent, issue.as_ref(), args);
@@ -79,7 +82,7 @@ pub(in crate::cli::commands) async fn start_worker(
 pub(super) async fn start_on_branch(
     ctx: &Context,
     workspace: Workspace,
-    (creation, issue): (&Creation, Option<&str>),
+    (creation, issue): (&Creation, Option<&ItemInput>),
     agent: AgentLaunch,
     args: Vec<OsString>,
     options: AddOptions,
@@ -101,7 +104,7 @@ pub(super) async fn start_on_branch(
 /// worker takes too, as `--in` does.
 fn new_space_flag(
     creation: &Creation,
-    issue: Option<&str>,
+    issue: Option<&ItemInput>,
     options: &AddOptions,
 ) -> Option<&'static str> {
     let forks_parent = options.fork.is_some() && creation.copy.is_none();

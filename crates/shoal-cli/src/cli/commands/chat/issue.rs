@@ -12,10 +12,7 @@ use crate::{
         ui,
     },
     config,
-    forge::items::{
-        link::{ItemKind, LinkKind},
-        list::Search,
-    },
+    forge::items::{link::ItemKind, list::Search, reference::ItemInput},
     model::{LinkedItem, Relation, Repository},
 };
 
@@ -23,7 +20,7 @@ use crate::{
 /// `repository` names or the current one.
 pub(super) async fn repository(
     ctx: &Context,
-    input: Option<&str>,
+    input: Option<&ItemInput>,
     repository: Option<String>,
 ) -> Result<Repository> {
     let retry = "shoal start --mode chat --issue <url> --repo <repository>";
@@ -37,7 +34,7 @@ pub(super) async fn chosen(
     repo: &Repository,
     labels: &config::Issue,
     mode: &crate::config::modes::ModeName,
-    input: Option<String>,
+    input: Option<ItemInput>,
 ) -> Result<Issue> {
     let input = match input {
         Some(input) => input,
@@ -50,11 +47,11 @@ pub(super) async fn chosen(
         }
     };
     let context = issues::read_context(ctx, repo).await?;
-    issues::load(ctx, context, &input).await
+    issues::load(ctx, context, input).await
 }
 
 /// The number of an open issue labelled `[issue] plan_label`, picked.
-async fn labelled(ctx: &Context, repo: &Repository, labels: &config::Issue) -> Result<String> {
+async fn labelled(ctx: &Context, repo: &Repository, labels: &config::Issue) -> Result<ItemInput> {
     let label = labels.plan_label.as_deref().context(
         "set [issue] plan_label to choose among the issues that need a plan, or name an issue",
     )?;
@@ -62,7 +59,8 @@ async fn labelled(ctx: &Context, repo: &Repository, labels: &config::Issue) -> R
     let search = Search::labelled(label);
     let issues = client::list_items(&ctx.paths, context, ItemKind::Issue, search, None).await?;
     ui::require_argument(ctx, "issue", "issue")?;
-    ui::pick_item(ctx, "Issue> ", &format!("issues labelled {label}"), issues)
+    let number = ui::pick_item(ctx, "Issue> ", &format!("issues labelled {label}"), issues)?;
+    Ok(ItemInput::Number(number))
 }
 
 /// `topic` started on `issue`: named after the issue's title, assigned the
@@ -75,7 +73,6 @@ pub(super) fn on(topic: Topic, issue: &Issue) -> Topic {
         links: vec![(
             Relation::Assigned,
             LinkedItem {
-                kind: LinkKind::Issue,
                 url: issue.url.clone(),
                 title: Some(issue.title.clone()),
             },

@@ -78,7 +78,10 @@ fn run(event: &str, pulls: Value, branch: Value) -> Value {
 #[test]
 fn a_run_names_its_pr_or_branch_and_a_forks_pr_only_its_commit() {
     let pull = job_run(&run("pull_request", json!([{"number": 12}]), json!("fix"))).unwrap();
-    assert_eq!(pull.url, "https://github.com/team/repo/actions/runs/30");
+    assert_eq!(
+        pull.url.url(),
+        "https://github.com/team/repo/actions/runs/30"
+    );
     assert_eq!(pull.workflow.as_deref(), Some("ci.yml"));
     assert_eq!(pull.commit, "abc123");
     assert_eq!(

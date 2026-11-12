@@ -41,6 +41,7 @@ use self::{
 };
 use crate::{
     cli::{context::Context, ui::ModeChoice},
+    forge::items::reference::ItemInput,
     start_plan::{AddPlan, Creation},
 };
 
@@ -89,7 +90,7 @@ pub(in crate::cli::commands) async fn add(
     ctx: &Context,
     repository: Option<crate::repository::Selector>,
     creation: Creation,
-    issue: Option<String>,
+    issue: Option<ItemInput>,
     agent: AgentLaunch,
     args: Vec<OsString>,
     mut options: AddOptions,
@@ -101,9 +102,9 @@ pub(in crate::cli::commands) async fn add(
         "workspace processes start agents only with their scope token"
     );
     let mut creation = absolute(ctx, creation)?;
-    let target = resolve_add_target(ctx, repository, issue.as_deref()).await?;
+    let target = resolve_add_target(ctx, repository, issue.as_ref()).await?;
     if let Some(workspace) = branch::settle(ctx, &target, &mut creation).await? {
-        let named = (&creation, issue.as_deref());
+        let named = (&creation, issue.as_ref());
         return existing::start_on_branch(ctx, workspace, named, agent, args, options).await;
     }
     check_add_creation(ctx, &target, &creation, options.parent.as_ref()).await?;
@@ -218,7 +219,7 @@ impl std::error::Error for StartsAsChat {}
 pub(in crate::cli::commands) async fn check_target(
     ctx: &Context,
     repository: Option<crate::repository::Selector>,
-    issue: Option<&str>,
+    issue: Option<&ItemInput>,
     parent: Option<&SpaceSelector>,
 ) -> Result<crate::repository::Selector> {
     let target = resolve_add_target(ctx, repository, issue).await?;

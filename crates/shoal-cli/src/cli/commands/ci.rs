@@ -16,9 +16,9 @@ use crate::{
         ui,
     },
     forge::{
-        ForgeRepo, IssueInput,
         capability::Capability,
         ci::{CiAction, run_view::RunFilter},
+        items::reference::ItemRef,
     },
     protocol::ItemContext,
 };
@@ -41,17 +41,17 @@ pub(super) async fn run(ctx: &Context, command: CiCommand) -> Result<i32> {
     }
 }
 
-/// Where a request about the run or workflow `input` names runs: the named
-/// workspace or the registered repository `repo` names, else the current
-/// workspace or checkout, which a run number or workflow name needs, so they
-/// fall back to the picker; a URL names its repository and needs neither.
+/// Where a request about a run or workflow runs: the named workspace or the
+/// registered repository `repo` names, else the current workspace or
+/// checkout, which a run number or workflow name needs, so they fall back to
+/// the picker; a run or workflow named by its URL, `url`, names its
+/// repository and needs neither.
 async fn input_context(
     ctx: &Context,
     space: Option<SpaceSelector>,
     repo: Option<String>,
-    input: Option<&str>,
+    url: bool,
 ) -> Result<Option<ItemContext>> {
-    let url = input.is_some_and(|input| IssueInput::parse(input) == IssueInput::Url);
     if space.is_none() && repo.is_none() && url && ui::current_chat(&space).is_none() {
         return current_context(ctx).await;
     }
@@ -61,16 +61,15 @@ async fn input_context(
 }
 
 /// What `view` and `status` say of the `waiting` runs on the head of the PR
-/// at `pr_url` that wait for approval, with how to approve them.
-pub(super) fn waiting_runs_line(pr_url: &str, waiting: usize) -> String {
+/// `pull` that wait for approval, with how to approve them.
+pub(super) fn waiting_runs_line(pull: &ItemRef, waiting: usize) -> String {
     let (runs, them) = match waiting {
         1 => ("1 CI run waits".to_owned(), "it"),
         _ => (format!("{waiting} CI runs wait"), "them"),
     };
-    let approvable = ForgeRepo::from_pull_url(pr_url)
-        .ok()
-        .filter(|forge| forge.supports(Capability::ApproveRuns))
-        .and_then(|forge| Some(forge.pull(pr_url).ok()?.0));
+    let approvable = (pull.repository().supports(Capability::ApproveRuns))
+        .then(|| pull.pull().ok())
+        .flatten();
     match approvable {
         Some(number) => {
             format!("{runs} for approval; approve {them} with shoal ci approve --pr {number}")

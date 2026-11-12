@@ -7,7 +7,7 @@ fn pr(forge: &ForgeRepo, draft: bool, labels: &[&str]) -> Current {
         item: Item {
             kind: ItemKind::Pr,
             number: 7,
-            url: String::new(),
+            url: "https://forge.example/team/repo/pulls/1".parse().unwrap(),
             title: if draft && forge.kind == ForgeKind::Forgejo {
                 "WIP: Fix".into()
             } else {

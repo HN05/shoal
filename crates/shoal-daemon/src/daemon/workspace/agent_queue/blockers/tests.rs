@@ -175,7 +175,10 @@ async fn issue_blockers_wait_for_closure_or_a_done_workspace_linking_them() {
         "https://forge.example/team/repo/issues/1",
         "https://forge.example/team/repo/issues/2",
     );
-    let blockers = vec![Blocker::Issue(closed.into()), Blocker::Issue(linked.into())];
+    let blockers = vec![
+        Blocker::Issue(closed.parse().unwrap()),
+        Blocker::Issue(linked.parse().unwrap()),
+    ];
     let launch = add_blocked(&manager, &repo, "launch", blockers).await;
     assert_eq!(launch.blockers, [closed, linked]);
 

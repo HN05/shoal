@@ -129,12 +129,14 @@ async fn origin_lookup_accepts_non_utf8_checkout_paths() {
         .unwrap();
     let remote = remote_url_from_path(&path).await.unwrap().unwrap();
     let forge = crate::forge::ForgeRepo::parse(&remote).unwrap();
+    let item = |kind| crate::forge::items::reference::ItemRef::numbered(&forge, kind, 178);
+    use crate::forge::items::link::LinkKind;
     assert_eq!(
-        forge.issue("178").unwrap().1,
+        item(LinkKind::Issue).unwrap().url(),
         "https://example.com/team/repo/issues/178"
     );
     assert_eq!(
-        forge.pull("178").unwrap().1,
+        item(LinkKind::Pr).unwrap().url(),
         "https://example.com/team/repo/pulls/178"
     );
 }
@@ -244,7 +246,6 @@ async fn an_item_url_is_refused_as_no_repository_and_names_its_repository() {
     // is still a repository.
     let nested = "https://gitlab.com/team/subgroup/tree/project.git";
     assert!(registrable(nested));
-    assert!(item_repository("/work/issues/3").is_none());
     assert_eq!(item(refusal(nested).await), None);
     // Anything else is still an unregistered repository.
     assert_eq!(item(refusal("missing").await), None);

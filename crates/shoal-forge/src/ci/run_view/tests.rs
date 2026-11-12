@@ -1,7 +1,11 @@
 use serde_json::json;
 
 use super::*;
-use crate::{backends::Runs, numbers::RunId};
+use crate::{
+    backends::Runs,
+    items::{link::LinkKind, reference::ItemRef},
+    numbers::RunId,
+};
 
 fn filter(branch: Option<&str>, workflow: Option<&str>) -> RunFilter {
     RunFilter {
@@ -282,11 +286,12 @@ async fn a_run_cancelled_before_its_job_ran_reports_it_without_reading_its_log()
     });
     let forgejo = repo_on(&server, ForgeKind::Forgejo, "team/repo");
     let account = agent_on(&server, "agent");
-    let activity = forgejo.run_activity(&account, "7").await?;
+    let run = ItemRef::numbered(&forgejo, LinkKind::Ci, 7)?;
+    let activity = forgejo.run_activity(&account, &run).await?;
     assert_eq!(activity.state(), Some(SnapshotState::Cancelled));
     assert!(activity.failed_jobs.is_empty());
     let log = forgejo
-        .run_job_log(&account, "7", &JobRef::Id(JobId::new(2)))
+        .run_job_log(&account, &run, &JobRef::Id(JobId::new(2)))
         .await;
     assert!(log.is_err());
     assert!(

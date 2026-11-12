@@ -120,7 +120,7 @@ async fn a_pr_finds_the_record_of_the_workspace_that_links_it() {
     let url = "https://forge.example/team/project/pulls/7".to_owned();
     assert!(
         manager
-            .recorded_for_pull(url.clone())
+            .recorded_for_pull(url.clone().parse().unwrap())
             .await
             .unwrap()
             .is_empty()
@@ -128,7 +128,7 @@ async fn a_pr_finds_the_record_of_the_workspace_that_links_it() {
 
     let registration = Registration {
         kind: RegistrationKind::Watch {
-            urls: vec![url.clone()],
+            urls: vec![url.clone().parse().unwrap()],
             merged_head: None,
         },
         error: None,
@@ -145,7 +145,10 @@ async fn a_pr_finds_the_record_of_the_workspace_that_links_it() {
         })
         .await
         .unwrap();
-    let recorded = manager.recorded_for_pull(url).await.unwrap();
+    let recorded = manager
+        .recorded_for_pull(url.parse().unwrap())
+        .await
+        .unwrap();
     let head = recorded[0].head.clone();
     let into = |target: &str| Merged {
         head: head.clone(),
@@ -175,7 +178,7 @@ async fn a_merge_is_refused_once_its_warning_is_not_the_one_confirmed() {
             subject: "PR #7".into(),
             target: "main".into(),
             files: vec!["version".into()],
-            url: Some("https://github.com/team/repo/pull/7".into()),
+            url: Some("https://github.com/team/repo/pull/7".parse().unwrap()),
         }),
     };
     let merge = Action::Merge {
@@ -183,12 +186,17 @@ async fn a_merge_is_refused_once_its_warning_is_not_the_one_confirmed() {
         delete_branch: false,
     };
     let refused = manager
-        .confirmed_merge(&context, Some("7".into()), merge, &confirmed)
+        .confirmed_merge(&context, Some("7".parse().unwrap()), merge, &confirmed)
         .await
         .unwrap_err();
     assert!(refused.to_string().contains("changed since you confirmed"));
     let refused = manager
-        .confirmed_merge(&context, Some("7".into()), Action::Close, &confirmed)
+        .confirmed_merge(
+            &context,
+            Some("7".parse().unwrap()),
+            Action::Close,
+            &confirmed,
+        )
         .await
         .unwrap_err();
     assert!(refused.to_string().contains("only a merge"));
@@ -199,7 +207,7 @@ async fn a_merge_is_refused_once_its_warning_is_not_the_one_confirmed() {
 fn link_pull(database: &std::path::Path, id: &str, url: &str) {
     let registration = Registration {
         kind: RegistrationKind::Watch {
-            urls: vec![url.to_owned()],
+            urls: vec![url.parse().unwrap()],
             merged_head: None,
         },
         error: None,

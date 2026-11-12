@@ -2,21 +2,19 @@
 //! number.
 use std::ffi::OsString;
 
-use anyhow::{Context as _, Result, bail, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use super::{AddOptions, AgentLaunch};
 use crate::{
     agent::Agent,
+    cli::args::target::StartTarget,
     cli::{
         client,
         commands::{issues, review},
         context::Context,
         ui,
     },
-    forge::{
-        IssueInput, PullRequest,
-        items::link::{Link, LinkTarget, is_item_link},
-    },
+    forge::{ForgeRepo, PullRequest, items::reference::ItemInput},
     git,
     model::Repository,
     protocol::PullHead,
@@ -24,15 +22,15 @@ use crate::{
 };
 
 pub(in crate::cli::commands) struct AddInput {
-    pub positional: Option<String>,
+    pub positional: Option<StartTarget>,
     pub repository: Option<crate::repository::Selector>,
-    pub issue: Option<String>,
+    pub issue: Option<ItemInput>,
 }
 
 /// What the input asks [`super::add`] for besides the creation.
 struct Request {
     repository: Option<crate::repository::Selector>,
-    issue: Option<String>,
+    issue: Option<ItemInput>,
     agent: AgentLaunch,
 }
 
@@ -77,45 +75,48 @@ async fn request(
             agent: AgentLaunch::Add(agent),
         });
     };
-    let number = IssueInput::parse(&positional) == IssueInput::Number
-        && creation.branch.is_none()
-        && creation.existing.is_none()
-        && issue.is_none();
-    let pasted = is_item_link(&positional);
-    if !number && !pasted {
+    // A number beside a branch or issue of its own names a repository.
+    let names_branch = creation.branch.is_some() || creation.existing.is_some() || issue.is_some();
+    let positional = match positional {
+        StartTarget::Issue(ItemInput::Number(number)) if names_branch => {
+            StartTarget::Repository(number.to_string())
+        }
+        positional => positional,
+    };
+    if let StartTarget::Repository(named) = positional {
         ensure!(
             repository.is_none(),
             "a positional repository cannot be combined with --repo"
         );
         return Ok(Request {
-            repository: Some(ui::repository_selector(positional)?),
+            repository: Some(ui::repository_selector(named)?),
             issue,
             agent: AgentLaunch::Add(agent),
         });
     }
     ensure!(
-        creation.branch.is_none() && creation.existing.is_none() && issue.is_none(),
+        !names_branch,
         "an item or branch link cannot be combined with --branch or --issue"
     );
-    let link = pasted.then(|| Link::parse(&positional)).transpose()?;
-    let target = link.as_ref().map(|link| &link.target);
-    let issue = matches!(target, None | Some(LinkTarget::Issue));
-    if issue && repository.is_some() {
+    let linked = positional.linked_repository().cloned();
+    if let StartTarget::Issue(issue) = &positional
+        && repository.is_some()
+    {
         // Resolve like --issue, which offers to register an unknown repository.
         return Ok(Request {
             repository,
-            issue: Some(positional),
+            issue: Some(issue.clone()),
             agent: AgentLaunch::IssueDefault(agent),
         });
     }
     let mut repos = crate::client::repositories::list(&ctx.paths).await?;
     let repository = match repository {
         Some(repository) => repository,
-        None => match &link {
-            Some(link) => issues::registered_remote(
+        None => match &linked {
+            Some(linked) => issues::registered_remote(
                 ctx,
                 &mut repos,
-                link.repository.clone(),
+                linked.clone(),
                 "shoal start <link> --repo <repository>",
             )
             .await?
@@ -126,26 +127,27 @@ async fn request(
         },
     };
     let repo = crate::repository::select(&repos, &repository).await?;
-    if issue {
+    if let StartTarget::Issue(issue) = positional {
         return Ok(Request {
             repository: Some(repo.id.clone().into()),
-            issue: Some(positional),
+            issue: Some(issue),
             agent: AgentLaunch::IssueDefault(agent),
         });
     }
-    ensure_link_in(repo, link.as_ref()).await?;
-    match target.unwrap() {
-        LinkTarget::Pr => {
+    ensure_link_in(repo, linked.as_ref()).await?;
+    match positional {
+        StartTarget::Pull(pull) => {
             let context = issues::read_context(ctx, repo).await?;
-            let pull = client::pull_request(&ctx.paths, context, positional).await?;
+            let pull = client::pull_request(&ctx.paths, context, pull.into()).await?;
             pull_creation(ctx, repo, pull, creation).await?;
         }
-        LinkTarget::Branch(branch) => {
-            git::check_branch_name(None, branch).await?;
-            creation.existing = Some(git::remote_ref("origin", branch));
+        StartTarget::Branch { branch, .. } => {
+            git::check_branch_name(None, &branch).await?;
+            creation.existing = Some(git::remote_ref("origin", &branch));
         }
-        LinkTarget::Run => bail!("a CI run names no work; use an issue, PR or branch link"),
-        LinkTarget::Issue => unreachable!(),
+        StartTarget::Repository(_) | StartTarget::Issue(_) => {
+            unreachable!("returned above")
+        }
     }
     Ok(Request {
         repository: Some(repo.id.clone().into()),
@@ -156,12 +158,12 @@ async fn request(
 
 /// Refuse a link that is not of `repo`, the repository of its checkout's
 /// origin.
-async fn ensure_link_in(repo: &Repository, link: Option<&Link>) -> Result<()> {
+async fn ensure_link_in(repo: &Repository, linked: Option<&ForgeRepo>) -> Result<()> {
     let remote = crate::repository::remote_url_from_path(&repo.path)
         .await?
         .context("forge lookup needs an origin remote")?;
     ensure!(
-        link.is_some_and(|link| link.repository.is_remote(&remote)),
+        linked.is_some_and(|linked| linked.is_remote(&remote)),
         "link belongs to a different repository"
     );
     Ok(())
@@ -186,7 +188,7 @@ pub(in crate::cli::commands) async fn pull_creation(
             pull.number
         );
         creation.pull_head = Some(fork_head(repo, &pull).await?);
-        creation.pr = Some(pull.url);
+        creation.pr = Some(pull.url.into());
         return Ok(());
     }
     let owned = crate::client::workspaces::list(&ctx.paths)
@@ -205,7 +207,7 @@ pub(in crate::cli::commands) async fn pull_creation(
         }
         creation.existing = Some(git::remote_ref("origin", pull.head.as_str()));
     }
-    creation.pr = Some(pull.url);
+    creation.pr = Some(pull.url.into());
     Ok(())
 }
 

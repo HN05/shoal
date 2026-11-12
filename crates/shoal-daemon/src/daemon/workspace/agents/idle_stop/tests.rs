@@ -371,7 +371,7 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
     };
     let (workspace, execution) = agent(&manager, &repo.id, "blocked", working).await;
     let selector = SpaceSelector::id(&workspace.id);
-    let blocker = crate::model::Blocker::Pr("https://github.com/team/app/pull/8".into());
+    let blocker = crate::model::Blocker::Pr("https://github.com/team/app/pull/8".parse().unwrap());
     let change = ProgressChange::AddBlocker {
         blocker: blocker.clone(),
         step: None,

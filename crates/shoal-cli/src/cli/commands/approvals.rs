@@ -160,7 +160,10 @@ fn detail_rows(request: &ApprovalRequest) -> Vec<[Cell; 2]> {
         Some(labels) => row("Labels", labels.join(", ")),
         None => row("Settings", settings(&request.specification)),
     }
-    row("URL", request.url.clone().unwrap_or_default());
+    row(
+        "URL",
+        (request.url.as_ref()).map_or_else(String::new, ToString::to_string),
+    );
     rows
 }
 

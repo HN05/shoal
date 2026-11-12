@@ -20,7 +20,7 @@ states!(ItemState {
 pub struct Item {
     pub kind: ItemKind,
     pub number: u64,
-    pub url: String,
+    pub url: crate::items::reference::ItemRef,
     pub title: String,
     pub state: ItemState,
     pub labels: Vec<String>,
@@ -121,13 +121,13 @@ impl ForgeRepo {
         self.kind.current(self, kind, number, value)
     }
 
-    /// The URL Shoal records for the item.
-    pub fn item_url(&self, kind: ItemKind, number: u64) -> Result<String> {
-        let number = number.to_string();
-        Ok(match kind {
-            ItemKind::Issue => self.issue(&number)?.1,
-            ItemKind::Pr => self.pull(&number)?.1,
-        })
+    /// The item Shoal records for the `kind` item numbered `number`.
+    pub fn item_url(
+        &self,
+        kind: ItemKind,
+        number: u64,
+    ) -> Result<crate::items::reference::ItemRef> {
+        crate::items::reference::ItemRef::numbered(self, kind.into(), number)
     }
 }
 

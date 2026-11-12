@@ -1,5 +1,6 @@
 //! A watch's polling of the forge for the activity of the items it
 //! follows, and the reads of item activity the background poll shares.
+use crate::forge::items::reference::ItemRef;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -17,7 +18,7 @@ use crate::{
     daemon::{links::space::LinkSpace, notifications::NotificationKind, workspace::Manager},
     forge::{
         account::Account,
-        items::link::{LinkKind, Selection},
+        items::link::Selection,
         transport::limits::rate_limited,
         updates::{Snapshot, Update},
     },
@@ -47,7 +48,7 @@ impl Manager {
         let report = branch_report(&items);
         let branch = watches_branch(selection).then(|| space.branch().map(str::to_owned));
         let branch = branch.flatten();
-        let mut keys = items.iter().map(|(url, _)| url.clone()).collect::<Vec<_>>();
+        let mut keys = items.iter().map(ToString::to_string).collect::<Vec<_>>();
         keys.extend(branch.clone());
         let mut batch = own_batch(id, self.pending_activity(id, &keys).await?);
         batch.extend(self.delegated_pending(&children, selection.kind).await?);
@@ -129,15 +130,15 @@ impl Manager {
     pub(super) async fn items_to_look_up(
         &self,
         space: &LinkSpace,
-        items: Vec<(String, LinkKind)>,
-    ) -> Result<Vec<(String, LinkKind)>> {
+        items: Vec<ItemRef>,
+    ) -> Result<Vec<ItemRef>> {
         let (id, done) = (space.id().to_owned(), space.done());
         self.store
             .run(move |db| {
                 let mut open = Vec::new();
-                for (url, kind) in items {
-                    if !activity_ended(db, &id, &url, done)? {
-                        open.push((url, kind));
+                for url in items {
+                    if !activity_ended(db, &id, url.url(), done)? {
+                        open.push(url);
                     }
                 }
                 Ok(open)
@@ -149,36 +150,35 @@ impl Manager {
     /// a worktree Git cannot read holds none of it back.
     pub(super) async fn item_activity(
         &self,
-        items: Vec<(String, LinkKind)>,
+        items: Vec<ItemRef>,
         selection: &Selection,
     ) -> Result<Vec<(String, Snapshot)>> {
         let account = &self.user_account();
         let linked = selection.input.is_none();
         stream::iter(items)
-            .map(|(url, kind)| async move {
-                let snapshot = (self.read_item_activity(account, &url, kind, linked)).await?;
-                Ok((url, snapshot))
+            .map(|url| async move {
+                let snapshot = (self.read_item_activity(account, &url, linked)).await?;
+                Ok((url.to_string(), snapshot))
             })
             .buffered(ITEMS_READ_AT_ONCE)
             .try_collect()
             .await
     }
 
-    /// The activity of the item at `url`. The forge failing to read a `linked`
-    /// item leaves an unread snapshot, so a watch reports the failure as it
+    /// The activity of `item`. The forge failing to read a `linked` item
+    /// leaves an unread snapshot, so a watch reports the failure as it
     /// reports one of the item's sources; an item named on the command line
     /// still fails, so a mistyped number does not wait silently.
     async fn read_item_activity(
         &self,
         account: &Account,
-        url: &str,
-        kind: LinkKind,
+        item: &ItemRef,
         linked: bool,
     ) -> Result<Snapshot> {
-        let forge = self.item_url_forge(kind, url).await?;
-        match forge.item_activity(account, kind, url).await {
+        let forge = self.item_forge(item).await?;
+        match forge.item_activity(account, item).await {
             Err(error) if linked && rate_limited(&error).is_none() => {
-                Ok(Snapshot::unread_item(kind, &error))
+                Ok(Snapshot::unread_item(item.kind(), &error))
             }
             read => read,
         }

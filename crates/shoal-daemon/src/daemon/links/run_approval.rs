@@ -10,7 +10,10 @@ use crate::{
         ForgeRepo,
         account::Account,
         ci::approval::RunsApproved,
-        items::link::{ItemKind, LinkKind},
+        items::{
+            link::{ItemKind, LinkKind},
+            reference::{ItemInput, ItemRef},
+        },
     },
     model::Workspace,
     protocol::ItemContext,
@@ -22,8 +25,8 @@ impl Manager {
     pub async fn approve_ci_runs(
         &self,
         context: &ItemContext,
-        run: Option<String>,
-        pr: Option<String>,
+        run: Option<ItemInput>,
+        pr: Option<ItemInput>,
     ) -> Result<RunsApproved> {
         let place = self.place(context).await?;
         let workspace = place.workspace();
@@ -31,10 +34,11 @@ impl Manager {
         let account = self.user_account();
         let approved = match run {
             Some(input) => {
+                let run = ItemRef::in_repository(&forge, LinkKind::Ci, &input)?;
                 let url = forge
-                    .approve_run(&account, &input)
+                    .approve_run(&account, &run)
                     .await
-                    .with_context(|| format!("could not approve CI run {input}"))?;
+                    .with_context(|| format!("could not approve CI run {run}"))?;
                 self.record_approval(workspace, LinkKind::Ci, &url).await?;
                 vec![url]
             }
@@ -50,10 +54,10 @@ impl Manager {
         place: &Place,
         forge: &ForgeRepo,
         account: &Account,
-        pr: Option<String>,
+        pr: Option<ItemInput>,
     ) -> Result<Vec<String>> {
-        let input = self.named_or_linked(pr, place, ItemKind::Pr).await?;
-        let (number, url) = forge.pull(&input)?;
+        let pull = (self.named_or_linked(pr, place.space_id(), forge, ItemKind::Pr)).await?;
+        let (number, url) = (pull.pull()?, pull.to_string());
         let waiting = forge
             .pr_waiting_runs(account, number)
             .await

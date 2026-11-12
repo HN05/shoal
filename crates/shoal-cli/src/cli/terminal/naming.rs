@@ -42,9 +42,10 @@ pub(super) async fn name_plan(
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     let repo = crate::repository::select(&repos, &plan.repository).await?;
     // A queued start has only the issue's URL; the template may name it.
-    let found = match (issue, plan.issue_url()) {
+    let found = match (issue, plan.issue()) {
         (None, Some(url)) => {
-            Some(issues::load(ctx, item_context(ctx, plan, repo).await?, url).await?)
+            let context = item_context(ctx, plan, repo).await?;
+            Some(issues::load(ctx, context, url.clone()).await?)
         }
         _ => None,
     };
@@ -91,7 +92,7 @@ async fn place_name(ctx: &Context, workspace: &Workspace) -> Result<PlaceName> {
     let issue = match &workspace.links.issue {
         Some(url) => {
             let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
-            Some(issues::load(ctx, context, url).await?)
+            Some(issues::load(ctx, context, url.clone()).await?)
         }
         None => None,
     };

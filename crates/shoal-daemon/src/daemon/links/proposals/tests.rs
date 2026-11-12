@@ -429,7 +429,7 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .unwrap();
     manager.notify_approval(&elsewhere).await;
     let duplicate = ProposalDecision {
-        duplicate_of: Some(Duplicate::Issue("12".into())),
+        duplicate_of: Some(Duplicate::Issue("12".parse().unwrap())),
         ..ProposalDecision::default()
     };
     let decided = manager

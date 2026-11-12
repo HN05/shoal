@@ -170,7 +170,7 @@ mod streams {
             .link_item(
                 &SpaceSelector::id(&workspace.id),
                 LinkKind::Issue,
-                "40",
+                &"40".parse().unwrap(),
                 Relation::Related,
                 Some("Report".into()),
                 None,

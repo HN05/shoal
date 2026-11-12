@@ -1146,7 +1146,7 @@ async fn a_blocked_chat_with_a_background_task_keeps_running() {
     );
     let selector = SpaceSelector::id(&chat.id);
     let add = ProgressChange::AddBlocker {
-        blocker: Blocker::Pr("https://github.com/team/app/pull/8".into()),
+        blocker: Blocker::Pr("https://github.com/team/app/pull/8".parse().unwrap()),
         step: None,
         reason: "Needs the API".into(),
     };
@@ -1186,7 +1186,7 @@ async fn a_blocked_chats_waiting_hook_is_no_background_work() {
     );
     let selector = SpaceSelector::id(&chat.id);
     let add = ProgressChange::AddBlocker {
-        blocker: Blocker::Pr("https://github.com/team/app/pull/8".into()),
+        blocker: Blocker::Pr("https://github.com/team/app/pull/8".parse().unwrap()),
         step: None,
         reason: "Needs the API".into(),
     };

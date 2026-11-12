@@ -10,8 +10,7 @@ use crate::{
     backends::Runs,
     capability::{self, Capability},
     ci::{CiAction, JobState, id},
-    hosts::HostTypes,
-    items::link::LinkKind,
+    items::reference::ItemRef,
     numbers::{JobId, RunId, RunNumber},
     transport::api::{HttpMethod, Request},
 };
@@ -71,31 +70,14 @@ pub struct RunActed {
     pub action: CiAction,
 }
 
-/// Refuse a run no forge links, before any lookup.
-pub fn validate_run_reference(input: &str) -> Result<()> {
-    ensure!(
-        id(input).is_some() || input.starts_with("https://") || input.starts_with("http://"),
-        "name a CI run by its web URL or the number in it"
-    );
-    Ok(())
-}
-
 impl ForgeRepo {
-    /// The repository a run's web URL belongs to.
-    pub fn from_run_url(url: &str) -> Result<Self> {
-        Self::from_item_url(LinkKind::Ci, url)
-    }
-
-    /// The repository a run's web URL belongs to, on the forge `hosts` says
-    /// its host serves.
-    pub async fn resolve_run_url(url: &str, hosts: &impl HostTypes) -> Result<Self> {
-        Self::resolve_item_url(LinkKind::Ci, url, hosts).await
-    }
-
     /// The number of the run `input`, its web URL or the number in it, names,
     /// and the run's web URL without a job.
-    pub fn run(&self, input: &str) -> Result<(RunNumber, String)> {
-        validate_run_reference(input)?;
+    pub(crate) fn run(&self, input: &str) -> Result<(RunNumber, String)> {
+        ensure!(
+            id(input).is_some() || input.starts_with("https://") || input.starts_with("http://"),
+            "name a CI run by its web URL or the number in it"
+        );
         let number = id(input)
             .map(RunNumber::new)
             .or_else(|| self.kind.locate_run(self, input))
@@ -112,17 +94,21 @@ impl ForgeRepo {
         Ok(format!("{}{route}{number}", self.repository_url()))
     }
 
-    /// The run `input`, its web URL or the number in it, names, once the
-    /// forge is known to apply `action` to runs.
-    pub async fn find_run(&self, account: &Account, input: &str, action: CiAction) -> Result<Run> {
+    /// The run `run`, once the forge is known to apply `action` to runs.
+    pub async fn find_run(
+        &self,
+        account: &Account,
+        run: &ItemRef,
+        action: CiAction,
+    ) -> Result<Run> {
         self.require_on_server(account, Capability::ci(action))
             .await?;
-        self.read_run(account, input).await
+        self.read_run(account, run).await
     }
 
-    /// The run `input`, its web URL or the number in it, names.
-    pub(crate) async fn read_run(&self, account: &Account, input: &str) -> Result<Run> {
-        let (number, _) = self.run(input)?;
+    /// The run `run`.
+    pub(crate) async fn read_run(&self, account: &Account, run: &ItemRef) -> Result<Run> {
+        let number = run.run()?;
         let read = Request::get(self.repo_endpoint(&self.kind.run_path(number)));
         let value = self.send(account, &read).await?;
         self.kind.run(self, number, &value)

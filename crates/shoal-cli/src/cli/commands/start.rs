@@ -13,7 +13,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::{
-        args::create::StartArgs,
+        args::{create::StartArgs, target::StartTarget},
         context::Context,
         ui::{self, Fallback, ModeChoice},
     },
@@ -22,10 +22,7 @@ use crate::{
         permissions::{PermissionChange, PermissionsConfig},
         templates,
     },
-    forge::{
-        IssueInput,
-        items::link::{Link, LinkTarget},
-    },
+    forge::items::reference::{ItemInput, ItemRef},
     model::{AgentSession, SpaceKind},
     protocol::ConfigTarget,
     start_plan::{CopyCreation, Creation},
@@ -74,8 +71,7 @@ fn ensure_in_fits(args: &StartArgs) -> Result<()> {
         ensure_worker_fits(args)?;
     }
     let repository = args.repository_override.is_some()
-        || (args.repository.as_deref())
-            .is_some_and(|positional| positional_kind(positional) == Positional::Repository);
+        || matches!(args.repository, Some(StartTarget::Repository(_)));
     ensure!(
         !repository,
         "a start with --in starts in the workspace's repository; drop the repository"
@@ -242,7 +238,7 @@ async fn issue_mode(
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     let repo = crate::repository::select(&repos, selector).await?;
     let context = super::issues::read_context(ctx, repo).await?;
-    let issue = super::issues::load(ctx, context, input).await?;
+    let issue = super::issues::load(ctx, context, input.clone()).await?;
     let mode = labelled_mode(&settings.issue, &issue.labels);
     Ok(mode.filter(|mode| modes::get(&settings.modes, mode).is_ok()))
 }
@@ -263,46 +259,27 @@ fn labelled_mode(config: &config::Issue, labels: &[String]) -> Option<modes::Mod
 }
 
 /// The issue `--issue` or the positional argument names by number or URL.
-fn named_issue(args: &StartArgs) -> Option<&str> {
-    match (&args.issue, args.repository.as_deref()) {
+fn named_issue(args: &StartArgs) -> Option<&ItemInput> {
+    match (&args.issue, &args.repository) {
         (Some(Some(issue)), _) => Some(issue),
-        (_, Some(positional)) if positional_kind(positional) == Positional::Issue => {
-            Some(positional)
-        }
+        (_, Some(positional)) => positional.issue(),
         _ => None,
     }
 }
 
-/// What the positional argument names.
-#[derive(Debug, PartialEq, Eq)]
-enum Positional {
-    /// An issue, by number or URL.
-    Issue,
-    /// A PR or branch, by its link.
-    Branch,
-    /// A repository, by name or URL.
-    Repository,
-}
-
-fn positional_kind(positional: &str) -> Positional {
-    match IssueInput::parse(positional) {
-        IssueInput::Number => Positional::Issue,
-        IssueInput::Url => match Link::parse(positional) {
-            Ok(link) if matches!(link.target, LinkTarget::Issue) => Positional::Issue,
-            Ok(_) => Positional::Branch,
-            // A repository's own URL.
-            Err(_) => Positional::Repository,
-        },
-        IssueInput::Invalid => Positional::Repository,
-    }
+/// Whether the positional argument links a PR or branch, which only a
+/// workspace starts on.
+fn links_branch(args: &StartArgs) -> bool {
+    matches!(
+        args.repository,
+        Some(StartTarget::Pull(_) | StartTarget::Branch { .. })
+    )
 }
 
 /// The kind of space the arguments other than the mode fit: a workspace
 /// for a flag only a workspace takes or a PR or branch link.
 fn fitting_kind(args: &StartArgs) -> Option<SpaceKind> {
-    let links_branch = (args.repository.as_deref())
-        .is_some_and(|positional| positional_kind(positional) == Positional::Branch);
-    (links_branch || !workspace_flags(args).is_empty()).then_some(SpaceKind::Workspace)
+    (links_branch(args) || !workspace_flags(args).is_empty()).then_some(SpaceKind::Workspace)
 }
 
 /// The mode picked for a start whose arguments fit either kind of space,
@@ -346,10 +323,8 @@ async fn picking_repository(
         let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.clone()).await?;
         return Ok(Some((&inspection.workspace.repository_id).into()));
     }
-    let names_repository = [&args.repository, &args.repository_override]
-        .iter()
-        .any(|named| named.is_some())
-        || args.issue.is_some();
+    let names_repository =
+        args.repository.is_some() || args.repository_override.is_some() || args.issue.is_some();
     Ok(match names_repository {
         true => Some(checked_repository(ctx, args).await?),
         false => None,
@@ -376,11 +351,11 @@ async fn checked_repository(
         .clone()
         .map(ui::repository_selector)
         .transpose()?;
-    let selector = workspaces::check_target(ctx, named, issue.as_deref(), parent).await?;
-    let named = Some(selector.value().to_owned());
-    match repository.is_some() && repository == args.repository {
-        true => args.repository = named,
-        false => args.repository_override = named,
+    let selector = workspaces::check_target(ctx, named, issue.as_ref(), parent).await?;
+    let named = selector.value().to_owned();
+    match matches!(args.repository, Some(StartTarget::Repository(_))) {
+        true => args.repository = Some(StartTarget::Repository(named)),
+        false => args.repository_override = Some(named),
     }
     args.checked_repository = Some(selector.clone());
     Ok(selector)
@@ -510,19 +485,35 @@ async fn branch_workspace(
 /// current checkout or workspace, without asking.
 async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<RepositoryId>> {
     let repos = crate::client::repositories::list(&ctx.paths).await?;
-    let named = (args.repository_override.as_deref()).or(args.repository.as_deref());
+    let positional = match &args.repository {
+        Some(StartTarget::Repository(named)) => Some(named.as_str()),
+        _ => None,
+    };
+    let named = (args.repository_override.as_deref()).or(positional);
     if let Some(Ok(selector)) = named.map(|named| ui::repository_selector(named.to_owned()))
         && let Ok(repo) = crate::repository::select(&repos, selector).await
     {
         return Ok(Some(repo.id.clone()));
     }
-    let urls = [args.issue.clone().flatten(), args.repository.clone()];
-    for url in urls.iter().flatten() {
-        if let Ok(Some(repo)) = super::issues::registered_for_item(&repos, url).await {
+    for item in linked_items(args) {
+        if let Ok(Some(repo)) = super::issues::registered_for_item(&repos, item).await {
             return Ok(Some(repo.id.clone()));
         }
     }
     super::issues::current_repository_id(ctx, &repos).await
+}
+
+/// The issue and PR the arguments name by URL.
+fn linked_items(args: &StartArgs) -> impl Iterator<Item = &ItemRef> {
+    let issue = match &args.issue {
+        Some(Some(ItemInput::Url(issue))) => Some(issue),
+        _ => None,
+    };
+    let positional = match &args.repository {
+        Some(StartTarget::Issue(ItemInput::Url(item)) | StartTarget::Pull(item)) => Some(item),
+        _ => None,
+    };
+    issue.into_iter().chain(positional)
 }
 
 /// Start the agent in a new or reopened workspace, or, for a start that
@@ -672,10 +663,8 @@ async fn worker_in(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i
 /// Refuse a copy beside a PR or branch link, which would open that branch
 /// instead, before anything is asked or looked up.
 fn ensure_copy_fits(args: &StartArgs) -> Result<()> {
-    let links_branch = (args.repository.as_deref())
-        .is_some_and(|positional| positional_kind(positional) == Positional::Branch);
     ensure!(
-        !args.copy.is_set() || !links_branch,
+        !args.copy.is_set() || !links_branch(args),
         "a copy starts from the workspace it copies, not a PR or branch link"
     );
     Ok(())
@@ -740,19 +729,19 @@ async fn forked(
 /// the `checked` one, in place of the argument that named it, else the one
 /// `--repo` names.
 fn named_repository(
-    positional: Option<String>,
+    positional: Option<StartTarget>,
     repository: Option<String>,
     checked: Option<crate::repository::Selector>,
-) -> Result<(Option<String>, Option<crate::repository::Selector>)> {
+) -> Result<(Option<StartTarget>, Option<crate::repository::Selector>)> {
     let Some(checked) = checked else {
         return Ok((
             positional,
             repository.map(ui::repository_selector).transpose()?,
         ));
     };
-    let names_repository = (positional.as_deref())
-        .is_some_and(|positional| positional_kind(positional) == Positional::Repository);
-    Ok((positional.filter(|_| !names_repository), Some(checked)))
+    let positional =
+        positional.filter(|positional| !matches!(positional, StartTarget::Repository(_)));
+    Ok((positional, Some(checked)))
 }
 
 /// Start the agent in a chat in a repository's checkout, or with `--in` in
@@ -775,8 +764,8 @@ async fn in_chat_with(
         args.issue,
         args.in_workspace.is_some(),
     )?;
-    let linked_issue = (args.linked_issue.as_deref())
-        .and_then(|url| templates::IssueFields::at(url, args.linked_issue_title));
+    let linked_issue = (args.linked_issue.as_ref())
+        .map(|issue| templates::IssueFields::at(issue, args.linked_issue_title));
     let subject = chat::Subject {
         mode,
         issue,
@@ -822,11 +811,11 @@ fn ensure_no_repository(args: &StartArgs, mode: &modes::ModeName) -> Result<()> 
 /// PR or branch link, two of the same, or a repository beside `--in`, whose
 /// workspace has one, is refused.
 fn chat_target(
-    positional: Option<String>,
+    positional: Option<StartTarget>,
     repository: Option<String>,
-    issue: Option<Option<String>>,
+    issue: Option<Option<ItemInput>>,
     in_workspace: bool,
-) -> Result<(Option<String>, Option<Option<String>>)> {
+) -> Result<(Option<String>, Option<Option<ItemInput>>)> {
     let (repository, issue) = match positional {
         Some(positional) => positional_target(positional, repository, issue)?,
         None => (repository, issue),
@@ -841,27 +830,29 @@ fn chat_target(
 /// [`chat_target`] with a `positional` argument, before the check against
 /// `--in`.
 fn positional_target(
-    positional: String,
+    positional: StartTarget,
     repository: Option<String>,
-    issue: Option<Option<String>>,
-) -> Result<(Option<String>, Option<Option<String>>)> {
-    let kind = positional_kind(&positional);
-    ensure!(
-        kind != Positional::Branch,
-        "a chat starts on an issue, not a PR or branch link; start it in a mode that starts in a workspace, such as -m worker"
-    );
-    if kind == Positional::Issue {
-        ensure!(
-            issue.is_none(),
-            "name the issue once, positionally or with --issue"
-        );
-        return Ok((repository, Some(Some(positional))));
+    issue: Option<Option<ItemInput>>,
+) -> Result<(Option<String>, Option<Option<ItemInput>>)> {
+    match positional {
+        StartTarget::Pull(_) | StartTarget::Branch { .. } => anyhow::bail!(
+            "a chat starts on an issue, not a PR or branch link; start it in a mode that starts in a workspace, such as -m worker"
+        ),
+        StartTarget::Issue(positional) => {
+            ensure!(
+                issue.is_none(),
+                "name the issue once, positionally or with --issue"
+            );
+            Ok((repository, Some(Some(positional))))
+        }
+        StartTarget::Repository(positional) => {
+            ensure!(
+                repository.is_none(),
+                "a positional repository cannot be combined with --repo"
+            );
+            Ok((Some(positional), issue))
+        }
     }
-    ensure!(
-        repository.is_none(),
-        "a positional repository cannot be combined with --repo"
-    );
-    Ok((Some(positional), issue))
 }
 
 /// The permissions a start's `--permission` assignments give its agent,

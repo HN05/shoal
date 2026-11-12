@@ -201,7 +201,9 @@ async fn a_job_ranks_with_its_workspace_ahead_of_that_workspaces_restore() {
         }))
         .unwrap(),
         run: JobRun {
-            url: String::new(),
+            url: "https://forge.example/team/repo/actions/runs/2"
+                .parse()
+                .unwrap(),
             workflow: None,
             commit: "abc".into(),
             trigger: Trigger::Other,
@@ -240,7 +242,9 @@ async fn a_job_ranks_with_its_workspace_ahead_of_that_workspaces_restore() {
 #[test]
 fn only_a_run_on_the_known_default_branch_is_on_it() {
     let run = |trigger| JobRun {
-        url: String::new(),
+        url: "https://forge.example/team/repo/actions/runs/1"
+            .parse()
+            .unwrap(),
         workflow: None,
         commit: "abc".into(),
         trigger,

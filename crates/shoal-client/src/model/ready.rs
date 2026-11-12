@@ -7,7 +7,7 @@ pub struct ReviewMark {
     /// The linked issue or PR; both are absent when the mark covers the
     /// workspace itself.
     pub kind: Option<crate::forge::items::link::ItemKind>,
-    pub url: Option<String>,
+    pub url: Option<crate::forge::items::reference::ItemRef>,
     pub head: String,
     pub created_at: crate::time::UnixTime,
     /// Whether HEAD has moved since the mark; absent when HEAD was not read.
@@ -60,6 +60,6 @@ impl From<Vec<ReadyOutcome>> for ReadyMarks {
 /// A linked PR that `shoal ready` left unmarked, and why.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SkippedPr {
-    pub url: String,
+    pub url: crate::forge::items::reference::ItemRef,
     pub reason: String,
 }

@@ -2,17 +2,19 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use crate::forge::items::{link::LinkKind, reference::ItemRef};
+
 /// Canonical issue and pull-request links associated with a space, a
 /// workspace or chat.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SpaceLinks {
     /// The assigned issue.
-    pub issue: Option<String>,
+    pub issue: Option<ItemRef>,
     /// The linked issue's title when the linking caller knew it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue_title: Option<String>,
     /// The assigned PRs.
-    pub prs: Vec<String>,
+    pub prs: Vec<ItemRef>,
     /// Issues and PRs the space created through Shoal, oldest first.
     #[serde(default)]
     pub opened: Vec<LinkedItem>,
@@ -25,11 +27,10 @@ impl SpaceLinks {
     /// The links a copy of the space keeps: its issues, without the PRs and
     /// CI runs of the original's branch.
     pub fn copied(self) -> Self {
-        use crate::forge::items::link::LinkKind;
         let issues = |items: Vec<LinkedItem>| {
             items
                 .into_iter()
-                .filter(|item| item.kind == LinkKind::Issue)
+                .filter(|item| item.kind() == LinkKind::Issue)
                 .collect()
         };
         Self {
@@ -43,14 +44,11 @@ impl SpaceLinks {
     /// Every link with its relation: the assigned issue and PRs, then the
     /// opened and related items.
     pub fn relations(&self) -> Vec<(Relation, LinkedItem)> {
-        use crate::forge::items::link::LinkKind;
         let issue = self.issue.iter().map(|url| LinkedItem {
-            kind: LinkKind::Issue,
             url: url.clone(),
             title: self.issue_title.clone(),
         });
         let prs = self.prs.iter().map(|url| LinkedItem {
-            kind: LinkKind::Pr,
             url: url.clone(),
             title: None,
         });
@@ -60,10 +58,10 @@ impl SpaceLinks {
         assigned.chain(opened).chain(related).collect()
     }
 
-    /// The relations under which the item at `url` is linked.
-    pub fn relations_of(&self, url: &str) -> Vec<Relation> {
+    /// The relations under which `linked` is linked.
+    pub fn relations_of(&self, linked: &ItemRef) -> Vec<Relation> {
         (self.relations().into_iter())
-            .filter(|(_, item)| item.url == url)
+            .filter(|(_, item)| item.url == *linked)
             .map(|(relation, _)| relation)
             .collect()
     }
@@ -101,22 +99,54 @@ impl Default for Relation {
     }
 }
 
-/// An issue, PR or CI run a workspace records without lifecycle effect.
+/// An issue, PR or CI run a space links, with its title when the linking
+/// caller knew it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(into = "LinkedFields", try_from = "LinkedFields")]
 pub struct LinkedItem {
-    pub kind: crate::forge::items::link::LinkKind,
-    pub url: String,
-    /// The item's title when the recording caller knew it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: ItemRef,
     pub title: Option<String>,
 }
 
 impl LinkedItem {
+    pub fn kind(&self) -> LinkKind {
+        self.url.kind()
+    }
+
     /// Whether the item belongs to the repository `remote` names, as an
     /// issue opened elsewhere does not.
     pub fn in_repository(&self, remote: &str) -> bool {
-        crate::forge::items::link::item(self.kind, &self.url)
-            .is_ok_and(|(repository, _)| repository.is_remote(remote))
+        self.url.in_remote(remote)
+    }
+}
+
+/// How a [`LinkedItem`] serializes, its kind beside its URL.
+#[derive(Serialize, Deserialize)]
+struct LinkedFields {
+    kind: LinkKind,
+    url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    title: Option<String>,
+}
+
+impl From<LinkedItem> for LinkedFields {
+    fn from(item: LinkedItem) -> Self {
+        Self {
+            kind: item.kind(),
+            url: item.url.to_string(),
+            title: item.title,
+        }
+    }
+}
+
+impl TryFrom<LinkedFields> for LinkedItem {
+    type Error = anyhow::Error;
+
+    fn try_from(fields: LinkedFields) -> anyhow::Result<Self> {
+        Ok(Self {
+            url: ItemRef::parse_kind(fields.kind, &fields.url)?,
+            title: fields.title,
+        })
     }
 }
 
@@ -130,32 +160,31 @@ pub struct Selected {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SelectedItem {
-    pub url: String,
-    pub kind: crate::forge::items::link::LinkKind,
+    pub url: ItemRef,
     /// The relations under which the space links the item; none for an
     /// item it does not link.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relations: Vec<Relation>,
 }
 
+impl SelectedItem {
+    pub fn kind(&self) -> LinkKind {
+        self.url.kind()
+    }
+}
+
 impl Selected {
     /// The kind of the selected item numbered `number` in the repository
     /// `remote` names, when one is selected; an issue and a PR that share the
     /// number are ambiguous.
-    pub fn kind_of(
-        &self,
-        remote: &str,
-        number: u64,
-    ) -> anyhow::Result<Option<crate::forge::items::link::LinkKind>> {
+    pub fn kind_of(&self, remote: &str, number: u64) -> anyhow::Result<Option<LinkKind>> {
         // A number alone never names a run.
         let mut kinds = self
             .items
             .iter()
-            .filter(|item| item.kind.item().is_some())
-            .filter(|item| {
-                crate::forge::items::link::names_item(item.kind, &item.url, remote, number)
-            })
-            .map(|item| item.kind);
+            .filter(|item| item.kind().item().is_some())
+            .filter(|item| item.url.number().get() == number && item.url.in_remote(remote))
+            .map(SelectedItem::kind);
         let kind = kinds.next();
         anyhow::ensure!(
             kinds.all(|other| Some(other) == kind),

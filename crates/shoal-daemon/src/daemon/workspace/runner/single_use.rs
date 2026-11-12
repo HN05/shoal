@@ -11,7 +11,7 @@ use super::ends::ClaimedJob;
 use crate::client::queue::QueueEntryId;
 use crate::{
     daemon::workspace::Manager,
-    forge::{ForgeRepo, ci::runner::took_job, numbers::RunnerId},
+    forge::{ci::runner::took_job, numbers::RunnerId},
 };
 
 /// How long a runner may wait for the forge to give it a job before the
@@ -43,7 +43,7 @@ impl Manager {
         let Some(runner) = job.runner_id else {
             return Ok(());
         };
-        let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
+        let forge = self.item_forge(&job.job.run.url).await?;
         forge.delete_runner(&self.user_account(), runner).await
     }
 
@@ -71,7 +71,7 @@ impl Manager {
     /// Delete `runner`, registered for `job` alone, when it runs nothing and
     /// the forge lists no job waiting for the labels it was registered with.
     async fn release_if_idle(&self, job: &ClaimedJob, runner: RunnerId) -> Result<()> {
-        let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
+        let forge = self.item_forge(&job.job.run.url).await?;
         let account = self.user_account();
         // A runner already gone exits by itself.
         let Some(state) = forge.runner_state(&account, runner).await? else {

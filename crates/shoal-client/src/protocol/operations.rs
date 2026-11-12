@@ -59,9 +59,9 @@ pub enum OperationMethod {
         options: CreationOptions,
         /// An issue number or URL of the repository.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        issue: Option<String>,
+        issue: Option<crate::forge::items::reference::ItemInput>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        pr: Option<String>,
+        pr: Option<crate::forge::items::reference::ItemInput>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<Box<QueuedLaunch>>,
         /// The agent the caller starts itself once setup succeeds, which
@@ -90,7 +90,7 @@ pub enum OperationMethod {
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        issue: Option<String>,
+        issue: Option<crate::forge::items::reference::ItemInput>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<Box<QueuedLaunch>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -104,7 +104,7 @@ pub enum OperationMethod {
         chat: SpaceSelector,
         branch: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        issue: Option<String>,
+        issue: Option<crate::forge::items::reference::ItemInput>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         base: Option<String>,
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
@@ -146,7 +146,10 @@ pub enum WorkspaceStart {
     Branch(String),
     /// PR `url`'s head, at a commit, reopening the workspace made for the
     /// PR; it takes no base, path or Git profile.
-    PullHead { url: String, head: PullHead },
+    PullHead {
+        url: crate::forge::items::reference::ItemRef,
+        head: PullHead,
+    },
     /// A copy of another workspace of the repository on a new branch,
     /// `branch` or else one named after the copied one's; it takes no base.
     Copy {
@@ -220,7 +223,7 @@ pub struct Preparation {
     pub setup: bool,
     pub post_setup: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pr: Option<String>,
+    pub pr: Option<crate::forge::items::reference::ItemInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<Box<QueuedLaunch>>,
     /// The agent the caller starts itself once setup succeeds.
@@ -287,7 +290,7 @@ impl QueuedLaunch {
 /// for the prompt, and the title the queue shows.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LaunchIssue {
-    pub url: String,
+    pub url: crate::forge::items::reference::ItemRef,
     pub title: String,
 }
 

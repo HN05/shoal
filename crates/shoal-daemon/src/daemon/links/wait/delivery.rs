@@ -189,7 +189,7 @@ impl Manager {
                 .run(move |db| followed_items(db, &child_id, kind))
                 .await?
                 .into_iter()
-                .map(|(url, _)| url)
+                .map(|url| url.to_string())
                 .chain(child.branch.clone().filter(|_| kind.is_none()))
                 .collect::<Vec<_>>();
             let pending = self.pending_activity(&child.id, &keys).await?;
@@ -210,7 +210,7 @@ impl Manager {
             .await?;
         let keys = items
             .into_iter()
-            .map(|(url, _)| url)
+            .map(|url| url.to_string())
             .chain(workspace.branch)
             .collect::<Vec<_>>();
         self.pending_activity(&workspace.id, &keys).await
@@ -299,7 +299,7 @@ impl Manager {
         let keys: Vec<String> = (self.store.run(move |db| followed_items(db, &id, None)))
             .await?
             .into_iter()
-            .map(|(url, _)| url)
+            .map(|url| url.to_string())
             .collect();
         let mut batch = own_batch(chat, self.pending_activity(chat, &keys).await?);
         batch.extend(self.delegated_pending(&children, None).await?);

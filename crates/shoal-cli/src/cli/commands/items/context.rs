@@ -7,7 +7,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, ui},
     env,
-    forge::{ForgeRepo, IssueInput},
+    forge::{ForgeRepo, items::reference::ItemInput},
     model::{PresentSpace, Repository},
     protocol::ItemContext,
     repository::{self, NotRegistered},
@@ -33,7 +33,7 @@ pub(in crate::cli::commands) async fn select_space_item_context(
     ctx: &Context,
     space: Option<SpaceSelector>,
     repo: Option<String>,
-    item: Option<&str>,
+    item: Option<&ItemInput>,
 ) -> Result<ItemContext> {
     if let Some(repo) = repo {
         return Ok(ItemContext::Checkout(named(ctx, &repo).await?.id));
@@ -124,14 +124,14 @@ pub(in crate::cli::commands) async fn select_open_context(
     ))
 }
 
-/// The checkout of the registered repository of the issue or PR URL
+/// The checkout of the registered repository of the issue, PR or CI run URL
 /// `item`, if it names one.
-async fn item_checkout(ctx: &Context, item: Option<&str>) -> Result<Option<ItemContext>> {
-    let Some(url) = item.filter(|item| IssueInput::parse(item) == IssueInput::Url) else {
+async fn item_checkout(ctx: &Context, item: Option<&ItemInput>) -> Result<Option<ItemContext>> {
+    let Some(ItemInput::Url(item)) = item else {
         return Ok(None);
     };
     let repos = crate::client::repositories::list(&ctx.paths).await?;
-    let registered = super::super::issues::registered_for_item(&repos, url).await?;
+    let registered = super::super::issues::registered_for_item(&repos, item).await?;
     Ok(registered.map(|repo| ItemContext::Checkout(repo.id.clone())))
 }
 

@@ -75,7 +75,7 @@ async fn a_job_of_another_run_waits_until_its_workspace_is_at_that_runs_commit()
         (claimed.job.job.id, claimed.job.job.run),
         (JobId::new(21), RunId::new(2))
     );
-    assert!(claimed.job.run.url.ends_with("/actions/runs/2"));
+    assert!(claimed.job.run.url.url().ends_with("/actions/runs/2"));
 }
 
 #[tokio::test]
@@ -88,7 +88,7 @@ async fn a_workspace_that_cannot_move_fails_the_job() {
     assert!(directory.join("refused").exists());
     // Run 3 cannot be read, and stopping the job still cancels it.
     let claimed = manager.claimed_jobs().await.unwrap().remove(0);
-    assert!(claimed.job.run.url.ends_with("/actions/runs/3"));
+    assert!(claimed.job.run.url.url().ends_with("/actions/runs/3"));
     let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
@@ -125,7 +125,7 @@ async fn a_job_whose_commit_cannot_be_fetched_still_names_its_run() {
     assert!(directory.join("refused").exists());
     // Stopping the job cancels the run it took, not the claimed one.
     let claimed = manager.claimed_jobs().await.unwrap().remove(0);
-    assert!(claimed.job.run.url.ends_with("/actions/runs/4"));
+    assert!(claimed.job.run.url.url().ends_with("/actions/runs/4"));
     let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
@@ -142,7 +142,7 @@ async fn a_job_whose_name_cannot_be_read_still_runs_at_its_runs_commit() {
     manager.follow_taken_jobs().await.unwrap();
     assert!(directory.join("prepared").exists());
     let claimed = manager.claimed_jobs().await.unwrap().remove(0);
-    assert!(claimed.job.run.url.ends_with("/actions/runs/5"));
+    assert!(claimed.job.run.url.url().ends_with("/actions/runs/5"));
     assert_eq!(claimed.job.job.id, JobId::new(11));
     let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(
@@ -163,9 +163,7 @@ async fn a_report_recorded_before_a_restart_still_moves_the_workspace() {
     let (job, directory) = report(manager, 2).await;
     // A restart cut the follow short after it recorded run 2's job.
     let mut recorded = job.job.clone();
-    let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &manager.forge_hosts())
-        .await
-        .unwrap();
+    let forge = manager.item_forge(&job.job.run.url).await.unwrap();
     recorded.run = forge
         .job_run(&manager.user_account(), RunId::new(2))
         .await
@@ -209,6 +207,6 @@ async fn a_stop_holding_the_claim_from_before_the_follow_cancels_the_reported_ru
     // it read before.
     manager.follow_taken_jobs().await.unwrap();
     let cancelled = manager.cancel_job_run(&stale).await.unwrap();
-    assert!(cancelled.ends_with("/actions/runs/2"));
+    assert!(cancelled.url().ends_with("/actions/runs/2"));
     assert_eq!(fixture.state.lock().unwrap().cancelled, ["2"]);
 }

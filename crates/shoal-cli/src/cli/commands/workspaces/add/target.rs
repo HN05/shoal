@@ -6,7 +6,7 @@ use crate::{
         commands::{issues, repositories},
         context::Context,
     },
-    forge::IssueInput,
+    forge::items::reference::ItemInput,
     model::Repository,
 };
 
@@ -28,7 +28,7 @@ impl AddTarget {
 pub(super) async fn resolve_add_target(
     ctx: &Context,
     repository: Option<crate::repository::Selector>,
-    issue: Option<&str>,
+    issue: Option<&ItemInput>,
 ) -> Result<AddTarget> {
     // Load on first use so explicit targets keep their original failure order.
     let mut repositories = None;
@@ -43,9 +43,9 @@ pub(super) async fn resolve_add_target(
         None => {
             let repos = repositories.insert(crate::client::repositories::list(&ctx.paths).await?);
             match issue {
-                Some(url) if IssueInput::parse(url) == IssueInput::Url => {
-                    issues::repository_for(ctx, repos, url, offer).await?.into()
-                }
+                Some(ItemInput::Url(issue)) => issues::repository_for(ctx, repos, issue, offer)
+                    .await?
+                    .into(),
                 Some(_) => issues::current_repository(ctx, repos.clone(), issues::REPO_OR_URL)
                     .await?
                     .into(),

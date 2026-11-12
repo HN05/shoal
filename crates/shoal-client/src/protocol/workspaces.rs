@@ -65,7 +65,7 @@ pub enum WorkspaceMethod {
     /// top-level one of the user's.
     OpenPullHead {
         repository: crate::repository::Selector,
-        url: String,
+        url: crate::forge::items::reference::ItemRef,
         head: PullHead,
         parent: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]

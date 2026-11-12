@@ -419,10 +419,7 @@ async fn export_the_daemon_cannot_write_keeps_the_workspace() {
 
 #[tokio::test]
 async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
-    use crate::{
-        forge::items::link::LinkKind,
-        model::{LinkedItem, Relation},
-    };
+    use crate::model::{LinkedItem, Relation};
     let (_source, manager, repo, _origin) = exporter().await;
     let workspace = manager
         .create_workspace(&repo.id, "topic".into(), None, None, None)
@@ -432,13 +429,12 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
     commit(&workspace.path, "work");
     let head = git(&workspace.path, &["rev-parse", "HEAD"]);
     fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
-    let item = |kind, url: &str| LinkedItem {
-        kind,
-        url: url.into(),
+    let item = |url: &str| LinkedItem {
+        url: url.parse().unwrap(),
         title: None,
     };
-    let pr = item(LinkKind::Pr, "https://forge.test/o/r/pulls/2");
-    let issue = item(LinkKind::Issue, "https://forge.test/o/r/issues/3");
+    let pr = item("https://forge.test/o/r/pulls/2");
+    let issue = item("https://forge.test/o/r/issues/3");
     manager
         .record_items(
             &workspace.id,

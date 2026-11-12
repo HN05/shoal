@@ -89,13 +89,12 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         session: Some("s1".into()),
         restore: None,
         links: crate::model::SpaceLinks {
-            issue: Some("https://forge.example/team/repo/issues/12".into()),
+            issue: Some("https://forge.example/team/repo/issues/12".parse().unwrap()),
             issue_title: Some("Plan the cache".into()),
-            prs: vec!["https://forge.example/team/repo/pulls/14".into()],
+            prs: vec!["https://forge.example/team/repo/pulls/14".parse().unwrap()],
             opened: Vec::new(),
             related: vec![crate::model::LinkedItem {
-                kind: crate::forge::items::link::LinkKind::Issue,
-                url: "https://forge.example/team/repo/issues/9".into(),
+                url: "https://forge.example/team/repo/issues/9".parse().unwrap(),
                 title: None,
             }],
         },

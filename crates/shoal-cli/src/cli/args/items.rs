@@ -2,8 +2,17 @@
 //! a workspace or chat.
 use clap::{Args, Subcommand, ValueEnum};
 
+use anyhow::{Result, bail, ensure};
+
 use crate::client::space_names::SpaceSelector;
-use crate::{cli::args::item_reference, model::Relation, reviews::ReviewId};
+use crate::{
+    forge::items::{
+        link::{LinkKind, Selection},
+        reference::ItemInput,
+    },
+    model::Relation,
+    reviews::ReviewId,
+};
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -98,17 +107,15 @@ pub struct RelationArgs {
 
 impl RelationArgs {
     /// Split the trailing relation from the item selection before it.
-    pub fn split(self) -> anyhow::Result<(ItemArgs, Relation)> {
+    pub fn split(self) -> Result<(ItemArgs, Relation)> {
         let mut args = self.args;
         let last = args.pop().unwrap_or_default();
         let relation = Relation::from_str(&last, false).map_err(|_| {
             anyhow::anyhow!("end with a relation: assigned, opened or related (got {last})")
         })?;
-        let mut items = args
-            .into_iter()
-            .map(|arg| item_reference(&arg).unwrap_or_else(|never| match never {}));
+        let mut items = args.into_iter();
         let items = ItemArgs {
-            kind_or_url: items.next(),
+            kind_or_url: items.next().as_deref().map(str::parse).transpose()?,
             item: items.next(),
             space: self.space,
         };
@@ -116,14 +123,40 @@ impl RelationArgs {
     }
 }
 
+/// What an item selection's first argument names.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ItemWord {
+    /// The linked items of one kind, or the one the next argument names.
+    Kind(LinkKind),
+    /// The space's latest local review, or the one the next argument numbers.
+    Review,
+    Item(ItemInput),
+}
+
+impl std::str::FromStr for ItemWord {
+    type Err = anyhow::Error;
+
+    fn from_str(word: &str) -> Result<Self> {
+        if word == "review" {
+            return Ok(Self::Review);
+        }
+        Ok(
+            match LinkKind::ALL.iter().find(|kind| kind.as_str() == word) {
+                Some(kind) => Self::Kind(*kind),
+                None => Self::Item(word.parse()?),
+            },
+        )
+    }
+}
+
 #[derive(Debug, Args)]
 pub struct ItemArgs {
     /// pr/issue/ci/review to select a kind, an issue or PR number, or an
     /// issue, PR or CI run URL.
-    #[arg(value_parser = item_reference)]
-    pub kind_or_url: Option<String>,
-    /// Number or URL when a kind is supplied.
-    #[arg(requires = "kind_or_url", value_parser = item_reference)]
+    #[arg(value_parser = item_word)]
+    pub kind_or_url: Option<ItemWord>,
+    /// Number or URL when a kind is supplied, or a review's ID.
+    #[arg(requires = "kind_or_url")]
     pub item: Option<String>,
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
@@ -131,20 +164,58 @@ pub struct ItemArgs {
     pub space: Option<SpaceSelector>,
 }
 
+/// clap parser for [`ItemWord`].
+fn item_word(word: &str) -> Result<ItemWord, String> {
+    word.parse().map_err(|error| format!("{error:#}"))
+}
+
 impl ItemArgs {
     /// Whether the selection names CI runs, which no number alone does.
     pub fn selects_ci(&self) -> bool {
-        self.kind_or_url.as_deref() == Some("ci")
+        matches!(self.kind_or_url, Some(ItemWord::Kind(LinkKind::Ci)))
     }
 
     /// Whether the selection names a local review, by its ID when it has
     /// one: `view review 17`.
     pub fn selects_review(&self) -> bool {
-        self.kind_or_url.as_deref() == Some("review")
+        matches!(self.kind_or_url, Some(ItemWord::Review))
     }
 
     /// The review ID a review selection names.
-    pub fn review_id(&self) -> anyhow::Result<Option<ReviewId>> {
+    pub fn review_id(&self) -> Result<Option<ReviewId>> {
         self.item.as_deref().map(str::parse).transpose()
     }
+
+    /// The issues, PRs or CI runs the arguments select, where a URL gives
+    /// its kind and a bare number leaves it open.
+    pub fn selection(&self) -> Result<Selection> {
+        let input = self.item.as_deref().map(str::parse).transpose()?;
+        Ok(match (&self.kind_or_url, input) {
+            (None, _) => Selection::default(),
+            (Some(ItemWord::Kind(kind)), input) => {
+                ensure!(
+                    input
+                        .as_ref()
+                        .and_then(ItemInput::kind)
+                        .is_none_or(|named| named == *kind),
+                    "link does not match the selected item kind"
+                );
+                Selection {
+                    kind: Some(*kind),
+                    input,
+                }
+            }
+            (Some(ItemWord::Item(item)), None) => Selection {
+                kind: item.kind(),
+                input: Some(item.clone()),
+            },
+            (Some(ItemWord::Item(_)), Some(_)) => {
+                bail!("use a number or URL, or pr/issue/ci followed by one")
+            }
+            (Some(ItemWord::Review), _) => bail!("a review is not an issue, PR or CI run"),
+        })
+    }
 }
+
+#[cfg(test)]
+mod tests;

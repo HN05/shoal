@@ -1,12 +1,19 @@
 //! What the daemon reads from a forge for a space or a registered checkout,
 //! so a scoped caller reads as its agent account and anyone else with the
 //! user's own logins.
-use anyhow::{Result, bail};
+use anyhow::Result;
 
-use super::{actions::NOTHING_LINKED, space::LinkSpace};
+use super::space::LinkSpace;
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
-    forge::{ForgeRepo, account::Account, items::link::ItemKind},
+    forge::{
+        ForgeRepo,
+        account::Account,
+        items::{
+            link::ItemKind,
+            reference::{ItemInput, ItemRef},
+        },
+    },
     model::Repository,
     protocol::ItemContext,
 };
@@ -88,15 +95,16 @@ impl Manager {
     /// one of `kind`.
     pub(in crate::daemon::links) async fn place_item(
         &self,
-        item: Option<String>,
+        item: Option<ItemInput>,
         place: &ReadPlace,
         kind: ItemKind,
-    ) -> Result<String> {
-        match (item, place) {
-            (Some(item), _) => Ok(item),
-            (None, ReadPlace::Space(space)) => self.linked_item(space.id(), kind).await,
-            (None, ReadPlace::Checkout(_)) => bail!(NOTHING_LINKED),
-        }
+    ) -> Result<ItemRef> {
+        let forge = self.read_place_forge(place).await?;
+        let space = match place {
+            ReadPlace::Space(space) => Some(space.id()),
+            ReadPlace::Checkout(_) => None,
+        };
+        self.named_or_linked(item, space, &forge, kind).await
     }
 }
 

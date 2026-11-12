@@ -17,7 +17,7 @@ pub enum CiMethod {
     CiAction {
         #[serde(flatten)]
         context: super::ItemContext,
-        item: Option<String>,
+        item: Option<crate::forge::items::reference::ItemInput>,
         action: crate::forge::ci::CiAction,
         checks: Vec<String>,
     },
@@ -27,7 +27,7 @@ pub enum CiMethod {
     CiRunAction {
         #[serde(flatten)]
         context: Option<super::ItemContext>,
-        run: String,
+        run: crate::forge::items::reference::ItemInput,
         action: crate::forge::ci::CiAction,
         failed: bool,
     },
@@ -35,19 +35,19 @@ pub enum CiMethod {
     ViewCiRun {
         #[serde(flatten)]
         context: Option<super::ItemContext>,
-        run: String,
+        run: crate::forge::items::reference::ItemInput,
     },
     /// A CI workflow run's jobs, sent in pages.
     CiRunJobs {
         #[serde(flatten)]
         context: Option<super::ItemContext>,
-        run: String,
+        run: crate::forge::items::reference::ItemInput,
     },
     /// The log of one job of a CI workflow run.
     CiRunJobLog {
         #[serde(flatten)]
         context: Option<super::ItemContext>,
-        run: String,
+        run: crate::forge::items::reference::ItemInput,
         job: crate::forge::ci::run_view::JobRef,
     },
     /// The newest CI workflow runs, on the head commit of the PR `pr`
@@ -57,7 +57,7 @@ pub enum CiMethod {
         #[serde(flatten)]
         context: super::ItemContext,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        pr: Option<String>,
+        pr: Option<crate::forge::items::reference::ItemInput>,
         filter: crate::forge::ci::run_view::RunFilter,
     },
     /// Approve the run `run` names, or every run on the head of the PR `pr`
@@ -66,8 +66,8 @@ pub enum CiMethod {
     ApproveCiRuns {
         #[serde(flatten)]
         context: super::ItemContext,
-        run: Option<String>,
-        pr: Option<String>,
+        run: Option<crate::forge::items::reference::ItemInput>,
+        pr: Option<crate::forge::items::reference::ItemInput>,
     },
     /// Start a CI workflow run on a branch, by default the one a workflow
     /// file's URL names, the workspace's, or else the repository's default

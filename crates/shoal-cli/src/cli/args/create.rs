@@ -9,7 +9,10 @@ use crate::model::CheckpointNumber;
 use crate::{
     agent::Agent,
     cli::args::{
-        AgentParser, ModelArgs, command_line::CommandLine, item_reference, permission_assignment,
+        AgentParser, ModelArgs,
+        command_line::CommandLine,
+        issue_input, permission_assignment,
+        target::{StartTarget, start_target},
     },
 };
 
@@ -114,8 +117,8 @@ pub struct BranchArgs {
     /// branch's name with -copy added.
     pub branch: Option<String>,
     /// Derive the branch name from a forge issue number or URL and link the issue.
-    #[arg(short = 'i', long, value_parser = item_reference)]
-    pub issue: Option<String>,
+    #[arg(short = 'i', long, value_parser = issue_input)]
+    pub issue: Option<crate::forge::items::reference::ItemInput>,
     /// Starting Git ref of a new branch (defaults to the repository's
     /// default branch, refreshed from its upstream); a parent's branch
     /// stacks the child on it.
@@ -171,8 +174,8 @@ pub struct StartArgs {
     pub focus: bool,
     /// Registered repository, or an issue, PR or branch URL; defaults to the
     /// current checkout or workspace, else a picker.
-    #[arg(value_parser = item_reference)]
-    pub repository: Option<String>,
+    #[arg(value_parser = start_target)]
+    pub repository: Option<StartTarget>,
     /// Repository for an issue number or a pasted link.
     #[arg(short = 'r', long = "repo")]
     pub repository_override: Option<String>,
@@ -190,8 +193,8 @@ pub struct StartArgs {
     /// The forge issue number or URL the agent starts on; a workspace's name
     /// derives from it. Without a value in plan mode, offers the open issues
     /// labelled [issue] plan_label.
-    #[arg(short = 'i', long, num_args = 0..=1, value_parser = item_reference)]
-    pub issue: Option<Option<String>>,
+    #[arg(short = 'i', long, num_args = 0..=1, value_parser = issue_input)]
+    pub issue: Option<Option<crate::forge::items::reference::ItemInput>>,
     /// Create this worktree at an exact new directory instead of the repository default.
     #[arg(long)]
     pub path: Option<PathBuf>,
@@ -246,8 +249,8 @@ pub struct StartArgs {
     pub restore: Option<SpaceId>,
     /// Issue, by URL, that an imported chat is linked to, whose fields its
     /// rules take without asking the forge, which shoal move import passes.
-    #[arg(long, hide = true)]
-    pub linked_issue: Option<String>,
+    #[arg(long, hide = true, value_parser = linked_issue)]
+    pub linked_issue: Option<crate::forge::items::reference::ItemRef>,
     /// Title of --linked-issue.
     #[arg(long, hide = true, requires = "linked_issue")]
     pub linked_issue_title: Option<String>,
@@ -302,7 +305,7 @@ impl StartArgs {
             args,
         } = self;
         let mut line = CommandLine::of::<Self>(&["start"]);
-        line.positional("repository", repository.as_ref());
+        line.positional("repository", repository.as_ref().map(ToString::to_string));
         line.values("mode", mode.as_ref().map(|mode| mode.as_str()));
         line.values(
             "permissions",
@@ -316,7 +319,10 @@ impl StartArgs {
         line.switch("focus", *focus);
         line.values("repository_override", repository_override);
         line.values("branch", branch);
-        line.optional("issue", issue.as_ref().map(Option::as_ref));
+        line.optional(
+            "issue",
+            (issue.as_ref()).map(|issue| issue.as_ref().map(ToString::to_string)),
+        );
         line.values("path", path);
         line.values("base", base);
         line.values("git_profile", git_profile);
@@ -334,7 +340,10 @@ impl StartArgs {
         line.values("session", session.as_ref().map(|session| session.as_str()));
         line.switch("fork_session", *fork_session);
         line.values("restore", restore.as_ref().map(|restore| restore.as_str()));
-        line.values("linked_issue", linked_issue);
+        line.values(
+            "linked_issue",
+            linked_issue.as_ref().map(ToString::to_string),
+        );
         line.values("linked_issue_title", linked_issue_title);
         line.values("handoff", handoff);
         line.trailing("args", args);
@@ -410,7 +419,8 @@ pub struct ContributeArgs {
     #[arg(short = 'f', long, conflicts_with = "here")]
     pub focus: bool,
     /// Repository URL, or an issue, PR or branch URL.
-    pub target: String,
+    #[arg(value_parser = start_target)]
+    pub target: StartTarget,
     /// The branch to start on, as git switch takes it: an existing local
     /// branch or remote/branch opens, in its workspace when one has it, as
     /// --in does; any other name is a new branch, never suffixed. A
@@ -433,6 +443,12 @@ pub struct ContributeArgs {
 /// A recorded narrowing passed on as JSON.
 fn recorded(json: &str) -> Result<crate::config::permissions::PermissionsConfig, String> {
     serde_json::from_str(json).map_err(|error| error.to_string())
+}
+
+/// clap parser for an issue's URL.
+fn linked_issue(url: &str) -> Result<crate::forge::items::reference::ItemRef, String> {
+    use crate::forge::items::{link::LinkKind, reference::ItemRef};
+    ItemRef::parse_kind(LinkKind::Issue, url).map_err(|error| format!("{error:#}"))
 }
 
 #[cfg(test)]

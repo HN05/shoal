@@ -17,10 +17,13 @@ use crate::{
             CiAction,
             checks::CheckLog,
             run::{NewRun, StartedRun},
-            run_action::{Run, RunActed, validate_run_reference},
+            run_action::{Run, RunActed},
             run_view::{JobRef, RunFilter, RunJob, validate_filter},
         },
-        items::link::{ItemKind, LinkKind},
+        items::{
+            link::{ItemKind, LinkKind},
+            reference::{ItemInput, ItemRef},
+        },
     },
     model::{LinkedItem, Relation, Workspace},
     protocol::ItemContext,
@@ -92,18 +95,17 @@ impl Manager {
     pub async fn ci_run_action(
         &self,
         context: Option<&ItemContext>,
-        input: String,
+        input: ItemInput,
         action: CiAction,
         failed: bool,
         caller: Option<&Caller>,
     ) -> Result<RunActed> {
-        validate_run_reference(&input)?;
-        let place = self.run_input_place(context, &input, caller).await?;
+        let (place, run) = self.named_run(context, &input, caller).await?;
         let (forge, account) = (&place.forge, &place.account);
         let run = forge
-            .find_run(account, &input, action)
+            .find_run(account, &run, action)
             .await
-            .with_context(|| format!("could not {action} CI run {input}"))?;
+            .with_context(|| format!("could not {action} CI run {run}"))?;
         // Scope keeps workspace processes in their workspace.
         if caller.is_some() {
             on_own_branch(place.own_workspace(), &run)?;
@@ -118,49 +120,46 @@ impl Manager {
     pub async fn view_ci_run(
         &self,
         context: Option<&ItemContext>,
-        input: String,
+        input: ItemInput,
         caller: Option<&Caller>,
     ) -> Result<Run> {
-        validate_run_reference(&input)?;
-        let place = self.run_input_place(context, &input, caller).await?;
+        let (place, run) = self.named_run(context, &input, caller).await?;
         place
             .forge
-            .view_run(&place.account, &input)
+            .view_run(&place.account, &run)
             .await
-            .with_context(|| format!("could not read CI run {input}"))
+            .with_context(|| format!("could not read CI run {run}"))
     }
 
     /// Every job of the run `input` names.
     pub async fn ci_run_jobs(
         &self,
         context: Option<&ItemContext>,
-        input: String,
+        input: ItemInput,
         caller: Option<&Caller>,
     ) -> Result<Vec<RunJob>> {
-        validate_run_reference(&input)?;
-        let place = self.run_input_place(context, &input, caller).await?;
+        let (place, run) = self.named_run(context, &input, caller).await?;
         place
             .forge
-            .run_jobs(&place.account, &input)
+            .run_jobs(&place.account, &run)
             .await
-            .with_context(|| format!("could not read the jobs of CI run {input}"))
+            .with_context(|| format!("could not read the jobs of CI run {run}"))
     }
 
     /// The log of the job `job` of the run `input` names.
     pub async fn ci_run_job_log(
         &self,
         context: Option<&ItemContext>,
-        input: String,
+        input: ItemInput,
         job: JobRef,
         caller: Option<&Caller>,
     ) -> Result<CheckLog> {
-        validate_run_reference(&input)?;
-        let place = self.run_input_place(context, &input, caller).await?;
+        let (place, run) = self.named_run(context, &input, caller).await?;
         place
             .forge
-            .run_job_log(&place.account, &input, &job)
+            .run_job_log(&place.account, &run, &job)
             .await
-            .with_context(|| format!("could not read a job log of CI run {input}"))
+            .with_context(|| format!("could not read a job log of CI run {run}"))
     }
 
     /// The newest runs `filter` selects on the head commit of the PR `pr`
@@ -169,7 +168,7 @@ impl Manager {
     pub async fn list_ci_runs(
         &self,
         context: &ItemContext,
-        pr: Option<String>,
+        pr: Option<ItemInput>,
         mut filter: RunFilter,
     ) -> Result<Vec<Run>> {
         validate_filter(&filter)?;
@@ -185,15 +184,15 @@ impl Manager {
         // those of its linked PR.
         let pr = match (pr, &filter.branch, &place.origin) {
             (None, None, Some(Place::Chat { id, .. })) => self.linked_pr(id).await?,
-            (pr, ..) => pr,
+            (Some(pr), ..) => Some(ItemRef::in_repository(forge, LinkKind::Pr, &pr)?),
+            (None, ..) => None,
         };
         match pr {
-            Some(input) => {
-                let (_, url) = forge.pull(&input)?;
+            Some(pull) => {
                 let head = forge
-                    .pull_head(account, &url)
+                    .pull_head(account, &pull)
                     .await
-                    .with_context(|| format!("could not read the head of {url}"))?;
+                    .with_context(|| format!("could not read the head of {pull}"))?;
                 filter.commit = Some(head.into());
             }
             None => filter.branch = Some(place.run_branch(filter.branch.take()).await?),
@@ -205,14 +204,14 @@ impl Manager {
     }
 
     /// The one PR linked to the space `id`, if any.
-    async fn linked_pr(&self, id: &SpaceId) -> Result<Option<String>> {
+    async fn linked_pr(&self, id: &SpaceId) -> Result<Option<ItemRef>> {
         let id = id.to_owned();
         let prs = (self.store)
             .run(move |db| super::wait::linked_items(db, &id, Some(ItemKind::Pr)))
             .await?;
         match prs.as_slice() {
             [] => Ok(None),
-            [(url, _)] => Ok(Some(url.clone())),
+            [pull] => Ok(Some(pull.clone())),
             _ => bail!("several PRs are linked; pass --pr or --branch"),
         }
     }
@@ -225,9 +224,8 @@ fn started_link(forge: &ForgeRepo, started: &StartedRun) -> Option<LinkedItem> {
     if !forge.supports(Capability::ReadRuns) {
         return None;
     }
-    let (_, url) = forge.run(started.url.as_deref()?).ok()?;
+    let url = ItemRef::parse_kind(LinkKind::Ci, started.url.as_deref()?).ok()?;
     Some(LinkedItem {
-        kind: LinkKind::Ci,
         url,
         title: started.workflow.clone(),
     })

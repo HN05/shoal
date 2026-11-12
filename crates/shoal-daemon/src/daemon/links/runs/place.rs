@@ -9,10 +9,13 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{links::actions::Place, scope::Caller, workspace::Manager},
     forge::{
-        ForgeRepo, IssueInput,
+        ForgeRepo,
         account::Account,
         ci::workflow::is_workflow_url,
-        items::link::{LinkKind, Selection},
+        items::{
+            link::{LinkKind, Selection},
+            reference::{ItemInput, ItemRef},
+        },
     },
     model::Workspace,
     protocol::ItemContext,
@@ -108,11 +111,23 @@ impl Manager {
     pub(in crate::daemon::links) async fn run_input_place(
         &self,
         context: Option<&ItemContext>,
-        input: &str,
+        input: &ItemInput,
         caller: Option<&Caller>,
     ) -> Result<RunPlace> {
         let named = self.named_run_forge(input).await?;
         self.run_place(context, named, caller).await
+    }
+
+    /// Where a request acts on the run `input` names, and the run.
+    pub(in crate::daemon::links) async fn named_run(
+        &self,
+        context: Option<&ItemContext>,
+        input: &ItemInput,
+        caller: Option<&Caller>,
+    ) -> Result<(RunPlace, ItemRef)> {
+        let place = self.run_input_place(context, input, caller).await?;
+        let run = ItemRef::in_repository(&place.forge, LinkKind::Ci, input)?;
+        Ok((place, run))
     }
 
     /// Where a request starts the workflow `input` names, by its file or ID
@@ -136,11 +151,11 @@ impl Manager {
     /// The repository the run URL `input` names, or none for a run number.
     pub(in crate::daemon::links) async fn named_run_forge(
         &self,
-        input: &str,
+        input: &ItemInput,
     ) -> Result<Option<ForgeRepo>> {
-        Ok(match IssueInput::parse(input) {
-            IssueInput::Url => Some(self.run_url_forge(input).await?),
-            _ => None,
+        Ok(match input {
+            ItemInput::Url(run) => Some(self.item_forge(run).await?),
+            ItemInput::Number(_) => None,
         })
     }
 
@@ -152,7 +167,7 @@ impl Manager {
         selector: &SpaceSelector,
         selection: &Selection,
     ) -> Result<()> {
-        let (Some(LinkKind::Ci), Some(input)) = (selection.kind, selection.input.as_deref()) else {
+        let (Some(LinkKind::Ci), Some(input)) = (selection.kind, selection.input.as_ref()) else {
             return Ok(());
         };
         let Some(named) = self.named_run_forge(input).await? else {

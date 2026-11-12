@@ -163,8 +163,8 @@ impl Manager {
                     observations.into_iter().filter_map(|(url, snapshot)| {
                         linked
                             .iter()
-                            .find(|(linked_url, _)| linked_url == &url)
-                            .map(|(_, kind)| (url, *kind, snapshot))
+                            .find(|linked| linked.url() == url)
+                            .map(|linked| (url, linked.kind(), snapshot))
                     })
                 {
                     let previous: Option<String> = tx

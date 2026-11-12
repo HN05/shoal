@@ -90,20 +90,20 @@ fn a_start_in_a_workspace_refuses_what_no_role_takes_before_its_picker() {
 fn a_chat_takes_a_positional_issue_as_its_issue() {
     let target = |positional: &str, repository: Option<&str>, issue: Option<Option<&str>>| {
         chat_target(
-            Some(positional.to_owned()),
+            Some(positional.to_owned().parse().unwrap()),
             repository.map(str::to_owned),
-            issue.map(|issue| issue.map(str::to_owned)),
+            issue.map(|issue| issue.map(|issue| issue.parse().unwrap())),
             false,
         )
     };
     let url = "https://forge.example/team/repo/issues/37";
     assert_eq!(
         target("37", Some("repo"), None).unwrap(),
-        (Some("repo".into()), Some(Some("37".into())))
+        (Some("repo".into()), Some(Some("37".parse().unwrap())))
     );
     assert_eq!(
         target(url, None, None).unwrap(),
-        (None, Some(Some(url.into())))
+        (None, Some(Some(url.parse().unwrap())))
     );
     assert_eq!(
         target("repo", None, Some(None)).unwrap(),
@@ -135,7 +135,7 @@ fn a_chat_takes_a_positional_issue_as_its_issue() {
 fn a_chat_in_a_workspace_takes_no_repository() {
     let in_workspace = |positional: Option<&str>, repository: Option<&str>| {
         chat_target(
-            positional.map(str::to_owned),
+            positional.map(|positional| positional.parse().unwrap()),
             repository.map(str::to_owned),
             None,
             true,
@@ -143,7 +143,7 @@ fn a_chat_in_a_workspace_takes_no_repository() {
     };
     assert_eq!(
         in_workspace(Some("37"), None).unwrap(),
-        (None, Some(Some("37".into())))
+        (None, Some(Some("37".parse().unwrap())))
     );
     for (positional, repository) in [(None, Some("other")), (Some("other"), None)] {
         let error = in_workspace(positional, repository)
@@ -220,7 +220,7 @@ fn an_issues_labels_name_its_mode() {
 
 #[test]
 fn a_start_names_an_issue_with_issue_or_positionally() {
-    let issue = |args: &[&str]| named_issue(&start(args)).map(str::to_owned);
+    let issue = |args: &[&str]| named_issue(&start(args)).map(ToString::to_string);
     let url = "https://forge.example/o/r/issues/7";
     assert_eq!(issue(&["repo", "--issue", "7"]).as_deref(), Some("7"));
     assert_eq!(issue(&["7"]).as_deref(), Some("7"));
@@ -248,17 +248,19 @@ fn a_workspace_start_takes_the_checked_repository_by_id() {
         _ => None,
     };
     // It replaces the positional repository that named it.
-    let (positional, named) = named_repository(Some("repo".into()), None, checked()).unwrap();
+    let (positional, named) =
+        named_repository(Some("repo".parse().unwrap()), None, checked()).unwrap();
     assert_eq!((positional, id(named)), (None, Some("repo-id".into())));
     // A positional issue stays, beside the repository `--repo` named.
     let (positional, named) =
-        named_repository(Some("37".into()), Some("repo".into()), checked()).unwrap();
+        named_repository(Some("37".parse().unwrap()), Some("repo".into()), checked()).unwrap();
     assert_eq!(
         (positional, id(named)),
-        (Some("37".into()), Some("repo-id".into()))
+        (Some("37".parse().unwrap()), Some("repo-id".into()))
     );
     // Unchecked, `--repo` stays the user's text.
-    let (_, named) = named_repository(Some("37".into()), Some("repo".into()), None).unwrap();
+    let (_, named) =
+        named_repository(Some("37".parse().unwrap()), Some("repo".into()), None).unwrap();
     assert!(matches!(named, Some(crate::repository::Selector::Value(value)) if value == "repo"));
 }
 

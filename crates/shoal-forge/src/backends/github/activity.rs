@@ -50,9 +50,11 @@ impl Activity for GitHub {
         repo: &ForgeRepo,
         account: &Account,
         number: PullNumber,
-        url: &str,
+        pull: &crate::items::reference::ItemRef,
     ) -> Result<PrStatus> {
-        pr_status(repo, account, number, url).await.hint_login(self)
+        pr_status(repo, account, number, pull)
+            .await
+            .hint_login(self)
     }
 
     async fn view_details(
@@ -116,14 +118,14 @@ async fn pr_status(
     repo: &ForgeRepo,
     account: &Account,
     number: PullNumber,
-    url: &str,
+    pull_ref: &crate::items::reference::ItemRef,
 ) -> Result<PrStatus> {
     let pull = repo.read(account, ItemKind::Pr, number.get()).await?;
     let (checks, reviews) = tokio::join!(
         open_checks(repo, account, &pull),
         reviews(repo, account, number),
     );
-    let mut status = PrStatus::new(url.into(), Some(PrState::from(pull.item.state)));
+    let mut status = PrStatus::new(pull_ref.clone(), Some(PrState::from(pull.item.state)));
     if let Some(checks) = checks {
         let mut snapshot = Snapshot::default();
         snapshot.record_keyed_checks(&pull, checks);

@@ -759,15 +759,15 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
     let targets = [
         crate::model::SpaceTarget::Item {
             kind: crate::forge::items::link::LinkKind::Issue,
-            input: "7".into(),
+            input: "7".parse().unwrap(),
         },
         crate::model::SpaceTarget::Item {
             kind: crate::forge::items::link::LinkKind::Ci,
-            input: "2765".into(),
+            input: "2765".parse().unwrap(),
         },
         crate::model::SpaceTarget::Item {
             kind: crate::forge::items::link::LinkKind::Ci,
-            input: run.into(),
+            input: run.parse().unwrap(),
         },
         crate::model::SpaceTarget::Resource {
             name: "lock".into(),

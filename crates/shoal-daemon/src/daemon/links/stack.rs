@@ -1,5 +1,6 @@
 //! Move stacked workspaces down when their base workspace's PRs merge.
 use crate::client::space_ids::SpaceId;
+use crate::forge::items::reference::ItemRef;
 use anyhow::Result;
 use rusqlite::params;
 use shoal_refs::{BranchName, CommitId};
@@ -82,17 +83,23 @@ impl Manager {
         Ok(None)
     }
 
-    async fn base_pr_commits(&self, base: &Workspace, url: &str) -> Result<Option<Vec<CommitId>>> {
-        let (forge, number, _) = self.pr_forge(&base.path, url).await?;
-        forge.merged_commits(&self.user_account(), number).await
+    async fn base_pr_commits(
+        &self,
+        base: &Workspace,
+        url: &ItemRef,
+    ) -> Result<Option<Vec<CommitId>>> {
+        let (forge, pull) = self.pr_forge(&base.path, &url.clone().into()).await?;
+        forge
+            .merged_commits(&self.user_account(), pull.pull()?)
+            .await
     }
 
     /// The watched PRs `urls` of `base`, in order.
-    async fn base_pulls(&self, base: &Workspace, urls: &[String]) -> Result<Vec<PullRequest>> {
+    async fn base_pulls(&self, base: &Workspace, urls: &[ItemRef]) -> Result<Vec<PullRequest>> {
         let mut pulls = Vec::new();
         for url in urls {
-            let (forge, _, _) = self.pr_forge(&base.path, url).await?;
-            pulls.push(forge.pull_request(&self.user_account(), url).await?);
+            let (forge, pull) = self.pr_forge(&base.path, &url.clone().into()).await?;
+            pulls.push(forge.pull_request(&self.user_account(), &pull).await?);
         }
         Ok(pulls)
     }
@@ -114,9 +121,9 @@ impl Manager {
             .await?;
         let mut updates = Vec::new();
         let mut retargeted = Vec::new();
-        for (url, kind) in items {
-            let outcome = match kind {
-                ItemKind::Pr => {
+        for url in items {
+            let outcome = match url.kind().item() {
+                Some(ItemKind::Pr) => {
                     let pr = StackedPr {
                         workspace: &workspace,
                         url: &url,
@@ -124,12 +131,12 @@ impl Manager {
                     };
                     self.retarget_stacked(pr, base, head, target).await?
                 }
-                ItemKind::Issue => None,
+                _ => None,
             };
             if let Some(Retarget::Done { from }) = &outcome {
                 retargeted.push((url.clone(), Edited::retarget(from, target)));
             }
-            updates.push(base_merged_update(url, base, target, head, outcome));
+            updates.push(base_merged_update(&url, base, target, head, outcome));
         }
         self.ensure_base_unchanged(base, head).await?;
         let (id, base_id) = (workspace.id, base.id.clone());
@@ -154,8 +161,9 @@ impl Manager {
             merged_heads,
         } = pr;
         let lookup = async {
-            let (forge, number, _) = self.pr_forge(&workspace.path, url).await?;
-            let current = forge.pull_request(&self.user_account(), url).await?.base;
+            let (forge, pull) = self.pr_forge(&workspace.path, &url.clone().into()).await?;
+            let number = pull.pull()?;
+            let current = forge.pull_request(&self.user_account(), &pull).await?.base;
             Ok::<_, anyhow::Error>(
                 merged_heads
                     .contains(&current)
@@ -214,7 +222,7 @@ fn merged_into(pulls: &[PullRequest]) -> Option<BranchName> {
 /// base's merged PRs it may still target.
 struct StackedPr<'a> {
     workspace: &'a Workspace,
-    url: &'a str,
+    url: &'a ItemRef,
     merged_heads: &'a [BranchName],
 }
 
@@ -230,7 +238,7 @@ enum Retarget {
 /// The `base_merged` update telling a stacked workspace's agent to rebase
 /// past `head` onto `target`, with the outcome of retargeting its PR.
 fn base_merged_update(
-    url: String,
+    url: &ItemRef,
     base: &Workspace,
     target: &BranchName,
     head: &str,
@@ -248,7 +256,7 @@ fn base_merged_update(
         base.name,
     );
     Update {
-        url,
+        url: url.to_string(),
         kind: UpdateKind::BaseMerged,
         message,
         delivery: uuid::Uuid::new_v4().to_string(),
@@ -267,7 +275,7 @@ fn record_restack(
     id: &SpaceId,
     base_id: &SpaceId,
     updates: Vec<Update>,
-    retargeted: Vec<(String, Edited)>,
+    retargeted: Vec<(ItemRef, Edited)>,
 ) -> Result<()> {
     let changed = tx.execute(
         "UPDATE workspaces SET base_workspace_id=(SELECT base_workspace_id FROM workspaces WHERE id=?2)
@@ -283,7 +291,7 @@ fn record_restack(
     }
     for (url, edited) in retargeted {
         let change = wait::OwnChange {
-            url: &url,
+            url: url.url(),
             authored: Vec::new(),
             state: None,
             edited,

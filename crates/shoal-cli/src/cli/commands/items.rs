@@ -13,6 +13,7 @@ use crate::{
         create::NewIssue,
         item::{Item, ItemState},
         link::ItemKind,
+        reference::ItemInput,
     },
     protocol::ItemContext,
 };
@@ -215,7 +216,7 @@ async fn act(
 /// The context `selector` names an item in.
 async fn item_context(ctx: &Context, selector: &ItemSelector) -> Result<ItemContext> {
     let (space, repo) = (selector.space.clone(), selector.repo.name.clone());
-    select_space_item_context(ctx, space, repo, selector.item.as_deref()).await
+    select_space_item_context(ctx, space, repo, selector.item.as_ref()).await
 }
 
 /// Carry out `action`, which the caller validated, on `item` in `context`,
@@ -223,7 +224,7 @@ async fn item_context(ctx: &Context, selector: &ItemSelector) -> Result<ItemCont
 async fn act_in(
     ctx: &Context,
     context: ItemContext,
-    item: Option<String>,
+    item: Option<ItemInput>,
     kind: ItemKind,
     action: Action,
     outcome: &str,

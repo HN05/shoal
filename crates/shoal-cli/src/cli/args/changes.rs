@@ -8,7 +8,9 @@ use crate::client::space_names::SpaceSelector;
 use crate::forge::numbers::CommentId;
 use crate::{
     agent::Agent,
-    cli::args::{AgentParser, BodyArgs, ConfirmationArgs, ModelArgs, item_reference},
+    cli::args::{
+        AgentParser, BodyArgs, ConfirmationArgs, ModelArgs, issue_input, item_input, pull_input,
+    },
     reviews::{FindingId, OutcomeKind, ReviewId},
 };
 
@@ -119,8 +121,8 @@ pub enum ReviewCommand {
         /// number or ID, or a PR URL.
         space: Option<String>,
         /// Review this PR in the workspace that owns its head branch, opening one when none does.
-        #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "space", value_parser = item_reference)]
-        pr: Option<String>,
+        #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "space", value_parser = pull_input)]
+        pr: Option<crate::forge::items::reference::ItemInput>,
         /// Registered repository of the PR; defaults to the URL's repository or the current checkout/workspace.
         #[arg(short = 'r', long = "repo")]
         repository: Option<String>,
@@ -182,8 +184,8 @@ pub enum ReviewCommand {
         #[arg(long)]
         reason: Option<String>,
         /// The issue whose work fixes it (deferred).
-        #[arg(short = 'i', long, value_parser = item_reference)]
-        issue: Option<String>,
+        #[arg(short = 'i', long, value_parser = issue_input)]
+        issue: Option<crate::forge::items::reference::ItemInput>,
         /// The finding it repeats (duplicate).
         #[arg(long, value_name = "FINDING")]
         of: Option<FindingId>,
@@ -454,8 +456,8 @@ pub struct ListArgs {
 #[derive(Debug, Args)]
 pub struct ItemSelector {
     /// Number or URL; defaults to the linked one.
-    #[arg(value_parser = item_reference)]
-    pub item: Option<String>,
+    #[arg(value_parser = item_input)]
+    pub item: Option<crate::forge::items::reference::ItemInput>,
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
     #[arg(short = 's', long, conflicts_with = "repo")]
@@ -478,8 +480,8 @@ pub struct RegisteredRepo {
 #[derive(Debug, Args)]
 pub struct RevertedPr {
     /// Number or URL; defaults to the linked one.
-    #[arg(value_parser = item_reference)]
-    pub item: Option<String>,
+    #[arg(value_parser = pull_input)]
+    pub item: Option<crate::forge::items::reference::ItemInput>,
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
     #[arg(short = 's', long)]

@@ -24,7 +24,7 @@ async fn reverts_keep_the_reverted_base_and_skip_workspaces_being_removed() {
     let error = manager
         .revert_pull(
             &SpaceSelector::id(&workspace.id),
-            Some("7".into()),
+            Some("7".parse().unwrap()),
             elsewhere,
             None,
         )
@@ -40,7 +40,7 @@ async fn reverts_keep_the_reverted_base_and_skip_workspaces_being_removed() {
     let error = manager
         .revert_pull(
             &SpaceSelector::id(&workspace.id),
-            Some("7".into()),
+            Some("7".parse().unwrap()),
             PullOptions::default(),
             None,
         )
@@ -76,13 +76,13 @@ async fn a_chat_reverts_from_its_repositorys_checkout() {
     let reverted = manager
         .revert_pull(
             &SpaceSelector::id(&chat.id),
-            Some("7".into()),
+            Some("7".parse().unwrap()),
             PullOptions::default(),
             None,
         )
         .await;
     let merged = manager
-        .merged_pull(&SpaceSelector::id(&chat.id), Some("7".into()))
+        .merged_pull(&SpaceSelector::id(&chat.id), Some("7".parse().unwrap()))
         .await;
     for error in [reverted.unwrap_err(), merged.unwrap_err()] {
         assert!(

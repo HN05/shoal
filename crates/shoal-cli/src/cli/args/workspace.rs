@@ -3,7 +3,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Subcommand};
 
-use crate::cli::{args::item_reference, list_status};
+use crate::cli::list_status;
 use crate::client::space_names::SpaceSelector;
 use crate::model::CheckpointNumber;
 
@@ -50,7 +50,6 @@ pub enum WorkspaceCommand {
         #[arg(value_name = "TARGET")]
         space: Option<String>,
         /// Number, URL, or resource name after pr, issue, ci or resource.
-        #[arg(value_parser = item_reference)]
         item: Option<String>,
     },
     /// Show a space's log: its creation, agent, work, issues and PRs,

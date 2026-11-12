@@ -81,7 +81,7 @@ impl Manager {
         repository_id: &RepositoryId,
         job: &mut QueuedJob,
     ) {
-        match ForgeRepo::resolve_run_url(&job.run.url, &self.forge_hosts()).await {
+        match self.item_forge(&job.run.url).await {
             Ok(forge) => job.space_ids = spaces.run_spaces(&forge, repository_id, &job.run),
             Err(error) => crate::daemon::log!("runner: {}: {error:#}", job.job.name),
         }
@@ -175,5 +175,5 @@ fn links_pull(forge: &ForgeRepo, links: &SpaceLinks, number: PullNumber) -> bool
     links
         .prs
         .iter()
-        .any(|url| forge.pull(url).is_ok_and(|(linked, _)| linked == number))
+        .any(|url| url.repository() == forge && url.pull().is_ok_and(|linked| linked == number))
 }

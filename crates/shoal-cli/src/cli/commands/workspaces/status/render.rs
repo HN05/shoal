@@ -419,7 +419,7 @@ fn render_pr_watch(status: &SpaceStatus, palette: Palette) {
                 RegistrationKind::Watch { urls, .. } => {
                     for url in urls {
                         outln!("PR watch:      {url}");
-                        if let Some(pr) = status.prs.iter().find(|pr| &pr.url == url) {
+                        if let Some(pr) = status.prs.iter().find(|pr| pr.url == *url) {
                             render_pr(pr, palette);
                         }
                     }

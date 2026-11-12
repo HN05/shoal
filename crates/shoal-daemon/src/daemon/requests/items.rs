@@ -207,22 +207,22 @@ pub(super) async fn handle(
         ItemMethod::LinkItem {
             space: workspace,
             kind,
-            url,
+            item,
             relation,
             title,
         } => Body::Linked(
             manager
-                .link_item(&workspace, kind, &url, relation, title, caller)
+                .link_item(&workspace, kind, &item, relation, title, caller)
                 .await?,
         ),
         ItemMethod::UnlinkItems {
             space: workspace,
             relation,
             kind,
-            url,
+            item,
         } => {
             manager
-                .unlink_items(&workspace, relation, kind, url.as_deref())
+                .unlink_items(&workspace, relation, kind, item.as_ref())
                 .await?;
             Body::Ok
         }

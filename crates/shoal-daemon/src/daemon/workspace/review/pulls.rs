@@ -1,5 +1,6 @@
 //! Which linked PRs a ready mark may cover: open ones, at the head the forge
 //! reports for them, which a workspace's PR must share with its HEAD.
+use crate::forge::items::reference::ItemRef;
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
@@ -16,14 +17,14 @@ use crate::{
 #[derive(Default)]
 pub(super) struct Pulls {
     /// The forge's head of each PR that can be marked.
-    pub(super) heads: HashMap<String, String>,
+    pub(super) heads: HashMap<ItemRef, String>,
     pub(super) skipped: Vec<SkippedPr>,
 }
 
 impl Pulls {
-    pub(super) fn skip_reason(&self, url: &str) -> Option<&str> {
+    pub(super) fn skip_reason(&self, url: &ItemRef) -> Option<&str> {
         (self.skipped.iter())
-            .find(|skipped| skipped.url == url)
+            .find(|skipped| skipped.url == *url)
             .map(|skipped| skipped.reason.as_str())
     }
 }
@@ -36,7 +37,7 @@ impl Manager {
         &self,
         space: &LinkSpace,
         kind: Option<ItemKind>,
-        explicit: Option<&(String, ItemKind)>,
+        explicit: Option<&ItemRef>,
         head: Option<&str>,
     ) -> Result<Pulls> {
         let urls = self.covered_pulls(space, kind, explicit).await?;
@@ -47,8 +48,7 @@ impl Manager {
         let forge = self.space_forge(space).await?;
         let account = self.agent_account();
         for url in urls {
-            let (number, _) = forge.pull(&url)?;
-            let pull = (forge.read(&account, ItemKind::Pr, number.get()).await)
+            let pull = (forge.read(&account, ItemKind::Pr, url.pull()?.get()).await)
                 .with_context(|| format!("could not read {url}"))?;
             let state = pull.item.state;
             match unmarkable_reason(state, pull.head_sha.as_ref().map(CommitId::as_str), head) {
@@ -68,9 +68,9 @@ impl Manager {
         &self,
         space: &LinkSpace,
         kind: Option<ItemKind>,
-        explicit: Option<&(String, ItemKind)>,
-    ) -> Result<Vec<String>> {
-        let selected = explicit.map_or(kind, |(_, kind)| Some(*kind));
+        explicit: Option<&ItemRef>,
+    ) -> Result<Vec<ItemRef>> {
+        let selected = explicit.map_or(kind, |item| item.kind().item());
         if selected == Some(ItemKind::Issue) {
             return Ok(Vec::new());
         }
@@ -78,8 +78,8 @@ impl Manager {
         let linked = self
             .store
             .run(move |db| linked_items(db, &id, Some(ItemKind::Pr)));
-        let mut urls: Vec<String> = linked.await?.into_iter().map(|(url, _)| url).collect();
-        if let Some((url, _)) = explicit {
+        let mut urls = linked.await?;
+        if let Some(url) = explicit {
             urls.retain(|linked| linked == url);
         }
         Ok(urls)

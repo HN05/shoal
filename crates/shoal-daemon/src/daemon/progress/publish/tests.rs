@@ -1,3 +1,4 @@
+use crate::forge::items::{link::LinkKind, reference::ItemRef};
 use std::sync::{Arc, Mutex};
 
 use rusqlite::params;
@@ -109,10 +110,10 @@ async fn open_prs_show_the_progress_until_marked_ready() {
         &workspace.path,
         &["remote", "add", "origin", &pull.remote()],
     );
-    let (_, url) = ForgeRepo::parse(&pull.remote())
+    let forge = ForgeRepo::parse(&pull.remote()).unwrap();
+    let url = ItemRef::numbered(&forge, LinkKind::Pr, 12)
         .unwrap()
-        .pull("12")
-        .unwrap();
+        .to_string();
     let (id, registration) = (workspace.id.clone(), serde_json::json!({ "url": url }));
     manager
         .store
@@ -193,9 +194,10 @@ async fn a_pr_that_cannot_be_edited_leaves_the_others_updated_and_the_change_pen
     );
     let forge = ForgeRepo::parse(&pull.remote()).unwrap();
     // PR 13, which the forge does not serve, comes first.
-    let urls: Vec<String> = ["13", "12"]
-        .iter()
-        .map(|number| forge.pull(number).unwrap().1)
+    let urls: Vec<String> = [13, 12]
+        .into_iter()
+        .map(|number| ItemRef::numbered(&forge, LinkKind::Pr, number).unwrap())
+        .map(|url| url.to_string())
         .collect();
     let id = workspace.id.clone();
     manager

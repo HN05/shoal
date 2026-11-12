@@ -15,7 +15,7 @@ use crate::{
     env,
     forge::{
         ci::{checks::CheckLog, run_view::JobRef},
-        items::{link::Selection, reaction::Reaction},
+        items::{link::Selection, reaction::Reaction, reference::ItemRef},
         review::view::{AutoMerge, Details, PrDetails, Review},
     },
     model::Relation,
@@ -129,7 +129,9 @@ async fn open(ctx: &Context, items: ItemArgs, repo: Option<String>) -> Result<i3
     let selected = client::select_items(&ctx.paths, context, selection, true).await?;
     open_urls(
         ctx,
-        selected.items.into_iter().map(|item| item.url).collect(),
+        (selected.items.into_iter())
+            .map(|item| item.url.to_string())
+            .collect(),
     )
 }
 
@@ -221,7 +223,7 @@ pub(super) fn render_relations(relations: &[Relation]) {
     }
 }
 
-fn render_details(url: &str, details: &Details, palette: Palette, emoji: bool) {
+fn render_details(url: &ItemRef, details: &Details, palette: Palette, emoji: bool) {
     match &details.pr {
         Some(pr) => render_pr(url, &details.state, pr, palette),
         None => outln!("State:    {}", details.state),
@@ -265,7 +267,7 @@ fn render_details(url: &str, details: &Details, palette: Palette, emoji: bool) {
     }
 }
 
-fn render_pr(url: &str, state: &str, pr: &PrDetails, palette: Palette) {
+fn render_pr(url: &ItemRef, state: &str, pr: &PrDetails, palette: Palette) {
     let conflicts = match pr.merge_conflicts {
         Some(true) => format!(", {}", palette.paint(Style::Error, "merge conflicts")),
         Some(false) => ", no merge conflicts".into(),

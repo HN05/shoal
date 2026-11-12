@@ -1,4 +1,4 @@
-use super::new_space_flag;
+use super::{ItemInput, new_space_flag};
 use crate::{
     cli::commands::workspaces::AddOptions,
     client::space_names::SpaceSelector,
@@ -35,7 +35,11 @@ fn a_start_into_a_workspaces_branch_takes_only_a_forks_parent() {
     };
     assert_eq!(flag(&copy, &options(true)), Some("--parent"));
     assert_eq!(
-        new_space_flag(&Creation::default(), Some("7"), &options(true)),
+        new_space_flag(
+            &Creation::default(),
+            Some(&ItemInput::Number(7)),
+            &options(true)
+        ),
         Some("--issue")
     );
 }

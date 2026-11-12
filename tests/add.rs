@@ -12,26 +12,33 @@ use std::{
 };
 
 #[test]
-fn add_reuses_resolution_requests_without_reordering_failures() {
+fn an_issue_numbered_zero_is_refused_before_any_request() {
     let url = "https://forge.example/team/repo/issues/0";
+    for args in [
+        vec!["start", url],
+        vec!["start", "--issue", url, "--agent", "custom"],
+        vec!["start", "0", "--repo", "test"],
+    ] {
+        let daemon = FakeDaemon::start();
+        let output = daemon
+            .command()
+            .arg("--json")
+            .args(&args)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(daemon.methods().is_empty(), "{args:?}: {output:?}");
+        assert!(!output.status.success(), "{args:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("must be positive"), "{args:?}: {stderr}");
+    }
+}
+
+#[test]
+fn add_reuses_resolution_requests_without_reordering_failures() {
     for (args, expected, diagnostic) in [
-        (vec!["start", url], vec![], "issue number must be positive"),
         (
-            vec!["start", "--issue", url, "--agent", "custom"],
-            vec![
-                "list_repositories",
-                "layered_config id:test",
-                "issue_details",
-            ],
-            "issue number must be positive",
-        ),
-        (
-            vec!["start", "0", "--repo", "test"],
-            vec!["layered_config test", "list_repositories", "issue_details"],
-            "issue number must be positive",
-        ),
-        (
-            vec!["start", "0", "--repo", "test", "--agent", "missing"],
+            vec!["start", "7", "--repo", "test", "--agent", "missing"],
             vec!["layered_config test"],
             "\"missing\"",
         ),
@@ -138,7 +145,7 @@ fn unregistered_repositories_are_registered_on_confirmation() {
         "layered_config id:registered",
     ];
     let url_args: &[&str] = &["start", "https://other.example/team/repo/issues/7"];
-    let explicit_args: &[&str] = &["start", "0", "--repo", "https://other.example/team/repo"];
+    let explicit_args: &[&str] = &["start", "7", "--repo", "https://other.example/team/repo"];
     for (args, answer, expected) in [
         (url_args, "y\n", registered.clone()),
         (url_args, "n\n", vec!["list_repositories"]),

@@ -1,5 +1,6 @@
 //! Issue, PR and CI run activity as snapshots, and the updates between two
 //! of them.
+use crate::items::reference::ItemNumber;
 use std::{
     collections::{BTreeMap, BTreeSet},
     time::Duration,
@@ -588,23 +589,16 @@ pub(crate) fn discussion_key(id: &serde_json::Value) -> String {
 }
 
 impl ForgeRepo {
-    /// The activity of the `kind` item at `url`.
+    /// The activity of `item`.
     pub async fn item_activity(
         &self,
         account: &Account,
-        kind: LinkKind,
-        url: &str,
+        item: &crate::items::reference::ItemRef,
     ) -> Result<Snapshot> {
-        match kind {
-            LinkKind::Issue => {
-                let (number, _) = self.issue(url)?;
-                self.issue_activity(account, number).await
-            }
-            LinkKind::Pr => {
-                let (number, _) = self.pull(url)?;
-                self.activity(account, number).await
-            }
-            LinkKind::Ci => self.run_activity(account, url).await,
+        match item.number() {
+            ItemNumber::Issue(number) => self.issue_activity(account, number).await,
+            ItemNumber::Pr(number) => self.activity(account, number).await,
+            ItemNumber::Run(_) => self.run_activity(account, item).await,
         }
     }
 

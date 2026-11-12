@@ -8,6 +8,7 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     connection::{self, Daemon},
+    forge::items::reference::ItemInput,
     model::Workspace,
     operations::{Followed, Following},
     protocol::{
@@ -34,10 +35,10 @@ pub struct NewWorkspace {
     /// The chat the workspace is created in.
     pub parent: Option<SpaceSelector>,
     pub options: CreationOptions,
-    /// The issue to link, by URL.
-    pub issue: Option<String>,
-    /// The PR to link, by URL.
-    pub pr: Option<String>,
+    /// The issue to link, by number or URL.
+    pub issue: Option<ItemInput>,
+    /// The PR to link, by number or URL.
+    pub pr: Option<ItemInput>,
     /// The agent its preparation queues.
     pub agent: Option<Box<QueuedLaunch>>,
     /// The starting queue entry whose launch opens it.
@@ -113,8 +114,8 @@ pub struct NewSplit {
     /// The branch its branch starts from.
     pub base: Option<String>,
     pub options: CreationOptions,
-    /// The issue to link, by URL.
-    pub issue: Option<String>,
+    /// The issue to link, by number or URL.
+    pub issue: Option<ItemInput>,
     /// The agent its preparation queues.
     pub agent: Option<Box<QueuedLaunch>>,
 }

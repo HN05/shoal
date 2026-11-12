@@ -8,6 +8,7 @@ use crate::cli::{
         ConfirmationArgs,
         create::{CreateCommand, StartArgs},
         repository::{RepoCommand, RepositoryCommand},
+        target::StartTarget,
     },
     context::Context,
     ui::{self, Key, KeyBindings},
@@ -48,7 +49,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
         }),
         RepoMenuAction::AddWorkspace => {
             Command::Create(CreateCommand::Start(Box::new(StartArgs {
-                repository: Some(picked.id),
+                repository: Some(StartTarget::Repository(picked.id)),
                 mode: Some(crate::config::modes::ModeName::DEFAULT),
                 ..Default::default()
             })))

@@ -2,6 +2,7 @@
 //! commit. Integrations read them from the event journal; they neither notify
 //! the user nor affect completion or cleanup.
 use crate::client::space_ids::SpaceId;
+use crate::forge::items::reference::ItemRef;
 use std::{collections::BTreeMap, ffi::OsString, path::Path, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
@@ -47,9 +48,19 @@ pub(crate) fn list(db: &Connection, id: &SpaceId) -> Result<Vec<ReviewMark>> {
         )?
         .query_map([id], |row| {
             let url: String = row.get(0)?;
+            let url = (!url.is_empty())
+                .then(|| url.parse::<ItemRef>())
+                .transpose()
+                .map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        error.into(),
+                    )
+                })?;
             Ok(ReviewMark {
                 kind: row.get(1)?,
-                url: (!url.is_empty()).then_some(url),
+                url,
                 head: row.get(2)?,
                 created_at: row.get(3)?,
                 stale: None,
@@ -225,7 +236,7 @@ impl Manager {
         &self,
         id: &SpaceId,
         kind: Option<ItemKind>,
-        explicit: Option<(String, ItemKind)>,
+        explicit: Option<ItemRef>,
         head: String,
         pulls: Pulls,
     ) -> Result<ReadyMarks> {
@@ -237,14 +248,15 @@ impl Manager {
                 let linked = linked_items(tx, &id, kind)?;
                 let items = marked_items(linked, explicit, kind, &pulls)?;
                 // Linked-item marks replace a mark made while nothing was linked.
-                if items.iter().any(|(url, _)| url.is_some()) {
+                if items.iter().any(Option::is_some) {
                     tx.execute(
                         "DELETE FROM space_review WHERE space_id=?1 AND url=''",
                         [&id],
                     )?;
                 }
                 let mut marks = Vec::new();
-                for (url, kind) in items {
+                for url in items {
+                    let kind = url.as_ref().and_then(|url| url.kind().item());
                     let head = (url.as_ref())
                         .and_then(|url| pulls.heads.get(url))
                         .unwrap_or(&head)
@@ -254,7 +266,13 @@ impl Manager {
                          VALUES (?1,?2,?3,?4,?5)
                          ON CONFLICT(space_id,url) DO UPDATE
                          SET head=excluded.head,created_at=excluded.created_at",
-                        params![id, url.as_deref().unwrap_or(""), kind, head, created_at],
+                        params![
+                            id,
+                            url.as_ref().map_or("", ItemRef::url),
+                            kind,
+                            head,
+                            created_at
+                        ],
                     )?;
                     marks.push(ReviewMark {
                         kind,
@@ -309,19 +327,20 @@ impl Manager {
         &self,
         id: &SpaceId,
         kind: Option<ItemKind>,
-        explicit: Option<(String, ItemKind)>,
+        explicit: Option<ItemRef>,
     ) -> Result<Vec<ReviewMark>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
                 let mut selected = list(db, &id)?;
                 selected.retain(|mark| match (&explicit, kind) {
-                    (Some((url, _)), _) => mark.url.as_ref() == Some(url),
+                    (Some(url), _) => mark.url.as_ref() == Some(url),
                     (None, Some(kind)) => mark.kind == Some(kind),
                     (None, None) => true,
                 });
                 match (&explicit, kind) {
-                    (Some((url, kind)), _) => {
+                    (Some(url), _) => {
+                        let kind = url.kind();
                         ensure!(!selected.is_empty(), "{kind} is not marked ready: {url}")
                     }
                     (None, Some(kind)) => {
@@ -338,7 +357,11 @@ impl Manager {
         let id = id.to_owned();
         let urls: Vec<String> = marks
             .iter()
-            .map(|mark| mark.url.clone().unwrap_or_default())
+            .map(|mark| {
+                mark.url
+                    .as_ref()
+                    .map_or_else(String::new, ToString::to_string)
+            })
             .collect();
         self.store
             .write(move |tx| {
@@ -402,31 +425,29 @@ fn chat_hook_environment(
 /// `linked` ones, leaving out the `pulls` it skips, or the space itself when
 /// nothing is linked.
 fn marked_items(
-    linked: Vec<(String, ItemKind)>,
-    explicit: Option<(String, ItemKind)>,
+    linked: Vec<ItemRef>,
+    explicit: Option<ItemRef>,
     kind: Option<ItemKind>,
     pulls: &Pulls,
-) -> Result<Vec<(Option<String>, Option<ItemKind>)>> {
-    if let Some((url, kind)) = explicit {
-        ensure!(
-            linked.iter().any(|(linked, _)| linked == &url),
-            "{kind} is not linked: {url}"
-        );
+) -> Result<Vec<Option<ItemRef>>> {
+    if let Some(url) = explicit {
+        let kind = url.kind();
+        ensure!(linked.contains(&url), "{kind} is not linked: {url}");
         if let Some(reason) = pulls.skip_reason(&url) {
             bail!("{kind} cannot be marked ready: {url}: {reason}");
         }
-        return Ok(vec![(Some(url), Some(kind))]);
+        return Ok(vec![Some(url)]);
     }
     if linked.is_empty() {
         ensure!(
             kind.is_none(),
             "no linked items of the selected kind; register one with shoal link"
         );
-        return Ok(vec![(None, None)]);
+        return Ok(vec![None]);
     }
     let items: Vec<_> = (linked.into_iter())
-        .filter(|(url, _)| pulls.skip_reason(url).is_none())
-        .map(|(url, kind)| (Some(url), Some(kind)))
+        .filter(|url| pulls.skip_reason(url).is_none())
+        .map(Some)
         .collect();
     ensure!(
         !items.is_empty(),
@@ -445,7 +466,7 @@ fn skipped_list(skipped: &[SkippedPr]) -> String {
 }
 
 /// The PRs among `marks`.
-fn pr_urls(marks: &[ReviewMark]) -> Vec<String> {
+fn pr_urls(marks: &[ReviewMark]) -> Vec<ItemRef> {
     marks
         .iter()
         .filter(|mark| mark.kind == Some(ItemKind::Pr))
@@ -457,7 +478,7 @@ fn pr_urls(marks: &[ReviewMark]) -> Vec<String> {
 fn ready_notice(marks: &[ReviewMark]) -> String {
     let items = marks
         .iter()
-        .map(|mark| mark.url.as_deref().unwrap_or("the workspace"))
+        .map(|mark| mark.url.as_ref().map_or("the workspace", ItemRef::url))
         .collect::<Vec<_>>()
         .join(", ");
     format!("marked ready for review: {items}")
@@ -473,8 +494,8 @@ fn marked_kind(selection: &Selection) -> Result<Option<ItemKind>> {
 
 /// The explicitly selected issue or PR, which `marked_kind` has kept from
 /// being a run.
-fn marked_item(explicit: Option<(String, LinkKind)>) -> Option<(String, ItemKind)> {
-    explicit.and_then(|(url, kind)| Some((url, kind.item()?)))
+fn marked_item(explicit: Option<ItemRef>) -> Option<ItemRef> {
+    explicit.filter(|item| item.kind().item().is_some())
 }
 
 #[cfg(test)]

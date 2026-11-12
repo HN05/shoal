@@ -1,4 +1,7 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{Arc, LazyLock},
+    time::Duration,
+};
 
 use anyhow::Result;
 use rusqlite::params;
@@ -82,13 +85,36 @@ impl Manager {
             .run(move |db| {
                 Ok(linked_items(db, &id_owned, Some(ItemKind::Pr))?
                     .into_iter()
-                    .map(|(url, _)| url)
+                    .map(|url| url.to_string())
                     .collect::<Vec<_>>())
             })
             .await?;
         self.pending_activity(id, &urls).await
     }
 }
+
+/// A forge that serves nothing, which every item the tests link belongs
+/// to, so a lookup of one fails at once.
+static FORGE: LazyLock<crate::forge::test_support::Server> = LazyLock::new(|| {
+    let server = crate::forge::test_support::Server::start(|_| (404, Vec::new(), Vec::new()));
+    crate::forge::hosts::learn(&server.host, crate::forge::backends::ForgeKind::Forgejo);
+    server
+});
+
+/// The URL of the item at `path` in the repository on [`FORGE`].
+fn item_url(path: &str) -> String {
+    format!("http://{}/team/repo/{path}", FORGE.host)
+}
+
+static PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/1"));
+static WORKER_PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/2"));
+static CHILD_PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/3"));
+static GRANDCHILD_PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/4"));
+static PARENT_PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/5"));
+static ANOTHER_PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/6"));
+static ISSUE: LazyLock<String> = LazyLock::new(|| item_url("issues/9"));
+/// The CI run the run-watch tests link.
+static RUN: LazyLock<String> = LazyLock::new(|| item_url("actions/runs/7"));
 
 #[tokio::test]
 async fn agent_messages_end_a_watch_before_item_activity() {
@@ -159,7 +185,7 @@ async fn register_watch(manager: &Manager, id: &SpaceId, url: &str) {
     let id = id.clone();
     let registration = super::super::pr::Registration {
         kind: RegistrationKind::Watch {
-            urls: vec![url.into()],
+            urls: vec![url.parse().unwrap()],
             merged_head: None,
         },
         error: None,
@@ -189,10 +215,10 @@ async fn background_activity_uses_its_own_baseline_and_publishes_events() {
         .create_workspace(&repo.id, "activity".into(), None, None, None)
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
 
     manager
-        .record_background_activity(&workspace.id, vec![("pr".into(), snapshot("first"))])
+        .record_background_activity(&workspace.id, vec![(PR.as_str().into(), snapshot("first"))])
         .await
         .unwrap();
     assert!(manager
@@ -203,7 +229,10 @@ async fn background_activity_uses_its_own_baseline_and_publishes_events() {
             .all(|item| !matches!(item, crate::daemon::events::EventItem::Event(event) if event.details.kind == crate::daemon::events::EventKind::ItemActivity)));
 
     manager
-        .record_background_activity(&workspace.id, vec![("pr".into(), snapshot("second"))])
+        .record_background_activity(
+            &workspace.id,
+            vec![(PR.as_str().into(), snapshot("second"))],
+        )
         .await
         .unwrap();
     let events = manager.workspace_events(None, 100).await.unwrap();
@@ -217,7 +246,7 @@ async fn background_activity_uses_its_own_baseline_and_publishes_events() {
     });
     let activity = activity.expect("background activity event");
     assert_eq!(activity.kind, LinkKind::Pr);
-    assert_eq!(activity.url, "pr");
+    assert_eq!(activity.url, PR.as_str());
     assert_eq!(activity.update.kind, UpdateKind::Comment);
 }
 
@@ -233,7 +262,7 @@ async fn a_failed_first_background_read_leaves_the_baseline_to_the_next() {
         .create_workspace(&repo.id, "unread".into(), None, None, None)
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
 
     let refused = anyhow::anyhow!("connection refused");
     for snapshot in [
@@ -241,7 +270,7 @@ async fn a_failed_first_background_read_leaves_the_baseline_to_the_next() {
         snapshot("first"),
     ] {
         manager
-            .record_background_activity(&workspace.id, vec![("pr".into(), snapshot)])
+            .record_background_activity(&workspace.id, vec![(PR.as_str().into(), snapshot)])
             .await
             .unwrap();
     }
@@ -265,12 +294,12 @@ async fn background_activity_queues_for_the_agents_hooks() {
         .create_workspace(&repo.id, "queued".into(), None, None, None)
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     let queued = manager.signals.watch_item_updates();
     manager
         .queue_background_updates(
             &workspace.id,
-            vec![("pr".into(), snapshot("first"))],
+            vec![(PR.as_str().into(), snapshot("first"))],
             crate::time::UnixTime::now(),
         )
         .await
@@ -335,7 +364,7 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
         )
         .await
         .unwrap();
-    register_watch(&manager, &chat.id, "pr").await;
+    register_watch(&manager, &chat.id, PR.as_str()).await;
     let manager = std::sync::Arc::new(manager);
     // The chat's wake hook waits for the activity the poll queues.
     let waiting = tokio::spawn({
@@ -345,7 +374,7 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
     manager
         .queue_background_updates(
             &chat.id,
-            vec![("pr".into(), snapshot("first"))],
+            vec![(PR.as_str().into(), snapshot("first"))],
             crate::time::UnixTime::now(),
         )
         .await
@@ -405,11 +434,11 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
         )
         .await
         .unwrap();
-    register_watch(&manager, &worker.id, "worker-pr").await;
+    register_watch(&manager, &worker.id, WORKER_PR.as_str()).await;
     manager
         .queue_background_updates(
             &worker.id,
-            vec![("worker-pr".into(), snapshot("first"))],
+            vec![(WORKER_PR.as_str().into(), snapshot("first"))],
             crate::time::UnixTime::now(),
         )
         .await
@@ -468,7 +497,7 @@ async fn a_chats_wait_takes_activity_an_item_change_held_back() {
         )
         .await
         .unwrap();
-    register_watch(&manager, &chat.id, "pr").await;
+    register_watch(&manager, &chat.id, PR.as_str()).await;
     let manager = std::sync::Arc::new(manager);
     // Activity queues, signalling before the wait starts, and then an item
     // change holds the chat's PR gate, so the wait finds nothing it may
@@ -476,7 +505,7 @@ async fn a_chats_wait_takes_activity_an_item_change_held_back() {
     manager
         .queue_background_updates(
             &chat.id,
-            vec![("pr".into(), snapshot("first"))],
+            vec![(PR.as_str().into(), snapshot("first"))],
             crate::time::UnixTime::now(),
         )
         .await
@@ -510,11 +539,11 @@ async fn hook_delivery_does_not_wait_for_the_pr_gate() {
         .create_workspace(&repo.id, "gated".into(), None, None, None)
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     manager
         .queue_background_updates(
             &workspace.id,
-            vec![("pr".into(), snapshot("first"))],
+            vec![(PR.as_str().into(), snapshot("first"))],
             crate::time::UnixTime::now(),
         )
         .await
@@ -578,11 +607,11 @@ async fn hook_delivery_waits_only_for_the_workspaces_it_reads() {
         )
         .await
         .unwrap();
-    register_watch(&manager, &child.id, "child-pr").await;
+    register_watch(&manager, &child.id, CHILD_PR.as_str()).await;
     manager
         .queue_background_updates(
             &child.id,
-            vec![("child-pr".into(), snapshot("first"))],
+            vec![(CHILD_PR.as_str().into(), snapshot("first"))],
             crate::time::UnixTime::now(),
         )
         .await
@@ -636,7 +665,10 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
         )
         .await
         .unwrap();
-    let watched = [(&child, "child-pr"), (&grandchild, "grandchild-pr")];
+    let watched = [
+        (&child, CHILD_PR.as_str()),
+        (&grandchild, GRANDCHILD_PR.as_str()),
+    ];
     for (workspace, url) in watched {
         register_watch(&manager, &workspace.id, url).await;
     }
@@ -701,8 +733,8 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
         received,
         [
             (Some("child"), child.branch.as_deref().unwrap()),
-            (Some("child"), "child-pr"),
-            (Some("grandchild"), "grandchild-pr")
+            (Some("child"), CHILD_PR.as_str()),
+            (Some("grandchild"), GRANDCHILD_PR.as_str())
         ]
     );
     // An unfiltered watch of the parent reports them as well; one of PRs
@@ -788,7 +820,7 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
         )
         .await
         .unwrap();
-    for (workspace, url) in [(&parent, "parent-pr"), (&child, "child-pr")] {
+    for (workspace, url) in [(&parent, PARENT_PR.as_str()), (&child, CHILD_PR.as_str())] {
         register_watch(&manager, &workspace.id, url).await;
         manager
             .queue_background_updates(
@@ -869,7 +901,7 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
 
 fn large_update(n: usize, delivery: usize) -> Update {
     Update {
-        url: "child-pr".into(),
+        url: CHILD_PR.as_str().into(),
         kind: UpdateKind::Comment,
         message: format!("{n}{}", "x".repeat(4096)),
         delivery: delivery.to_string(),
@@ -922,7 +954,7 @@ async fn hook_responses_fit_messages_and_updates_together() {
         )
         .await
         .unwrap();
-    register_watch(&manager, &child.id, "child-pr").await;
+    register_watch(&manager, &child.id, CHILD_PR.as_str()).await;
     let id = child.id.clone();
     manager
         .store
@@ -977,7 +1009,7 @@ async fn a_delivery_too_large_for_one_response_arrives_in_parts() {
         )
         .await
         .unwrap();
-    register_watch(&manager, &child.id, "child-pr").await;
+    register_watch(&manager, &child.id, CHILD_PR.as_str()).await;
     let id = child.id.clone();
     manager
         .store
@@ -1044,7 +1076,7 @@ async fn deliveries_left_out_of_a_response_stay_pending_whole() {
         )
         .await
         .unwrap();
-    register_watch(&manager, &child.id, "child-pr").await;
+    register_watch(&manager, &child.id, CHILD_PR.as_str()).await;
     let id = child.id.clone();
     manager
         .store
@@ -1229,12 +1261,12 @@ async fn an_idle_agent_wakes_once_for_a_heads_passing_checks() {
         .create_workspace(&repo.id, "checks".into(), None, None, None)
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     let poll = async |snapshot| {
         manager
             .queue_background_updates(
                 &workspace.id,
-                vec![("pr".into(), snapshot)],
+                vec![(PR.as_str().into(), snapshot)],
                 crate::time::UnixTime::now(),
             )
             .await
@@ -1281,7 +1313,7 @@ async fn passes_held_past_one_response_are_delivered_in_parts() {
         .create_workspace(&repo.id, "many-checks".into(), None, None, None)
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     let names = (0..40)
         .map(|n| format!("{n:02}{}", "x".repeat(2000)))
         .collect::<Vec<_>>();
@@ -1300,7 +1332,7 @@ async fn passes_held_past_one_response_are_delivered_in_parts() {
         manager
             .queue_background_updates(
                 &workspace.id,
-                vec![("pr".into(), checks_at("a", &checks))],
+                vec![(PR.as_str().into(), checks_at("a", &checks))],
                 crate::time::UnixTime::now(),
             )
             .await
@@ -1341,12 +1373,12 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
         .create_workspace(&repo.id, "own".into(), None, None, None)
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     let observe = |comments: Value, state: &str| {
         let snapshot = serde_json::from_value(json!({"comments": comments, "checks": {},
                 "conflict": null, "state": state, "errors": {}}))
         .unwrap();
-        manager.record_pr_activity(&workspace.id, vec![("pr".into(), snapshot)])
+        manager.record_pr_activity(&workspace.id, vec![(PR.as_str().into(), snapshot)])
     };
     let first = observe(json!({"discussion:1": "theirs"}), "open")
         .await
@@ -1363,7 +1395,7 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
         .store
         .run(move |db| {
             let change = OwnChange {
-                url: "pr",
+                url: PR.as_str(),
                 authored: vec!["discussion:2".into()],
                 state: Some(ItemState::Closed),
                 edited: Edited::default(),
@@ -1381,7 +1413,7 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
     let report = BranchReport::Conflicts;
     let before = manager.record_observed(
         &workspace.id,
-        vec![("pr".into(), stale)],
+        vec![(PR.as_str().into(), stale)],
         &all,
         report,
         UnixTime::from_seconds(0),
@@ -1409,7 +1441,7 @@ async fn edits_are_reported_except_the_workspaces_own() {
         .create_workspace(&repo.id, "edits".into(), None, None, None)
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     let snapshot = |base: &str, labels: Value| -> Snapshot {
         serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
                 "state": "open", "errors": {}, "details": {"title": "Fix", "body": "",
@@ -1418,7 +1450,7 @@ async fn edits_are_reported_except_the_workspaces_own() {
     };
     let all = Selection::default();
     let observe = |snapshot: Snapshot, at: UnixTime| {
-        let observation = vec![("pr".into(), snapshot)];
+        let observation = vec![(PR.as_str().into(), snapshot)];
         manager.record_observed(
             &workspace.id,
             observation,
@@ -1439,7 +1471,7 @@ async fn edits_are_reported_except_the_workspaces_own() {
         .store
         .run(move |db| {
             let change = OwnChange {
-                url: "pr",
+                url: PR.as_str(),
                 authored: Vec::new(),
                 state: None,
                 edited: Edited::retarget(&"feature".into(), &"main".into()),
@@ -1490,7 +1522,7 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
         )
         .await
         .unwrap();
-    register_watch(&manager, &child.id, "child-pr").await;
+    register_watch(&manager, &child.id, CHILD_PR.as_str()).await;
     let based = |base: &str| -> Snapshot {
         serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
                 "state": "open", "errors": {}, "details": {"title": "Fix", "body": "",
@@ -1498,7 +1530,7 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
         .unwrap()
     };
     let observe = |base: &str| {
-        let observation = vec![("child-pr".into(), based(base))];
+        let observation = vec![(CHILD_PR.as_str().into(), based(base))];
         // Each poll starts after the changes before it.
         let later = UnixTime::now() + Duration::from_secs(1);
         manager.queue_background_updates(&child.id, observation, later)
@@ -1513,7 +1545,7 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
                 .store
                 .run(move |db| {
                     let change = OwnChange {
-                        url: "child-pr",
+                        url: CHILD_PR.as_str(),
                         authored: Vec::new(),
                         state: None,
                         edited,
@@ -1591,7 +1623,7 @@ async fn background_activity_does_not_repeat_an_unchanged_baseline_failure() {
         .create_workspace(&repo.id, "failed-activity".into(), None, None, None)
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     let failed: Snapshot = serde_json::from_value(serde_json::json!({
         "comments": {},
         "checks": {},
@@ -1602,11 +1634,11 @@ async fn background_activity_does_not_repeat_an_unchanged_baseline_failure() {
     .unwrap();
 
     manager
-        .record_background_activity(&workspace.id, vec![("pr".into(), failed.clone())])
+        .record_background_activity(&workspace.id, vec![(PR.as_str().into(), failed.clone())])
         .await
         .unwrap();
     manager
-        .record_background_activity(&workspace.id, vec![("pr".into(), failed)])
+        .record_background_activity(&workspace.id, vec![(PR.as_str().into(), failed)])
         .await
         .unwrap();
     assert!(manager
@@ -1634,15 +1666,15 @@ async fn polls_stop_looking_up_items_whose_activity_ended() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO space_issue(space_id,url) VALUES (?1,'issue')",
-                [id],
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                params![id, ISSUE.as_str()],
             )?;
             Ok(())
         })
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
-    // Neither URL names a forge, so looking one up fails.
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
+    // Nothing serves either item, so looking one up fails.
     let unfiltered = Selection::default();
     let poll = || manager.poll_item_activity(&workspace.id, &unfiltered);
     assert!(poll().await.is_err());
@@ -1657,8 +1689,8 @@ async fn polls_stop_looking_up_items_whose_activity_ended() {
         .record_activity(
             &workspace.id,
             vec![
-                ("pr".into(), ended("merged")),
-                ("issue".into(), ended("closed")),
+                (PR.as_str().into(), ended("merged")),
+                (ISSUE.as_str().into(), ended("closed")),
             ],
             &Selection::default(),
         )
@@ -1700,7 +1732,7 @@ async fn messages_for_the_next_turn_come_with_the_next_updates() {
         .create_workspace(&repo.id, "quiet".into(), None, None, None)
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     manager
         .queue_agent_message_delivered(
             &workspace.id,
@@ -1717,7 +1749,10 @@ async fn messages_for_the_next_turn_come_with_the_next_updates() {
     );
     assert!(!manager.agent_updates_recorded(&workspace.id).await.unwrap());
     manager
-        .record_pr_activity(&workspace.id, vec![("pr".into(), snapshot("review"))])
+        .record_pr_activity(
+            &workspace.id,
+            vec![(PR.as_str().into(), snapshot("review"))],
+        )
         .await
         .unwrap();
     // A message that wakes the agent would end the wait on its own.
@@ -1750,7 +1785,7 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
         )
         .await
         .unwrap();
-    register_watch(&manager, &child.id, "child-pr").await;
+    register_watch(&manager, &child.id, CHILD_PR.as_str()).await;
     let prs = Selection {
         kind: Some(LinkKind::Pr),
         input: None,
@@ -1786,7 +1821,7 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
     manager
         .queue_background_updates(
             &child.id,
-            vec![("child-pr".into(), snapshot("first"))],
+            vec![(CHILD_PR.as_str().into(), snapshot("first"))],
             crate::time::UnixTime::now(),
         )
         .await
@@ -1812,10 +1847,13 @@ async fn recorded_updates_count_while_the_pr_gate_is_held() {
         .create_workspace(&repo.id, "gated".into(), None, None, None)
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     assert!(!manager.agent_updates_recorded(&workspace.id).await.unwrap());
     manager
-        .record_pr_activity(&workspace.id, vec![("pr".into(), snapshot("review"))])
+        .record_pr_activity(
+            &workspace.id,
+            vec![(PR.as_str().into(), snapshot("review"))],
+        )
         .await
         .unwrap();
     // Cleanup holds the gate while it decides whether updates wait.
@@ -1846,20 +1884,20 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO space_issue(space_id,url) VALUES (?1,'issue')",
-                [id],
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                params![id, ISSUE.as_str()],
             )?;
             Ok(())
         })
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     let updates = manager
         .record_activity(
             &workspace.id,
             vec![
-                ("pr".into(), snapshot("review")),
-                ("issue".into(), snapshot("comment")),
+                (PR.as_str().into(), snapshot("review")),
+                (ISSUE.as_str().into(), snapshot("comment")),
             ],
             &Selection::default(),
         )
@@ -1867,7 +1905,7 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
         .unwrap();
     assert_eq!(updates.len(), 2);
     let pending = manager
-        .pending_activity(&workspace.id, &["pr".into()])
+        .pending_activity(&workspace.id, &[PR.as_str().into()])
         .await
         .unwrap();
     assert_eq!(pending.len(), 1);
@@ -1887,7 +1925,7 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
         .unwrap();
     assert_eq!(
         manager
-            .pending_activity(&workspace.id, &["issue".into()])
+            .pending_activity(&workspace.id, &[ISSUE.as_str().into()])
             .await
             .unwrap()
             .len(),
@@ -1897,7 +1935,7 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
         manager
             .record_activity(
                 &workspace.id,
-                vec![("pr".into(), snapshot("later"))],
+                vec![(PR.as_str().into(), snapshot("later"))],
                 &Selection::default()
             )
             .await
@@ -1910,7 +1948,7 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
         .unwrap();
     assert!(
         manager
-            .pending_activity(&workspace.id, &["issue".into()])
+            .pending_activity(&workspace.id, &[ISSUE.as_str().into()])
             .await
             .unwrap()
             .is_empty()
@@ -1919,7 +1957,7 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
         manager
             .record_activity(
                 &workspace.id,
-                vec![("issue".into(), snapshot("later"))],
+                vec![(ISSUE.as_str().into(), snapshot("later"))],
                 &Selection::default()
             )
             .await
@@ -1928,7 +1966,7 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
     );
     let explicit = Selection {
         kind: Some(LinkKind::Issue),
-        input: Some("2".into()),
+        input: Some("2".parse().unwrap()),
     };
     let updates = manager
         .record_activity(
@@ -2005,13 +2043,16 @@ async fn acknowledgement_keeps_queued_updates_and_those_a_newer_wait_needs() {
         .create_workspace(&repo.id, "queued".into(), None, None, None)
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     let delivered = manager
-        .record_pr_activity(&workspace.id, vec![("pr".into(), snapshot("review"))])
+        .record_pr_activity(
+            &workspace.id,
+            vec![(PR.as_str().into(), snapshot("review"))],
+        )
         .await
         .unwrap();
     let queued = Update {
-        url: "pr".into(),
+        url: PR.as_str().into(),
         kind: UpdateKind::BaseMerged,
         message: "base merged".into(),
         delivery: "queued".into(),
@@ -2066,9 +2107,9 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
         .create_workspace(&repo.id, "other".into(), None, None, None)
         .await
         .unwrap();
-    let changes = || vec![("pr".into(), snapshot("first review"))];
-    register_watch(&manager, &workspace.id, "pr").await;
-    register_watch(&manager, &other.id, "pr").await;
+    let changes = || vec![(PR.as_str().into(), snapshot("first review"))];
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
+    register_watch(&manager, &other.id, PR.as_str()).await;
     let first = manager
         .record_pr_activity(&workspace.id, changes())
         .await
@@ -2121,7 +2162,7 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
         restarted
             .record_pr_activity(
                 &workspace.id,
-                vec![("pr".into(), snapshot("edited review"))]
+                vec![(PR.as_str().into(), snapshot("edited review"))]
             )
             .await
             .unwrap()
@@ -2154,7 +2195,7 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
             .await
             .is_err()
     );
-    register_watch(&restarted, &workspace.id, "another-pr").await;
+    register_watch(&restarted, &workspace.id, ANOTHER_PR.as_str()).await;
     assert!(
         restarted
             .record_pr_activity(&workspace.id, changes())
@@ -2215,7 +2256,7 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
     let all = Selection::default();
 
     // A linked PR's forge reports conflicts instead.
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     let conflicting = branch_conflicts(
         Ok(crate::model::ConflictCheck {
             workspace_id: workspace.id.clone(),
@@ -2283,8 +2324,8 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO space_issue(space_id,url) VALUES (?1,'issue')",
-                [id],
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                params![id, ISSUE.as_str()],
             )?;
             Ok(())
         })
@@ -2354,7 +2395,7 @@ async fn sensitive_files_changed_on_both_sides_are_reported_beside_a_linked_pr()
     // The forge reports the PR's conflicts, so the branch reports the rest,
     // from a watch and from the background poll.
     let linked = &workspaces[1];
-    register_watch(&manager, &linked.id, "pr").await;
+    register_watch(&manager, &linked.id, PR.as_str()).await;
     let space = manager
         .link_space(&SpaceSelector::id(&linked.id))
         .await
@@ -2388,7 +2429,7 @@ async fn a_stalled_worktree_fails_the_background_branch_check_at_once() {
         .create_workspace(&repo.id, "stalled".into(), None, None, None)
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     tokio::time::pause();
     let stalled = manager
         .check_access(&workspace.path, std::future::pending::<Result<()>>())
@@ -2545,6 +2586,11 @@ fn run_snapshot(state: &str) -> Snapshot {
     .unwrap()
 }
 
+/// The URLs of `items`.
+fn urls(items: &[crate::forge::items::reference::ItemRef]) -> Vec<&str> {
+    items.iter().map(|item| item.url()).collect()
+}
+
 #[tokio::test]
 async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
     let (root, manager) = manager().await;
@@ -2559,8 +2605,7 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
         .unwrap();
     let id = workspace.id.clone();
     let run = crate::model::LinkedItem {
-        kind: LinkKind::Ci,
-        url: "run".into(),
+        url: RUN.as_str().parse().unwrap(),
         title: None,
     };
     manager
@@ -2568,7 +2613,7 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
         .await
         .unwrap();
     manager
-        .record_background_activity(&id, vec![("run".into(), run_snapshot("running"))])
+        .record_background_activity(&id, vec![(RUN.as_str().into(), run_snapshot("running"))])
         .await
         .unwrap();
 
@@ -2580,7 +2625,7 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
     let delivered = manager
         .record_activity(
             &id,
-            vec![("run".into(), run_snapshot("finished"))],
+            vec![(RUN.as_str().into(), run_snapshot("finished"))],
             &selection,
         )
         .await
@@ -2599,18 +2644,18 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
         .await
         .unwrap();
     assert!(watched.is_empty(), "{watched:?}");
-    assert_eq!(polled, [("run".to_owned(), LinkKind::Ci)]);
+    assert_eq!(urls(&polled), [RUN.as_str()]);
 
     // The background poll still records the finish on its own baseline.
     manager
-        .record_background_activity(&id, vec![("run".into(), run_snapshot("finished"))])
+        .record_background_activity(&id, vec![(RUN.as_str().into(), run_snapshot("finished"))])
         .await
         .unwrap();
     let events = manager.workspace_events(None, 100).await.unwrap();
     assert!(events.iter().any(|item| matches!(item,
         crate::daemon::events::EventItem::Event(event)
             if event.details.item_activity.as_deref().is_some_and(|activity|
-                activity.url == "run" && activity.update.kind == UpdateKind::CiCompleted))));
+                activity.url == RUN.as_str() && activity.update.kind == UpdateKind::CiCompleted))));
 }
 
 #[tokio::test]
@@ -2627,8 +2672,7 @@ async fn background_polls_a_finished_run_until_its_finish_is_queued() {
         .unwrap();
     let id = workspace.id.clone();
     let run = crate::model::LinkedItem {
-        kind: LinkKind::Ci,
-        url: "run".into(),
+        url: RUN.as_str().parse().unwrap(),
         title: None,
     };
     manager
@@ -2640,12 +2684,12 @@ async fn background_polls_a_finished_run_until_its_finish_is_queued() {
         manager.store.run(move |db| polled_items(db, &id))
     };
     // The poll is interrupted after recording the finish on its baseline.
-    let finished = vec![("run".to_owned(), run_snapshot("finished"))];
+    let finished = vec![(RUN.to_owned(), run_snapshot("finished"))];
     manager
         .record_background_activity(&id, finished.clone())
         .await
         .unwrap();
-    assert_eq!(polled().await.unwrap(), [("run".to_owned(), LinkKind::Ci)]);
+    assert_eq!(urls(&polled().await.unwrap()), [RUN.as_str()]);
     // The next poll queues it for the agent's hooks, which ends the polling.
     manager
         .queue_background_updates(&id, finished, crate::time::UnixTime::now())
@@ -2681,7 +2725,7 @@ async fn settling_workspace(root: &tempfile::TempDir, manager: &Manager) -> Work
 async fn updates_leave_settling_messages_for_a_later_delivery() {
     let (root, manager) = manager().await;
     let workspace = settling_workspace(&root, &manager).await;
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     manager
         .queue_agent_message_delivered(
             &workspace.id,
@@ -2691,7 +2735,10 @@ async fn updates_leave_settling_messages_for_a_later_delivery() {
         .await
         .unwrap();
     manager
-        .record_pr_activity(&workspace.id, vec![("pr".into(), snapshot("review"))])
+        .record_pr_activity(
+            &workspace.id,
+            vec![(PR.as_str().into(), snapshot("review"))],
+        )
         .await
         .unwrap();
     let updates = manager
@@ -2751,9 +2798,12 @@ async fn a_held_gate_delays_a_wake_but_keeps_an_issued_one_due() {
         .create_workspace(&repo.id, "gated".into(), None, None, None)
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     manager
-        .record_pr_activity(&workspace.id, vec![("pr".into(), snapshot("review"))])
+        .record_pr_activity(
+            &workspace.id,
+            vec![(PR.as_str().into(), snapshot("review"))],
+        )
         .await
         .unwrap();
     let held = manager.gates.lock_prs([&workspace.id]).await;
@@ -2792,7 +2842,7 @@ async fn a_merge_a_background_poll_sees_asks_for_a_sync() {
         .create_workspace(&repo.id, "merging".into(), None, None, None)
         .await
         .unwrap();
-    register_watch(&manager, &workspace.id, "pr").await;
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
     let in_state = |state: &str| {
         serde_json::from_value::<Snapshot>(
             json!({"comments": {}, "checks": {}, "conflict": null, "state": state, "errors": {}}),
@@ -2800,7 +2850,8 @@ async fn a_merge_a_background_poll_sees_asks_for_a_sync() {
         .unwrap()
     };
     let record = |state| {
-        manager.record_background_activity(&workspace.id, vec![("pr".into(), in_state(state))])
+        manager
+            .record_background_activity(&workspace.id, vec![(PR.as_str().into(), in_state(state))])
     };
     assert!(!record("open").await.unwrap());
     assert!(!record("open").await.unwrap());
@@ -2856,7 +2907,7 @@ async fn the_background_poll_reads_spaces_together() {
         manager
             .set_issue(
                 &SpaceSelector::id(&workspace.id),
-                &issue,
+                &issue.parse().unwrap(),
                 Some("Fix".into()),
             )
             .await

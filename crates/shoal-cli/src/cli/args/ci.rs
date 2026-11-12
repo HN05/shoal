@@ -2,7 +2,7 @@
 //! approving CI runs.
 use clap::{Args, Subcommand};
 
-use crate::cli::args::item_reference;
+use crate::cli::args::{pull_input, run_input};
 use crate::client::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
@@ -58,11 +58,12 @@ pub struct Target {
 pub struct Subject {
     /// The run's web URL, as `shoal ci run` or a check links it, or the number
     /// in it; omit it to act on a PR's runs.
-    pub run: Option<String>,
+    #[arg(value_parser = run_input)]
+    pub run: Option<crate::forge::items::reference::ItemInput>,
     /// Act on the runs on this PR's head, by number or URL; defaults to the
     /// linked PR.
-    #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "run", value_parser = item_reference)]
-    pub pr: Option<String>,
+    #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "run", value_parser = pull_input)]
+    pub pr: Option<crate::forge::items::reference::ItemInput>,
     /// Space, a workspace or chat, to use; defaults to the current workspace or
     /// chat, or a picker.
     #[arg(short = 's', long, conflicts_with = "repo")]
@@ -83,8 +84,8 @@ pub struct ListArgs {
     #[arg(long)]
     pub branch: Option<String>,
     /// List the runs on this PR's head commit, by number or URL.
-    #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "branch", value_parser = item_reference)]
-    pub pr: Option<String>,
+    #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "branch", value_parser = pull_input)]
+    pub pr: Option<crate::forge::items::reference::ItemInput>,
     #[command(flatten)]
     pub repo: crate::cli::args::changes::RegisteredRepo,
     /// List only this workflow file's runs; GitLab has none.

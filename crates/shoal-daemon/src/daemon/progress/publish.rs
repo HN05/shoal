@@ -4,6 +4,7 @@
 //! end. A failed edit is logged and retried with the next change, without
 //! a notification.
 use crate::client::space_ids::SpaceId;
+use crate::forge::items::reference::ItemRef;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex, PoisonError},
@@ -122,15 +123,13 @@ pub async fn run(manager: Arc<Manager>) {
 
 /// The open PRs the space `id` opened or was assigned and has not marked
 /// ready, which show its progress.
-fn publishing_pulls(db: &Connection, id: &SpaceId) -> Result<Vec<String>> {
-    let assigned = linked_items(db, id, Some(ItemKind::Pr))?
-        .into_iter()
-        .map(|(url, _)| url);
+fn publishing_pulls(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
+    let assigned = linked_items(db, id, Some(ItemKind::Pr))?.into_iter();
     let opened = (store::recorded_items(db, id, Relation::Opened)?.into_iter())
-        .filter(|item| item.kind == ItemKind::Pr.into())
+        .filter(|item| item.kind() == ItemKind::Pr.into())
         .map(|item| item.url);
     let marked = crate::daemon::workspace::review::list(db, id)?;
-    let mut urls: Vec<String> = Vec::new();
+    let mut urls: Vec<ItemRef> = Vec::new();
     for url in assigned.chain(opened) {
         let ready = marked.iter().any(|mark| mark.url.as_ref() == Some(&url));
         if !ready && !urls.contains(&url) {
@@ -174,7 +173,7 @@ impl Manager {
     async fn write_sections(
         &self,
         space: &LinkSpace,
-        urls: &[String],
+        urls: &[ItemRef],
         section: Option<&str>,
     ) -> bool {
         let mut written = true;
@@ -191,7 +190,7 @@ impl Manager {
     /// marked ready, so they stop showing it; a failure is logged. The
     /// caller holds the gates [`Manager::lock_change_gates`] takes for the
     /// space.
-    pub(crate) async fn remove_progress_sections(&self, space: &LinkSpace, urls: &[String]) {
+    pub(crate) async fn remove_progress_sections(&self, space: &LinkSpace, urls: &[ItemRef]) {
         self.write_sections(space, urls, None).await;
     }
 

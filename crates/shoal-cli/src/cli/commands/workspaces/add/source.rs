@@ -10,7 +10,11 @@ use crate::{
         context::Context,
         ui,
     },
-    forge::items::{link::ItemKind, list::Search},
+    forge::items::{
+        link::ItemKind,
+        list::Search,
+        reference::{ItemInput, ItemRef},
+    },
     git::{self},
     protocol::ItemContext,
     start_plan::{AddPlan, Creation},
@@ -23,7 +27,7 @@ pub(super) async fn pick_add_source(
     ctx: &Context,
     target: &AddTarget,
     creation: &mut Creation,
-) -> Result<Option<String>> {
+) -> Result<Option<ItemInput>> {
     if creation.branch.is_some()
         || creation.existing.is_some()
         || creation.base.is_some()
@@ -57,14 +61,16 @@ pub(super) async fn pick_add_source(
             let context = read_context(ctx, target).await?;
             let search = Search::picker();
             let issues = client::list_items(&ctx.paths, context, ItemKind::Issue, search, None);
-            return ui::pick_item(ctx, "Issue> ", "issues", issues.await?).map(Some);
+            let number = ui::pick_item(ctx, "Issue> ", "issues", issues.await?)?;
+            return Ok(Some(ItemInput::Number(number)));
         }
         Source::Pull => {
             let context = read_context(ctx, target).await?;
             let search = Search::picker();
             let pulls = client::list_items(&ctx.paths, context.clone(), ItemKind::Pr, search, None);
             let number = ui::pick_item(ctx, "Pull request> ", "pull requests", pulls.await?)?;
-            let pull = client::pull_request(&ctx.paths, context, number).await?;
+            let pull = client::pull_request(&ctx.paths, context, ItemInput::Number(number));
+            let pull = pull.await?;
             let repo = target.repository(ctx).await?;
             super::link::pull_creation(ctx, repo, pull, creation).await?;
         }
@@ -77,12 +83,12 @@ pub(super) async fn pick_add_source(
 pub(super) async fn load_add_issue(
     ctx: &Context,
     target: &AddTarget,
-    input: Option<String>,
+    input: Option<ItemInput>,
 ) -> Result<Option<issues::Issue>> {
     match input {
         Some(input) => {
             let context = read_context(ctx, target).await?;
-            Ok(Some(issues::load(ctx, context, &input).await?))
+            Ok(Some(issues::load(ctx, context, input).await?))
         }
         None => Ok(None),
     }
@@ -95,7 +101,7 @@ pub(super) async fn load_planned_issue(
     target: &AddTarget,
     plan: &AddPlan,
 ) -> Result<Option<issues::Issue>> {
-    let input = plan.issue.clone();
+    let input = plan.issue.clone().map(Into::into);
     match plan.workspace {
         Some(_) => load_linked_issue(ctx, target, input).await,
         None => load_add_issue(ctx, target, input).await,
@@ -107,12 +113,12 @@ pub(super) async fn load_planned_issue(
 pub(super) async fn load_linked_issue(
     ctx: &Context,
     target: &AddTarget,
-    input: Option<String>,
+    input: Option<ItemInput>,
 ) -> Result<Option<issues::Issue>> {
     match input {
         Some(input) => {
             let context = read_context(ctx, target).await?;
-            Ok(Some(issues::load_linked(ctx, context, &input).await?))
+            Ok(Some(issues::load_linked(ctx, context, input).await?))
         }
         None => Ok(None),
     }
@@ -145,7 +151,7 @@ async fn issue_creation(
     target: &AddTarget,
     mut creation: Creation,
     name: String,
-    issue_url: &str,
+    issue_url: &ItemRef,
 ) -> Result<Creation> {
     let repo = target.repository(ctx).await?;
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
@@ -154,7 +160,7 @@ async fn issue_creation(
         .iter()
         .filter(|workspace| workspace.repository_id == repo.id)
     {
-        if workspace.links.issue.as_deref() == Some(issue_url) {
+        if workspace.links.issue.as_ref() == Some(issue_url) {
             ensure!(
                 associated.is_none(),
                 "multiple workspaces are associated with this issue; pass an explicit branch"
