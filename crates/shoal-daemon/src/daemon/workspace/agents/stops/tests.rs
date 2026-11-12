@@ -151,3 +151,26 @@ async fn a_load_stop_the_store_cannot_record_still_stops_the_agent() {
         crate::daemon::workspace::executions::Save::Everything
     );
 }
+
+#[tokio::test]
+async fn a_stop_recorded_beside_a_restart_leaves_the_restart_its_stop() {
+    let (root, manager) = manager().await;
+    let execution = idle_agent(&manager, &root).await;
+    let id = &execution.plan.id;
+    // A restart signals the wrapper, then a protection stop commits its
+    // record before its delivery finds the restart.
+    (manager.executions)
+        .with_agent(id, |agent| {
+            agent.restarts.current = Some(super::restart::Restart::unanswered(None, false));
+        })
+        .await;
+    let protection = Protection::load("memory pressure");
+    assert!(
+        manager
+            .record_agent_stop(id, &protection, None)
+            .await
+            .unwrap()
+    );
+    assert_eq!(manager.agent_overload(id).await, None);
+    assert!(manager.restart_requested(id).await);
+}

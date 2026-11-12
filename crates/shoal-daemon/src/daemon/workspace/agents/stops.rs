@@ -158,11 +158,14 @@ impl Manager {
     /// The protection stop whose restore the tracked agent of `id` awaits:
     /// a stop request, as from `shoal stop` or a daemon shutdown, cancels
     /// it, and one of an execution no agent connected for authorizes
-    /// nothing.
+    /// nothing. A restart in progress owns the agent's stop, since a stop
+    /// delivered before it refuses the restart, so a record beside it is
+    /// one that lost and goes.
     pub(crate) async fn agent_overload(&self, id: &ExecutionId) -> Option<Protection> {
-        if (self.executions.with_agent(id, |_| ()).await).is_none()
-            || self.executions.stop_request(id).await.is_some()
-        {
+        let restarting = (self.executions)
+            .with_agent(id, |agent| agent.restarts.current.is_some())
+            .await;
+        if restarting != Some(false) || self.executions.stop_request(id).await.is_some() {
             return None;
         }
         let execution = id.to_owned();
