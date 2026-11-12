@@ -14,9 +14,13 @@ use crate::{
     },
     execution::recovery,
     model::{Chat, PresentSpace, QueueEntry, QueueRequest, Repository, RunningAgent, SpaceTarget},
-    protocol::operations::LaunchRequest,
     repository::Selector,
 };
+
+/// Why a scoped caller cannot start the worker of a workspace outside its
+/// tree.
+const WORKER_REFUSAL: &str =
+    "workspace processes can start agents only in the workspaces split from theirs";
 
 /// Why a scoped caller cannot start an agent regardless of the limits.
 pub(in crate::daemon) const NOT_NOW: &str =
@@ -342,8 +346,6 @@ impl Manager {
         caller: &Caller,
         request: &'a mut QueueRequest,
     ) -> Result<Option<&'a mut SpaceSelector>> {
-        const REFUSAL: &str =
-            "workspace processes can start agents only in the workspaces split from theirs";
         ensure!(!request.now, NOT_NOW);
         // The daemon starts a scoped caller's agents detached, so none
         // inherits the caller's scope.
@@ -355,31 +357,35 @@ impl Manager {
             self.confine_new_launch(caller, request).await?;
             return Ok(None);
         }
-        let given = request.narrowing;
-        let mode = (request.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT);
-        let target = request.workspace.as_mut().context(REFUSAL)?;
-        let target = self.workspace_below(caller, target, REFUSAL).await?;
-        let giver = Some(&caller.space_id);
-        (self.ensure_workspace_agent_held(giver, target, &mode, &given)).await?;
-        Ok(Some(target))
+        let QueueRequest {
+            workspace,
+            mode,
+            narrowing,
+            ..
+        } = request;
+        let target = workspace.as_mut().context(WORKER_REFUSAL)?;
+        let target = self.worker_target(caller, target, mode.as_ref(), narrowing);
+        Ok(Some(target.await?))
     }
 
-    /// The workspace below `caller`'s own space whose worker it queues with
-    /// `launch`, which may not start at once or give permissions the
-    /// caller does not hold.
+    /// The workspace below `caller`'s own space whose worker it queues in
+    /// `mode`, the default mode without one, refused with `given`
+    /// permissions the caller does not hold.
     pub(in crate::daemon) async fn worker_target<'a>(
         &self,
         caller: &Caller,
         workspace: &'a mut SpaceSelector,
-        launch: &LaunchRequest,
+        mode: Option<&crate::config::modes::ModeName>,
+        given: &crate::config::permissions::PermissionsConfig,
     ) -> Result<&'a mut SpaceSelector> {
-        const REFUSAL: &str =
-            "workspace processes can start agents only in the workspaces split from theirs";
-        ensure!(!launch.now, NOT_NOW);
-        let mode = (launch.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT);
-        let target = self.workspace_below(caller, workspace, REFUSAL).await?;
+        let mode = mode
+            .cloned()
+            .unwrap_or(crate::config::modes::ModeName::DEFAULT);
+        let target = self
+            .workspace_below(caller, workspace, WORKER_REFUSAL)
+            .await?;
         let giver = Some(&caller.space_id);
-        (self.ensure_workspace_agent_held(giver, target, &mode, &launch.narrowing)).await?;
+        (self.ensure_workspace_agent_held(giver, target, &mode, given)).await?;
         Ok(target)
     }
 

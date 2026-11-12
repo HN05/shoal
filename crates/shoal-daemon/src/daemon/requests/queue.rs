@@ -95,7 +95,15 @@ impl Scoped for QueueMethod {
             QueueMethod::SetPriority { space, .. } => Some(space),
             QueueMethod::QueueAgent {
                 workspace, launch, ..
-            } => Some(manager.worker_target(caller, workspace, launch).await?),
+            } => {
+                ensure!(!launch.now, NOT_NOW);
+                let (mode, given) = (launch.mode.as_ref(), &launch.narrowing);
+                Some(
+                    manager
+                        .worker_target(caller, workspace, mode, given)
+                        .await?,
+                )
+            }
             QueueMethod::QueueRestore {
                 workspace,
                 execution,
