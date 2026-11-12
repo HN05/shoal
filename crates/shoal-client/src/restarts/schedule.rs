@@ -123,7 +123,8 @@ impl Restart {
 
 /// `error`, of the failed restart of `workspace`'s agent, naming how to
 /// restore the agent when the workspace saved stopped work for that, as the
-/// daemon names it for a chat.
+/// daemon names it for a chat. The daemon's error stays its cause, which
+/// callers can inspect.
 async fn with_restore(
     daemon: &impl Daemon,
     workspace: &Workspace,
@@ -131,10 +132,10 @@ async fn with_restore(
 ) -> anyhow::Error {
     let saved = saved::read(daemon, SpaceSelector::id(&workspace.id)).await;
     match saved.is_ok_and(|saved| saved.is_resumable()) {
-        true => anyhow::anyhow!(
-            "{error:#}; restore it with shoal resume {}",
+        true => error.context(format!(
+            "the agent stays stopped; restore it with shoal resume {}",
             workspace.number
-        ),
+        )),
         false => error,
     }
 }
