@@ -11,6 +11,7 @@ use crate::{
     agent::Agent,
     connection::{Daemon, pages},
     protocol::{RecoveryMethod, SavedPiece},
+    sessions::Origin,
     space_ids::SpaceId,
     space_names::SpaceSelector,
     time::UnixTime,
@@ -109,6 +110,8 @@ pub struct SavedSession {
     pub idle: bool,
     /// A live wrapper waits to restore it, which restores it only there.
     pub waits_in_wrapper: bool,
+    /// Where it ran, when known, where a restore may run it again.
+    pub origin: Option<Origin>,
 }
 
 /// A stopped command, which a restored agent of its workspace is told about.
@@ -137,6 +140,11 @@ impl Saved {
             self.sessions.clear();
             self.commands.retain(|command| command.id == *id);
         }
+    }
+
+    /// The stopped agent or last session of execution `id`.
+    pub fn session(&self, id: &ExecutionId) -> Option<&SavedSession> {
+        (self.agents.iter().chain(&self.sessions)).find(|session| session.id == *id)
     }
 
     /// The agent of each stopped agent and then each last session, `None`

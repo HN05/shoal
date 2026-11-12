@@ -15,8 +15,8 @@ pub mod claim;
 
 pub use claim::{RecoveryClaim, claim, claim_last_session, claim_record, discard_saved};
 
+pub(crate) use crate::client::executions::unnamed_execution;
 pub use crate::client::executions::{Copied, LastSession, Record, Stage, Stop, StoppedAgent};
-pub(crate) use crate::client::executions::{earlier_place, unnamed_execution};
 pub use crate::client::saved::{Saved, SavedCommand, SavedSession};
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -830,18 +830,6 @@ pub fn saved_path(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) -> PathBu
     LastSession::path(paths, space_id, id)
 }
 
-/// Where the agent a recovery record or last session at `path` keeps ran,
-/// when known.
-pub fn saved_place(path: &Path) -> Option<Origin> {
-    #[derive(Deserialize)]
-    struct Placed {
-        #[serde(default, alias = "place", deserialize_with = "earlier_place")]
-        origin: Option<Origin>,
-    }
-    let bytes = std::fs::read(path).ok()?;
-    serde_json::from_slice::<Placed>(&bytes).ok()?.origin
-}
-
 pub fn record_path(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) -> PathBuf {
     paths
         .space_state(space_id)
@@ -1191,7 +1179,8 @@ fn stopped_agent(id: ExecutionId, path: PathBuf) -> SavedSession {
             .as_ref()
             .and_then(|record| record.stop_reason.clone()),
         idle: record.as_ref().is_some_and(Record::between_turns),
-        waits_in_wrapper: record.is_some_and(|record| waits(&record)),
+        waits_in_wrapper: record.as_ref().is_some_and(waits),
+        origin: record.and_then(|record| record.origin),
         id,
         path,
     }
@@ -1203,10 +1192,11 @@ fn last_session(id: ExecutionId, path: PathBuf) -> SavedSession {
     let last = LastSession::load(&path).ok().flatten();
     SavedSession {
         stopped_at: saved_at(&path),
-        agent: last.map(|last| last.agent),
+        agent: last.as_ref().map(|last| last.agent.clone()),
         stop_reason: None,
         idle: false,
         waits_in_wrapper: false,
+        origin: last.and_then(|last| last.origin),
         id,
         path,
     }

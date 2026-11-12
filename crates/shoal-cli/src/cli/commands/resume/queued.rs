@@ -64,7 +64,10 @@ pub(in crate::cli::commands) async fn start_queued(
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
-    let record = crate::execution::recovery::saved_path(&ctx.paths, &workspace.id, execution);
+    let saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
+    let stopped = saved
+        .session(execution)
+        .and_then(|session| session.origin.as_ref());
     let args = [
         "resume",
         workspace.id.as_str(),
@@ -75,7 +78,7 @@ pub(in crate::cli::commands) async fn start_queued(
         entry.id.as_str(),
     ]
     .map(OsString::from);
-    terminal::restore_queued(ctx, &settings, &workspace, &record, &args).await
+    terminal::restore_queued(ctx, &settings, &workspace, stopped, &args).await
 }
 
 /// Record the place this restore runs in, one `host` opened in the

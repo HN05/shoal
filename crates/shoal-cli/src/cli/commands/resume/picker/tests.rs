@@ -9,6 +9,7 @@ fn stopped(reason: Option<&str>, idle: bool) -> SavedSession {
         stop_reason: reason.map(Into::into),
         idle,
         waits_in_wrapper: false,
+        origin: None,
     }
 }
 

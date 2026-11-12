@@ -510,7 +510,8 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
         &SpaceId::from("workspace"),
         &ExecutionId::from("execution"),
     );
-    assert_eq!(saved_place(&kept), Some(herdr_pane("w1:p2")));
+    let saved = Saved::load(&paths, &SpaceId::from("workspace")).unwrap();
+    assert_eq!(saved.sessions[0].origin, Some(herdr_pane("w1:p2")));
     assert_eq!(
         saved_path(
             &paths,

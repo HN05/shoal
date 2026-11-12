@@ -9,6 +9,7 @@ fn session(id: &str) -> SavedSession {
         stop_reason: None,
         idle: false,
         waits_in_wrapper: false,
+        origin: None,
     }
 }
 

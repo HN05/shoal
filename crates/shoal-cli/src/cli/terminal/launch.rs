@@ -264,63 +264,63 @@ fn recorded_origin(recorded: &str) -> Result<Option<Origin>> {
     serde_json::from_str(recorded).context("invalid queued start origin")
 }
 
-/// Run Shoal with `args` where the agent of `record` stopped, when that
+/// Run Shoal with `args` where an agent stopped, in `stopped`, when that
 /// place is another one still open and idle. Returns what such restarts run
 /// in, or `None` when it did not run.
 pub(in crate::cli) async fn rerun_where_stopped(
     ctx: &Context,
     settings: &Effective,
-    record: &Path,
+    stopped: Option<&Origin>,
     args: &[OsString],
 ) -> Result<Option<&'static str>> {
     let host = beside(ctx, settings).host;
-    let reused = rerun_in_host(ctx, host, record, args).await?;
+    let reused = rerun_in_host(ctx, host, stopped, args).await?;
     Ok(host
         .places()
         .filter(|_| reused)
         .map(Places::background_places))
 }
 
-/// Restore the agent of `record` in its earlier place in `host`, when idle.
+/// Restore an agent in `stopped`, its earlier place, when that is in `host`
+/// and idle.
 async fn rerun_in_host(
     ctx: &Context,
     host: &dyn Host,
-    record: &Path,
+    stopped: Option<&Origin>,
     args: &[OsString],
 ) -> Result<bool> {
     let Some(places) = host.places() else {
         return Ok(false);
     };
-    let Some(place) = stopped_place(record).filter(|place| place.host == host.name()) else {
+    let Some(place) = reusable_place(stopped).filter(|place| place.host == host.name()) else {
         return Ok(false);
     };
     let argv = shoal_command(ctx, args)?;
     places
-        .run_in_place(&ctx.paths.state, &place, &argv, &place_env(ctx)?)
+        .run_in_place(&ctx.paths.state, place, &argv, &place_env(ctx)?)
         .await
 }
 
-/// Where the agent of `record` stopped, unless that is where this process
+/// `stopped`, where an agent stopped, unless that is where this process
 /// runs, which is never reused.
-fn stopped_place(record: &Path) -> Option<Origin> {
+fn reusable_place(stopped: Option<&Origin>) -> Option<&Origin> {
     let here = current_origin().and_then(|origin| origin.place);
-    crate::execution::recovery::saved_place(record)
-        .filter(|origin| origin.place.is_some() && origin.place != here)
+    stopped.filter(|origin| origin.place.is_some() && origin.place != here)
 }
 
-/// Run Shoal with `args`, which restore the agent of `record` in
-/// `workspace`, for the daemon's worker, which has no terminal: where the
+/// Run Shoal with `args`, which restore an agent of `workspace` that stopped
+/// in `stopped`, for the daemon's worker, which has no terminal: where the
 /// agent stopped when that place is back at its prompt, otherwise in the
 /// background of the first place a queued start from there can open.
 pub(in crate::cli) async fn restore_queued(
     ctx: &Context,
     settings: &Effective,
     workspace: &Workspace,
-    record: &Path,
+    stopped: Option<&Origin>,
     args: &[OsString],
 ) -> Result<()> {
-    if let Some(host) = stopped_place(record).and_then(|place| enabled_host(settings, place.host))
-        && rerun_in_host(ctx, host, record, args).await?
+    if let Some(host) = reusable_place(stopped).and_then(|place| enabled_host(settings, place.host))
+        && rerun_in_host(ctx, host, stopped, args).await?
     {
         return Ok(());
     }

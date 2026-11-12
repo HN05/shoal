@@ -250,7 +250,7 @@ pub fn unnamed_execution() -> ExecutionId {
 
 /// A record's place: an origin, or the bare pane ID records kept before
 /// origins, which only Herdr recorded.
-pub fn earlier_place<'de, D: serde::Deserializer<'de>>(
+fn earlier_place<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> std::result::Result<Option<Origin>, D::Error> {
     #[derive(Deserialize)]

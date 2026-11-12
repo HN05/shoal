@@ -152,7 +152,7 @@ async fn start_session(
     ]
     .map(OsString::from);
     if let Some(places) =
-        terminal::rerun_where_stopped(ctx, &settings, &session.path, &args).await?
+        terminal::rerun_where_stopped(ctx, &settings, session.origin.as_ref(), &args).await?
     {
         return Ok(Started::Elsewhere {
             reused: true,
