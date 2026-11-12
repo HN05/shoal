@@ -59,6 +59,12 @@ pub enum QueueMethod {
         entry: QueueEntryId,
         error: String,
     },
+    /// Set `priority` on the space, which ranks its queued work; a scoped
+    /// caller gives at most its own space's.
+    SetPriority {
+        space: SpaceSelector,
+        priority: crate::priority::Priority,
+    },
     /// Queue the restore of a stopped agent, which the daemon starts with
     /// `env` once admitted, or with `now` at once, regardless of the limits.
     QueueRestore {

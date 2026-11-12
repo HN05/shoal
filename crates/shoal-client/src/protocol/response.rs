@@ -220,6 +220,7 @@ response_bodies! {
     AgentStatus(crate::model::AgentStatus),
     Progress(Option<crate::progress::Progress>),
     Slept(crate::sleep::Slept),
+    Prioritized(crate::priority::Prioritized),
     WokenTurn(WokenTurn),
     AgentSession(crate::model::AgentSession),
     SpaceStatus(Box<SpaceStatus>),

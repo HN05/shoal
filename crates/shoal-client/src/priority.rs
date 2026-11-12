@@ -5,6 +5,12 @@ use std::{fmt, str::FromStr};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
+use crate::{
+    connection::{Daemon, request},
+    protocol::QueueMethod,
+    space_names::{SpaceName, SpaceSelector},
+};
+
 /// A priority, from 0 to 100; [`Self::NORMAL`] unless set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "u8", into = "u8")]
@@ -77,6 +83,22 @@ impl fmt::Display for Priority {
             None => write!(f, "{}", self.0),
         }
     }
+}
+
+/// A space's priority after `shoal priority`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Prioritized {
+    pub space: SpaceName,
+    pub priority: Priority,
+}
+
+/// Set `priority` on the space `space` names, which ranks its queued work.
+pub async fn set(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    priority: Priority,
+) -> Result<Prioritized> {
+    request(daemon, QueueMethod::SetPriority { space, priority }).await
 }
 
 #[cfg(feature = "rusqlite")]

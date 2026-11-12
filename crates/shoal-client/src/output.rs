@@ -114,6 +114,7 @@ outputs!(
     crate::sim::Simulator,
     crate::sim::SimulatorOverview,
     crate::sleep::Slept,
+    crate::priority::Prioritized,
     crate::model::AgentStatus,
     crate::model::Chat,
     crate::model::Checkpoint,

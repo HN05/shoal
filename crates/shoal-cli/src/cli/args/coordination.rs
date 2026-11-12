@@ -101,6 +101,19 @@ pub enum CoordinationCommand {
         #[arg(long)]
         undo: bool,
     },
+    /// Set a space's priority, which ranks its queued work ahead of
+    /// everything else.
+    ///
+    /// Work that the space waits on takes it too. A space's agent gives
+    /// at most its own space's priority.
+    Priority {
+        /// low (25), normal (50, the default), urgent (75), or a number
+        /// from 0 to 100; higher goes first.
+        priority: crate::client::priority::Priority,
+        /// Space, a workspace or chat; defaults to the current workspace or
+        /// chat, or a picker.
+        space: Option<SpaceSelector>,
+    },
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.
     ///
     /// A chat records that its work is finished and keeps running.

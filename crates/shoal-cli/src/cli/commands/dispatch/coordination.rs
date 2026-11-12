@@ -4,7 +4,7 @@ use crate::cli::{
     args::coordination::{
         CoordinationCommand, FilesCommand, MessagesCommand, QuestionAskArgs, QuestionsCommand,
     },
-    commands::{files, messages, progress, questions, sleep, workspaces},
+    commands::{files, messages, priority, progress, questions, sleep, workspaces},
     context::Context,
 };
 
@@ -144,6 +144,9 @@ pub(in crate::cli::commands) async fn run(
                 (false, false) => Some(crate::state::Sleep::Turn),
             };
             sleep::run(&ctx, space, sleep).await
+        }
+        CoordinationCommand::Priority { priority, space } => {
+            priority::run(&ctx, space, priority).await
         }
         CoordinationCommand::Done {
             space,

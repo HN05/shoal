@@ -1915,6 +1915,8 @@ shoal queue                                   # Waiting and starting entries; on
 shoal queue start <entry>                     # Starts a waiting entry, or a space's queued restore, now regardless of the limits
 shoal queue start --attach <entry>            # Starts it and attaches this terminal to its agent's session
 shoal queue cancel <entry>                    # Removes a waiting entry; a restore's agent stays stopped
+shoal priority urgent [space]                 # Ranks the space's queued work ahead of the rest
+shoal priority 30 [space]                     # Any number from 0 to 100; low is 25, normal 50
 ```
 
 [`machine.max_agents`](config.md#machine) limits the agents that run at once. It defaults to `dynamic`,
@@ -2081,6 +2083,12 @@ agent for `shoal resume`. `shoal rm` also removes a waiting launch by its ID;
 a starting entry belongs to its workspace. Every caller sees every entry.
 Scoped callers may cancel the entries for the workspaces below their own;
 starting an entry is for the user.
+
+`shoal priority` sets a space's priority, which ranks its queued work and the
+work it waits on (see [Queue order](#queue-order)): `low`, `normal` or
+`urgent`, or a number from 0 to 100. It lasts until changed, through `done`
+and conversion. A space's agent sets it on its own space and those below, at
+most to its own space's priority; you and a master session set any.
 
 #### Queue order
 

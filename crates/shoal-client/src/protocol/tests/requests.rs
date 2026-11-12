@@ -145,6 +145,7 @@ const REQUESTS: &[&str] = &[
     r#"{"queue_hold":{"entry":"q1"}}"#,
     r#"{"queue_attach":{"entry":"q1","workspace":"fix"}}"#,
     r#"{"queue_fail":{"entry":"q1","error":"no agent"}}"#,
+    r#"{"set_priority":{"space":"fix","priority":75}}"#,
     r#"{"queue_restore":{"workspace":"fix","execution":"e1","env":{}}}"#,
     // Demos.
     r#"{"list_demos":{"workspace":null}}"#,

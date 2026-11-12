@@ -51,6 +51,9 @@ pub(super) async fn handle(
             manager.fail_queue_entry(&entry, &error).await?;
             Body::Ok
         }
+        QueueMethod::SetPriority { space, priority } => {
+            Body::Prioritized(manager.set_priority(caller, &space, priority).await?)
+        }
         QueueMethod::QueueRestore {
             workspace,
             execution,
@@ -84,6 +87,7 @@ impl Scoped for QueueMethod {
             // Each answer confines the entries to those below the caller.
             QueueMethod::ListQueue | QueueMethod::QueueRemove { .. } => None,
             QueueMethod::QueueAdd { request } => manager.queue_target(caller, request).await?,
+            QueueMethod::SetPriority { space, .. } => Some(space),
             QueueMethod::QueueAgent { workspace, .. } => {
                 const REFUSAL: &str =
                     "workspace processes can start agents only in the workspaces split from theirs";
