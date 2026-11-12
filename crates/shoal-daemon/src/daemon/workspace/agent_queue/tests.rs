@@ -1602,3 +1602,31 @@ async fn a_start_gives_its_queue_entry_the_workspace_before_its_setup_runs() {
         Some(&started.workspace.id)
     );
 }
+
+#[tokio::test]
+async fn a_launch_waits_for_a_setup_the_daemon_never_started() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
+    let child = manager
+        .create_workspace(&repo.id, "child".into(), None, None, None)
+        .await
+        .unwrap();
+    // Its setup was refused before it registered, so it stays preparing
+    // with nothing running.
+    manager
+        .set_state(&child.id, WorkspaceState::Preparing, None)
+        .await
+        .unwrap();
+    let entry = manager
+        .queue_add(QueueRequest {
+            workspace: Some(SpaceSelector::id(&child.id)),
+            ..request(&repo, "child", false)
+        })
+        .await
+        .unwrap()
+        .entry
+        .unwrap();
+    assert_eq!(entry.state, QueueState::Queued);
+    assert_eq!(entry.blockers, vec!["setup of child".to_owned()]);
+}

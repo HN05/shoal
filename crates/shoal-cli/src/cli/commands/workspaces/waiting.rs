@@ -45,10 +45,15 @@ impl WaitingAgent {
     }
 }
 
-/// Whether `workspace`'s setup failed.
+/// Whether `workspace`'s setup failed, or never started and runs in no
+/// execution, as when the daemon refused it.
 async fn setup_failed(ctx: &Context, workspace: &Workspace) -> bool {
     let selector = SpaceSelector::id(&workspace.id);
     crate::client::workspaces::inspect(&ctx.paths, selector)
         .await
-        .is_ok_and(|inspection| inspection.workspace.state == WorkspaceState::Failed)
+        .is_ok_and(|inspection| match inspection.workspace.state {
+            WorkspaceState::Failed => true,
+            WorkspaceState::Preparing => inspection.executions.is_empty(),
+            _ => false,
+        })
 }

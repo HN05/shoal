@@ -76,12 +76,19 @@ fn end_failed_starts(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Res
     Ok(())
 }
 
-/// Whether `workspace`'s setup failed, which a retried setup can ready.
+/// Whether `workspace`'s setup failed, or never started and runs in no
+/// execution, as when the daemon refused it, either of which a retried
+/// setup can ready.
 fn setup_failed(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<bool> {
     crate::daemon::store::exists(
         tx,
-        "SELECT 1 FROM workspaces WHERE id=?1 AND state=?2",
-        params![workspace, crate::state::WorkspaceState::Failed],
+        "SELECT 1 FROM workspaces w WHERE id=?1 AND (state=?2 OR state=?3
+            AND NOT EXISTS (SELECT 1 FROM executions e WHERE e.workspace_id=w.id))",
+        params![
+            workspace,
+            crate::state::WorkspaceState::Failed,
+            crate::state::WorkspaceState::Preparing
+        ],
     )
 }
 
