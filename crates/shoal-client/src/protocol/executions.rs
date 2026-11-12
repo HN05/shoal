@@ -10,7 +10,7 @@ use crate::{executions::ExecutionKind, processes::Identity};
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionMethod {
     /// Long-lived: the connection stays open for the execution's lifetime.
-    /// `agent` names a Shoal agent shortcut whose exit the user is told about.
+    /// `agent` names the agent the command runs, whose exit the user is told about.
     Execute {
         workspace: SpaceSelector,
         wrapper: Identity,

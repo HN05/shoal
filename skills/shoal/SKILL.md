@@ -56,7 +56,7 @@ instructions, and text after `--` is the task. `--mode` picks the mode,
 chat; the mode alone decides the kind of space. `--name` names
 the new space; without it, it takes the issue's or PR's title, else its
 branch. `--base` naming another workspace's branch stacks the new workspace on
-it. A start that names no branch, issue, PR, existing branch or copy begins as
+it. A start that names no branch, issue, PR or copy begins as
 a chat in its mode, `worker` by default, which `shoal convert workspace` makes
 a workspace once the work is known. `--in <workspace>` starts that existing
 workspace's own agent instead of a new space, with the task after `--`, else on

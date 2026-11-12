@@ -60,7 +60,7 @@ impl TrackedAgent {
     }
 }
 
-/// `agent` names a Shoal agent shortcut; the daemon tells the user when it exits.
+/// `agent` names the agent the command runs; the daemon tells the user when it exits.
 pub async fn run(
     paths: &CommandPaths,
     workspace: SpaceSelector,
