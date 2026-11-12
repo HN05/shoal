@@ -76,12 +76,8 @@ pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
             import::import(ctx, files, options).await
         }
         MoveCommand::Ssh(args) => ssh::run(ctx, args).await,
-        MoveCommand::Root {
-            root,
-            regular_dir,
-            confirmation,
-        } => {
-            root::run(ctx, root, regular_dir, confirmation.yes).await?;
+        MoveCommand::Root(args) => {
+            root::run(ctx, args).await?;
             Ok(0)
         }
     }

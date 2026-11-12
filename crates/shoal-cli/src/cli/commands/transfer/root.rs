@@ -16,6 +16,7 @@ use anyhow::{Result, ensure};
 use crate::{
     cli::{
         agents,
+        args::transfer::RootArgs,
         client::{self},
         context::Context,
         output::{Palette, Style},
@@ -27,17 +28,19 @@ use crate::{
     repository,
 };
 
-/// Check that every repository outside `root`, or the configured root, can
-/// move, confirm, save `root` as `root_dir` when given, stop the commands and
-/// agents running in them, then have the daemon move them, into a directory
-/// Spotlight skips unless `regular_dir`, and queue the stopped agents'
-/// restores, even when the move fails.
-pub(super) async fn run(
-    ctx: &Context,
-    root: Option<PathBuf>,
-    regular_dir: bool,
-    confirmed: bool,
-) -> Result<()> {
+/// Check that every repository outside the root `args` name, or the
+/// configured root, can move, confirm, save that root as `root_dir` when
+/// given, stop the commands and agents running in them, then have the
+/// daemon move them, into a directory Spotlight skips unless they ask for a
+/// regular one, and queue the stopped agents' restores, even when the move
+/// fails.
+pub(super) async fn run(ctx: &Context, args: RootArgs) -> Result<()> {
+    let RootArgs {
+        root,
+        regular_dir,
+        confirmation,
+    } = args;
+    let confirmed = confirmation.yes;
     let root = root
         .map(|root| super::super::repositories::absolute(ctx, root))
         .transpose()?;

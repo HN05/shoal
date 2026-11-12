@@ -10,7 +10,11 @@ use std::{
 };
 
 use crate::{
-    cli::{Cli, Command, args::approvals::Decision, args::internal::InternalCommand},
+    cli::{
+        Cli, Command,
+        args::approvals::Decision,
+        args::internal::{AddWorkerArgs, InternalCommand},
+    },
     paths::Paths,
     sessions::HostName,
     workers::{Worker, internal_command},
@@ -47,12 +51,12 @@ fn add_round_trips_host_close_when_done_and_focus() {
         assert_eq!(cli.state_dir.as_ref(), Some(&paths.state));
         let Some(Command::Internal {
             command:
-                InternalCommand::Add {
+                InternalCommand::Add(AddWorkerArgs {
                     host,
                     close_when_done: parsed,
                     focused: parsed_focus,
                     plan,
-                },
+                }),
         }) = cli.command
         else {
             panic!("expected the add worker");

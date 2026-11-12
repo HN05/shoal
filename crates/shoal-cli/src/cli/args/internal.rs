@@ -2,7 +2,7 @@
 use crate::client::space_ids::SpaceId;
 use std::{ffi::OsString, path::PathBuf};
 
-use clap::Subcommand;
+use clap::{Args, Subcommand};
 
 use crate::client::{events::EventCursor, space_names::SpaceSelector};
 use crate::{cli::commands, sessions::HostName, workers};
@@ -194,18 +194,7 @@ pub enum InternalCommand {
     },
     /// Add the planned workspace inside the place `host` opened for it.
     #[command(name = workers::ADD)]
-    Add {
-        #[arg(long)]
-        host: HostName,
-        /// Close the place once the workspace is done.
-        #[arg(long)]
-        close_when_done: bool,
-        /// The place was opened focused, showing the workspace's session.
-        #[arg(long)]
-        focused: bool,
-        #[arg(env = crate::env::ADD_PLAN, hide_env_values = true)]
-        plan: String,
-    },
+    Add(AddWorkerArgs),
     /// Tracked agent inside a new place; consumes recovery records once started.
     #[command(name = workers::SESSION)]
     Session {
@@ -288,4 +277,19 @@ fn agent(name: &str) -> Result<crate::agent::Agent, String> {
 /// A `--permission` narrowing a worker receives as JSON.
 fn narrowing(json: &str) -> Result<crate::config::permissions::PermissionsConfig, String> {
     serde_json::from_str(json).map_err(|error| error.to_string())
+}
+
+/// Arguments of the add worker.
+#[derive(Debug, Args)]
+pub struct AddWorkerArgs {
+    #[arg(long)]
+    pub host: HostName,
+    /// Close the place once the workspace is done.
+    #[arg(long)]
+    pub close_when_done: bool,
+    /// The place was opened focused, showing the workspace's session.
+    #[arg(long)]
+    pub focused: bool,
+    #[arg(env = crate::env::ADD_PLAN, hide_env_values = true)]
+    pub plan: String,
 }

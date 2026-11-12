@@ -10,10 +10,11 @@ use super::{
     here::{created_here, label_current, place_here, record_owned},
 };
 use crate::{
-    cli::{commands::workspaces::execute_add, context::Context, recent},
+    cli::{
+        args::internal::AddWorkerArgs, commands::workspaces::execute_add, context::Context, recent,
+    },
     env,
     model::Workspace,
-    sessions::HostName,
     terminal::{Configured, Host, Owner, Places, named},
 };
 
@@ -47,24 +48,18 @@ pub(super) fn add_worker_argv(
     )
 }
 
-/// The add worker: add the workspace `payload` plans in the place of the
-/// host named `host` this process runs in.
-pub(in crate::cli) async fn add_worker(
-    mut ctx: Context,
-    host: HostName,
-    closes_when_done: bool,
-    focused: bool,
-    payload: &str,
-) -> Result<i32> {
-    let plan = serde_json::from_str(payload).context("invalid workspace plan")?;
-    let host = named(host);
+/// The add worker: add the workspace `args` plan in the place of the host
+/// they name that this process runs in.
+pub(in crate::cli) async fn add_worker(mut ctx: Context, args: AddWorkerArgs) -> Result<i32> {
+    let plan = serde_json::from_str(&args.plan).context("invalid workspace plan")?;
+    let host = named(args.host);
     let id = place_here(host)
         .with_context(|| format!("{} did not name the place this worker runs in", host.name()))?;
     ctx.place = Some(Place {
         host,
         id,
-        closes_when_done,
-        focused,
+        closes_when_done: args.close_when_done,
+        focused: args.focused,
     });
     execute_add(&ctx, plan).await
 }

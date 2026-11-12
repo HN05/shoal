@@ -12,22 +12,21 @@ use crate::{
 };
 
 /// Copy each of `spaces` to `remote`, the workspace at its checkpoint
-/// `checkpoint` or a new one, queueing the copies' agents there when
-/// `resume`. A copy removes nothing, so one that fails leaves the rest to
-/// copy.
+/// `checkpoint` or a new one, queueing the copies' agents there when it
+/// resumes them. A copy removes nothing, so one that fails leaves the rest
+/// to copy.
 pub(super) async fn copy_spaces(
     ctx: &Context,
     remote: &Remote,
     spaces: &[PresentSpace],
     checkpoint: Option<CheckpointNumber>,
-    resume: bool,
 ) -> Result<i32> {
     let staging = tempfile::tempdir()?;
     let directory = export::ExportDirectory::create(staging.path().to_owned())?;
     let mut report = ui::Report::new("copy");
     for space in spaces {
         let name = space.name();
-        match copy_one(ctx, remote, &directory, space, checkpoint, resume).await {
+        match copy_one(ctx, remote, &directory, space, checkpoint).await {
             Ok(imported) => {
                 let message = copied_message(name, &remote.host, &imported);
                 report.done(ctx, &message, imported)
@@ -41,18 +40,17 @@ pub(super) async fn copy_spaces(
 
 /// Write a copy of `space` to its file in `directory`, then import it on
 /// `remote`, queueing its agents' restores or starting its chat there when
-/// `resume`.
+/// it resumes them.
 async fn copy_one(
     ctx: &Context,
     remote: &Remote,
     directory: &export::ExportDirectory,
     space: &PresentSpace,
     checkpoint: Option<CheckpointNumber>,
-    resume: bool,
 ) -> Result<Imported> {
     let file = directory.file(space.id());
     export::copy::copy(ctx, SpaceSelector::id(space.id()), checkpoint, file.clone()).await?;
-    remote.import(&file, resume).await
+    remote.import(&file).await
 }
 
 /// The report of copying `name` to `host`, naming the copy when the import

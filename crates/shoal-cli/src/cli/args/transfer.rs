@@ -41,16 +41,7 @@ pub enum MoveCommand {
     /// spaces instead and leaves them running here.
     Ssh(SshArgs),
     /// Move every repository directory, with its workspaces and clone, into root_dir.
-    Root {
-        /// New root directory, saved as root_dir first; omit to use the configured one.
-        #[arg(value_hint = clap::ValueHint::DirPath)]
-        root: Option<PathBuf>,
-        /// Keep root_dir a regular directory instead of a link to one Spotlight skips (macOS).
-        #[arg(long)]
-        regular_dir: bool,
-        #[command(flatten)]
-        confirmation: ConfirmationArgs,
-    },
+    Root(RootArgs),
 }
 
 // Arguments of `shoal move export`.
@@ -130,6 +121,19 @@ pub struct SshArgs {
     /// The shoal program on the other machine, when SSH's PATH does not find it.
     #[arg(long, value_name = "PATH", default_value = "shoal")]
     pub shoal: String,
+    #[command(flatten)]
+    pub confirmation: ConfirmationArgs,
+}
+
+/// Arguments of `shoal move root`.
+#[derive(Debug, Args)]
+pub struct RootArgs {
+    /// New root directory, saved as root_dir first; omit to use the configured one.
+    #[arg(value_hint = clap::ValueHint::DirPath)]
+    pub root: Option<PathBuf>,
+    /// Keep root_dir a regular directory instead of a link to one Spotlight skips (macOS).
+    #[arg(long)]
+    pub regular_dir: bool,
     #[command(flatten)]
     pub confirmation: ConfirmationArgs,
 }

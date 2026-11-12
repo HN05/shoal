@@ -140,12 +140,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             };
             crate::execution::take_over(&ctx.paths, taken).await
         }
-        InternalCommand::Add {
-            host,
-            close_when_done,
-            focused,
-            plan,
-        } => terminal::add_worker(ctx, host, close_when_done, focused, &plan).await,
+        InternalCommand::Add(args) => terminal::add_worker(ctx, args).await,
         InternalCommand::Demo {
             workspace,
             launch,

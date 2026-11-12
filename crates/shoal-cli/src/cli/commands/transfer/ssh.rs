@@ -24,6 +24,7 @@ pub(super) async fn run(ctx: &Context, args: SshArgs) -> Result<i32> {
     let remote = Remote {
         host: args.host,
         shoal: args.shoal,
+        resume: !args.no_resume,
     };
     let spaces = match args.repository {
         Some(repository) => export::repository_spaces(ctx, repository).await?,
@@ -37,10 +38,9 @@ pub(super) async fn run(ctx: &Context, args: SshArgs) -> Result<i32> {
         remote.check(),
     )
     .await?;
-    let resume = !args.no_resume;
     match args.keep {
-        true => copy::copy_spaces(ctx, &remote, &spaces, args.checkpoint, resume).await,
-        false => move_spaces(ctx, &remote, &spaces, args.confirmation.yes, resume).await,
+        true => copy::copy_spaces(ctx, &remote, &spaces, args.checkpoint).await,
+        false => move_spaces(ctx, &remote, &spaces, args.confirmation.yes).await,
     }
 }
 
@@ -51,7 +51,6 @@ async fn move_spaces(
     remote: &Remote,
     spaces: &[PresentSpace],
     yes: bool,
-    resume: bool,
 ) -> Result<i32> {
     let staging = tempfile::tempdir()?;
     let directory = ExportDirectory::create(staging.path().to_owned())?;
@@ -64,7 +63,7 @@ async fn move_spaces(
     let mut report = ui::Report::new("move");
     for planned in planned {
         let name = planned.name().to_owned();
-        match move_one(ctx, remote, planned, resume).await {
+        match move_one(ctx, remote, planned).await {
             Ok(imported) => {
                 let message = format!("Moved {name} to {}", arrived(&remote.host, &imported));
                 report.done(ctx, &message, imported)
@@ -116,17 +115,12 @@ fn arrived(host: &str, imported: &Imported) -> String {
 }
 
 /// End and export the planned space, then import it on `remote`, queueing
-/// its agents' restores or starting its chat there when `resume`.
-async fn move_one(
-    ctx: &Context,
-    remote: &Remote,
-    planned: PlannedExport,
-    resume: bool,
-) -> Result<Imported> {
+/// its agents' restores or starting its chat there when it resumes them.
+async fn move_one(ctx: &Context, remote: &Remote, planned: PlannedExport) -> Result<Imported> {
     let (name, id) = (planned.name().to_owned(), planned.id().clone());
     let chat = planned.chat().cloned();
     let file = planned.export(ctx).await?;
-    let error = match remote.import(&file, resume).await {
+    let error = match remote.import(&file).await {
         Ok(imported) => return Ok(imported),
         Err(error) => error,
     };
@@ -190,6 +184,9 @@ struct Remote {
     host: String,
     /// The shoal program there.
     shoal: String,
+    /// Whether imports there queue the agents' restores and start the
+    /// chats they bring.
+    resume: bool,
 }
 
 impl Remote {
@@ -213,10 +210,10 @@ impl Remote {
     }
 
     /// Import the export in `file` there, queueing its agents' restores when
-    /// `resume`, and return what the import reported.
-    async fn import(&self, file: &Path, resume: bool) -> Result<Imported> {
+    /// it resumes them, and return what the import reported.
+    async fn import(&self, file: &Path) -> Result<Imported> {
         let mut args = vec!["move", "import"];
-        if resume {
+        if self.resume {
             args.push("--resume");
         }
         let input = std::fs::File::open(file)?;
