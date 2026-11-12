@@ -97,7 +97,11 @@ impl Manager {
         self.record_changed_on_both_sides(&check).await?;
         if check.conflicts
             && self
-                .conflicts_settled(&workspace, &check.head, &check.target_commit)
+                .conflicts_settled(
+                    &workspace,
+                    check.head.as_str(),
+                    check.target_commit.as_str(),
+                )
                 .await?
         {
             check.conflicts = false;
@@ -168,8 +172,8 @@ impl Manager {
         Ok(ConflictCheck {
             workspace_id: workspace.id.clone(),
             target,
-            target_commit,
-            head,
+            target_commit: target_commit.into(),
+            head: head.into(),
             conflicts: !files.is_empty(),
             files,
             changed_on_both_sides,

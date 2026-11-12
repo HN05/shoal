@@ -162,9 +162,9 @@ impl Manager {
             .await?;
         let files = SourceFiles::Checkpoint {
             number,
-            commit: checkpoint.commit,
+            commit: checkpoint.commit.into(),
         };
-        Ok(live_source(workspace, checkpoint.head, files))
+        Ok(live_source(workspace, checkpoint.head.into(), files))
     }
 
     /// Checkpoint `number` of the removed workspace `selector` names, with
@@ -185,14 +185,14 @@ impl Manager {
             workspace_id: removed.workspace_id,
             repository_id: removed.repository_id,
             name: removed.name.into(),
-            branch: checkpoint.branch,
+            branch: checkpoint.branch.map(String::from),
             base_ref: removed.base_ref,
             base_commit: removed.base_commit,
             base_branch,
-            head: checkpoint.head,
+            head: checkpoint.head.into(),
             files: SourceFiles::Checkpoint {
                 number,
-                commit: checkpoint.commit,
+                commit: checkpoint.commit.into(),
             },
         })
     }

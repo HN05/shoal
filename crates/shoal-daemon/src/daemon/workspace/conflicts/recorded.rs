@@ -3,6 +3,7 @@
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
+use shoal_refs::CommitId;
 
 use crate::model::{ChangedOnBothSides, ConflictCheck};
 
@@ -52,8 +53,8 @@ const COLUMNS: &str = "workspace_id,target,target_commit,head,files";
 struct Row {
     workspace_id: SpaceId,
     target: String,
-    target_commit: String,
-    head: String,
+    target_commit: CommitId,
+    head: CommitId,
     files: String,
 }
 

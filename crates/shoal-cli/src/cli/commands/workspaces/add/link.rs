@@ -230,7 +230,7 @@ pub(in crate::cli::commands) async fn fork_head(
     Ok(PullHead {
         number: pull.number,
         reference,
-        commit: commit.into(),
+        commit,
         base: Some(base),
     })
 }

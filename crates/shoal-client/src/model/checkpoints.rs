@@ -3,6 +3,7 @@ use super::Workspace;
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
+use shoal_refs::{BranchName, CommitId};
 
 crate::state::states!(
     /// Why a checkpoint was taken.
@@ -35,10 +36,10 @@ pub struct Checkpoint {
     pub name: Option<String>,
     pub cause: CheckpointCause,
     /// The branch checked out; `None` for a detached HEAD.
-    pub branch: Option<String>,
-    pub head: String,
+    pub branch: Option<BranchName>,
+    pub head: CommitId,
     /// HEAD, or a commit on top of it with the unsaved files.
-    pub commit: String,
+    pub commit: CommitId,
     /// Unsaved files exceeded the archive limit and were not kept.
     pub files_omitted: bool,
     pub created_at: crate::time::UnixTime,

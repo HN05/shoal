@@ -430,7 +430,7 @@ impl Manager {
                     .commit;
                 Ok(Commits {
                     head: head.into(),
-                    base: base.into(),
+                    base,
                 })
             }
             ReviewTarget::Pr { head, base, .. } => {

@@ -66,6 +66,6 @@ async fn removed(
         .into_iter()
         .find(|removed| selector.given_id() == Some(&removed.workspace_id))
         .with_context(|| format!("no workspace or removed workspace {selector}"))?;
-    let named = removed.checkpoint.branch.unwrap_or(removed.name.into());
+    let named = (removed.checkpoint.branch.map(String::from)).unwrap_or(removed.name.into());
     Ok((removed.workspace_id, removed.repository_id, named))
 }

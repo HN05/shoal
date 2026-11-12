@@ -8,6 +8,7 @@ use crate::space_names::SpaceName;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+use shoal_refs::CommitId;
 
 use crate::{
     approvals::ApprovalRequest,
@@ -154,7 +155,7 @@ pub struct Link {
     /// Absent until the daemon has looked.
     pub state: Option<SnapshotState>,
     /// A PR's head commit, which its checks ran on.
-    pub head: Option<String>,
+    pub head: Option<CommitId>,
     /// A PR's CI checks on its head.
     pub checks: Vec<Check>,
     /// Whether a PR's head conflicts with its base; absent when unknown,

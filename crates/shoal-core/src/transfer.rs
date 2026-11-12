@@ -337,11 +337,13 @@ impl PackagedWorkspaceExt for PackagedWorkspace {
         let commit = removed.checkpoint.commit.clone();
         let shared = shared_commit(repo).await?;
         let bundle = match &shared {
-            Some(shared) => !git::is_ancestor(repo, &commit, shared, git::isolated_command).await?,
+            Some(shared) => {
+                !git::is_ancestor(repo, commit.as_str(), shared, git::isolated_command).await?
+            }
             None => true,
         };
         Ok(Self {
-            prerequisite: if bundle { shared } else { Some(commit) },
+            prerequisite: if bundle { shared } else { Some(commit.into()) },
             bundle,
             workspace: moved(removed),
         })
@@ -418,7 +420,7 @@ impl Bundle {
         let bundle = Self {
             directory: tempfile::tempdir()?,
         };
-        let reference = git::checkpoint::reference(&packaged.workspace.checkpoint.commit);
+        let reference = git::checkpoint::reference(packaged.workspace.checkpoint.commit.as_str());
         let exclude = packaged.prerequisite.as_deref();
         git::bundle::create(repo, &bundle.path(), &reference, exclude).await?;
         Ok(bundle)

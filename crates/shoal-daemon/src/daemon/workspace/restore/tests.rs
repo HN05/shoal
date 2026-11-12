@@ -139,7 +139,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
     assert_ne!(git(&checkout, &["branch", "--list", "topic"]), "");
     let removed = record(&manager, workspace.id.as_str()).await.unwrap();
     assert_eq!(removed.name, "topic");
-    assert_eq!(removed.checkpoint.branch.as_deref(), Some("topic"));
+    assert_eq!(removed.checkpoint.branch, Some("topic".into()));
     assert_eq!(removed.checkpoint.head, head.trim());
     assert_eq!(removed.checkpoint.cause, CheckpointCause::Removal);
     assert!(!removed.checkpoint.files_omitted);
@@ -149,7 +149,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
         Some("https://forge/issue/1")
     );
     assert_eq!(removed.expires_at, removed.checkpoint.expires_at);
-    let reference = git::checkpoint::reference(&removed.checkpoint.commit);
+    let reference = git::checkpoint::reference(removed.checkpoint.commit.as_str());
     assert_eq!(
         git(&checkout, &["rev-parse", &reference]).trim(),
         removed.checkpoint.commit
@@ -339,7 +339,8 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
         .unwrap();
     assert_eq!(next.number, checkpoints[0].number.get() + 1);
     assert!(
-        checkpoint_refs(&checkout).contains(&git::checkpoint::reference(&checkpoints[0].commit))
+        checkpoint_refs(&checkout)
+            .contains(&git::checkpoint::reference(checkpoints[0].commit.as_str()))
     );
 }
 
@@ -652,7 +653,9 @@ async fn a_failed_removal_keeps_its_checkpoint() {
     );
     assert_eq!(
         checkpoint_refs(&checkout),
-        [git::checkpoint::reference(&record.checkpoint.commit)]
+        [git::checkpoint::reference(
+            record.checkpoint.commit.as_str()
+        )]
     );
     assert!(
         manager.removed_workspaces().await.unwrap().is_empty(),
@@ -741,8 +744,8 @@ async fn a_retried_removal_keeps_earlier_checkpoints_and_reuses_an_unchanged_one
     let third = save().await;
     assert_eq!(third.number, second.number);
     let mut kept = vec![
-        git::checkpoint::reference(&first.commit),
-        git::checkpoint::reference(&second.commit),
+        git::checkpoint::reference(first.commit.as_str()),
+        git::checkpoint::reference(second.commit.as_str()),
     ];
     kept.sort();
     assert_eq!(checkpoint_refs(&checkout), kept);

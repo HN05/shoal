@@ -18,7 +18,7 @@ pub(in crate::cli::commands) async fn diff(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let base = crate::client::workspaces::diff_base(&ctx.paths, workspace.clone()).await?;
-    let command = git::diff_command(&base.commit);
+    let command = git::diff_command(base.commit.as_str());
     if crate::env::in_chat().is_some() {
         return diff_untracked(&base.path, &command);
     }

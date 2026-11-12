@@ -400,7 +400,7 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
             crate::protocol::PullHead {
                 number: PullNumber::new(9),
                 reference: "refs/pull/9/head".into(),
-                commit,
+                commit: commit.into(),
                 base: Some("refs/remotes/origin/main".into()),
             },
             None,
@@ -572,7 +572,7 @@ async fn reopening_a_prs_workspace_records_the_prs_base() {
             crate::protocol::PullHead {
                 number: PullNumber::new(5),
                 reference: "refs/pull/5/head".into(),
-                commit: head.clone(),
+                commit: head.clone().into(),
                 base: base.map(str::to_owned),
             },
             None,
@@ -629,7 +629,7 @@ async fn a_restored_prs_workspace_drops_a_base_that_is_gone() {
             crate::protocol::PullHead {
                 number: PullNumber::new(6),
                 reference: "refs/pull/6/head".into(),
-                commit: head.clone(),
+                commit: head.clone().into(),
                 base: Some("refs/remotes/origin/release".into()),
             },
             None,
@@ -710,7 +710,7 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
             let head = crate::protocol::PullHead {
                 number: PullNumber::new(4),
                 reference: "refs/pull/4/head".into(),
-                commit: head,
+                commit: head.into(),
                 base: None,
             };
             let url = "https://forge.example/team/repo/pulls/4".into();

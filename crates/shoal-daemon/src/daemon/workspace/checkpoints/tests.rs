@@ -75,7 +75,7 @@ async fn checkpoints_keep_head_and_unsaved_files_and_only_manual_ones_repeat() {
         .await
         .unwrap();
     assert_eq!(first.number, 1);
-    assert_eq!(first.branch.as_deref(), Some("topic"));
+    assert_eq!(first.branch, Some("topic".into()));
     assert_eq!(first.head, f.git(&["rev-parse", "HEAD"]).trim());
     assert_eq!(
         git(&f.checkout, &["show", &format!("{}:scratch", first.commit)]),
@@ -402,13 +402,16 @@ async fn expiry_deletes_expired_and_unowned_checkpoints_and_adopts_removal_refs(
     f.set_expiry(first.number, crate::time::UnixTime::from_seconds(0))
         .await;
     manager.expire_checkpoints().await.unwrap();
-    let kept = [git::checkpoint::reference(&second.commit)];
+    let kept = [git::checkpoint::reference(second.commit.as_str())];
     assert_eq!(checkpoint_refs(&f.checkout), kept);
 
     // A removal snapshot from before checkpoints moves to the checkpoint the
     // store migration recorded for it.
     let legacy = format!("refs/shoal/removed/{}", f.workspace.id);
-    git(&f.checkout, &["update-ref", &legacy, &second.commit]);
+    git(
+        &f.checkout,
+        &["update-ref", &legacy, second.commit.as_str()],
+    );
     git(&f.checkout, &["update-ref", "-d", &kept[0]]);
     manager.expire_checkpoints().await.unwrap();
     assert_eq!(checkpoint_refs(&f.checkout), kept);
@@ -473,7 +476,7 @@ async fn a_starting_checkpoint_outlives_its_expiry_while_its_workspace_exists() 
     assert_eq!(numbers, [start.number]);
     assert_eq!(
         checkpoint_refs(&f.checkout),
-        [git::checkpoint::reference(&start.commit)]
+        [git::checkpoint::reference(start.commit.as_str())]
     );
     let copied = manager
         .workspace(&manager.named("topic").await)
@@ -483,5 +486,8 @@ async fn a_starting_checkpoint_outlives_its_expiry_while_its_workspace_exists() 
         .unwrap();
     assert_eq!(copied.workspace, None, "the source is gone");
     assert_eq!(copied.starting_checkpoint, start.number);
-    assert_eq!((copied.head, copied.commit), (start.head, start.commit));
+    assert_eq!(
+        (copied.head, copied.commit),
+        (start.head.to_string(), start.commit.to_string())
+    );
 }

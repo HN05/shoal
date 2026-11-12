@@ -2,12 +2,13 @@
 //! conflict checks.
 use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
+use shoal_refs::CommitId;
 use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DiffBase {
     pub workspace_id: SpaceId,
-    pub commit: String,
+    pub commit: CommitId,
     /// The worktree, verified as the workspace's.
     pub path: PathBuf,
 }
@@ -17,8 +18,8 @@ pub struct DiffBase {
 pub struct ConflictCheck {
     pub workspace_id: SpaceId,
     pub target: String,
-    pub target_commit: String,
-    pub head: String,
+    pub target_commit: CommitId,
+    pub head: CommitId,
     pub conflicts: bool,
     /// Conflicted paths, empty when the merge is clean.
     pub files: Vec<String>,
@@ -32,8 +33,8 @@ pub struct ConflictCheck {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChangedOnBothSides {
     pub target: String,
-    pub target_commit: String,
-    pub head: String,
+    pub target_commit: CommitId,
+    pub head: CommitId,
     /// Empty when the check found none.
     pub files: Vec<String>,
 }

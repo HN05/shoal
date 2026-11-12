@@ -226,7 +226,7 @@ fn workspace_links(workspace: &Workspace, activity: &HashMap<String, Snapshot>) 
                 relation,
                 title,
                 state: observed.and_then(Snapshot::state),
-                head: observed.and_then(Snapshot::head).map(ToString::to_string),
+                head: observed.and_then(Snapshot::head).cloned(),
                 checks: observed.map_or_else(Vec::new, checks),
                 conflict: observed.and_then(Snapshot::head_conflict),
                 lookup_errors: observed.map_or_else(Vec::new, lookup_errors),

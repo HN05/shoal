@@ -39,8 +39,8 @@ pub(super) fn branch_conflicts(check: Result<ConflictCheck>, report: BranchRepor
     let timed_out = check.as_ref().is_err_and(file_access::timed_out);
     let mut snapshot = Snapshot::merge_check(check.map(|check| MergeCheck {
         conflict: conflict_message(&check, report),
-        head: check.head.into(),
-        base: check.target_commit.into(),
+        head: check.head,
+        base: check.target_commit,
     }));
     if timed_out {
         snapshot.shown_elsewhere();

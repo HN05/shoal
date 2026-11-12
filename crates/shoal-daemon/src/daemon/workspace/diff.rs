@@ -39,7 +39,7 @@ impl Manager {
         );
         Ok(DiffBase {
             workspace_id: workspace.id,
-            commit,
+            commit: commit.into(),
             path: workspace.path,
         })
     }

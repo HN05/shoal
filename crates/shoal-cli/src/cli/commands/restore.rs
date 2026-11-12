@@ -6,6 +6,7 @@ use crate::client::space_ids::SpaceId;
 use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result, ensure};
+use shoal_refs::BranchName;
 
 use super::resume::queue::Stopped;
 use crate::client::output::resume::{Queued, Reopened};
@@ -319,7 +320,7 @@ fn removed_lines(removed: &[RemovedWorkspace]) -> Vec<String> {
     removed
         .iter()
         .map(|workspace| {
-            let branch = branch_label(workspace.checkpoint.branch.as_deref());
+            let branch = branch_label(workspace.checkpoint.branch.as_ref());
             format!(
                 "{:width$}  {branch}  removed {} ({}), checkpoint {}, restorable until {}",
                 workspace.name,
@@ -364,7 +365,7 @@ fn checkpoint_lines(checkpoints: &[Checkpoint]) -> Vec<String> {
                 checkpoint.number,
                 checkpoint.created_at.local_seconds(),
                 cause_label(checkpoint.cause),
-                branch_label(checkpoint.branch.as_deref()),
+                branch_label(checkpoint.branch.as_ref()),
             )
         })
         .collect()
@@ -380,6 +381,6 @@ fn cause_label(cause: CheckpointCause) -> &'static str {
     }
 }
 
-fn branch_label(branch: Option<&str>) -> &str {
-    branch.unwrap_or("detached HEAD")
+fn branch_label(branch: Option<&BranchName>) -> &str {
+    branch.map_or("detached HEAD", BranchName::as_str)
 }

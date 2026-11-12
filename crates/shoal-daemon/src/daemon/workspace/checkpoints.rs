@@ -7,6 +7,7 @@ use std::collections::HashSet;
 
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
+use shoal_refs::{BranchName, CommitId};
 
 use super::Manager;
 use crate::client::space_names::SpaceSelector;
@@ -127,9 +128,9 @@ impl Manager {
             number: CheckpointNumber::default(),
             name,
             cause,
-            branch: snapshot.branch,
-            head: snapshot.head,
-            commit: snapshot.commit,
+            branch: snapshot.branch.map(BranchName::from),
+            head: CommitId::from(snapshot.head),
+            commit: CommitId::from(snapshot.commit),
             files_omitted,
             created_at,
             expires_at: created_at + retention,
@@ -143,8 +144,9 @@ impl Manager {
     async fn save_checkpoint(&self, mut checkpoint: Checkpoint) -> Result<Checkpoint> {
         let repo = self.repository(&checkpoint.repository_id).await?;
         let _refs = self.gates.lock_checkpoints().await;
-        let reference = git::checkpoint::reference(&checkpoint.commit);
-        git::checkpoint::save(&repo.path, &reference, &checkpoint.commit).await?;
+        let commit = checkpoint.commit.as_str();
+        let reference = git::checkpoint::reference(commit);
+        git::checkpoint::save(&repo.path, &reference, commit).await?;
         let record = checkpoint.clone();
         checkpoint.number = self
             .store
@@ -166,7 +168,12 @@ impl Manager {
         };
         if (&latest.branch, &latest.head, latest.files_omitted)
             != (&next.branch, &next.head, next.files_omitted)
-            || !git::checkpoint::same_files(&workspace.path, &latest.commit, &next.commit).await?
+            || !git::checkpoint::same_files(
+                &workspace.path,
+                latest.commit.as_str(),
+                next.commit.as_str(),
+            )
+            .await?
         {
             return Ok(None);
         }
@@ -271,14 +278,18 @@ impl Manager {
             replaced.number
         );
         let _git = self.gates.lock_git(&workspace.repository_id).await;
-        git::checkpoint::rewind(&workspace.path, &checkpoint.head, &checkpoint.commit)
-            .await
-            .with_context(|| {
-                format!(
-                    "restore to checkpoint {} failed; checkpoint {} keeps the state before it",
-                    checkpoint.number, replaced.number
-                )
-            })?;
+        git::checkpoint::rewind(
+            &workspace.path,
+            checkpoint.head.as_str(),
+            checkpoint.commit.as_str(),
+        )
+        .await
+        .with_context(|| {
+            format!(
+                "restore to checkpoint {} failed; checkpoint {} keeps the state before it",
+                checkpoint.number, replaced.number
+            )
+        })?;
         Ok(replaced)
     }
 
@@ -307,11 +318,15 @@ impl Manager {
             checkpoint.branch == branch,
             "checkpoint {} is on {}; the workspace is on {}",
             checkpoint.number,
-            branch_label(checkpoint.branch.as_deref()),
-            branch_label(branch.as_deref())
+            branch_label(checkpoint.branch.as_ref()),
+            branch_label(branch.as_ref())
         );
-        let ignored =
-            git::checkpoint::ignored_collisions(path, &checkpoint.head, &checkpoint.commit).await?;
+        let ignored = git::checkpoint::ignored_collisions(
+            path,
+            checkpoint.head.as_str(),
+            checkpoint.commit.as_str(),
+        )
+        .await?;
         ensure!(
             ignored.is_empty(),
             "checkpoint {} would overwrite ignored files no checkpoint keeps; move them first: {}",
@@ -441,12 +456,12 @@ impl Manager {
 }
 
 /// The branch checked out; `None` for a detached HEAD.
-async fn current_branch(path: &std::path::Path) -> Result<Option<String>> {
+async fn current_branch(path: &std::path::Path) -> Result<Option<BranchName>> {
     let branch = git::current_branch(path).await?.trim().to_owned();
-    Ok((!branch.is_empty()).then_some(branch))
+    Ok((!branch.is_empty()).then(|| branch.into()))
 }
 
-fn branch_label(branch: Option<&str>) -> String {
+fn branch_label(branch: Option<&BranchName>) -> String {
     branch.map_or_else(
         || "a detached HEAD".to_owned(),
         |branch| format!("branch {branch}"),

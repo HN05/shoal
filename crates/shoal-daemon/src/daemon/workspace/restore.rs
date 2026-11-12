@@ -124,8 +124,8 @@ impl Manager {
         let removed = self.claim_removed_workspace(selector).await?;
         let checkpoint = &removed.checkpoint;
         let files = (checkpoint.commit != checkpoint.head).then(|| RestoredFiles {
-            head: checkpoint.head.clone(),
-            snapshot: checkpoint.commit.clone(),
+            head: checkpoint.head.to_string(),
+            snapshot: checkpoint.commit.to_string(),
         });
         let opened = match removed.at.clone() {
             Some(at) => OpenedWorkspace {
@@ -288,9 +288,9 @@ impl Manager {
         checkpoint.workspace_id = id.clone();
         let name = match &checkpoint.branch {
             Some(branch) => {
-                let branch = self.copy_branch(repo, branch).await?;
-                git::branch::create(&repo.path, &branch, &checkpoint.head).await?;
-                checkpoint.branch = Some(branch.clone());
+                let branch = self.copy_branch(repo, branch.as_str()).await?;
+                git::branch::create(&repo.path, &branch, checkpoint.head.as_str()).await?;
+                checkpoint.branch = Some(branch.as_str().into());
                 SpaceName::derive(&branch, "workspace")
             }
             None => removed.name,
@@ -317,7 +317,7 @@ impl Manager {
         session_files: &[CarriedSessionFile],
     ) -> Result<RemovedWorkspace> {
         let _refs = self.gates.lock_checkpoints().await;
-        let commit = &removed.checkpoint.commit;
+        let commit = removed.checkpoint.commit.as_str();
         let reference = git::checkpoint::reference(commit);
         match bundle {
             Some(bundle) => git::bundle::fetch(&repo.path, bundle, &reference).await?,
@@ -403,8 +403,9 @@ impl Manager {
         let checkpoint = &removed.checkpoint;
         // A detached HEAD reopens on a branch named after its short commit,
         // since nothing is built from the workspace's name.
-        let branch = (checkpoint.branch.clone())
-            .unwrap_or_else(|| checkpoint.head[..checkpoint.head.len().min(7)].to_owned());
+        let head = checkpoint.head.as_str();
+        let branch = (checkpoint.branch.clone().map(String::from))
+            .unwrap_or_else(|| head[..head.len().min(7)].to_owned());
         if let Some(workspace) = self.list_workspaces().await?.into_iter().find(|workspace| {
             workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&branch)
         }) {
@@ -412,7 +413,7 @@ impl Manager {
         }
         let local = git::local_ref(&branch);
         if !git::ref_exists(&repo.path, &local, git::isolated_command).await? {
-            git::branch::create(&repo.path, &branch, &checkpoint.head).await?;
+            git::branch::create(&repo.path, &branch, head).await?;
             return Ok(branch);
         }
         let tip = git::verify_revision(
@@ -423,7 +424,7 @@ impl Manager {
         .await?;
         let tip = tip.trim();
         ensure!(
-            git::is_ancestor(&repo.path, &checkpoint.head, tip, git::isolated_command).await?,
+            git::is_ancestor(&repo.path, head, tip, git::isolated_command).await?,
             "branch {branch} no longer contains the removed HEAD {}; restore it under another name with git branch <name> {}",
             checkpoint.head,
             checkpoint.commit

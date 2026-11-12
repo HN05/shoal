@@ -2215,8 +2215,8 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
         Ok(crate::model::ConflictCheck {
             workspace_id: workspace.id.clone(),
             target: "main".into(),
-            target_commit: String::new(),
-            head: String::new(),
+            target_commit: "".into(),
+            head: "".into(),
             conflicts: true,
             files: vec!["tracked".into()],
             changed_on_both_sides: Vec::new(),
@@ -2523,8 +2523,8 @@ fn resolved_branch(workspace_id: &SpaceId) -> Snapshot {
         Ok(crate::model::ConflictCheck {
             workspace_id: workspace_id.clone(),
             target: "main".into(),
-            target_commit: String::new(),
-            head: String::new(),
+            target_commit: "".into(),
+            head: "".into(),
             conflicts: false,
             files: Vec::new(),
             changed_on_both_sides: Vec::new(),

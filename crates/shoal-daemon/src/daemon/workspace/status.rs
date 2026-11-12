@@ -96,7 +96,7 @@ impl Manager {
     async fn diff_summary(&self, workspace: &Workspace) -> Result<DiffSummary> {
         self.verify_worktree(workspace).await?;
         let base = self.diff_base(&SpaceSelector::id(&workspace.id)).await?;
-        let numstat = git::diff::numstat(&workspace.path, &base.commit).await?;
+        let numstat = git::diff::numstat(&workspace.path, base.commit.as_str()).await?;
         parse_numstat(&numstat)
     }
 }

@@ -1044,7 +1044,7 @@ async fn existing_default_branch_survives_normal_workspace_removal() {
     assert_eq!(
         git(
             &opened.workspace.path,
-            &["diff", "--name-only", &diff.commit]
+            &["diff", "--name-only", diff.commit.as_str()]
         )
         .trim(),
         "new-work"

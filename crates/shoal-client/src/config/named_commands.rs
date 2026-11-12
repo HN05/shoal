@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, ensure};
+use shoal_refs::CommitId;
 
 use crate::space_names::SpaceSelector;
 use crate::{config::placeholders::render_os as render, connection::Daemon, model::Workspace};
@@ -53,7 +54,7 @@ pub fn workspace_only_placeholder(argv: &[String]) -> Option<&'static str> {
 /// `diff_base` is known.
 pub fn workspace_fields<'a>(
     workspace: &'a Workspace,
-    diff_base: Option<&'a str>,
+    diff_base: Option<&'a CommitId>,
 ) -> Vec<(&'static str, &'a OsStr)> {
     let mut fields = vec![
         ("{workspace}", OsStr::new(workspace.directory_name())),
@@ -64,7 +65,7 @@ pub fn workspace_fields<'a>(
         ("{path}", workspace.path.as_os_str()),
     ];
     if let Some(base) = diff_base {
-        fields.push(("{diff_base}", OsStr::new(base)));
+        fields.push(("{diff_base}", base.as_ref()));
     }
     fields
 }
@@ -83,7 +84,7 @@ pub async fn expand_with_fields(
         .get(name)
         .with_context(|| format!("unknown command {name:?}"))?;
     let base = diff_base(daemon, workspace, argv).await?;
-    let mut fields = workspace_fields(workspace, base.as_deref());
+    let mut fields = workspace_fields(workspace, base.as_ref());
     fields.extend_from_slice(extra_fields);
     Ok(substitute(argv, &fields, args))
 }
@@ -93,7 +94,7 @@ async fn diff_base(
     daemon: &impl Daemon,
     workspace: &Workspace,
     argv: &[String],
-) -> Result<Option<String>> {
+) -> Result<Option<CommitId>> {
     if !uses_diff_base(argv) {
         return Ok(None);
     }

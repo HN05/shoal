@@ -348,7 +348,7 @@ impl Manager {
                 CreationOptions::default(),
             )
             .await?;
-        let head = &removed.checkpoint.head;
+        let head = removed.checkpoint.head.as_str();
         let result = self
             .materialize_commit_worktree(&repo, &workspace, head, files.as_ref())
             .await;

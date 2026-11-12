@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use shoal_refs::CommitId;
 
 use super::ConfigTarget;
 use super::Lifetime;
@@ -314,7 +315,7 @@ pub struct CopySource {
 pub struct PullHead {
     pub number: PullNumber,
     pub reference: String,
-    pub commit: String,
+    pub commit: CommitId,
     /// The fetched ref of the PR's base branch, which the workspace's diff
     /// compares with, so it shows the PR's changes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
