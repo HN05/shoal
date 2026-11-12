@@ -1,8 +1,8 @@
 //! What lists read besides a workspace's record to tell its status: whether
-//! its work is stopped, and the agent queued to start in it.
+//! its work is stopped, and the agents queued to start in it.
 use std::collections::HashSet;
 
-use super::{Cell, status_cell};
+use super::{Cell, status_cell, waiting_reasons};
 use crate::cli::list_status::ListStatus;
 use crate::client::space_ids::SpaceId;
 use crate::model::{QueueEntry, Workspace};
@@ -21,23 +21,31 @@ impl Statuses {
         ListStatus::of_listed_workspace(
             workspace,
             self.stopped.contains(&workspace.id),
-            self.entry(workspace),
+            self.entries(workspace).first().copied(),
         )
     }
 
-    /// Every status the row of `workspace` shows: its own, and its queued
-    /// agent's when its own wins over it.
+    /// Every status the row of `workspace` shows: its own, and those of the
+    /// agents queued in it.
     pub fn shown(&self, workspace: &Workspace) -> Vec<ListStatus> {
-        let status = self.of(workspace);
-        let queued = self.entry(workspace).map(ListStatus::of_entry);
-        std::iter::once(status)
-            .chain(queued.filter(|queued| *queued != status))
-            .collect()
+        let mut shown = vec![self.of(workspace)];
+        for status in self
+            .entries(workspace)
+            .into_iter()
+            .map(ListStatus::of_entry)
+        {
+            if !shown.contains(&status) {
+                shown.push(status);
+            }
+        }
+        shown
     }
 
-    /// The agent queued to start in `workspace`.
-    pub(super) fn entry(&self, workspace: &Workspace) -> Option<&QueueEntry> {
-        (self.queued.iter()).find(|entry| entry.workspace() == Some(&workspace.id))
+    /// The agents queued to start in `workspace`, in queue order.
+    pub(super) fn entries(&self, workspace: &Workspace) -> Vec<&QueueEntry> {
+        (self.queued.iter())
+            .filter(|entry| entry.workspace() == Some(&workspace.id))
+            .collect()
     }
 
     /// Sort `workspaces` as lists show them: by status, then number.
@@ -46,24 +54,29 @@ impl Statuses {
     }
 }
 
-/// The cell of `status`, naming the queued agent `entry` with its place in
-/// the queue: `queued (2)`, or after a status that wins over it, such as
-/// `process running, queued (2)`.
-pub(super) fn place_cell(status: ListStatus, entry: Option<&QueueEntry>) -> Cell {
+/// The cell of `status`, naming the queued agents `entries` with their
+/// places in the queue: `queued (2)`, or after a status that wins over the
+/// first, such as `process running, queued (2)`.
+pub(super) fn place_cell(status: ListStatus, entries: &[&QueueEntry]) -> Cell {
     let (label, style) = status_cell(status);
-    match entry {
-        Some(entry) if ListStatus::of_entry(entry) == status => (place_label(entry), style),
-        Some(entry) => (format!("{label}, {}", place_label(entry)), style),
+    let places = (entries.iter().map(|entry| place_label(entry)))
+        .collect::<Vec<_>>()
+        .join("; ");
+    match entries.first() {
+        Some(first) if ListStatus::of_entry(first) == status => (places, style),
+        Some(_) => (format!("{label}, {places}"), style),
         None => (label, style),
     }
 }
 
-/// A queued agent's status with its place in the queue while it waits:
-/// `queued (2)`, or `starting`.
+/// A queued agent's status with its place in the queue while it waits, and
+/// what else it waits for: `queued (2)`, `queued (2), after an update`, or
+/// `starting`.
 fn place_label(entry: &QueueEntry) -> String {
     let label = ListStatus::of_entry(entry).label();
-    match entry.position {
+    let place = match entry.position {
         Some(position) => format!("{label} ({position})"),
         None => label.to_owned(),
-    }
+    };
+    place + &waiting_reasons(entry)
 }

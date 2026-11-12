@@ -128,6 +128,8 @@ fn a_queued_agent_shows_as_its_workspaces_status_or_its_own_row() {
     let mut runs = numbered("runs", 3);
     runs.running = true;
     let workspaces = [numbered("waits", 2), numbered("idle", 1), runs];
+    let mut after_update = entry("restore", Some(5), Some(&workspaces[0].id));
+    after_update.waits_for_update = true;
     let statuses = Statuses {
         stopped: HashSet::new(),
         queued: vec![
@@ -137,6 +139,7 @@ fn a_queued_agent_shows_as_its_workspaces_status_or_its_own_row() {
             entry("in-runs", Some(3), Some(&workspaces[2].id)),
             // A scoped caller lists only its own workspaces, but every entry.
             entry("elsewhere", Some(4), Some(&"unlisted".into())),
+            after_update,
         ],
     };
     let rows = workspace_tree_rows(&workspaces, &[], &statuses, plain, None);
@@ -144,10 +147,10 @@ fn a_queued_agent_shows_as_its_workspaces_status_or_its_own_row() {
         rows,
         [
             "◐ 3  runs       process running, queued (3)",
-            "◌    starts     starting                     Add onboarding",
-            "○ 2  waits      queued (2)",
-            "○    new        queued (1)                   Add onboarding",
-            "○    elsewhere  queued (4)                   Add onboarding",
+            "◌    starts     starting                                 Add onboarding",
+            "○ 2  waits      queued (2); queued (5), after an update",
+            "○    new        queued (1)                               Add onboarding",
+            "○    elsewhere  queued (4)                               Add onboarding",
             "○ 1  idle       inactive",
         ]
     );
