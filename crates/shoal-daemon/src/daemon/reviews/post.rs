@@ -61,12 +61,12 @@ impl Manager {
         review: &Review,
         workspace: &Workspace,
         url: &str,
-        head: &str,
+        head: &CommitId,
     ) -> Result<String> {
         let (forge, account) = self.workspace_forge_account(workspace).await?;
         let (number, url) = forge.pull(url)?;
         let current = forge.read(&account, ItemKind::Pr, number.get()).await?;
-        let moved = current.head_sha.as_ref().map(CommitId::as_str) != Some(head);
+        let moved = current.head_sha.as_ref() != Some(head);
         let diff = match moved {
             true => None,
             false => Some(forge.pr_diff(&account, &current).await?),
@@ -102,7 +102,7 @@ impl Manager {
 pub(super) fn new_review(
     review: &Review,
     inline: impl Fn(&Finding) -> bool,
-    outdated: Option<&str>,
+    outdated: Option<&CommitId>,
 ) -> NewReview {
     let (placed, elsewhere): (Vec<&Finding>, Vec<&Finding>) =
         review.findings.iter().partition(|finding| inline(finding));
@@ -127,7 +127,7 @@ pub(super) fn new_review(
         let _ = write!(
             body,
             "\n\n_Reviewed commit {}; newer commits were pushed during the review._",
-            &head[..head.len().min(12)]
+            head.short()
         );
     }
     if !review.findings.is_empty() {
@@ -138,7 +138,7 @@ pub(super) fn new_review(
         body,
         // A review of the current head is bound to it, so a push before the
         // forge receives it refuses it; one already outdated says so.
-        commit: (review.head.clone().map(CommitId::from)).filter(|_| outdated.is_none()),
+        commit: review.head.clone().filter(|_| outdated.is_none()),
         comments: placed
             .into_iter()
             .map(|finding| LineComment {

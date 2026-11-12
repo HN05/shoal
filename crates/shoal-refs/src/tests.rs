@@ -27,3 +27,9 @@ fn commits_and_branches_are_json_strings_and_sqlite_text() -> anyhow::Result<()>
     }
     Ok(())
 }
+
+#[test]
+fn a_short_commit_is_its_first_twelve_characters() {
+    assert_eq!(CommitId::from("0123456789abcdef").short(), "0123456789ab");
+    assert_eq!(CommitId::from("abc").short(), "abc");
+}

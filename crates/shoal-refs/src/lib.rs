@@ -139,6 +139,13 @@ text_ref!(
     CommitId
 );
 
+impl CommitId {
+    /// The first 12 characters, as a reader sees the commit.
+    pub fn short(&self) -> &str {
+        self.0.get(..12).unwrap_or(&self.0)
+    }
+}
+
 text_ref!(
     /// A branch's short name, such as `main`: never `refs/heads/main` or a
     /// remote-tracking name such as `origin/main`.

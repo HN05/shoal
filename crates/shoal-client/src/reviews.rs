@@ -6,6 +6,7 @@ use std::{fmt, str::FromStr};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
+use shoal_refs::{BranchName, CommitId};
 
 use crate::space_names::{SpaceName, SpaceSelector};
 use crate::{
@@ -281,8 +282,8 @@ pub enum ReviewTarget {
     /// origin, posted there when `post` is set.
     Pr {
         url: String,
-        head: String,
-        base: String,
+        head: BranchName,
+        base: BranchName,
         post: bool,
     },
 }
@@ -350,10 +351,10 @@ pub struct Review {
     pub failure: Option<FailureReason>,
     /// The commit reviewed, set when the review starts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub head: Option<String>,
+    pub head: Option<CommitId>,
     /// The commit it was compared against.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub base: Option<String>,
+    pub base: Option<CommitId>,
     pub created_at: crate::time::UnixTime,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started_at: Option<crate::time::UnixTime>,

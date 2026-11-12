@@ -126,7 +126,7 @@ async fn a_review_reads_the_committed_head_and_stores_its_findings() {
     let head = crate::git::run(&fixture.workspace.path, &["rev-parse", "HEAD"])
         .await
         .unwrap();
-    assert_eq!(review.head.as_deref(), Some(head.trim()));
+    assert_eq!(review.head, Some(head.trim().into()));
     assert!(review.base.is_some());
     assert_eq!(review.outdated, Some(false));
     assert_eq!(review.findings[0].severity, Severity::ShouldFix);
@@ -323,7 +323,15 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
         .id();
     manager
         .store
-        .run(move |db| store::start(db, queued, "head", "base", UnixTime::from_seconds(2)))
+        .run(move |db| {
+            store::start(
+                db,
+                queued,
+                &"head".into(),
+                &"base".into(),
+                UnixTime::from_seconds(2),
+            )
+        })
         .await
         .unwrap();
     let checkout = manager
@@ -943,7 +951,13 @@ async fn finished_reviews(
                     UnixTime::from_seconds(1),
                 )?
                 .id();
-                store::start(tx, review, "head", "base", UnixTime::from_seconds(2))?;
+                store::start(
+                    tx,
+                    review,
+                    &"head".into(),
+                    &"base".into(),
+                    UnixTime::from_seconds(2),
+                )?;
                 let output: crate::reviews::output::ReviewerOutput = serde_json::from_value(
                     serde_json::json!({"summary": "Long.", "verdict": "comment", "checked": [],
                         "findings": [{"path": "a", "line": 1, "severity": "nit",
@@ -1046,7 +1060,13 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
                 UnixTime::from_seconds(1),
             )?
             .id();
-            store::start(db, review, "head", "base", UnixTime::from_seconds(2))?;
+            store::start(
+                db,
+                review,
+                &"head".into(),
+                &"base".into(),
+                UnixTime::from_seconds(2),
+            )?;
             Ok(review)
         })
         .await
@@ -1101,7 +1121,13 @@ async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_slot() {
                 UnixTime::from_seconds(1),
             )?
             .id();
-            store::start(db, review, "head", "base", UnixTime::from_seconds(2))?;
+            store::start(
+                db,
+                review,
+                &"head".into(),
+                &"base".into(),
+                UnixTime::from_seconds(2),
+            )?;
             Ok(review)
         })
         .await
@@ -1244,5 +1270,5 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
     drop(held);
     ended.changed().await.unwrap();
     let review = manager.await_review(queued.id).await.unwrap();
-    assert_eq!(review.head.as_deref(), Some(moved.as_str()), "{review:?}");
+    assert_eq!(review.head, Some(moved.as_str().into()), "{review:?}");
 }

@@ -4,6 +4,7 @@ use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Row, params};
+use shoal_refs::CommitId;
 
 use crate::{
     agent::{Agent, ModelChoice},
@@ -170,8 +171,8 @@ pub(crate) fn running(db: &Connection) -> Result<Vec<ReviewId>> {
 pub(crate) fn start(
     db: &Connection,
     id: ReviewId,
-    head: &str,
-    base: &str,
+    head: &CommitId,
+    base: &CommitId,
     now: crate::time::UnixTime,
 ) -> Result<bool> {
     Ok(db.execute(

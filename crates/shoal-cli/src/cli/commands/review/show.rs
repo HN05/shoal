@@ -153,8 +153,8 @@ pub(in crate::cli::commands) fn render(review: &Review, palette: Palette) {
         };
         outln!(
             "Commit:   {} against {}{outdated}",
-            short(head),
-            short(base)
+            head.short(),
+            base.short()
         );
     }
     if let Some(started) = review.started_at {
@@ -231,10 +231,6 @@ fn state_style(review: &Review) -> Style {
         ReviewState::Failed => Style::Error,
         ReviewState::Cancelled => Style::Muted,
     }
-}
-
-fn short(commit: &str) -> &str {
-    &commit[..commit.len().min(12)]
 }
 
 /// A duration in minutes and seconds, such as `3m 12s`.

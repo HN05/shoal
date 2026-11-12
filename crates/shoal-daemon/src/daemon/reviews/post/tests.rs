@@ -75,7 +75,7 @@ fn findings_on_diff_lines_become_line_comments_and_the_rest_go_in_the_body() {
 #[test]
 fn a_review_of_a_moved_head_puts_every_finding_in_the_body() {
     let review = review(vec![finding(1, "src/a.rs", Severity::Blocker)]);
-    let posted = new_review(&review, |_| false, Some("0123456789abcdef"));
+    let posted = new_review(&review, |_| false, Some(&"0123456789abcdef".into()));
     assert!(posted.comments.is_empty());
     assert_eq!(posted.commit, None);
     assert!(posted.body.contains("src/a.rs:7"), "{}", posted.body);

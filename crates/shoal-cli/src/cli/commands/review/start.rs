@@ -518,8 +518,8 @@ impl Subject {
             Self::Changes => ReviewTarget::Workspace,
             Self::Pull { pull, .. } => ReviewTarget::Pr {
                 url: pull.url,
-                head: pull.head.into(),
-                base: pull.base.into(),
+                head: pull.head,
+                base: pull.base,
                 post,
             },
         }

@@ -100,7 +100,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   a named operation of the client module for its subject and never builds one
   itself. What the CLI alone needs, such as parsing, prompting and printing,
   stays in `shoal-cli`, and `shoal-client` depends on no Shoal crate but
-  `shoal-forge`, `shoal-subprocess`, `shoal-time` and `shoal-config-derive`.
+  `shoal-forge`, `shoal-refs`, `shoal-subprocess`, `shoal-time` and
+  `shoal-config-derive`.
 - `crates/shoal-time` holds the wall-clock timestamp type, and
   `crates/shoal-refs` the commit and branch name types, that every crate
   shares; neither depends on a Shoal crate.

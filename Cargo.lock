@@ -1310,6 +1310,7 @@ dependencies = [
  "serde_json",
  "shoal-config-derive",
  "shoal-forge",
+ "shoal-refs",
  "shoal-subprocess",
  "shoal-time",
  "tempfile",

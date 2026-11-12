@@ -6,6 +6,7 @@ use std::{collections::HashSet, path::Path, sync::Arc};
 use crate::client::repository_ids::RepositoryId;
 
 use anyhow::{Context, Result};
+use shoal_refs::{BranchName, CommitId};
 use tokio::{sync::watch, task::JoinSet};
 
 use super::{
@@ -79,8 +80,8 @@ struct Run<'a> {
 
 /// The commits a run reviews.
 struct Commits {
-    head: String,
-    base: String,
+    head: CommitId,
+    base: CommitId,
 }
 
 impl Manager {
@@ -240,7 +241,7 @@ impl Manager {
         files: &Files,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Result<(Agent, Ended)> {
-        self.prepare_checkout(workspace, &commits.head, files)
+        self.prepare_checkout(workspace, commits.head.as_str(), files)
             .await?;
         let run = Run {
             runs: &self.oneshot_runs,
@@ -368,7 +369,7 @@ impl Manager {
                 workspace: workspace.directory_name(),
                 branch: workspace.branch.as_deref().unwrap_or_default(),
                 path: &checkout.to_string_lossy(),
-                base: &commits.base,
+                base: commits.base.as_str(),
             },
         );
         let (id, workspace_id) = (review.id, workspace.id.clone());
@@ -427,15 +428,21 @@ impl Manager {
                     .diff_base(&SpaceSelector::id(&workspace.id))
                     .await?
                     .commit;
-                Ok(Commits { head, base })
+                Ok(Commits {
+                    head: head.into(),
+                    base: base.into(),
+                })
             }
             ReviewTarget::Pr { head, base, .. } => {
-                let base_ref = crate::git::remote_ref("origin", base);
+                let base_ref = crate::git::remote_ref("origin", base.as_str());
                 let head = self.pull_review_head(workspace, head).await?;
                 let base = crate::git::diff::merge_base_of(&workspace.path, &head, &base_ref)
                     .await
                     .with_context(|| format!("the PR base {base} is not fetched"))?;
-                Ok(Commits { head, base })
+                Ok(Commits {
+                    head: head.into(),
+                    base: base.into(),
+                })
             }
         }
     }
@@ -444,11 +451,11 @@ impl Manager {
     /// a workspace at a commit, opened at the head of a PR whose branch
     /// origin does not have, as a fork's, the head it was last moved to,
     /// whatever was committed on top of it there since.
-    async fn pull_review_head(&self, workspace: &Workspace, head: &str) -> Result<String> {
+    async fn pull_review_head(&self, workspace: &Workspace, head: &BranchName) -> Result<String> {
         if let Some(at) = &workspace.at {
             return Ok(at.commit.clone());
         }
-        let head_ref = crate::git::remote_ref("origin", head);
+        let head_ref = crate::git::remote_ref("origin", head.as_str());
         crate::git::resolve_commit(&workspace.path, &head_ref, crate::git::run)
             .await
             .with_context(|| format!("the PR head {head} is not fetched"))

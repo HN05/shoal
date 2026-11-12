@@ -64,12 +64,12 @@ async fn one_review_is_queued_or_running_per_workspace() {
                 UnixTime::from_seconds(2),
             )?;
             assert_eq!(again, Queued::Existing(first.id()));
-            assert!(start(db, first.id(), "head", "base", UnixTime::from_seconds(3))?);
+            assert!(start(db, first.id(), &"head".into(), &"base".into(), UnixTime::from_seconds(3))?);
             // A run protection stopped waits for healthy readings until the
             // review starts again.
             assert!(requeue(db, first.id())?);
             assert!(waits_for_recovery(db, first.id())?);
-            assert!(start(db, first.id(), "head", "base", UnixTime::from_seconds(3))?);
+            assert!(start(db, first.id(), &"head".into(), &"base".into(), UnixTime::from_seconds(3))?);
             assert!(!waits_for_recovery(db, first.id())?);
             let refused = queue(
                 db,
@@ -108,7 +108,13 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 UnixTime::from_seconds(1),
             )?
             .id();
-            start(tx, first, "one", "base", UnixTime::from_seconds(2))?;
+            start(
+                tx,
+                first,
+                &"one".into(),
+                &"base".into(),
+                UnixTime::from_seconds(2),
+            )?;
             assert!(finish(
                 tx,
                 first,
@@ -151,7 +157,13 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 UnixTime::from_seconds(6),
             )?
             .id();
-            start(tx, second, "two", "base", UnixTime::from_seconds(7))?;
+            start(
+                tx,
+                second,
+                &"two".into(),
+                &"base".into(),
+                UnixTime::from_seconds(7),
+            )?;
             let checked = vec![
                 Checked {
                     finding,
@@ -242,7 +254,13 @@ async fn failures_are_typed_and_interrupted_runs_start_over() {
                 UnixTime::from_seconds(1),
             )?
             .id();
-            start(db, id, "head", "base", UnixTime::from_seconds(2))?;
+            start(
+                db,
+                id,
+                &"head".into(),
+                &"base".into(),
+                UnixTime::from_seconds(2),
+            )?;
             assert_eq!(requeue_running(db, &[])?, 1);
             let review = load(db, id)?.unwrap();
             assert_eq!((review.state, review.head), (ReviewState::Queued, None));
@@ -277,7 +295,13 @@ async fn removing_the_workspace_deletes_its_reviews() {
                 UnixTime::from_seconds(1),
             )?
             .id();
-            start(tx, id, "head", "base", UnixTime::from_seconds(2))?;
+            start(
+                tx,
+                id,
+                &"head".into(),
+                &"base".into(),
+                UnixTime::from_seconds(2),
+            )?;
             finish(
                 tx,
                 id,
