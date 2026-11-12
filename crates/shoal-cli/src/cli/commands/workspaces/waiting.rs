@@ -5,7 +5,7 @@ use crate::client::queue::QueueEntryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{commands::queued_agents, context::Context},
-    model::Workspace,
+    model::{Inspection, Workspace},
     state::WorkspaceState,
 };
 
@@ -45,15 +45,21 @@ impl WaitingAgent {
     }
 }
 
-/// Whether `workspace`'s setup failed, or never started and runs in no
-/// execution, as when the daemon refused it.
+/// Whether `workspace`'s setup failed, or never started.
 async fn setup_failed(ctx: &Context, workspace: &Workspace) -> bool {
     let selector = SpaceSelector::id(&workspace.id);
     crate::client::workspaces::inspect(&ctx.paths, selector)
         .await
-        .is_ok_and(|inspection| match inspection.workspace.state {
-            WorkspaceState::Failed => true,
-            WorkspaceState::Preparing => inspection.executions.is_empty(),
-            _ => false,
-        })
+        .is_ok_and(|inspection| awaits_setup(&inspection))
+}
+
+/// Whether the inspected workspace waits for a retried setup: its setup
+/// failed, or never started and runs in no execution, as when the daemon
+/// refused it.
+pub(in crate::cli::commands) fn awaits_setup(inspection: &Inspection) -> bool {
+    match inspection.workspace.state {
+        WorkspaceState::Failed => true,
+        WorkspaceState::Preparing => inspection.executions.is_empty(),
+        _ => false,
+    }
 }

@@ -1,12 +1,11 @@
-//! A workspace whose setup failed resumes by retrying its setup, after which
-//! the agent waiting in the queue for it starts.
+//! A workspace whose setup failed, or never started, resumes by retrying its
+//! setup, after which the agent waiting in the queue for it starts.
 use anyhow::{Result, ensure};
 
 use super::targets::Selected;
 use crate::{
     cli::{commands::workspaces, context::Context, output::Style},
     model::Workspace,
-    state::WorkspaceState,
 };
 
 /// Retry the setup of the selected workspaces whose setup failed, when the
@@ -86,7 +85,8 @@ fn report(
     Ok(Some(i32::from(set_up.len() < retried)))
 }
 
-/// The selected workspaces whose setup failed, which leave the selection.
+/// The selected workspaces whose setup failed or never started, which leave
+/// the selection.
 async fn take_failed(ctx: &Context, selected: &mut Selected) -> Result<Vec<Workspace>> {
     let Some(selectors) = selected.workspaces.take() else {
         return Ok(Vec::new());
@@ -95,9 +95,9 @@ async fn take_failed(ctx: &Context, selected: &mut Selected) -> Result<Vec<Works
     let mut rest = Vec::new();
     for selector in selectors {
         let inspection = crate::client::workspaces::inspect(&ctx.paths, selector.clone()).await?;
-        match inspection.workspace.state {
-            WorkspaceState::Failed => failed.push(inspection.workspace),
-            _ => rest.push(selector),
+        match workspaces::awaits_setup(&inspection) {
+            true => failed.push(inspection.workspace),
+            false => rest.push(selector),
         }
     }
     selected.workspaces = Some(rest);

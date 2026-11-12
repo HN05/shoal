@@ -45,6 +45,7 @@ pub(super) use setup::{
 };
 pub(super) use status::status;
 pub(super) use unmerge::{unmerge, unmerge_branch, unmerge_worker};
+pub(super) use waiting::awaits_setup;
 pub(super) use watch::watch_items;
 
 /// Where the workspace's worktree is, for messages: `on branch <branch> at
