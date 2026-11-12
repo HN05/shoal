@@ -16,7 +16,7 @@ use std::{
 use tokio::sync::{Mutex, MutexGuard, Notify, futures::Notified, watch};
 
 use super::Grant;
-use crate::client::queue::QueueEntryId;
+use crate::client::{queue::QueueEntryId, space_ids::SpaceId, time::UnixTime};
 use crate::model::HeldBy;
 
 #[derive(Default)]
@@ -42,9 +42,12 @@ struct OneShots {
     runs: BTreeMap<u64, OneShot>,
 }
 
-/// A one-shot run's request for a slot in `repository`.
+/// A one-shot run's request for a slot in `repository`, for the work of
+/// `space`.
 struct OneShot {
     repository: RepositoryId,
+    space: Option<SpaceId>,
+    requested_at: UnixTime,
     /// Whether protection stopped its earlier run, so it waits for healthy
     /// readings as a stopped agent's restore does.
     after_stop: bool,
@@ -67,6 +70,9 @@ pub(crate) struct WaitingOneShot {
     /// Its queue ID, which no stored entry has.
     pub id: QueueEntryId,
     pub repository: RepositoryId,
+    /// The space whose work it serves, which it ranks with.
+    pub space: Option<SpaceId>,
+    pub requested_at: UnixTime,
     pub after_stop: bool,
 }
 
@@ -156,12 +162,24 @@ impl AgentQueue {
     }
 
     /// Ask for a slot in `repository` for a one-shot run, such as a review,
-    /// which waits in the queue ahead of launches; the request and the slot
-    /// end with the returned value. Protection calls `stop` to stop the run;
-    /// a run it stopped asks again `after_stop`.
+    /// of the work of `space`, which waits in the queue at that space's
+    /// rank; the request and the slot end with the returned value.
+    /// Protection calls `stop` to stop the run; a run it stopped asks again
+    /// `after_stop`.
     pub(crate) fn request_oneshot(
         &self,
         repository: &RepositoryId,
+        space: &SpaceId,
+        after_stop: bool,
+        stop: impl FnOnce() + Send + Sync + 'static,
+    ) -> OneShotSlot<'_> {
+        self.request(repository, Some(space.clone()), after_stop, stop)
+    }
+
+    fn request(
+        &self,
+        repository: &RepositoryId,
+        space: Option<SpaceId>,
         after_stop: bool,
         stop: impl FnOnce() + Send + Sync + 'static,
     ) -> OneShotSlot<'_> {
@@ -173,6 +191,8 @@ impl AgentQueue {
             number,
             OneShot {
                 repository: repository.clone(),
+                space,
+                requested_at: UnixTime::now(),
                 after_stop,
                 admitted,
                 stop: Some(Box::new(stop)),
@@ -190,7 +210,7 @@ impl AgentQueue {
     /// Hold a slot in `repository` until the daemon restarts, for a run a
     /// stopped daemon left whose processes could not be proven stopped.
     pub(crate) fn hold_oneshot(&self, repository: &RepositoryId) {
-        let slot = self.request_oneshot(repository, false, || {});
+        let slot = self.request(repository, None, false, || {});
         if let Some(run) = self.oneshots.lock().unwrap().runs.get(&slot.number) {
             run.admitted.send_replace(Some(Instant::now()));
         }
@@ -208,6 +228,8 @@ impl AgentQueue {
             .map(|(number, run)| WaitingOneShot {
                 id: oneshot_id(*number),
                 repository: run.repository.clone(),
+                space: run.space.clone(),
+                requested_at: run.requested_at,
                 after_stop: run.after_stop,
             })
             .collect()

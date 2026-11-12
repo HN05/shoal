@@ -3,7 +3,7 @@
 //! failure.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
@@ -11,6 +11,7 @@ use rusqlite::{OptionalExtension, params};
 use super::{
     blockers,
     dispatch::Start,
+    rank::Ranked,
     store::{ENTRY_COLUMNS, Launch, entry, insert_launch},
 };
 use crate::client::{
@@ -20,7 +21,7 @@ use crate::client::{
 };
 use crate::{
     daemon::{notifications::NotificationKind, scope::Caller, workspace::Manager},
-    model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan},
+    model::{QueueAdmission, QueueEntry, QueueRank, QueueRequest, QueuedPlan},
     state::{QueueKind, QueueState},
 };
 
@@ -142,10 +143,11 @@ impl Manager {
         ))
     }
 
-    /// Entries in queue order, waiting ones numbered and with what blocks
-    /// them and what held them back at the last admission pass.
+    /// Entries, the starting ones first and then the waiting ones in rank
+    /// order, numbered, with their rank, what blocks them and what held them
+    /// back at the last admission pass.
     pub async fn queue_entries(&self) -> Result<Vec<QueueEntry>> {
-        let mut entries = self.numbered_entries().await?;
+        let mut entries = self.ranked_entries().await?;
         let mut readiness = self.blocker_readiness().await?;
         let waking = self.restores_waiting_for_updates().await?;
         for entry in &mut entries {
@@ -163,25 +165,13 @@ impl Manager {
         Ok(entries)
     }
 
-    async fn numbered_entries(&self) -> Result<Vec<QueueEntry>> {
-        self.store
-            .run(|db| {
-                let mut entries = db
-                    .prepare(&format!(
-                        "SELECT {ENTRY_COLUMNS} FROM agent_queue ORDER BY seq"
-                    ))?
-                    .query_map([], entry)?
-                    .collect::<rusqlite::Result<Vec<_>>>()?;
-                let mut position = 0;
-                for entry in &mut entries {
-                    if entry.state == QueueState::Queued {
-                        position += 1;
-                        entry.position = Some(position);
-                    }
-                }
-                Ok(entries)
-            })
-            .await
+    /// Entries, the starting ones first and then the waiting ones in rank
+    /// order, each waiting one numbered and with its rank. One that arrived
+    /// since the rank was read goes last.
+    async fn ranked_entries(&self) -> Result<Vec<QueueEntry>> {
+        let ranked = self.ranked_queue().await?;
+        let entries = self.store.run(|db| all_entries(db)).await?;
+        Ok(in_rank_order(entries, ranked))
     }
 
     pub async fn queued_plan(&self, id: &QueueEntryId) -> Result<QueuedPlan> {
@@ -472,6 +462,35 @@ impl Manager {
             })
             .await
     }
+}
+
+/// Every entry of the queue, in arrival order.
+fn all_entries(db: &rusqlite::Connection) -> Result<Vec<QueueEntry>> {
+    Ok(db
+        .prepare(&format!(
+            "SELECT {ENTRY_COLUMNS} FROM agent_queue ORDER BY seq"
+        ))?
+        .query_map([], entry)?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// `entries` with the starting ones first and then the waiting ones in the
+/// order of `ranked`, each waiting one numbered and with its rank.
+fn in_rank_order(mut entries: Vec<QueueEntry>, ranked: Vec<Ranked>) -> Vec<QueueEntry> {
+    let mut ranked: HashMap<QueueEntryId, (usize, QueueRank)> = (ranked.into_iter())
+        .enumerate()
+        .map(|(place, ranked)| (ranked.id, (place, ranked.rank)))
+        .collect();
+    entries.sort_by_key(|entry| {
+        let place = (ranked.get(&entry.id)).map_or(usize::MAX, |(place, _)| *place);
+        (entry.state == QueueState::Queued, place)
+    });
+    let waiting = (entries.iter_mut()).filter(|entry| entry.state == QueueState::Queued);
+    for (position, entry) in waiting.enumerate() {
+        entry.position = Some(position + 1);
+        entry.rank = ranked.remove(&entry.id).map(|(_, rank)| rank);
+    }
+    entries
 }
 
 /// How long the workspace a launch started its agent in stays recorded

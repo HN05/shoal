@@ -164,7 +164,7 @@ async fn waiting_jobs_join_the_queue_linked_to_their_workspace_until_the_forge_d
 }
 
 #[tokio::test]
-async fn a_workspaces_job_goes_ahead_of_its_agents_queued_restore() {
+async fn a_job_ranks_with_its_workspace_ahead_of_that_workspaces_restore() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -230,7 +230,11 @@ async fn a_workspaces_job_goes_ahead_of_its_agents_queued_restore() {
         .into_iter()
         .map(|entry| entry.name.into())
         .collect();
-    assert_eq!(order, ["first", "ci-linked-1", "restore", "ci-unlinked-1"]);
+    // The job ranks with the started workspace it serves, ahead of that
+    // workspace's agent; the job serving none is new work.
+    let place = |name: &str| order.iter().position(|entry| entry == name).unwrap();
+    assert!(place("ci-linked-1") < place("restore"));
+    assert_eq!(order.last().map(String::as_str), Some("ci-unlinked-1"));
 }
 
 #[test]

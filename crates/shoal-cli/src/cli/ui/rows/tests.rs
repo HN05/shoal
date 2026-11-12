@@ -43,6 +43,7 @@ fn queue_status_names_the_work_a_launch_waits_for() {
         base: None,
         job: None,
         held_by: None,
+        rank: None,
     };
     assert_eq!(queue_status_cell(&entry).0, "queued, position 2");
     entry.blockers = vec!["api".into(), "https://forge.example/o/r/issues/7".into()];
@@ -91,6 +92,7 @@ fn queue_status_names_a_restore_that_waits_for_an_update() {
         base: None,
         job: None,
         held_by: None,
+        rank: None,
     };
     assert_eq!(
         queue_status_cell(&entry).0,

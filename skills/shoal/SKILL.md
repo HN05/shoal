@@ -74,8 +74,9 @@ own agent from a fork of its session, so it needs only its task after `--`.
 
 `start` returns once the workspace is set up, with the workspace and the
 agent's queue entry. The daemon starts queued agents as `max_agents` allows
-(`state: queued`, `position`); `shoal queue` lists entries and `--now` starts
-one regardless. `--add-blocker <space|queued agent|issue>` (repeatable)
+(`state: queued`, `position`), work close to finished and work that other work
+waits on first (`rank`); `shoal queue` lists entries and `--now` starts one
+regardless. `--add-blocker <space|queued agent|issue>` (repeatable)
 holds an agent until that work is done, where a bare number is an issue, a
 space is selected by its ID and a queued agent by its entry's ID, and an
 issue's agent is also blocked by the issues its forge records as blocking it;

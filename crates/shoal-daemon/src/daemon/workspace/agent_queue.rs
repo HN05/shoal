@@ -8,7 +8,8 @@ mod dispatch;
 mod entries;
 mod expiry;
 mod limits;
-mod order;
+mod rank;
+mod ranking;
 mod restores;
 mod slots;
 mod state;
@@ -17,7 +18,6 @@ mod store;
 mod wake;
 
 pub(crate) use dispatch::Start;
-pub(crate) use order::place_entry;
 pub(crate) use state::{AgentQueue, OneShotSlot, OneShotStop};
 pub(crate) use wake::Grant;
 

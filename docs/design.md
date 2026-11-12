@@ -820,7 +820,7 @@ from a fork of its session, the one the caller's agent or else the parent's only
 agent reported last, so the parent need not restate what it learned; the daemon starts every launch in an existing
 workspace itself, detached, so the agent never inherits the caller's scope, and
 scoped callers may queue only for the workspaces below theirs, and cancel those
-entries or move them back, but never ahead of other work. A scoped caller's
+entries. A scoped caller's
 launch that a blocker holds queues before its workspace exists, so the
 workspace can start from the done blocker's branch: the entry records the
 caller's space, which the daemon starts it for and whose scope the user's
@@ -1550,8 +1550,21 @@ without referencing its row, which ended with the agent, and leaves the queue
 once the recovery record or last session is gone. A last session's admitted
 restore counts as a launch, having no slot to take over.
 `shoal queue` starts and cancels entries, and the daemon owns their order:
-there is no hand-placed order, which would fight the order the daemon
-decides, and positions count waiting entries machine-wide, as admission does.
+there is no hand-placed order, which would fight the rank, and positions count
+waiting entries machine-wide, as admission does.
+The queue starts the work that gets the most done with the fewest agents
+running: work close to finished before new work, and work that other work
+waits on before the work waiting. One pure rank operation over a snapshot of
+the entries, spaces and what waits on what orders admission and the listing
+alike. Its tiers are `finishing` (a space with an open PR or a ready mark, CI
+jobs on PRs and the default branch), `started` (restores of agents that have
+worked) and `new`; an hour's wait raises an entry a tier, so nothing starves.
+Rank flows along one dependency graph from waiting work to what it waits on,
+such as a queued launch to its blockers. CI jobs and reviews have no rank of their
+own beyond a job's tier: each takes the rank of the spaces it serves and goes
+ahead of their agents, which wait on it. Within a tier, plan steps done, then
+the space's age, then arrival decide, and `shoal queue` explains a rank taken
+from other work.
 For the same reason
 every caller sees the whole queue, while acting on an entry keeps the scope
 rules. Each waiting entry carries what held it back at the last admission
@@ -1712,8 +1725,8 @@ long has stopped making progress. The daemon starts the reviewer as a one-shot
 agent run, which any feature can use: an AI tool's command without a session or
 terminal, in its own process group, killed on timeout, cancel or a daemon stop and
 found again by its marker after a crash. A one-shot run takes an agent slot like
-any agent and waits in the agent queue ahead of launches, since it reviews work
-already done that an agent waits on. Protection stops a one-shot run before
+any agent and waits in the agent queue at the rank of the workspace it serves,
+ahead of that workspace's agent, which waits on it. Protection stops a one-shot run before
 any agent, since it has no session to lose; it asks for a slot again and waits
 for healthy readings, as a stopped agent's restore does. A chat has no worktree or branch, so it
 reviews no changes of its own: it names the workspace it reviews, or reviews

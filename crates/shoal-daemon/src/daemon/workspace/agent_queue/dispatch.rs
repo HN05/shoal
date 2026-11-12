@@ -202,10 +202,9 @@ impl Manager {
         )
     }
 
-    /// The queued entries in order, each restore with whether its agent
+    /// The queued entries in rank order, each restore with whether its agent
     /// waits and what for. A restore the daemon starts is admitted like a
-    /// launch once it waits for nothing. One-shot runs, such as reviews of
-    /// work already done, go ahead of every launch.
+    /// launch once it waits for nothing.
     async fn waiting_work(&self) -> Result<WaitingWork> {
         let queued = self.store.run(|db| queued_rows(db)).await?;
         let waiters = self.agent_queue.restore_waiters();
@@ -262,10 +261,6 @@ impl Manager {
                 work,
             });
         }
-        let first_launch = waiting
-            .iter()
-            .position(|entry| entry.work == Work::Launch)
-            .unwrap_or(waiting.len());
         let oneshots = self
             .agent_queue
             .waiting_oneshots()
@@ -277,13 +272,25 @@ impl Manager {
                     after_stop: oneshot.after_stop,
                 },
             });
-        waiting.splice(first_launch..first_launch, oneshots);
+        waiting.extend(oneshots);
+        self.in_rank_order(&mut waiting).await?;
         Ok(WaitingWork {
             entries: waiting,
             restores,
             stopped,
             permits_busy,
         })
+    }
+
+    /// Sort `waiting` in rank order; an entry that arrived since the rank
+    /// was read goes last.
+    async fn in_rank_order(&self, waiting: &mut [Waiting]) -> Result<()> {
+        let order: HashMap<QueueEntryId, usize> = (self.ranked_queue().await?.into_iter())
+            .enumerate()
+            .map(|(place, ranked)| (ranked.id, place))
+            .collect();
+        waiting.sort_by_key(|entry| order.get(&entry.id).copied().unwrap_or(usize::MAX));
+        Ok(())
     }
 
     /// Take the launches that blockers hold back out of `waiting`, returning

@@ -965,8 +965,8 @@ cannot be proven stopped also keeps its agent slot. The daemon reads the workspa
 worktree verifies as the workspace's. A queued review takes the
 workspace's HEAD when it starts. A workspace has at most one queued or running
 review: running the command again returns the queued one, and is refused while one
-runs. A review waits in the [agent queue](#agent-queue) for a slot, ahead of every
-launch, and holds it while its reviewer runs; `shoal queue` does not list it. A
+runs. A review waits in the [agent queue](#agent-queue) for a slot, ranked
+with the workspace it reviews, and holds it while its reviewer runs; `shoal queue` does not list it. A
 chat has no changes of its own; see [chat reviews](#chat-reviews) below.
 
 The reviewer is `--agent`, else [`[review] agent`](config.md#reviews), else `agent.default`, else one you
@@ -1922,7 +1922,7 @@ after a daemon restart, or waits for `shoal resume`, unless its workspace is
 done or its restore waits in the queue; `shoal done`, the agent's exit,
 `resume --discard` and removal free it.
 A [local review](#local-reviews)'s reviewer also uses a slot while it runs; a
-queued review waits ahead of every launch and starts as soon as a slot is free.
+queued review ranks with the workspace it reviews.
 Overload protection stops a running reviewer before any agent, and disk
 protection stops every reviewer; the review is queued again and starts over
 once readings are healthy.
@@ -1945,8 +1945,8 @@ a terminal, starting in the background once the work is complete; a scoped
 caller's opens its workspace below the caller, or the space `--parent` names,
 with the checks the caller's own start would meet, and queue `--json` names
 the caller's space in its `queued_by`. The daemon starts waiting entries
-in order as slots free, passing over an entry whose repository is full, and
-records a `queue_started` notification. An entry queued from another host's pane, block
+in [rank order](#queue-order) as slots free, passing over an entry whose
+repository is full, and records a `queue_started` notification. An entry queued from another host's pane, block
 or tab opens a background tab or window where it was queued; otherwise it runs where
 `terminal.default_host` puts it, by default a detached zmx session that `shoal attach`
 reaches. A start keeps its slot through setup until
@@ -1959,7 +1959,7 @@ issue or arguments that the `focus` setting does not send to the background, unl
 makes it wait for work.
 
 An agent's automatic restore after a protection stop waits in the same queue,
-in order with launches, from when its processes stop. A restore of an agent
+ranked with launches, from when its processes stop. A restore of an agent
 stopped while idle holds back nothing behind it, and holds no slot once its
 processes are proven stopped, until an update arrives for the agent; then it needs a free slot, or room for its load,
 as a launch does, and with disk protection on `disk.cleanup_free_gib`
@@ -2031,7 +2031,10 @@ with its run, `blockers` while any remain, the setup of the workspace it opens
 among them,
 `waits_for_update` for a restore of an idle agent, `held_by` with its `reason`
 (`memory` with `needed` and `left` bytes, `disk`, `max_agents`, `max_jobs`,
-`repository_limit`, `permits` or `reading`) and
+`repository_limit`, `permits` or `reading`), a waiting entry's `rank` with its
+`tier` and, when it took that from work waiting on it, `inherited` with that
+work's space number or launch name `from` and the `dependency` (`blocked`,
+`parent`, `question`, `stacked`, `lease` or `serves`), and
 `base` once a launch starts on a blocker's branch, while `list --json` stays
 a list of workspaces. Each line starts with the entry's ID, which `queue
 start` and `cancel` take. On a terminal, `shoal queue` picks a waiting entry and
@@ -2048,6 +2051,17 @@ agent for `shoal resume`. `shoal rm` also removes a waiting launch by its ID;
 a starting entry belongs to its workspace. Every caller sees every entry.
 Scoped callers may cancel the entries for the workspaces below their own;
 starting an entry is for the user.
+
+#### Queue order
+
+Waiting entries start by tier, highest first: `finishing`, the agents of a
+space with an open PR it opened or was assigned or with a ready mark, and CI
+jobs on PRs and on the default branch; `started`, restores of agents that have
+worked in their space; `new`, other launches and CI jobs. An entry rises one
+tier for each full hour it waits. Within a tier, the space with the larger
+share of its plan steps done goes first, then the space created earliest, then
+a CI job or review ahead of an agent of the same space, then the entry that
+arrived first.
 
 ### Agent accounts
 
@@ -3245,9 +3259,8 @@ minutes later or when the config changes. Other forges and Gitea report the
 
 The jobs the forge holds for the runner's labels join the [agent
 queue](#agent-queue) as `job` entries named `ci-<job>-<ID>`, whose workspaces
-take the job's name in a directory of the entry's, in the order the
-forge queued them, except that a job goes ahead of a queued restore of the
-agent of the workspace its run links. The daemon reads them every ten seconds
+take the job's name in a directory of the entry's, ranked with the spaces
+its run links, ahead of a queued agent of the same space. The daemon reads them every ten seconds
 while a job could start and every minute while none can, so new jobs show in
 the queue and the entries of jobs the forge no longer lists, which another
 runner took or a cancel ended, leave it. `machine.max_jobs`

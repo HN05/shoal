@@ -187,11 +187,14 @@ impl Manager {
             .run(move |db| store::waits_for_recovery(db, id))
             .await?;
         let stop = cancel.clone();
-        let mut slot =
-            self.agent_queue
-                .request_oneshot(&workspace.repository_id, after_stop, move || {
-                    stop.send_replace(true);
-                });
+        let mut slot = self.agent_queue.request_oneshot(
+            &workspace.repository_id,
+            &workspace.id,
+            after_stop,
+            move || {
+                stop.send_replace(true);
+            },
+        );
         tokio::select! {
             () = slot.admitted() => Ok(Some(slot)),
             _ = cancelled.wait_for(|cancelled| *cancelled) => Ok(None),

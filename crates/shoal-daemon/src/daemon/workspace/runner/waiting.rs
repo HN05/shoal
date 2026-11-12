@@ -2,8 +2,8 @@
 //! the jobs a repository's runner may take, with the run each belongs to and
 //! the spaces that run links, and drops the entries of jobs the forge no
 //! longer lists as waiting, which another runner took or a cancel ended.
+use crate::client::queue::QueueEntryId;
 use crate::client::repository_ids::RepositoryId;
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -148,20 +148,19 @@ fn forget_unlisted_jobs(
     Ok(known)
 }
 
-/// Queue `job` behind the work already waiting, except that it goes ahead of
-/// a waiting restore of the agent of a space its run is for.
+/// Queue `job` behind the work already waiting; its rank decides when it
+/// starts.
 fn queue_job(
     tx: &rusqlite::Transaction<'_>,
     repository_id: &RepositoryId,
     job: &QueuedJob,
 ) -> Result<()> {
-    let id = QueueEntryId::generate();
     let name = SpaceName::derive(&format!("ci-{}-{}", job.job.name, job.job.id), "workspace");
     tx.execute(
         "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,job)
          VALUES (?1,?2,?3,?4,'',?5,?6,?7)",
         params![
-            id,
+            QueueEntryId::generate(),
             QueueKind::Job,
             repository_id,
             name,
@@ -170,28 +169,7 @@ fn queue_job(
             serde_json::to_string(job)?,
         ],
     )?;
-    if let Some(restore) = queued_restore(tx, &job.space_ids)? {
-        crate::daemon::workspace::agent_queue::place_entry(tx, &id, &restore)?;
-    }
     Ok(())
-}
-
-/// The waiting restore of the agent of the first of `spaces` that has one.
-fn queued_restore(
-    tx: &rusqlite::Transaction<'_>,
-    spaces: &[SpaceId],
-) -> Result<Option<QueueEntryId>> {
-    for space in spaces {
-        let restore = rusqlite::OptionalExtension::optional(tx.query_row(
-            "SELECT id FROM agent_queue WHERE workspace_id=?1 AND kind=?2 AND state=?3",
-            params![space, QueueKind::Restore, QueueState::Queued],
-            |row| row.get(0),
-        ))?;
-        if restore.is_some() {
-            return Ok(restore);
-        }
-    }
-    Ok(None)
 }
 
 #[cfg(test)]

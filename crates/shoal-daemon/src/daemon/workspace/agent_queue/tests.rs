@@ -1238,8 +1238,10 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     assert!(launch.start);
     manager.dispatch_queue().await.unwrap();
     assert!(manager.overload_recovery.published().is_some());
-    assert_eq!(queue(&manager).await[0], ("idle".into(), Restore, Queued));
-    assert!(manager.queue_entries().await.unwrap()[0].waits_for_update);
+    let entries = manager.queue_entries().await.unwrap();
+    let restore = entries.iter().find(|entry| entry.name == "idle").unwrap();
+    assert_eq!(restore.state, Queued);
+    assert!(restore.waits_for_update);
 
     // An update makes it due; it waits for the launch's slot like a launch.
     manager
@@ -1252,7 +1254,11 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
-    assert_eq!(queue(&manager).await[0], ("idle".into(), Restore, Queued));
+    assert!(
+        queue(&manager)
+            .await
+            .contains(&("idle".into(), Restore, Queued))
+    );
     let launched = launch.entry.unwrap().id;
     manager.fail_queue_entry(&launched, "test").await.unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -1354,17 +1360,19 @@ async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
 }
 
 #[tokio::test]
-async fn a_oneshot_run_goes_ahead_of_launches_and_holds_its_slot() {
+async fn a_oneshot_run_ranks_with_its_workspace_and_holds_its_slot() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
     let first = add(&manager, &repo, "first").await.entry.unwrap();
-    let launch = add(&manager, &repo, "launch").await.entry.unwrap();
-    let mut review = manager.agent_queue.request_oneshot(&repo.id, false, || {});
     let workspace = manager
         .create_workspace(&repo.id, "first".into(), None, None, None)
         .await
         .unwrap();
+    // The launch has no space, so it started no earlier than the workspace
+    // whose review ranks with it.
+    let launch = add(&manager, &repo, "launch").await.entry.unwrap();
+    let mut review = (manager.agent_queue).request_oneshot(&repo.id, &workspace.id, false, || {});
     manager
         .queue_attach(&first.id, &SpaceSelector::id(&workspace.id))
         .await
@@ -1379,7 +1387,8 @@ async fn a_oneshot_run_goes_ahead_of_launches_and_holds_its_slot() {
         .await
         .unwrap();
 
-    // The one free slot goes to the run queued after the launch.
+    // The one free slot goes to the run queued after the launch, which ranks
+    // with its older workspace.
     manager.dispatch_queue().await.unwrap();
     tokio::time::timeout(Duration::from_secs(5), review.admitted())
         .await
@@ -1393,6 +1402,11 @@ async fn a_oneshot_run_goes_ahead_of_launches_and_holds_its_slot() {
     assert!(started(&launch.id));
 }
 
+/// A workspace one-shot runs serve, which ranking finds none of.
+fn reviewed() -> crate::client::space_ids::SpaceId {
+    String::from("reviewed").into()
+}
+
 #[tokio::test]
 async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
     let (temp, manager) = manager().await;
@@ -1402,7 +1416,7 @@ async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
     let counted = stops.clone();
     let mut run = manager
         .agent_queue
-        .request_oneshot(&repo.id, false, move || {
+        .request_oneshot(&repo.id, &reviewed(), false, move || {
             counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         });
     manager.dispatch_queue().await.unwrap();
@@ -1428,7 +1442,7 @@ async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
     assert_eq!(stops.load(std::sync::atomic::Ordering::SeqCst), 1);
     drop(run);
 
-    let mut again = manager.agent_queue.request_oneshot(&repo.id, true, || {});
+    let mut again = (manager.agent_queue).request_oneshot(&repo.id, &reviewed(), true, || {});
     manager.dispatch_queue().await.unwrap();
     crate::daemon::test_support::assert_pending(again.admitted()).await;
     publish_recovery(&manager);
