@@ -48,8 +48,12 @@ pub(crate) fn list(db: &Connection, id: &SpaceId) -> Result<Vec<ReviewMark>> {
         )?
         .query_map([id], |row| {
             let url: String = row.get(0)?;
+            let kind: Option<ItemKind> = row.get(1)?;
             let url = (!url.is_empty())
-                .then(|| url.parse::<ItemRef>())
+                .then(|| match kind {
+                    Some(kind) => ItemRef::parse_kind(kind.into(), &url),
+                    None => url.parse::<ItemRef>(),
+                })
                 .transpose()
                 .map_err(|error| {
                     rusqlite::Error::FromSqlConversionFailure(
@@ -59,7 +63,7 @@ pub(crate) fn list(db: &Connection, id: &SpaceId) -> Result<Vec<ReviewMark>> {
                     )
                 })?;
             Ok(ReviewMark {
-                kind: row.get(1)?,
+                kind,
                 url,
                 head: row.get(2)?,
                 created_at: row.get(3)?,
