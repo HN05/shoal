@@ -8,7 +8,7 @@ pub(crate) mod actions;
 mod organization;
 mod review;
 mod reviewers;
-mod runner;
+mod runners;
 mod sniff;
 pub(crate) mod threads;
 mod uploads;
@@ -33,7 +33,6 @@ use crate::{
         run::NewRun,
         run_action::{Run, RunOperation},
         run_view::{RunFilter, RunJob},
-        runner::{JobCommand, JobLaunch, JobRun, RegisteredRunner, WaitingJob},
     },
     conventions::{Lookup, draft::DraftMarker, shared_lookups},
     items::{
@@ -45,7 +44,7 @@ use crate::{
         list,
         reaction::{Listed, Subject, allowed::AllowedReactions},
     },
-    numbers::{CommentId, IssueNumber, JobId, PullNumber, RunId, RunNumber, RunnerId},
+    numbers::{CommentId, IssueNumber, JobId, PullNumber, RunId, RunNumber},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -822,51 +821,6 @@ impl Backend for Forgejo {
     ) -> Result<String> {
         let endpoint = repo.repo_endpoint(&format!("actions/jobs/{}/logs", job.id));
         Ok(self.plain_log(&actions::job_log(repo, account, &endpoint).await?))
-    }
-
-    fn runner_program(&self) -> Result<&'static str> {
-        Ok(runner::PROGRAM)
-    }
-
-    async fn waiting_jobs(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        labels: &[String],
-    ) -> Result<Vec<WaitingJob>> {
-        runner::waiting_jobs(repo, account, labels).await
-    }
-
-    /// Forgejo reads a run by its API ID here, not its number.
-    fn job_run_path(&self, id: RunId) -> Result<String> {
-        Ok(format!("actions/runs/{id}"))
-    }
-
-    fn job_run(&self, repo: &ForgeRepo, value: &Value) -> Result<JobRun> {
-        runner::job_run(repo, value)
-    }
-
-    async fn register_runner(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        name: &str,
-    ) -> Result<Option<RegisteredRunner>> {
-        let value = repo.send(account, &runner::register(repo, name)).await?;
-        runner::registered(&value).map(Some)
-    }
-
-    fn delete_runner(&self, repo: &ForgeRepo, id: RunnerId) -> Result<Request> {
-        Ok(runner::delete(repo, id))
-    }
-
-    async fn job_command(
-        &self,
-        repo: &ForgeRepo,
-        _account: &Account,
-        launch: &JobLaunch<'_>,
-    ) -> Result<JobCommand> {
-        runner::job_command(repo, launch)
     }
 
     /// Forgejo reruns failed jobs one by one; one run accepts several job

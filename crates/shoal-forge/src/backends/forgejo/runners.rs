@@ -5,9 +5,11 @@ use std::ffi::OsString;
 use anyhow::{Context, Result};
 use serde_json::Value;
 
+use super::Forgejo;
 use crate::{
     ForgeRepo,
     account::Account,
+    backends::Runners,
     ci::runner::{
         JobCommand, JobLaunch, JobRun, RegisteredRunner, Trigger, WaitingJob, file_url,
         registration,
@@ -15,6 +17,53 @@ use crate::{
     numbers::{JobId, PullNumber, RunId, RunnerId},
     transport::api::{HttpMethod, Request, encode},
 };
+
+impl Runners for Forgejo {
+    fn runner_program(&self) -> Result<&'static str> {
+        Ok(PROGRAM)
+    }
+
+    async fn waiting_jobs(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        labels: &[String],
+    ) -> Result<Vec<WaitingJob>> {
+        waiting_jobs(repo, account, labels).await
+    }
+
+    /// Forgejo reads a run by its API ID here, not its number.
+    fn job_run_path(&self, id: RunId) -> Result<String> {
+        Ok(format!("actions/runs/{id}"))
+    }
+
+    fn job_run(&self, repo: &ForgeRepo, value: &Value) -> Result<JobRun> {
+        job_run(repo, value)
+    }
+
+    async fn register_runner(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        name: &str,
+    ) -> Result<Option<RegisteredRunner>> {
+        let value = repo.send(account, &register(repo, name)).await?;
+        registered(&value).map(Some)
+    }
+
+    fn delete_runner(&self, repo: &ForgeRepo, id: RunnerId) -> Result<Request> {
+        Ok(delete(repo, id))
+    }
+
+    async fn job_command(
+        &self,
+        repo: &ForgeRepo,
+        _account: &Account,
+        launch: &JobLaunch<'_>,
+    ) -> Result<JobCommand> {
+        job_command(repo, launch)
+    }
+}
 
 /// The program that runs one job.
 pub(super) const PROGRAM: &str = "forgejo-runner";

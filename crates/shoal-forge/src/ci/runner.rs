@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::Runners,
     capability::Capability,
     numbers::{JobId, PullNumber, RunId, RunnerId},
     transport::api::{HttpMethod, Request},

@@ -8,17 +8,85 @@ use std::{ffi::OsString, path::Path};
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
+use super::GitHub;
 use crate::{
     ForgeRepo,
     account::Account,
+    backends::Runners,
     ci::runner::{
-        Installation, JobCommand, JobLaunch, JobRun, RunnerState, Trigger, WaitingJob, quote,
-        took_run_hook,
+        Installation, JobCommand, JobLaunch, JobRun, RegisteredRunner, RunnerState, Trigger,
+        WaitingJob, quote, took_run_hook,
     },
     items::item::text,
     numbers::{JobId, PullNumber, RunId, RunnerId},
     transport::api::{HttpMethod, Request},
 };
+
+impl Runners for GitHub {
+    fn runner_program(&self) -> Result<&'static str> {
+        Ok(PROGRAM)
+    }
+
+    async fn waiting_jobs(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        labels: &[String],
+    ) -> Result<Vec<WaitingJob>> {
+        waiting_jobs(repo, account, labels).await
+    }
+
+    fn job_run_path(&self, id: RunId) -> Result<String> {
+        Ok(format!("actions/runs/{id}"))
+    }
+
+    fn job_run(&self, _repo: &ForgeRepo, value: &Value) -> Result<JobRun> {
+        job_run(value)
+    }
+
+    /// GitHub registers a runner for each job, and none for the repository.
+    async fn register_runner(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        _name: &str,
+    ) -> Result<Option<RegisteredRunner>> {
+        check_registration(repo, account).await?;
+        Ok(None)
+    }
+
+    fn delete_runner(&self, repo: &ForgeRepo, id: RunnerId) -> Result<Request> {
+        Ok(delete(repo, id))
+    }
+
+    async fn job_command(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        launch: &JobLaunch<'_>,
+    ) -> Result<JobCommand> {
+        job_command(repo, account, launch).await
+    }
+
+    async fn runner_state(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        id: RunnerId,
+    ) -> Result<Option<RunnerState>> {
+        state(repo, account, id).await
+    }
+
+    async fn runner_job(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        run: RunId,
+        runner: RunnerId,
+    ) -> Result<Option<WaitingJob>> {
+        runner_job(repo, account, run, runner).await
+    }
+}
 
 /// The program `actions/runner` runs each job with; its installation is the
 /// directory above the one that holds it.

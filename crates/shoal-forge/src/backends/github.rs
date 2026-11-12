@@ -7,7 +7,7 @@ mod actions;
 mod activity;
 mod review;
 mod reviewers;
-mod runner;
+mod runners;
 pub(crate) mod threads;
 mod view;
 
@@ -28,7 +28,6 @@ use crate::{
         run::{NewRun, workflow_segment},
         run_action::{Run, RunOperation},
         run_view::{JOBS_PAGE, RunFilter, RunJob},
-        runner::{JobCommand, JobLaunch, JobRun, RegisteredRunner, RunnerState, WaitingJob},
     },
     conventions::{Lookup, draft::DraftMarker, shared_lookups},
     items::{
@@ -41,7 +40,7 @@ use crate::{
         reaction::{Listed, Subject},
         revert::NewRevert,
     },
-    numbers::{CommentId, IssueNumber, JobId, PullNumber, RunId, RunNumber, RunnerId},
+    numbers::{CommentId, IssueNumber, JobId, PullNumber, RunId, RunNumber},
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
@@ -679,70 +678,6 @@ impl Backend for GitHub {
 
     fn approve_endpoint(&self, run: &Run) -> Result<String> {
         Ok(format!("actions/runs/{}/approve", run.id))
-    }
-
-    fn runner_program(&self) -> Result<&'static str> {
-        Ok(runner::PROGRAM)
-    }
-
-    async fn waiting_jobs(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        labels: &[String],
-    ) -> Result<Vec<WaitingJob>> {
-        runner::waiting_jobs(repo, account, labels).await
-    }
-
-    fn job_run_path(&self, id: RunId) -> Result<String> {
-        Ok(format!("actions/runs/{id}"))
-    }
-
-    fn job_run(&self, _repo: &ForgeRepo, value: &Value) -> Result<JobRun> {
-        runner::job_run(value)
-    }
-
-    /// GitHub registers a runner for each job, and none for the repository.
-    async fn register_runner(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        _name: &str,
-    ) -> Result<Option<RegisteredRunner>> {
-        runner::check_registration(repo, account).await?;
-        Ok(None)
-    }
-
-    fn delete_runner(&self, repo: &ForgeRepo, id: RunnerId) -> Result<Request> {
-        Ok(runner::delete(repo, id))
-    }
-
-    async fn job_command(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        launch: &JobLaunch<'_>,
-    ) -> Result<JobCommand> {
-        runner::job_command(repo, account, launch).await
-    }
-
-    async fn runner_state(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        id: RunnerId,
-    ) -> Result<Option<RunnerState>> {
-        runner::state(repo, account, id).await
-    }
-
-    async fn runner_job(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        run: RunId,
-        runner: RunnerId,
-    ) -> Result<Option<WaitingJob>> {
-        runner::runner_job(repo, account, run, runner).await
     }
 
     /// GitHub filters the runs that wait for approval itself.

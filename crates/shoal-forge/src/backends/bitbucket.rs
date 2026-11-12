@@ -10,7 +10,10 @@ use serde_json::{Value, json};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::rest::{RestCheck, RestReads, fingerprints},
+    backends::{
+        Runners,
+        rest::{RestCheck, RestReads, fingerprints},
+    },
     capability::{self, Capability, Support},
     ci::{
         CiAction, CiCheck, Job, Location, Operation,
@@ -830,6 +833,8 @@ impl Backend for Bitbucket {
         Some((text(&listed["name"])?, listed["id"].as_u64()?))
     }
 }
+
+impl Runners for Bitbucket {}
 
 async fn view_details(
     repo: &ForgeRepo,

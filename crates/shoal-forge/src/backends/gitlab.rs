@@ -6,7 +6,10 @@ use serde_json::{Value, json};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::rest::{RestCheck, RestReads, fingerprints},
+    backends::{
+        Runners,
+        rest::{RestCheck, RestReads, fingerprints},
+    },
     capability::{self, Capability, Support},
     ci::{
         CiAction, CiCheck, Job, Location, Operation, check,
@@ -1017,6 +1020,8 @@ impl Backend for GitLab {
         repo.repo_endpoint("milestones?include_ancestors=true")
     }
 }
+
+impl Runners for GitLab {}
 
 async fn view_details(
     repo: &ForgeRepo,
