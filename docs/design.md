@@ -1,7 +1,8 @@
 # Shoal design
 
 Decisions and proposals; usage: [README.md](../README.md), behavior:
-[docs/reference.md](reference.md), contributor rules: [AGENTS.md](../AGENTS.md).
+[docs/reference.md](reference.md), configuration: [docs/config.md](config.md),
+contributor rules: [AGENTS.md](../AGENTS.md).
 
 ## Purpose and boundaries
 

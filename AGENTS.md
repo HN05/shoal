@@ -316,8 +316,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
 ## Documentation
 
 Keep documentation short and current. Say each thing once, where a reader looks for
-it: usage in README.md, behavior in docs/reference.md, decisions in docs/design.md,
-contributor rules here; a new document needs a subject none of those covers. The
+it: usage in README.md, behavior in docs/reference.md, configuration options in
+docs/config.md, decisions in docs/design.md, contributor rules here; a new document needs a subject none of those covers. The
 skill under `skills/` says only what Shoal's commands do; a practice goes in a
 user rule, and a rule about anything else, such as how to write or structure
 code, goes here. This repository's own practices, such as how its agents

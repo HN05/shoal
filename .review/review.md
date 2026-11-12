@@ -688,7 +688,7 @@ configured command for another agent, plus proven child
   run, such as `env!("CARGO_BIN_EXE_shoal")` or a build script's absolute
   path; it names the seed worktree until the code is rebuilt.
 - Documentation: usage lives in README.md, behavior in docs/reference.md,
-  decisions in docs/design.md, contributor rules in AGENTS.md. The skill under
+  configuration options in docs/config.md, decisions in docs/design.md, contributor rules in AGENTS.md. The skill under
   `skills/` says only what Shoal's commands do; flag any practice there,
   which belongs in a user rule, and any rule about something else, such as
   how to write or structure code. Flag a practice of this repository in the

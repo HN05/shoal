@@ -56,7 +56,7 @@ the daemon. Prebuilt binaries do not require Rust.
 | [fzf](https://github.com/junegunn/fzf) 0.63+ | Interactive menus and pickers |
 
 Feature-specific tools are installed separately: `curl` for issues and PR
-watches, with a [token](docs/reference.md#forges) for private repositories; the agent or
+watches, with a [token](docs/config.md#forges) for private repositories; the agent or
 command you want to run;
 and `happy` plus `curl` for Happy sessions. Simulator use requires macOS with
 Xcode, `xcrun simctl`, and an installed simulator runtime.
@@ -528,7 +528,7 @@ terminals.
 
 ## Development
 
-See [docs/design.md](docs/design.md) for decisions and the [command reference](docs/reference.md) for behavior.
+See [docs/design.md](docs/design.md) for decisions, the [command reference](docs/reference.md) for behavior and the [configuration reference](docs/config.md) for every option.
 Create releases through **Actions → release** ([setup](docs/releases.md)).
 
 Requires Rust at least as new as `package.rust-version` in [Cargo.toml](Cargo.toml)

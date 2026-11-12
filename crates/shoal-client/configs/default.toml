@@ -52,7 +52,7 @@ root_dir = "~/shoal"
 # the tokens Forgejo, Gitea and Bitbucket requests sign in with, yours and
 # the agent account's, each written out, from a variable or printed by a
 # command. Without a token only public repositories are readable.
-# See docs/reference.md#forges.
+# See docs/config.md#forges.
 # [machine.forges."git.example.com"]
 # type = "forgejo"
 # token = { cmd = ["security", "find-generic-password", "-s", "forgejo", "-w"] }
