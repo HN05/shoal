@@ -879,9 +879,13 @@ fn resume_starts_the_agent_waiting_for_a_failed_setup_now_with_the_permission_gi
     ]);
     let launch = &resumed["set_up"][0]["launch"];
     assert_eq!(launch["state"], "starting", "{resumed}");
-    assert_eq!(launch["narrowing"]["push"], "deny", "{resumed}");
+    // The agent starts under the permission given.
     wait_until("the waiting agent start", || {
         path.join("agent-started").exists()
+    });
+    wait_until("the given permission", || {
+        let status = fixture.ok(&["status", &fixture.id("failing")]);
+        status["workspace"]["narrowing"]["push"] == "deny"
     });
 }
 
@@ -889,9 +893,17 @@ fn resume_starts_the_agent_waiting_for_a_failed_setup_now_with_the_permission_gi
 fn resume_with_focus_runs_the_agent_waiting_for_a_failed_setup_here() {
     let fixture = failing_setup_fixture();
     let path = fail_setup(&fixture, "failing");
-    let output = fixture.run(&["resume", &fixture.id("failing"), "--focus"]);
+    let output = fixture.run(&[
+        "resume",
+        &fixture.id("failing"),
+        "--focus",
+        "--permission",
+        "push=deny",
+    ]);
     assert!(output.status.success(), "{output:?}");
     assert!(path.join("agent-started").exists());
+    let status = fixture.ok(&["status", &fixture.id("failing")]);
+    assert_eq!(status["workspace"]["narrowing"]["push"], "deny", "{status}");
     let entries = fixture.ok(&["queue"]);
     assert_eq!(entries, serde_json::json!([]));
 }

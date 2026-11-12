@@ -1572,7 +1572,22 @@ async fn a_launch_waiting_for_setup_takes_a_permission_change() {
         .await
         .unwrap();
     let change = PermissionChange::assigned("merge=direct").unwrap();
-    let narrowing = async || manager.queue_entries().await.unwrap()[0].narrowing;
+    // The agent starts under the narrowing its plan keeps.
+    let narrowing = async || {
+        let id = entry.id.clone();
+        let plan: String = (manager.store)
+            .run(move |db| {
+                Ok(
+                    db.query_row("SELECT plan FROM agent_queue WHERE id=?1", [id], |row| {
+                        row.get(0)
+                    })?,
+                )
+            })
+            .await
+            .unwrap();
+        let plan: serde_json::Value = serde_json::from_str(&plan).unwrap();
+        serde_json::from_value::<PermissionsConfig>(plan["narrowing"].clone()).unwrap_or_default()
+    };
     let change_for = async |launches: &[SpaceSelector]| {
         let stopped = Stopped {
             agents: &[],
@@ -1590,7 +1605,10 @@ async fn a_launch_waiting_for_setup_takes_a_permission_change() {
     assert_eq!(narrowing().await, PermissionsConfig::default());
     change_for(&both[..1]).await.unwrap();
     assert_eq!(narrowing().await, change.set);
-    assert_eq!(manager.queue_entries().await.unwrap()[0].id, entry.id);
+    assert_eq!(
+        manager.queue_entries().await.unwrap()[0].narrowing,
+        change.set
+    );
 }
 
 #[tokio::test]

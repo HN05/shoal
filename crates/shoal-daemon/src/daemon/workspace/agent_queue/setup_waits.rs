@@ -1,6 +1,6 @@
 //! The launches waiting for the setup of a workspace whose setup failed:
 //! finding the one waiting for a workspace's, and changing the permissions
-//! it starts with before a retried setup lets it start.
+//! its plan starts its agent with before a retried setup lets it start.
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 
 use anyhow::{Result, ensure};
@@ -35,22 +35,27 @@ impl Manager {
             .await
     }
 
-    /// Give each launch `given` names the permissions beside it, refusing
-    /// them all when one no longer waits for a setup.
+    /// Give each launch `given` names the permissions beside it, in its
+    /// plan, which its agent starts under, and in the entry the queue
+    /// shows, refusing them all when one no longer waits for a setup.
     pub(crate) async fn give_launches_awaiting_setup(
         &self,
         given: Vec<(QueueEntryId, PermissionsConfig)>,
     ) -> Result<()> {
         let given = (given.into_iter())
-            .map(|(id, given)| Ok((id, store::narrowing_column(&given)?)))
+            .map(|(id, given)| {
+                let column = store::narrowing_column(&given)?;
+                Ok((id, column, serde_json::to_string(&given)?))
+            })
             .collect::<Result<Vec<_>>>()?;
         self.store
             .write(move |tx| {
-                for (id, narrowing) in given {
+                for (id, column, planned) in given {
                     let updated = tx.execute(
-                        "UPDATE agent_queue SET narrowing=?2 WHERE id=?1 AND state=?3 AND id IN
-                            (SELECT entry_id FROM agent_queue_blockers WHERE kind=?4)",
-                        params![id, narrowing, QueueState::Queued, BlockerKind::Setup],
+                        "UPDATE agent_queue SET narrowing=?2,plan=json_set(plan,'$.narrowing',json(?3))
+                         WHERE id=?1 AND state=?4 AND json_valid(plan) AND id IN
+                            (SELECT entry_id FROM agent_queue_blockers WHERE kind=?5)",
+                        params![id, column, planned, QueueState::Queued, BlockerKind::Setup],
                     )?;
                     ensure!(updated == 1, "{id} no longer waits for a setup");
                 }
