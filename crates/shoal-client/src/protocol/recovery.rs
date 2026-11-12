@@ -26,6 +26,8 @@ pub enum RecoveryMethod {
     },
     /// What an existing workspace saved for `shoal resume`.
     Saved { workspace: SpaceSelector },
+    /// The visible workspaces with stopped agents or commands saved.
+    StoppedWorkspaces,
     /// Inspect one workspace, or all, and with `options` repair what verifies.
     Reconcile {
         workspace: Option<SpaceSelector>,

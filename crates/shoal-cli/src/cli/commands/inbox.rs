@@ -71,7 +71,7 @@ impl Inbox {
             "a workspace process that cleared its scope token cannot list the inbox"
         );
         let mut workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-        let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
+        let stopped = ui::stopped_workspaces(&ctx.paths).await;
         let existing: HashSet<SpaceId> = workspaces.iter().map(|w| w.id.clone()).collect();
         workspaces.retain(|w| {
             filter.keeps_workspace(w, &[ListStatus::of_workspace(w, stopped.contains(&w.id))])

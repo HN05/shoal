@@ -246,6 +246,7 @@ response_bodies! {
     Checkpoints(Option<Vec<crate::model::Checkpoint>>),
     RestoredCheckpoint(crate::model::RestoredCheckpoint),
     Saved(crate::saved::Saved),
+    StoppedWorkspaces(Vec<crate::space_ids::SpaceId>),
     FastForwarded(bool),
     Reconciled(Vec<Report>),
     Execution(ExecutionPlan),

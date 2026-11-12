@@ -10,6 +10,7 @@ use crate::{
     agent::Agent,
     connection::{Daemon, request},
     protocol::RecoveryMethod,
+    space_ids::SpaceId,
     space_names::SpaceSelector,
     time::UnixTime,
 };
@@ -17,6 +18,12 @@ use crate::{
 /// What the existing workspace `workspace` saved.
 pub async fn read(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Saved> {
     request(daemon, RecoveryMethod::Saved { workspace }).await
+}
+
+/// The workspaces this caller sees that saved stopped agents or commands,
+/// which are unfinished work; last sessions alone are not.
+pub async fn stopped_workspaces(daemon: &impl Daemon) -> Result<Vec<SpaceId>> {
+    request(daemon, RecoveryMethod::StoppedWorkspaces).await
 }
 
 /// What `shoal stop` or overload protection saved for one workspace.

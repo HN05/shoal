@@ -320,7 +320,7 @@ async fn space_rows(ctx: &Context, scoped: bool) -> Result<Entries> {
     let mut workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let palette = Palette::picker();
     let statuses = ui::Statuses {
-        stopped: ui::stopped_workspaces(&ctx.paths, &workspaces),
+        stopped: ui::stopped_workspaces(&ctx.paths).await,
         queued: queued_agents::entries(ctx).await?,
     };
     statuses.sort(&mut workspaces);

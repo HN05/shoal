@@ -80,3 +80,56 @@ async fn a_permission_change_changes_no_agent_or_chat_when_one_is_refused() {
     let saved = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
     assert_eq!(saved.narrowing, change.set);
 }
+
+#[tokio::test]
+async fn only_stopped_agents_or_commands_make_a_workspace_stopped() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let mut ids = Vec::new();
+    for name in ["stopped", "exited"] {
+        let workspace = manager
+            .create_workspace(&repo.id, name.into(), None, None, None)
+            .await
+            .unwrap();
+        ids.push(workspace.id);
+    }
+    let (stopped, exited) = (&ids[0], &ids[1]);
+    let agent = TrackedAgent::named("claude");
+    let execution = ExecutionId::from("agent");
+    crate::execution::recovery::save_record(
+        &manager.paths,
+        stopped,
+        &execution,
+        &agent,
+        None,
+        None,
+    )
+    .unwrap();
+    LastSession::save(&manager.paths, exited, &agent, &execution).unwrap();
+
+    assert_eq!(
+        manager.stopped_workspaces(None).await.unwrap(),
+        std::slice::from_ref(stopped)
+    );
+    let saved = manager
+        .saved_work(&SpaceSelector::id(stopped))
+        .await
+        .unwrap();
+    let agents = saved
+        .agents
+        .iter()
+        .map(|agent| (&agent.id, agent.agent.as_ref()));
+    assert_eq!(
+        agents.collect::<Vec<_>>(),
+        [(&execution, Some(&"claude".into()))]
+    );
+    let saved = manager
+        .saved_work(&SpaceSelector::id(exited))
+        .await
+        .unwrap();
+    assert!(saved.agents.is_empty() && saved.sessions.len() == 1);
+}

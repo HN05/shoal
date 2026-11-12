@@ -22,9 +22,8 @@ use crate::{
         recent,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
-    execution::recovery,
     model::{Chat, Workspace},
-    paths::{CommandPaths, Paths},
+    paths::CommandPaths,
 };
 
 /// How to choose a workspace when the command line names none.
@@ -626,7 +625,7 @@ fn picked_ids(picked: Vec<String>) -> Vec<SpaceSelector> {
 /// needs, starting with their state markers when `markers` says.
 async fn workspace_entries(ctx: &Context, workspaces: Vec<Workspace>, markers: bool) -> Entries {
     let availability = availability::load(ctx.need, &ctx.paths, &workspaces).await;
-    let stopped = stopped_workspaces(&ctx.paths, &workspaces);
+    let stopped = stopped_workspaces(&ctx.paths).await;
     availability_entries(
         workspaces,
         &availability,
@@ -674,11 +673,9 @@ fn availability_entries(
         .collect()
 }
 
-/// Workspaces with agents or commands saved by `shoal stop` for `shoal resume`.
-pub fn stopped_workspaces(paths: &Paths, workspaces: &[Workspace]) -> HashSet<SpaceId> {
-    workspaces
-        .iter()
-        .filter(|w| recovery::pending(paths, &w.id).unwrap_or(false))
-        .map(|w| w.id.clone())
-        .collect()
+/// Workspaces with agents or commands saved by `shoal stop` for `shoal
+/// resume`; none when the daemon cannot say, which only loses the marks.
+pub async fn stopped_workspaces(paths: &CommandPaths) -> HashSet<SpaceId> {
+    let stopped = crate::client::saved::stopped_workspaces(paths).await;
+    stopped.unwrap_or_default().into_iter().collect()
 }

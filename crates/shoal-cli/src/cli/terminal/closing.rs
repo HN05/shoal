@@ -423,7 +423,8 @@ async fn workspace_lifecycle(ctx: &Context, workspace: &SpaceId) -> Result<Lifec
         }) if !completion.cleanup => Ok(Lifecycle::Kept {
             head: completion.head,
             running: !executions.is_empty(),
-            stopped: crate::execution::recovery::pending(&ctx.paths, workspace)?,
+            stopped: (crate::client::saved::read(&ctx.paths, SpaceSelector::id(workspace)).await?)
+                .is_unfinished(),
             turn: record.agent_state.map(|status| status.state),
         }),
         Ok(_) => Ok(Lifecycle::Active),

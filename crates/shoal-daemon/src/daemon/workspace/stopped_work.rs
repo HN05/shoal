@@ -52,6 +52,19 @@ impl Manager {
         Saved::load(&self.paths, &workspace.id)
     }
 
+    /// The workspaces visible within `owner`'s reach, or every one, with
+    /// stopped agents or commands saved. One whose state cannot be read
+    /// counts as none, so it costs only its own workspace.
+    pub(crate) async fn stopped_workspaces(&self, owner: Option<&SpaceId>) -> Result<Vec<SpaceId>> {
+        let workspaces = self.visible_workspaces(owner).await?;
+        let stopped = |id: &SpaceId| recovery::pending(&self.paths, id).unwrap_or(false);
+        Ok(workspaces
+            .into_iter()
+            .map(|workspace| workspace.id)
+            .filter(|id| stopped(id))
+            .collect())
+    }
+
     /// Keep the workspace's stopped agents whose execution ended as last
     /// sessions, which hold no agent slot and nothing restores on its own,
     /// recording `stopper` on those it stopped. One a wrapper waits to

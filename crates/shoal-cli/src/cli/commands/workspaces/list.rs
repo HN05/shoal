@@ -16,7 +16,7 @@ pub(in crate::cli::commands) async fn list(
     let chats = chat::listed(ctx, filter).await?;
     let mut workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let mut statuses = ui::Statuses {
-        stopped: ui::stopped_workspaces(&ctx.paths, &workspaces),
+        stopped: ui::stopped_workspaces(&ctx.paths).await,
         queued: queued_agents::entries(ctx).await?,
     };
     workspaces.retain(|workspace| filter.keeps_workspace(workspace, &statuses.shown(workspace)));

@@ -1,12 +1,11 @@
 use super::*;
-use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::terminal::Closes;
 use crate::time::UnixTime;
 use crate::{
     model::{AgentStatus, Completion, Execution, Inspection, Workspace},
     paths::Paths,
-    protocol::{self, Body, Method, Operation, Request, Response, WorkspaceMethod},
+    protocol::{self, Body, Method, Operation, RecoveryMethod, Request, Response, WorkspaceMethod},
     state::{ExecutionState, WorkspaceState},
 };
 use tokio::{io::BufReader, net::UnixListener};
@@ -342,16 +341,13 @@ async fn inspect(
     let temp = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(temp.path());
     paths.prepare().unwrap();
+    let mut saved = crate::client::saved::Saved::default();
     if stopped {
-        crate::execution::recovery::save_record(
-            &paths,
-            &SpaceId::from("workspace"),
-            &ExecutionId::from("agent"),
-            &crate::execution::TrackedAgent::named("codex"),
-            None,
-            None,
-        )
-        .unwrap();
+        saved.commands.push(crate::client::saved::SavedCommand {
+            id: "command".into(),
+            path: "command.json".into(),
+            argv: vec!["true".into()],
+        });
     }
     let listener = UnixListener::bind(&paths.socket).unwrap();
     let server = tokio::spawn(async move {
@@ -397,11 +393,21 @@ async fn inspect(
         )
         .await
         .unwrap();
+        // A kept workspace's lifecycle also reads what it saved.
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut stream = BufReader::new(stream);
+        let request: Request = protocol::read_buffered(&mut stream).await.unwrap();
+        assert!(
+            matches!(request.method, Method::Operation(Operation::Recovery(RecoveryMethod::Saved { workspace })) if workspace == "workspace")
+        );
+        let response = Response::new(request.id, Body::Saved(saved));
+        protocol::write(stream.get_mut(), &response).await.unwrap();
     });
     let lifecycle = workspace_lifecycle(&Context::new(paths, true), &SpaceId::from("workspace"))
         .await
         .unwrap();
-    server.await.unwrap();
+    // Only a kept workspace's lifecycle reads what it saved.
+    server.abort();
     lifecycle
 }
 

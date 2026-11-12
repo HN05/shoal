@@ -61,7 +61,11 @@ impl Operation {
                     QuestionMethod::ListQuestions { .. } | QuestionMethod::ShowQuestion { .. }
                 )
                 | Self::Queue(QueueMethod::ListQueue | QueueMethod::QueuedPlan { .. })
-                | Self::Recovery(RecoveryMethod::Checkpoints { .. } | RecoveryMethod::Saved { .. })
+                | Self::Recovery(
+                    RecoveryMethod::Checkpoints { .. }
+                        | RecoveryMethod::Saved { .. }
+                        | RecoveryMethod::StoppedWorkspaces
+                )
                 | Self::Removal(
                     RemovalMethod::CheckRemoval { .. }
                         | RemovalMethod::CheckStop { .. }
