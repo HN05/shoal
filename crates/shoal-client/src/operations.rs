@@ -14,13 +14,13 @@ use crate::{
     },
 };
 
-/// What following an operation reports.
+/// What following an operation reports, ending in `E`, how it ended.
 #[derive(Debug, Clone)]
-pub enum Followed {
+pub enum Followed<E = Ended> {
     /// A step it reached or a line its processes wrote.
     Event(OperationEvent),
     /// How it ended; nothing follows.
-    Ended(Ended),
+    Ended(E),
 }
 
 /// An operation being followed, on a connection of its own.
