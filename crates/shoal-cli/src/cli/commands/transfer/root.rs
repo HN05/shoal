@@ -22,7 +22,6 @@ use crate::{
         ui,
     },
     config::{Config, edit::Change},
-    execution::recovery::{Saved, SavedExt as _},
     model::{Execution, MovedRepository, Repository, RepositoryMoves, Workspace},
     protocol::QueuedLaunches,
     repository,
@@ -97,7 +96,7 @@ async fn stop_running(
         if !workspace_listed(ctx, workspace).await? {
             continue;
         }
-        let saved_before = saved_executions(ctx, workspace)?;
+        let saved_before = saved_executions(ctx, workspace).await?;
         let result = ctx
             .progress(
                 "Stopping commands and agents",
@@ -120,7 +119,7 @@ async fn stop_running(
             .await?;
             continue;
         }
-        let saved = saved_executions(ctx, workspace)?;
+        let saved = saved_executions(ctx, workspace).await?;
         stopped.insert(
             workspace.clone(),
             saved.difference(&saved_before).cloned().collect(),
@@ -156,11 +155,14 @@ async fn job_ended(ctx: &Context, workspace: &SpaceId) -> Result<()> {
 }
 
 /// The executions whose stopped work the workspace saves for `shoal resume`.
-fn saved_executions(ctx: &Context, workspace: &SpaceId) -> Result<BTreeSet<ExecutionId>> {
-    Ok(Saved::load(&ctx.paths, workspace)?
-        .execution_ids()
-        .into_iter()
-        .collect())
+async fn saved_executions(ctx: &Context, workspace: &SpaceId) -> Result<BTreeSet<ExecutionId>> {
+    Ok(
+        crate::client::saved::read(&ctx.paths, SpaceSelector::id(workspace))
+            .await?
+            .execution_ids()
+            .into_iter()
+            .collect(),
+    )
 }
 
 async fn move_repositories(ctx: &Context, regular_dir: bool) -> Result<Vec<MovedRepository>> {

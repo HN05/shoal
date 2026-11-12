@@ -2,18 +2,14 @@
 //! wrapper that waits for it, in the background, or in this terminal, and
 //! listing those the user starts in terminals of their own.
 use anyhow::Result;
-use std::{
-    ffi::OsString,
-    path::{Path, PathBuf},
-};
+use std::ffi::OsString;
 
 use super::{commands, queue, reports};
-use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::{Resumed, ResumedAgent};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, terminal, ui},
-    execution::recovery::{Saved, waits_in_wrapper},
+    execution::recovery::{Saved, SavedSession},
     model::Workspace,
     protocol::ConfigTarget,
 };
@@ -47,7 +43,7 @@ pub(super) async fn run_all(
                 .agents
                 .into_iter()
                 .chain(saved.sessions)
-                .map(|saved| (workspace.clone(), saved.id, saved.path)),
+                .map(|saved| (workspace.clone(), saved)),
         );
     }
     // An agent restored here replaces this run's report, so it takes the
@@ -58,21 +54,22 @@ pub(super) async fn run_all(
 }
 
 /// Start each of the stopped agents `sessions` lists, by workspace,
-/// execution and saved file, through the wrapper that waits for it, where it
+/// through the wrapper that waits for it, where it
 /// stopped or in the background; `single` resumes the only one in this
 /// terminal when none is possible. Reports them with what `output` holds
 /// already.
 pub(super) async fn start_sessions(
     ctx: &Context,
-    sessions: Vec<(Workspace, ExecutionId, PathBuf)>,
+    sessions: Vec<(Workspace, SavedSession)>,
     single: bool,
     mut output: Resumed,
 ) -> Result<i32> {
     let mut listed = Vec::new();
     let mut in_wrappers = 0;
     let mut place = None;
-    for (workspace, id, record) in &sessions {
-        let (reused, started) = match start_session(ctx, workspace, id, record, single).await {
+    for (workspace, session) in &sessions {
+        let id = &session.id;
+        let (reused, started) = match start_session(ctx, workspace, session, single).await {
             Ok(Started::Here) => {
                 // Boxed, since `run` calls back into this function.
                 let id = Some(id.clone());
@@ -127,18 +124,17 @@ enum Started {
     },
 }
 
-/// Start the stopped agent `id` of `workspace` through the wrapper that
+/// Start the stopped agent `session` of `workspace` through the wrapper that
 /// waits for it, where it stopped or in the background; when none is
 /// possible, `single` resumes the only one in this terminal.
 async fn start_session(
     ctx: &Context,
     workspace: &Workspace,
-    id: &ExecutionId,
-    record: &Path,
+    session: &SavedSession,
     single: bool,
 ) -> Result<Started> {
-    if waits_in_wrapper(record) {
-        queue::queue(ctx, workspace, id, true).await?;
+    if session.waits_in_wrapper {
+        queue::queue(ctx, workspace, &session.id, true).await?;
         return Ok(Started::InWrapper);
     }
     let settings = crate::client::workspaces::settings(
@@ -150,11 +146,13 @@ async fn start_session(
         "resume",
         workspace.id.as_str(),
         "--execution",
-        id.as_str(),
+        session.id.as_str(),
         "--focus",
     ]
     .map(OsString::from);
-    if let Some(places) = terminal::rerun_where_stopped(ctx, &settings, record, &args).await? {
+    if let Some(places) =
+        terminal::rerun_where_stopped(ctx, &settings, &session.path, &args).await?
+    {
         return Ok(Started::Elsewhere {
             reused: true,
             place: Some(places),

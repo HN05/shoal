@@ -7,12 +7,13 @@ use super::{commands, permission_change, picker, queue, reports, sessions, stale
 use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::Resumed;
 use crate::client::space_names::SpaceSelector;
-use crate::execution::recovery::{LastSessionExt, RecordExt};
+use crate::execution::recovery::RecordExt;
 use crate::{
     cli::{context::Context, terminal},
     config::permissions::PermissionChange,
     execution::recovery::{
-        Copied, LastSession, Record, Recovery, Restored, Saved, SavedCommand, claim,
+        Copied, LastSession, Recovery, Restored, Saved, SavedCommand, claim_last_session,
+        claim_record,
     },
     model::Workspace,
     protocol::ConfigTarget,
@@ -59,7 +60,7 @@ pub(super) async fn run(
         return Ok(0);
     }
     let picked = picker::select_agent(ctx, &saved.agents, picker::agent_label)?;
-    let (selected_id, selected) = (picked.id, picked.path);
+    let (selected_id, selected) = (picked.id.clone(), picked.path.clone());
     if picked.waits_in_wrapper {
         saved.retain_execution(&selected_id, true);
         let stopped = vec![(workspace.clone(), saved)];
@@ -71,14 +72,13 @@ pub(super) async fn run(
     );
     permission_change::apply_one(ctx, workspace, &selected_id, change).await?;
     if !here {
-        let session = (workspace.clone(), selected_id, selected);
+        let session = (workspace.clone(), picked);
         return sessions::start_sessions(ctx, vec![session], true, Resumed::default()).await;
     }
     // The restore claims the commands it reports, which a restore started
     // elsewhere claims for itself.
     let _commands = commands::claim(&mut saved.commands);
-    let _claim = claim(&selected)?;
-    let recorded = Record::load(&selected)?.context("recovery record was already consumed")?;
+    let (_claim, recorded) = claim_record(&selected)?;
     if let Some(reason) = &recorded.stop_reason {
         reports::restoring(&recorded.agent, reason);
     }
@@ -98,20 +98,18 @@ pub(super) async fn continue_last_session(
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
     let picked = picker::select_agent(ctx, &saved.sessions, picker::session_label)?;
-    let (id, path) = (picked.id, picked.path);
-    permission_change::apply_one(ctx, workspace, &id, change).await?;
+    permission_change::apply_one(ctx, workspace, &picked.id, change).await?;
     if !here {
-        let session = (workspace.clone(), id, path);
+        let session = (workspace.clone(), picked);
         return sessions::start_sessions(ctx, vec![session], true, Resumed::default()).await;
     }
-    let _claim = claim(&path)?;
-    let last = LastSession::load(&path)?.context("last session was already continued")?;
+    let (_claim, last) = claim_last_session(&picked.path)?;
     let mut commands = saved.commands;
     let _commands = commands::claim(&mut commands);
     if !last.moved {
         reports::continuing(&last.agent);
     }
-    restore(ctx, workspace, last, path, commands).await
+    restore(ctx, workspace, last, picked.path, commands).await
 }
 
 /// Restore the agent of `session`, saved at `path`, telling it about its stop

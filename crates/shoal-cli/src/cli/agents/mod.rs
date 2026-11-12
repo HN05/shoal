@@ -26,9 +26,7 @@ use crate::{
     ai::IntegrationKind,
     cli::{commands::configured, context::Context, ui},
     config::{Config, Effective, modes, named_commands::Commands, templates},
-    execution::recovery,
     model::{Chat, ChatHome, LinkedItem, Relation, RemovedWorkspace, Repository, Workspace},
-    paths::Paths,
     protocol::ConfigTarget,
     tools::{ensure_program, program_available},
 };
@@ -696,19 +694,16 @@ pub(in crate::cli) async fn trust_resumed(
 /// Trust the path of `workspace`, which moved, for each agent it saves for
 /// `shoal resume`, which restores them there without trusting it.
 pub(in crate::cli) async fn trust_saved(ctx: &Context, workspace: &Workspace) {
-    match saved_agents(&ctx.paths, &workspace.id) {
-        Ok(agents) => trust_for(ctx, workspace, agents).await,
+    match crate::client::saved::read(&ctx.paths, SpaceSelector::id(&workspace.id)).await {
+        Ok(saved) => {
+            let agents = saved.agent_names().flatten().cloned().collect();
+            trust_for(ctx, workspace, agents).await;
+        }
         Err(error) => eprintln!(
             "warning: cannot trust {} for its agents: {error:#}",
             workspace.path.display()
         ),
     }
-}
-
-/// The agents the workspace saves for `shoal resume`.
-fn saved_agents(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<Agent>> {
-    let saved = <recovery::Saved as recovery::SavedExt>::load(paths, workspace_id)?;
-    Ok(saved.agent_names().flatten().cloned().collect())
 }
 
 /// Trust the path of `workspace` for each of `agents` as a tracked launch

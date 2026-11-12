@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod claim;
 
-pub use claim::{RecoveryClaim, claim, discard_saved};
+pub use claim::{RecoveryClaim, claim, claim_last_session, claim_record, discard_saved};
 
 pub use crate::client::executions::{Copied, LastSession, Record, Stage, Stop, StoppedAgent};
 pub(crate) use crate::client::executions::{earlier_place, unnamed_execution};
@@ -1300,11 +1300,6 @@ fn rewrite(path: &Path, saved: &impl Serialize) -> Result<()> {
     Ok(())
 }
 
-/// Whether a live wrapper waits to restore the agent saved at `path`.
-pub fn waits_in_wrapper(path: &Path) -> bool {
-    Record::load(path).is_ok_and(|record| record.is_some_and(|record| waits(&record)))
-}
-
 /// Whether a live wrapper waits to restore the agent of `record`.
 fn waits(record: &Record) -> bool {
     (record.waiting.as_ref()).is_some_and(|wrapper| identity::alive(wrapper).unwrap_or(false))
@@ -1317,17 +1312,11 @@ pub fn any_pending(paths: &Paths) -> bool {
         return false;
     };
     entries.flatten().any(|entry| {
-        entry
-            .file_name()
-            .to_str()
-            .is_some_and(|id| resumable(paths, &SpaceId::from(id.to_owned())).unwrap_or(false))
+        entry.file_name().to_str().is_some_and(|id| {
+            let saved = Saved::load(paths, &SpaceId::from(id.to_owned()));
+            saved.is_ok_and(|saved| saved.is_resumable())
+        })
     })
-}
-
-/// Whether the workspace has stopped work that waits for `shoal resume`,
-/// which an agent whose wrapper still waits to restore it is not.
-pub fn resumable(paths: &Paths, workspace_id: &SpaceId) -> Result<bool> {
-    Ok(Saved::load(paths, workspace_id)?.is_resumable())
 }
 
 /// Pending recovery is unfinished work even when its Git tree is clean.

@@ -1,6 +1,8 @@
 //! Exclusive claims on saved records, so only one `shoal resume` restores,
 //! reports or discards each.
-use super::{Saved, SavedSession, consume};
+use super::{
+    LastSession, LastSessionExt as _, Record, RecordExt as _, Saved, SavedSession, consume,
+};
 use crate::client::execution_ids::ExecutionId;
 use anyhow::{Context as _, Result, ensure};
 
@@ -47,6 +49,23 @@ fn lock_current(file: std::fs::File, path: &std::path::Path) -> Result<Option<Re
     let locked = file.metadata()?;
     let same = (locked.dev(), locked.ino()) == (current.dev(), current.ino());
     Ok(same.then_some(RecoveryClaim(file)))
+}
+
+/// Claim the stopped agent saved at `path` for a restore and read its
+/// record as it is now, which a permission change may have rewritten since
+/// it was listed.
+pub fn claim_record(path: &std::path::Path) -> Result<(RecoveryClaim, Record)> {
+    let claimed = claim(path)?;
+    let record = Record::load(path)?.context("recovery record was already consumed")?;
+    Ok((claimed, record))
+}
+
+/// Claim the last session saved at `path` for a restore and read it as it
+/// is now, as [`claim_record`] does.
+pub fn claim_last_session(path: &std::path::Path) -> Result<(RecoveryClaim, LastSession)> {
+    let claimed = claim(path)?;
+    let last = LastSession::load(path)?.context("last session was already continued")?;
+    Ok((claimed, last))
 }
 
 /// Forget saved records, returning their execution IDs.
