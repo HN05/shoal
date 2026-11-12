@@ -97,6 +97,7 @@ impl ForgeRepo {
         name: &str,
     ) -> Result<CheckLog> {
         self.require(Capability::ReadJobLogs)?;
+        pull.belongs_to(self)?;
         self.kind
             .failed_check_log(self, account, pull.url(), name)
             .await
@@ -151,6 +152,7 @@ impl ForgeRepo {
 
     /// The head commit of PR `pull`, open or not.
     pub async fn pull_head(&self, account: &Account, pull: &ItemRef) -> Result<CommitId> {
+        pull.belongs_to(self)?;
         let pull = self.read(account, ItemKind::Pr, pull.pull()?.get()).await?;
         pull.head_sha.context("PR has no head commit")
     }

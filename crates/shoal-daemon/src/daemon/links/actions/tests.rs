@@ -132,3 +132,43 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
         .count();
     assert_eq!(created, 2);
 }
+
+#[tokio::test]
+async fn a_linked_item_of_an_earlier_origin_is_not_taken_for_the_current_ones() {
+    use crate::daemon::test_support::{manager, repository};
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                rusqlite::params![id, "https://forge.example/team/old/issues/7"],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let linked = |remote: &str| {
+        let forge = ForgeRepo::parse(remote).unwrap();
+        let manager = &manager;
+        let id = workspace.id.clone();
+        async move {
+            (manager.named_or_linked(None, Some(&id), &forge, ItemKind::Issue))
+                .await
+                .map(|issue| issue.number().get())
+        }
+    };
+    assert_eq!(linked("https://forge.example/team/old").await.unwrap(), 7);
+    // After its origin moved to another repository, issue 7 there is another issue.
+    assert!(linked("https://forge.example/team/new").await.is_err());
+}

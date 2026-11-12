@@ -108,6 +108,7 @@ impl ForgeRepo {
 
     /// The run `run`.
     pub(crate) async fn read_run(&self, account: &Account, run: &ItemRef) -> Result<Run> {
+        run.belongs_to(self)?;
         let number = run.run()?;
         let read = Request::get(self.repo_endpoint(&self.kind.run_path(number)));
         let value = self.send(account, &read).await?;

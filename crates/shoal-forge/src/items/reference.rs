@@ -81,10 +81,7 @@ impl ItemRef {
             }
             ItemInput::Url(item) => {
                 ensure!(item.kind() == kind, "{item} is not {}", article(kind));
-                ensure!(
-                    item.repository() == repository,
-                    "{item} belongs to a different repository"
-                );
+                item.belongs_to(repository)?;
                 Ok(item.clone())
             }
         }
@@ -149,6 +146,17 @@ impl ItemRef {
 
     pub fn url(&self) -> &str {
         &self.0.url
+    }
+
+    /// Refuse it unless it is an item of `repository`, as one recorded
+    /// before the repository's origin changed is not.
+    pub fn belongs_to(&self, repository: &ForgeRepo) -> Result<()> {
+        ensure!(
+            self.0.repository == *repository,
+            "{self} belongs to a different repository than {}",
+            repository.repository_url()
+        );
+        Ok(())
     }
 
     /// Whether it belongs to the repository `remote` names.

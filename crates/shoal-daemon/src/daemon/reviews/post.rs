@@ -65,6 +65,7 @@ impl Manager {
         head: &CommitId,
     ) -> Result<String> {
         let (forge, account) = self.workspace_forge_account(workspace).await?;
+        pull.belongs_to(&forge)?;
         let current = forge
             .read(&account, ItemKind::Pr, pull.pull()?.get())
             .await?;

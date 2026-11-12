@@ -101,7 +101,11 @@ impl Manager {
     ) -> Result<ItemRef> {
         match (named, space) {
             (Some(named), _) => ItemRef::in_repository(forge, kind.into(), &named),
-            (None, Some(id)) => self.linked_item(id, kind).await,
+            (None, Some(id)) => {
+                let linked = self.linked_item(id, kind).await?;
+                linked.belongs_to(forge)?;
+                Ok(linked)
+            }
             (None, None) => bail!(NOTHING_LINKED),
         }
     }
@@ -171,6 +175,7 @@ impl Manager {
             ..Edit::default()
         });
         for url in urls {
+            url.belongs_to(&forge)?;
             let (number, url) = (url.pull()?, url.to_string());
             let item = forge.read(&account, ItemKind::Pr, number.get()).await?.item;
             let pending = item.state == ItemState::Open
@@ -200,6 +205,7 @@ impl Manager {
     ) -> Result<()> {
         let forge = self.space_forge(space).await?;
         let account = self.agent_account();
+        pull.belongs_to(&forge)?;
         let (number, url) = (pull.pull()?, pull.to_string());
         let current = forge.read(&account, ItemKind::Pr, number.get()).await?;
         if current.item.state != ItemState::Open {
@@ -639,6 +645,7 @@ fn record_opened(
 /// or a failed read.
 async fn marked_item(forge: &ForgeRepo, account: &Account, mark: &ReviewMark) -> Option<Item> {
     let (kind, url) = (mark.kind?, mark.url.as_ref()?);
+    url.belongs_to(forge).ok()?;
     let number = url.number().get();
     Some(forge.read(account, kind, number).await.ok()?.item)
 }

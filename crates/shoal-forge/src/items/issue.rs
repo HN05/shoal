@@ -30,6 +30,7 @@ impl ForgeRepo {
         issue: &ItemRef,
         closed: bool,
     ) -> Result<IssueDetails> {
+        issue.belongs_to(self)?;
         let number = issue.issue()?;
         let details = match closed {
             true => self.issue_details(account, number).await?,
@@ -58,6 +59,7 @@ impl ForgeRepo {
 
     /// Whether the issue `issue`, of this repository, is closed.
     pub async fn issue_closed(&self, account: &Account, issue: &ItemRef) -> Result<bool> {
+        issue.belongs_to(self)?;
         let state = self.issue_state(account, issue.issue()?).await?;
         Ok(state == ItemState::Closed)
     }

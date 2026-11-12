@@ -48,6 +48,7 @@ impl Manager {
         let forge = self.space_forge(space).await?;
         let account = self.agent_account();
         for url in urls {
+            url.belongs_to(&forge)?;
             let pull = (forge.read(&account, ItemKind::Pr, url.pull()?.get()).await)
                 .with_context(|| format!("could not read {url}"))?;
             let state = pull.item.state;

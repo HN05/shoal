@@ -87,3 +87,12 @@ fn a_route_in_a_repository_path_leaves_the_items_own_route_to_decide() -> Result
     );
     Ok(())
 }
+
+#[test]
+fn an_item_of_another_repository_does_not_belong_to_this_one() -> Result<()> {
+    let item: ItemRef = "https://codeberg.org/team/old/issues/7".parse()?;
+    assert!(item.belongs_to(item.repository()).is_ok());
+    let moved = ForgeRepo::parse("https://codeberg.org/team/new")?;
+    assert!(item.belongs_to(&moved).is_err());
+    Ok(())
+}

@@ -169,6 +169,7 @@ impl ForgeRepo {
         comments: bool,
         errors: &mut Vec<String>,
     ) -> Result<Details> {
+        item.belongs_to(self)?;
         let number = item.number().get();
         let content = self
             .kind

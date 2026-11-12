@@ -123,6 +123,7 @@ impl ForgeRepo {
         pull: &crate::items::reference::ItemRef,
     ) -> PrStatus {
         let result = async {
+            pull.belongs_to(self)?;
             let number = pull.pull()?;
             self.kind.pr_status(self, account, number, pull).await
         }

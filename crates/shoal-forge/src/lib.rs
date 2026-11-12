@@ -253,6 +253,7 @@ impl ForgeRepo {
         account: &account::Account,
         pull: &items::reference::ItemRef,
     ) -> Result<PullRequest> {
+        pull.belongs_to(self)?;
         let number = pull.pull()?;
         let details = self.kind.pull_details(self, account, number).await?;
         self.checkout_details(pull.clone(), details)
