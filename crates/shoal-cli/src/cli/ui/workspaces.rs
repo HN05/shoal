@@ -3,7 +3,10 @@
 use crate::cli::availability::NeedExt;
 use crate::cli::list_status::ListStatusExt;
 use crate::client::space_ids::SpaceId;
-use std::{collections::HashSet, io};
+use std::{
+    collections::{HashMap, HashSet},
+    io,
+};
 
 use anyhow::{Result, ensure};
 
@@ -11,6 +14,7 @@ use super::{
     Cell, Entries, chat_entries, pick, pick_many, picker_width, require_argument, rows_with_status,
     status_cell,
 };
+use crate::client::saved::SavedSummary;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
@@ -224,8 +228,9 @@ pub async fn select_stopped_spaces(
     if !names.is_empty() {
         return select_workspaces(ctx, names).await.map(Some);
     }
+    let summaries = saved_summaries(&ctx.paths).await;
     let workspaces = match resolve_workspace(ctx, None, Fallback::CurrentDirectory).await? {
-        Resolution::Current(id) if resumable(&ctx.paths, &id).await.is_some() => {
+        Resolution::Current(id) if summaries.contains_key(&id) => {
             return Ok(Some(vec![SpaceSelector::Id(id)]));
         }
         Resolution::Named(_) | Resolution::Current(_) => {
@@ -233,7 +238,7 @@ pub async fn select_stopped_spaces(
         }
         Resolution::Picker(workspaces) => workspaces,
     };
-    let Some(entries) = resume_entries(ctx, workspaces, saved).await else {
+    let Some(entries) = resume_entries(ctx, workspaces, saved, &summaries) else {
         return Ok(None);
     };
     require_argument(ctx, "spaces", SPACE)?;
@@ -241,17 +246,18 @@ pub async fn select_stopped_spaces(
 }
 
 /// Workspaces with stopped work come first, then those with a last session,
-/// then the `saved` chats, then the workspaces with nothing to resume;
-/// `None` when nothing is resumable.
-async fn resume_entries(
+/// then the `saved` chats, then the workspaces with nothing to resume, as
+/// `summaries` says; `None` when nothing is resumable.
+fn resume_entries(
     ctx: &Context,
     workspaces: Vec<Workspace>,
     saved: &[Chat],
+    summaries: &HashMap<SpaceId, SavedSummary>,
 ) -> Option<Entries> {
-    let mut rows = Vec::new();
-    for workspace in workspaces {
-        rows.push((resumable(&ctx.paths, &workspace.id).await, workspace));
-    }
+    let mut rows = workspaces
+        .into_iter()
+        .map(|w| (resumable(summaries.get(&w.id)), w))
+        .collect::<Vec<_>>();
     if saved.is_empty() && rows.iter().all(|(resumable, _)| resumable.is_none()) {
         return None;
     }
@@ -284,28 +290,34 @@ async fn resume_entries(
     Some(entries)
 }
 
-/// What `shoal resume` restores in a workspace, such as `stopped: claude,
-/// 1 command`, and whether it is unfinished work rather than only last
-/// sessions; `None` when nothing is saved.
-pub async fn resumable(paths: &CommandPaths, workspace_id: &SpaceId) -> Option<(String, bool)> {
-    let workspace = SpaceSelector::id(workspace_id);
-    let saved = (crate::client::saved::read(paths, workspace).await).unwrap_or_default();
-    if saved.is_empty() {
-        return None;
-    }
-    let mut parts = saved
-        .agent_names()
-        .map(|agent| agent.map_or_else(|| "agent".to_owned(), |agent| agent.to_string()))
+/// What each workspace this process sees saved, in brief, by workspace;
+/// none when the daemon cannot say, which only loses what the lists show.
+pub async fn saved_summaries(paths: &CommandPaths) -> HashMap<SpaceId, SavedSummary> {
+    let summaries = crate::client::saved::summaries(paths).await;
+    let summaries = summaries.unwrap_or_default().into_iter();
+    summaries
+        .map(|summary| (summary.workspace.clone(), summary))
+        .collect()
+}
+
+/// What `shoal resume` restores in a workspace that saved `summary`, such
+/// as `stopped: claude, 1 command`, and whether it is unfinished work
+/// rather than only last sessions; `None` when nothing is saved.
+pub fn resumable(summary: Option<&SavedSummary>) -> Option<(String, bool)> {
+    let summary = summary?;
+    let mut parts = (summary.agents.iter())
+        .map(|agent| {
+            agent
+                .as_ref()
+                .map_or_else(|| "agent".to_owned(), ToString::to_string)
+        })
         .collect::<Vec<_>>();
-    match saved.commands.len() {
+    match summary.commands {
         0 => {}
         1 => parts.push("1 command".into()),
         n => parts.push(format!("{n} commands")),
     }
-    Some((
-        format!("stopped: {}", parts.join(", ")),
-        saved.is_unfinished(),
-    ))
+    Some((format!("stopped: {}", parts.join(", ")), summary.unfinished))
 }
 
 /// How the resume picker and completion name a workspace without stopped work.
@@ -676,6 +688,7 @@ fn availability_entries(
 /// Workspaces with agents or commands saved by `shoal stop` for `shoal
 /// resume`; none when the daemon cannot say, which only loses the marks.
 pub async fn stopped_workspaces(paths: &CommandPaths) -> HashSet<SpaceId> {
-    let stopped = crate::client::saved::stopped_workspaces(paths).await;
-    stopped.unwrap_or_default().into_iter().collect()
+    let summaries = saved_summaries(paths).await.into_values();
+    let unfinished = summaries.filter(|summary| summary.unfinished);
+    unfinished.map(|summary| summary.workspace).collect()
 }

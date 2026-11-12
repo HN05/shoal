@@ -64,7 +64,7 @@ impl Operation {
                 | Self::Recovery(
                     RecoveryMethod::Checkpoints { .. }
                         | RecoveryMethod::Saved { .. }
-                        | RecoveryMethod::StoppedWorkspaces
+                        | RecoveryMethod::SavedSummaries
                 )
                 | Self::Removal(
                     RemovalMethod::CheckRemoval { .. }

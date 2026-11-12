@@ -7,6 +7,7 @@ use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 
 use super::Manager;
+use crate::client::saved::SavedSummary;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::{self, Saved, SavedExt as _};
 use crate::protocol::SavedAgent;
@@ -52,16 +53,22 @@ impl Manager {
         Saved::load(&self.paths, &workspace.id)
     }
 
-    /// The workspaces visible within `owner`'s reach, or every one, with
-    /// stopped agents or commands saved. One whose state cannot be read
-    /// counts as none, so it costs only its own workspace.
-    pub(crate) async fn stopped_workspaces(&self, owner: Option<&SpaceId>) -> Result<Vec<SpaceId>> {
+    /// What each workspace visible within `owner`'s reach, or every one,
+    /// saved, in brief, for those that saved anything. One whose state
+    /// cannot be read counts as saving nothing, so it costs only its own
+    /// workspace.
+    pub(crate) async fn saved_summaries(
+        &self,
+        owner: Option<&SpaceId>,
+    ) -> Result<Vec<SavedSummary>> {
         let workspaces = self.visible_workspaces(owner).await?;
-        let stopped = |id: &SpaceId| recovery::pending(&self.paths, id).unwrap_or(false);
+        let summary = |id: SpaceId| {
+            let saved = Saved::load(&self.paths, &id).ok()?;
+            (!saved.is_empty()).then(|| saved.summary(id))
+        };
         Ok(workspaces
             .into_iter()
-            .map(|workspace| workspace.id)
-            .filter(|id| stopped(id))
+            .filter_map(|workspace| summary(workspace.id))
             .collect())
     }
 

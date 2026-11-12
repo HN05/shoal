@@ -24,10 +24,24 @@ pub async fn read(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Save
     serde_json::from_str(&json).context("the daemon sent invalid saved work")
 }
 
-/// The workspaces this caller sees that saved stopped agents or commands,
-/// which are unfinished work; last sessions alone are not.
-pub async fn stopped_workspaces(daemon: &impl Daemon) -> Result<Vec<SpaceId>> {
-    pages(daemon, RecoveryMethod::StoppedWorkspaces).await
+/// What each workspace this caller sees saved, in brief, for those that
+/// saved anything, in one read for listings and pickers.
+pub async fn summaries(daemon: &impl Daemon) -> Result<Vec<SavedSummary>> {
+    pages(daemon, RecoveryMethod::SavedSummaries).await
+}
+
+/// What a workspace saved, in brief, as listings and pickers show it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavedSummary {
+    pub workspace: SpaceId,
+    /// The agent of each stopped agent and then each last session, `None`
+    /// for one whose file cannot be read.
+    pub agents: Vec<Option<Agent>>,
+    /// How many stopped commands it saved.
+    pub commands: usize,
+    /// It saved stopped agents or commands, which are unfinished work; last
+    /// sessions alone are not.
+    pub unfinished: bool,
 }
 
 /// What `shoal stop` or overload protection saved for one workspace.
@@ -129,6 +143,16 @@ impl Saved {
     /// for one consumed since the daemon read it.
     pub fn agent_names(&self) -> impl Iterator<Item = Option<&Agent>> {
         (self.agents.iter().chain(&self.sessions)).map(|session| session.agent.as_ref())
+    }
+
+    /// This work in brief, as the workspace `workspace` saved it.
+    pub fn summary(&self, workspace: SpaceId) -> SavedSummary {
+        SavedSummary {
+            workspace,
+            agents: self.agent_names().map(Option::<&Agent>::cloned).collect(),
+            commands: self.commands.len(),
+            unfinished: self.is_unfinished(),
+        }
     }
 
     /// Keep only the records of the executions `keep` selects.

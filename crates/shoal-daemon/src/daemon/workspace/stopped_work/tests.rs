@@ -82,7 +82,7 @@ async fn a_permission_change_changes_no_agent_or_chat_when_one_is_refused() {
 }
 
 #[tokio::test]
-async fn only_stopped_agents_or_commands_make_a_workspace_stopped() {
+async fn only_stopped_agents_or_commands_are_unfinished_work() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
@@ -111,10 +111,16 @@ async fn only_stopped_agents_or_commands_make_a_workspace_stopped() {
     .unwrap();
     LastSession::save(&manager.paths, exited, &agent, &execution).unwrap();
 
-    assert_eq!(
-        manager.stopped_workspaces(None).await.unwrap(),
-        std::slice::from_ref(stopped)
-    );
+    let summaries = manager.saved_summaries(None).await.unwrap();
+    let summarized = summaries
+        .iter()
+        .map(|summary| (&summary.workspace, summary.unfinished, summary.agents.len()));
+    let (stopped_one, exited_one) = ((stopped, true, 1), (exited, false, 1));
+    let mut expected = vec![stopped_one, exited_one];
+    expected.sort();
+    let mut summarized = summarized.collect::<Vec<_>>();
+    summarized.sort();
+    assert_eq!(summarized, expected);
     let saved = manager
         .saved_work(&SpaceSelector::id(stopped))
         .await

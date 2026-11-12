@@ -36,10 +36,10 @@ pub(super) async fn handle(
             let saved = manager.saved_work(&workspace).await;
             return Ok(Answer::pages(pieces(saved), Body::SavedPieces));
         }
-        RecoveryMethod::StoppedWorkspaces => {
+        RecoveryMethod::SavedSummaries => {
             let root = manager.reach_root(caller).await?;
-            let stopped = manager.stopped_workspaces(root.as_ref()).await;
-            return Ok(Answer::pages(stopped, Body::StoppedWorkspaces));
+            let summaries = manager.saved_summaries(root.as_ref()).await;
+            return Ok(Answer::pages(summaries, Body::SavedSummaries));
         }
         RecoveryMethod::Reconcile { workspace, options } => Body::Reconciled(
             manager
@@ -65,7 +65,7 @@ impl Scoped for RecoveryMethod {
             | RecoveryMethod::Checkpoints { workspace, .. }
             | RecoveryMethod::RestoreCheckpoint { workspace, .. }
             | RecoveryMethod::Saved { workspace } => Some(workspace),
-            RecoveryMethod::StoppedWorkspaces => None,
+            RecoveryMethod::SavedSummaries => None,
             RecoveryMethod::Reconcile { .. } => return Err(denied()),
         })
     }

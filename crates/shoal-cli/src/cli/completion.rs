@@ -444,13 +444,16 @@ impl Typed {
             return Ok(candidates);
         }
         if matches!(target, Target::ResumeSpaces) {
-            let mut candidates = Vec::new();
-            for w in workspaces {
-                let status = (ui::resumable(&paths, &w.id).await)
-                    .map_or_else(|| ui::NOTHING_TO_RESUME.into(), |(text, _)| text);
-                let help = format!("{}: {status}", w.name);
-                candidates.push(space_candidate(w.number, &w.name).help(Some(help.into())));
-            }
+            let summaries = ui::saved_summaries(&paths).await;
+            let mut candidates: Vec<_> = workspaces
+                .into_iter()
+                .map(|w| {
+                    let status = ui::resumable(summaries.get(&w.id))
+                        .map_or_else(|| ui::NOTHING_TO_RESUME.into(), |(text, _)| text);
+                    let help = format!("{}: {status}", w.name);
+                    space_candidate(w.number, &w.name).help(Some(help.into()))
+                })
+                .collect();
             candidates.extend(stopped_chat_candidates(
                 crate::client::chats::recorded(&paths).await?,
             ));
