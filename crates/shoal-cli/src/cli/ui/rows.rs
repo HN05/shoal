@@ -24,7 +24,10 @@ use crate::{
     client::progress::Progress,
     config::modes::ModeName,
     forge::items::link,
-    model::{Chat, HeldBy, QueueEntry, Repository, ReviewMark, Workspace, WorkspaceUsage},
+    model::{
+        Chat, Dependency, HeldBy, QueueEntry, QueueRank, Repository, ReviewMark, Tier, Workspace,
+        WorkspaceUsage,
+    },
     state::{AgentState, QueueKind, QueueState},
 };
 
@@ -305,10 +308,13 @@ fn title_limit(width: Option<usize>) -> Option<WidthLimit> {
 fn queue_status_cell(entry: &QueueEntry) -> Cell {
     let status = ListStatus::of_entry(entry);
     let label = status.label().to_owned();
-    let text = match entry.position {
+    let mut text = match entry.position {
         Some(position) => format!("{label}, position {position}"),
         None => label,
     };
+    if let Some(rank) = (entry.rank.as_ref()).filter(|_| entry.state == QueueState::Queued) {
+        text += &format!(", {}", rank_label(rank));
+    }
     (text + &waiting_reasons(entry), Some(status.style()))
 }
 
@@ -326,6 +332,28 @@ fn waiting_reasons(entry: &QueueEntry) -> String {
         text += &format!(", held by {}", held_by_label(held));
     }
     text
+}
+
+/// A waiting entry's rank: its tier, with the work it took that from and
+/// why, as in `finishing (from 12, blocked on this)`.
+fn rank_label(rank: &QueueRank) -> String {
+    let tier = match rank.tier {
+        Tier::New => "new",
+        Tier::Started => "started",
+        Tier::Finishing => "finishing",
+    };
+    let Some(inherited) = &rank.inherited else {
+        return tier.into();
+    };
+    let why = match inherited.dependency {
+        Dependency::Blocked => "blocked on this",
+        Dependency::Parent => "its parent",
+        Dependency::Question => "its child, asking it",
+        Dependency::Stacked => "stacked on this",
+        Dependency::Lease => "waiting for its lease",
+        Dependency::Serves => "which it serves",
+    };
+    format!("{tier} (from {}, {why})", inherited.from)
 }
 
 /// What holds a waiting entry back: `memory: needs 4.0 GiB, 1.2 GiB left`,

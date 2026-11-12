@@ -2071,7 +2071,9 @@ on the default branch; a workspace's children; the parent of a child with an
 open question; the workspace a stacked one builds on; and the spaces holding a
 lease another space queues for. A chat's children compete with every other
 worker. A CI job ranks with the highest of the spaces its run links, and a
-review with the workspace it reviews.
+review with the workspace it reviews. `shoal queue` shows each waiting entry's
+tier, and when it took that from waiting work, that work and why, as in
+`finishing (from 12, blocked on this)`.
 
 ### Agent accounts
 
