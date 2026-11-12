@@ -146,14 +146,9 @@ async fn lease_simulator(
     queue: bool,
 ) -> Result<Declinable<Simulator>> {
     let request = SimRequest {
-        request_id: uuid::Uuid::new_v4().to_string(),
-        clean: false,
-        name: SIM_LEASE.into(),
-        profile: None,
-        device: None,
-        runtime: None,
         reason: Some(format!("Demo {name}")),
         queue,
+        ..SimRequest::new(SIM_LEASE.into())
     };
     let outcome = obtain(ctx, "a simulator", queue, async || {
         leases::acquire_simulator(

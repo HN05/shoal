@@ -93,6 +93,23 @@ pub struct SimRequest {
     pub queue: bool,
 }
 
+impl SimRequest {
+    /// A request for the lease `name` with an ID of its own, which each
+    /// retry of the request keeps.
+    pub fn new(name: String) -> Self {
+        Self {
+            request_id: uuid::Uuid::new_v4().to_string(),
+            clean: false,
+            name,
+            profile: None,
+            device: None,
+            runtime: None,
+            reason: None,
+            queue: false,
+        }
+    }
+}
+
 states!(SimulatorState {
     /// Claimed; simctl create has not returned a UDID yet.
     Creating => "creating",

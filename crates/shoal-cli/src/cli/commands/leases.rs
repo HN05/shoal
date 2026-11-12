@@ -61,14 +61,13 @@ pub(super) async fn acquire(
             clean,
         } => {
             let request = SimRequest {
-                request_id: uuid::Uuid::new_v4().to_string(),
                 clean,
-                name: lease.name,
                 profile,
                 device,
                 runtime,
                 reason: lease.reason,
                 queue: lease.queue,
+                ..SimRequest::new(lease.name)
             };
             simulators::acquire(ctx, workspace, request).await
         }
