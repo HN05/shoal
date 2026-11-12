@@ -4,8 +4,6 @@
 
 use anyhow::{Result, ensure};
 
-use super::environment::configured_environment;
-use super::link_pull::link_or_warn;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
@@ -124,7 +122,7 @@ async fn run_post_setup_hook(
     )
     .await?;
     if let Some(command) = command {
-        let configured_env = configured_environment(ctx, workspace).await?;
+        let configured_env = crate::env::configured_environment(&ctx.paths, workspace).await?;
         hooks::run_until(
             Hook::PostSetup,
             workspace,
@@ -148,7 +146,7 @@ async fn link_pr(
     reporter: &Reporter<'_>,
 ) -> Result<Workspace> {
     reporter.ensure_running()?;
-    if !link_or_warn(ctx, &workspace.id, pr).await {
+    if !crate::opened_pull::link_or_warn(&ctx.paths, &workspace.id, pr).await {
         return Ok(workspace);
     }
     reporter.reached(Step::PrLinked).await?;

@@ -288,7 +288,7 @@ pub(super) async fn prepare_reopened(
         workspace = set_up.workspace;
     }
     for url in &removed.links.prs {
-        workspace = super::workspaces::link_pull(ctx, workspace, url.clone()).await?;
+        workspace = crate::opened_pull::link(&ctx.paths, workspace, url.clone()).await?;
     }
     Ok(Some(Reopened {
         workspace,

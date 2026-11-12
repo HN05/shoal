@@ -269,7 +269,7 @@ async fn pull_request(
             fetch_pull_branch(&repo.path, "base", pull.base.as_str()).await?;
             update_to_head(ctx, &repo.path, &workspace, pull.head.as_str()).await?;
             let workspace =
-                super::super::workspaces::link_pull(ctx, workspace, pull.url.clone()).await?;
+                crate::opened_pull::link(&ctx.paths, workspace, pull.url.clone()).await?;
             eprintln!(
                 "Reviewing PR #{} in workspace {}",
                 pull.number, workspace.name
