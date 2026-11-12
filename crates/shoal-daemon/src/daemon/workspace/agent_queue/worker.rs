@@ -3,6 +3,7 @@
 //! there. Chats in its worktree are not its agents and never count.
 use anyhow::{Result, bail};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{daemon::workspace::Manager, execution::recovery, model::Workspace};
 
 impl Manager {
@@ -44,6 +45,31 @@ impl Manager {
             )));
         }
         Ok(())
+    }
+
+    /// Take the queue gate for an agent that registers in `space` without a
+    /// queue entry, such as a restored one or a resumed last session,
+    /// refusing it while a launch waits or starts there, which holds the
+    /// workspace's one agent. Held until the agent is tracked, the gate
+    /// keeps a launch from being admitted there meanwhile.
+    pub(crate) async fn reserve_worker(
+        &self,
+        space: &SpaceSelector,
+    ) -> Result<tokio::sync::MutexGuard<'_, ()>> {
+        let gate = self.agent_queue.lock_admission().await;
+        let workspace = self.workspace(space).await?;
+        let id = workspace.id.clone();
+        if self
+            .store
+            .read(move |tx| super::store::queues_launch_in(tx, &id))
+            .await?
+        {
+            let space = workspace.number;
+            bail!(HasAgent(format!(
+                "workspace {space} has an agent waiting in the agent queue, which takes its place; `shoal queue` lists it"
+            )));
+        }
+        Ok(gate)
     }
 }
 

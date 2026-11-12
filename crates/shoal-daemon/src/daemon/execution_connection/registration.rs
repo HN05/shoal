@@ -89,12 +89,14 @@ pub(super) async fn register(
         true => Some(manager.admit_agent(&workspace).await.map_err(refused)?),
         false => None,
     };
-    let takes_entry = (kind == ExecutionKind::Command && agent.is_some())
-        .then_some(queue_entry.as_ref())
-        .flatten();
-    let reserved = match takes_entry {
-        Some(entry) => Some(manager.reserve_queue_entry(entry).await.map_err(refused)?),
-        None => None,
+    let tracks_agent = kind == ExecutionKind::Command && agent.is_some();
+    let takes_entry = tracks_agent.then_some(queue_entry.as_ref()).flatten();
+    // An agent takes its launch's reservation of the workspace's one agent,
+    // and one without a launch must find no launch holding it.
+    let reserved = match (takes_entry, tracks_agent) {
+        (Some(entry), _) => Some(manager.reserve_queue_entry(entry).await.map_err(refused)?),
+        (None, true) => Some(manager.reserve_worker(&workspace).await.map_err(refused)?),
+        (None, false) => None,
     };
     let request = ExecutionRequest {
         demo,

@@ -95,6 +95,19 @@ pub(super) fn queues_agent_in(tx: &rusqlite::Transaction<'_>, workspace: &SpaceI
     )
 }
 
+/// Whether a launch waits in the queue or starts in `workspace`, holding
+/// its one agent.
+pub(super) fn queues_launch_in(
+    tx: &rusqlite::Transaction<'_>,
+    workspace: &SpaceId,
+) -> Result<bool> {
+    crate::daemon::store::exists(
+        tx,
+        "SELECT 1 FROM agent_queue WHERE ?1 IN (workspace_id,opens_workspace_id) AND kind=?2",
+        params![workspace, QueueKind::Launch],
+    )
+}
+
 /// Whether `workspace`'s setup failed, or never started and runs in no
 /// execution, as when the daemon refused it, either of which a retried
 /// setup can ready.

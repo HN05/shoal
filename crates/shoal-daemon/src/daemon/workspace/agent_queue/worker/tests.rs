@@ -167,3 +167,33 @@ async fn overlapping_unlimited_starts_on_an_existing_branch_take_one_worker() {
     let second = manager.queue_add(on_topic()).await;
     assert!(second.is_err(), "{second:?}");
 }
+
+#[tokio::test]
+async fn an_agent_without_a_launch_waits_out_one_queued_in_its_workspace() {
+    use crate::daemon::workspace::agent_queue::HasAgent;
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let workspace = create(&manager, &repo, "worked").await;
+    let blocker = create(&manager, &repo, "blocker").await;
+    let selector = SpaceSelector::id(&workspace.id);
+    // Nothing waits there, so a restored agent may register.
+    drop(manager.reserve_worker(&selector).await.unwrap());
+    // A launch waits there for another space's work.
+    let admission = manager
+        .queue_add(QueueRequest {
+            workspace: Some(selector.clone()),
+            blockers: vec![crate::model::Blocker::Space(blocker.id.to_string())],
+            ..request(&repo, "worked", false)
+        })
+        .await
+        .unwrap();
+    let entry = admission.entry.unwrap();
+    let refused = manager.reserve_worker(&selector).await.map(drop);
+    assert!(
+        refused.as_ref().is_err_and(|error| error.is::<HasAgent>()),
+        "{refused:?}"
+    );
+    // Once it leaves the queue, the restore may go ahead.
+    manager.queue_remove(entry.id.as_str(), None).await.unwrap();
+    drop(manager.reserve_worker(&selector).await.unwrap());
+}
