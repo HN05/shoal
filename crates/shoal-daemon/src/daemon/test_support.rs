@@ -221,3 +221,8 @@ impl Manager {
         Ok(path)
     }
 }
+
+/// The names of the spaces a message's result lists, as tests compare them.
+pub fn names(spaces: &[crate::client::output::messages::Recipient]) -> Vec<&str> {
+    spaces.iter().map(|space| space.name.as_str()).collect()
+}

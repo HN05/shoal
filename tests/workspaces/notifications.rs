@@ -488,16 +488,17 @@ fn a_title_request_reaches_only_a_running_agent() {
 fn a_message_to_all_reaches_running_chats_but_not_workspaces_without_an_agent() {
     let fixture = Fixture::new();
     fixture.add("idle");
-    let (mut agent, _) = start_test_chat(&fixture, "planning");
+    let (mut agent, chat) = start_test_chat(&fixture, "planning");
+    let chats = fixture.ok(&["list", "--chats"]);
+    let reached = serde_json::json!({
+        "now": {"workspaces": [], "chats": [
+            {"number": chats[0]["number"], "id": chat, "name": "planning"}
+        ]},
+        "on_start": {"workspaces": [], "chats": []}
+    });
     let repo = fixture.repo.to_str().unwrap();
     let sent = fixture.ok(&["messages", "send", "--repo", repo, "Rebase onto main"]);
-    assert_eq!(
-        sent,
-        serde_json::json!({
-            "now": {"workspaces": [], "chats": ["planning"]},
-            "on_start": {"workspaces": [], "chats": []}
-        })
-    );
+    assert_eq!(sent, reached);
     // A --repo without a value means the current repository.
     let output = fixture
         .command()
@@ -507,22 +508,10 @@ fn a_message_to_all_reaches_running_chats_but_not_workspaces_without_an_agent() 
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     let sent: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(
-        sent,
-        serde_json::json!({
-            "now": {"workspaces": [], "chats": ["planning"]},
-            "on_start": {"workspaces": [], "chats": []}
-        })
-    );
+    assert_eq!(sent, reached);
     // --all reaches every repository, from outside any of them.
     let sent = fixture.ok(&["messages", "send", "--all", "The network works again"]);
-    assert_eq!(
-        sent,
-        serde_json::json!({
-            "now": {"workspaces": [], "chats": ["planning"]},
-            "on_start": {"workspaces": [], "chats": []}
-        })
-    );
+    assert_eq!(sent, reached);
     assert_eq!(
         fixture.ok(&["messages", &fixture.id("idle")]),
         serde_json::json!([])

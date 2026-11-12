@@ -1,4 +1,5 @@
 //! What `shoal messages` prints.
+use crate::space_ids::{SpaceId, SpaceNumber};
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 
@@ -38,18 +39,34 @@ impl Refused {
     }
 }
 
-/// A space that refused a message, by name, with why.
+/// A space that refused a message, with why.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RefusedSpace {
-    pub name: SpaceName,
+    #[serde(flatten)]
+    pub space: Recipient,
     pub error: String,
 }
 
-/// Workspaces and chats a message reached, by name.
+/// Workspaces and chats a message reached.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReachedSpaces {
-    pub workspaces: Vec<SpaceName>,
-    pub chats: Vec<SpaceName>,
+    pub workspaces: Vec<Recipient>,
+    pub chats: Vec<Recipient>,
+}
+
+/// A space a message was sent to, by its number, ID and name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Recipient {
+    pub number: SpaceNumber,
+    pub id: SpaceId,
+    pub name: SpaceName,
+}
+
+impl Recipient {
+    /// Its number with its name, as text that names it does.
+    pub fn label(&self) -> String {
+        crate::space_names::label(self.number, &self.name)
+    }
 }
 
 impl ReachedSpaces {

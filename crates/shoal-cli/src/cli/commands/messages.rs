@@ -104,10 +104,10 @@ fn show_reached(heading: &str, spaces: &ReachedSpaces) {
     }
     outln!("{heading}");
     for workspace in &spaces.workspaces {
-        outln!("  {workspace}");
+        outln!("  {}", workspace.label());
     }
     for chat in &spaces.chats {
-        outln!("  {chat} (chat)");
+        outln!("  {} (chat)", chat.label());
     }
 }
 
@@ -119,10 +119,10 @@ fn show_refused(refused: &Refused) {
     }
     outln!("Not queued for:");
     for workspace in &refused.workspaces {
-        outln!("  {}: {}", workspace.name, workspace.error);
+        outln!("  {}: {}", workspace.space.label(), workspace.error);
     }
     for chat in &refused.chats {
-        outln!("  {} (chat): {}", chat.name, chat.error);
+        outln!("  {} (chat): {}", chat.space.label(), chat.error);
     }
 }
 

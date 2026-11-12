@@ -1310,7 +1310,10 @@ async fn a_message_to_every_agent_restores_an_idle_stopped_agent() {
         )
         .await
         .unwrap();
-    assert_eq!(reached.on_start.workspaces, ["idle"]);
+    assert_eq!(
+        crate::daemon::test_support::names(&reached.on_start.workspaces),
+        ["idle"]
+    );
     manager.dispatch_queue().await.unwrap();
     assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Update);
 }

@@ -4,10 +4,9 @@ use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::{
-    client::output::messages::{Reached, ReachedSpaces, Refused},
     daemon::{
         scope::{self, Caller},
-        test_support::{manager, repository},
+        test_support::{manager, names, repository},
         workspace::{ExecutionKind, Manager},
         workspace_files::Attacher,
     },
@@ -310,21 +309,16 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
     };
     let reached = send(None, None).await.now;
     assert_eq!(
-        (reached.workspaces, reached.chats),
+        (names(&reached.workspaces), names(&reached.chats)),
         (
-            vec![
-                "child".into(),
-                "outside".into(),
-                "parent".into(),
-                "sibling".into()
-            ],
-            vec!["other".into(), "planning".into()]
+            vec!["child", "outside", "parent", "sibling"],
+            vec!["other", "planning"]
         )
     );
     let reached = send(Some(&parent.repository_id), None).await.now;
-    assert_eq!(reached.workspaces, ["child", "parent", "sibling"]);
+    assert_eq!(names(&reached.workspaces), ["child", "parent", "sibling"]);
     // The sending chat is left out.
-    assert_eq!(reached.chats, ["planning"]);
+    assert_eq!(names(&reached.chats), ["planning"]);
     // The repeat collapses into the unread message.
     for workspace in [&parent, &child, &sibling, &outside] {
         let messages = manager
@@ -342,8 +336,8 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
     );
     let reached = send(None, Some(parent.id.clone())).await;
     assert_eq!(
-        (reached.now.workspaces, reached.now.chats),
-        (vec!["child".into()], vec![])
+        (names(&reached.now.workspaces), names(&reached.now.chats)),
+        (vec!["child"], vec![])
     );
     assert!(send(None, Some(child.id.clone())).await.is_empty());
     // A workspace process names only its own repository, or none.
@@ -479,25 +473,21 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     let [refused] = reached.refused.workspaces.as_slice() else {
         panic!("{:?}", reached.refused);
     };
-    assert_eq!(refused.name, "full");
+    assert_eq!(refused.space.id, full.id);
     assert!(refused.error.contains("unread"), "{}", refused.error);
+    let [running_space] = reached.now.workspaces.as_slice() else {
+        panic!("{:?}", reached.now);
+    };
     assert_eq!(
-        Reached {
-            refused: Refused::default(),
-            ..reached
-        },
-        Reached {
-            now: ReachedSpaces {
-                workspaces: vec!["running".into()],
-                chats: vec!["planning".into()],
-            },
-            on_start: ReachedSpaces {
-                workspaces: vec!["queued".into(), "reattaching".into(), "stopped".into()],
-                chats: vec!["paused".into()],
-            },
-            refused: Refused::default(),
-        }
+        (running_space.number, &running_space.id),
+        (running.number, &running.id)
     );
+    assert_eq!(names(&reached.now.chats), ["planning"]);
+    assert_eq!(
+        names(&reached.on_start.workspaces),
+        ["queued", "reattaching", "stopped"]
+    );
+    assert_eq!(names(&reached.on_start.chats), ["paused"]);
     for (workspace, unread) in [(&stopped, 1), (&queued, 1), (&without, 0)] {
         let messages = manager
             .agent_messages(&SpaceSelector::id(&workspace.id))

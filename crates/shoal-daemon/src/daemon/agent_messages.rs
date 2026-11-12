@@ -11,9 +11,9 @@ use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
 
 pub(crate) use crate::client::agent_messages::AgentMessage;
-use crate::client::space_names::{SpaceName, SpaceSelector};
+use crate::client::space_names::SpaceSelector;
 use crate::{
-    client::output::messages::{Reached, ReachedSpaces, Refused, RefusedSpace},
+    client::output::messages::{Reached, ReachedSpaces, Recipient, Refused, RefusedSpace},
     daemon::{
         workspace::Manager,
         workspace_files::{self, Attacher, NewFile, layout::Copy},
@@ -255,7 +255,8 @@ impl Manager {
                     attacher,
                 )
                 .await;
-            outcome(&mut reached, runs, sent).workspace(workspace.name);
+            outcome(&mut reached, runs, sent)
+                .workspace(recipient(&PresentSpace::Workspace(workspace)));
         }
         for chat in chats {
             let sent = self
@@ -266,7 +267,8 @@ impl Manager {
                     attacher,
                 )
                 .await;
-            outcome(&mut reached, chat.restore.is_none(), sent).chat(chat.name);
+            let runs = chat.restore.is_none();
+            outcome(&mut reached, runs, sent).chat(recipient(&PresentSpace::Chat(chat)));
         }
         Ok(reached)
     }
@@ -545,25 +547,34 @@ enum Outcome<'a> {
 }
 
 impl Outcome<'_> {
-    fn workspace(self, name: SpaceName) {
+    fn workspace(self, space: Recipient) {
         match self {
-            Self::Reached(spaces) => spaces.workspaces.push(name),
-            Self::Refused(refused, error) => refused.workspaces.push(refusal(name, error)),
+            Self::Reached(spaces) => spaces.workspaces.push(space),
+            Self::Refused(refused, error) => refused.workspaces.push(refusal(space, error)),
         }
     }
 
-    fn chat(self, name: SpaceName) {
+    fn chat(self, space: Recipient) {
         match self {
-            Self::Reached(spaces) => spaces.chats.push(name),
-            Self::Refused(refused, error) => refused.chats.push(refusal(name, error)),
+            Self::Reached(spaces) => spaces.chats.push(space),
+            Self::Refused(refused, error) => refused.chats.push(refusal(space, error)),
         }
     }
 }
 
-/// The space `name` refusing a message for `error`, which the daemon logs.
-fn refusal(name: SpaceName, error: String) -> RefusedSpace {
-    crate::daemon::log!("message to every agent refused by {name}: {error}");
-    RefusedSpace { name, error }
+/// `space` as a message's result names it.
+fn recipient(space: &PresentSpace) -> Recipient {
+    Recipient {
+        number: space.number(),
+        id: space.id().clone(),
+        name: space.name().clone(),
+    }
+}
+
+/// `space` refusing a message for `error`, which the daemon logs.
+fn refusal(space: Recipient, error: String) -> RefusedSpace {
+    crate::daemon::log!("message to every agent refused by {}: {error}", space.id);
+    RefusedSpace { space, error }
 }
 
 #[cfg(test)]

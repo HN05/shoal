@@ -280,12 +280,10 @@ async fn a_broadcast_with_files_reaches_a_chat_without_a_repository() {
         )
     };
     let reached = send(vec![report.into()]).await.unwrap();
-    assert_eq!(
-        reached.now.chats,
-        ["master".to_owned(), talk.name.to_string()]
-    );
+    let names = crate::daemon::test_support::names;
+    assert_eq!(names(&reached.now.chats), ["master", talk.name.as_str()]);
     let reached = send(Vec::new()).await.unwrap();
-    assert_eq!(reached.now.chats, ["master".to_owned(), talk.name.into()]);
+    assert_eq!(names(&reached.now.chats), ["master", talk.name.as_str()]);
 }
 
 #[tokio::test]
