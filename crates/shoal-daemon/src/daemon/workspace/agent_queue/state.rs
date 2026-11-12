@@ -99,7 +99,7 @@ impl AgentQueue {
         self.admission.lock().await
     }
 
-    /// Count an open hold on the starting entry `id`.
+    /// Count an open hold on the entry `id`.
     pub(crate) fn hold(&self, id: &QueueEntryId) {
         *self.holds.lock().unwrap().entry(id.clone()).or_default() += 1;
     }
@@ -115,7 +115,7 @@ impl AgentQueue {
         }
     }
 
-    /// The starting entries with an open hold.
+    /// The entries with an open hold.
     pub(crate) fn held(&self) -> HashSet<QueueEntryId> {
         self.holds.lock().unwrap().keys().cloned().collect()
     }

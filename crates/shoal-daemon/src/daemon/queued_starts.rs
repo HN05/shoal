@@ -85,7 +85,9 @@ pub(crate) fn spawn_start(_paths: &Paths, start: &Start) -> Result<()> {
     Ok(())
 }
 
-/// Keep `entry`'s slot until the client hangs up or an agent takes it over.
+/// Keep `entry`'s slot, or a waiting entry out of admission, until the
+/// client hangs up or the entry leaves the queue, as when an agent takes it
+/// over.
 pub(super) async fn hold(
     mut stream: UnixStream,
     request_id: u64,
@@ -109,7 +111,7 @@ pub(super) async fn hold(
                 // The client never writes; a read completes only when it hangs up.
                 _ = reader.read(&mut closed) => return Ok(()),
             }
-            if !manager.queue_entry_starting(&entry).await? {
+            if !manager.queue_entry_present(&entry).await? {
                 return Ok(());
             }
         }

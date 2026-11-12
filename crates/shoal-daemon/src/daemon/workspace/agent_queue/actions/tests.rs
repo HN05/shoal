@@ -119,21 +119,73 @@ async fn entries_start_now_past_the_limits_unless_they_wait_for_work() {
     add(&manager, &repo, "b").await;
 
     let b = manager
-        .queue_start(&manager.queued("b").await)
+        .queue_start(&manager.queued("b").await, false)
         .await
         .unwrap();
     assert_eq!(b.state, QueueState::Starting);
     assert!(started(&b.id));
     assert_eq!(waiting(&manager).await, ["a", "dependent"]);
     manager
-        .queue_start(&manager.queued("dependent").await)
+        .queue_start(&manager.queued("dependent").await, false)
         .await
         .unwrap_err();
     assert!(!started(&dependent.entry.unwrap().id));
     manager
-        .queue_start(&manager.queued("first").await)
+        .queue_start(&manager.queued("first").await, false)
         .await
         .unwrap_err();
+}
+
+#[tokio::test]
+async fn a_launch_started_here_is_left_to_the_caller() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    add(&manager, &repo, "first").await;
+    add(&manager, &repo, "here").await;
+
+    let here = manager
+        .queue_start(&manager.queued("here").await, true)
+        .await
+        .unwrap();
+    assert_eq!(here.state, QueueState::Starting);
+    assert!(!started(&here.id));
+    assert!(waiting(&manager).await.is_empty());
+}
+
+#[tokio::test]
+async fn only_a_launch_starts_here() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let workspace = create(&manager, &repo, "stopped").await;
+    let _agents = stopped_agents(&manager, &[&workspace]).await;
+    manager
+        .queue_start(&manager.queued("stopped").await, true)
+        .await
+        .unwrap_err();
+    assert_eq!(waiting(&manager).await, ["stopped"]);
+}
+
+#[tokio::test]
+async fn a_held_waiting_entry_waits_for_its_holder() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let first = add(&manager, &repo, "first").await.entry.unwrap();
+    add(&manager, &repo, "held").await;
+    add(&manager, &repo, "after").await;
+    let held = QueueEntryId::from(manager.queued("held").await);
+    manager.hold_queue_entry(&held).await.unwrap();
+
+    manager.fail_queue_entry(&first.id, "gone").await.unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert!(!started(&held));
+    assert!(started(&manager.queued("after").await.into()));
+    manager.release_queue_hold(&held).await.unwrap();
+    limit_globally(&manager, 2);
+    manager.dispatch_queue().await.unwrap();
+    assert!(started(&held));
 }
 
 #[tokio::test]
@@ -144,7 +196,7 @@ async fn a_stopped_agent_restores_now_once_its_processes_stopped() {
     let workspace = create(&manager, &repo, "stopped").await;
     let agents = stopped_agents(&manager, &[&workspace]).await;
     manager
-        .queue_start(&manager.queued("stopped").await)
+        .queue_start(&manager.queued("stopped").await, false)
         .await
         .unwrap_err();
 
@@ -153,7 +205,7 @@ async fn a_stopped_agent_restores_now_once_its_processes_stopped() {
     manager.dispatch_queue().await.unwrap();
     assert_eq!(waiting(&manager).await, ["stopped"]);
     manager
-        .queue_start(&manager.queued("stopped").await)
+        .queue_start(&manager.queued("stopped").await, false)
         .await
         .unwrap();
     assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Queue);
@@ -299,6 +351,7 @@ async fn workspace_processes_see_the_whole_queue_and_act_only_below_theirs() {
         .await;
     let mut method = crate::protocol::QueueMethod::QueueStart {
         entry: "two".into(),
+        here: false,
     };
     assert!(
         crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method)

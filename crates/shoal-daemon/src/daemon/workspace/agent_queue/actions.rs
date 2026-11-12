@@ -71,17 +71,28 @@ impl Manager {
     }
 
     /// Start the waiting entry `selector` names now, regardless of the
-    /// limits. A launch still waiting for other work needs that work's
-    /// branch, so it is refused.
-    pub async fn queue_start(&self, selector: &str) -> Result<QueueEntry> {
+    /// limits, or for `here` mark the launch it names starting for the
+    /// caller, which starts it in its own process. A launch still waiting
+    /// for other work needs that work's branch, so it is refused.
+    pub async fn queue_start(&self, selector: &str, here: bool) -> Result<QueueEntry> {
         let _gate = self.agent_queue.lock_admission().await;
         let entry = self.waiting_entry(selector, None, "").await?;
-        self.start_waiting(entry).await
+        ensure!(
+            !here || entry.kind == QueueKind::Launch,
+            "{} is not a launch, so only the agent queue starts it",
+            entry.name
+        );
+        self.start_waiting(entry, here).await
     }
 
     /// Start the waiting `entry` now, regardless of the limits, as
-    /// [`Manager::queue_start`] does. Requires the queue gate.
-    pub(super) async fn start_waiting(&self, mut entry: QueueEntry) -> Result<QueueEntry> {
+    /// [`Manager::queue_start`] does, leaving a launch to the caller when
+    /// `here`. Requires the queue gate.
+    pub(super) async fn start_waiting(
+        &self,
+        mut entry: QueueEntry,
+        here: bool,
+    ) -> Result<QueueEntry> {
         let base = self.start_base(&entry).await?;
         match self.waiting_wrapper(&entry).await? {
             Some(execution) => self.grant_now(&entry, &execution).await?,
@@ -90,7 +101,8 @@ impl Manager {
                 let starts = self
                     .mark_starting(vec![entry.id.clone()], bases.into_iter().collect())
                     .await?;
-                self.start_launches(starts, None).await?;
+                let caller = here.then_some(&entry.id);
+                self.start_launches(starts, caller).await?;
                 if entry.kind == QueueKind::Job {
                     self.runners.wake();
                 }

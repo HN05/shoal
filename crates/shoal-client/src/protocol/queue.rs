@@ -31,9 +31,13 @@ pub enum QueueMethod {
     QueueRemove {
         entry: String,
     },
-    /// Start a waiting entry, named by ID, now, regardless of the limits.
+    /// Start a waiting entry, named by ID, now, regardless of the limits;
+    /// with `here`, a launch the caller starts in its own process, which
+    /// holds its slot.
     QueueStart {
         entry: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        here: bool,
     },
     /// The workspace a launch that left the queue started its agent in,
     /// while the daemon still knows it.

@@ -37,7 +37,9 @@ pub(super) async fn handle(
         QueueMethod::QueueRemove { entry } => {
             Body::QueueEntry(manager.queue_remove(&entry, caller).await?)
         }
-        QueueMethod::QueueStart { entry } => Body::QueueEntry(manager.queue_start(&entry).await?),
+        QueueMethod::QueueStart { entry, here } => {
+            Body::QueueEntry(manager.queue_start(&entry, here).await?)
+        }
         QueueMethod::StartedLaunch { entry } => {
             Body::StartedLaunch(manager.started_launch(&entry).await?)
         }

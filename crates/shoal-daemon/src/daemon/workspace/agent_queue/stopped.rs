@@ -336,7 +336,7 @@ impl Manager {
             .find(|entry| entry.execution.as_ref() == Some(execution))
             .context("the restore already left the agent queue")?;
         match now && entry.state == QueueState::Queued {
-            true => self.start_waiting(entry).await,
+            true => self.start_waiting(entry, false).await,
             false => Ok(entry),
         }
     }

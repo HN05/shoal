@@ -244,11 +244,12 @@ impl Manager {
             .await
     }
 
-    /// Count an open hold on a starting entry.
+    /// Count an open hold on an entry: a starting one keeps its slot, and a
+    /// waiting one stays out of admission, since its holder starts it.
     pub(crate) async fn hold_queue_entry(&self, id: &QueueEntryId) -> Result<()> {
         ensure!(
-            self.queue_entry_starting(id).await?,
-            "queue entry is no longer starting"
+            self.queue_entry_present(id).await?,
+            "queue entry is no longer in the agent queue"
         );
         self.agent_queue.hold(id);
         Ok(())
@@ -265,6 +266,16 @@ impl Manager {
                     params![id, now],
                 )?;
                 Ok(())
+            })
+            .await
+    }
+
+    /// Whether the entry `id` still waits or starts.
+    pub(crate) async fn queue_entry_present(&self, id: &QueueEntryId) -> Result<bool> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                crate::daemon::store::exists(db, "SELECT 1 FROM agent_queue WHERE id=?1", [id])
             })
             .await
     }

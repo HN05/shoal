@@ -38,7 +38,15 @@ pub async fn plan(daemon: &impl Daemon, entry: QueueEntryId) -> Result<QueuedPla
 
 /// Start the entry `entry` names by ID now, whatever waits before it.
 pub async fn start(daemon: &impl Daemon, entry: String) -> Result<QueueEntry> {
-    request(daemon, QueueMethod::QueueStart { entry }).await
+    let here = false;
+    request(daemon, QueueMethod::QueueStart { entry, here }).await
+}
+
+/// Mark the waiting launch `entry` starting for this process, which starts
+/// it itself, now, whatever waits before it, and holds its slot.
+pub async fn start_here(daemon: &impl Daemon, entry: &QueueEntryId) -> Result<QueueEntry> {
+    let (entry, here) = (entry.to_string(), true);
+    request(daemon, QueueMethod::QueueStart { entry, here }).await
 }
 
 /// The workspace the launch `entry`, which left the queue, started its

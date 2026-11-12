@@ -204,10 +204,13 @@ impl Manager {
     }
 
     /// The queued entries in rank order, each restore with whether its agent
-    /// waits and what for. A restore the daemon starts is admitted like a
-    /// launch once it waits for nothing.
+    /// waits and what for, without those a caller holds to start itself. A
+    /// restore the daemon starts is admitted like a launch once it waits for
+    /// nothing.
     async fn waiting_work(&self) -> Result<WaitingWork> {
-        let queued = self.store.run(|db| queued_rows(db)).await?;
+        let held = self.agent_queue.held();
+        let mut queued = self.store.run(|db| queued_rows(db)).await?;
+        queued.retain(|row| !held.contains(&row.id));
         let waiters = self.agent_queue.restore_waiters();
         let mut restores = HashMap::new();
         let mut stopped = HashSet::new();
