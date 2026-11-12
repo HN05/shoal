@@ -726,6 +726,16 @@ with, so `area/` takes any area label; see
 marks issues that need a plan and `planned_label` those whose plan is settled;
 see [planning issues](reference.md#planning-issues).
 
+```toml
+[priority.labels]   # Default: none
+urgent = 75
+"low-priority" = 25
+```
+
+`[priority.labels]` gives forge labels a priority from 0 to 100: a space
+without one set ranks in the [agent queue](reference.md#queue-order) with the
+highest its issue's labels map to.
+
 ### PRs
 
 ```toml

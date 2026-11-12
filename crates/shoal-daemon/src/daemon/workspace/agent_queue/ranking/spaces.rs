@@ -1,12 +1,16 @@
 //! The spaces as ranking sees them: each one's priority and own tier, its
-//! plan steps and when it was created.
+//! plan steps and when it was created, and the labels of the issues of
+//! those without a priority set.
 use std::collections::HashMap;
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::super::rank::{Space, Steps};
-use crate::client::{events::EventKind, priority::Priority, space_ids::SpaceId, time::UnixTime};
+use crate::client::{
+    events::EventKind, priority::Priority, repository_ids::RepositoryId, space_ids::SpaceId,
+    time::UnixTime,
+};
 use crate::{
     daemon::{progress, store},
     forge::{items::link::LinkKind, updates::SnapshotState},
@@ -85,6 +89,63 @@ fn space(db: &Connection, row: &Row) -> Result<Space> {
         steps: steps.unwrap_or_default(),
         created_at: row.created_at.unwrap_or(UnixTime::from_seconds(0)),
     })
+}
+
+/// A space without a priority set whose issue has labels, which may give
+/// it one.
+pub(super) struct Labelled {
+    pub id: SpaceId,
+    pub repository: RepositoryId,
+    pub labels: Vec<String>,
+}
+
+/// The spaces without a priority set whose issue has labels, as the
+/// background poll, or else a watch, last read them.
+pub(super) fn labelled(db: &Connection) -> Result<Vec<Labelled>> {
+    let rows = db
+        .prepare(
+            "SELECT s.id,s.repository_id,COALESCE(
+                (SELECT json_extract(record,'$.details.labels') FROM space_item_activity
+                    WHERE space_id=s.id AND url=i.url),
+                (SELECT json_extract(record,'$.details.labels') FROM pr_activity
+                    WHERE space_id=s.id AND url=i.url))
+             FROM spaces s JOIN space_issue i ON i.space_id=s.id
+             WHERE s.repository_id IS NOT NULL
+                AND s.id NOT IN (SELECT space_id FROM space_priority)",
+        )?
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, SpaceId>(0)?,
+                row.get::<_, RepositoryId>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut labelled = Vec::new();
+    for (id, repository, labels) in rows {
+        let labels: Vec<String> =
+            labels.map_or(Ok(Vec::new()), |labels| serde_json::from_str(&labels))?;
+        if !labels.is_empty() {
+            labelled.push(Labelled {
+                id,
+                repository,
+                labels,
+            });
+        }
+    }
+    Ok(labelled)
+}
+
+/// Give each space of `priorities` its priority.
+pub(super) fn prioritize(
+    spaces: &mut HashMap<SpaceId, Space>,
+    priorities: Vec<(SpaceId, Priority)>,
+) {
+    for (id, priority) in priorities {
+        if let Some(space) = spaces.get_mut(&id) {
+            space.priority = Some(priority);
+        }
+    }
 }
 
 /// Whether the space `id` has a PR it opened or was assigned that is open,

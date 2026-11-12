@@ -7,7 +7,7 @@ use crate::client::{priority::Priority, resources::Scope, space_names::SpaceSele
 use crate::{
     daemon::{
         scope::Caller,
-        test_support::manager,
+        test_support::{global_config, manager},
         workspace::agent_queue::{
             Serving, last_seq,
             rank::{Carries, Edge, Node},
@@ -331,6 +331,76 @@ async fn a_space_and_a_queued_launch_rank_with_the_priority_set_on_them() {
             ("launch".into(), Priority::URGENT),
             ("earlier".into(), Priority::NORMAL),
             ("worker".into(), Priority::LOW),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_space_without_a_priority_set_takes_the_highest_its_issues_labels_map_to() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(
+        "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n\
+         [priority.labels]\nurgent = 75\nlater = 25\n",
+    ));
+    add(&manager, &repo, "running").await;
+    // Labels as the background poll read them, as a watch read them, and
+    // under a priority set on the space.
+    let cases = [
+        ("polled", "space_item_activity", None),
+        ("watched", "pr_activity", None),
+        ("set", "space_item_activity", Some(Priority::LOW)),
+    ];
+    for (number, (name, table, set)) in cases.into_iter().enumerate() {
+        let workspace = create(&manager, &repo, name).await;
+        let selector = SpaceSelector::id(&workspace.id);
+        if let Some(priority) = set {
+            manager
+                .set_priority(None, &selector, priority)
+                .await
+                .unwrap();
+        }
+        let id = workspace.id.clone();
+        let url = format!("https://forge.example/team/repo/issues/{}", number + 1);
+        manager
+            .store
+            .run(move |db| {
+                db.execute(
+                    "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                    params![id, url],
+                )?;
+                db.execute(
+                    &format!(
+                        "INSERT INTO {table}(space_id,url,record) VALUES (?1,?2,
+                            json_object('details',json_object('labels',json_array('later','urgent','bug'))))"
+                    ),
+                    params![id, url],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        manager
+            .queue_add(QueueRequest {
+                workspace: Some(selector),
+                ..request(&repo, name, false)
+            })
+            .await
+            .unwrap();
+    }
+    add(&manager, &repo, "unlabelled").await;
+
+    let waiting: Vec<_> = (manager.queue_entries().await.unwrap().into_iter())
+        .filter(|entry| entry.state == QueueState::Queued)
+        .map(|entry| (entry.name.to_string(), entry.rank.unwrap().priority))
+        .collect();
+    assert_eq!(
+        waiting,
+        [
+            ("polled".into(), Priority::URGENT),
+            ("watched".into(), Priority::URGENT),
+            ("unlabelled".into(), Priority::NORMAL),
+            ("set".into(), Priority::LOW),
         ]
     );
 }

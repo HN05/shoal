@@ -1589,8 +1589,8 @@ The queue starts the work that gets the most done with the fewest agents
 running: work close to finished before new work, and work that other work
 waits on before the work waiting. One pure rank operation over a snapshot of
 the entries, spaces and what waits on what orders admission and the listing
-alike. A space's priority, 0 to 100 and 50 unless set, goes first, so the user
-decides what matters; a queued launch carries its own until its space exists.
+alike. A space's priority, 0 to 100 and 50 unless set or mapped from its
+issue's labels, goes first, so the user decides what matters; a queued launch carries its own until its space exists.
 Within a priority, its tiers are `finishing` (a space with an open PR or a ready mark, CI
 jobs on PRs and the default branch), `started` (restores of agents that have
 worked) and `new`; an hour's wait raises an entry a tier, so nothing starves
