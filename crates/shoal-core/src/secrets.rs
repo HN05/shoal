@@ -13,7 +13,11 @@ use std::{
 pub use crate::client::secrets::Secret;
 pub(crate) use crate::client::secrets::{Secrets, validate};
 use crate::client::space_names::SpaceSelector;
-use crate::{client::approvals::SecretSpecification, env, paths::Paths};
+use crate::{
+    client::approvals::SecretSpecification,
+    env,
+    paths::{CommandPaths, Paths},
+};
 
 /// What a grant for `secret` binds: the command that fetches it and the tools
 /// it serves.
@@ -133,7 +137,7 @@ fn write_launchers(secrets: &Secrets, paths: &Paths) -> Result<tempfile::TempDir
 /// launch's launcher. Values are fetched only after the daemon authorizes
 /// every one.
 pub async fn run_tool(
-    paths: &Paths,
+    paths: &CommandPaths,
     launchers: &Path,
     tool: &str,
     args: Vec<OsString>,
@@ -166,7 +170,7 @@ fn served_to<'a>(secrets: &'a Secrets, tool: &str) -> Vec<(&'a String, &'a Secre
 /// A scoped run asks the daemon about every secret, so current approval
 /// policy applies even when it changed after the agent started; unscoped
 /// callers need no approval.
-async fn authorize(paths: &Paths, tool: &str, served: &[(&String, &Secret)]) -> Result<()> {
+async fn authorize(paths: &CommandPaths, tool: &str, served: &[(&String, &Secret)]) -> Result<()> {
     if !must_authorize(tool, env::inherits_scope(&paths.state), env::is_scoped())? {
         return Ok(());
     }
@@ -215,7 +219,12 @@ fn exec_with(program: &Path, args: Vec<OsString>, values: Vec<(&String, OsString
 /// Fail unless the daemon confirms this workspace may fetch `name` from the
 /// source this launch serves; a pending or denied request is named so the
 /// agent can follow it.
-async fn confirm_grant(paths: &Paths, tool: &str, name: &str, secret: &Secret) -> Result<()> {
+async fn confirm_grant(
+    paths: &CommandPaths,
+    tool: &str,
+    name: &str,
+    secret: &Secret,
+) -> Result<()> {
     use crate::{
         client::{approvals::DecisionStatus, secrets::SecretRequest},
         protocol::{Body, SecretMethod},

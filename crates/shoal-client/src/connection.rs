@@ -34,14 +34,15 @@ pub trait Daemon: Sync {
     fn scope(&self) -> Option<ScopeToken>;
 }
 
-/// The CLI's daemon: requests carry the scope token this process inherited.
+/// Tests' daemon, which they reach as the user.
+#[cfg(test)]
 impl Daemon for Paths {
     fn paths(&self) -> &Paths {
         self
     }
 
     fn scope(&self) -> Option<ScopeToken> {
-        crate::env::scope_token()
+        None
     }
 }
 

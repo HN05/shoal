@@ -162,7 +162,7 @@ async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() 
         (true, true, &failed[..]),
     ] {
         let root = tempfile::tempdir().unwrap();
-        let paths = crate::paths::Paths::for_test(root.path());
+        let paths = crate::paths::CommandPaths::from(crate::paths::Paths::for_test(root.path()));
         let (_daemon, methods) = daemon_speaking(&paths, crate::protocol::VERSION);
         let (sender, events) = tokio::sync::mpsc::unbounded_channel();
         sender
@@ -192,7 +192,7 @@ async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() 
     // A failure no retry fixes ends a Codex turn too, which the daemon then
     // reports instead of retrying.
     let root = tempfile::tempdir().unwrap();
-    let paths = crate::paths::Paths::for_test(root.path());
+    let paths = crate::paths::CommandPaths::from(crate::paths::Paths::for_test(root.path()));
     let (_daemon, methods) = daemon_speaking(&paths, crate::protocol::VERSION);
     let (sender, events) = tokio::sync::mpsc::unbounded_channel();
     sender
@@ -219,7 +219,7 @@ async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() 
 #[tokio::test]
 async fn a_report_the_upgraded_daemon_refuses_goes_through_the_installed_release() {
     let root = tempfile::tempdir().unwrap();
-    let paths = crate::paths::Paths::for_test(root.path());
+    let paths = crate::paths::CommandPaths::from(crate::paths::Paths::for_test(root.path()));
     let binary = root.path().join("shoal");
     let received = root.path().join("received");
     // A new file each time, as an upgrade puts one there.
@@ -266,7 +266,7 @@ async fn a_report_the_upgraded_daemon_refuses_goes_through_the_installed_release
 #[tokio::test]
 async fn the_proxy_report_worker_sends_only_a_wrappers_reports() {
     let root = tempfile::tempdir().unwrap();
-    let paths = crate::paths::Paths::for_test(root.path());
+    let paths = crate::paths::CommandPaths::from(crate::paths::Paths::for_test(root.path()));
     for report in [
         r#"{"set_agent_state":{"workspace":"w","state":"idle"}}"#,
         r#"{"report_turn_failure":{"workspace":"w","failure":"overloaded"}}"#,
@@ -290,7 +290,7 @@ fn agents_name_the_key_in_the_header_the_proxy_reads() {
 async fn the_reporter_sends_each_change_once_and_clears_only_what_it_reported() {
     use shoal_proxy::{Event, Failure};
     let root = tempfile::tempdir().unwrap();
-    let paths = crate::paths::Paths::for_test(root.path());
+    let paths = crate::paths::CommandPaths::from(crate::paths::Paths::for_test(root.path()));
     let (_daemon, methods) = daemon_speaking(&paths, crate::protocol::VERSION);
     let (sender, events) = tokio::sync::mpsc::unbounded_channel();
     let limited = Event::Failed {
@@ -340,7 +340,7 @@ async fn the_reporter_sends_each_change_once_and_clears_only_what_it_reported() 
 async fn a_report_the_daemon_did_not_take_goes_again_with_the_next_event() {
     use shoal_proxy::{Event, Failure};
     let root = tempfile::tempdir().unwrap();
-    let paths = crate::paths::Paths::for_test(root.path());
+    let paths = crate::paths::CommandPaths::from(crate::paths::Paths::for_test(root.path()));
     // The daemon refuses the first reset, as one restarting might.
     let (_daemon, methods) = daemon_refusing(&paths, crate::protocol::VERSION, &[0]);
     let (sender, events) = tokio::sync::mpsc::unbounded_channel();
@@ -377,7 +377,7 @@ async fn a_report_the_daemon_did_not_take_goes_again_with_the_next_event() {
 async fn a_recovery_the_daemon_took_in_part_keeps_what_it_did_not() {
     use shoal_proxy::{Event, Failure};
     let root = tempfile::tempdir().unwrap();
-    let paths = crate::paths::Paths::for_test(root.path());
+    let paths = crate::paths::CommandPaths::from(crate::paths::Paths::for_test(root.path()));
     // The daemon refuses the retry's clearing but takes the reset's.
     let (_daemon, methods) = daemon_refusing(&paths, crate::protocol::VERSION, &[2]);
     let (sender, events) = tokio::sync::mpsc::unbounded_channel();

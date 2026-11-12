@@ -13,7 +13,12 @@ use anyhow::{Context, Result};
 use tokio::process::{Child, Command};
 
 use super::{Mode, terminal::Terminal};
-use crate::{config::value::Value, env, model::ExecutionPlan, paths::Paths};
+use crate::{
+    config::value::Value,
+    env,
+    model::ExecutionPlan,
+    paths::{CommandPaths, Paths},
+};
 
 /// What an agent's or publishing child receives beyond the workspace
 /// environment: the agent Git profile and, for agents, the configured secrets
@@ -174,7 +179,7 @@ impl AgentLaunch {
     /// stream ends them.
     pub(super) fn report_proxy(
         &mut self,
-        paths: &Paths,
+        paths: &CommandPaths,
         workspace: &SpaceId,
         execution: &ExecutionId,
     ) {

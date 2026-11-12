@@ -15,7 +15,7 @@ use crate::{
     agents::PromptWake,
     client::connection,
     model::ExecutionPlan,
-    paths::Paths,
+    paths::CommandPaths,
     protocol::AgentMethod,
     terminal::{PromptSession, WAKE_PROMPT},
 };
@@ -54,7 +54,7 @@ pub(super) fn session(
 }
 
 /// Wake the agent `plan` runs as `wake` says.
-pub(super) fn start(paths: &Paths, plan: &ExecutionPlan, wake: Wake) -> Waker {
+pub(super) fn start(paths: &CommandPaths, plan: &ExecutionPlan, wake: Wake) -> Waker {
     let paths = paths.clone();
     let workspace = plan.workspace.id.clone();
     let hooked = (wake.when == PromptWake::WhenHookCannot).then(|| plan.id.clone());
@@ -99,7 +99,12 @@ where
 /// Wait until whether the agent is idle with updates matches `due`, where
 /// the hook of the agent the `hooked` execution runs cannot wake it when
 /// given, waiting out a restarting or failing daemon.
-async fn await_wake(paths: &Paths, workspace: &SpaceId, due: bool, hooked: Option<ExecutionId>) {
+async fn await_wake(
+    paths: &CommandPaths,
+    workspace: &SpaceId,
+    due: bool,
+    hooked: Option<ExecutionId>,
+) {
     loop {
         match request(paths, workspace, due, hooked.clone()).await {
             Ok(()) => return,
@@ -113,7 +118,7 @@ async fn await_wake(paths: &Paths, workspace: &SpaceId, due: bool, hooked: Optio
 const RETRY_INTERVAL: Duration = Duration::from_secs(30);
 
 async fn request(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspace: &SpaceId,
     due: bool,
     hooked: Option<ExecutionId>,

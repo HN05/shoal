@@ -407,6 +407,26 @@ pub fn output_setting() -> (String, String) {
     (OUTPUT.into(), std::env::var(OUTPUT).unwrap_or_default())
 }
 
+/// The scope token a starter handed this process with a chat to start,
+/// which stands in for [`SCOPE_TOKEN`] without entering any environment.
+static HANDED_SCOPE: std::sync::OnceLock<ScopeToken> = std::sync::OnceLock::new();
+
+/// Take `token`, which a starter handed this process, as its scope token;
+/// false when it already took one.
+pub fn take_handed_scope(token: ScopeToken) -> bool {
+    HANDED_SCOPE.set(token).is_ok()
+}
+
+/// The scope token this process was handed, else the one it inherited.
+pub fn scope_token() -> Option<ScopeToken> {
+    (HANDED_SCOPE.get().cloned()).or_else(|| std::env::var(SCOPE_TOKEN).ok().map(ScopeToken::from))
+}
+
+/// True when this process carries cooperative workspace scope.
+pub fn is_scoped() -> bool {
+    HANDED_SCOPE.get().is_some() || std::env::var_os(SCOPE_TOKEN).is_some()
+}
+
 /// The chat this process runs under, if any.
 pub fn chat() -> Option<SpaceId> {
     std::env::var(CHAT)

@@ -6,6 +6,8 @@ use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use anyhow::Context;
 use anyhow::Result;
 
+use crate::paths::CommandPaths;
+
 /// The header an agent names its proxy's key in, which the proxy checks.
 pub(crate) const KEY_HEADER: &str = "x-shoal-proxy-key";
 
@@ -56,7 +58,7 @@ impl Running {
     /// turn's end, since a subagent's request may fail while the turn goes on.
     pub(crate) fn report_turns(
         &mut self,
-        paths: &crate::paths::Paths,
+        paths: &CommandPaths,
         workspace: &SpaceId,
         execution: &ExecutionId,
         ends_turns: bool,
@@ -96,7 +98,7 @@ impl Origin {
 /// when an upgrade changed the daemon's protocol under this wrapper;
 /// whether the daemon took it.
 pub(crate) async fn send_report(
-    paths: &crate::paths::Paths,
+    paths: &CommandPaths,
     report: crate::protocol::AgentMethod,
 ) -> bool {
     send_from(paths, origin(), report).await
@@ -104,7 +106,7 @@ pub(crate) async fn send_report(
 
 /// [`send_report`] from the wrapper `origin` describes.
 pub(super) async fn send_from(
-    paths: &crate::paths::Paths,
+    paths: &CommandPaths,
     origin: &Origin,
     report: crate::protocol::AgentMethod,
 ) -> bool {
@@ -134,7 +136,7 @@ fn origin() -> &'static Origin {
 /// `executable`, whose protocol the upgraded daemon speaks; whether it sent
 /// it. Nothing runs when nothing replaced it.
 async fn relay(
-    paths: &crate::paths::Paths,
+    paths: &CommandPaths,
     executable: &crate::installed::Executable,
     report: &str,
 ) -> bool {
@@ -158,7 +160,7 @@ async fn relay(
 /// Send `report`, the JSON of a report a wrapper of an older release could
 /// not, as the `proxy-report` worker does. Only the wrapper's own reports,
 /// its proxy's and whether a terminal shows its agent, go through it.
-pub async fn send_relayed(paths: &crate::paths::Paths, report: &str) -> Result<i32> {
+pub async fn send_relayed(paths: &CommandPaths, report: &str) -> Result<i32> {
     use crate::protocol::AgentMethod;
     let report: AgentMethod = serde_json::from_str(report).map_err(anyhow::Error::from)?;
     anyhow::ensure!(
@@ -183,7 +185,7 @@ pub async fn send_relayed(paths: &crate::paths::Paths, report: &str) -> Result<i
 /// make and its upstream's reset; whether the daemon took both. A report
 /// that fails leaves them to the execution's end.
 pub(crate) async fn forget_reports(
-    paths: &crate::paths::Paths,
+    paths: &CommandPaths,
     workspace: &SpaceId,
     execution: &ExecutionId,
 ) -> bool {
@@ -204,7 +206,7 @@ pub(crate) async fn forget_reports(
 
 /// Reports a proxied agent's ended turns to the daemon.
 pub(super) struct Reporter {
-    pub(super) paths: crate::paths::Paths,
+    pub(super) paths: CommandPaths,
     pub(super) workspace: SpaceId,
     pub(super) execution: ExecutionId,
     /// Whether a failure stream ends the agent's turn.

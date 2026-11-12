@@ -34,7 +34,7 @@ use crate::{
     },
     env,
     model::{Chat, Workspace},
-    paths::Paths,
+    paths::{CommandPaths, Paths},
     protocol::ConfigTarget,
 };
 
@@ -288,7 +288,7 @@ impl Typed {
             .state
             .clone()
             .or_else(|| std::env::var_os(env::STATE_DIR).map(PathBuf::from));
-        let Ok(paths) = Paths::of_command(state) else {
+        let Ok(paths) = Paths::of_command(state).map(CommandPaths::from) else {
             return Settings {
                 commands: named_commands::defaults(),
                 providers: crate::ai::agents(&crate::ai::tools(&Default::default()))
@@ -378,7 +378,7 @@ impl Typed {
             .state
             .clone()
             .or_else(|| std::env::var_os(env::STATE_DIR).map(PathBuf::from));
-        let paths = Paths::of_command(state)?;
+        let paths = CommandPaths::from(Paths::of_command(state)?);
         if matches!(target, Target::Repositories) {
             return Ok(repository_candidates(
                 &crate::client::repositories::list(&paths).await?,
@@ -543,7 +543,7 @@ fn chat_candidate(chat: &Chat, kind: &str) -> CompletionCandidate {
 }
 
 /// Every chat, a stopped one described as such.
-async fn chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidate>> {
+async fn chat_candidates(paths: &CommandPaths) -> Result<Vec<CompletionCandidate>> {
     Ok(crate::client::chats::recorded(paths)
         .await?
         .iter()
@@ -595,7 +595,7 @@ fn target_of(id: &str, parent: &str, name: &str, need: Need) -> Option<Target> {
 }
 
 /// The running chats with an agent session.
-async fn session_chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidate>> {
+async fn session_chat_candidates(paths: &CommandPaths) -> Result<Vec<CompletionCandidate>> {
     let chats = crate::client::chats::list(paths).await?;
     let places = super::commands::sessions::chat_places(&chats);
     let attachable = terminal::session_owners(&places);

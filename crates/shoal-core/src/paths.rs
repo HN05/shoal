@@ -4,6 +4,7 @@
 //! apps reach that daemon whatever their build.
 use std::{
     fs,
+    ops::Deref,
     path::{Path, PathBuf},
 };
 
@@ -11,6 +12,43 @@ use anyhow::{Result, ensure};
 
 pub(crate) use crate::client::paths::DEFAULT_STATE;
 pub use crate::client::paths::{Paths, SESSION_LOG, SESSION_PROMPT};
+use crate::client::{connection::Daemon, scope_tokens::ScopeToken};
+
+/// The daemon of the `shoal` command, which its requests reach with the scope
+/// token the command was handed or inherited; apps choose theirs with
+/// [`crate::client::connection::Connector`] instead.
+#[derive(Debug, Clone)]
+pub struct CommandPaths(Paths);
+
+impl From<Paths> for CommandPaths {
+    fn from(paths: Paths) -> Self {
+        Self(paths)
+    }
+}
+
+impl From<CommandPaths> for Paths {
+    fn from(paths: CommandPaths) -> Self {
+        paths.0
+    }
+}
+
+impl Deref for CommandPaths {
+    type Target = Paths;
+
+    fn deref(&self) -> &Paths {
+        &self.0
+    }
+}
+
+impl Daemon for CommandPaths {
+    fn paths(&self) -> &Paths {
+        &self.0
+    }
+
+    fn scope(&self) -> Option<ScopeToken> {
+        crate::env::scope_token()
+    }
+}
 
 /// Operations on the client type [`Paths`] that only the `shoal` command uses.
 pub trait PathsExt: Sized {

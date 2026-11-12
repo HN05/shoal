@@ -24,7 +24,7 @@ use crate::client::space_names::SpaceSelector;
 use anyhow::{Result, ensure};
 use std::{ffi::OsString, path::PathBuf};
 
-use crate::{env, paths::Paths};
+use crate::{env, paths::CommandPaths};
 pub use cancellation::{cancel, cancellation};
 pub use completion::SetupVerificationFailure;
 pub use detached::{DetachedLaunch, launch_detached};
@@ -62,7 +62,7 @@ impl TrackedAgent {
 
 /// `agent` names a Shoal agent shortcut; the daemon tells the user when it exits.
 pub async fn run(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspace: SpaceSelector,
     command: Vec<OsString>,
     agent: Option<TrackedAgent>,
@@ -85,7 +85,7 @@ pub async fn run(
 
 /// A command the user chose, recorded when `shoal stop` interrupts it.
 pub async fn run_command(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspace: SpaceSelector,
     command: Vec<OsString>,
 ) -> Result<i32> {
@@ -103,7 +103,7 @@ pub async fn run_command(
 /// Consume the selected recovery records only after the replacement process is
 /// recorded, so failed launches remain recoverable without duplicating sessions.
 pub async fn run_recovery(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspace: SpaceSelector,
     command: Vec<OsString>,
     agent: TrackedAgent,
@@ -125,7 +125,7 @@ pub async fn run_recovery(
 /// child reads `/dev/null` and writes `log`. It stays alive as the execution's
 /// wrapper, so stop requests, removal, and recovery see a connected command.
 pub async fn run_detached_wrapper(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspace: SpaceSelector,
     log: PathBuf,
     command: Vec<OsString>,
@@ -138,7 +138,7 @@ pub async fn run_detached_wrapper(
 /// A demo's wrapper, which records `launch` with its execution and restarts
 /// `command` until the demo is stopped; a stopped demo exits 0.
 pub async fn run_demo(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspace: SpaceSelector,
     launch: crate::demos::Launch,
     command: Vec<OsString>,
@@ -170,14 +170,14 @@ pub struct TakenOver {
 
 /// Continue an agent's wrapper whose binary an upgrade replaced with this
 /// one: register its execution again and restore the agent.
-pub async fn take_over(paths: &Paths, taken: TakenOver) -> Result<i32> {
+pub async fn take_over(paths: &CommandPaths, taken: TakenOver) -> Result<i32> {
     run_taken_over(paths, taken)
         .await
         .map(env::session_exit_code)
 }
 
 pub async fn publish(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspace: SpaceSelector,
     command: Vec<OsString>,
 ) -> Result<i32> {
@@ -187,7 +187,7 @@ pub async fn publish(
 /// Merge the workspace's branch; its worker writes the result as a
 /// [`MergeResult`] to `result`.
 pub async fn merge(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspace: SpaceSelector,
     options: crate::model::MergeOptions,
     result: PathBuf,
@@ -207,14 +207,18 @@ pub type MergeResult = std::result::Result<crate::model::MergedBranch, String>;
 
 /// Undo the workspace's latest merge; its worker writes the result as an
 /// [`UnmergeResult`] to `result`.
-pub async fn unmerge(paths: &Paths, workspace: SpaceSelector, result: PathBuf) -> Result<i32> {
+pub async fn unmerge(
+    paths: &CommandPaths,
+    workspace: SpaceSelector,
+    result: PathBuf,
+) -> Result<i32> {
     run_tracked(paths, workspace, vec![], Mode::Unmerge { result }, None).await
 }
 
 /// What an unmerge worker writes: what it undid, or why it could not.
 pub type UnmergeResult = std::result::Result<crate::model::Unmerged, String>;
 
-pub async fn setup(paths: &Paths, workspace: SpaceSelector) -> Result<i32> {
+pub async fn setup(paths: &CommandPaths, workspace: SpaceSelector) -> Result<i32> {
     run_tracked(paths, workspace, vec![], Mode::Setup, None).await
 }
 

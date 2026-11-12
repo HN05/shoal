@@ -14,7 +14,7 @@ use super::{
 };
 use crate::{
     model::{ExecutionPlan, PortReservation},
-    paths::Paths,
+    paths::{CommandPaths, Paths},
     process,
     protocol::{ExecutionEvent, Protection},
 };
@@ -44,7 +44,7 @@ pub(super) enum AfterPause {
 /// when protection stopped it, wait for the daemon to restore it.
 pub(super) async fn pause_agent(
     link: &mut Link,
-    paths: &Paths,
+    paths: &CommandPaths,
     plan: &ExecutionPlan,
     mode: &Mode,
     recovery: &recovery::Recovery,
@@ -90,7 +90,7 @@ pub(super) async fn pause_agent(
 /// from its saved `record` when it resumes.
 async fn await_restore(
     link: &mut Link,
-    paths: &Paths,
+    paths: &CommandPaths,
     plan: &ExecutionPlan,
     recovery: &recovery::Recovery,
     stop: &Halt,

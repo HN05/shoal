@@ -17,7 +17,7 @@ use tokio::{
 
 use crate::{
     client::connection,
-    paths::Paths,
+    paths::{CommandPaths, Paths},
     process::identity::Identity,
     protocol::{
         self, Body, Control, ExecutionEvent, ExecutionMethod, Method, Protection, Reattach,
@@ -77,7 +77,7 @@ impl Link {
     /// Send `method` and keep the connection for the execution's lifetime.
     /// `limit` bounds the daemon's reply.
     pub(super) async fn open(
-        paths: &Paths,
+        paths: &CommandPaths,
         method: ExecutionMethod,
         limit: Duration,
     ) -> Result<(Self, Body)> {

@@ -26,7 +26,7 @@ use crate::{
     config::permissions::Pushes,
     env,
     model::ExecutionPlan,
-    paths::Paths,
+    paths::{CommandPaths, Paths},
     process::{self, identity::Identity},
     protocol::{Body, ExecutionMethod, Reattach},
     sessions::Origin,
@@ -48,7 +48,7 @@ struct TrackedLaunch {
 }
 
 pub(super) async fn run_tracked(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspace: SpaceSelector,
     command: Vec<OsString>,
     mode: Mode,
@@ -59,7 +59,7 @@ pub(super) async fn run_tracked(
 }
 
 /// Restore the agent of a wrapper that continues from this binary.
-pub(super) async fn run_taken_over(paths: &Paths, taken: super::TakenOver) -> Result<i32> {
+pub(super) async fn run_taken_over(paths: &CommandPaths, taken: super::TakenOver) -> Result<i32> {
     let mode = match taken.log.clone() {
         Some(log) => Mode::Detached { log },
         None => Mode::Command { record: false },
@@ -70,7 +70,7 @@ pub(super) async fn run_taken_over(paths: &Paths, taken: super::TakenOver) -> Re
 
 impl TrackedLaunch {
     /// Run the command until the execution ends, then report its end.
-    async fn run_to_end(mut self, paths: &Paths, mode: &Mode) -> Result<i32> {
+    async fn run_to_end(mut self, paths: &CommandPaths, mode: &Mode) -> Result<i32> {
         let wake = self.wake_session(mode);
         let mut restarts = demo::Restarts::default();
         let result = loop {
@@ -107,7 +107,7 @@ impl TrackedLaunch {
     }
 
     /// Report whether a terminal shows the agent while it runs.
-    fn attachment(&self, paths: &Paths) -> Option<attachment::Monitor> {
+    fn attachment(&self, paths: &CommandPaths) -> Option<attachment::Monitor> {
         let shown = self.auth.as_ref()?.shown.clone()?;
         Some(attachment::start(paths, &self.plan, shown))
     }
@@ -116,7 +116,7 @@ impl TrackedLaunch {
     /// nothing to run.
     async fn run(
         &mut self,
-        paths: &Paths,
+        paths: &CommandPaths,
         mode: &Mode,
         wake: Option<wake::Wake>,
     ) -> Result<Outcome> {
@@ -146,7 +146,7 @@ impl TrackedLaunch {
     /// code to finish with, or `None` to run the command again.
     async fn after_run(
         &mut self,
-        paths: &Paths,
+        paths: &CommandPaths,
         mode: &Mode,
         outcome: Outcome,
         restarts: &mut demo::Restarts,
@@ -199,7 +199,12 @@ impl TrackedLaunch {
 
     /// Pause the agent, or keep a stopped command for `shoal resume`; true
     /// when the daemon restored the agent to run again.
-    async fn resolve_pause(&mut self, paths: &Paths, mode: &Mode, stop: &Halt) -> Result<bool> {
+    async fn resolve_pause(
+        &mut self,
+        paths: &CommandPaths,
+        mode: &Mode,
+        stop: &Halt,
+    ) -> Result<bool> {
         let Some(recovery) = &self.recovery else {
             if matches!(mode, Mode::Command { record: true }) {
                 record_stopped_command(paths, &self.plan, &self.command, stop);
@@ -243,7 +248,7 @@ impl TrackedLaunch {
     /// exits to release them. Returns only on failure.
     async fn hand_over(
         &mut self,
-        paths: &Paths,
+        paths: &CommandPaths,
         mode: &Mode,
         installed: &Path,
         record: Option<&Path>,
@@ -300,7 +305,7 @@ async fn roll_back_failed_merge(plan: &ExecutionPlan, result: Result<i32>) -> Re
 }
 
 async fn prepare_tracked_launch(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspace: SpaceSelector,
     command: Vec<OsString>,
     mode: &Mode,
@@ -343,7 +348,7 @@ async fn prepare_tracked_launch(
 /// again over the connection it was handed, then restores its agent from the
 /// record.
 async fn prepare_taken_over_launch(
-    paths: &Paths,
+    paths: &CommandPaths,
     taken: super::TakenOver,
     mode: &Mode,
 ) -> Result<TrackedLaunch> {
@@ -400,7 +405,7 @@ async fn prepare_taken_over_launch(
 /// Prepare the agent of `workspace` that a taken-over wrapper restores, with
 /// the place it runs in, within [`takeover::PREPARATION_LIMIT`].
 async fn prepare_restore(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspace: &SpaceId,
     agent: &super::TrackedAgent,
     mode: &Mode,
@@ -438,7 +443,7 @@ async fn terminal_place(mode: &Mode) -> Option<Origin> {
 /// Start the agent's proxy for the registered `plan`, and the command it
 /// runs.
 async fn ready_command(
-    paths: &Paths,
+    paths: &CommandPaths,
     plan: &ExecutionPlan,
     command: Vec<OsString>,
     mode: &Mode,
@@ -453,7 +458,7 @@ async fn ready_command(
 }
 
 async fn open_execution(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspace: SpaceSelector,
     mode: &Mode,
     agent: Option<&super::TrackedAgent>,
@@ -536,7 +541,7 @@ fn allow_reattach(
 }
 
 async fn prepare_agent_launch(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspace: &SpaceSelector,
     mode: &Mode,
     agent: Option<&super::TrackedAgent>,
@@ -596,7 +601,7 @@ async fn prepare_agent_launch(
 /// or refuses them, as its `push` permission at launch says; none where it
 /// pushes directly.
 async fn prepare_push_gate(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspace: &SpaceSelector,
     agent: &crate::execution::TrackedAgent,
 ) -> Result<crate::push_gate::Launch> {

@@ -68,8 +68,9 @@ a program that runs `shoal --json` parses the output with them. The protocol
 keeps no
 compatibility promise: its version and exact-match rule refuse a client of
 another release with `protocol_mismatch` naming both versions, and an app
-updates with Shoal. Without a scope token an app is the user; with one, it is
-that workspace's agent, under the scope checks and approvals of its `shoal`
+updates with Shoal. An app is the user unless it gives a scope token, which
+only the `shoal` command reads from its environment; with one, it is that
+workspace's agent, under the scope checks and approvals of its `shoal`
 commands. Creating or splitting a workspace, opening a PR and merging start
 operations, below, whose ID a client follows for typed progress, then a result
 or a typed failure. A subscription sends a snapshot of the records of its

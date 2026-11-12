@@ -9,7 +9,7 @@ use tokio::net::UnixListener;
 /// `response`.
 async fn setup_answered(mut response: Response) -> Result<i32> {
     let temp = tempfile::tempdir_in("/tmp")?;
-    let paths = Paths::for_test(temp.path());
+    let paths = CommandPaths::from(crate::paths::Paths::for_test(temp.path()));
     paths.prepare()?;
     let listener = UnixListener::bind(&paths.socket)?;
     let daemon = tokio::spawn(async move {

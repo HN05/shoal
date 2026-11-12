@@ -23,7 +23,7 @@ use crate::{
     config::named_commands,
     fsutil::atomic::{Permissions, ReplaceOptions},
     model::Workspace,
-    paths::Paths,
+    paths::{CommandPaths, Paths},
     process::identity::{self, Identity},
     protocol::ConfigTarget,
     sessions::Origin,
@@ -168,7 +168,7 @@ pub fn converted_subject(
 /// the message it continues with and the arguments that keep its model and
 /// effort.
 struct RestoreCommand<'a> {
-    paths: &'a Paths,
+    paths: &'a CommandPaths,
     settings: &'a crate::config::Effective,
     name: &'a Agent,
     workspace: &'a Workspace,
@@ -251,7 +251,7 @@ impl Recovery {
     }
 
     pub(super) async fn for_launch(
-        paths: &Paths,
+        paths: &CommandPaths,
         workspace: &SpaceSelector,
         agent: &super::TrackedAgent,
     ) -> Self {
@@ -290,7 +290,7 @@ impl Recovery {
     /// arguments restore its session when known, otherwise the workspace's
     /// latest session, with its model and effort.
     pub async fn resolve(
-        paths: &Paths,
+        paths: &CommandPaths,
         workspace: &Workspace,
         restored: Restored<'_>,
         handoff: Option<&str>,
@@ -354,7 +354,7 @@ impl Recovery {
     /// and when it stopped, otherwise the restore command resolved at launch.
     pub(super) async fn restore_command(
         &self,
-        paths: &Paths,
+        paths: &CommandPaths,
         workspace: &Workspace,
         record: Option<&Path>,
     ) -> (Vec<OsString>, Option<crate::proxy::Proxy>) {

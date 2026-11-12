@@ -4,8 +4,8 @@ use std::{io::IsTerminal, time::Duration};
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    config::Effective, model::ExecutionPlan, paths::Paths, protocol::AgentMethod, sessions::Origin,
-    terminal::Attachment,
+    config::Effective, model::ExecutionPlan, paths::CommandPaths, protocol::AgentMethod,
+    sessions::Origin, terminal::Attachment,
 };
 
 /// How often the wrapper reads whether a terminal shows the agent and
@@ -53,7 +53,7 @@ impl Shown {
     }
 }
 
-pub(super) fn start(paths: &Paths, plan: &ExecutionPlan, shown: Shown) -> Monitor {
+pub(super) fn start(paths: &CommandPaths, plan: &ExecutionPlan, shown: Shown) -> Monitor {
     let paths = paths.clone();
     let (workspace, execution) = (plan.workspace.id.clone(), plan.id.clone());
     Monitor(tokio::spawn(async move {

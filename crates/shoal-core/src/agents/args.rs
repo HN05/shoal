@@ -15,7 +15,7 @@ use crate::{
     config::{Effective, modes, templates},
     fsutil,
     model::Workspace,
-    paths::Paths,
+    paths::CommandPaths,
 };
 
 /// The arguments that run agent `name` with `model`, refusing an agent
@@ -87,7 +87,7 @@ pub(crate) fn insert_options(command: &mut Vec<OsString>, options: Vec<OsString>
 /// What a workspace's agent `name` runs with besides its instructions, prompt
 /// and forwarded arguments: Shoal's hooks and [`workspace_dir_args`].
 pub async fn workspace_args(
-    paths: &Paths,
+    paths: &CommandPaths,
     settings: &Effective,
     name: &Agent,
     workspace: &Workspace,
@@ -103,7 +103,7 @@ pub async fn workspace_args(
 /// directories, so it may also work in the child workspaces it splits
 /// there and in its temporary directory.
 pub async fn workspace_dir_args(
-    paths: &Paths,
+    paths: &CommandPaths,
     settings: &Effective,
     name: &Agent,
     workspace: &Workspace,
@@ -156,7 +156,7 @@ fn agent_dirs(settings: &Effective, home: &Path) -> BTreeSet<PathBuf> {
 /// The directory in which `workspace`'s repository keeps its workspaces,
 /// resolved as agents compare paths; `None`, with a warning when it cannot be
 /// looked up, when there is none.
-async fn workspaces_dir(paths: &Paths, workspace: &Workspace) -> Option<PathBuf> {
+async fn workspaces_dir(paths: &CommandPaths, workspace: &Workspace) -> Option<PathBuf> {
     let directory = crate::client::repositories::list(paths)
         .await
         .and_then(|repositories| {

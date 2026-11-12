@@ -1,6 +1,7 @@
 use tokio::net::UnixListener;
 
 use super::*;
+use crate::paths::Paths;
 use crate::protocol::{self, Body, Request, Response};
 use anyhow::Result;
 

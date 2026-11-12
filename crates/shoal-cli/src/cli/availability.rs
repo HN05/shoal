@@ -9,7 +9,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::terminal,
     model::{RunningAgent, Workspace},
-    paths::Paths,
+    paths::CommandPaths,
     sessions::Origin,
 };
 
@@ -111,7 +111,7 @@ impl NeedExt for Need {
 
 /// The availability of `workspaces` for `need`, with the agent sessions the
 /// terminal hosts keep.
-pub async fn load(need: Need, paths: &Paths, workspaces: &[Workspace]) -> Availability {
+pub async fn load(need: Need, paths: &CommandPaths, workspaces: &[Workspace]) -> Availability {
     Availability::load(need, paths, workspaces, async || {
         session_workspaces(paths).await
     })
@@ -123,7 +123,7 @@ pub async fn load(need: Need, paths: &Paths, workspaces: &[Workspace]) -> Availa
 /// wrapper waits to restore it, which attaching resumes, and those Shoal
 /// created for them, such as a session left at its shell after a failed
 /// launch.
-async fn session_workspaces(paths: &Paths) -> HashSet<SpaceId> {
+async fn session_workspaces(paths: &CommandPaths) -> HashSet<SpaceId> {
     let agents = crate::client::agents::all(paths).await.unwrap_or_default();
     let owned = crate::client::workspaces::owned_places(paths)
         .await
@@ -172,7 +172,7 @@ fn agent_places(agents: &[RunningAgent]) -> AgentPlaces<'_> {
 /// The settings of each of `workspaces`, which say which hosts to ask about
 /// its places; one whose settings cannot be read is left out.
 async fn workspace_settings<'a>(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspaces: impl Iterator<Item = &'a SpaceId>,
 ) -> HashMap<SpaceId, crate::config::Effective> {
     let mut settings = HashMap::new();

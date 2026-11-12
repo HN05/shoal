@@ -9,11 +9,11 @@ use crate::{
         availability::Need,
         output::{Palette, Style},
     },
-    paths::Paths,
+    paths::{CommandPaths, Paths},
 };
 
 pub struct Context {
-    pub paths: Paths,
+    pub paths: CommandPaths,
     /// The place a backend opened for this process, when it runs in one.
     pub(in crate::cli) place: Option<super::terminal::Place>,
     /// Emit machine-readable output and never prompt.
@@ -52,7 +52,7 @@ impl Context {
 
     pub fn new(paths: Paths, json: bool) -> Self {
         Self {
-            paths,
+            paths: paths.into(),
             json,
             place: None,
             need: Need::Any,

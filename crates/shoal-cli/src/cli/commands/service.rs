@@ -17,7 +17,7 @@ pub(super) async fn run(ctx: Context, command: DaemonCommand, daemon: Daemon) ->
             executable,
         } => install::install(&ctx, dry_run, executable).await,
         DaemonCommand::Run { managed } => {
-            (daemon.run)(ctx.paths, managed, daemon.handoff).await?;
+            (daemon.run)(ctx.paths.into(), managed, daemon.handoff).await?;
             Ok(0)
         }
         DaemonCommand::Start => daemon::start(&ctx).await,

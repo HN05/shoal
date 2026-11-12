@@ -16,6 +16,7 @@ use crate::daemon::{
 };
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
+use crate::paths::CommandPaths;
 use std::{fs, future::Future, os::unix::fs::PermissionsExt};
 
 mod agent_restart;
@@ -42,6 +43,8 @@ async fn built_in_restore_child() {
     }
     use crate::execution::recovery::Recovery;
     let (_root, manager, workspace, serving) = fixture().await;
+    // The daemon as the workspace's wrapper reaches it.
+    let paths = CommandPaths::from(manager.paths.clone());
     fs::write(
         workspace.path.join(".shoal.toml"),
         "[agents.codex]\ncommand = ['codex-fixture', '{args}']\n[agents.claude]\ncommand = ['claude-fixture', '{args}']\n",
@@ -64,15 +67,9 @@ async fn built_in_restore_child() {
             &["claude-fixture", "--continue"][..],
         ),
     ] {
-        let recovery = Recovery::resolve(
-            &manager.paths,
-            &workspace,
-            restored(agent, None),
-            handoff,
-            None,
-        )
-        .await
-        .unwrap();
+        let recovery = Recovery::resolve(&paths, &workspace, restored(agent, None), handoff, None)
+            .await
+            .unwrap();
         assert!(recovery.automatic);
         assert_eq!(recovery.handoff_delivered, handoff.is_some());
         // Restored sessions keep receiving agent messages and may work in
@@ -93,7 +90,7 @@ async fn built_in_restore_child() {
         // The restored session is told its mode's rules again, after its
         // resume arguments.
         let target = crate::protocol::ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
-        let settings = crate::client::workspaces::settings(&manager.paths, target)
+        let settings = crate::client::workspaces::settings(&paths, target)
             .await
             .unwrap();
         let rules = crate::agents::restored_instruction_args(
@@ -126,7 +123,7 @@ async fn built_in_restore_child() {
         ("claude", &["claude-fixture", "--resume", "s1"][..]),
     ] {
         let recovery = Recovery::resolve(
-            &manager.paths,
+            &paths,
             &workspace,
             restored(agent, Some(&"s1".into())),
             None,
@@ -152,7 +149,7 @@ async fn built_in_restore_child() {
         mode: &"triage".into(),
         ..restored("claude", Some(&session))
     };
-    let recovery = Recovery::resolve(&manager.paths, &workspace, triage, None, None)
+    let recovery = Recovery::resolve(&paths, &workspace, triage, None, None)
         .await
         .unwrap();
     let told =
@@ -198,7 +195,7 @@ async fn built_in_restore_child() {
             model: &model,
             session: Some(&"s1".into()),
         };
-        let recovery = Recovery::resolve(&manager.paths, &workspace, restored, None, None)
+        let recovery = Recovery::resolve(&paths, &workspace, restored, None, None)
             .await
             .unwrap();
         let restore = restore.iter().map(std::ffi::OsString::from);
@@ -209,15 +206,9 @@ async fn built_in_restore_child() {
         );
         assert_eq!(recovery.model, model);
     }
-    let unsupported = Recovery::resolve(
-        &manager.paths,
-        &workspace,
-        restored("custom", None),
-        None,
-        None,
-    )
-    .await
-    .unwrap();
+    let unsupported = Recovery::resolve(&paths, &workspace, restored("custom", None), None, None)
+        .await
+        .unwrap();
     assert!(!unsupported.automatic);
     assert!(unsupported.command.is_empty());
     fs::write(
@@ -226,7 +217,7 @@ async fn built_in_restore_child() {
     )
     .unwrap();
     let overridden = Recovery::resolve(
-        &manager.paths,
+        &paths,
         &workspace,
         restored("codex", None),
         Some("handoff"),
@@ -246,7 +237,7 @@ async fn built_in_restore_child() {
     )
     .unwrap();
     let prompted = Recovery::resolve(
-        &manager.paths,
+        &paths,
         &workspace,
         restored("codex", None),
         Some("handoff"),
@@ -263,15 +254,9 @@ async fn built_in_restore_child() {
         prompt.to_string_lossy().ends_with("\n\nhandoff"),
         "{prompt:?}"
     );
-    let prompted = Recovery::resolve(
-        &manager.paths,
-        &workspace,
-        restored("codex", None),
-        None,
-        None,
-    )
-    .await
-    .unwrap();
+    let prompted = Recovery::resolve(&paths, &workspace, restored("codex", None), None, None)
+        .await
+        .unwrap();
     assert!(!prompted.handoff_delivered);
     let [program, separator, prompt] = &prompted.command[..] else {
         panic!("{:?}", prompted.command);
@@ -294,7 +279,7 @@ async fn built_in_restore_child() {
         model: &model,
         session: None,
     };
-    let kept = Recovery::resolve(&manager.paths, &workspace, with_model(&codex), None, None)
+    let kept = Recovery::resolve(&paths, &workspace, with_model(&codex), None, None)
         .await
         .unwrap();
     assert_eq!(
@@ -302,7 +287,7 @@ async fn built_in_restore_child() {
         ["saved-session", "-m", "m1", "--"].map(std::ffi::OsString::from)
     );
     // A tool that cannot take it refuses the restore, which waits.
-    let refused = Recovery::resolve(&manager.paths, &workspace, with_model(&custom), None, None);
+    let refused = Recovery::resolve(&paths, &workspace, with_model(&custom), None, None);
     assert!(refused.await.is_err());
     // So does the restore of an agent config turns off.
     let config = fs::read_to_string(workspace.path.join(".shoal.toml")).unwrap();
@@ -311,7 +296,7 @@ async fn built_in_restore_child() {
         format!("{config}enabled = false\n"),
     )
     .unwrap();
-    let off = Recovery::resolve(&manager.paths, &workspace, with_model(&codex), None, None);
+    let off = Recovery::resolve(&paths, &workspace, with_model(&codex), None, None);
     assert!(off.await.is_err());
     fs::write(workspace.path.join(".shoal.toml"), config).unwrap();
     // A restore tells the session why and when it stopped.
@@ -320,7 +305,7 @@ async fn built_in_restore_child() {
         at: None,
     };
     let told = Recovery::resolve(
-        &manager.paths,
+        &paths,
         &workspace,
         restored("codex", None),
         None,
@@ -438,7 +423,7 @@ fn with_background(script: &str) -> String {
 
 async fn run_tracked_agent(script: &str) {
     let root = std::env::current_dir().unwrap();
-    let paths = crate::paths::Paths::for_test(root);
+    let paths = CommandPaths::from(crate::paths::Paths::for_test(root));
     let id = SpaceSelector::Id(std::env::var("SHOAL_TEST_WORKSPACE").unwrap().into());
     let code = crate::execution::run(
         &paths,
@@ -462,7 +447,7 @@ async fn tracked_command_child() {
         return;
     }
     let root = std::env::current_dir().unwrap();
-    let paths = crate::paths::Paths::for_test(root);
+    let paths = CommandPaths::from(crate::paths::Paths::for_test(root));
     let id = SpaceSelector::Id(std::env::var("SHOAL_TEST_WORKSPACE").unwrap().into());
     let code = crate::execution::run_command(
         &paths,
@@ -1269,7 +1254,7 @@ async fn resumed_agent_child() {
         crate::env::launch_queue_entry(&entry.into());
     }
     let root = std::env::current_dir().unwrap();
-    let paths = crate::paths::Paths::for_test(root);
+    let paths = CommandPaths::from(crate::paths::Paths::for_test(root));
     let id = SpaceSelector::Id(std::env::var("SHOAL_TEST_WORKSPACE").unwrap().into());
     let record = std::env::var_os("SHOAL_TEST_RECORD").unwrap();
     let script = "trap 'exit 0' TERM; touch started; while :; do sleep 1; done";

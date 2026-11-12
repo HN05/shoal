@@ -18,7 +18,7 @@ use crate::{
     env,
     execution::{self, MergeResult},
     model::{MergeConfirmation, MergeOptions, MergePlan, MergedBranch},
-    paths::Paths,
+    paths::CommandPaths,
     protocol::{
         ConfigTarget,
         operations::{OperationSpec, Step},
@@ -128,7 +128,7 @@ pub(in crate::cli::commands) async fn merge_branch(
 /// Merge `workspace` as a tracked execution, reading what its worker merged,
 /// or why it could not, from the file the worker writes.
 async fn run_merge(
-    paths: &Paths,
+    paths: &CommandPaths,
     workspace: SpaceSelector,
     options: MergeOptions,
 ) -> Result<MergedBranch> {

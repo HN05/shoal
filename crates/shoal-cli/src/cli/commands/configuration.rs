@@ -13,7 +13,7 @@ use crate::{
     },
     config::{Config, edit::Change, options::Entry, resolve::Stack},
     env,
-    paths::Paths,
+    paths::CommandPaths,
     protocol::ConfigTarget,
 };
 
@@ -166,7 +166,7 @@ async fn target(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<Config
 /// Every option with its winning layer, and warnings for retired settings
 /// and an ignored worktree file: the daemon's repository layers under the
 /// global file read now.
-async fn report(paths: &Paths, target: ConfigTarget) -> Result<(Vec<Entry>, Vec<String>)> {
+async fn report(paths: &CommandPaths, target: ConfigTarget) -> Result<(Vec<Entry>, Vec<String>)> {
     let layers = crate::client::workspaces::config_layers(paths, target).await?;
     let stack = Stack::new(&Config::load_with_templates(paths)?, &layers);
     let mut warnings = stack.warnings().to_vec();

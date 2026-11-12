@@ -18,13 +18,14 @@ pub struct Request {
 }
 
 impl Request {
-    /// A request from this process, carrying its workspace scope token if any.
+    /// An unscoped request, which [`crate::connection`] gives its caller's
+    /// scope.
     pub fn new(method: impl Into<Method>) -> Self {
         Self {
             protocol: VERSION,
             id: 1,
             method: method.into(),
-            scope: crate::env::scope_token(),
+            scope: None,
         }
     }
 }

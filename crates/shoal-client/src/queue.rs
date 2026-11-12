@@ -10,7 +10,6 @@ use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, open, request, stream_closed},
     model::{MovedEntry, QueueAdmission, QueueEntry, QueuePlace, QueueRequest, QueuedPlan},
-    paths::Paths,
     protocol::QueueMethod,
 };
 
@@ -107,21 +106,24 @@ impl Hold {
     /// Returns once the daemon holds the slot, ends the entry or cannot be
     /// reached. A daemon at its connection limit closes the hold unanswered,
     /// so preparation waits instead of outliving the reservation.
-    pub async fn start(paths: &Paths, entry: &QueueEntryId) -> Self {
+    pub async fn start(
+        daemon: &(impl Daemon + Clone + Send + 'static),
+        entry: &QueueEntryId,
+    ) -> Self {
         let (settled, held) = oneshot::channel();
-        let hold = Self(tokio::spawn(keep(paths.clone(), entry.clone(), settled)));
+        let hold = Self(tokio::spawn(keep(daemon.clone(), entry.clone(), settled)));
         let _ = held.await;
         hold
     }
 }
 
-async fn keep(paths: Paths, entry: QueueEntryId, settled: oneshot::Sender<()>) {
+async fn keep(daemon: impl Daemon, entry: QueueEntryId, settled: oneshot::Sender<()>) {
     let mut settled = Some(settled);
     loop {
         let method = QueueMethod::QueueHold {
             entry: entry.clone(),
         };
-        let opened = open(&paths, method).await;
+        let opened = open(&daemon, method).await;
         if !matches!(&opened, Err(error) if stream_closed(error))
             && let Some(settled) = settled.take()
         {

@@ -24,7 +24,7 @@ use crate::{
     },
     execution,
     model::Workspace,
-    paths::Paths,
+    paths::CommandPaths,
     protocol::ConfigTarget,
 };
 
@@ -234,7 +234,7 @@ async fn run_defined(
 }
 
 async fn expand(
-    paths: &Paths,
+    paths: &CommandPaths,
     commands: &Commands,
     name: &str,
     workspace: &Workspace,

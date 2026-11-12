@@ -7,7 +7,7 @@ use super::install::install;
 use crate::client::output::daemon::{Reloaded, Running, Status};
 use crate::{
     cli::{client, context::Context, output::Style, ui},
-    paths::Paths,
+    paths::{CommandPaths, Paths},
     protocol::Exit,
     service::{self, Platform},
 };
@@ -145,7 +145,7 @@ async fn start_service(ctx: &Context) -> Result<()> {
 
 /// Ask the daemon to exit with `exit`, then unload its service. A daemon that
 /// does not answer gets SIGTERM, which stops its work saved first.
-pub(super) async fn stop_daemon(paths: &Paths, exit: Exit) -> Result<()> {
+pub(super) async fn stop_daemon(paths: &CommandPaths, exit: Exit) -> Result<()> {
     if !client::exit(paths, exit).await? {
         return terminate(paths).await;
     }
@@ -160,7 +160,7 @@ pub(super) async fn stop_daemon(paths: &Paths, exit: Exit) -> Result<()> {
 /// Stop a daemon with SIGTERM through the OS service manager, or directly
 /// when it runs in the foreground or does not answer status without an
 /// installed service, as while it starts.
-async fn terminate(paths: &Paths) -> Result<()> {
+async fn terminate(paths: &CommandPaths) -> Result<()> {
     match client::status(paths).await {
         Ok(Some(status)) if !status.managed => {
             signal_owner(
