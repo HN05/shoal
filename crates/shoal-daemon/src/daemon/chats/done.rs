@@ -32,8 +32,8 @@ impl Manager {
     ) -> Result<Completion> {
         done.check()?;
         ensure!(
-            !done.integrated,
-            "a chat has no branch; integrated applies to workspaces"
+            !done.integrated && !done.keep_demos,
+            "a chat has no branch or demos; integrated and keep_demos apply to workspaces"
         );
         let chat = self.done_chat(selector).await?;
         let _guard = self.gates.lock_prs([&chat.id]).await;

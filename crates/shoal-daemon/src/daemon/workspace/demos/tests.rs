@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use super::*;
+use crate::client::assignments::Done;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -9,6 +10,7 @@ use crate::{
         scope::{self, Caller, ScopedExecution},
         test_support::{manager, repository},
         workspace::ExecutionKind,
+        workspace_files::Attacher,
     },
     model::Workspace,
     protocol::DemoMethod,
@@ -176,6 +178,38 @@ async fn stopping_demos_asks_only_their_wrappers_to_stop() {
             .await
             .is_err()
     );
+}
+
+#[tokio::test]
+async fn completion_stops_the_workspaces_demos_unless_it_keeps_them() {
+    let (temp, manager) = manager().await;
+    let (first, _) = workspaces(&manager, temp.path()).await;
+    let mut web = manager
+        .begin_execution_running(
+            first.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+            Some(launch("web")),
+        )
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&first.id);
+    let kept = Done {
+        keep_demos: true,
+        ..Done::default()
+    };
+    manager
+        .mark_done(&selector, kept, &Attacher::User)
+        .await
+        .unwrap();
+    assert!(!*web.stop.borrow_and_update());
+
+    manager.undo_done(&selector).await.unwrap();
+    (manager.mark_done(&selector, Done::default(), &Attacher::User))
+        .await
+        .unwrap();
+    assert!(*web.stop.borrow_and_update());
 }
 
 #[tokio::test]

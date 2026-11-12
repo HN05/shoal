@@ -160,12 +160,13 @@ pub(in crate::cli::commands) async fn run(
                 let done = crate::client::assignments::Done {
                     cleanup,
                     integrated,
+                    keep_demos,
                     results: messages::attachments(&attach)?,
                     summary,
                 };
                 // Before anything is picked or stopped.
                 done.check()?;
-                workspaces::done(&ctx, space, done, keep_demos).await
+                workspaces::done(&ctx, space, done).await
             }
         }
     }

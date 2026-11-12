@@ -25,6 +25,9 @@ pub struct Done {
     /// workspace has such a branch.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub integrated: bool,
+    /// Leave the workspace's demos running; a chat has none.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub keep_demos: bool,
     /// Files to hand back by absolute path, which the daemon copies.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub results: Vec<NewFile>,

@@ -43,30 +43,16 @@ pub(in crate::cli::commands) async fn undone(
     Ok(0)
 }
 
-/// Stop the workspace's demos unless `keep_demos`, then record `done`; a
-/// chat only records it, since it has no branch or demos.
+/// Record `done`, which stops a workspace's demos unless it keeps them.
 pub(in crate::cli::commands) async fn done(
     ctx: &Context,
     space: Option<SpaceSelector>,
     done: assignments::Done,
-    keep_demos: bool,
 ) -> Result<i32> {
     let selected = selected(ctx, space).await?;
     let space = match &selected {
-        Selected::Chat(chat) => {
-            anyhow::ensure!(
-                !done.integrated && !keep_demos,
-                "a chat has no branch or demos; --integrated and --keep-demos apply to workspaces"
-            );
-            SpaceSelector::id(chat)
-        }
-        Selected::Workspace(workspace) => {
-            // Before completion, whose cleanup may remove the workspace at once.
-            if !keep_demos {
-                stop_demos(ctx, workspace).await?;
-            }
-            workspace.clone()
-        }
+        Selected::Chat(chat) => SpaceSelector::id(chat),
+        Selected::Workspace(workspace) => workspace.clone(),
     };
     let completion = assignments::mark_done(&ctx.paths, space, done, crate::env::chat()).await?;
     let message = match selected {
@@ -79,10 +65,6 @@ pub(in crate::cli::commands) async fn done(
     };
     ctx.emit(&message, &completion)?;
     Ok(0)
-}
-
-async fn stop_demos(ctx: &Context, workspace: &SpaceSelector) -> Result<()> {
-    crate::client::demos::stop(&ctx.paths, workspace.clone(), None).await
 }
 
 fn done_message(completion: &Completion) -> String {

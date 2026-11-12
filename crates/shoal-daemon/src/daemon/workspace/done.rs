@@ -69,9 +69,10 @@ impl Manager {
         }
     }
 
-    /// Record `done` at the workspace's HEAD. Copies of the files it hands
-    /// back are attached by `attacher`, and the workspace's attached files
-    /// keep them after its removal.
+    /// Stop the workspace's demos unless `done` keeps them, then record
+    /// `done` at its HEAD. Copies of the files it hands back are attached by
+    /// `attacher`, and the workspace's attached files keep them after its
+    /// removal.
     pub async fn mark_done(
         &self,
         selector: &SpaceSelector,
@@ -79,6 +80,10 @@ impl Manager {
         attacher: &Attacher,
     ) -> Result<Completion> {
         done.check()?;
+        // Before completion, whose cleanup may remove the workspace at once.
+        if !done.keep_demos {
+            self.stop_demos(selector, None).await?;
+        }
         // Serialize cleanup choices with the PR and completion sweeps.
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         // A workspace at a commit holds no assignment of its own.
