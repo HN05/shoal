@@ -80,7 +80,7 @@ impl Activity for GitHub {
     }
 }
 
-pub(crate) async fn issue_activity(
+async fn issue_activity(
     repo: &ForgeRepo,
     account: &Account,
     number: IssueNumber,
@@ -94,11 +94,7 @@ pub(crate) async fn issue_activity(
     Ok(snapshot)
 }
 
-pub(crate) async fn pr_activity(
-    repo: &ForgeRepo,
-    account: &Account,
-    number: PullNumber,
-) -> Result<Snapshot> {
+async fn pr_activity(repo: &ForgeRepo, account: &Account, number: PullNumber) -> Result<Snapshot> {
     let pull = read_pull(repo, account, number).await?;
     let mut snapshot = Snapshot::item(&pull);
     let (discussion, reviews, inline, checks) = tokio::join!(
@@ -116,7 +112,7 @@ pub(crate) async fn pr_activity(
     Ok(snapshot)
 }
 
-pub(crate) async fn pr_status(
+async fn pr_status(
     repo: &ForgeRepo,
     account: &Account,
     number: PullNumber,

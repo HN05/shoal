@@ -66,10 +66,10 @@ impl Runners for Forgejo {
 }
 
 /// The program that runs one job.
-pub(super) const PROGRAM: &str = "forgejo-runner";
+const PROGRAM: &str = "forgejo-runner";
 
 /// The jobs the job search lists as waiting for a runner with `labels`.
-pub(super) async fn waiting_jobs(
+async fn waiting_jobs(
     repo: &ForgeRepo,
     account: &Account,
     labels: &[String],
@@ -118,7 +118,7 @@ fn waiting_job(value: &Value) -> Result<Option<WaitingJob>> {
 }
 
 /// The run `value` with the event that started it.
-pub(super) fn job_run(repo: &ForgeRepo, value: &Value) -> Result<JobRun> {
+fn job_run(repo: &ForgeRepo, value: &Value) -> Result<JobRun> {
     let number = value["index_in_repo"]
         .as_u64()
         .context("run has no number")?;
@@ -158,11 +158,11 @@ pub(super) fn job_run(repo: &ForgeRepo, value: &Value) -> Result<JobRun> {
 }
 
 /// The request that registers a repository runner named `name`.
-pub(super) fn register(repo: &ForgeRepo, name: &str) -> Request {
+fn register(repo: &ForgeRepo, name: &str) -> Request {
     registration(repo.repo_endpoint("actions/runners"), name)
 }
 
-pub(super) fn registered(value: &Value) -> Result<RegisteredRunner> {
+fn registered(value: &Value) -> Result<RegisteredRunner> {
     Ok(RegisteredRunner {
         id: value["id"]
             .as_u64()
@@ -173,7 +173,7 @@ pub(super) fn registered(value: &Value) -> Result<RegisteredRunner> {
     })
 }
 
-pub(super) fn delete(repo: &ForgeRepo, id: RunnerId) -> Request {
+fn delete(repo: &ForgeRepo, id: RunnerId) -> Request {
     let endpoint = repo.repo_endpoint(&format!("actions/runners/{id}"));
     Request::new(HttpMethod::Delete, endpoint, None)
 }
@@ -182,7 +182,7 @@ pub(super) fn delete(repo: &ForgeRepo, id: RunnerId) -> Request {
 /// host backend, with a configuration that keeps the runner's files in the
 /// launch's work directory and gives the job the launch's variables, which
 /// `runner.envs` puts in every step's environment and the `env` context.
-pub(super) fn job_command(repo: &ForgeRepo, launch: &JobLaunch<'_>) -> Result<JobCommand> {
+fn job_command(repo: &ForgeRepo, launch: &JobLaunch<'_>) -> Result<JobCommand> {
     let runner = launch
         .runner
         .context("Forgejo runs a job only on the repository's runner")?;

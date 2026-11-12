@@ -123,7 +123,7 @@ impl Reviews for GitHub {
 
 /// The PR's diff as GitHub lists its files. A file too large for GitHub
 /// to show has no patch, so none of its lines takes a comment.
-pub(super) async fn diff(repo: &ForgeRepo, account: &Account, current: &Current) -> Result<Diff> {
+async fn diff(repo: &ForgeRepo, account: &Account, current: &Current) -> Result<Diff> {
     let endpoint = repo.repo_endpoint(&format!("pulls/{}/files", current.item.number));
     let files = repo.pages(account, &endpoint).await?;
     files
@@ -177,7 +177,7 @@ fn submit(repo: &ForgeRepo, number: PullNumber, review: &PlacedReview) -> Submis
 
 /// The activity keys of the review a review post's `response` describes
 /// and of its line comments, which GitHub lists under the review.
-pub(super) async fn keys(
+async fn keys(
     repo: &ForgeRepo,
     account: &Account,
     number: PullNumber,

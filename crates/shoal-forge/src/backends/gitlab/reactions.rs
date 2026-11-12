@@ -62,7 +62,7 @@ const NAMES: [(&str, &str); 4] = [
 ];
 
 /// GitLab keeps a merge request's diff notes among its notes.
-pub(super) fn endpoint(repo: &ForgeRepo, kind: ItemKind, number: u64, subject: Subject) -> String {
+fn endpoint(repo: &ForgeRepo, kind: ItemKind, number: u64, subject: Subject) -> String {
     let item = repo.item_endpoint(kind, number);
     match subject {
         Subject::Item => format!("{item}/award_emoji"),
@@ -72,7 +72,7 @@ pub(super) fn endpoint(repo: &ForgeRepo, kind: ItemKind, number: u64, subject: S
     }
 }
 
-pub(super) fn listed(award: &Value) -> Result<Listed> {
+fn listed(award: &Value) -> Result<Listed> {
     let name = text(&award["name"]).context("an award emoji has no name")?;
     Ok(Listed {
         id: award["id"].clone(),
@@ -86,7 +86,7 @@ pub(super) async fn own_login(repo: &ForgeRepo, account: &Account) -> Result<Str
     text(&user["username"]).context("GitLab did not report your username")
 }
 
-pub(super) fn add(endpoint: String, content: &str) -> Request {
+fn add(endpoint: String, content: &str) -> Request {
     let name = NAMES
         .iter()
         .find(|(github, _)| *github == content)
@@ -94,7 +94,7 @@ pub(super) fn add(endpoint: String, content: &str) -> Request {
     Request::new(HttpMethod::Post, endpoint, Some(json!({ "name": name })))
 }
 
-pub(super) fn remove(endpoint: String, own: &Listed) -> Result<Request> {
+fn remove(endpoint: String, own: &Listed) -> Result<Request> {
     let id = own.number()?;
     Ok(Request::new(
         HttpMethod::Delete,
@@ -104,7 +104,7 @@ pub(super) fn remove(endpoint: String, own: &Listed) -> Result<Request> {
 }
 
 /// GitHub's name for GitLab's emoji `name`, where GitHub has the reaction.
-pub(super) fn github_name(name: &str) -> String {
+fn github_name(name: &str) -> String {
     NAMES
         .iter()
         .find(|(_, emoji)| *emoji == name)

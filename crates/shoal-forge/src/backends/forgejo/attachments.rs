@@ -86,7 +86,7 @@ impl Attachments for Forgejo {
 
 /// What `GET /settings/attachment` reports.
 #[derive(Debug, Deserialize)]
-pub(super) struct Settings {
+struct Settings {
     enabled: bool,
     /// Comma-separated extensions (`.png`), media types (`image/png`) and
     /// wildcards (`image/*`, `*/*`); none allows every file.
@@ -97,7 +97,7 @@ pub(super) struct Settings {
 }
 
 impl Settings {
-    pub(super) async fn read(repo: &ForgeRepo, account: &Account) -> Result<Self> {
+    async fn read(repo: &ForgeRepo, account: &Account) -> Result<Self> {
         let response = repo
             .send(account, &Request::get("settings/attachment".to_owned()))
             .await
@@ -106,7 +106,7 @@ impl Settings {
     }
 
     /// Refuse an attachment the instance would refuse to upload.
-    pub(super) fn check(&self, attachment: &Attachment) -> Result<()> {
+    fn check(&self, attachment: &Attachment) -> Result<()> {
         ensure!(self.enabled, "the forge does not accept attached files");
         let path = attachment.path.display();
         if !self.allows(attachment)? {

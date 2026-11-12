@@ -139,7 +139,7 @@ impl Reviews for GitLab {
 
 /// The diff of the merge request's version at its head, with the commits
 /// that version compares, which positions on it name.
-pub(super) async fn diff(repo: &ForgeRepo, account: &Account, current: &Current) -> Result<Diff> {
+async fn diff(repo: &ForgeRepo, account: &Account, current: &Current) -> Result<Diff> {
     let head = current
         .head_sha
         .as_deref()
@@ -256,11 +256,7 @@ fn draft_note(review: &PlacedReview, placed: &Placed) -> Result<Value> {
 
 /// The request that deletes the draft note a draft request's response
 /// describes.
-pub(super) fn discard_draft(
-    repo: &ForgeRepo,
-    number: PullNumber,
-    draft: &Value,
-) -> Result<Request> {
+fn discard_draft(repo: &ForgeRepo, number: PullNumber, draft: &Value) -> Result<Request> {
     let id = draft["id"].as_u64().context("the draft note has no ID")?;
     let endpoint = format!(
         "{}/draft_notes/{id}",
@@ -271,7 +267,7 @@ pub(super) fn discard_draft(
 
 /// Refuse a review while `account` has drafts pending on merge request
 /// `number`, which publishing the review would publish with it.
-pub(super) async fn check(repo: &ForgeRepo, account: &Account, number: PullNumber) -> Result<()> {
+async fn check(repo: &ForgeRepo, account: &Account, number: PullNumber) -> Result<()> {
     let endpoint = format!(
         "{}/draft_notes",
         repo.item_endpoint(ItemKind::Pr, number.get())
@@ -289,7 +285,7 @@ pub(super) async fn check(repo: &ForgeRepo, account: &Account, number: PullNumbe
 /// The activity keys of the notes `review` published. Publishing reports
 /// none, so they are the account's newest notes with the review's bodies;
 /// a note whose body GitLab rewrote is reported back like anyone else's.
-pub(super) async fn keys(
+async fn keys(
     repo: &ForgeRepo,
     account: &Account,
     number: PullNumber,

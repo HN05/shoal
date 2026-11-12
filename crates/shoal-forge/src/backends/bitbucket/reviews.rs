@@ -108,7 +108,7 @@ impl Reviews for Bitbucket {
 
 /// The pull request's diff from where its head forks from the
 /// destination, as Bitbucket shows it.
-pub(super) async fn diff(repo: &ForgeRepo, account: &Account, current: &Current) -> Result<Diff> {
+async fn diff(repo: &ForgeRepo, account: &Account, current: &Current) -> Result<Diff> {
     let request = Request::get(diff_endpoint(repo, current)?);
     Diff::parse(&repo.read_text(account, &request).await?)
 }

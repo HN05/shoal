@@ -61,7 +61,7 @@ impl Attachments for GitLab {
 /// group by ID, `/-/project/<id>/uploads/<secret>/<file>`, or by path,
 /// `/<project path>/uploads/<secret>/<file>` and
 /// `/groups/<group path>/-/uploads/<secret>/<file>`.
-pub(crate) fn api_route(url: &str) -> Result<String> {
+fn api_route(url: &str) -> Result<String> {
     let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
     let path = rest.split(['?', '#']).next().unwrap_or_default();
     let segments: Vec<&str> = path.split('/').skip(1).collect();

@@ -297,7 +297,7 @@ fn review_comment(comment: &Value, thread: CommentId, resolved: bool) -> ReviewC
 }
 
 /// A deleted account has no user.
-pub(crate) fn nickname(user: &Value) -> String {
+fn nickname(user: &Value) -> String {
     text(&user["nickname"])
         .or_else(|| text(&user["display_name"]))
         .unwrap_or_else(|| "ghost".into())

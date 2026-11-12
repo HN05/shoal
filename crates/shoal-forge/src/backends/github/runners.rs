@@ -90,7 +90,7 @@ impl Runners for GitHub {
 
 /// The program `actions/runner` runs each job with; its installation is the
 /// directory above the one that holds it.
-pub(super) const PROGRAM: &str = "Runner.Listener";
+const PROGRAM: &str = "Runner.Listener";
 
 /// The runner group every repository runner joins.
 const DEFAULT_GROUP: u64 = 1;
@@ -104,7 +104,7 @@ const PAGE: usize = 100;
 /// The queued jobs of the repository's active runs that a runner with
 /// `labels` may take: GitHub gives a job to a runner that has each of the
 /// labels it runs on, whatever their case.
-pub(super) async fn waiting_jobs(
+async fn waiting_jobs(
     repo: &ForgeRepo,
     account: &Account,
     labels: &[String],
@@ -187,7 +187,7 @@ fn names(value: &Value) -> Vec<String> {
 /// The run `value` with the event that started it. A PR's run at the PR's
 /// head names the PR only when it comes from the repository itself; a
 /// fork's, like a tag's or a schedule's, is fetched by its commit.
-pub(super) fn job_run(value: &Value) -> Result<JobRun> {
+fn job_run(value: &Value) -> Result<JobRun> {
     let event = value["event"].as_str().unwrap_or_default();
     let pull = value["pull_requests"][0]["number"]
         .as_u64()
@@ -214,7 +214,7 @@ pub(super) fn job_run(value: &Value) -> Result<JobRun> {
 
 /// Read the repository's runners, which only an account that may register
 /// them can.
-pub(super) async fn check_registration(repo: &ForgeRepo, account: &Account) -> Result<()> {
+async fn check_registration(repo: &ForgeRepo, account: &Account) -> Result<()> {
     let endpoint = repo.repo_endpoint("actions/runners?per_page=1");
     repo.send(account, &Request::get(endpoint))
         .await
@@ -222,17 +222,13 @@ pub(super) async fn check_registration(repo: &ForgeRepo, account: &Account) -> R
     Ok(())
 }
 
-pub(super) fn delete(repo: &ForgeRepo, id: RunnerId) -> Request {
+fn delete(repo: &ForgeRepo, id: RunnerId) -> Request {
     let endpoint = repo.repo_endpoint(&format!("actions/runners/{id}"));
     Request::new(HttpMethod::Delete, endpoint, None)
 }
 
 /// The state of the runner `id`, or `None` once it is gone.
-pub(super) async fn state(
-    repo: &ForgeRepo,
-    account: &Account,
-    id: RunnerId,
-) -> Result<Option<RunnerState>> {
+async fn state(repo: &ForgeRepo, account: &Account, id: RunnerId) -> Result<Option<RunnerState>> {
     let read = Request::get(repo.repo_endpoint(&format!("actions/runners/{id}")));
     Ok(match repo.read_refusable(account, &read, &[404]).await? {
         Ok(runner) => Some(RunnerState {
@@ -249,7 +245,7 @@ pub(super) async fn state(
 }
 
 /// The job of `run` that the runner `runner` took.
-pub(super) async fn runner_job(
+async fn runner_job(
     repo: &ForgeRepo,
     account: &Account,
     run: RunId,
@@ -275,7 +271,7 @@ pub(super) async fn runner_job(
 /// the job's workspace, its configuration arrives through the environment,
 /// off the command line, and its job-started hook gives every step the
 /// launch's variables and reports the run of the job GitHub gave it.
-pub(super) async fn job_command(
+async fn job_command(
     repo: &ForgeRepo,
     account: &Account,
     launch: &JobLaunch<'_>,

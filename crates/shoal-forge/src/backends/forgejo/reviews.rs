@@ -118,7 +118,7 @@ impl Reviews for Forgejo {
 }
 
 /// The PR's diff as Forgejo serves it.
-pub(super) async fn diff(repo: &ForgeRepo, account: &Account, current: &Current) -> Result<Diff> {
+async fn diff(repo: &ForgeRepo, account: &Account, current: &Current) -> Result<Diff> {
     let endpoint = repo.repo_endpoint(&format!("pulls/{}.diff", current.item.number));
     Diff::parse(&repo.read_text(account, &Request::get(endpoint)).await?)
 }
@@ -159,7 +159,7 @@ fn submit(repo: &ForgeRepo, number: PullNumber, review: &PlacedReview) -> Submis
 
 /// The activity key of the review a review post's `response` describes,
 /// which counts its line comments.
-pub(super) fn keys(response: &Value) -> Result<Vec<String>> {
+fn keys(response: &Value) -> Result<Vec<String>> {
     let id = response.get("id").context("the review has no ID")?;
     Ok(vec![activity_key("reviews", id)])
 }
