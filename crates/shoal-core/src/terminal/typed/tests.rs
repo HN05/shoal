@@ -74,7 +74,8 @@ fn the_launch_file_names_what_the_command_runs_without() {
         true,
     )
     .unwrap();
-    assert!(!typed.command()[2].contains("exec"));
+    // The line names this executable, whose path may contain `exec`.
+    assert!(!typed.command()[2].contains("${SHELL"));
     let file = typed.file.to_path_buf();
     typed.hand_over().unwrap();
     assert_eq!(read(&file).unwrap().clear, ["HERDR_ENV"]);
