@@ -9,7 +9,9 @@ use anyhow::{Result, ensure};
 use crate::client::output::agents::SpaceStopped;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    cli::{args::SpaceTargets, commands::queued_agents, context::Context, output::Style, ui},
+    cli::{
+        args::lifecycle::StopArgs, commands::queued_agents, context::Context, output::Style, ui,
+    },
     client::processes::Selection,
     model::{PresentSpace, StoppedWorkspace, Workspace},
     protocol::{ErrorCode, QueuedLaunches, RemoteError},
@@ -26,12 +28,13 @@ use processes::stop_untracked;
 use targets::check_each;
 pub(super) use targets::{ensure_below, resolve};
 
-pub(super) async fn run(
-    ctx: &Context,
-    targets: SpaceTargets,
-    yes: bool,
-    skip_children: bool,
-) -> Result<i32> {
+pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
+    let StopArgs {
+        targets,
+        yes,
+        skip_children,
+        ..
+    } = args;
     if targets.all {
         return stop_all(ctx).await;
     }

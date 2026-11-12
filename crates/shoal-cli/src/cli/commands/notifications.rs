@@ -10,6 +10,7 @@ use anyhow::{Result, ensure};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
+        args::diagnostics::AlertsArgs,
         client::{self},
         context::Context,
         installed::arguments_with,
@@ -20,7 +21,15 @@ use crate::{
     installed::Executable,
 };
 
-pub(super) async fn list(ctx: &Context, all: bool, keep_unread: bool, limit: u32) -> Result<i32> {
+/// List the notifications `args` ask for, marking them read unless they
+/// keep them unread.
+pub(super) async fn list(ctx: &Context, args: AlertsArgs) -> Result<i32> {
+    let AlertsArgs {
+        all,
+        keep_unread,
+        limit,
+        ..
+    } = args;
     refuse_workspace_processes(ctx)?;
     let notifications = notifications::list(&ctx.paths, !all, limit).await?;
     ctx.show(&notifications, |notifications| {

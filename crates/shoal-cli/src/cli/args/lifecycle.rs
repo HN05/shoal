@@ -17,31 +17,7 @@ pub enum LifecycleCommand {
     /// chats, the current one by default. Untracked processes carry the space's identity or are its
     /// leftovers: processes still running after what started them exited, tied to the space by
     /// working directory, temporary directory, program or identity, with what they started.
-    Stop {
-        #[command(flatten)]
-        targets: SpaceTargets,
-        /// Treat executions Shoal cannot prove ended as stopped without asking.
-        #[arg(short = 'y', long)]
-        yes: bool,
-        /// Keep running the spaces below the selected ones.
-        #[arg(long, conflicts_with = "all")]
-        skip_children: bool,
-        /// Cancel the current turns of the agents instead, keeping them running.
-        ///
-        /// Shoal types each agent's interrupt key into its terminal session, records its turn
-        /// as ended, and leaves agents without a running turn alone.
-        #[arg(long, conflicts_with_all = ["all", "yes", "skip_children"])]
-        interrupt: bool,
-        /// Stop only the processes Shoal does not track, leftovers included.
-        #[arg(
-            long,
-            conflicts_with_all = ["all", "yes", "skip_children", "interrupt", "leftovers"]
-        )]
-        processes: bool,
-        /// Stop only leftovers.
-        #[arg(long, conflicts_with_all = ["all", "yes", "skip_children", "interrupt"])]
-        leftovers: bool,
-    },
+    Stop(StopArgs),
     /// Remove spaces, workspaces or chats, and release their resources.
     ///
     /// Removing a space first removes the workspaces below it, and removing a chat stops its
@@ -51,15 +27,7 @@ pub enum LifecycleCommand {
     ///
     /// A workspace's removal goes on in the background once Shoal has reserved it and checked
     /// that it can go; a failure after that keeps the workspace and arrives as a notification.
-    Rm {
-        #[arg(value_name = "SPACE")]
-        space: Vec<SpaceSelector>,
-        #[command(flatten)]
-        confirmation: ConfirmationArgs,
-        /// Wait until each workspace is removed, reporting the branches kept.
-        #[arg(long)]
-        wait: bool,
-    },
+    Rm(RmArgs),
     /// Remove what Shoal left behind: spaces cleanup would remove, kept branches and caches.
     ///
     /// Without a kind, lists them; on a terminal, a picker offers them, where Tab selects several
@@ -114,4 +82,44 @@ pub struct CleanupArgs {
     /// Delete kept branches without asking.
     #[arg(short = 'y', long, global = true)]
     pub yes: bool,
+}
+
+/// Arguments of `shoal stop`.
+#[derive(Debug, Args)]
+pub struct StopArgs {
+    #[command(flatten)]
+    pub targets: SpaceTargets,
+    /// Treat executions Shoal cannot prove ended as stopped without asking.
+    #[arg(short = 'y', long)]
+    pub yes: bool,
+    /// Keep running the spaces below the selected ones.
+    #[arg(long, conflicts_with = "all")]
+    pub skip_children: bool,
+    /// Cancel the current turns of the agents instead, keeping them running.
+    ///
+    /// Shoal types each agent's interrupt key into its terminal session, records its turn
+    /// as ended, and leaves agents without a running turn alone.
+    #[arg(long, conflicts_with_all = ["all", "yes", "skip_children"])]
+    pub interrupt: bool,
+    /// Stop only the processes Shoal does not track, leftovers included.
+    #[arg(
+        long,
+        conflicts_with_all = ["all", "yes", "skip_children", "interrupt", "leftovers"]
+    )]
+    pub processes: bool,
+    /// Stop only leftovers.
+    #[arg(long, conflicts_with_all = ["all", "yes", "skip_children", "interrupt"])]
+    pub leftovers: bool,
+}
+
+/// Arguments of `shoal rm`.
+#[derive(Debug, Args)]
+pub struct RmArgs {
+    #[arg(value_name = "SPACE")]
+    pub space: Vec<SpaceSelector>,
+    #[command(flatten)]
+    pub confirmation: ConfirmationArgs,
+    /// Wait until each workspace is removed, reporting the branches kept.
+    #[arg(long)]
+    pub wait: bool,
 }

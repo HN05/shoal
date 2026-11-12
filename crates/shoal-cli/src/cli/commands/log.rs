@@ -6,26 +6,26 @@ use anyhow::Result;
 
 use crate::{
     cli::{
+        args::workspace::LogArgs,
         context::Context,
         output::{Palette, Style},
         ui::{self, Fallback},
     },
     client::{
         log::{LogEntry, LogFilter, LogTopic},
-        space_names::SpaceSelector,
         subscriptions::{Subscription, Update, records::Record},
     },
 };
 
 mod entries;
 
-pub(super) async fn run(
-    ctx: &Context,
-    space: Option<SpaceSelector>,
-    all: bool,
-    limit: u32,
-    follow: bool,
-) -> Result<i32> {
+pub(super) async fn run(ctx: &Context, args: LogArgs) -> Result<i32> {
+    let LogArgs {
+        space,
+        all,
+        limit,
+        follow,
+    } = args;
     let space = match space {
         Some(space) => Some(ui::select_space(ctx, Some(space), Fallback::CurrentDirectory).await?),
         None => ui::space_here(ctx, ui::Workspaces::Below).await?,

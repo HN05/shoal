@@ -14,7 +14,7 @@ use crate::{
             coordination::{CoordinationCommand, QuestionsArgs},
             create::{CreateCommand, StartArgs},
             items::{ItemArgs, ItemsCommand, ViewArgs},
-            lifecycle::LifecycleCommand,
+            lifecycle::{LifecycleCommand, RmArgs, StopArgs},
             repository::{RepoCommand, RepositoryCommand},
             sessions::SessionsCommand,
             workspace::WorkspaceCommand,
@@ -148,11 +148,11 @@ async fn chat_command(ctx: &Context, action: Action, chat: SpaceSelector) -> Res
 fn chat_action(action: Action, chat: SpaceSelector) -> Result<Command> {
     let chat = Some(chat);
     Ok(match action {
-        Action::Delete => Command::Lifecycle(LifecycleCommand::Rm {
+        Action::Delete => Command::Lifecycle(LifecycleCommand::Rm(RmArgs {
             space: chat.into_iter().collect(),
             confirmation: ConfirmationArgs::default(),
             wait: false,
-        }),
+        })),
         Action::Attach => Command::Sessions(SessionsCommand::Attach {
             target: chat,
             session: None,
@@ -248,7 +248,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
 
 /// `shoal stop` of `space` and the spaces below it.
 fn stop(space: Option<SpaceSelector>) -> Command {
-    Command::Lifecycle(LifecycleCommand::Stop {
+    Command::Lifecycle(LifecycleCommand::Stop(StopArgs {
         targets: SpaceTargets {
             space: space.into_iter().collect(),
             all: false,
@@ -258,7 +258,7 @@ fn stop(space: Option<SpaceSelector>) -> Command {
         interrupt: false,
         processes: false,
         leftovers: false,
-    })
+    }))
 }
 
 /// “+ Add workspace” starts a worker in a new workspace.
@@ -277,11 +277,11 @@ async fn workspace_command(
 ) -> Result<Command> {
     Ok(match action {
         Action::Enter => Command::Workspace(WorkspaceCommand::Cd { workspace }),
-        Action::Delete => Command::Lifecycle(LifecycleCommand::Rm {
+        Action::Delete => Command::Lifecycle(LifecycleCommand::Rm(RmArgs {
             space: workspace.into_iter().collect(),
             confirmation: ConfirmationArgs::default(),
             wait: false,
-        }),
+        })),
         Action::Status => Command::Workspace(WorkspaceCommand::Status {
             space: workspace.map(|workspace| workspace.to_string()),
             item: None,

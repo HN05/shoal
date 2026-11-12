@@ -1,7 +1,7 @@
 //! Arguments of commands that list, enter, inspect and manage workspaces.
 use std::{ffi::OsString, path::PathBuf};
 
-use clap::Subcommand;
+use clap::{Args, Subcommand};
 
 use crate::cli::{args::item_reference, list_status};
 use crate::client::space_names::SpaceSelector;
@@ -62,19 +62,7 @@ pub enum WorkspaceCommand {
     /// daemon's starts and stops, config reloads and cleanup runs. A removed
     /// space is selected by its ID while its log lasts. Entries print
     /// oldest first, by local time.
-    Log {
-        space: Option<SpaceSelector>,
-        /// Show every event Shoal recorded, such as agent turn states,
-        /// forge comments and checks, demos and attached files.
-        #[arg(short = 'A', long)]
-        all: bool,
-        /// Show the newest this many entries.
-        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=1000))]
-        limit: u32,
-        /// Keep printing new entries as Shoal records them.
-        #[arg(long)]
-        follow: bool,
-    },
+    Log(LogArgs),
     /// Enter a workspace, or use - for the one you were in before.
     ///
     /// Omit the workspace to open the picker, even inside a workspace.
@@ -162,3 +150,19 @@ pub enum WorkspaceCommand {
 }
 
 pub use crate::config::repo::DesktopApp;
+
+/// Arguments of `shoal log`.
+#[derive(Debug, Args)]
+pub struct LogArgs {
+    pub space: Option<SpaceSelector>,
+    /// Show every event Shoal recorded, such as agent turn states,
+    /// forge comments and checks, demos and attached files.
+    #[arg(short = 'A', long)]
+    pub all: bool,
+    /// Show the newest this many entries.
+    #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=1000))]
+    pub limit: u32,
+    /// Keep printing new entries as Shoal records them.
+    #[arg(long)]
+    pub follow: bool,
+}

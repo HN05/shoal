@@ -1,6 +1,6 @@
 //! Arguments of `shoal alerts`.
 use crate::client::space_names::SpaceSelector;
-use clap::Subcommand;
+use clap::{Args, Subcommand};
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -10,22 +10,30 @@ pub enum DiagnosticsCommand {
     Alerts {
         #[command(subcommand)]
         command: Option<AlertsCommand>,
-        /// Include notifications already shown.
-        #[arg(short = 'A', long, conflicts_with = "follow")]
-        all: bool,
-        /// Keep printing new notifications as the daemon records them.
-        #[arg(long)]
-        follow: bool,
-        /// Show notifications without marking them read.
-        #[arg(long)]
-        keep_unread: bool,
-        /// Continue following after this notification, as the installed
-        /// release does after an upgrade restarted the daemon.
-        #[arg(long, hide = true, requires = "follow")]
-        resume: Option<i64>,
-        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=200))]
-        limit: u32,
+        #[command(flatten)]
+        list: AlertsArgs,
     },
+}
+
+/// Arguments of `shoal alerts` without a subcommand, which lists or follows
+/// notifications.
+#[derive(Debug, Args)]
+pub struct AlertsArgs {
+    /// Include notifications already shown.
+    #[arg(short = 'A', long, conflicts_with = "follow")]
+    pub all: bool,
+    /// Keep printing new notifications as the daemon records them.
+    #[arg(long)]
+    pub follow: bool,
+    /// Show notifications without marking them read.
+    #[arg(long)]
+    pub keep_unread: bool,
+    /// Continue following after this notification, as the installed
+    /// release does after an upgrade restarted the daemon.
+    #[arg(long, hide = true, requires = "follow")]
+    pub resume: Option<i64>,
+    #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=200))]
+    pub limit: u32,
 }
 
 #[derive(Debug, Subcommand)]

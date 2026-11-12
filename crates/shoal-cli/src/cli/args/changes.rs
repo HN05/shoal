@@ -305,25 +305,7 @@ pub enum PrCommand {
     },
     /// Merge a PR with your own login, now or once its checks pass;
     /// workspace processes cannot merge.
-    Merge {
-        #[command(flatten)]
-        item: ItemSelector,
-        /// How to merge.
-        #[arg(short = 'X', long, value_enum, required_unless_present = "cancel_auto")]
-        method: Option<crate::forge::items::action::MergeMethod>,
-        /// Delete the PR's branch on the forge after merging.
-        #[arg(long)]
-        delete_branch: bool,
-        /// Have the forge merge the PR once its required checks and approvals
-        /// pass, or now when they already do.
-        #[arg(long)]
-        auto: bool,
-        /// Withdraw the PR's automatic merge.
-        #[arg(long, conflicts_with_all = ["method", "delete_branch", "auto"])]
-        cancel_auto: bool,
-        #[command(flatten)]
-        confirmation: ConfirmationArgs,
-    },
+    Merge(PrMergeArgs),
     /// Delete the branch of a merged or closed PR on the forge with your own
     /// login; workspace processes cannot delete branches.
     DeleteBranch {
@@ -403,6 +385,28 @@ pub enum IssueCommand {
         #[command(flatten)]
         item: ItemSelector,
     },
+}
+
+/// Arguments of `shoal pr merge`.
+#[derive(Debug, Args)]
+pub struct PrMergeArgs {
+    #[command(flatten)]
+    pub item: ItemSelector,
+    /// How to merge.
+    #[arg(short = 'X', long, value_enum, required_unless_present = "cancel_auto")]
+    pub method: Option<crate::forge::items::action::MergeMethod>,
+    /// Delete the PR's branch on the forge after merging.
+    #[arg(long)]
+    pub delete_branch: bool,
+    /// Have the forge merge the PR once its required checks and approvals
+    /// pass, or now when they already do.
+    #[arg(long)]
+    pub auto: bool,
+    /// Withdraw the PR's automatic merge.
+    #[arg(long, conflicts_with_all = ["method", "delete_branch", "auto"])]
+    pub cancel_auto: bool,
+    #[command(flatten)]
+    pub confirmation: ConfirmationArgs,
 }
 
 // A reaction to add or remove, and the comment it is on.

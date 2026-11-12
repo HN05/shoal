@@ -5,11 +5,11 @@ use anyhow::Result;
 
 use crate::{
     cli::{
-        args::changes::{IssueCommand, ItemSelector, PrCommand},
+        args::changes::{IssueCommand, ItemSelector, PrCommand, PrMergeArgs},
         context::Context,
     },
     forge::items::{
-        action::{Action, MergeMethod},
+        action::Action,
         create::NewIssue,
         item::{Item, ItemState},
         link::ItemKind,
@@ -90,16 +90,9 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
         PrCommand::Update { item, method } => {
             (item, Action::Update { method }, "PR branch updated")
         }
-        PrCommand::Merge {
-            item,
-            method,
-            delete_branch,
-            auto,
-            cancel_auto: _,
-            confirmation,
-        } => {
-            let (action, outcome) = merge(method, delete_branch, auto);
-            return merge_pr(ctx, item, action, outcome, confirmation.yes).await;
+        PrCommand::Merge(args) => {
+            let (action, outcome) = merge(&args);
+            return merge_pr(ctx, args.item, action, outcome, args.confirmation.yes).await;
         }
         PrCommand::DeleteBranch { item } => (item, Action::DeleteBranch, "PR branch deleted"),
     };
@@ -153,12 +146,13 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
     act(ctx, item, ItemKind::Issue, action, outcome).await
 }
 
-/// The merge the options ask for: without a method, which only
-/// `--cancel-auto` leaves out, withdrawing an automatic merge.
-fn merge(method: Option<MergeMethod>, delete_branch: bool, auto: bool) -> (Action, &'static str) {
-    match method {
+/// The merge `args` ask for: without a method, which only `--cancel-auto`
+/// leaves out, withdrawing an automatic merge.
+fn merge(args: &PrMergeArgs) -> (Action, &'static str) {
+    let delete_branch = args.delete_branch;
+    match args.method {
         None => (Action::CancelAutoMerge, "Auto-merge canceled"),
-        Some(method) if auto => (
+        Some(method) if args.auto => (
             Action::AutoMerge {
                 method,
                 delete_branch,

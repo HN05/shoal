@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use crate::cli::{
-    args::diagnostics::{AlertsCommand, DiagnosticsCommand},
+    args::diagnostics::{AlertsArgs, AlertsCommand, DiagnosticsCommand},
     commands::notifications,
     context::Context,
 };
@@ -30,17 +30,17 @@ pub(in crate::cli::commands) async fn run(
         } => notifications::withdraw(&ctx, space, id).await,
         DiagnosticsCommand::Alerts {
             command: None,
-            follow: true,
-            keep_unread,
-            resume,
-            ..
+            list:
+                AlertsArgs {
+                    follow: true,
+                    keep_unread,
+                    resume,
+                    ..
+                },
         } => notifications::follow(&ctx, keep_unread, resume.unwrap_or(0)).await,
         DiagnosticsCommand::Alerts {
             command: None,
-            all,
-            keep_unread,
-            limit,
-            ..
-        } => notifications::list(&ctx, all, keep_unread, limit).await,
+            list,
+        } => notifications::list(&ctx, list).await,
     }
 }
