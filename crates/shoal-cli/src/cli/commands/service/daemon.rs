@@ -101,24 +101,25 @@ pub(super) async fn restart(ctx: &Context) -> Result<i32> {
     ctx.progress("Stopping daemon", stop_daemon(&ctx.paths, Exit::Restart))
         .await?;
     start_service(ctx).await?;
-    let stopped = crate::client::saved::waits_for_resume(&ctx.paths).await?;
-    emit_stopped_work(ctx, "Daemon restarted", true, Some(stopped))?;
+    // The restart succeeded even when its saved work cannot be read.
+    let stopped = crate::client::saved::waits_for_resume(&ctx.paths).await;
+    emit_stopped_work(ctx, "Daemon restarted", true, stopped.ok())?;
     Ok(0)
 }
 
 /// Stopping saves running agents and commands, as does a restart for those
-/// that cannot reattach; point to restoring them when `stopped` says some
-/// wait.
+/// that cannot reattach; point to restoring them unless `stopped` says none
+/// wait, as a daemon that does not say may have left some.
 fn emit_stopped_work(
     ctx: &Context,
     message: &str,
     running: bool,
     stopped: Option<bool>,
 ) -> Result<()> {
-    let message = if stopped == Some(true) {
-        format!("{message}; restore stopped work with shoal resume --all")
-    } else {
-        message.to_owned()
+    let message = match stopped {
+        Some(true) => format!("{message}; restore stopped work with shoal resume --all"),
+        None => format!("{message}; restore any stopped work with shoal resume --all"),
+        Some(false) => message.to_owned(),
     };
     ctx.emit_styled(
         Style::Success,
