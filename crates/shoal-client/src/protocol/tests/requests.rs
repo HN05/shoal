@@ -122,6 +122,7 @@ const REQUESTS: &[&str] = &[
     r#"{"restart_agent":{"execution":"e1"}}"#,
     // Chats.
     r#"{"start_chat":{"repository":"app","name":"app-chat","agent":"claude","pid":4}}"#,
+    r#"{"launch_chat":{"start":{"repository":"app","agent":"claude","args":["Read the build"]}}}"#,
     r#"{"restore_chat":{"chat":"c1","pid":5}}"#,
     r#"{"save_chat":{"chat":"c1","pid":5,"error":"the agent is not installed"}}"#,
     r#"{"move_chat":{"chat":"c1","pid":5}}"#,
@@ -136,7 +137,7 @@ const REQUESTS: &[&str] = &[
     r#""chat_root""#,
     // The agent queue.
     r#"{"queue_add":{"request":{"repository":"app","name":"fix","agent":"claude","issue_title":null,"plan":"{}","env":{},"now":false,"workspace":"fix","starts_in_caller":true,"blockers":[]}}}"#,
-    r#"{"queue_agent":{"workspace":"fix","agent":"claude","prompt":"Fix the build"}}"#,
+    r#"{"queue_agent":{"workspace":"fix","launch":{"agent":null,"prompt":"Fix the build"}}}"#,
     r#""list_queue""#,
     r#"{"queued_plan":{"entry":"q1"}}"#,
     r#"{"queue_remove":{"entry":"q1"}}"#,
