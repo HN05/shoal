@@ -13,7 +13,10 @@ use crate::client::{
 };
 use crate::{
     daemon::{progress, store},
-    forge::{items::link::LinkKind, updates::SnapshotState},
+    forge::{
+        items::link::LinkKind,
+        updates::{self, SnapshotState},
+    },
     model::Tier,
 };
 
@@ -100,15 +103,14 @@ pub(super) struct Labelled {
 }
 
 /// The spaces without a priority set whose issue has labels, as the
-/// background poll, or else a watch, last read them.
+/// background poll, or else a watch, last read them. A record that does not
+/// read leaves its space without labels rather than failing the rank.
 pub(super) fn labelled(db: &Connection) -> Result<Vec<Labelled>> {
     let rows = db
         .prepare(
             "SELECT s.id,s.repository_id,COALESCE(
-                (SELECT json_extract(record,'$.details.labels') FROM space_item_activity
-                    WHERE space_id=s.id AND url=i.url),
-                (SELECT json_extract(record,'$.details.labels') FROM pr_activity
-                    WHERE space_id=s.id AND url=i.url))
+                (SELECT record FROM space_item_activity WHERE space_id=s.id AND url=i.url),
+                (SELECT record FROM pr_activity WHERE space_id=s.id AND url=i.url))
              FROM spaces s JOIN space_issue i ON i.space_id=s.id
              WHERE s.repository_id IS NOT NULL
                 AND s.id NOT IN (SELECT space_id FROM space_priority)",
@@ -122,9 +124,10 @@ pub(super) fn labelled(db: &Connection) -> Result<Vec<Labelled>> {
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut labelled = Vec::new();
-    for (id, repository, labels) in rows {
-        let labels: Vec<String> =
-            labels.map_or(Ok(Vec::new()), |labels| serde_json::from_str(&labels))?;
+    for (id, repository, record) in rows {
+        let labels = (record.as_deref())
+            .and_then(|record| updates::saved_labels(record).ok())
+            .unwrap_or_default();
         if !labels.is_empty() {
             labelled.push(Labelled {
                 id,

@@ -40,7 +40,7 @@ mod comments;
 pub(crate) use comments::{Entry, verdict_entries};
 mod commits;
 mod details;
-pub use details::{Edited, ItemDetails};
+pub use details::{Edited, ItemDetails, saved_labels};
 mod held;
 mod state;
 pub use state::{SnapshotKind, SnapshotState};

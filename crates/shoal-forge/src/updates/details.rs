@@ -24,6 +24,26 @@ pub struct ItemDetails {
     pub(crate) base: Option<BranchName>,
 }
 
+/// The labels of the issue or PR whose saved snapshot, or watch record,
+/// is `record`, read without the rest of it; none before its details are
+/// read.
+pub fn saved_labels(record: &str) -> serde_json::Result<Vec<String>> {
+    #[derive(Deserialize)]
+    struct Saved {
+        #[serde(default)]
+        details: Option<Labels>,
+    }
+    #[derive(Deserialize)]
+    struct Labels {
+        labels: Vec<String>,
+    }
+    let saved: Saved = serde_json::from_str(record)?;
+    Ok(saved
+        .details
+        .map(|details| details.labels)
+        .unwrap_or_default())
+}
+
 /// What an action changed of an item's details: the item as it was read
 /// before the action and after it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

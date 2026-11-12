@@ -818,3 +818,24 @@ fn a_merge_ends_activity_and_closing_ends_it_once_the_assignment_is_done() {
     assert!(snapshot(Closed).activity_ended(true));
     assert!(!snapshot(Open).activity_ended(true));
 }
+
+#[test]
+fn a_saved_snapshot_and_watch_record_give_back_their_items_labels() {
+    let snapshot = Snapshot {
+        details: Some(ItemDetails {
+            labels: vec!["bug".into(), "urgent".into()],
+            ..ItemDetails::default()
+        }),
+        ..Snapshot::default()
+    };
+    let mut record = WatchRecord::default();
+    record.snapshot = snapshot.clone();
+    for saved in [
+        serde_json::to_string(&snapshot).unwrap(),
+        serde_json::to_string(&record).unwrap(),
+    ] {
+        assert_eq!(saved_labels(&saved).unwrap(), ["bug", "urgent"]);
+    }
+    let unread = serde_json::to_string(&Snapshot::default()).unwrap();
+    assert!(saved_labels(&unread).unwrap().is_empty());
+}
