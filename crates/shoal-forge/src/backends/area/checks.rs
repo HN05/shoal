@@ -55,15 +55,15 @@ pub(crate) trait Checks: Backend {
         }
     }
 
-    /// The log of the failed check `name` on the current head of PR `url`.
+    /// The log of the failed check `name` on the current head of PR `pull`.
     async fn failed_check_log(
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        url: &str,
+        pull: &crate::items::reference::ItemRef,
         name: &str,
     ) -> Result<CheckLog> {
-        repo.failed_job_log(account, url, name).await
+        repo.failed_job_log(account, pull, name).await
     }
 
     /// `log`, a job log as the forge serves it, as plain text.

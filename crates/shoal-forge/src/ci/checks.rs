@@ -98,9 +98,7 @@ impl ForgeRepo {
     ) -> Result<CheckLog> {
         self.require(Capability::ReadJobLogs)?;
         pull.belongs_to(self)?;
-        self.kind
-            .failed_check_log(self, account, pull.url(), name)
-            .await
+        self.kind.failed_check_log(self, account, pull, name).await
     }
 
     /// Add the logs of the failed checks of the PRs among `views` in this
@@ -135,20 +133,19 @@ impl ForgeRepo {
     }
 
     /// The log of the CI job the failed check `name` on the current head of
-    /// PR `url` links, read from the endpoint the forge serves it at.
+    /// PR `pull` links, read from the endpoint the forge serves it at.
     pub(crate) async fn failed_job_log(
         &self,
         account: &Account,
-        url: &str,
+        pull: &ItemRef,
         name: &str,
     ) -> Result<CheckLog> {
-        let pull = ItemRef::parse_kind(LinkKind::Pr, url)?;
-        let head = self.pull_head(account, &pull).await?;
+        let head = self.pull_head(account, pull).await?;
         let checks = self.kind.ci_checks(self, account, head.as_str()).await?;
         let (location, target) = self.failed_job(&checks, name)?;
         let log = self.job_log(account, location).await?;
         let step = self.kind.failed_step(&log);
-        Ok(CheckLog::from_text(url, name, &log, step).with_job(target))
+        Ok(CheckLog::from_text(pull.url(), name, &log, step).with_job(target))
     }
 
     /// The head commit of PR `pull`, open or not.

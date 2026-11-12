@@ -77,10 +77,10 @@ impl Checks for Forgejo {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        url: &str,
+        pull: &crate::items::reference::ItemRef,
         name: &str,
     ) -> Result<CheckLog> {
-        actions::failed_check_log(repo, account, url, name).await
+        actions::failed_check_log(repo, account, pull, name).await
     }
 
     /// Each log line starts with its time.
