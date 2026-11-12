@@ -15,7 +15,7 @@ use crate::{
         rest::{RestCheck, RestReads, fingerprints},
     },
     capability::{self, Capability, Support},
-    ci::{CiAction, CiCheck, Job, Location, Operation, check_state::CheckState},
+    ci::check_state::CheckState,
     conventions::Lookup,
     items::{
         action::{Edit, MergeMethod, MilestoneChange, UpdateMethod, changed_set},
@@ -44,6 +44,7 @@ use crate::{
     updates::{DISCUSSION, Entry, Snapshot},
 };
 
+mod checks;
 mod review;
 mod runs;
 
@@ -676,30 +677,6 @@ impl Backend for Bitbucket {
         _account: &Account,
     ) -> Result<AllowedReactions> {
         Err(capability::unsupported(self, Capability::Reactions))
-    }
-
-    /// No CI job Shoal can act on, since it reads no Pipelines jobs.
-    async fn ci_checks(
-        &self,
-        _repo: &ForgeRepo,
-        _account: &Account,
-        _head: &str,
-    ) -> Result<Vec<CiCheck>> {
-        Ok(Vec::new())
-    }
-
-    fn locate_job(&self, _repo: &ForgeRepo, _target: &str) -> Option<Location> {
-        None
-    }
-
-    fn ci_operation(
-        &self,
-        _jobs: &[Job],
-        _selected: &[Job],
-        job: &Job,
-        _action: CiAction,
-    ) -> Result<(Operation, Vec<String>)> {
-        bail!("check {} is not a CI job Shoal can act on", job.name)
     }
 
     fn default_branch<'a>(&self, value: &'a Value) -> Option<&'a str> {

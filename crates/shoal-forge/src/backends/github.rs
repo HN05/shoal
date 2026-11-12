@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 
 mod actions;
 mod activity;
+mod checks;
 mod review;
 mod reviewers;
 mod runners;
@@ -21,7 +22,6 @@ use crate::{
     ForgeRepo,
     account::Account,
     capability::{Capability, Support},
-    ci::{CiAction, CiCheck, Job, Location, Operation, checks::plain},
     conventions::{Lookup, draft::DraftMarker, shared_lookups},
     items::{
         action::{Edit, MergeMethod, UpdateMethod},
@@ -589,43 +589,6 @@ impl Backend for GitHub {
             format!("{endpoint}/{id}"),
             None,
         ))
-    }
-
-    /// Only each check's latest attempt, not those reruns replaced, and
-    /// each commit status, which reports no Actions job.
-    async fn ci_checks(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        head: &str,
-    ) -> Result<Vec<CiCheck>> {
-        let (runs, statuses) = activity::commit_checks(repo, account, head).await?;
-        let mut checks = actions::checks(&runs)?;
-        checks.extend(github_rest::commit_statuses(&statuses, self)?);
-        Ok(checks)
-    }
-
-    fn locate_job(&self, repo: &ForgeRepo, target: &str) -> Option<Location> {
-        actions::locate(repo, target)
-    }
-
-    fn ci_operation(
-        &self,
-        jobs: &[Job],
-        selected: &[Job],
-        job: &Job,
-        action: CiAction,
-    ) -> Result<(Operation, Vec<String>)> {
-        actions::operation(jobs, selected, job, action)
-    }
-
-    fn job_log_endpoint(&self, location: Location) -> Result<String> {
-        actions::log_endpoint(location)
-    }
-
-    /// Each log line starts with its time.
-    fn plain_log(&self, log: &str) -> String {
-        plain::readable(&plain::without_timestamps(log))
     }
 
     async fn check_uploads(

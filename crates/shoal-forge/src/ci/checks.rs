@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::Checks,
     capability::Capability,
     ci::{CiCheck, JobState, Location},
     items::link::ItemKind,

@@ -7,7 +7,7 @@ use tokio::process::Command;
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::Checks,
     ci::{
         CiAction, Job, JobState, Location, Operation,
         checks::{CheckLog, MAX_LOG_BYTES, NoJobLog},

@@ -7,7 +7,7 @@ use super::{Forgejo, actions};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::{Backend, Runs},
+    backends::{Checks, Runs},
     ci::{
         CiAction,
         approval::RUNS_PAGE,

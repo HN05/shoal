@@ -1,5 +1,5 @@
 use super::*;
-use crate::backends::{Backend, ForgeKind};
+use crate::backends::{Checks, ForgeKind};
 
 #[test]
 fn escapes_controls_and_redrawn_text_are_removed() {

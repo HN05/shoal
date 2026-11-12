@@ -16,7 +16,7 @@ use serde_json::Value;
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::Checks,
     capability::Capability,
     items::{item::ItemState, link::ItemKind},
     numbers::{JobId, PullNumber, RunId, RunNumber},
@@ -260,7 +260,7 @@ fn select(jobs: &[Job], action: CiAction, names: &[String]) -> Result<Vec<Job>> 
 /// head's `jobs`, as `backend` plans each, and the checks they reach; jobs
 /// that share an operation share it once.
 fn operations(
-    backend: &impl Backend,
+    backend: &impl Checks,
     jobs: &[Job],
     selected: &[Job],
     action: CiAction,
