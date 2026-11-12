@@ -119,7 +119,7 @@ fn an_agent_protection_stopped_while_the_run_waited_is_skipped() {
         joins: None,
     }];
     let stopped = RunningAgent {
-        stopped: Some(crate::client::protocol::Protection {
+        stopped: Some(crate::protocol::Protection {
             reason: "critical memory pressure".into(),
             resumes_when: "system load is healthy".into(),
         }),

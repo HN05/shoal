@@ -1,6 +1,6 @@
 //! What a run tells the user: a numbered line for each selected agent as
-//! its restart ends or is skipped, what goes on when it is interrupted, and
-//! with `--json` the object that lists them.
+//! its restart ends or is skipped, whose turns it waits for, what goes on
+//! when it is interrupted, and with `--json` the object that lists them.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceNumber;
 use crate::client::space_names::{self, SpaceName};
@@ -9,19 +9,21 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::client::output::agents::{Restarted, RestartedAgent, Skipped};
-use crate::client::restarts::Restart;
+use crate::client::restarts::{self, Restart};
 use crate::{
     cli::{
         context::Context,
         output::{Palette, Style},
         ui,
     },
-    model::RunningAgent,
+    execution::recovery,
+    model::{PresentSpace, RunningAgent},
     sessions::Origin,
     terminal,
 };
 
-pub(super) struct Progress {
+pub(super) struct Progress<'a> {
+    ctx: &'a Context,
     report: ui::Report<RestartedAgent>,
     skipped: Vec<Skipped>,
     /// How many agents the run reported on so far, and how many it selected.
@@ -31,10 +33,11 @@ pub(super) struct Progress {
     spaces: HashMap<ExecutionId, (SpaceNumber, SpaceName)>,
 }
 
-impl Progress {
+impl<'a> Progress<'a> {
     /// Progress of restarting `restarts` and skipping `skipped` more.
-    pub(super) fn new(restarts: &[Restart], skipped: usize) -> Self {
+    pub(super) fn new(ctx: &'a Context, restarts: &[Restart], skipped: usize) -> Self {
         Self {
+            ctx,
             report: ui::Report::new("restart"),
             skipped: Vec::new(),
             position: 0,
@@ -56,10 +59,59 @@ impl Progress {
         format!("({}/{})", self.position, self.total)
     }
 
+    /// Report that the run was interrupted, naming the agents of the run in
+    /// `agents` whose restart goes on without it and the command, selecting
+    /// only `agent` agents as the run did, that reports on them; exit 130.
+    pub(super) fn interrupted(
+        self,
+        agents: &[RunningAgent],
+        agent: Option<&crate::agent::Agent>,
+    ) -> Result<i32> {
+        let pending: Vec<(SpaceNumber, SpaceName)> = agents
+            .iter()
+            .filter(|agent| agent.restart.is_some())
+            .filter_map(|agent| self.space_of(agent))
+            .collect();
+        if !self.ctx.json {
+            eprintln!("{}", interruption(&pending, agent));
+        }
+        let pending = pending.into_iter().map(|(_, name)| name).collect();
+        self.report(true, pending)?;
+        Ok(130)
+    }
+
+    /// The space of `agent`, selected as the execution it runs or ran as.
+    fn space_of(&self, agent: &RunningAgent) -> Option<(SpaceNumber, SpaceName)> {
+        std::iter::once(&agent.execution)
+            .chain(&agent.restarted_from)
+            .find_map(|execution| self.spaces.get(execution).cloned())
+    }
+
+    /// Print the JSON object, exiting 1 when any restart failed.
+    pub(super) fn finish(self) -> Result<i32> {
+        self.report(false, Vec::new())
+    }
+
+    /// Print the JSON object, of a run `interrupted` with the restarts of
+    /// `pending` going on without it.
+    fn report(self, interrupted: bool, pending: Vec<SpaceName>) -> Result<i32> {
+        let skipped = self.skipped;
+        self.report
+            .finish(self.ctx, "", |restarted, failed| Restarted {
+                restarted,
+                failed,
+                skipped,
+                interrupted,
+                pending,
+            })
+    }
+}
+
+impl restarts::Progress for Progress<'_> {
     /// Report an agent the run does not restart.
-    pub(super) fn skip(&mut self, ctx: &Context, skipped: Skipped) {
+    fn skipped(&mut self, skipped: Skipped) {
         let place = self.next();
-        if !ctx.json {
+        if !self.ctx.json {
             let message = format!("Skipped {} {place}: {}", skipped.space, skipped.reason);
             outln!("{}", Palette::stdout(false).paint(Style::Warning, &message));
         }
@@ -68,17 +120,12 @@ impl Progress {
 
     /// Report how the restart of `restart` ended, with the place its agent
     /// runs in now when it runs again.
-    pub(super) fn ended(
-        &mut self,
-        ctx: &Context,
-        restart: &Restart,
-        result: Result<Option<Origin>>,
-    ) {
+    fn ended(&mut self, restart: &Restart, result: Result<Option<Origin>>) {
         let position = self.next();
         let name = restart.space.name();
         match result {
             Ok(place) => self.report.done(
-                ctx,
+                self.ctx,
                 &restarted(
                     name,
                     &position,
@@ -92,60 +139,42 @@ impl Progress {
                 },
             ),
             Err(error) => {
-                let message = match super::waits(&error) {
-                    Some(waits) => format!("Pending {name} {position}: {waits}"),
-                    None => format!("Failed {name} {position}: {error:#}"),
+                let (message, error) = match restarts::waits(&error) {
+                    Some(waits) => (format!("Pending {name} {position}: {waits}"), error),
+                    None => {
+                        let error = with_restore(self.ctx, &restart.space, error);
+                        (format!("Failed {name} {position}: {error:#}"), error)
+                    }
                 };
-                self.report.failed_saying(ctx, &message, name, &error);
+                self.report.failed_saying(self.ctx, &message, name, &error);
             }
         }
     }
 
-    /// Report that the run was interrupted, naming the agents of the run in
-    /// `agents` whose restart goes on without it and the command, selecting
-    /// only `agent` agents as the run did, that reports on them; exit 130.
-    pub(super) fn interrupted(
-        self,
-        ctx: &Context,
-        agents: &[RunningAgent],
-        agent: Option<&crate::agent::Agent>,
-    ) -> Result<i32> {
-        let pending: Vec<(SpaceNumber, SpaceName)> = agents
-            .iter()
-            .filter(|agent| agent.restart.is_some())
-            .filter_map(|agent| self.space_of(agent))
-            .collect();
-        if !ctx.json {
-            eprintln!("{}", interruption(&pending, agent));
+    /// Say whose turns the run waits for.
+    fn waiting(&mut self, spaces: &[&SpaceName]) {
+        if !self.ctx.json {
+            let names: Vec<_> = spaces.iter().map(|name| name.as_str()).collect();
+            eprintln!("Waiting for the turns of {} to end", names.join(", "));
         }
-        let pending = pending.into_iter().map(|(_, name)| name).collect();
-        self.report(ctx, true, pending)?;
-        Ok(130)
     }
+}
 
-    /// The space of `agent`, selected as the execution it runs or ran as.
-    fn space_of(&self, agent: &RunningAgent) -> Option<(SpaceNumber, SpaceName)> {
-        std::iter::once(&agent.execution)
-            .chain(&agent.restarted_from)
-            .find_map(|execution| self.spaces.get(execution).cloned())
-    }
-
-    /// Print the JSON object, exiting 1 when any restart failed.
-    pub(super) fn finish(self, ctx: &Context) -> Result<i32> {
-        self.report(ctx, false, Vec::new())
-    }
-
-    /// Print the JSON object, of a run `interrupted` with the restarts of
-    /// `pending` going on without it.
-    fn report(self, ctx: &Context, interrupted: bool, pending: Vec<SpaceName>) -> Result<i32> {
-        let skipped = self.skipped;
-        self.report.finish(ctx, "", |restarted, failed| Restarted {
-            restarted,
-            failed,
-            skipped,
-            interrupted,
-            pending,
-        })
+/// `error`, of the failed restart of the agent of `space`, naming how to
+/// restore the agent when its workspace waits for that. The daemon names how
+/// to restore a chat, and a restart that waits still restores the agent
+/// itself, as a wrapper waiting for its restore does.
+fn with_restore(ctx: &Context, space: &PresentSpace, error: anyhow::Error) -> anyhow::Error {
+    match space {
+        PresentSpace::Workspace(workspace)
+            if recovery::resumable(&ctx.paths, &workspace.id).unwrap_or(false) =>
+        {
+            anyhow::anyhow!(
+                "{error:#}; restore it with shoal resume {}",
+                workspace.number
+            )
+        }
+        _ => error,
     }
 }
 

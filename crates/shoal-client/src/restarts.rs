@@ -1,7 +1,8 @@
 //! Restarting several agents, of workspaces and of chats alike, each so it
-//! runs its agent's current binary: which ones a run restarts.
+//! runs its agent's current binary: which ones a run restarts, and when each
+//! restarts.
 mod plan;
+mod schedule;
 
-pub use plan::{
-    Plan, Restart, Selection, running_agents, skip_reason, space_skip_reason, stopped_reason,
-};
+pub use plan::{Plan, Restart, Selection, running_agents, skip_reason};
+pub use schedule::{Options, Progress, restart_all, waits};

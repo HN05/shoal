@@ -56,7 +56,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             in_place,
             permissions,
         } => {
-            let options = restart::Options {
+            let options = crate::client::restarts::Options {
                 wait,
                 sequential,
                 in_place,

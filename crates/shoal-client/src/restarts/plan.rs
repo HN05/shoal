@@ -157,7 +157,7 @@ fn run_skip_reason(space: &PresentSpace, running: &RunningAgent, in_place: bool)
 }
 
 /// Why `running`, the agent of `space`, cannot restart, if it cannot.
-pub fn space_skip_reason(space: &PresentSpace, running: &RunningAgent) -> Option<String> {
+pub(super) fn space_skip_reason(space: &PresentSpace, running: &RunningAgent) -> Option<String> {
     match space {
         PresentSpace::Workspace(workspace) => skip_reason(workspace, running),
         PresentSpace::Chat(_) if !running.restorable => {
@@ -189,7 +189,7 @@ fn absent_reason(
 /// Why `running`, the agent of `space`, does not restart when protection
 /// stopped it: it waits for its restore, which `shoal queue start` starts
 /// now.
-pub fn stopped_reason(space: &str, running: &RunningAgent) -> Option<String> {
+pub(super) fn stopped_reason(space: &str, running: &RunningAgent) -> Option<String> {
     let protection = running.stopped.as_ref()?;
     let agent = running
         .agent

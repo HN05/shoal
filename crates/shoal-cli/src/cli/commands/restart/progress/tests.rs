@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::restarts::Progress as _;
 use crate::{
     cli::context::Context,
     model::{PresentSpace, Workspace},
@@ -38,16 +39,17 @@ fn restart(name: &str) -> Restart {
 fn every_agent_takes_a_place_among_all_the_run_selected() {
     let ctx = Context::new(Paths::for_test(std::path::Path::new("state")), true);
     let api = restart("api");
-    let mut progress = Progress::new(std::slice::from_ref(&api), 2);
-    progress.skip(
-        &ctx,
-        Skipped {
-            space: "gone".into(),
-            agent: None,
-            reason: "no agent runs there".into(),
-        },
+    let mut progress = Progress::new(&ctx, std::slice::from_ref(&api), 2);
+    progress.skipped(Skipped {
+        space: "gone".into(),
+        agent: None,
+        reason: "no agent runs there".into(),
+    });
+    restarts::Progress::ended(
+        &mut progress,
+        &api,
+        Err(anyhow::anyhow!("claude disconnected")),
     );
-    progress.ended(&ctx, &api, Err(anyhow::anyhow!("claude disconnected")));
     assert_eq!(progress.next(), "(3/3)");
 }
 
