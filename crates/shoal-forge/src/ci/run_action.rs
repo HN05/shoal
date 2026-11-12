@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::Runs,
     capability::{self, Capability},
     ci::{CiAction, JobState, id},
     hosts::HostTypes,

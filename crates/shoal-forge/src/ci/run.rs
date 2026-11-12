@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::{Backend, Runs},
     capability::Capability,
     ci::workflow::{WorkflowLink, is_workflow_url},
 };

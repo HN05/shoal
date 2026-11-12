@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ForgeRepo, IssueInput,
-    backends::{Backend, ForgeKind},
+    backends::{Backend, ForgeKind, Runs},
     hosts::HostTypes,
     repo::locator::{ISSUE_URL, PULL_URL, item_path, locate},
 };

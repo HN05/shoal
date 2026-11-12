@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::{Backend, Runs},
     capability::Capability,
     ci::{JobState, checks::CheckLog, run_action::Run},
     numbers::JobId,

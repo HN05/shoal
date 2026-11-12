@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::*;
-use crate::numbers::RunId;
+use crate::{backends::Runs, numbers::RunId};
 
 fn filter(branch: Option<&str>, workflow: Option<&str>) -> RunFilter {
     RunFilter {
