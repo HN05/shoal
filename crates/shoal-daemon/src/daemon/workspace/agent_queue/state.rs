@@ -42,11 +42,11 @@ struct OneShots {
     runs: BTreeMap<u64, OneShot>,
 }
 
-/// A one-shot run's request for a slot in `repository`, for the work of
-/// `space`.
+/// A one-shot run's request for a slot in `repository`, for the work it
+/// serves.
 struct OneShot {
     repository: RepositoryId,
-    space: Option<SpaceId>,
+    serving: Option<Serving>,
     requested_at: UnixTime,
     /// Whether protection stopped its earlier run, so it waits for healthy
     /// readings as a stopped agent's restore does.
@@ -70,10 +70,20 @@ pub(crate) struct WaitingOneShot {
     /// Its queue ID, which no stored entry has.
     pub id: QueueEntryId,
     pub repository: RepositoryId,
-    /// The space whose work it serves, which it ranks with.
-    pub space: Option<SpaceId>,
+    /// What it serves, which it ranks with.
+    pub serving: Option<Serving>,
     pub requested_at: UnixTime,
     pub after_stop: bool,
+}
+
+/// The work a one-shot run serves, which places it in the queue.
+#[derive(Clone)]
+pub(crate) struct Serving {
+    /// The space whose work it serves.
+    pub space: SpaceId,
+    /// The sequence number of the newest queue entry when it asked, so it
+    /// arrives after that entry and before any queued later.
+    pub queued_after: i64,
 }
 
 /// The queue ID of one-shot request `number`, which no stored entry has.
@@ -162,24 +172,24 @@ impl AgentQueue {
     }
 
     /// Ask for a slot in `repository` for a one-shot run, such as a review,
-    /// of the work of `space`, which waits in the queue at that space's
-    /// rank; the request and the slot end with the returned value.
+    /// of the work it is `serving`, which waits in the queue at the rank of
+    /// that space; the request and the slot end with the returned value.
     /// Protection calls `stop` to stop the run; a run it stopped asks again
     /// `after_stop`.
     pub(crate) fn request_oneshot(
         &self,
         repository: &RepositoryId,
-        space: &SpaceId,
+        serving: Serving,
         after_stop: bool,
         stop: impl FnOnce() + Send + Sync + 'static,
     ) -> OneShotSlot<'_> {
-        self.request(repository, Some(space.clone()), after_stop, stop)
+        self.request(repository, Some(serving), after_stop, stop)
     }
 
     fn request(
         &self,
         repository: &RepositoryId,
-        space: Option<SpaceId>,
+        serving: Option<Serving>,
         after_stop: bool,
         stop: impl FnOnce() + Send + Sync + 'static,
     ) -> OneShotSlot<'_> {
@@ -191,7 +201,7 @@ impl AgentQueue {
             number,
             OneShot {
                 repository: repository.clone(),
-                space,
+                serving,
                 requested_at: UnixTime::now(),
                 after_stop,
                 admitted,
@@ -228,7 +238,7 @@ impl AgentQueue {
             .map(|(number, run)| WaitingOneShot {
                 id: oneshot_id(*number),
                 repository: run.repository.clone(),
-                space: run.space.clone(),
+                serving: run.serving.clone(),
                 requested_at: run.requested_at,
                 after_stop: run.after_stop,
             })

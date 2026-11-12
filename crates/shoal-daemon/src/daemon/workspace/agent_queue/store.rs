@@ -3,7 +3,7 @@
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use anyhow::{Context, Result, ensure};
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 
 use super::blockers;
 use crate::client::time::UnixTime;
@@ -239,6 +239,19 @@ pub(super) fn record_waiting_restore(
         [&restore.execution],
         |row| row.get(0),
     )?)
+}
+
+/// The sequence number of the newest queue entry, even one that has left:
+/// every entry queued later has a higher one, and it never falls.
+pub(crate) fn last_seq(db: &rusqlite::Connection) -> Result<i64> {
+    let seq: Option<i64> = db
+        .query_row(
+            "SELECT seq FROM sqlite_sequence WHERE name='agent_queue'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(seq.unwrap_or(0))
 }
 
 pub(super) const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,mode,narrowing,issue_title,state,created_at,workspace_id,execution_id,opens_workspace_id,base_branch,job,scope_space_id";

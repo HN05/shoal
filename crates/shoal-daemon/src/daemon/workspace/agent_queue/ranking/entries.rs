@@ -1,5 +1,5 @@
-//! The waiting entries as ranking sees them: the queue's waiting rows in
-//! the order they arrived, then the one-shot runs waiting for a slot.
+//! The waiting entries as ranking sees them: the queue's waiting rows and
+//! the one-shot runs waiting for a slot, in the order they arrived.
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 
@@ -14,46 +14,74 @@ use crate::{
     state::{QueueKind, QueueState},
 };
 
-/// The waiting entries, the queue's then `oneshots`.
+/// The waiting entries, the queue's and `oneshots`, numbered in the order
+/// they arrived.
 pub(super) fn waiting(db: &Connection, oneshots: &[WaitingOneShot]) -> Result<Vec<Entry>> {
+    let mut arrived = queued(db)?;
+    arrived.extend(oneshots.iter().map(oneshot));
+    // A one-shot run arrived after the entry it was queued after; the stable
+    // sort keeps the order within each kind.
+    arrived.sort_by_key(|(after, _)| *after);
+    let entries = arrived.into_iter().map(|(_, entry)| entry);
+    Ok(entries
+        .enumerate()
+        .map(|(arrival, entry)| Entry { arrival, ..entry })
+        .collect())
+}
+
+/// When an entry arrived: after the queue entry of this sequence number, as
+/// a one-shot run, or as that entry itself.
+type Arrived = (i64, bool);
+
+/// The queue's waiting entries in arrival order, each with when it arrived.
+fn queued(db: &Connection) -> Result<Vec<(Arrived, Entry)>> {
     let rows = db
         .prepare(
-            "SELECT id,kind,name,created_at,COALESCE(workspace_id,opens_workspace_id),job
+            "SELECT seq,id,kind,name,created_at,COALESCE(workspace_id,opens_workspace_id),job
              FROM agent_queue WHERE state=?1 ORDER BY seq",
         )?
         .query_map([QueueState::Queued], |row| {
             Ok((
-                row.get::<_, QueueEntryId>(0)?,
-                row.get::<_, QueueKind>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, UnixTime>(3)?,
-                row.get::<_, Option<SpaceId>>(4)?,
-                row.get::<_, Option<String>>(5)?,
+                row.get::<_, i64>(0)?,
+                row.get::<_, QueueEntryId>(1)?,
+                row.get::<_, QueueKind>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, UnixTime>(4)?,
+                row.get::<_, Option<SpaceId>>(5)?,
+                row.get::<_, Option<String>>(6)?,
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut entries = Vec::new();
-    for (id, kind, name, queued_at, space, job) in rows {
-        entries.push(Entry {
+    for (seq, id, kind, name, queued_at, space, job) in rows {
+        let work = work(kind, space, job.as_deref())?;
+        let entry = Entry {
             id,
             name,
-            work: work(kind, space, job.as_deref())?,
+            work,
             queued_at,
-            arrival: entries.len(),
-        });
-    }
-    for oneshot in oneshots {
-        entries.push(Entry {
-            id: oneshot.id.clone(),
-            name: "review".into(),
-            work: Work::Review {
-                space: oneshot.space.clone(),
-            },
-            queued_at: oneshot.requested_at,
-            arrival: entries.len(),
-        });
+            arrival: 0,
+        };
+        entries.push(((seq, false), entry));
     }
     Ok(entries)
+}
+
+/// The waiting review `oneshot`, with when it arrived: one that serves
+/// nothing never waits, so it goes last.
+fn oneshot(oneshot: &WaitingOneShot) -> (Arrived, Entry) {
+    let serving = oneshot.serving.as_ref();
+    let after = serving.map_or(i64::MAX, |serving| serving.queued_after);
+    let entry = Entry {
+        id: oneshot.id.clone(),
+        name: "review".into(),
+        work: Work::Review {
+            space: serving.map(|serving| serving.space.clone()),
+        },
+        queued_at: oneshot.requested_at,
+        arrival: 0,
+    };
+    ((after, true), entry)
 }
 
 /// What an entry of `kind` in `space` starts; `job` is a job's entry's job.

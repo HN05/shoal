@@ -1372,7 +1372,8 @@ async fn a_oneshot_run_ranks_with_its_workspace_and_holds_its_slot() {
     // The launch has no space, so it started no earlier than the workspace
     // whose review ranks with it.
     let launch = add(&manager, &repo, "launch").await.entry.unwrap();
-    let mut review = (manager.agent_queue).request_oneshot(&repo.id, &workspace.id, false, || {});
+    let mut review =
+        (manager.agent_queue).request_oneshot(&repo.id, serving(&workspace.id), false, || {});
     manager
         .queue_attach(&first.id, &SpaceSelector::id(&workspace.id))
         .await
@@ -1402,9 +1403,17 @@ async fn a_oneshot_run_ranks_with_its_workspace_and_holds_its_slot() {
     assert!(started(&launch.id));
 }
 
-/// A workspace one-shot runs serve, which ranking finds none of.
-fn reviewed() -> crate::client::space_ids::SpaceId {
-    String::from("reviewed").into()
+/// What a one-shot run of `space`'s work serves, queued after everything.
+pub(super) fn serving(space: &crate::client::space_ids::SpaceId) -> super::Serving {
+    super::Serving {
+        space: space.clone(),
+        queued_after: i64::MAX,
+    }
+}
+
+/// What one-shot runs of a workspace ranking finds none of serve.
+fn reviewed() -> super::Serving {
+    serving(&String::from("reviewed").into())
 }
 
 #[tokio::test]
@@ -1416,7 +1425,7 @@ async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
     let counted = stops.clone();
     let mut run = manager
         .agent_queue
-        .request_oneshot(&repo.id, &reviewed(), false, move || {
+        .request_oneshot(&repo.id, reviewed(), false, move || {
             counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         });
     manager.dispatch_queue().await.unwrap();
@@ -1442,7 +1451,7 @@ async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
     assert_eq!(stops.load(std::sync::atomic::Ordering::SeqCst), 1);
     drop(run);
 
-    let mut again = (manager.agent_queue).request_oneshot(&repo.id, &reviewed(), true, || {});
+    let mut again = (manager.agent_queue).request_oneshot(&repo.id, reviewed(), true, || {});
     manager.dispatch_queue().await.unwrap();
     crate::daemon::test_support::assert_pending(again.admitted()).await;
     publish_recovery(&manager);

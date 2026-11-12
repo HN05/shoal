@@ -8,6 +8,7 @@ use crate::{
     daemon::{
         test_support::manager,
         workspace::agent_queue::{
+            Serving, last_seq,
             rank::{Edge, Node},
             tests::{add, create, limit_globally, register, request},
         },
@@ -206,4 +207,77 @@ async fn a_space_with_a_pr_it_opened_finishes_until_the_pr_merges() {
         Ok(spaces::ranked(tx)?[&id].tier)
     });
     assert_eq!(tier.await.unwrap(), Tier::New);
+}
+
+#[tokio::test]
+async fn a_review_arrives_after_the_entries_queued_before_it_in_the_same_second() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let id = repo.id.clone();
+    let queued_after = manager
+        .store
+        .run(move |db| {
+            let insert = |entry: &str| {
+                db.execute(
+                    "INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,state,created_at)
+                     VALUES (?1,'launch',?2,?1,'claude','{}','{}','queued',10)",
+                    params![entry, id],
+                )
+            };
+            insert("early")?;
+            let queued_after = last_seq(db)?;
+            insert("late")?;
+            Ok(queued_after)
+        })
+        .await
+        .unwrap();
+    let review = WaitingOneShot {
+        id: String::from("oneshot:0").into(),
+        repository: repo.id.clone(),
+        serving: Some(Serving {
+            space: String::from("reviewed").into(),
+            queued_after,
+        }),
+        requested_at: UnixTime::from_seconds(10),
+        after_stop: false,
+    };
+    let entries = manager
+        .store
+        .read(move |tx| entries::waiting(tx, &[review]))
+        .await
+        .unwrap();
+    let arrived: Vec<_> = (entries.iter())
+        .map(|entry| (entry.id.to_string(), entry.arrival))
+        .collect();
+    assert_eq!(
+        arrived,
+        [
+            ("early".into(), 0),
+            ("oneshot:0".into(), 1),
+            ("late".into(), 2)
+        ]
+    );
+}
+
+#[tokio::test]
+async fn the_last_sequence_number_holds_after_the_newest_entry_leaves() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let id = repo.id.clone();
+    let (before, after) = manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,state,created_at)
+                 VALUES ('gone','launch',?1,'gone','claude','{}','{}','queued',10)",
+                [&id],
+            )?;
+            let before = last_seq(db)?;
+            db.execute("DELETE FROM agent_queue WHERE id='gone'", [])?;
+            Ok((before, last_seq(db)?))
+        })
+        .await
+        .unwrap();
+    assert!(before > 0);
+    assert_eq!(after, before);
 }

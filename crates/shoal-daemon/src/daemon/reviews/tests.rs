@@ -1222,7 +1222,15 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
     tokio::spawn(run(manager.clone()));
     tokio::spawn(crate::daemon::queued_starts::run(manager.clone()));
     // The only slot is taken, so the review waits for it.
-    let mut held = (manager.agent_queue).request_oneshot(&repo.id, &workspace.id, false, || {});
+    let mut held = (manager.agent_queue).request_oneshot(
+        &repo.id,
+        crate::daemon::workspace::agent_queue::Serving {
+            space: workspace.id.clone(),
+            queued_after: 0,
+        },
+        false,
+        || {},
+    );
     held.admitted().await;
     let mut ended = manager.reviews.ended.subscribe();
     let target = ReviewTarget::Pr {

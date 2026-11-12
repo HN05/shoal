@@ -19,7 +19,10 @@ use crate::{
     config::{Effective, templates},
     daemon::{
         log, oneshot,
-        workspace::{Manager, agent_queue::OneShotSlot},
+        workspace::{
+            Manager,
+            agent_queue::{self, OneShotSlot, Serving},
+        },
     },
     model::Workspace,
     reviews::{FailureReason, Review, ReviewId, ReviewState, ReviewTarget},
@@ -182,14 +185,23 @@ impl Manager {
         cancel: &Arc<watch::Sender<bool>>,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Result<Option<OneShotSlot<'_>>> {
-        let after_stop = self
+        let (after_stop, queued_after) = self
             .store
-            .run(move |db| store::waits_for_recovery(db, id))
+            .read(move |tx| {
+                Ok((
+                    store::waits_for_recovery(tx, id)?,
+                    agent_queue::last_seq(tx)?,
+                ))
+            })
             .await?;
+        let serving = Serving {
+            space: workspace.id.clone(),
+            queued_after,
+        };
         let stop = cancel.clone();
         let mut slot = self.agent_queue.request_oneshot(
             &workspace.repository_id,
-            &workspace.id,
+            serving,
             after_stop,
             move || {
                 stop.send_replace(true);
