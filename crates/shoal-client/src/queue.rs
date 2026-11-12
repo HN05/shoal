@@ -23,6 +23,7 @@ const HOLD_RETRY: Duration = Duration::from_secs(1);
 
 /// Admit `request` now or queue it.
 pub async fn add(daemon: &impl Daemon, request: QueueRequest) -> Result<QueueAdmission> {
+    let request = Box::new(request);
     self::request(daemon, QueueMethod::QueueAdd { request }).await
 }
 

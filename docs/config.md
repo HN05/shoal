@@ -732,8 +732,8 @@ urgent = 75
 "low-priority" = 25
 ```
 
-`[priority.labels]` gives forge labels a priority from 0 to 100: a space
-without one set ranks in the [agent queue](reference.md#queue-order) with the
+`[priority.labels]` gives forge labels a priority from 0 to 100: a space or
+launch given none ranks in the [agent queue](reference.md#queue-order) with the
 highest its issue's labels map to.
 
 ### PRs

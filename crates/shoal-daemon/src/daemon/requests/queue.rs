@@ -30,7 +30,7 @@ pub(super) async fn handle(
             prompt,
         } => Body::QueueEntry(manager.queue_agent(&workspace, agent, prompt).await?),
         QueueMethod::QueueAdd { request } => {
-            Body::QueueAdmission(manager.queue_add_as(request, caller).await?)
+            Body::QueueAdmission(manager.queue_add_as(*request, caller).await?)
         }
         QueueMethod::ListQueue => Body::QueueEntries(manager.visible_queue().await?),
         QueueMethod::QueuedPlan { entry } => Body::QueuedPlan(manager.queued_plan(&entry).await?),

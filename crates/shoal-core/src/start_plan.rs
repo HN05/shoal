@@ -96,6 +96,7 @@ pub fn queued_agent_request(
     let mut plan = AddPlan::agent_in(workspace, launch)?;
     plan.creation.pr = pr;
     Ok(QueueRequest {
+        issue_labels: Vec::new(),
         priority: None,
         repository: (&workspace.repository_id).into(),
         name: workspace.name.clone(),

@@ -273,6 +273,10 @@ pub struct QueueRequest {
     /// that space exists.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<crate::priority::Priority>,
+    /// The labels of the issue the launch works on, whose
+    /// `[priority.labels]` priority ranks it when it is given none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub issue_labels: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

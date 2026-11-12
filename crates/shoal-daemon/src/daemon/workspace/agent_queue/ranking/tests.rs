@@ -404,3 +404,38 @@ async fn a_space_without_a_priority_set_takes_the_highest_its_issues_labels_map_
         ]
     );
 }
+
+#[tokio::test]
+async fn a_launch_given_no_priority_ranks_with_the_highest_its_issues_labels_map_to() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(
+        "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n\
+         [priority.labels]\nurgent = 75\nlater = 25\n",
+    ));
+    add(&manager, &repo, "running").await;
+    let labelled = |name, priority| QueueRequest {
+        priority,
+        issue_labels: vec!["later".into(), "urgent".into()],
+        ..request(&repo, name, false)
+    };
+    manager
+        .queue_add(labelled("given", Some(Priority::LOW)))
+        .await
+        .unwrap();
+    add(&manager, &repo, "unlabelled").await;
+    manager.queue_add(labelled("labelled", None)).await.unwrap();
+
+    let waiting: Vec<_> = (manager.queue_entries().await.unwrap().into_iter())
+        .filter(|entry| entry.state == QueueState::Queued)
+        .map(|entry| (entry.name.to_string(), entry.rank.unwrap().priority))
+        .collect();
+    assert_eq!(
+        waiting,
+        [
+            ("labelled".into(), Priority::URGENT),
+            ("unlabelled".into(), Priority::NORMAL),
+            ("given".into(), Priority::LOW),
+        ]
+    );
+}

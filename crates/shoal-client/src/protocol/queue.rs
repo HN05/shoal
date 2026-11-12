@@ -10,7 +10,7 @@ use super::Lifetime;
 #[serde(rename_all = "snake_case")]
 pub enum QueueMethod {
     QueueAdd {
-        request: crate::model::QueueRequest,
+        request: Box<crate::model::QueueRequest>,
     },
     /// Queue `agent` in the ready `workspace`, with `prompt` as its first
     /// message, once it can run there; the daemon starts it detached in the

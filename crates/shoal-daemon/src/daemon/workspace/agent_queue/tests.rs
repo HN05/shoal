@@ -47,6 +47,7 @@ pub(super) fn limit_globally(manager: &Manager, limit: u32) {
 
 pub(super) fn request(repository: &Repository, name: &str, now: bool) -> QueueRequest {
     QueueRequest {
+        issue_labels: Vec::new(),
         priority: None,
         narrowing: Default::default(),
         mode: None,
@@ -1038,10 +1039,10 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
         (None, true),
     ] {
         let mut method = crate::protocol::QueueMethod::QueueAdd {
-            request: QueueRequest {
+            request: Box::new(QueueRequest {
                 workspace: workspace.map(SpaceSelector::from),
                 ..request(&repo, "launch", false)
-            },
+            }),
         };
         let authorized =
             crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
@@ -1055,10 +1056,10 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
         },
     ] {
         let mut method = crate::protocol::QueueMethod::QueueAdd {
-            request: QueueRequest {
+            request: Box::new(QueueRequest {
                 workspace: Some(SpaceSelector::id(&child.id)),
                 ..request
-            },
+            }),
         };
         let authorized =
             crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
@@ -1067,7 +1068,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
     // Nor does it open one in another repository.
     let other = register(&manager, &temp, "other").await;
     let mut method = crate::protocol::QueueMethod::QueueAdd {
-        request: request(&other, "launch", false),
+        request: Box::new(request(&other, "launch", false)),
     };
     let authorized =
         crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;

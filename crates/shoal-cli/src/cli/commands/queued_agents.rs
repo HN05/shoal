@@ -35,6 +35,8 @@ pub(super) struct Launch {
     /// The workspace the launch opens.
     pub name: SpaceName,
     pub issue_title: Option<String>,
+    /// The labels of its issue, which may give it a priority.
+    pub issue_labels: Vec<String>,
     pub now: bool,
     pub blockers: Vec<Blocker>,
     /// The existing workspace the launch reopens, whose agent it becomes.
@@ -53,6 +55,7 @@ pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Resu
         mode: plan.mode.clone(),
         narrowing: plan.narrowing,
         issue_title: launch.issue_title,
+        issue_labels: launch.issue_labels,
         plan: serde_json::to_string(plan)?,
         env: terminal::start_environment(),
         now: launch.now,

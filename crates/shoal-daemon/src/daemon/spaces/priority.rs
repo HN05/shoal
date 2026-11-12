@@ -6,9 +6,11 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::super::{scope::Caller, workspace::Manager};
 use crate::client::{
     priority::{Prioritized, Priority},
+    repository_ids::RepositoryId,
     space_ids::SpaceId,
     space_names::SpaceSelector,
 };
+use crate::model::QueueRequest;
 
 /// The priority of the space `id`: the one set on it, else the default.
 pub(crate) fn current(db: &Connection, id: &SpaceId) -> Result<Priority> {
@@ -75,6 +77,24 @@ impl Manager {
             }
             None => Ok((own < Priority::default()).then_some(own)),
         }
+    }
+
+    /// The priority the launch `request` ranks with while queued: the one
+    /// `caller` gives it, else the highest the labels of its issue map to
+    /// under `[priority.labels]` of its `repository`.
+    pub(crate) async fn launch_priority(
+        &self,
+        caller: Option<&Caller>,
+        request: &QueueRequest,
+        repository: &RepositoryId,
+    ) -> Result<Option<Priority>> {
+        let given = self.given_priority(caller, request.priority).await?;
+        if given.is_some() || request.issue_labels.is_empty() {
+            return Ok(given);
+        }
+        let settings = self.repository_settings(repository).await?;
+        let labels = request.issue_labels.iter().map(String::as_str);
+        Ok(settings.priority.of_labels(labels))
     }
 
     /// Set `priority`, when given, on the space `id`.

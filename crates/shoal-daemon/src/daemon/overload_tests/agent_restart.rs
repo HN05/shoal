@@ -86,6 +86,7 @@ async fn a_restart_resumes_only_in_a_ready_recorded_workspace() {
 /// A launch in the fixture's repository, which waits for a slot.
 fn waiting_launch(workspace: &crate::model::Workspace) -> QueueRequest {
     QueueRequest {
+        issue_labels: Vec::new(),
         priority: None,
         narrowing: Default::default(),
         repository: (&workspace.repository_id).into(),

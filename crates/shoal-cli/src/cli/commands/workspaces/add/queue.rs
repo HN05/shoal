@@ -89,6 +89,7 @@ pub(super) async fn admit_launch(
         agent,
         name: planned_workspace_name(ctx, target, &plan.creation).await?,
         issue_title: issue.map(|issue| issue.title.clone()),
+        issue_labels: issue.map_or_else(Vec::new, |issue| issue.labels.clone()),
         now,
         blockers,
         opens: reopened_workspace(ctx, target, plan).await?,

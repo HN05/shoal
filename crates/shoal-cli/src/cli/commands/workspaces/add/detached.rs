@@ -106,6 +106,7 @@ async fn queue_in_existing(
         agent,
         name: planned_workspace_name(ctx, target, &plan.creation).await?,
         issue_title: issue.map(|issue| issue.title.clone()),
+        issue_labels: issue.map_or_else(Vec::new, |issue| issue.labels.clone()),
         now,
         blockers,
         opens: Some(workspace.clone()),

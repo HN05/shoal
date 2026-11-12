@@ -708,7 +708,8 @@ async fn a_launch_a_chat_queued_opens_its_workspace_in_the_chats_scope() {
     let token = daemon.manager.chat_scope(&chat.id).await.unwrap();
     let agent = daemon.connector().scope(token);
     let queue = QueueMethod::QueueAdd {
-        request: crate::model::QueueRequest {
+        request: Box::new(crate::model::QueueRequest {
+            issue_labels: Vec::new(),
             priority: None,
             repository: daemon.repository.id.clone().into(),
             name: "api".into(),
@@ -722,7 +723,7 @@ async fn a_launch_a_chat_queued_opens_its_workspace_in_the_chats_scope() {
             workspace: None,
             starts_in_caller: false,
             blockers: Vec::new(),
-        },
+        }),
     };
     let admission: crate::model::QueueAdmission = connection::request(&agent, queue).await.unwrap();
     // The daemon starts it, as it starts a launch in an existing workspace.
@@ -806,6 +807,7 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
         ));
     // The user's start holds a slot it has yet to open a workspace for.
     let request = crate::model::QueueRequest {
+        issue_labels: Vec::new(),
         priority: None,
         narrowing: Default::default(),
         mode: None,

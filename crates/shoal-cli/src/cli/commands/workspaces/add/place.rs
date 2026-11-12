@@ -113,6 +113,8 @@ async fn admit_here(
         agent: launch.agent.clone(),
         name: workspace.name.clone(),
         issue_title: launch.issue.as_ref().map(|issue| issue.title.clone()),
+        // The workspace exists, so its issue's labels rank it.
+        issue_labels: Vec::new(),
         now: launch.now,
         blockers: Vec::new(),
         opens: Some(workspace.id.clone()),
