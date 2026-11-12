@@ -151,9 +151,11 @@ async fn done_renames_and_links_go_through_the_protocol() {
         kind: LinkKind::Issue,
         url: "40".into(),
         relation: Relation::Related,
-        title: None,
+        title: Some("Report".into()),
     };
-    connection::request::<()>(&app, link).await.unwrap();
+    connection::request::<crate::client::links::Linked>(&app, link)
+        .await
+        .unwrap();
     let unlink = || ItemMethod::UnlinkItems {
         space: SpaceSelector::id(&workspace.id),
         relation: Relation::Related,

@@ -58,7 +58,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
             LinkKind::Issue,
             "40",
             Relation::Opened,
-            None,
+            Some("Report".into()),
             None,
         )
         .await
@@ -91,7 +91,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
             LinkKind::Issue,
             "40",
             Relation::Related,
-            None,
+            Some("Report".into()),
             None,
         )
         .await
@@ -121,7 +121,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
                 LinkKind::Issue,
                 "https://github.com/other/repo/issues/1",
                 Relation::Related,
-                None,
+                Some("Report".into()),
                 None,
             )
             .await
@@ -225,7 +225,7 @@ async fn a_moved_worktree_takes_no_recorded_relations() {
                 LinkKind::Issue,
                 "40",
                 Relation::Related,
-                None,
+                Some("Report".into()),
                 None
             )
             .await
@@ -245,4 +245,61 @@ fn link_events_from_before_relations_were_assignments() {
         serde_json::from_str(r#"{"kind":"pr","url":"https://forge.example/team/repo/pulls/7"}"#)
             .unwrap();
     assert_eq!(link.relation, Relation::Assigned);
+}
+
+#[tokio::test]
+async fn an_issue_linked_without_its_title_gets_the_forges() {
+    let server = crate::forge::test_support::Server::start(|request| {
+        let number = request
+            .line
+            .strip_prefix("GET /api/v1/repos/team/repo/issues/");
+        let Some(number) = number.filter(|number| *number != "9") else {
+            return (404, Vec::new(), Vec::new());
+        };
+        let issue = serde_json::json!({"number": number.parse::<u64>().unwrap(),
+            "title": format!("Issue {number}"), "state": "open"});
+        (200, Vec::new(), issue.to_string().into())
+    });
+    let host = &server.host;
+    // Pins are this process's, which parallel tests replace; an answer stays.
+    crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::Forgejo);
+    let (root, manager) = manager().await;
+    crate::daemon::test_support::configure(
+        &manager,
+        &format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\ntoken = \"user\"\n"),
+    )
+    .await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "titles".into(), None, None, None)
+        .await
+        .unwrap();
+    git(
+        &path,
+        &[
+            "remote",
+            "add",
+            "origin",
+            &format!("http://{host}/team/repo"),
+        ],
+    );
+    let selector = SpaceSelector::id(&workspace.id);
+    let link = |input, relation| {
+        manager.link_item(&selector, LinkKind::Issue, input, relation, None, None)
+    };
+    for (input, relation) in [("5", Relation::Assigned), ("6", Relation::Related)] {
+        assert_eq!(link(input, relation).await.unwrap().title_error, None);
+    }
+    // An issue the forge does not show is linked without a title.
+    let unread = link("9", Relation::Opened).await.unwrap();
+
+    let links = manager.workspace_by_id(&workspace.id).await.unwrap().links;
+    assert_eq!(links.issue_title.as_deref(), Some("Issue 5"));
+    assert_eq!(links.related[0].title.as_deref(), Some("Issue 6"));
+    assert!(unread.title_error.is_some());
+    assert_eq!(links.opened[0].title, None);
 }

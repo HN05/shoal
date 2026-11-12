@@ -210,6 +210,7 @@ response_bodies! {
     PullRequest(crate::forge::PullRequest),
     ViewPieces(Vec<ViewPiece>),
     Opened(crate::links::OpenOutcome),
+    Linked(crate::links::Linked),
     Push(crate::links::PushOutcome),
     BranchPush(crate::links::BranchPush),
     Completion(crate::model::Completion),

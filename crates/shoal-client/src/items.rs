@@ -23,7 +23,7 @@ pub async fn link(
     space: &SpaceSelector,
     relation: Relation,
     item: &LinkedItem,
-) -> Result<()> {
+) -> Result<crate::links::Linked> {
     let method = ItemMethod::LinkItem {
         space: space.clone(),
         kind: item.kind,

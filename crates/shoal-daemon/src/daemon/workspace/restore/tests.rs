@@ -512,7 +512,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
             LinkKind::Issue,
             "7",
             Relation::Assigned,
-            None,
+            Some("Report".into()),
             None,
         )
         .await

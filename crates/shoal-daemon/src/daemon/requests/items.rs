@@ -194,26 +194,17 @@ pub(super) async fn handle(
                 .select_context_items(&context, &selection, elsewhere, caller)
                 .await?,
         ),
-        ItemMethod::SetIssue {
-            space: workspace,
-            url,
-            title,
-        } => {
-            manager.set_issue(&workspace, &url, title).await?;
-            Body::Ok
-        }
         ItemMethod::LinkItem {
             space: workspace,
             kind,
             url,
             relation,
             title,
-        } => {
+        } => Body::Linked(
             manager
                 .link_item(&workspace, kind, &url, relation, title, caller)
-                .await?;
-            Body::Ok
-        }
+                .await?,
+        ),
         ItemMethod::UnlinkItems {
             space: workspace,
             relation,
@@ -303,10 +294,7 @@ impl Scoped for ItemMethod {
                     | Action::Update { .. },
                 ..
             } => Some(change_context_space(manager, caller, context).await?),
-            ItemMethod::SetIssue {
-                space: workspace, ..
-            }
-            | ItemMethod::LinkItem {
+            ItemMethod::LinkItem {
                 space: workspace, ..
             }
             | ItemMethod::UnlinkItems {

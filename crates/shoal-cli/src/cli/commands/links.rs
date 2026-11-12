@@ -99,16 +99,15 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
         } => (kind, input),
         Selection { kind, .. } => pick_open_item(ctx, context.clone(), kind).await?,
     };
-    let title = match kind {
-        LinkKind::Issue => issue_title(ctx, context, &input).await,
-        LinkKind::Pr | LinkKind::Ci => None,
-    };
     let item = crate::model::LinkedItem {
         kind,
         url: input,
-        title,
+        title: None,
     };
-    crate::client::items::link(&ctx.paths, &space, relation, &item).await?;
+    let linked = crate::client::items::link(&ctx.paths, &space, relation, &item).await?;
+    if let Some(error) = linked.title_error {
+        eprintln!("Issue title unavailable: {error}");
+    }
     ctx.emit(
         &link_outcome(kind, relation),
         Registered {
@@ -134,18 +133,6 @@ fn link_outcome(kind: LinkKind, relation: Relation) -> String {
         (Relation::Opened, LinkKind::Issue) => "Issue linked as opened.".into(),
         (Relation::Related, LinkKind::Pr) => "PR linked as related.".into(),
         (Relation::Related, LinkKind::Issue) => "Issue linked as related.".into(),
-    }
-}
-
-/// The title lists show for the space; linking proceeds without one when
-/// the forge cannot be read.
-async fn issue_title(ctx: &Context, context: ItemContext, input: &str) -> Option<String> {
-    match super::issues::load(ctx, context, input).await {
-        Ok(issue) => Some(issue.title),
-        Err(error) => {
-            eprintln!("Issue title unavailable: {error:#}");
-            None
-        }
     }
 }
 

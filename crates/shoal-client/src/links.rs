@@ -22,6 +22,15 @@ pub enum OpenOutcome {
     Opened(Box<Opened>),
 }
 
+/// What linking an item reports beside recording it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Linked {
+    /// Why the issue's title could not be read, which leaves the link
+    /// without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title_error: Option<String>,
+}
+
 /// Whether a push may go ahead, or waits for the user's approval of the
 /// request recorded for it.
 #[derive(Debug, Clone, Serialize, Deserialize)]

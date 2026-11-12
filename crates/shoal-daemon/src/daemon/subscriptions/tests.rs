@@ -172,7 +172,7 @@ mod streams {
                 LinkKind::Issue,
                 "40",
                 Relation::Related,
-                None,
+                Some("Report".into()),
                 None,
             )
             .await

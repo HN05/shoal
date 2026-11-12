@@ -151,7 +151,6 @@ const REQUESTS: &[&str] = &[
     r#"{"demo_progress":{"workspace":"fix","launch":"l1"}}"#,
     r#"{"stop_demos":{"workspace":"fix","name":"web"}}"#,
     // Issues and PRs.
-    r#"{"set_issue":{"space":"fix","url":"https://forge.example/team/app/issues/1","title":"Fix"}}"#,
     r#"{"link_item":{"space":"fix","kind":"issue","url":"1","relation":"related"}}"#,
     r#"{"unlink_items":{"space":"fix","relation":"assigned","kind":null,"url":null}}"#,
     r#"{"set_pr":{"space":"fix","url":"7","clear":false}}"#,

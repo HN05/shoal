@@ -31,6 +31,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
 
 use crate::{
+    client::links::Linked,
     daemon::{
         events::{self, EventKind},
         links::{pr::Action, space::LinkSpace},
@@ -43,7 +44,29 @@ use crate::{
 };
 
 impl Manager {
+    /// Link the item `input` names with `relation`; an issue linked without
+    /// its title gets the one the forge shows, or else none, which the
+    /// answer says why.
     pub async fn link_item(
+        &self,
+        selector: &SpaceSelector,
+        kind: LinkKind,
+        input: &str,
+        relation: Relation,
+        title: Option<String>,
+        caller: Option<&Caller>,
+    ) -> Result<Linked> {
+        let (title, title_error) = match (kind, title) {
+            (LinkKind::Issue, None) => self.issue_title(selector, input, caller).await,
+            (_, title) => (title, None),
+        };
+        self.record_link(selector, kind, input, relation, title, caller)
+            .await?;
+        Ok(Linked { title_error })
+    }
+
+    /// Record the link [`Self::link_item`] makes, with `title`.
+    async fn record_link(
         &self,
         selector: &SpaceSelector,
         kind: LinkKind,
@@ -67,6 +90,24 @@ impl Manager {
                 self.record_item(selector, relation, kind, input, title)
                     .await
             }
+        }
+    }
+
+    /// The title of the issue `input` names, which lists show for the space,
+    /// or else why the forge could not be read.
+    async fn issue_title(
+        &self,
+        selector: &SpaceSelector,
+        input: &str,
+        caller: Option<&Caller>,
+    ) -> (Option<String>, Option<String>) {
+        let read = async {
+            let context = self.link_space(selector).await?.item_context();
+            anyhow::Ok(self.issue_details(&context, input, caller).await?.title)
+        };
+        match read.await {
+            Ok(title) => (Some(title), None),
+            Err(error) => (None, Some(format!("{error:#}"))),
         }
     }
 

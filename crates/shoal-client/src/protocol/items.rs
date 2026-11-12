@@ -12,12 +12,6 @@ use crate::space_names::SpaceSelector;
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ItemMethod {
-    SetIssue {
-        space: SpaceSelector,
-        url: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        title: Option<String>,
-    },
     /// Link an issue or PR by number or URL with a relation.
     LinkItem {
         space: SpaceSelector,
