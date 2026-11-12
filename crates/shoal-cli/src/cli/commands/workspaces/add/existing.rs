@@ -84,18 +84,7 @@ pub(super) async fn start_on_branch(
     args: Vec<OsString>,
     options: AddOptions,
 ) -> Result<i32> {
-    let new_space = [
-        ("--issue", issue.is_some()),
-        ("--name", creation.options.name.is_some()),
-        ("--parent", options.parent.is_some()),
-        ("--base", creation.base.is_some()),
-        ("--path", creation.path.is_some()),
-        ("--git-profile", creation.git_profile.is_some()),
-        ("--copy", creation.copy.is_some()),
-        ("--skip-setup", creation.options.skip_setup),
-        ("--disposable", creation.options.disposable),
-    ];
-    if let Some((flag, _)) = new_space.iter().find(|(_, set)| *set) {
+    if let Some(flag) = new_space_flag(creation, issue, &options) {
         anyhow::bail!(
             "{flag} applies to a new workspace, and workspace {} already has branch {}; the start goes into it as --in does",
             workspace.number,
@@ -104,6 +93,32 @@ pub(super) async fn start_on_branch(
     }
     let selector = SpaceSelector::id(&workspace.id);
     start_worker(ctx, selector, agent.named(), args, options).await
+}
+
+/// The first flag of a start that only the new workspace of `creation`, on
+/// `issue`, takes. The parent of a `--fork` start without a copy is the
+/// workspace whose agent it forks, which a start of an existing workspace's
+/// worker takes too, as `--in` does.
+fn new_space_flag(
+    creation: &Creation,
+    issue: Option<&str>,
+    options: &AddOptions,
+) -> Option<&'static str> {
+    let forks_parent = options.fork.is_some() && creation.copy.is_none();
+    let new_space = [
+        ("--issue", issue.is_some()),
+        ("--name", creation.options.name.is_some()),
+        ("--parent", options.parent.is_some() && !forks_parent),
+        ("--base", creation.base.is_some()),
+        ("--path", creation.path.is_some()),
+        ("--git-profile", creation.git_profile.is_some()),
+        ("--copy", creation.copy.is_some()),
+        ("--skip-setup", creation.options.skip_setup),
+        ("--disposable", creation.options.disposable),
+    ];
+    (new_space.into_iter())
+        .find(|(_, set)| *set)
+        .map(|(flag, _)| flag)
 }
 
 /// The plan that starts `agent` in `workspace` on `issue` with `args`,
@@ -138,3 +153,6 @@ fn worker_plan(
         workspace: Some(workspace.id.clone()),
     }
 }
+
+#[cfg(test)]
+mod tests;
