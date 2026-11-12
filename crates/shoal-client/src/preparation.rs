@@ -14,8 +14,8 @@ use crate::{
     protocol::{
         CopySource, CreationOptions, OperationMethod,
         operations::{
-            Ended, Failure, OperationSpec, Preparation, Prepared, Progress, QueuedLaunch,
-            StartedWorkspace, WorkspaceStart,
+            Ended, Failure, LaunchRequest, OperationSpec, Preparation, Prepared, Progress,
+            QueuedLaunch, StartedWorkspace, WorkspaceStart,
         },
     },
     queue::QueueEntryId,
@@ -39,8 +39,9 @@ pub struct NewWorkspace {
     pub issue: Option<ItemInput>,
     /// The PR to link, by number or URL.
     pub pr: Option<ItemInput>,
-    /// The agent its preparation queues.
-    pub agent: Option<Box<QueuedLaunch>>,
+    /// The agent its preparation queues, which the daemon resolves under
+    /// the workspace's settings.
+    pub agent: Option<Box<LaunchRequest>>,
     /// The starting queue entry whose launch opens it.
     pub queue_entry: Option<QueueEntryId>,
     /// The agent the caller starts itself once setup succeeds, which waits
@@ -116,8 +117,9 @@ pub struct NewSplit {
     pub options: CreationOptions,
     /// The issue to link, by number or URL.
     pub issue: Option<ItemInput>,
-    /// The agent its preparation queues.
-    pub agent: Option<Box<QueuedLaunch>>,
+    /// The agent its preparation queues, which the daemon resolves under
+    /// the workspace's settings.
+    pub agent: Option<Box<LaunchRequest>>,
 }
 
 impl NewSplit {

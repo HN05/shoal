@@ -8,7 +8,7 @@ use crate::{
     agent::{Agent, ModelChoice},
     config::{Effective, named_commands::Commands},
     model::SpaceKind,
-    protocol::operations::QueuedLaunch,
+    protocol::operations::{LaunchRequest, QueuedLaunch},
     tools::ensure_program,
 };
 
@@ -107,6 +107,18 @@ pub fn check_queued_launch(launch: &QueuedLaunch, settings: &Effective) -> Resul
     }
     let model = resolve_model(settings, agent, launch.model.clone());
     check_model(settings, agent, &model)
+}
+
+/// The launch `request` asks for under `settings`: run by the agent it
+/// names, else `agent.default`, refused as [`check_queued_launch`] refuses
+/// it.
+pub fn resolve_launch(request: LaunchRequest, settings: &Effective) -> Result<QueuedLaunch> {
+    let agent = (request.agent.clone())
+        .or_else(|| settings.agent.default.clone())
+        .context("name the agent to start; no agent.default is configured")?;
+    let launch = request.run_by(agent);
+    check_queued_launch(&launch, settings)?;
+    Ok(launch)
 }
 
 #[cfg(test)]

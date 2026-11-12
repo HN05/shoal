@@ -2162,7 +2162,7 @@ fn an_apps_agent_keeps_waiting_for_a_failed_setup_until_a_hook_passes_there() {
             env: None,
             issue: None,
             pr: None,
-            agent: agent.map(Box::new),
+            agent: agent.map(|agent| Box::new(agent.into())),
             waiting: None,
             queue_entry: None,
         };

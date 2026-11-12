@@ -126,8 +126,12 @@ a branch that is not a literal Git branch name before creating anything, creates
 branch, PR head or record it names, assigns the issue, removing a new workspace
 it cannot assign, and starts the operation, which sets it up, links its PR, runs
 a new workspace's post-setup hook and queues the detached agent the request
-names, with its mode, model, arguments, fork, issue and caller's place, as a
-scoped `start --agent` starts its agent. One `shoal_client` call sends the
+asks for, with its mode, model, arguments, fork, issue and caller's place, as a
+scoped `start --agent` starts its agent. The request names an agent, mode or
+model only where the caller chose one; the daemon resolves the rest under the
+workspace's settings, `agent.default` for the agent, and the agent works on the
+start's issue unless the request gives it an issue or a task, so an app needs
+no configuration of its own to start one as the CLI does. One `shoal_client` call sends the
 request and follows the preparation, returning the prepared workspace or the
 typed failure with the workspace as it left it, ready when only what follows
 setup failed. The CLI makes that call and keeps its prompt for a failed setup

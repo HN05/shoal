@@ -148,7 +148,7 @@ impl Manager {
     /// the workspace it becomes keeps.
     async fn link_converted_issue(&self, chat: &Chat, input: &ItemInput) -> Result<()> {
         let checkout = self.chat_checkout_path(chat).await?;
-        let OpenIssue { url, title } = self.read_open_issue(&checkout, input).await?;
+        let OpenIssue { url, title, .. } = self.read_open_issue(&checkout, input).await?;
         self.set_issue(&SpaceSelector::id(&chat.id), &url.into(), Some(title))
             .await
     }

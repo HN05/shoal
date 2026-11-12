@@ -372,7 +372,7 @@ async fn start_add_workspace<'c>(
         options,
         issue: issue.map(|issue| issue.url.clone().into()),
         pr,
-        agent,
+        agent: agent.map(|agent| Box::new((*agent).into())),
         queue_entry,
         waiting,
     };

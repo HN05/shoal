@@ -2372,7 +2372,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
         issue: None,
         pr: Some(url.parse().unwrap()),
         agent: Some(Box::new(
-            shoal_client::protocol::operations::QueuedLaunch::new("reviewer".into()),
+            shoal_client::protocol::operations::LaunchRequest::new(Some("reviewer".into())),
         )),
         waiting: None,
         env: None,

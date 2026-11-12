@@ -10,7 +10,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
-    agents::check_queued_launch,
+    agents::{check_queued_launch, resolve_launch},
     config::Effective,
     daemon::{
         links::issue::OpenIssue,
@@ -21,7 +21,10 @@ use crate::{
     model::{OpenedWorkspace, Workspace},
     protocol::{
         CopySource, CreationOptions,
-        operations::{OperationSpec, Preparation, QueuedLaunch, StartedWorkspace, WorkspaceStart},
+        operations::{
+            LaunchIssue, LaunchRequest, OperationSpec, Preparation, QueuedLaunch, StartedWorkspace,
+            WorkspaceStart,
+        },
     },
     removal::{InspectionPolicy, UnsavedWork},
     repository::Selector,
@@ -57,12 +60,13 @@ pub(crate) struct Split {
 }
 
 /// What preparing a new workspace does once it exists, in the caller's
-/// environment `env`.
-pub(crate) struct Preparing {
+/// environment `env`, with its agent as a request names it or, by default,
+/// as the daemon resolved it.
+pub(crate) struct Preparing<L = QueuedLaunch> {
     /// An issue number or URL the workspace is assigned.
     pub issue: Option<crate::forge::items::reference::ItemInput>,
     pub pr: Option<crate::forge::items::reference::ItemInput>,
-    pub agent: Option<Box<QueuedLaunch>>,
+    pub agent: Option<Box<L>>,
     /// The agent the caller starts itself once setup succeeds, which waits
     /// in the queue should setup fail.
     pub waiting: Option<Box<QueuedLaunch>>,
@@ -72,6 +76,58 @@ pub(crate) struct Preparing {
     pub env: Option<BTreeMap<String, String>>,
 }
 
+impl Preparing<LaunchRequest> {
+    /// This preparation with its agent resolved, and the agent the caller
+    /// starts itself checked, under the `settings` they launch with, read
+    /// only when the start has either.
+    async fn resolved(
+        self,
+        settings: impl AsyncFnOnce() -> Result<Effective>,
+    ) -> Result<Preparing> {
+        let Self {
+            issue,
+            pr,
+            agent,
+            waiting,
+            queue_entry,
+            env,
+        } = self;
+        let agent = match (agent, &waiting) {
+            (None, None) => None,
+            (agent, waiting) => {
+                let settings = settings().await?;
+                if let Some(waiting) = waiting {
+                    check_queued_launch(waiting, &settings)?;
+                }
+                let resolved = agent.map(|agent| resolve_launch(*agent, &settings));
+                resolved.transpose()?.map(Box::new)
+            }
+        };
+        Ok(Preparing {
+            issue,
+            pr,
+            agent,
+            waiting,
+            queue_entry,
+            env,
+        })
+    }
+}
+
+impl Preparing {
+    /// Queue its agent on the start's `issue` unless it names a task of its
+    /// own.
+    fn work_on(&mut self, issue: Option<&OpenIssue>) {
+        if let (Some(agent), Some(OpenIssue { url, title, labels })) = (&mut self.agent, issue) {
+            agent.default_issue(LaunchIssue {
+                url: url.clone(),
+                title: title.clone(),
+                labels: labels.clone(),
+            });
+        }
+    }
+}
+
 impl Manager {
     /// Open the workspace `opening` names in `repository`, a new one or
     /// the one on its branch or PR head, and start preparing it.
@@ -79,22 +135,24 @@ impl Manager {
         self: &Arc<Self>,
         repository: Selector,
         mut opening: Opening<'_>,
-        preparing: Preparing,
+        preparing: Preparing<LaunchRequest>,
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
         let repo = self.repository(repository.clone()).await?;
-        if let Some(agent) = preparing.agent.as_ref().or(preparing.waiting.as_ref()) {
+        let start = &opening.start;
+        let mut preparing = (preparing.resolved(async || {
             ensure!(
-                !matches!(opening.start, WorkspaceStart::PullHead { .. }),
+                !matches!(start, WorkspaceStart::PullHead { .. }),
                 "a PR's head opens in a workspace at a commit, which holds no agent of its own"
             );
-            let settings = self.start_settings(&repo.id, &opening.start).await?;
-            check_queued_launch(agent, &settings)?;
-        }
+            self.start_settings(&repo.id, start).await
+        }))
+        .await?;
         let issue = match &preparing.issue {
             Some(issue) => Some(self.read_open_issue(&repo.path, issue).await?),
             None => None,
         };
+        preparing.work_on(issue.as_ref());
         name_after_issue(&mut opening.new.options, issue.as_ref());
         if opening.new.options.name.is_none() {
             let title = self
@@ -157,18 +215,18 @@ impl Manager {
         self: &Arc<Self>,
         parent: &SpaceSelector,
         mut split: Split,
-        preparing: Preparing,
+        preparing: Preparing<LaunchRequest>,
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
         let parent = self.workspace(parent).await?;
-        if let Some(agent) = &preparing.agent {
-            let settings = self.workspace_settings_with_templates(&parent).await?;
-            check_queued_launch(agent, &settings)?;
-        }
+        let mut preparing = (preparing
+            .resolved(async || self.workspace_settings_with_templates(&parent).await))
+        .await?;
         let issue = match &preparing.issue {
             Some(issue) => Some(self.read_open_issue(&parent.path, issue).await?),
             None => None,
         };
+        preparing.work_on(issue.as_ref());
         name_after_issue(&mut split.options, issue.as_ref());
         let priority = (self.given_priority(caller, split.options.priority)).await?;
         let child = self.create_child(&parent, split).await?;
@@ -308,7 +366,7 @@ impl Manager {
         preparing: Preparing,
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
-        if let Some(OpenIssue { url, title }) = issue
+        if let Some(OpenIssue { url, title, .. }) = issue
             && let Err(error) = self
                 .set_issue(&SpaceSelector::id(&workspace.id), &url.into(), Some(title))
                 .await

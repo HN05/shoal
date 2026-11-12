@@ -27,6 +27,7 @@ use crate::{
 pub(crate) struct OpenIssue {
     pub url: ItemRef,
     pub title: String,
+    pub labels: Vec<String>,
 }
 
 impl Manager {
@@ -108,7 +109,7 @@ impl Manager {
         Ok(())
     }
 
-    /// The canonical URL and title of the open issue `input` names in the
+    /// The canonical URL, title and labels of the open issue `input` names in the
     /// repository whose origin `checkout` has, read with the user's logins,
     /// as `shoal start` reads it. A closed or unknown issue is refused.
     pub(crate) async fn read_open_issue(
@@ -123,6 +124,7 @@ impl Manager {
         Ok(OpenIssue {
             url,
             title: issue.item.title,
+            labels: issue.item.labels,
         })
     }
 

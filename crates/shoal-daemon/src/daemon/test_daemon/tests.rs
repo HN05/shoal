@@ -27,7 +27,7 @@ use crate::{
         ApprovalMethod, AssignmentMethod, Body, ErrorCode, HoldMethod, ItemMethod, OperationMethod,
         QuestionMethod, QueueMethod, RemoteError, RemovalMethod, RepositoryMethod, WorkspaceMethod,
         operations::{
-            Ended, Failure, OperationSpec, Progress, QueuedLaunch, Report, StartedWorkspace,
+            Ended, Failure, LaunchRequest, OperationSpec, Progress, Report, StartedWorkspace,
             WorkspaceStart,
         },
     },
@@ -515,12 +515,12 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
     let daemon = TestDaemon::start().await;
     let app = daemon.connector();
     let launch = |agent: &str, mode: Option<&str>| {
-        Box::new(QueuedLaunch {
+        Box::new(LaunchRequest {
             mode: mode.map(Into::into),
-            ..QueuedLaunch::new(agent.into())
+            ..LaunchRequest::new(Some(agent.into()))
         })
     };
-    let create = |issue: Option<&str>, agent: Option<Box<QueuedLaunch>>| {
+    let create = |issue: Option<&str>, agent: Option<Box<LaunchRequest>>| {
         let mut create = start_workspace(&daemon, WorkspaceStart::Name("api".into()));
         if let OperationMethod::StartWorkspace {
             issue: requested,
@@ -601,6 +601,36 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
         worker.token.is_some(),
         "the worker acts with the caller's scope"
     );
+    worker.exit(1);
+}
+
+#[tokio::test]
+async fn a_start_without_an_agent_queues_the_configured_default() {
+    let daemon = TestDaemon::start().await;
+    let app = daemon.connector();
+    let create = |name: &str| {
+        let mut create = start_workspace(&daemon, WorkspaceStart::Name(name.into()));
+        if let OperationMethod::StartWorkspace { agent, .. } = &mut create {
+            *agent = Some(Box::new(LaunchRequest::new(None)));
+        }
+        create
+    };
+    let error = connection::request::<StartedWorkspace>(&app, create("unnamed"))
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("agent.default"), "{error:#}");
+    assert_eq!(code(inspect(&app, "unnamed").await), ErrorCode::NotFound);
+    crate::daemon::test_support::configure(
+        &daemon.manager,
+        "[agent]\ndefault = \"probe\"\n[agents.probe]\ncommand = [\"true\"]\n",
+    )
+    .await;
+    let started: StartedWorkspace = connection::request(&app, create("api")).await.unwrap();
+    let worker = fake::take(&started.operation);
+    let OperationSpec::Prepare { steps, .. } = worker.order.spec.clone() else {
+        panic!("expected a preparation: {:?}", worker.order);
+    };
+    assert_eq!(steps.agent.map(|launch| launch.agent), Some("probe".into()));
     worker.exit(1);
 }
 

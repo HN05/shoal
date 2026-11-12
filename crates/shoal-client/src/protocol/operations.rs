@@ -62,8 +62,10 @@ pub enum OperationMethod {
         issue: Option<crate::forge::items::reference::ItemInput>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pr: Option<crate::forge::items::reference::ItemInput>,
+        /// The agent its preparation queues, on `issue` unless it names a
+        /// task of its own.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        agent: Option<Box<QueuedLaunch>>,
+        agent: Option<Box<LaunchRequest>>,
         /// The agent the caller starts itself once setup succeeds, which
         /// waits in the queue for a retried setup should setup fail.
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -91,8 +93,9 @@ pub enum OperationMethod {
         options: CreationOptions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         issue: Option<crate::forge::items::reference::ItemInput>,
+        /// The agent its preparation queues, as for [`Self::StartWorkspace`].
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        agent: Option<Box<QueuedLaunch>>,
+        agent: Option<Box<LaunchRequest>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<BTreeMap<String, String>>,
     },
@@ -232,10 +235,12 @@ pub struct Preparation {
 }
 
 /// An agent to queue in a ready workspace, as a `shoal start` without a
-/// terminal or a scoped one queues the new workspace's.
+/// terminal or a scoped one queues the new workspace's. A request names it
+/// as a [`LaunchRequest`], which the daemon resolves into the launch it
+/// queues.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QueuedLaunch {
-    pub agent: crate::agent::Agent,
+pub struct QueuedLaunch<A = crate::agent::Agent> {
+    pub agent: A,
     /// Its first message when no issue gives it one.
     pub prompt: Option<String>,
     /// The mode it starts in; the default mode when omitted.
@@ -268,9 +273,9 @@ pub struct QueuedLaunch {
     pub now: bool,
 }
 
-impl QueuedLaunch {
+impl<A> QueuedLaunch<A> {
     /// A launch of `agent` that asks for nothing else.
-    pub fn new(agent: crate::agent::Agent) -> Self {
+    pub fn new(agent: A) -> Self {
         Self {
             agent,
             prompt: None,
@@ -283,6 +288,61 @@ impl QueuedLaunch {
             env: None,
             now: false,
         }
+    }
+}
+
+impl<A> QueuedLaunch<A> {
+    /// Work on `issue` unless the launch names an issue or a task of its
+    /// own.
+    pub fn default_issue(&mut self, issue: LaunchIssue) {
+        if self.issue.is_none() && self.prompt.is_none() && self.args.is_empty() {
+            self.issue = Some(issue);
+        }
+    }
+
+    /// This launch, run by the agent `agent` makes of its own.
+    fn map_agent<B>(self, agent: impl FnOnce(A) -> B) -> QueuedLaunch<B> {
+        let Self {
+            agent: own,
+            prompt,
+            mode,
+            narrowing,
+            model,
+            args,
+            fork,
+            issue,
+            env,
+            now,
+        } = self;
+        QueuedLaunch {
+            agent: agent(own),
+            prompt,
+            mode,
+            narrowing,
+            model,
+            args,
+            fork,
+            issue,
+            env,
+            now,
+        }
+    }
+}
+
+/// A launch a client asks for: the agent it names, else the space's
+/// `agent.default`.
+pub type LaunchRequest = QueuedLaunch<Option<crate::agent::Agent>>;
+
+impl LaunchRequest {
+    /// This launch, run by `agent`.
+    pub fn run_by(self, agent: crate::agent::Agent) -> QueuedLaunch {
+        self.map_agent(|_| agent)
+    }
+}
+
+impl From<QueuedLaunch> for LaunchRequest {
+    fn from(launch: QueuedLaunch) -> Self {
+        launch.map_agent(Some)
     }
 }
 
@@ -466,3 +526,6 @@ impl Failure {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

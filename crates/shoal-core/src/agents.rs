@@ -33,7 +33,8 @@ pub use args::{
     dir_args, model_args, restored_instruction_args, workspace_args, workspace_dir_args,
 };
 pub use checks::{
-    check_model, check_queued_launch, ensure_available, ensure_forks, programs, resolve_model,
+    check_model, check_queued_launch, ensure_available, ensure_forks, programs, resolve_launch,
+    resolve_model,
 };
 pub(crate) use proxy::{
     Routing, agent_url, launch_proxy, proxy_defaults, proxy_ends_turns, proxy_environment,

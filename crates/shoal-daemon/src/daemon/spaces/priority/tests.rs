@@ -62,7 +62,8 @@ async fn a_chat_started_with_a_priority_records_it() {
 }
 
 /// What preparing a started workspace does in the tests: nothing more.
-fn bare() -> crate::daemon::operations::starts::Preparing {
+fn bare() -> crate::daemon::operations::starts::Preparing<crate::protocol::operations::LaunchRequest>
+{
     crate::daemon::operations::starts::Preparing {
         issue: None,
         pr: None,
