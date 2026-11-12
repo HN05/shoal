@@ -14,7 +14,14 @@ fn removal_and_cleanup_leave_a_session_the_user_opened() -> anyhow::Result<()> {
     let output = fixture
         .command()
         .env("ZMX_SESSION", "mine")
-        .args(["run", "claude", "-w", &fixture.id("guest")])
+        .args([
+            "start",
+            "--in",
+            &fixture.id("guest"),
+            "--here",
+            "--agent",
+            "claude",
+        ])
         .output()?;
     assert!(output.status.success(), "{output:?}");
     let sessions = fs::read_to_string(home.join("zmx-sessions"))?;
@@ -50,7 +57,14 @@ fn start_shortcut<'a>(fixture: &'a Fixture, command: &mut Command) -> anyhow::Re
     let shortcut = Shortcut {
         fixture,
         child: command
-            .args(["run", "claude", "-w", &fixture.id("new-owner")])
+            .args([
+                "start",
+                "--in",
+                &fixture.id("new-owner"),
+                "--here",
+                "--agent",
+                "claude",
+            ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -127,7 +141,14 @@ fn assert_failed_labelling_refuses_launches(
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("repository path"))?;
     for args in [
-        vec!["run", "claude", "-w", &fixture.id("new-owner")],
+        vec![
+            "start",
+            "--in",
+            &fixture.id("new-owner"),
+            "--here",
+            "--agent",
+            "claude",
+        ],
         vec!["resume", &fixture.id("new-owner"), "--focus"],
         vec![
             "start",
@@ -260,7 +281,14 @@ fn failed_zmx_handoffs_exclude_cross_state_reassignment() -> anyhow::Result<()> 
                 .env("ZMX_SESSION", session)
                 .env("HANDOFF_TEST_ROOT", home)
                 .env_remove("ZMX_DIR")
-                .args(["run", "claude", "-w", &other.id("new-owner")])
+                .args([
+                    "start",
+                    "--in",
+                    &other.id("new-owner"),
+                    "--here",
+                    "--agent",
+                    "claude",
+                ])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .spawn()?,
@@ -296,7 +324,14 @@ fn zmx_reassignment_waits_for_another_states_verified_close() -> anyhow::Result<
     let output = original
         .command()
         .env("ZMX_SESSION", "reused")
-        .args(["run", "claude", "-w", &original.id("old-owner")])
+        .args([
+            "start",
+            "--in",
+            &original.id("old-owner"),
+            "--here",
+            "--agent",
+            "claude",
+        ])
         .output()?;
     assert!(output.status.success(), "{output:?}");
     let other = Fixture::new();
@@ -334,7 +369,14 @@ fn zmx_reassignment_waits_for_another_states_verified_close() -> anyhow::Result<
             .env("ZMX_SESSION", "reused")
             .env("ZMX_TEST_ROOT", home)
             .env_remove("ZMX_DIR")
-            .args(["run", "claude", "-w", &other.id("new-owner")])
+            .args([
+                "start",
+                "--in",
+                &other.id("new-owner"),
+                "--here",
+                "--agent",
+                "claude",
+            ])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()?,

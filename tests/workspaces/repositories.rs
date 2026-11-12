@@ -429,7 +429,14 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
     let old = PathBuf::from(workspace["path"].as_str().unwrap());
     let agent = fixture
         .command()
-        .args(["run", "claude", "-w", &fixture.id("moving")])
+        .args([
+            "start",
+            "--in",
+            &fixture.id("moving"),
+            "--here",
+            "--agent",
+            "claude",
+        ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

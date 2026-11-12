@@ -1,5 +1,6 @@
 //! `shoal run <name>`: configured commands use the same workspace selection
-//! and wrapper as arbitrary commands.
+//! and wrapper as arbitrary commands. Agents are not commands; `shoal start`
+//! starts them.
 use crate::client::space_ids::SpaceId;
 use std::ffi::{OsStr, OsString};
 
@@ -10,6 +11,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::client::output::configured::CommandDefinition;
 use crate::{
     cli::{
+        agents,
         client::{self},
         context::Context,
         recent,
@@ -95,13 +97,14 @@ async fn definition(ctx: &Context, name: &str, named: Option<SpaceSelector>) -> 
     let workspaces = running_workspaces(ctx).await?;
     if let Some(workspace) = selected_workspace(ctx, &workspaces, named.clone()).await? {
         if !defines(ctx, &workspace.id, name).await? {
-            return Err(unknown_command(name));
+            let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
+            return Err(not_configured(ctx, name, target).await);
         }
         return Ok(Definition::Workspace(workspace.id.clone()));
     }
     let defining = defining_workspaces(ctx, workspaces, name).await;
     if defining.is_empty() {
-        return Err(unknown_command(name));
+        return Err(not_configured(ctx, name, ConfigTarget::Global).await);
     }
     // The command is unknown wherever the named workspace would have run it.
     if let Some(selector) = named {
@@ -263,6 +266,29 @@ pub(super) fn expand_outside_workspace(
         );
     }
     Ok(named_commands::substitute(argv, fields, args))
+}
+
+/// The error for `name`, which no configuration it could run from defines
+/// as a command: for the name of an agent `target`'s settings know, how to
+/// start that agent, else [`unknown_command`].
+async fn not_configured(ctx: &Context, name: &str, target: ConfigTarget) -> anyhow::Error {
+    let settings = match target {
+        ConfigTarget::Global => {
+            Config::load(&ctx.paths).and_then(|config| config.resolve(&ConfigLayers::default()))
+        }
+        target => crate::client::workspaces::settings(&ctx.paths, target).await,
+    };
+    let is_agent = settings.is_ok_and(|settings| {
+        agents::names(&settings)
+            .iter()
+            .any(|agent| agent.name() == name)
+    });
+    if is_agent {
+        return anyhow::anyhow!(
+            "{name} is an agent, not a configured command; start it with `shoal start --in [workspace] -a {name}`"
+        );
+    }
+    unknown_command(name)
 }
 
 fn unknown_command(name: &str) -> anyhow::Error {

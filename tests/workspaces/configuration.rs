@@ -238,7 +238,6 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
         ("root_dir", "/tmp/no"),
         ("default_agnet", "codex"),
         ("agents.claude.prompt_cache_minutes", "0"),
-        ("commands.claude", "['echo']"),
         ("agents.loop.base", "loop"),
         ("agents.helper.base", "all"),
         ("agents.claude.resume", "['--resume']"),
@@ -637,7 +636,14 @@ fn agent_git_profile_applies_only_to_agent_processes() {
         .env("GIT_CONFIG_VALUE_0", "12")
         .env("GIT_AUTHOR_EMAIL", "inherited@example.invalid")
         .env("GIT_COMMITTER_NAME", "Inherited Name")
-        .args(["run", "claude", "-w", &fixture.id("agent-git")])
+        .args([
+            "start",
+            "--in",
+            &fixture.id("agent-git"),
+            "--here",
+            "--agent",
+            "claude",
+        ])
         .output()
         .unwrap();
     assert!(
@@ -671,7 +677,14 @@ fn agent_git_profile_applies_only_to_agent_processes() {
         format!("{commands}[agent]\ngit_profile = 'missing'\n"),
     )
     .unwrap();
-    let output = fixture.run(&["run", "claude", "-w", &fixture.id("agent-git")]);
+    let output = fixture.run(&[
+        "start",
+        "--in",
+        &fixture.id("agent-git"),
+        "--here",
+        "--agent",
+        "claude",
+    ]);
     assert!(!output.status.success());
 }
 
@@ -697,7 +710,14 @@ fn agents_git_over_https_uses_the_hosts_agent_token() {
     )
     .unwrap();
 
-    let agent = fixture.run(&["run", "claude", "-w", &fixture.id("agent-login")]);
+    let agent = fixture.run(&[
+        "start",
+        "--in",
+        &fixture.id("agent-login"),
+        "--here",
+        "--agent",
+        "claude",
+    ]);
     let other = fixture.run(&[
         "run",
         "--workspace",

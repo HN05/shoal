@@ -24,7 +24,7 @@ use crate::{
         ensure_forks, integration, programs, resolve_model,
     },
     ai::IntegrationKind,
-    cli::{commands::configured, context::Context, ui},
+    cli::{context::Context, ui},
     config::{Config, Effective, modes, named_commands::Commands, templates},
     model::{Chat, ChatHome, LinkedItem, Relation, RemovedWorkspace, Repository, Workspace},
     protocol::ConfigTarget,
@@ -187,14 +187,6 @@ impl Opening {
         }
     }
 
-    /// A new session of the default mode, on `subject` when given.
-    pub fn worker(subject: Option<templates::Subject>) -> Self {
-        Self::New {
-            mode: modes::ModeName::DEFAULT,
-            subject,
-        }
-    }
-
     /// The system text and first message of the launch at `place`.
     fn brief(&self, settings: &Effective, place: templates::Place<'_>) -> Result<templates::Brief> {
         match self {
@@ -315,127 +307,6 @@ pub(super) async fn launch_agent(
         crate::execution::recovery::consume(record)?;
     }
     Ok(code)
-}
-
-/// How `shoal run <name>` runs.
-enum NamedRun {
-    /// A configured command.
-    Command,
-    /// An agent of the targeted workspace, or of this machine's config.
-    Agent,
-    /// An agent only these workspaces define, outside every workspace.
-    Elsewhere(Vec<crate::model::Workspace>),
-}
-
-/// Agents are those the targeted workspace's settings resolve, else this
-/// machine's config; outside every workspace, also a repository's own,
-/// which runs in a workspace defining it, as a repository's command does.
-async fn classify(
-    ctx: &Context,
-    name: &str,
-    workspace: Option<&SpaceSelector>,
-) -> Result<NamedRun> {
-    if (name.parse::<Agent>()).is_ok_and(|agent| added(&agent).is_some()) {
-        return Ok(NamedRun::Agent);
-    }
-    let target = agent_target(ctx, workspace).await?;
-    // A named workspace, resolved or not, never falls back to another.
-    let in_workspace = target.is_some() || workspace.is_some();
-    // A workspace that does not resolve is the command's own error to report.
-    let settings = match target {
-        Some(target) => crate::client::workspaces::settings(&ctx.paths, target)
-            .await
-            .ok(),
-        None => None,
-    };
-    let tools = match settings {
-        Some(settings) => settings.tools,
-        None => Config::load(&ctx.paths)?.tools()?,
-    };
-    if crate::ai::agents(&tools).any(|agent| agent == name) {
-        return Ok(NamedRun::Agent);
-    }
-    if in_workspace {
-        return Ok(NamedRun::Command);
-    }
-    let defining = defining_workspaces(ctx, name).await;
-    Ok(if defining.is_empty() {
-        NamedRun::Command
-    } else {
-        NamedRun::Elsewhere(defining)
-    })
-}
-
-/// The workspaces whose settings resolve `name` as an agent.
-async fn defining_workspaces(ctx: &Context, name: &str) -> Vec<crate::model::Workspace> {
-    let Ok(workspaces) = crate::client::workspaces::list(&ctx.paths).await else {
-        return Vec::new();
-    };
-    let mut defining = Vec::new();
-    for workspace in workspaces {
-        let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
-        // A workspace whose configuration cannot load has no agents.
-        if let Ok(settings) = crate::client::workspaces::settings(&ctx.paths, target).await
-            && crate::ai::agents(&settings.tools).any(|agent| agent == name)
-        {
-            defining.push(workspace);
-        }
-    }
-    defining
-}
-
-/// The workspace `workspace` names, else the one running a command would
-/// select: the current directory's, then the caller's scope.
-async fn agent_target(
-    ctx: &Context,
-    workspace: Option<&SpaceSelector>,
-) -> Result<Option<ConfigTarget>> {
-    if let Some(workspace) = workspace {
-        // A selector that does not resolve is the command's own error.
-        let workspace = crate::cli::ui::explicit_workspace(ctx, workspace.clone()).await;
-        return Ok(workspace
-            .ok()
-            .map(|selected| ConfigTarget::Workspace(selected.clone())));
-    }
-    // Without a daemon there is no workspace context, only the machine's.
-    let Ok(workspaces) = crate::client::workspaces::list(&ctx.paths).await else {
-        return Ok(None);
-    };
-    let current = configured::current_workspace(&workspaces)?;
-    Ok(current.map(|workspace| ConfigTarget::Workspace(SpaceSelector::id(&workspace.id))))
-}
-
-/// `shoal run <name>`: agents launch with their prompts, other names run as
-/// plain configured commands.
-pub(super) async fn run_named(
-    ctx: &Context,
-    name: &str,
-    workspace: Option<SpaceSelector>,
-    args: Vec<OsString>,
-) -> Result<i32> {
-    let workspace = match classify(ctx, name, workspace.as_ref()).await? {
-        NamedRun::Command => return configured::run(ctx, name, workspace, args).await,
-        NamedRun::Agent => workspace,
-        NamedRun::Elsewhere(defining) => {
-            ensure!(
-                ctx.interactive(),
-                "{name} is an agent only some repositories define; run it in one of their \
-                 workspaces or name one with --workspace"
-            );
-            Some(SpaceSelector::id(
-                &ui::pick_workspace(ctx, defining, "workspace").await?,
-            ))
-        }
-    };
-    launch::shortcut(
-        ctx,
-        name.parse()?,
-        workspace,
-        None,
-        args,
-        LaunchOptions::default(),
-    )
-    .await
 }
 
 /// The requested agent, else the configured `agent.default`, else a picker.

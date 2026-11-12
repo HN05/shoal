@@ -3,7 +3,6 @@ use std::ffi::OsString;
 use anyhow::Result;
 
 use crate::cli::{
-    agents,
     commands::{configured, workspaces},
     context::Context,
 };
@@ -16,7 +15,7 @@ pub(in crate::cli::commands) async fn run(
     args: Vec<OsString>,
 ) -> Result<i32> {
     match name {
-        Some(name) => agents::run_named(&ctx, &name, workspace, args).await,
+        Some(name) => configured::run(&ctx, &name, workspace, args).await,
         None if args.is_empty() => configured::list(&ctx, workspace).await,
         None => workspaces::exec(&ctx, workspace, args).await,
     }

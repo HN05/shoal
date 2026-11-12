@@ -254,11 +254,12 @@ fn a_repositorys_own_agents_complete_as_agents() {
         ..Default::default()
     };
     let settings = layered_settings(&Config::default(), &layers);
-    assert!(settings.providers.contains("repo-only"));
     assert!(settings.agents.iter().any(|agent| agent == "repo-only"));
-    assert_eq!(settings.commands["repo-only"], ["repo-agent"]);
+    assert_eq!(settings.launchers["repo-only"], ["repo-agent"]);
+    // Agents are not commands.
+    assert!(!settings.commands.contains_key("repo-only"));
     let global = layered_settings(&Config::default(), &ConfigLayers::default());
-    assert!(!global.providers.contains("repo-only"));
+    assert!(!global.agents.iter().any(|agent| agent == "repo-only"));
 }
 
 #[test]

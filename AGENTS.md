@@ -175,7 +175,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `Option<&Caller>`, `None` for the user, never from a `bool` saying whether
   it is scoped.
 - Notifications are daemon records the CLI shows: record them where the daemon
-  decides (busy resources, port conflicts, agent-shortcut exits, its own
+  decides (busy resources, port conflicts, agent exits, its own
   removals), never fail the operation for one, collapse repeated polled events
   until read, and deny reading them to scoped callers. A scoped caller may send
   the user a message for its own workspace, separate from completion.

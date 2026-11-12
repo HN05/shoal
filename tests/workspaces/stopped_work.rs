@@ -45,11 +45,14 @@ impl Stopped {
     /// Start the workspace's agent and wait until it runs.
     fn start_agent(&self, fixture: &Fixture) -> Child {
         let _ = fs::remove_file(self.path.join("started"));
-        let agent = spawn(
-            fixture
-                .command()
-                .args(["run", "claude", "-w", &fixture.id(self.name)]),
-        );
+        let agent = spawn(fixture.command().args([
+            "start",
+            "--in",
+            &fixture.id(self.name),
+            "--here",
+            "--agent",
+            "claude",
+        ]));
         self.wait_running(fixture, "started");
         agent
     }

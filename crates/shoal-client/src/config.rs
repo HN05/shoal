@@ -329,7 +329,7 @@ impl Config {
     ) -> Result<Effective> {
         let settings = resolve::Stack::over(global, files, layers).resolve()?;
         let agents = agents::describe(&settings.agents, &self.machine.agents);
-        crate::ai::validate(&agents, &settings.commands)?;
+        crate::ai::validate(&agents)?;
         let tools = crate::ai::tools(&agents);
         crate::config::proxies::validate_routes(&tools, &self.machine.proxies)?;
         let proxies = crate::config::proxies::routes(&tools, &self.machine.proxies);

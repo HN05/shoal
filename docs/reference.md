@@ -694,9 +694,9 @@ shoal open 3 --app claude                # Claude desktop app (macOS)
 shoal open 3 --app codex                 # Codex desktop app
 shoal open --app t3                      # Running T3 Code desktop app; current workspace or picker
 shoal open 3                             # app.default, else the only installed app, else a picker
-shoal run claude -w 3 -- --help
-shoal run codex                          # Current workspace or picker
-shoal run happy-codex -w 3               # Detached Happy session for the Happy app
+shoal start --in 3 -a claude             # Start workspace 3's own agent, on its issue
+shoal start --in -a codex                # The current workspace's, else a picked one's
+shoal start --in 3 -a happy-codex        # Detached Happy session for the Happy app
 shoal status 3                      # Activity, changes, held resources, issue and PR state
 shoal status 5                      # A chat's agent, sessions, issue and PR state
 shoal status pr 12                  # Workspaces and chats that link PR 12
@@ -911,8 +911,11 @@ daemon fork-point/merge-base lookup as `shoal diff`; failure prevents launch.
 
 Agents' launchers are the [`command`](config.md#ai-tools) of their AI tool.
 Overriding the `command` of Claude or Codex changes the executable or flags;
-prompt templates, trust setup, and agent exit notifications still apply. Both run
-with their own sandbox and approval settings.
+prompt templates, trust setup, and agent exit notifications still apply. Agents
+are not commands: `shoal run <name>` runs only `[commands]` entries, which may
+take any name, an agent's included, and for an agent's name that no entry
+defines the error says to start it with `shoal start --in [workspace] -a
+<name>`. Both run with their own sandbox and approval settings.
 Every Codex launch, chats included, adds
 `-c sandbox_workspace_write.network_access=true`, since Codex's workspace-write
 sandbox otherwise blocks the daemon's socket and allows a single socket only
@@ -1118,8 +1121,7 @@ queue](#agent-queue) enforces, and a workspace's agent starts this way only the
 agent of a workspace below its own space. The workspace menu's agent choice
 runs `shoal start --in <workspace> --mode worker --agent <name> --here`.
 
-On a terminal, CLI agent launches (`shoal run claude`, `shoal run codex`, other
-AI tools, `start --agent` and `resume`) run in a [zmx](https://github.com/neurosnap/zmx)
+On a terminal, CLI agent launches (`start --agent` and `resume`) run in a [zmx](https://github.com/neurosnap/zmx)
 session, so the agent keeps running when you detach with Ctrl-\ or close the
 terminal. zmx passes the agent's output to your terminal unchanged, so images and
 other terminal protocols keep working, and restores the screen when you attach
@@ -1128,8 +1130,7 @@ cleanup treat the agent as before. When the session returns control, Shoal reset
 emulator input modes on the caller's terminal. zmx reports no exit status: these launches
 exit 0 once the agent exits or you detach. A launch inside a
 zmx session (`ZMX_SESSION` is set), or in a pane or block of another enabled host, such
-as a Herdr pane with `terminal.herdr.enabled`, runs in place, as does an agent
-launch such as `shoal run claude` without a terminal. Scoped callers, and callers
+as a Herdr pane with `terminal.herdr.enabled`, runs in place. Scoped callers, and callers
 without a terminal, such as another agent's tool call, start the agents of `start`, `contribute` and `resume --now` detached
 through the daemon instead (see [Agent queue](#agent-queue) and `shoal resume`),
 so the call returns without running the agent and interrupting it leaves the
@@ -1394,11 +1395,11 @@ replaying the output.
 Besides Claude and Codex, Shoal includes [opencode](https://opencode.ai)
 (`opencode --prompt {prompt} {args}`), [pi](https://github.com/badlogic/pi-mono)
 (`pi`) and [Grok Build](https://docs.x.ai/build/overview) (`grok`); pi and Grok
-take the prompt as their first argument. Each runs as `shoal run <name>` once its
-executable is on PATH. An [`[agents.<name>]`](config.md#ai-tools) table in global
-or repository config adds another AI tool, such as `droid`:
-`shoal run droid [--workspace W] -- <args>` then starts it in a workspace the
-way `shoal run claude` does, and `--agent droid` selects it. The picker and
+take the prompt as their first argument. Each starts with `--agent <name>` once
+its executable is on PATH. An [`[agents.<name>]`](config.md#ai-tools) table in
+global or repository config adds another AI tool, such as `droid`:
+`--agent droid` then starts it, such as `shoal start --in 3 --agent droid` in
+an existing workspace. The picker and
 completion offer AI tools only, and leave out a tool whose agents
 `enabled = false` turns off; their launches and reviews are refused, and a
 stopped agent's restore waits until the tool is on again. It stops no running
@@ -1574,8 +1575,8 @@ Happy sessions are an optional integration: off until
 [`agents.happy.enabled = true`](config.md#ai-tools). While off, pickers and completion leave Happy out and
 launches are refused before any work starts.
 
-`shoal run happy-claude|happy-codex [--workspace W]` and `start --agent happy-claude|happy-codex`
-start a [Happy](https://github.com/slopus/happy) session as Happy's own daemon
+`start --agent happy-claude|happy-codex`, with `--in <workspace>` for an
+existing workspace, starts a [Happy](https://github.com/slopus/happy) session as Happy's own daemon
 would (`happy <agent> --happy-starting-mode remote --started-by daemon`, then
 your `--` arguments), so it registers with that daemon and appears in the Happy
 app. The session is detached from your terminal (stdin from `/dev/null`, output
@@ -1682,7 +1683,7 @@ from a chat's name, which [`shoal attach <number>`](#agents)
 returns to; in any other place of a host, such as a zmx session, it runs in
 place. `--here` runs it in place in this terminal. A Happy chat
 (`happy-claude` or `happy-codex`, see [Agents](#agents)) needs no terminal: it
-starts detached in the checkout as `shoal run happy-codex` starts a workspace session, and
+starts detached in the checkout as `start --in --agent happy-codex` starts a workspace session, and
 you continue it in the Happy app. Happy's Claude takes the instructions as
 arguments, and Happy's Codex receives them as its first message the way its
 prompts are delivered. Its output and any saved first message are kept at
@@ -3637,8 +3638,8 @@ without `SHOAL_DEV_USER_FILES`, stay for the workspace's next removal record.
 and `--resume` queues the restores of the agents the export stopped, as `shoal
 resume` does, under the importing machine's agent limits. Every reopen, by import or
 `shoal restore`, trusts the workspace's path for the agents that resume there. An agent
-without a kept session `shoal resume` starts as `shoal run claude` or `shoal run codex`
-starts a new one, telling it the workspace moved, instead of running
+without a kept session `shoal resume` starts as `shoal start --in` starts a new
+one, telling it the workspace moved, instead of running
 its `resume_command`. An imported chat starts in the repository's checkout as
 a chat starts, in the mode it ran in, under its name, with its agent's `resume` arguments for its session, or as a new
 session for an agent without them or a session not kept. A single chat imported
@@ -5167,8 +5168,8 @@ why under `refused` while the others still receive it, and the command then
 exits 1. Sending the same message again does not repeat it to agents that
 have not read it yet, because identical unread messages collapse.
 
-`shoal run claude`, `shoal run codex` and their automatic or `shoal resume` restores
-register `shoal messages --hook` for the `PostToolUse` and `UserPromptSubmit`
+Claude Code and Codex agents Shoal starts, and their automatic or `shoal
+resume` restores, register `shoal messages --hook` for the `PostToolUse` and `UserPromptSubmit`
 events, so a working agent receives new messages, the activity on its linked
 issues and PRs that the daemon has queued for the next watch, and the
 [leftovers](#untracked-processes) of its workspace or chat that it has not been

@@ -268,7 +268,7 @@ over every Git config file; see [agent accounts](reference.md#agent-accounts).
 An `[agents.<name>]` table changes one of the
 [AI tools Shoal includes](reference.md#agents) or adds another; a tool is an
 agent when it is built in or has a `command` or `base`, and may take a built-in
-command's name.
+or configured command's name, since agents are not commands.
 
 ```toml
 [agents.claude]
@@ -664,7 +664,7 @@ executable resolves through `PATH`, with the workspace as working directory and
 without shell expansion. A higher layer replaces the whole array. `{workspace}`,
 `{branch}`, `{path}` and `{diff_base}`, the fork point `shoal diff` compares
 against, expand once; a standalone `{args}` inserts the forwarded arguments
-there, otherwise they are appended. A `[commands]` entry cannot name an agent.
+there, otherwise they are appended. An entry may take an agent's name.
 `edit` is what `shoal edit` runs, and `review` the manual review of
 `shoal review run`. See [configured commands](reference.md#configured-commands).
 

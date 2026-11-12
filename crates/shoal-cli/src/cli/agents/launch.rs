@@ -4,49 +4,15 @@ use std::ffi::{OsStr, OsString};
 
 use anyhow::Result;
 
-use super::{Launch, LaunchOptions};
+use super::Launch;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     agents::{Integration, Wake, ensure_available},
-    cli::{
-        context::Context,
-        terminal,
-        ui::{self, Fallback},
-    },
+    cli::{context::Context, terminal},
     config::{Effective, named_commands, templates},
     execution,
-    model::Workspace,
 };
-
-/// The workspace a command such as `shoal run codex` names, else the current
-/// directory's or a picked one.
-pub(super) async fn shortcut_workspace(
-    ctx: &Context,
-    workspace: Option<SpaceSelector>,
-) -> Result<Workspace> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    Ok(
-        crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
-            .await?
-            .workspace,
-    )
-}
-
-/// Start `agent` in the workspace a shortcut names, as
-/// [`super::launch_agent`] starts it.
-pub(super) async fn shortcut(
-    ctx: &Context,
-    agent: Agent,
-    workspace: Option<SpaceSelector>,
-    subject: Option<templates::Subject>,
-    args: Vec<OsString>,
-    options: LaunchOptions,
-) -> Result<i32> {
-    let workspace = shortcut_workspace(ctx, workspace).await?;
-    let opening = super::Opening::worker(subject);
-    super::launch_agent(ctx, agent, workspace, opening, args, options).await
-}
 
 /// Run `launch` as a tracked agent in its workspace, in a session this
 /// terminal attaches to where the terminal keeps agents in sessions.

@@ -72,7 +72,14 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
             .spawn()
             .unwrap()
     };
-    let mut agent = spawn(&["run", "claude", "-w", &fixture.id("restarted")]);
+    let mut agent = spawn(&[
+        "start",
+        "--in",
+        &fixture.id("restarted"),
+        "--here",
+        "--agent",
+        "claude",
+    ]);
     let mut command = spawn(&[
         "run",
         "--workspace",
@@ -161,7 +168,14 @@ fn daemon_stop_and_signals_stop_tracked_agents() {
         let _ = fs::remove_file(path.join("agent-started"));
         let agent = fixture
             .command()
-            .args(["run", "claude", "-w", &fixture.id("stopped")])
+            .args([
+                "start",
+                "--in",
+                &fixture.id("stopped"),
+                "--here",
+                "--agent",
+                "claude",
+            ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())

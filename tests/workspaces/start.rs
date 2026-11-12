@@ -107,7 +107,14 @@ fn start_runs_the_childs_agent_from_a_fork_of_the_parents_session() {
     fixture.add("parent");
     let output = fixture
         .command()
-        .args(["run", "claude", "-w", &fixture.id("parent")])
+        .args([
+            "start",
+            "--in",
+            &fixture.id("parent"),
+            "--here",
+            "--agent",
+            "claude",
+        ])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -165,7 +172,14 @@ fn start_runs_a_copys_agent_from_a_fork_of_the_copied_workspaces_session() {
     fixture.add("parent");
     let output = fixture
         .command()
-        .args(["run", "claude", "-w", &fixture.id("parent")])
+        .args([
+            "start",
+            "--in",
+            &fixture.id("parent"),
+            "--here",
+            "--agent",
+            "claude",
+        ])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -456,7 +470,7 @@ fn claude_app_opens_a_new_session_link_for_the_workspace() {
 }
 
 #[test]
-fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
+fn start_in_forwards_arguments_without_starting_real_agents() {
     let fixture = Fixture::new();
     let workspace = fixture.add("shortcut");
     let bin = fixture.root.path().join("stub-bin");
@@ -470,10 +484,12 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
         let output = fixture
             .command()
             .args([
-                "run",
-                agent,
-                "-w",
+                "start",
+                "--in",
                 &fixture.id("shortcut"),
+                "--here",
+                "--agent",
+                agent,
                 "--",
                 "--version",
                 "hello with spaces",
@@ -497,9 +513,9 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
         let mut command = fixture.command();
         command
             .current_dir(workspace["path"].as_str().unwrap())
-            .args(["run", "claude"]);
+            .args(["start", "--here", "--agent", "claude", "--in"]);
         if let Some(target) = target {
-            command.args(["-w", target]);
+            command.arg(target);
         }
         let output = command
             .env("PATH", fixture.restricted_path(&bin))
@@ -511,6 +527,38 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
             "shortcut\n"
         );
     }
+}
+
+#[test]
+fn agents_start_only_through_start_and_their_names_say_so() {
+    let fixture = Fixture::new();
+    fixture.add("named");
+    let bin = fixture.root.path().join("stub-bin");
+    install_test_script_with_mode(
+        bin.join("claude"),
+        "#!/bin/sh\ntouch \"$HOME/ran\"\n",
+        0o700,
+    );
+    let run = fixture
+        .command()
+        .args(["run", "claude", "--workspace", &fixture.id("named")])
+        .env("PATH", fixture.restricted_path(&bin))
+        .output()
+        .unwrap();
+    assert!(!run.status.success(), "{run:?}");
+    let error = String::from_utf8_lossy(&run.stderr);
+    assert!(error.contains("shoal start --in"), "{error}");
+    assert!(!fixture.root.path().join("ran").exists());
+    // A configured command may take an agent's name; it runs as configured.
+    fs::create_dir_all(fixture.root.path().join(".config/shoal")).unwrap();
+    fs::write(
+        fixture.root.path().join(".config/shoal/config.toml"),
+        "[commands]\nclaude = ['sh', '-c', 'echo configured']\n",
+    )
+    .unwrap();
+    let output = fixture.run(&["run", "claude", "--workspace", &fixture.id("named")]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"configured\n");
 }
 
 #[test]
@@ -609,7 +657,7 @@ fn start_in_refuses_a_second_worker_beside_a_running_one() {
     let release = fixture.root.path().join("release");
     install_test_script_with_mode(
         bin.join("claude"),
-        &format!(
+        format!(
             "#!/bin/sh\nwhile [ ! -e '{}' ]; do sleep 0.1; done\n",
             release.display()
         ),
@@ -660,6 +708,9 @@ fn workspace_agents_get_the_agent_and_workspaces_directories_ahead_of_their_prom
         let stub = bin.join(agent);
         install_test_script_with_mode(&stub, "#!/bin/sh\nprintf '%s\\0' \"$@\"\n", 0o700);
     }
+    // The daemon, which would start an agent left waiting for setup, checks
+    // the agents on its own PATH.
+    install_fake_agents(&fixture, &["codex", "pi"]);
     let claude_dir = format!("--add-dir={directory}");
     // Every agent may also read `/tmp`, the default agent directory.
     let tmp_dir = format!("--add-dir={}", fs::canonicalize("/tmp").unwrap().display());
@@ -671,10 +722,12 @@ fn workspace_agents_get_the_agent_and_workspaces_directories_ahead_of_their_prom
         let output = fixture
             .command()
             .args([
-                "run",
-                agent,
-                "-w",
+                "start",
+                "--in",
                 &fixture.id("directories"),
+                "--here",
+                "--agent",
+                agent,
                 "--",
                 "user prompt",
             ])
@@ -777,7 +830,14 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
         "{codex:?}"
     );
     // A tool without a template refuses the model `[agent]` sets for it.
-    let output = launch(&["run", "pi", "-w", &fixture.id("models")]);
+    let output = launch(&[
+        "start",
+        "--in",
+        &fixture.id("models"),
+        "--here",
+        "--agent",
+        "pi",
+    ]);
     assert!(!output.status.success(), "{output:?}");
     // An addition refuses it before creating anything.
     let output = launch(&[
@@ -855,10 +915,12 @@ fn worker_rules_resolve_per_launch_and_reach_native_instruction_options() {
             let output = fixture
                 .command()
                 .args([
-                    "run",
-                    agent,
-                    "-w",
+                    "start",
+                    "--in",
                     &fixture.id("instructions"),
+                    "--here",
+                    "--agent",
+                    agent,
                     "--",
                     "user prompt",
                 ])
@@ -1085,14 +1147,28 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
     for workspace in ["early", "first"] {
         assert!(
             fixture
-                .run(&["run", "claude", "-w", &fixture.id(workspace)])
+                .run(&[
+                    "start",
+                    "--in",
+                    &fixture.id(workspace),
+                    "--here",
+                    "--agent",
+                    "claude"
+                ])
                 .status
                 .success()
         );
     }
     assert!(
         !fixture
-            .run(&["run", "claude", "-w", &fixture.id("late")])
+            .run(&[
+                "start",
+                "--in",
+                &fixture.id("late"),
+                "--here",
+                "--agent",
+                "claude"
+            ])
             .status
             .success()
     );
@@ -1199,7 +1275,14 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
     let launch = |agent: &str| {
         let output = fixture
             .command()
-            .args(["run", agent, "-w", &fixture.id("profiled")])
+            .args([
+                "start",
+                "--in",
+                &fixture.id("profiled"),
+                "--here",
+                "--agent",
+                agent,
+            ])
             .env("INHERITED_TOKEN", "secret")
             .output()
             .unwrap();
@@ -1309,7 +1392,14 @@ fn claude_launch_trusts_checkout_and_shared_repository_directory() {
     // First launch creates a trusted entry even before Claude has a config.
     assert!(
         fixture
-            .run(&["run", "claude", "-w", &fixture.id("trusted")])
+            .run(&[
+                "start",
+                "--in",
+                &fixture.id("trusted"),
+                "--here",
+                "--agent",
+                "claude"
+            ])
             .status
             .success()
     );
@@ -1326,7 +1416,14 @@ fn claude_launch_trusts_checkout_and_shared_repository_directory() {
     fs::write(&config, r#"{"numStartups": 1, "projects": {}}"#).unwrap();
     assert!(
         fixture
-            .run(&["run", "claude", "-w", &fixture.id("trusted")])
+            .run(&[
+                "start",
+                "--in",
+                &fixture.id("trusted"),
+                "--here",
+                "--agent",
+                "claude"
+            ])
             .status
             .success()
     );
@@ -1346,7 +1443,14 @@ fn claude_launch_trusts_checkout_and_shared_repository_directory() {
     fs::write(&config, r#"{"projects": {}}"#).unwrap();
     let output = fixture
         .command()
-        .args(["run", "claude", "-w", &fixture.id("trusted")])
+        .args([
+            "start",
+            "--in",
+            &fixture.id("trusted"),
+            "--here",
+            "--agent",
+            "claude",
+        ])
         .env("CLAUDE_CONFIG_DIR", &config_dir)
         .output()
         .unwrap();
@@ -1367,7 +1471,14 @@ fn claude_launch_trusts_checkout_and_shared_repository_directory() {
     // A bad override warns and still launches.
     let output = fixture
         .command()
-        .args(["run", "claude", "-w", &fixture.id("trusted")])
+        .args([
+            "start",
+            "--in",
+            &fixture.id("trusted"),
+            "--here",
+            "--agent",
+            "claude",
+        ])
         .env("CLAUDE_CONFIG_DIR", "relative")
         .output()
         .unwrap();
@@ -1401,9 +1512,17 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
     );
     let config = home.join(".codex/config.toml");
     // The tracked agent in the current workspace, the named one, and the app.
+    let id = fixture.id("trusted");
     for args in [
-        &["run", "codex"][..],
-        &["run", "codex", "-w", &fixture.id("trusted")],
+        &["start", "--in", "--here", "--agent", "codex"][..],
+        &[
+            "start",
+            "--in",
+            &fixture.id("trusted"),
+            "--here",
+            "--agent",
+            "codex",
+        ],
         &["open", "--app", "codex", &fixture.id("trusted")],
     ] {
         for overridden in [false, true] {
@@ -1415,7 +1534,7 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
             };
             let mut command = fixture.command();
             command.args(args);
-            if args.len() == 2 {
+            if !args.contains(&id.as_str()) {
                 command.current_dir(&path);
             }
             if overridden {
@@ -1451,7 +1570,14 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
 
     // Malformed settings remain untouched and only produce a warning.
     fs::write(&config, "projects = []\n").unwrap();
-    let output = fixture.run(&["run", "codex", "-w", &fixture.id("trusted")]);
+    let output = fixture.run(&[
+        "start",
+        "--in",
+        &fixture.id("trusted"),
+        "--here",
+        "--agent",
+        "codex",
+    ]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(fs::read_to_string(config).unwrap(), "projects = []\n");
 }
@@ -1583,10 +1709,12 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
         "[agents.claude]\ncommand = ['printf', '%s\\n', '{workspace}', '{args}', '{branch}', '{path}', 'prompt={prompt}']\n[agents.codex]\ncommand = ['printf', '%s\\n', '{args}', 'custom default', 'prompt={prompt}']\n"
     ).unwrap();
     let output = fixture.run(&[
-        "run",
-        "claude",
-        "-w",
+        "start",
+        "--in",
         &fixture.id("configured-agent"),
+        "--here",
+        "--agent",
+        "claude",
         "--",
         "{path}",
         "two words",
@@ -1604,10 +1732,12 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
         )
     );
     let output = fixture.run(&[
-        "run",
-        "claude",
-        "--workspace",
+        "start",
+        "--in",
         &fixture.id("configured-agent"),
+        "--here",
+        "--agent",
+        "claude",
         "--",
         "{path}",
         "two words",
@@ -1621,10 +1751,12 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
         )
     );
     let output = fixture.run(&[
-        "run",
-        "codex",
-        "-w",
+        "start",
+        "--in",
         &fixture.id("configured-agent"),
+        "--here",
+        "--agent",
+        "codex",
         "--",
         "--model",
         "example",
@@ -1635,10 +1767,12 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
         "--model\nexample\ncustom default\nprompt=\n"
     );
     let output = fixture.run(&[
-        "run",
-        "codex",
-        "--workspace",
+        "start",
+        "--in",
         &fixture.id("configured-agent"),
+        "--here",
+        "--agent",
+        "codex",
         "--",
         "--model",
         "example",
@@ -1715,10 +1849,12 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     assert!(!fixture.root.path().join(".codex/config.toml").exists());
 
     let output = fixture.run(&[
-        "run",
-        "helper",
-        "--workspace",
+        "start",
+        "--in",
         workspace["id"].as_str().unwrap(),
+        "--here",
+        "--agent",
+        "helper",
         "--",
         "literal {prompt}",
     ]);
@@ -2161,10 +2297,12 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
     let args =
         || remove_guidance(&fs::read_to_string(fixture.root.path().join("agent-args")).unwrap());
     let output = fixture.run(&[
-        "run",
-        "droid",
-        "--workspace",
+        "start",
+        "--in",
         &fixture.id("provider"),
+        "--here",
+        "--agent",
+        "droid",
         "--",
         "user message",
     ]);
@@ -2181,7 +2319,14 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
     let saved = fixture.root.path().join("saved.toml");
     fs::write(&saved, "[agents.droid]\ncommand = ['repo-droid']\n").unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
-    let output = fixture.run(&["run", "droid", "-w", &fixture.id("provider")]);
+    let output = fixture.run(&[
+        "start",
+        "--in",
+        &fixture.id("provider"),
+        "--here",
+        "--agent",
+        "droid",
+    ]);
     assert_eq!(output.status.code(), Some(7), "{output:?}");
     assert!(args().starts_with("repo-droid\0Follow "), "{}", args());
 
@@ -2191,26 +2336,34 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
         "[agents.repo-only]\ncommand = ['repo-droid']\n",
     )
     .unwrap();
-    let output = fixture.run(&["run", "repo-only", "--workspace", &fixture.id("provider")]);
+    let output = fixture.run(&[
+        "start",
+        "--in",
+        &fixture.id("provider"),
+        "--here",
+        "--agent",
+        "repo-only",
+    ]);
     assert_eq!(output.status.code(), Some(7), "{output:?}");
     assert!(args().starts_with("repo-droid\0Follow "), "{}", args());
-    // Outside every workspace it is still an agent, which needs a workspace.
-    let outside = fixture
-        .command()
-        .current_dir(fixture.root.path())
-        .args(["run", "repo-only"])
-        .output()
-        .unwrap();
-    assert!(!outside.status.success());
+    // Its name names no command; in its workspace the refusal says how to
+    // start it.
+    let named = fixture.run(&["run", "repo-only", "-w", &fixture.id("provider")]);
+    assert!(
+        String::from_utf8_lossy(&named.stderr).contains("shoal start --in"),
+        "{named:?}"
+    );
 
     // Built-in providers without specialized launchers place the prompt the
     // same way.
     fs::copy(bin.join("fake-droid"), bin.join("opencode")).unwrap();
     let output = fixture.run(&[
-        "run",
-        "opencode",
-        "-w",
+        "start",
+        "--in",
         &fixture.id("provider"),
+        "--here",
+        "--agent",
+        "opencode",
         "--",
         "user message",
     ]);
@@ -2232,7 +2385,14 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
 
     // A provider whose launcher is missing never starts.
     fs::remove_file(bin.join("repo-droid")).unwrap();
-    let output = fixture.run(&["run", "droid", "-w", &fixture.id("provider")]);
+    let output = fixture.run(&[
+        "start",
+        "--in",
+        &fixture.id("provider"),
+        "--here",
+        "--agent",
+        "droid",
+    ]);
     assert!(!output.status.success(), "{output:?}");
 }
 

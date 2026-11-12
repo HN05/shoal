@@ -17,9 +17,8 @@ direct resource access; filesystem restrictions are future work.
 Caller-specific integration stays outside the daemon core: Superlogical owns terminals;
 Macraft owns VM/container provisioning. Shoal does not provision tools, manage
 browsers, schedule work beyond the agent queue, which also admits registered
-repositories' CI jobs, or store conversations. Agent shortcuts
-(`shoal <agent>`) and `shoal open` are thin launchers around the generic execution
-path; CLI launcher argument arrays are configurable defaults; session and desktop
+repositories' CI jobs, or store conversations. `shoal start` and `shoal open`
+are thin launchers around the generic execution path; CLI launcher argument arrays are configurable defaults; session and desktop
 adapters retain their tool-specific setup. Shoal does not switch the user's or
 daemon's login. `[secrets]` names
 user commands that fetch values in the CLI, for an agent's environment at launch
@@ -658,8 +657,8 @@ component only, never changing the workspace's name. `start --branch` takes the
 name as typed, as `git switch` does: an existing branch opens, in the workspace
 that has it when one does, through `--in`'s path, and a new one is created under
 exactly that name or refused, since a suffixed branch is not the one the user
-asked for; one flag replaces both the branch positional and `--existing`, so a
-start never decides from the user's spelling whether to open or create. Names Git reads as a revision
+asked for; one flag both opens and creates, so the user never chooses between
+spellings for a branch that may or may not exist. Names Git reads as a revision
 instead of a branch, in either supported object format, get a leaf suffix on
 creation and an error on existing-branch selection. Ownership of a worktree's
 Git admin directory is proven by a marker naming the workspace, written there on
@@ -1468,8 +1467,7 @@ over in place. The caller places the agent once the workspace is set up, from
 its settings, and queues it itself rather than in the start request.
 `start --here` and `resume --focus` keep the in-place launch for callers outside
 Shoal, for a script that waits on the agent's exit code, while a scoped
-caller's `--here` with an agent is refused. Agent shortcuts such as `shoal
-claude` are the user's commands and still run in place without a terminal. zmx reports no exit status, so a session launch
+caller's `--here` with an agent is refused. zmx reports no exit status, so a session launch
 exits 0; the daemon still records the agent's exit.
 
 Demos let the user try a change where the agent's windows are out of sight,
@@ -1771,9 +1769,13 @@ agents.
 AI tools are providers: built-in ones plus `[agents.<name>]` entries, one table
 per tool holding its launcher, resume command, launch mode and argument
 templates, merged option by option across layers so a repository can replace
-`command` and keep the global `resume`. A `command` or `base` makes a tool an
-agent that `shoal run <name>` launches, whatever built-in command shares its
-name, and `[commands]` holds only shortcuts that are not agents.
+`command` and keep the global `resume`. Agents are not commands: every agent
+starts through `shoal start` (or `contribute`), and `resume` and `restart`
+bring stopped ones back, so a launch always passes the queue, takes a mode
+and meets the one-worker rule, which a command per agent would skip.
+`shoal run <name>` runs only `[commands]`, whose names may be agents', and an
+agent's name needs no distance from the built-in commands; for an agent's
+name without an entry, the error names `start --in`.
 What a tool needs of the machine, its skill directory and proxy, sits under
 `[machine.agents.<name>]`. Pickers and completion offer providers only. Agents run
 as tracked agents with scope, an agent Git profile, and exit notifications. Their `{prompt}` argument combines general instructions
@@ -1829,7 +1831,7 @@ a claude.ai login within its usage limits, while an agent waiting for CI or a
 review idles longer, so a proxied Claude agent gets the 1-hour cache unless its
 environment or settings choose a lifetime.
 
-Agent shortcuts use the execution wrapper: by default Codex CLI and Claude run with their
+Agent launches use the execution wrapper: by default Codex CLI and Claude run with their
 own sandbox and approval settings. Every Codex launch, chats included, turns on its
 workspace-write sandbox's network access, which reaching the daemon's socket needs since
 Codex allows a single socket only along with the network, whatever the configured
@@ -1898,8 +1900,7 @@ a workspace while it shows it and queues agents, which the daemon starts
 detached in `terminal.default_host`, which never names an external app.
 Happy sessions are an optional integration behind the `agents.happy.enabled`
 setting, off by default. Happy is an agent backend like any other: `shoal happy` is gone, and its
-agents start as other agents do, with `--agent happy-claude|happy-codex` or as
-`shoal run happy-claude`. They are the phone-driven flow: a console session that
+agents start as other agents do, with `--agent happy-claude|happy-codex`. They are the phone-driven flow: a console session that
 Happy's daemon started in a non-workspace directory creates workspaces and starts
 sessions in them. Shoal launches `happy <agent>` with the daemon's own flags so
 the session registers with Happy and appears in the app, detached from the
@@ -1972,7 +1973,7 @@ command line still fails, so a mistyped item does not wait silently.
 
 Notifications stay in the terminal: the daemon records what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of
-shortcut-launched agents, workspaces it removed or retained on its own, messages
+agents launched in place, workspaces it removed or retained on its own, messages
 a workspace's agent sends to ask for attention) and the
 CLI shows them once, unless asked to keep them unread, on request or as a followed stream that also raises the
 terminal's own notifications (OSC 9); `status`, in a space and outside one, only counts them. Recording never fails the operation it describes,

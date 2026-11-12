@@ -197,7 +197,14 @@ fn resume_continues_the_agent_a_removal_stopped_once_restored() {
             .spawn()
             .unwrap()
     };
-    let agent = spawn(&["run", "claude", "-w", &fixture.id("removed")]);
+    let agent = spawn(&[
+        "start",
+        "--in",
+        &fixture.id("removed"),
+        "--here",
+        "--agent",
+        "claude",
+    ]);
     let command = spawn(&[
         "run",
         "--workspace",

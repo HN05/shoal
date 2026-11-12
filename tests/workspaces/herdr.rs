@@ -1264,7 +1264,14 @@ fn attach_previous_returns_to_a_herdr_tab_an_agent_launch_left_open() {
     assert_eq!(previous(), "w1:t4");
     // Outside Herdr, an agent launch opens a tab and attaches its session.
     let mut launch = fixture.command();
-    launch.args(["run", "claude", "-w", &fixture.id("shown")]);
+    launch.args([
+        "start",
+        "--in",
+        &fixture.id("shown"),
+        "--here",
+        "--agent",
+        "claude",
+    ]);
     let (output, transcript) = fixture.terminal_command(&mut launch, "", true);
     assert!(output.status.success(), "{output:?}\n{transcript}");
     // The fake Herdr runs no worker to record the tab it opened.

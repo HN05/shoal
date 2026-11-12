@@ -56,8 +56,10 @@ struct Typed {
 
 /// The configuration completion reads, from cwd when no workspace resolves.
 struct Settings {
+    /// The configured commands `shoal run` runs.
     commands: Commands,
-    providers: BTreeSet<String>,
+    /// The agents' launchers, whose programs decide which agents complete.
+    launchers: Commands,
     /// Agents pickers offer, installed or not.
     agents: Vec<Agent>,
     /// The modes `shoal start` takes.
@@ -261,26 +263,15 @@ fn own_first(arg: clap::Arg) -> clap::Arg {
 }
 
 impl Typed {
-    /// The configured commands and the agents `shoal run` names: those
-    /// pickers offer, including the ones integrations add, such as Happy's,
-    /// whose programs are on `search_path`.
-    fn command_names(&self, search_path: &OsStr) -> Vec<String> {
-        let settings = self.settings();
-        let commands = (self.commands().keys()).filter(|name| !settings.providers.contains(*name));
-        let agents = (settings.agents.iter())
-            .filter(|agent| self.launchable(agent, search_path))
-            .map(|agent| agent.name().to_owned());
-        let names: BTreeSet<String> = commands.cloned().chain(agents).collect();
-        names.into_iter().collect()
+    /// The configured commands `shoal run` names; agents are not commands.
+    fn command_names(&self) -> Vec<String> {
+        self.settings().commands.keys().cloned().collect()
     }
 
-    fn commands(&self) -> &Commands {
-        &self.settings().commands
-    }
-
-    /// Whether `agent`'s programs are on `search_path`.
+    /// Whether `agent`'s programs are on `search_path`, including the ones
+    /// integrations add, such as Happy's.
     fn launchable(&self, agent: &Agent, search_path: &OsStr) -> bool {
-        agents::installed(agent, self.commands(), search_path)
+        agents::installed(agent, &self.settings().launchers, search_path)
     }
 
     fn settings(&self) -> &Settings {
@@ -294,10 +285,8 @@ impl Typed {
             .or_else(|| std::env::var_os(env::STATE_DIR).map(PathBuf::from));
         let Ok(paths) = Paths::of_command(state).map(CommandPaths::from) else {
             return Settings {
-                commands: named_commands::defaults(),
-                providers: crate::ai::agents(&crate::ai::tools(&Default::default()))
-                    .map(str::to_owned)
-                    .collect(),
+                commands: Commands::new(),
+                launchers: named_commands::defaults(),
                 agents: crate::ai::PROVIDERS
                     .iter()
                     .filter_map(|provider| provider.name.parse().ok())
@@ -345,9 +334,8 @@ impl Typed {
             return vec![];
         };
         if matches!(target, Target::Commands) {
-            let search_path = std::env::var_os("PATH").unwrap_or_default();
             return self
-                .command_names(&search_path)
+                .command_names()
                 .into_iter()
                 .filter(|name| name.starts_with(current))
                 .map(CompletionCandidate::new)
@@ -666,22 +654,16 @@ fn repository_candidates(
 /// What completion offers under `global` and the target's `layers`: a
 /// repository's own agents count as agents too.
 fn layered_settings(global: &Config, layers: &ConfigLayers) -> Settings {
-    // Agents' launchers complete beside the workspace shortcuts.
-    let mut commands: Commands = Stack::new(global, layers)
+    let commands: Commands = Stack::new(global, layers)
         .named(|config| &config.commands)
         .into_iter()
         .map(|(name, (argv, _))| (name, argv))
         .collect();
     let resolved = global.resolve(layers);
-    // The target's agents, so a repository's own are agents here too.
-    let tools = match &resolved {
-        Ok(settings) => settings.tools.clone(),
-        Err(_) => global.tools().unwrap_or_default(),
+    let launchers = match &resolved {
+        Ok(settings) => settings.launchers.clone(),
+        Err(_) => named_commands::defaults(),
     };
-    let providers: BTreeSet<_> = crate::ai::agents(&tools).map(str::to_owned).collect();
-    if let Ok(settings) = &resolved {
-        commands.extend(settings.launchers.clone());
-    }
     let modes = match &resolved {
         Ok(settings) => settings
             .modes
@@ -692,10 +674,11 @@ fn layered_settings(global: &Config, layers: &ConfigLayers) -> Settings {
             .map(ModeName::from)
             .collect(),
     };
+    // The target's agents, so a repository's own are agents here too.
     let agents = resolved.map_or_else(
         |_| {
-            providers
-                .iter()
+            let tools = global.tools().unwrap_or_default();
+            (crate::ai::agents(&tools))
                 .filter_map(|name| name.parse().ok())
                 .collect()
         },
@@ -703,7 +686,7 @@ fn layered_settings(global: &Config, layers: &ConfigLayers) -> Settings {
     );
     Settings {
         commands,
-        providers,
+        launchers,
         agents,
         modes,
     }

@@ -9,17 +9,15 @@ use anyhow::{Context, Result, ensure};
 use super::{Agent, Agents, resolve::runs_as_agent};
 use crate::config::named_commands::{self, Commands};
 
-/// Each tool `agents` describes after every layer; `commands`, the
-/// workspace shortcuts, must not name one.
-pub fn validate(agents: &Agents, commands: &Commands) -> Result<()> {
+/// Each tool `agents` describes after every layer.
+pub fn validate(agents: &Agents) -> Result<()> {
     for (name, agent) in agents {
         entry(name, agent)?;
         if let Some(argv) = &agent.command {
-            validate_command(name, argv, commands)
-                .with_context(|| format!("agents.{name}.command"))?;
+            validate_command(name, argv).with_context(|| format!("agents.{name}.command"))?;
         }
         if let Some(base) = &agent.base {
-            validate_launcher_name(name, commands).with_context(|| format!("agents.{name}"))?;
+            agent_name(name).with_context(|| format!("agents.{name}"))?;
             validate_base(agents, name, base).with_context(|| format!("agents.{name}.base"))?;
         }
         ensure!(
@@ -87,23 +85,13 @@ pub fn entry(name: &str, agent: &Agent) -> Result<()> {
     Ok(())
 }
 
-fn validate_command(name: &str, argv: &[String], commands: &Commands) -> Result<()> {
-    validate_launcher_name(name, commands)?;
+fn validate_command(name: &str, argv: &[String]) -> Result<()> {
+    agent_name(name)?;
     named_commands::validate(&Commands::from([(name.to_owned(), argv.to_vec())]))
 }
 
-/// A tool that runs as an agent needs a name no shortcut takes.
-fn validate_launcher_name(name: &str, commands: &Commands) -> Result<()> {
-    agent_name(name)?;
-    ensure!(
-        !commands.contains_key(name),
-        "{name:?} is an agent; [commands] holds only workspace shortcuts"
-    );
-    Ok(())
-}
-
-/// A name an agent may take: a portable one, which may be a built-in
-/// command's, since only `shoal run <name>` launches it.
+/// A name `--agent` takes: a portable one, which may be a built-in or
+/// configured command's too, since agents are not commands.
 pub fn agent_name(name: &str) -> Result<()> {
     ensure!(
         name.parse::<crate::agent::Agent>().is_ok(),

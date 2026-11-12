@@ -1602,7 +1602,14 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
     // the agent of the workspace below asks for.
     let mut worker = fixture
         .command()
-        .args(["run", "claude", "-w", &fixture.id("deep")])
+        .args([
+            "start",
+            "--in",
+            &fixture.id("deep"),
+            "--here",
+            "--agent",
+            "claude",
+        ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .spawn()

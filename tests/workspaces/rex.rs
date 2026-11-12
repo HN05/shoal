@@ -529,9 +529,14 @@ fn a_zmx_session_started_from_a_rex_block_with_rex_off_leaves_the_block_alone() 
     // the block's Rex variables for its own place.
     let (output, transcript) = fixture.terminal_command(
         rex.inside(
-            fixture
-                .command()
-                .args(["run", "pi", "-w", &fixture.id("plain")]),
+            fixture.command().args([
+                "start",
+                "--in",
+                &fixture.id("plain"),
+                "--here",
+                "--agent",
+                "pi",
+            ]),
             &session,
             &block,
         ),

@@ -555,8 +555,10 @@ configured command for another agent, plus proven child
   report command errors without opening a picker.
   `{diff_base}` resolves lazily through the shared daemon diff-base lookup.
   AI tools (built-in providers and `[agents.<name>]` entries with a `command`
-  or `base`) are agents: `shoal run <name>` launches them as tracked agents, and pickers and completion offer AI tools only.
-  `[commands]` holds only workspace shortcuts and never names an agent. Their
+  or `base`) are agents, which start only through `shoal start` (or
+  `contribute`), `resume` and `restart`, as tracked agents; pickers and
+  completion offer AI tools only. `shoal run <name>` runs only `[commands]`
+  entries, whose names may be agents'. Agents'
   `{prompt}` combines general instructions and issue context, prepended to
   forwarded arguments when no prompt placeholder is configured.
   Plain command invocations expand `{prompt}` to an empty string.
@@ -581,8 +583,8 @@ configured command for another agent, plus proven child
   best-effort cleanup to the terminal rather than redirected output; stop requests
   give the entire command process group a shared grace period, even after its leader exits.
   Terminal agent launches put the tracked wrapper inside a zmx session, never a
-  terminal emulator between agent and terminal; agent shortcuts without a terminal
-  and launches in a place of an enabled host run in place. Shoal closes only zmx sessions
+  terminal emulator between agent and terminal; launches in a place of an
+  enabled host run in place. Shoal closes only zmx sessions
   it created, labelled `shoal.created=1` at creation and never by relabelling;
   sessions the user opened stay theirs even after an agent ran in them, and
   sessions without the label have unknown origin and are never closed. Removal

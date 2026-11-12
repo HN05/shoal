@@ -122,10 +122,12 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                 .command()
                 .args([
                     "--json",
-                    "run",
-                    "happy-claude",
-                    "-w",
+                    "start",
+                    "--in",
                     &fixture.id(&name),
+                    "--here",
+                    "--agent",
+                    "happy-claude",
                     "--",
                     "--model",
                     "test",
@@ -135,7 +137,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                 .unwrap();
             assert!(output.status.success(), "{output:?}");
             assert_eq!(output.stderr, b"", "{output:?}");
-            let launch: Value = serde_json::from_slice(&output.stdout).unwrap();
+            let launch: Value = happy_launch(&output);
             assert_eq!(launch["workspace"]["id"], workspace["id"]);
             assert_eq!(launch["happy_daemon_recorded"], true);
             // Detached Claude launches skip the trust dialog like `shoal claude`.
@@ -396,10 +398,12 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
             .command()
             .args([
                 "--json",
-                "run",
-                "happy-codex",
-                "-w",
+                "start",
+                "--in",
                 &fixture.id(&name),
+                "--here",
+                "--agent",
+                "happy-codex",
                 "--",
                 "--yolo",
             ])
@@ -408,7 +412,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
             .output()
             .unwrap();
         assert!(output.status.success(), "{output:?}");
-        let launch: Value = serde_json::from_slice(&output.stdout).unwrap();
+        let launch: Value = happy_launch(&output);
         assert_eq!(launch["prompt_delivered"], true, "{launch}");
         let session_id = launch["happy_session_id"].as_str().unwrap().to_owned();
         assert!(session_id.starts_with("session-"));
@@ -504,10 +508,12 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         .command()
         .args([
             "--json",
-            "run",
-            "happy-codex",
-            "-w",
+            "start",
+            "--in",
             &fixture.id("unseeded"),
+            "--here",
+            "--agent",
+            "happy-codex",
         ])
         .env("HAPPY_RECORD", &record)
         .env("HAPPY_SERVER_URL", &server.url)
@@ -518,7 +524,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let launch: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let launch: Value = happy_launch(&output);
     assert_eq!(launch["prompt_delivered"], false);
     assert_eq!(launch["happy_session_id"], Value::Null);
     wait_until("fake happy record", || record.exists());
@@ -538,7 +544,15 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     let launch_orphan = || {
         fixture
             .command()
-            .args(["--json", "run", "happy-codex", "-w", &fixture.id("orphan")])
+            .args([
+                "--json",
+                "start",
+                "--in",
+                &fixture.id("orphan"),
+                "--here",
+                "--agent",
+                "happy-codex",
+            ])
             .env("HAPPY_SERVER_URL", &server.url)
             // Only the fixture directory and system tools: a real happy must not be found.
             .env(

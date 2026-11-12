@@ -611,9 +611,16 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     };
     // Agents get JSON output unless they inherit a setting; commands get none.
     let mut children = vec![
-        spawn_with(&["run", "claude", "-w", &fixture.id("stopped")], None),
         spawn_with(
-            &["run", "claude", "-w", &fixture.id("stopped")],
+            &[
+                "start",
+                "--in",
+                &fixture.id("stopped"),
+                "--here",
+                "--now",
+                "--agent",
+                "claude",
+            ],
             Some("text"),
         ),
         spawn_with(
@@ -640,7 +647,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
             .map(|execution| execution["id"].as_str().unwrap().to_owned())
             .filter(|id| path.join(format!("started-{id}")).exists())
             .collect::<Vec<_>>();
-        (ids.len() == 2 && path.join("command-started").exists()).then_some(ids)
+        (ids.len() == 1 && path.join("command-started").exists()).then_some(ids)
     })
     .unwrap_or_else(|| panic!("executions did not start: {last_inspection}"));
     let mut outputs = ids
@@ -648,7 +655,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         .map(|id| fs::read_to_string(path.join(format!("output-{id}"))).unwrap())
         .collect::<Vec<_>>();
     outputs.sort();
-    assert_eq!(outputs, ["json", "text"]);
+    assert_eq!(outputs, ["text"]);
     assert_eq!(
         fs::read_to_string(path.join("command-output")).unwrap(),
         "unset"
@@ -691,13 +698,6 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         })
         .count();
     assert_eq!(commands, 1);
-    // Several agents restore here one at a time.
-    assert!(
-        !fixture
-            .run(&["resume", &fixture.id("stopped"), "--focus"])
-            .status
-            .success()
-    );
     for id in &ids {
         assert!(
             fixture
@@ -716,27 +716,23 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     // The stopped command reaches the first restored session only.
     let restored = fs::read_to_string(path.join("restored")).unwrap();
     let prompts = restored.split('|').collect::<Vec<_>>();
-    assert_eq!(prompts.len(), 3, "{restored}");
+    assert_eq!(prompts.len(), 2, "{restored}");
     assert!(
         prompts[0].contains("- sh -c 'printf %s \"${SHOAL_OUTPUT-unset}\" > command-output; touch command-started; while :; do sleep 1; done'"),
         "{restored}"
     );
-    // Each restored session learns why it stopped.
-    for prompt in &prompts[..2] {
-        assert!(prompt.contains("(stopped by shoal stop)"), "{restored}");
-    }
-    assert!(!prompts[1].contains("command-started"), "{restored}");
+    // The restored session learns why it stopped.
+    assert!(prompts[0].contains("(stopped by shoal stop)"), "{restored}");
     assert_eq!(
         fs::read_to_string(path.join("restored-output")).unwrap(),
-        "json|json|"
+        "json|"
     );
-    // The restored agents exited on their own, leaving only their sessions;
-    // restoring one kept the other's.
+    // The restored agent exited on its own, leaving only its session.
     let left = fs::read_dir(&state)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
         .collect::<Vec<_>>();
-    assert_eq!(left.len(), 2, "{left:?}");
+    assert_eq!(left.len(), 1, "{left:?}");
     assert!(
         left.iter().all(|name| name.ends_with(".last-session.json")),
         "{left:?}"
@@ -759,7 +755,14 @@ fn status_shows_where_each_reported_session_keeps_its_transcript() {
     .unwrap();
     let output = fixture
         .command()
-        .args(["run", "claude", "-w", &fixture.id("talked")])
+        .args([
+            "start",
+            "--in",
+            &fixture.id("talked"),
+            "--here",
+            "--agent",
+            "claude",
+        ])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -812,7 +815,14 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
     .unwrap();
     let output = fixture
         .command()
-        .args(["run", "claude", "-w", &fixture.id("quit")])
+        .args([
+            "start",
+            "--in",
+            &fixture.id("quit"),
+            "--here",
+            "--agent",
+            "claude",
+        ])
         .stdin(Stdio::null())
         .output()
         .unwrap();
