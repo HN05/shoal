@@ -1,6 +1,7 @@
 //! Noninteractive workspace selection over a captured directory context.
 use std::path::Path;
 
+use crate::cli::scoping::Scoping;
 use crate::client::space_names::SpaceSelector;
 use crate::model::Workspace;
 
@@ -14,8 +15,8 @@ impl ScopeOrder {
     /// Whether selection with this order consults the current directory: a
     /// scoped caller that puts its scope first never does, so it needs no
     /// readable working directory.
-    pub fn reads_directory(self, scoped: bool) -> bool {
-        !(scoped && matches!(self, Self::BeforeDirectory))
+    pub fn reads_directory(self, scoping: Scoping) -> bool {
+        !(scoping == Scoping::Scoped && matches!(self, Self::BeforeDirectory))
     }
 }
 
@@ -41,13 +42,14 @@ impl<'a> WorkspaceContext<'a> {
     pub fn resolve(
         &self,
         explicit: Option<&SpaceSelector>,
-        scoped: bool,
+        scoping: Scoping,
         order: ScopeOrder,
     ) -> Option<&'a Workspace> {
         if let Some(selector) = explicit {
             return (self.workspaces.iter())
                 .find(|workspace| selector.selects(&workspace.id, workspace.number));
         }
+        let scoped = scoping == Scoping::Scoped;
         let scope = || scoped.then(|| self.workspaces.first()).flatten();
         match order {
             ScopeOrder::BeforeDirectory if scoped => scope(),

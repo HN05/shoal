@@ -17,6 +17,7 @@ use crate::{
     cli::{
         context::Context,
         output::{Palette, Style},
+        scoping::Scoping,
         ui::{self, Entries, WidthLimit},
     },
     client::notifications::{self, Notification},
@@ -232,10 +233,10 @@ fn decode_path(hex: &str) -> Result<PathBuf> {
 }
 
 /// The rows `view` lists for a caller with this scope.
-pub(super) async fn rows(ctx: &Context, view: View, scoped: bool) -> Result<Entries> {
+pub(super) async fn rows(ctx: &Context, view: View, scoping: Scoping) -> Result<Entries> {
     match view {
         View::Inbox => inbox_rows(ctx).await,
-        View::Spaces => space_rows(ctx, scoped).await,
+        View::Spaces => space_rows(ctx, scoping).await,
         View::Notifications => notification_rows(ctx).await,
     }
 }
@@ -315,7 +316,7 @@ async fn inbox_rows(ctx: &Context) -> Result<Entries> {
 
 /// Every workspace by status, then number, then an entry that adds one
 /// unless workspace processes ask.
-async fn space_rows(ctx: &Context, scoped: bool) -> Result<Entries> {
+async fn space_rows(ctx: &Context, scoping: Scoping) -> Result<Entries> {
     let repos = ui::repository_choices(crate::client::repositories::list(&ctx.paths).await?).await;
     let mut workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let palette = Palette::picker();
@@ -330,7 +331,7 @@ async fn space_rows(ctx: &Context, scoped: bool) -> Result<Entries> {
         .map(|w| w.id.into())
         .zip(rows)
         .collect();
-    if !scoped {
+    if scoping == Scoping::Unscoped {
         entries.push((
             ADD_ENTRY.into(),
             format!("{} Add workspace", palette.paint(Style::Success, "+")),

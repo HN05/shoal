@@ -21,18 +21,18 @@ use crate::{
         Command,
         context::Context,
         internal,
+        scoping::Scoping,
         ui::{self, Entries, ViewPicker},
     },
-    env,
     workers::Worker,
 };
 
 /// Open the picker on `start`, or bare on the inbox unless nothing needs
 /// the user, searching for the current workspace's items when it has any.
 pub(super) async fn choose(ctx: &Context, start: Option<View>) -> Result<Choice> {
-    let scoped = env::inherits_scope(&ctx.paths.state);
-    let views = View::available(scoped);
-    let (view, entries) = first_view(ctx, start, views, scoped).await?;
+    let scoping = Scoping::inherited(&ctx.paths.state);
+    let views = View::available(scoping);
+    let (view, entries) = first_view(ctx, start, views, scoping).await?;
     let query = match start {
         None if view == View::Inbox => current_items(ctx, &entries).await?,
         _ => None,
@@ -44,7 +44,7 @@ pub(super) async fn choose(ctx: &Context, start: Option<View>) -> Result<Choice>
         ctx,
         entries,
         ViewPicker {
-            view: view.description(scoped, next.is_some()),
+            view: view.description(scoping, next.is_some()),
             keys: &Action::ALL.map(Action::key),
             next,
             query,
@@ -72,30 +72,30 @@ async fn first_view(
     ctx: &Context,
     start: Option<View>,
     views: &[View],
-    scoped: bool,
+    scoping: Scoping,
 ) -> Result<(View, Entries)> {
     if let Some(view) = start {
-        return Ok((view, rows(ctx, view, scoped).await?));
+        return Ok((view, rows(ctx, view, scoping).await?));
     }
     for &view in &views[..views.len() - 1] {
-        let entries = rows(ctx, view, scoped).await?;
+        let entries = rows(ctx, view, scoping).await?;
         if !entries.is_empty() {
             return Ok((view, entries));
         }
     }
     let last = views[views.len() - 1];
-    Ok((last, rows(ctx, last, scoped).await?))
+    Ok((last, rows(ctx, last, scoping).await?))
 }
 
 /// Print `view`'s rows for the picker to reload, refusing the views a
 /// workspace process may not see, whatever variables it cleared.
 pub(super) async fn print_rows(ctx: &Context, view: View) -> Result<i32> {
-    let scoped = env::inherits_scope(&ctx.paths.state);
+    let scoping = Scoping::inherited(&ctx.paths.state);
     ensure!(
-        View::available(scoped).contains(&view),
+        View::available(scoping).contains(&view),
         "workspace processes cannot see the inbox or notifications; ask the user"
     );
-    for (id, label) in rows(ctx, view, scoped).await? {
+    for (id, label) in rows(ctx, view, scoping).await? {
         outln!("{}", ui::picker_line(&id, &label));
     }
     Ok(0)
@@ -104,8 +104,8 @@ pub(super) async fn print_rows(ctx: &Context, view: View) -> Result<i32> {
 /// Print the fzf actions that switch from the view fzf shows, named by its
 /// prompt, to the next one.
 pub(super) fn print_next(ctx: &Context) -> Result<i32> {
-    let scoped = env::inherits_scope(&ctx.paths.state);
-    let views = View::available(scoped);
+    let scoping = Scoping::inherited(&ctx.paths.state);
+    let views = View::available(scoping);
     let next = *ui::next_picker_view(views, |view| view.prompt())?;
     let name = next.to_possible_value().context("views have names")?;
     let reload = internal::shell_command(
@@ -116,7 +116,7 @@ pub(super) fn print_next(ctx: &Context) -> Result<i32> {
     )?;
     outln!(
         "{}",
-        next.description(scoped, true)
+        next.description(scoping, true)
             .transition(&Action::ALL.map(Action::key), &reload)
     );
     Ok(0)

@@ -55,7 +55,7 @@ fn explicit_numbers_and_ids_win_and_misses_do_not_fall_back() {
         current: workspaces.first(),
     };
     for order in [ScopeOrder::BeforeDirectory, ScopeOrder::AfterDirectory] {
-        for scoped in [false, true] {
+        for scoped in [Scoping::Unscoped, Scoping::Scoped] {
             for selector in ["id-explicit", "2"] {
                 assert_eq!(
                     context
@@ -92,25 +92,28 @@ fn scope_order_and_disabled_directory_inference_are_explicit() {
     };
     assert_eq!(
         context
-            .resolve(None, true, ScopeOrder::BeforeDirectory)
+            .resolve(None, Scoping::Scoped, ScopeOrder::BeforeDirectory)
             .unwrap()
             .name,
         "own"
     );
     assert_eq!(
         context
-            .resolve(None, true, ScopeOrder::AfterDirectory)
+            .resolve(None, Scoping::Scoped, ScopeOrder::AfterDirectory)
             .unwrap()
             .name,
         "current"
     );
     let outside = WorkspaceContext::from_directory(&workspaces, None);
     for order in [ScopeOrder::BeforeDirectory, ScopeOrder::AfterDirectory] {
-        assert_eq!(outside.resolve(None, true, order).unwrap().name, "own");
-        assert!(outside.resolve(None, false, order).is_none());
+        assert_eq!(
+            outside.resolve(None, Scoping::Scoped, order).unwrap().name,
+            "own"
+        );
+        assert!(outside.resolve(None, Scoping::Unscoped, order).is_none());
         assert!(
             WorkspaceContext::from_directory(&[], None)
-                .resolve(None, true, order)
+                .resolve(None, Scoping::Scoped, order)
                 .is_none()
         );
     }
@@ -130,7 +133,7 @@ fn directory_capture_matches_nested_and_symlink_paths() {
     let context = WorkspaceContext::from_directory(&workspaces, Some(&cwd));
     assert_eq!(
         context
-            .resolve(None, false, ScopeOrder::BeforeDirectory)
+            .resolve(None, Scoping::Unscoped, ScopeOrder::BeforeDirectory)
             .unwrap()
             .name,
         "inner"
@@ -140,22 +143,22 @@ fn directory_capture_matches_nested_and_symlink_paths() {
     let context = WorkspaceContext::from_directory(&workspaces, Some(&raw));
     assert!(
         context
-            .resolve(None, false, ScopeOrder::BeforeDirectory)
+            .resolve(None, Scoping::Unscoped, ScopeOrder::BeforeDirectory)
             .is_none()
     );
     let sibling = root.path().join("outer-other");
     let context = WorkspaceContext::from_directory(&workspaces, Some(&sibling));
     assert!(
         context
-            .resolve(None, false, ScopeOrder::BeforeDirectory)
+            .resolve(None, Scoping::Unscoped, ScopeOrder::BeforeDirectory)
             .is_none()
     );
 }
 
 #[test]
 fn only_a_scope_put_first_skips_the_directory() {
-    assert!(!ScopeOrder::BeforeDirectory.reads_directory(true));
-    assert!(ScopeOrder::BeforeDirectory.reads_directory(false));
-    assert!(ScopeOrder::AfterDirectory.reads_directory(true));
-    assert!(ScopeOrder::AfterDirectory.reads_directory(false));
+    assert!(!ScopeOrder::BeforeDirectory.reads_directory(Scoping::Scoped));
+    assert!(ScopeOrder::BeforeDirectory.reads_directory(Scoping::Unscoped));
+    assert!(ScopeOrder::AfterDirectory.reads_directory(Scoping::Scoped));
+    assert!(ScopeOrder::AfterDirectory.reads_directory(Scoping::Unscoped));
 }

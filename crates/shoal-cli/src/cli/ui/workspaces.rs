@@ -24,6 +24,7 @@ use crate::{
         list_status::ListStatus,
         output::{Palette, Style},
         recent,
+        scoping::Scoping,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     model::{Chat, Workspace},
@@ -177,7 +178,7 @@ async fn named_workspaces(ctx: &Context, names: Vec<SpaceSelector>) -> Result<Ve
     for name in names {
         let workspace = match recent::is_previous(&name) {
             true => SpaceSelector::Id(recent::previous(ctx).await?),
-            false => (context.resolve(Some(&name), false, ScopeOrder::AfterDirectory))
+            false => (context.resolve(Some(&name), Scoping::Unscoped, ScopeOrder::AfterDirectory))
                 .map_or(name, |workspace| SpaceSelector::id(&workspace.id)),
         };
         if !selected.contains(&workspace) {
@@ -367,21 +368,24 @@ async fn resolve_workspace(
     // A scoped caller lists its own workspace first, then the workspaces
     // split from it, which the current directory selects.
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-    let scoped = crate::env::workspace_scoped();
+    let scoping = Scoping::of_workspace();
     let order = match fallback {
         Fallback::OwnWorkspace => ScopeOrder::BeforeDirectory,
         Fallback::CurrentDirectory | Fallback::CurrentDirectoryOnly => ScopeOrder::AfterDirectory,
     };
-    let cwd = if order.reads_directory(scoped) {
+    let cwd = if order.reads_directory(scoping) {
         current_directory()?
     } else {
         None
     };
     let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
-    if let Some(workspace) = context.resolve(None, scoped, order) {
+    if let Some(workspace) = context.resolve(None, scoping, order) {
         return Ok(Resolution::Current(workspace.id.clone()));
     }
-    ensure!(!scoped, "scoped workspace is unavailable");
+    ensure!(
+        scoping == Scoping::Unscoped,
+        "scoped workspace is unavailable"
+    );
     if matches!(
         fallback,
         Fallback::CurrentDirectoryOnly | Fallback::OwnWorkspace
@@ -398,7 +402,7 @@ pub fn current_workspace(workspaces: &[Workspace]) -> Result<Option<&Workspace>>
     }
     let cwd = current_directory()?;
     let context = WorkspaceContext::from_directory(workspaces, cwd.as_deref());
-    Ok(context.resolve(None, false, ScopeOrder::BeforeDirectory))
+    Ok(context.resolve(None, Scoping::Unscoped, ScopeOrder::BeforeDirectory))
 }
 
 /// Always run the picker, including for scoped callers (whose list is filtered).

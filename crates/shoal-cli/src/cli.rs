@@ -15,6 +15,7 @@ pub mod list_status;
 pub mod output;
 mod progress;
 pub mod recent;
+pub mod scoping;
 pub mod shell;
 mod terminal;
 pub mod ui;

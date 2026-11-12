@@ -21,6 +21,7 @@ use crate::{
     cli::{
         agents,
         availability::{self, Fit, Need},
+        scoping::Scoping,
         terminal, ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
@@ -317,12 +318,14 @@ impl Typed {
                 let workspace = context
                     .resolve(
                         self.workspace.as_ref(),
-                        env::workspace_scoped(),
+                        Scoping::of_workspace(),
                         ScopeOrder::AfterDirectory,
                     )
                     // Command names remain available from cwd while a typed
                     // workspace is incomplete or unknown.
-                    .or_else(|| context.resolve(None, false, ScopeOrder::AfterDirectory))
+                    .or_else(|| {
+                        context.resolve(None, Scoping::Unscoped, ScopeOrder::AfterDirectory)
+                    })
                     .context("no current workspace")?;
                 let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
                 crate::client::workspaces::config_layers(&paths, target).await
@@ -518,7 +521,7 @@ impl Typed {
         let cwd = std::env::current_dir().ok();
         WorkspaceContext::from_directory(workspaces, cwd.as_deref()).resolve(
             self.workspace.as_ref(),
-            env::workspace_scoped(),
+            Scoping::of_workspace(),
             ScopeOrder::AfterDirectory,
         )
     }

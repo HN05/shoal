@@ -13,6 +13,7 @@ use crate::{
         client::{self},
         context::Context,
         recent,
+        scoping::Scoping,
         ui::{self, Fallback},
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
@@ -155,11 +156,7 @@ async fn selected_workspace<'a>(
 pub(in crate::cli) fn current_workspace(workspaces: &[Workspace]) -> Result<Option<&Workspace>> {
     let current = ui::current_directory()?;
     let context = WorkspaceContext::from_directory(workspaces, current.as_deref());
-    Ok(context.resolve(
-        None,
-        crate::env::workspace_scoped(),
-        ScopeOrder::AfterDirectory,
-    ))
+    Ok(context.resolve(None, Scoping::of_workspace(), ScopeOrder::AfterDirectory))
 }
 
 async fn defines(ctx: &Context, workspace: &SpaceId, name: &str) -> Result<bool> {

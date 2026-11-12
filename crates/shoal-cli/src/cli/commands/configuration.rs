@@ -11,11 +11,11 @@ use crate::{
         client,
         context::Context,
         output::{Palette, Style},
+        scoping::Scoping,
         ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     config::{Config, edit::Change, options::Entry, resolve::Stack},
-    env,
     paths::CommandPaths,
     protocol::ConfigTarget,
 };
@@ -153,14 +153,13 @@ async fn target(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<Config
         return Ok(ConfigTarget::Workspace(workspace));
     }
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-    let scoped = env::workspace_scoped();
-    let cwd = if scoped {
-        None
-    } else {
-        Some(std::fs::canonicalize(std::env::current_dir()?)?)
+    let scoping = Scoping::of_workspace();
+    let cwd = match scoping {
+        Scoping::Scoped => None,
+        Scoping::Unscoped => Some(std::fs::canonicalize(std::env::current_dir()?)?),
     };
     let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
-    if let Some(workspace) = context.resolve(None, scoped, ScopeOrder::BeforeDirectory) {
+    if let Some(workspace) = context.resolve(None, scoping, ScopeOrder::BeforeDirectory) {
         return Ok(ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)));
     }
     let cwd = cwd.context("scoped workspace is unavailable")?;

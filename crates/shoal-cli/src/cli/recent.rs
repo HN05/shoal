@@ -9,6 +9,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
+        scoping::Scoping,
         ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
@@ -201,7 +202,7 @@ async fn remember(ctx: &Context, command: &str, selector: &SpaceSelector, from_c
     };
     let Some(target) = WorkspaceContext::from_directory(&workspaces, None).resolve(
         Some(selector),
-        false,
+        Scoping::Unscoped,
         ScopeOrder::AfterDirectory,
     ) else {
         return;
