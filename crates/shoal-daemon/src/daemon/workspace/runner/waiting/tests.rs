@@ -255,3 +255,71 @@ fn only_a_run_on_the_known_default_branch_is_on_it() {
     ));
     assert!(!on_branch(&run(Trigger::Other), Some("main")));
 }
+
+#[tokio::test]
+async fn a_waiting_job_serves_the_workspace_that_links_its_pr_after_it_queued() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let server = forgejo(Arc::new(Mutex::new(vec![job("a", 4, 1)])));
+    configure(
+        &manager,
+        &format!(
+            "[machine.forges.\"{}\"]\ntype = \"forgejo\"\ntoken = \"user\"\n[runner]\nenabled = true\n",
+            server.host
+        ),
+    )
+    .await;
+    // Created before the remote, so it starts from the local default branch.
+    let pull = manager
+        .create_workspace(&repo.id, "pull".into(), None, None, None)
+        .await
+        .unwrap();
+    git(
+        &path,
+        &[
+            "remote",
+            "add",
+            "origin",
+            &format!("http://{}/team/repo", server.host),
+        ],
+    );
+    let (repository_id, forge_repository) =
+        (repo.id.clone(), format!("http://{}/team/repo", server.host));
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO runners(repository_id,forge_repository,forge_id,uuid,token)
+                 VALUES (?1,?2,5,'u','t')",
+                params![repository_id, forge_repository],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.refresh_waiting_jobs().await.unwrap();
+    let entry = jobs(&manager).await.remove(0);
+    assert!(entry.job.as_ref().unwrap().space_ids.is_empty());
+
+    let (pull_id, url) = (
+        pull.id.clone(),
+        format!("http://{}/team/repo/pulls/12", server.host),
+    );
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
+                params![pull_id, json!({"url": url}).to_string()],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let linked = manager.waiting_job_spaces().await.unwrap();
+    assert_eq!(linked[&entry.id], [pull.id]);
+}

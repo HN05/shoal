@@ -243,7 +243,7 @@ async fn a_review_arrives_after_the_entries_queued_before_it_in_the_same_second(
     };
     let entries = manager
         .store
-        .read(move |tx| entries::waiting(tx, &[review]))
+        .read(move |tx| entries::waiting(tx, &HashMap::new(), &[review]))
         .await
         .unwrap();
     let arrived: Vec<_> = (entries.iter())
