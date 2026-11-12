@@ -58,7 +58,7 @@ pub(super) async fn handle(
         } => {
             let queued = match caller {
                 Some(_) => None,
-                None => queued_start(manager, queue_entry, &mut parent, &mut start).await?,
+                None => queued_start(manager, queue_entry.clone(), &mut parent, &mut start).await?,
             };
             let caller = caller.or(queued.as_ref());
             let opening = Opening {
@@ -77,6 +77,7 @@ pub(super) async fn handle(
                 pr,
                 agent,
                 waiting,
+                queue_entry,
                 env,
             };
             Body::WorkspaceStarted(
@@ -106,6 +107,7 @@ pub(super) async fn handle(
                 pr: None,
                 agent,
                 waiting: None,
+                queue_entry: None,
                 env,
             };
             Body::WorkspaceStarted(

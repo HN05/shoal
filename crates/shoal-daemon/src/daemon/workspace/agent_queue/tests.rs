@@ -1566,3 +1566,39 @@ async fn a_launch_left_waiting_for_setup_frees_the_slot_of_the_start_that_failed
     assert_eq!(ids, [&waiting.id]);
     assert!(add(&manager, &repo, "other").await.start);
 }
+
+#[tokio::test]
+async fn a_start_gives_its_queue_entry_the_workspace_before_its_setup_runs() {
+    use crate::daemon::operations::starts::{Opening, Preparing};
+    use crate::protocol::operations::WorkspaceStart;
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let starting = add(&manager, &repo, "child").await.entry.unwrap();
+    // No caller attaches the entry: the start alone gives it the workspace.
+    let opening = Opening {
+        start: WorkspaceStart::Name("child".into()),
+        base: Some("HEAD".into()),
+        new: Default::default(),
+        parent: None,
+    };
+    let preparing = Preparing {
+        issue: None,
+        pr: None,
+        agent: None,
+        waiting: None,
+        queue_entry: Some(starting.id.clone()),
+        env: None,
+    };
+    let started = manager
+        .start_workspace((&repo.id).into(), opening, preparing, None)
+        .await
+        .unwrap();
+    let _worker = crate::daemon::operations::fake::take(&started.operation);
+    let entries = manager.queue_entries().await.unwrap();
+    assert_eq!(entries.len(), 1, "{entries:?}");
+    assert_eq!(
+        entries[0].workspace_id.as_ref(),
+        Some(&started.workspace.id)
+    );
+}

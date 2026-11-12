@@ -1,6 +1,7 @@
 //! Opening a workspace and starting its preparation in one request, as
 //! `shoal start` and `shoal split` do: the checks before anything is created,
 //! the workspace and its issue, then the operation that prepares it.
+use crate::client::queue::QueueEntryId;
 use crate::client::space_ids::SpaceId;
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -63,6 +64,9 @@ pub(crate) struct Preparing {
     /// The agent the caller starts itself once setup succeeds, which waits
     /// in the queue should setup fail.
     pub waiting: Option<Box<QueuedLaunch>>,
+    /// The starting queue entry of the launch the start carries out, which
+    /// the opened workspace takes before its preparation starts.
+    pub queue_entry: Option<QueueEntryId>,
     pub env: Option<BTreeMap<String, String>>,
 }
 
@@ -248,10 +252,11 @@ impl Manager {
         }
     }
 
-    /// Assign `issue` to the `opened` workspace, then start preparing it:
-    /// its setup while it is preparing, linking the PR, the post-setup hook
-    /// of a new workspace, then queuing the agent. A new workspace whose
-    /// issue cannot be assigned is removed, since nothing ran in it yet.
+    /// Assign `issue` to the `opened` workspace and give it the start's
+    /// queue entry, then start preparing it: its setup while it is
+    /// preparing, linking the PR, the post-setup hook of a new workspace,
+    /// then queuing the agent. A new workspace whose issue cannot be
+    /// assigned is removed, since nothing ran in it yet.
     pub(crate) async fn prepare_new(
         self: &Arc<Self>,
         OpenedWorkspace { workspace, reused }: OpenedWorkspace,
@@ -268,6 +273,18 @@ impl Manager {
                 self.discard_new(&workspace).await;
             }
             return Err(error);
+        }
+        // The entry is the workspace's before its setup can fail, so a
+        // waiting launch frees its slot even once the caller is gone.
+        if let Some(entry) = &preparing.queue_entry
+            && let Err(error) = self
+                .queue_attach(entry, &SpaceSelector::id(&workspace.id))
+                .await
+        {
+            log!(
+                "queue entry {entry} not given {}: {error:#}",
+                workspace.name
+            );
         }
         let steps = Preparation {
             setup: workspace.state == WorkspaceState::Preparing,
