@@ -4,7 +4,7 @@
 use crate::client::execution_ids::ExecutionId;
 pub use crate::client::executions::Discarded;
 use crate::client::space_ids::SpaceId;
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use super::Manager;
 use crate::client::saved::SavedSummary;
@@ -19,6 +19,15 @@ pub(super) struct Stopper<'a> {
     pub(super) workspace: &'a SpaceId,
     /// The executions the stop ended.
     pub(super) executions: Vec<ExecutionId>,
+}
+
+/// What a change to the permissions given applies to: stopped agents and
+/// saved chats, which restores run under, and the workspaces whose failed
+/// setup a launch waits for, which it starts under.
+pub(crate) struct Stopped<'a> {
+    pub agents: &'a [SavedAgent],
+    pub chats: &'a [SpaceSelector],
+    pub launches: &'a [SpaceSelector],
 }
 
 impl Manager {
@@ -129,33 +138,59 @@ impl Manager {
         })
     }
 
-    /// Make `change` to the permissions each of the stopped `agents` and
-    /// saved `chats` was given, which its restore runs under, once none of
-    /// them is refused, for the scoped process of the space `giver`, which
-    /// gives only what it holds, or for the user.
+    /// Make `change` to the permissions each of the `stopped` agents, chats
+    /// and waiting launches was given, once none of them is refused, for
+    /// the scoped process of the space `giver`, which gives only what it
+    /// holds, or for the user.
     pub async fn change_stopped_permissions(
         &self,
-        agents: &[SavedAgent],
-        chats: &[SpaceSelector],
+        stopped: Stopped<'_>,
         change: &crate::config::permissions::PermissionChange,
         giver: Option<&SpaceId>,
     ) -> Result<()> {
         let mut changed = Vec::new();
-        for agent in agents {
+        for agent in stopped.agents {
             changed.push(self.changeable(agent, change, giver).await?);
         }
         let mut saved = Vec::new();
-        for chat in chats {
+        for chat in stopped.chats {
             saved.push(self.changeable_chat(chat, change, giver).await?);
         }
-        // The chats change together, refusing one restored or removed since,
-        // while the agents' claims keep their restores out.
+        let mut launches = Vec::new();
+        for workspace in stopped.launches {
+            launches.push(self.changeable_launch(workspace, change, giver).await?);
+        }
+        // The chats and the launches change together, refusing one restored,
+        // started or removed since, while the agents' claims keep their
+        // restores out.
         let claimed = recovery::ClaimedChange::claim(&changed)?;
         let given = saved
             .iter()
             .map(|chat| (chat.id.clone(), change.applied_to(chat.narrowing)));
         self.give_saved_chats(given.collect()).await?;
+        let given = launches
+            .into_iter()
+            .map(|launch| (launch.id, change.applied_to(launch.narrowing)));
+        self.give_launches_awaiting_setup(given.collect()).await?;
         claimed.make(change)
+    }
+
+    /// The launch waiting for the failed setup of the workspace `selector`
+    /// names, refusing a workspace without one and `change` where `giver`
+    /// does not hold what it gives, as [`Manager::ensure_change_held`]
+    /// refuses it.
+    async fn changeable_launch(
+        &self,
+        selector: &SpaceSelector,
+        change: &crate::config::permissions::PermissionChange,
+        giver: Option<&SpaceId>,
+    ) -> Result<crate::model::QueueEntry> {
+        let workspace = self.workspace(selector).await?;
+        let repository = Some(workspace.repository_id.clone());
+        let space = crate::model::PresentSpace::Workspace(workspace.clone());
+        (self.ensure_change_held(giver, &space, change, repository.as_ref())).await?;
+        let launch = self.launch_awaiting_setup(&workspace.id).await?;
+        launch.with_context(|| format!("no agent waits for the setup of {}", workspace.name))
     }
 
     /// The saved chat `selector` names, refusing one that is not saved and

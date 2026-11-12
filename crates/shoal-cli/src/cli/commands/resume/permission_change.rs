@@ -111,8 +111,11 @@ async fn request(
         Some(change) if !(agents.is_empty() && chats.is_empty()) => {
             let change = change.clone();
             let paths = &ctx.paths;
-            crate::client::assignments::change_stopped_permissions(paths, agents, chats, change)
-                .await
+            let launches = Vec::new();
+            crate::client::assignments::change_stopped_permissions(
+                paths, agents, chats, launches, change,
+            )
+            .await
         }
         _ => Ok(()),
     }

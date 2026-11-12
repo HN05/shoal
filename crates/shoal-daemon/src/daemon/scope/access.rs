@@ -172,6 +172,20 @@ impl Manager {
         Ok(workspace)
     }
 
+    /// `workspace`, which must be one below the caller's space, whose
+    /// failed setup an agent waits for.
+    pub(in crate::daemon) async fn setup_below<'a>(
+        &self,
+        caller: &Caller,
+        workspace: &'a mut SpaceSelector,
+    ) -> Result<&'a mut SpaceSelector> {
+        const REFUSAL: &str = "scoped processes resume only the workspaces below their own space";
+        let workspace = self.workspace_below(caller, workspace, REFUSAL).await?;
+        let id = self.workspace(workspace).await?.id;
+        ensure!(self.reaches(caller, &id).await?, REFUSAL);
+        Ok(workspace)
+    }
+
     /// `chat`, which must be a stopped chat below the caller's space that
     /// the caller's process or one below it stopped: a chat the user or
     /// Shoal stopped, or whose agent exited, is the user's to resume.

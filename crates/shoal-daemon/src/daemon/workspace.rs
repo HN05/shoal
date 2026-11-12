@@ -80,6 +80,7 @@ pub(crate) use lifecycle::not_ready;
 pub(crate) use merge::RecordChange;
 pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use stack::record_base_changed;
+pub(crate) use stopped_work::Stopped;
 
 pub(crate) use tree::{
     Source, TrackedAgents, children, deciders, delegated, ensure_parent, parent, receiving_paths,

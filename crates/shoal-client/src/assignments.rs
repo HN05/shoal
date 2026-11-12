@@ -109,17 +109,20 @@ pub async fn discard_stopped_work(
 }
 
 /// Make `change` to the permissions each of the stopped `agents` and saved
-/// `chats` was given, which its restore runs under; the daemon changes none
-/// when it refuses one.
+/// `chats` was given, which its restore runs under, and the launch waiting
+/// for the failed setup of each of the `launches` workspaces; the daemon
+/// changes none when it refuses one.
 pub async fn change_stopped_permissions(
     daemon: &impl Daemon,
     agents: Vec<crate::protocol::SavedAgent>,
     chats: Vec<SpaceSelector>,
+    launches: Vec<SpaceSelector>,
     change: crate::config::permissions::PermissionChange,
 ) -> Result<()> {
     let method = AssignmentMethod::ChangeStoppedPermissions {
         agents,
         chats,
+        launches,
         change,
     };
     request(daemon, method).await

@@ -13,11 +13,12 @@ use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace::agents::ProtectionExt;
 use crate::protocol::operations::{Ended, Failure, OperationSpec, Preparation, Report, Step};
 use crate::{
+    config::permissions::{PermissionChange, PermissionsConfig},
     daemon::{
         notifications::NotificationKind,
         queued_starts::tests::STARTED,
         test_support::{global_config, manager, repository},
-        workspace::{Manager, capacity::Activity},
+        workspace::{Manager, Stopped, capacity::Activity},
         workspace_files::Attacher,
     },
     model::{QueueAdmission, QueueEntry, QueueRequest, Repository, Workspace},
@@ -1561,6 +1562,35 @@ async fn a_launch_in_a_workspace_whose_setup_failed_waits_until_its_hook_ran() {
     manager.dispatch_queue().await.unwrap();
     assert_eq!(queue(&manager).await[0].2, QueueState::Starting);
     assert!(started(&entry.id));
+}
+
+#[tokio::test]
+async fn a_launch_waiting_for_setup_takes_a_permission_change() {
+    let (_temp, manager, child, entry) = launch_waiting_for_setup().await;
+    let ready = manager
+        .create_workspace(&child.repository_id, "ready".into(), None, None, None)
+        .await
+        .unwrap();
+    let change = PermissionChange::assigned("merge=direct").unwrap();
+    let narrowing = async || manager.queue_entries().await.unwrap()[0].narrowing;
+    let change_for = async |launches: &[SpaceSelector]| {
+        let stopped = Stopped {
+            agents: &[],
+            chats: &[],
+            launches,
+        };
+        manager
+            .change_stopped_permissions(stopped, &change, None)
+            .await
+    };
+
+    // No agent waits for the setup of a ready workspace, so none changes.
+    let both = [SpaceSelector::id(&child.id), SpaceSelector::id(&ready.id)];
+    change_for(&both).await.unwrap_err();
+    assert_eq!(narrowing().await, PermissionsConfig::default());
+    change_for(&both[..1]).await.unwrap();
+    assert_eq!(narrowing().await, change.set);
+    assert_eq!(manager.queue_entries().await.unwrap()[0].id, entry.id);
 }
 
 #[tokio::test]

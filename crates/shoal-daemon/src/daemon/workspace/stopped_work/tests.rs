@@ -3,12 +3,22 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::{PermissionChange, PermissionsConfig},
     daemon::test_support::{chat, manager, repository},
+    daemon::workspace::Stopped,
     execution::{
         TrackedAgent,
         recovery::{LastSession, LastSessionExt},
     },
     protocol::SavedAgent,
 };
+
+/// The stopped `agents` and `chats`, without waiting launches.
+fn stopped_of<'a>(agents: &'a [SavedAgent], chats: &'a [SpaceSelector]) -> Stopped<'a> {
+    Stopped {
+        agents,
+        chats,
+        launches: &[],
+    }
+}
 
 #[tokio::test]
 async fn a_permission_change_changes_no_agent_or_chat_when_one_is_refused() {
@@ -50,18 +60,20 @@ async fn a_permission_change_changes_no_agent_or_chat_when_one_is_refused() {
     let chats = [SpaceSelector::id(&talk.id)];
 
     // The second workspace saved no agent, so the first keeps its own.
-    let changed = manager.change_stopped_permissions(&agents, &[], &change, None);
+    let changed = manager.change_stopped_permissions(stopped_of(&agents, &[]), &change, None);
     assert!(changed.await.is_err());
     assert_eq!(stopped(&manager), PermissionsConfig::default());
     // A running chat is not saved, so the agent keeps its own too.
-    let changed = manager.change_stopped_permissions(&agents[..1], &chats, &change, None);
+    let changed =
+        manager.change_stopped_permissions(stopped_of(&agents[..1], &chats), &change, None);
     assert!(changed.await.is_err());
     assert_eq!(stopped(&manager), PermissionsConfig::default());
     // A space's process gives only what it holds: no workspace's mode merges
     // directly here.
     manager.save_chat(&talk.id, None).await.unwrap();
     let giver = running_id.as_ref();
-    let changed = manager.change_stopped_permissions(&agents[..1], &chats, &change, giver);
+    let changed =
+        manager.change_stopped_permissions(stopped_of(&agents[..1], &chats), &change, giver);
     assert!(changed.await.is_err());
     assert_eq!(stopped(&manager), PermissionsConfig::default());
     let saved = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
@@ -73,7 +85,7 @@ async fn a_permission_change_changes_no_agent_or_chat_when_one_is_refused() {
     let saved = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
     assert_eq!(saved.narrowing, PermissionsConfig::default());
     // The user gives any, to a saved chat as to a stopped agent.
-    (manager.change_stopped_permissions(&agents[..1], &chats, &change, None))
+    (manager.change_stopped_permissions(stopped_of(&agents[..1], &chats), &change, None))
         .await
         .unwrap();
     assert_eq!(stopped(&manager), change.set);
