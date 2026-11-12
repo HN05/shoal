@@ -46,7 +46,7 @@ fn queued(
 ) -> Result<Vec<(Arrived, Entry)>> {
     let rows = db
         .prepare(
-            "SELECT seq,id,kind,name,created_at,COALESCE(workspace_id,opens_workspace_id),job
+            "SELECT seq,id,kind,name,created_at,COALESCE(space_id,opens_workspace_id),job
              FROM agent_queue WHERE state=?1 ORDER BY seq",
         )?
         .query_map([QueueState::Queued], |row| {

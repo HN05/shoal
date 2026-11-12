@@ -154,7 +154,7 @@ impl ExecutionKindExt for ExecutionKind {
             Self::Command | Self::Merge | Self::Unmerge => store::require_ready(tx, workspace_id)?,
             Self::Setup => {
                 let blocking: Option<ExecutionId> = tx.query_row(
-                    "SELECT id FROM executions WHERE workspace_id=?1 AND (?2 IS NULL OR id != ?2) LIMIT 1",
+                    "SELECT id FROM executions WHERE space_id=?1 AND (?2 IS NULL OR id != ?2) LIMIT 1",
                     params![workspace_id, parent_execution],
                     |r| r.get(0),
                 ).optional()?;
@@ -384,7 +384,7 @@ impl Manager {
             .write(move |tx| {
                 kind.reserve(tx, &workspace_id, parent_execution.as_ref())?;
                 tx.execute(
-                    "INSERT INTO executions(id,workspace_id,state,wrapper,scope_token,agent_execution)
+                    "INSERT INTO executions(id,space_id,state,wrapper,scope_token,agent_execution)
                         VALUES (?1,?2,?3,?4,?5,?6)",
                     params![
                         id,

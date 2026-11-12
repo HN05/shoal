@@ -87,7 +87,7 @@ impl Manager {
                         if rules.awaiting_setup
                             && !store::exists(
                                 tx,
-                                "SELECT 1 FROM executions WHERE workspace_id=?1",
+                                "SELECT 1 FROM executions WHERE space_id=?1",
                                 [&id],
                             )? =>
                     {

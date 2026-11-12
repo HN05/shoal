@@ -95,7 +95,7 @@ async fn interrupted(
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO executions(id,workspace_id,state,wrapper,child,group_id)
+                "INSERT INTO executions(id,space_id,state,wrapper,child,group_id)
                     VALUES (?1,?2,?3,?4,?5,?6)",
                 rusqlite::params![
                     id,

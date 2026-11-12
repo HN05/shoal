@@ -117,7 +117,7 @@ fn space(
     }
     let launch: Option<(String, Option<String>)> = db
         .query_row(
-            "SELECT id,COALESCE(workspace_id,opens_workspace_id) FROM agent_queue
+            "SELECT id,COALESCE(space_id,opens_workspace_id) FROM agent_queue
              WHERE repository_id=?1 AND kind=?3 AND id=?2 AND id IS NOT ?4",
             params![repository, selector, QueueKind::Launch, entry],
             |row| Ok((row.get(0)?, row.get(1)?)),

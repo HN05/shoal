@@ -124,7 +124,7 @@ impl Manager {
                 ensure!(
                     !store::exists(
                         tx,
-                        "SELECT 1 FROM executions WHERE workspace_id=?1 AND (?2 IS NULL OR id!=?2)",
+                        "SELECT 1 FROM executions WHERE space_id=?1 AND (?2 IS NULL OR id!=?2)",
                         params![workspace.id, caller_execution]
                     )?,
                     "workspace has other active or unknown executions; stop them before renaming"
@@ -186,7 +186,7 @@ impl Manager {
                 ensure!(
                     !store::exists(
                         tx,
-                        "SELECT 1 FROM executions WHERE workspace_id=?1 AND (?2 IS NULL OR id!=?2)",
+                        "SELECT 1 FROM executions WHERE space_id=?1 AND (?2 IS NULL OR id!=?2)",
                         params![id, caller_execution]
                     )?,
                     "workspace has other active or unknown executions; stop them before renaming"

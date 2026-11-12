@@ -307,7 +307,7 @@ impl Manager {
                     "spaces were opened below it during removal; retaining it"
                 );
                 events::record(tx, &id, events::EventKind::Removed, cause, None)?;
-                tx.execute("DELETE FROM executions WHERE workspace_id=?1", [&id])?;
+                tx.execute("DELETE FROM executions WHERE space_id=?1", [&id])?;
                 crate::daemon::workspace_files::forget_removed(tx, &id)?;
                 let released = crate::daemon::approvals::release_decided_by(tx, &id)?;
                 tx.execute("DELETE FROM workspaces WHERE id=?1", [&id])?;

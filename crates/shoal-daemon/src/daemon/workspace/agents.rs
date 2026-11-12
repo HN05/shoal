@@ -487,7 +487,7 @@ impl Manager {
                 )?;
                 db.execute(
                     "UPDATE workspaces SET mode=?2,narrowing=?3
-                     WHERE id=(SELECT workspace_id FROM executions WHERE id=?1)",
+                     WHERE id=(SELECT space_id FROM executions WHERE id=?1)",
                     rusqlite::params![execution, agent.mode, narrowing],
                 )?;
                 Ok(())
@@ -852,7 +852,7 @@ impl Manager {
             .run(move |db| {
                 Ok(db
                     .query_row(
-                        "SELECT agent,workspace_id FROM executions WHERE id=?1 AND agent IS NOT NULL",
+                        "SELECT agent,space_id FROM executions WHERE id=?1 AND agent IS NOT NULL",
                         [execution],
                         |row| Ok((row.get(0)?, row.get(1)?)),
                     )

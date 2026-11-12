@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_owners, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 159;
+pub(super) const SCHEMA_VERSION: i64 = 160;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -425,6 +425,11 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (157, include_str!("setup_blockers.sql"), None),
     (158, include_str!("agent_turns.sql"), None),
     (159, include_str!("agent_stops.sql"), None),
+    (
+        160,
+        include_str!("execution_spaces.sql"),
+        Some(unreference_execution_spaces),
+    ),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
@@ -658,17 +663,41 @@ pub(super) fn allow_files_without_repository(db: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// An execution and its queue entry belong to a space of either kind, so
+/// the column naming it references neither space table.
+pub(super) fn unreference_execution_spaces(db: &Connection) -> Result<()> {
+    drop_constraint(
+        db,
+        "executions",
+        " workspace_id TEXT NOT NULL",
+        "REFERENCES workspaces(id)",
+    )?;
+    // The leading space keeps `opens_workspace_id` out of the match.
+    drop_constraint(
+        db,
+        "agent_queue",
+        " workspace_id TEXT",
+        "REFERENCES workspaces(id) ON DELETE CASCADE",
+    )
+}
+
 /// Drop the `NOT NULL` constraint of the column `table` defines as
-/// `column`, its name and type, in place, as SQLite documents for removing
-/// a constraint: rebuilding the table would delete the rows of every table
-/// that references it.
+/// `column`, its name and type.
 fn drop_not_null(db: &Connection, table: &str, column: &str) -> Result<()> {
+    drop_constraint(db, table, column, "NOT NULL")
+}
+
+/// Drop `constraint`, which follows the column `table` defines as
+/// `column`, in place, as SQLite documents for removing a `NOT NULL` or
+/// foreign key constraint: rebuilding the table would delete the rows of
+/// every table that references it.
+fn drop_constraint(db: &Connection, table: &str, column: &str, constraint: &str) -> Result<()> {
     let sql: String = db.query_row(
         "SELECT sql FROM sqlite_schema WHERE type='table' AND name=?1",
         [table],
         |row| row.get(0),
     )?;
-    let constrained = format!("{column} NOT NULL");
+    let constrained = format!("{column} {constraint}");
     match sql.matches(&constrained).count() {
         0 => return Ok(()),
         1 => {}

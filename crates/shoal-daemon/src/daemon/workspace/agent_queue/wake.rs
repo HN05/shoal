@@ -52,8 +52,8 @@ struct RestoreRow {
 fn restore_rows(db: &Connection) -> Result<Vec<RestoreRow>> {
     Ok(db
         .prepare(
-            "SELECT id,workspace_id,execution_id FROM agent_queue
-             WHERE kind=?1 AND workspace_id IS NOT NULL AND execution_id IS NOT NULL
+            "SELECT id,space_id,execution_id FROM agent_queue
+             WHERE kind=?1 AND space_id IS NOT NULL AND execution_id IS NOT NULL
                 AND automatic",
         )?
         .query_map([QueueKind::Restore], |row| {
@@ -80,7 +80,7 @@ fn queued_restores(db: &Connection, workspace_id: &SpaceId) -> Result<Vec<Queued
     Ok(db
         .prepare(
             "SELECT execution_id,env IS NOT NULL,automatic FROM agent_queue
-             WHERE kind=?1 AND workspace_id=?2 AND state=?3 AND execution_id IS NOT NULL",
+             WHERE kind=?1 AND space_id=?2 AND state=?3 AND execution_id IS NOT NULL",
         )?
         .query_map(
             rusqlite::params![QueueKind::Restore, workspace_id, QueueState::Queued],

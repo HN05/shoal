@@ -548,7 +548,7 @@ async fn deleting_every_workspaces_files_spares_active_ones() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO executions(id,workspace_id,state) VALUES ('agent',?1,'running'),
+                "INSERT INTO executions(id,space_id,state) VALUES ('agent',?1,'running'),
                     ('command',?2,'unknown')",
                 [active_id, unresolved_id],
             )?;
@@ -1043,6 +1043,7 @@ async fn upgrading_records_the_copies_messages_attached_before() {
     manager
         .store
         .run(|db| {
+            db.execute_batch(include_str!("../store/execution_spaces_undo.sql"))?;
             db.execute_batch(include_str!("../store/agent_stops_undo.sql"))?;
             db.execute_batch(include_str!("../store/agent_turns_undo.sql"))?;
             db.execute_batch(include_str!("../store/agent_queue_scopes_undo.sql"))?;
@@ -1169,6 +1170,7 @@ async fn an_earlier_copy_that_cannot_be_read_is_recorded_on_a_later_pass() {
     manager
         .store
         .run(|db| {
+            db.execute_batch(include_str!("../store/execution_spaces_undo.sql"))?;
             db.execute_batch(include_str!("../store/agent_stops_undo.sql"))?;
             db.execute_batch(include_str!("../store/agent_turns_undo.sql"))?;
             db.execute_batch(include_str!("../store/agent_queue_scopes_undo.sql"))?;
@@ -1219,6 +1221,7 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
     manager
         .store
         .run(|db| {
+            db.execute_batch(include_str!("../store/execution_spaces_undo.sql"))?;
             db.execute_batch(include_str!("../store/agent_stops_undo.sql"))?;
             db.execute_batch(include_str!("../store/agent_turns_undo.sql"))?;
             db.execute_batch(include_str!("../store/agent_queue_scopes_undo.sql"))?;

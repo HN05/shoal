@@ -32,7 +32,7 @@ pub(super) struct QueuedRow {
 pub(super) fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
     Ok(db
         .prepare(
-            "SELECT id,repository_id,kind,execution_id,workspace_id,env IS NOT NULL,automatic,job
+            "SELECT id,repository_id,kind,execution_id,space_id,env IS NOT NULL,automatic,job
              FROM agent_queue WHERE state=?1 ORDER BY seq",
         )?
         .query_map([QueueState::Queued], |row| {
@@ -69,7 +69,7 @@ pub(super) struct Launch {
 /// them.
 fn end_failed_starts(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<()> {
     tx.execute(
-        "DELETE FROM agent_queue WHERE ?1 IN (workspace_id,opens_workspace_id)
+        "DELETE FROM agent_queue WHERE ?1 IN (space_id,opens_workspace_id)
          AND kind=?2 AND state=?3",
         params![workspace, QueueKind::Launch, QueueState::Starting],
     )?;
@@ -83,7 +83,7 @@ fn end_failed_starts(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Res
 pub(super) fn queues_agent_in(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<bool> {
     crate::daemon::store::exists(
         tx,
-        "SELECT 1 FROM agent_queue WHERE ?1 IN (workspace_id,opens_workspace_id)
+        "SELECT 1 FROM agent_queue WHERE ?1 IN (space_id,opens_workspace_id)
          AND kind IN (?2,?3) AND NOT (?5 AND kind=?2 AND state=?4)",
         params![
             workspace,
@@ -103,7 +103,7 @@ pub(super) fn queues_launch_in(
 ) -> Result<bool> {
     crate::daemon::store::exists(
         tx,
-        "SELECT 1 FROM agent_queue WHERE ?1 IN (workspace_id,opens_workspace_id) AND kind=?2",
+        "SELECT 1 FROM agent_queue WHERE ?1 IN (space_id,opens_workspace_id) AND kind=?2",
         params![workspace, QueueKind::Launch],
     )
 }
@@ -115,7 +115,7 @@ fn setup_failed(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<b
     crate::daemon::store::exists(
         tx,
         "SELECT 1 FROM workspaces w WHERE id=?1 AND (state=?2 OR state=?3
-            AND NOT EXISTS (SELECT 1 FROM executions e WHERE e.workspace_id=w.id))",
+            AND NOT EXISTS (SELECT 1 FROM executions e WHERE e.space_id=w.id))",
         params![
             workspace,
             crate::state::WorkspaceState::Failed,
@@ -258,7 +258,7 @@ pub(super) fn record_waiting_restore(
     let now = UnixTime::now();
     let workspace = &restore.workspace;
     db.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,seen_at,workspace_id,execution_id,automatic)
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,seen_at,space_id,execution_id,automatic)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?7,?8,?9,1)
          ON CONFLICT(execution_id) DO UPDATE SET state=excluded.state,seen_at=excluded.seen_at",
         params![
@@ -293,7 +293,7 @@ pub(crate) fn last_seq(db: &rusqlite::Connection) -> Result<i64> {
     Ok(seq.unwrap_or(0))
 }
 
-pub(super) const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,mode,narrowing,issue_title,state,created_at,workspace_id,execution_id,opens_workspace_id,base_branch,job,scope_space_id";
+pub(super) const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,mode,narrowing,issue_title,state,created_at,space_id,execution_id,opens_workspace_id,base_branch,job,scope_space_id";
 
 pub(super) fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
     Ok(QueueEntry {
@@ -308,7 +308,7 @@ pub(super) fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         state: row.get("state")?,
         position: None,
         created_at: row.get("created_at")?,
-        workspace_id: row.get("workspace_id")?,
+        workspace_id: row.get("space_id")?,
         execution: row.get("execution_id")?,
         opens: row.get("opens_workspace_id")?,
         queued_by: row.get("scope_space_id")?,

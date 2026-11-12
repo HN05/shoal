@@ -495,8 +495,8 @@ async fn workspaces_with_unprotected_executions(manager: &Manager) -> Result<Vec
         .run(|db| {
             Ok(db
                 .prepare(
-                    "SELECT id, workspace_id FROM executions
-                     WHERE workspace_id NOT IN (SELECT workspace_id FROM ci_jobs)",
+                    "SELECT id, space_id FROM executions
+                     WHERE space_id NOT IN (SELECT workspace_id FROM ci_jobs)",
                 )?
                 .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
                 .collect::<rusqlite::Result<_>>()?)

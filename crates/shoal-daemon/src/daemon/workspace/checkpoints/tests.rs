@@ -345,7 +345,7 @@ async fn restore_refuses_what_it_would_lose_or_disturb() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO executions(id,workspace_id,state) VALUES ('agent',?1,'running')",
+                "INSERT INTO executions(id,space_id,state) VALUES ('agent',?1,'running')",
                 [id],
             )?;
             Ok(())

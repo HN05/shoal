@@ -317,7 +317,7 @@ pub fn require_ready(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
 /// Whether any workspace of the repository has a tracked execution.
 pub fn repository_has_executions(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
     Ok(db.query_row(
-        "SELECT EXISTS(SELECT 1 FROM executions e JOIN workspaces w ON w.id=e.workspace_id WHERE w.repository_id=?1)",
+        "SELECT EXISTS(SELECT 1 FROM executions e JOIN workspaces w ON w.id=e.space_id WHERE w.repository_id=?1)",
         [repository_id],
         |row| row.get(0),
     )?)
@@ -531,12 +531,12 @@ pub fn ports(db: &Connection, workspace_id: Option<&SpaceId>) -> Result<Vec<Port
 }
 
 const EXECUTION_COLUMNS: &str =
-    "id,workspace_id,state,wrapper,child,group_id,origin,agent,model,effort,mode,narrowing";
+    "id,space_id,state,wrapper,child,group_id,origin,agent,model,effort,mode,narrowing";
 
 fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
     Ok(Execution {
         id: row.get("id")?,
-        workspace_id: row.get("workspace_id")?,
+        workspace_id: row.get("space_id")?,
         state: row.get("state")?,
         wrapper: json_column(row, "wrapper")?,
         child: json_column(row, "child")?,
@@ -554,7 +554,7 @@ fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
 }
 
 fn executions_query() -> String {
-    format!("SELECT {EXECUTION_COLUMNS} FROM executions WHERE workspace_id=?1")
+    format!("SELECT {EXECUTION_COLUMNS} FROM executions WHERE space_id=?1")
 }
 
 pub fn find_execution(db: &Connection, id: &ExecutionId) -> Result<Option<Execution>> {
@@ -610,7 +610,7 @@ impl AgentExecution {
 pub fn agent_executions(db: &mut Connection) -> Result<HashMap<SpaceId, AgentExecution>> {
     let mut agents: HashMap<SpaceId, AgentExecution> = HashMap::new();
     let mut statement = db.prepare(
-        "SELECT workspace_id,agent,state,child IS NOT NULL FROM executions WHERE agent IS NOT NULL",
+        "SELECT space_id,agent,state,child IS NOT NULL FROM executions WHERE agent IS NOT NULL",
     )?;
     let rows = statement.query_map([], |row| {
         let execution = AgentExecution {
@@ -640,7 +640,7 @@ pub fn repository_executions(
     Ok(db
         .prepare(&format!(
             "SELECT {EXECUTION_COLUMNS} FROM executions
-                WHERE workspace_id IN (SELECT id FROM workspaces WHERE repository_id=?1)"
+                WHERE space_id IN (SELECT id FROM workspaces WHERE repository_id=?1)"
         ))?
         .query_map([repository_id], execution)?
         .collect::<rusqlite::Result<Vec<_>>>()?)

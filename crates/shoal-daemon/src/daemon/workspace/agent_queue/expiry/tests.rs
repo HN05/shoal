@@ -14,7 +14,7 @@ async fn database() -> Result<(tempfile::TempDir, Store)> {
                  INSERT INTO workspaces(id,repository_id,name,path,branch,state)
                  VALUES ('workspace','repo','work','/unused/work','work','ready');
                  INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,
-                     execution_id,state,created_at,seen_at,workspace_id) VALUES
+                     execution_id,state,created_at,seen_at,space_id) VALUES
                  ('launch','launch','repo','launch','codex','{}','{}',NULL,'starting',0,99,NULL),
                  ('opened','launch','repo','opened','codex','{}','{}',NULL,'starting',0,99,'workspace'),
                  ('restore','restore','repo','restore','codex',NULL,'{}','execution','starting',0,99,'workspace');",
@@ -39,7 +39,7 @@ async fn expiry_commits_deletions_and_returns_only_reportable_failures() -> Resu
         .write(|tx| {
             tx.execute_batch(
                 "INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,
-                     execution_id,state,created_at,seen_at,workspace_id) VALUES
+                     execution_id,state,created_at,seen_at,space_id) VALUES
                  ('held','launch','repo','held','codex','{}','{}',NULL,'starting',0,99,NULL),
                  ('boundary','launch','repo','boundary','codex','{}','{}',NULL,'starting',0,100,NULL),
                  ('recent','launch','repo','recent','codex','{}','{}',NULL,'starting',0,101,NULL),

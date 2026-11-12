@@ -340,9 +340,7 @@ impl Manager {
     pub(super) async fn workspace_has_executions(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         self.store
-            .run(move |db| {
-                store::exists(db, "SELECT 1 FROM executions WHERE workspace_id=?1", [id])
-            })
+            .run(move |db| store::exists(db, "SELECT 1 FROM executions WHERE space_id=?1", [id]))
             .await
     }
 
@@ -358,7 +356,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let count: i64 = db.query_row(
-                    "SELECT COUNT(*) FROM executions WHERE workspace_id=?1",
+                    "SELECT COUNT(*) FROM executions WHERE space_id=?1",
                     [id],
                     |row| row.get(0),
                 )?;
@@ -509,7 +507,7 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
     workspace.links = store::space_links(db, &workspace.id)?;
     workspace.running = store::exists(
         db,
-        "SELECT 1 FROM executions WHERE workspace_id=?1 AND state=?2",
+        "SELECT 1 FROM executions WHERE space_id=?1 AND state=?2",
         rusqlite::params![workspace.id, crate::state::ExecutionState::Running],
     )?;
     workspace.done = store::exists(

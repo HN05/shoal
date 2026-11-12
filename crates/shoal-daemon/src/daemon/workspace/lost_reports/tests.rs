@@ -29,7 +29,7 @@ async fn workspace_in(
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO executions(id,workspace_id,state) VALUES ('agent',?1,?2)",
+                "INSERT INTO executions(id,space_id,state) VALUES ('agent',?1,?2)",
                 rusqlite::params![id, state],
             )?;
             Ok(())
@@ -181,7 +181,7 @@ async fn a_lost_report_waits_for_its_execution_to_reattach() {
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE executions SET state='running' WHERE workspace_id=?1",
+                "UPDATE executions SET state='running' WHERE space_id=?1",
                 [id],
             )?;
             Ok(())

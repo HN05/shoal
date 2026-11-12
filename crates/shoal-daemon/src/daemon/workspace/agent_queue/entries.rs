@@ -300,9 +300,9 @@ impl Manager {
             .store
             .write(move |tx| {
                 let started = tx.execute(
-                    "UPDATE agent_queue SET workspace_id=?2
+                    "UPDATE agent_queue SET space_id=?2
                      WHERE id=?1 AND state=?3 AND (opens_workspace_id IS NULL OR opens_workspace_id=?2)
-                     AND (workspace_id IS NULL OR workspace_id=?2)",
+                     AND (space_id IS NULL OR space_id=?2)",
                     params![id, workspace.id, QueueState::Starting],
                 )?;
                 if started == 1 {
@@ -312,7 +312,7 @@ impl Manager {
                     true => tx.execute(
                         "UPDATE agent_queue SET opens_workspace_id=?2
                          WHERE id=?1 AND state=?3 AND kind=?4 AND repository_id=?5
-                         AND workspace_id IS NULL AND opens_workspace_id IS NULL",
+                         AND space_id IS NULL AND opens_workspace_id IS NULL",
                         params![
                             id,
                             workspace.id,
@@ -357,8 +357,8 @@ impl Manager {
             .run(move |db| {
                 crate::daemon::store::exists(
                     db,
-                    "SELECT 1 FROM agent_queue WHERE kind=?2 AND (workspace_id=?1 OR opens_workspace_id=?1
-                        OR (scope_space_id=?1 AND workspace_id IS NULL))",
+                    "SELECT 1 FROM agent_queue WHERE kind=?2 AND (space_id=?1 OR opens_workspace_id=?1
+                        OR (scope_space_id=?1 AND space_id IS NULL))",
                     params![space_id, QueueKind::Launch],
                 )
             })
@@ -399,9 +399,9 @@ impl Manager {
             .run(|db| {
                 Ok(db
                     .prepare(
-                        "SELECT DISTINCT COALESCE(workspace_id,opens_workspace_id) FROM agent_queue
+                        "SELECT DISTINCT COALESCE(space_id,opens_workspace_id) FROM agent_queue
                          WHERE kind IN (?1,?2)
-                            AND COALESCE(workspace_id,opens_workspace_id) IS NOT NULL",
+                            AND COALESCE(space_id,opens_workspace_id) IS NOT NULL",
                     )?
                     .query_map(params![QueueKind::Launch, QueueKind::Restore], |row| {
                         row.get(0)
@@ -421,7 +421,7 @@ impl Manager {
             .run(move |db| {
                 let entry: Option<(SpaceName, bool, Option<SpaceId>)> = db
                     .query_row(
-                        "SELECT name, state=?2, COALESCE(workspace_id,opens_workspace_id)
+                        "SELECT name, state=?2, COALESCE(space_id,opens_workspace_id)
                             FROM agent_queue WHERE id=?1",
                         params![entry_id, QueueState::Starting],
                         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
@@ -465,7 +465,7 @@ impl Manager {
             .store
             .write(move |tx| {
                 let consumed = tx.execute(
-                    "DELETE FROM agent_queue WHERE id=?1 AND workspace_id=?2 AND state=?3",
+                    "DELETE FROM agent_queue WHERE id=?1 AND space_id=?2 AND state=?3",
                     params![entry, workspace, QueueState::Starting],
                 )?;
                 if consumed == 1 {

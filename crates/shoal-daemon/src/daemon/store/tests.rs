@@ -505,13 +505,22 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 159 {
         db.execute_batch(include_str!("agent_stops.sql"))?;
     }
+    if version >= 160 {
+        unreference_execution_spaces(&db)?;
+        db.execute_batch(include_str!("execution_spaces.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
-    db.execute_batch(
-            "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+    let space = if version >= 160 {
+        "space_id"
+    } else {
+        "workspace_id"
+    };
+    db.execute_batch(&format!(
+        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
             INSERT INTO workspaces(id,repository_id,name,path,branch,state)
                 VALUES ('workspace','repo','worker','/work','worker','ready');
-            INSERT INTO executions(id,workspace_id,state) VALUES ('execution','workspace','running');",
-        )?;
+            INSERT INTO executions(id,{space},state) VALUES ('execution','workspace','running');"
+    ))?;
     Ok(db)
 }
 
@@ -1060,7 +1069,7 @@ fn restores_outlive_their_execution_and_launches_keep_their_blockers() -> Result
     assert_eq!(count("SELECT COUNT(*) FROM agent_queue")?, 2);
     // A restore the daemon starts carries its terminal's variables.
     db.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,env,execution_id,state,created_at,workspace_id)
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,env,execution_id,state,created_at,space_id)
             VALUES ('started','restore','repo','worker','claude','{}','ended','queued',1,'workspace')",
         [],
     )?;
@@ -1358,6 +1367,48 @@ fn migration_makes_the_restores_waiting_wrappers_carry_out_automatic() -> Result
 }
 
 #[test]
+fn executions_and_queue_restores_keep_their_workspace_as_their_space() -> Result<()> {
+    let mut db = historical_database(159)?;
+    db.execute_batch(
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,execution_id,state,created_at,workspace_id)
+            VALUES ('restore','restore','repo','worker','claude','execution','queued',1,'workspace');",
+    )?;
+    migrate(&mut db)?;
+    let spaces = |db: &Connection| -> Result<Vec<(String, String)>> {
+        Ok(db
+            .prepare(
+                "SELECT 'execution', space_id FROM executions
+                 UNION ALL SELECT 'queue', space_id FROM agent_queue ORDER BY 1, 2",
+            )?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?)
+    };
+    let kept = spaces(&db)?;
+    assert_eq!(
+        kept,
+        [
+            ("execution".into(), "workspace".into()),
+            ("queue".into(), "workspace".into())
+        ]
+    );
+
+    // A chat's execution and restore go with the chat, as a workspace's go
+    // with the workspace.
+    db.execute_batch(
+        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
+            VALUES ('chat','repo','chat','claude',1,'b',1);
+         INSERT INTO executions(id,space_id,state) VALUES ('chat-execution','chat','running');
+         INSERT INTO agent_queue(id,kind,repository_id,name,agent,execution_id,state,created_at,space_id)
+            VALUES ('chat-restore','restore','repo','chat','claude','chat-execution','queued',1,'chat');
+         DELETE FROM chats WHERE id='chat';",
+    )?;
+    assert_eq!(spaces(&db)?, kept);
+    db.execute("DELETE FROM workspaces WHERE id='workspace'", [])?;
+    assert!(spaces(&db)?.is_empty());
+    Ok(())
+}
+
+#[test]
 fn migration_keeps_each_space_completion_in_one_table() -> Result<()> {
     let mut db = historical_database(152)?;
     db.execute_batch(
@@ -1466,7 +1517,7 @@ fn mappers_use_named_columns() -> Result<()> {
                     'abc','refs/heads/main','/git/worktrees/worker','1:2',1);
             INSERT INTO ports(workspace_id,name,port,env_var,reason)
                 VALUES ('workspace','web',12345,'WEB_PORT',NULL);
-            INSERT INTO executions(id,workspace_id,state,wrapper,child,group_id,agent)
+            INSERT INTO executions(id,space_id,state,wrapper,child,group_id,agent)
                 VALUES ('execution','workspace','unknown','{"pid":123,"birth":"wrapper"}',
                     '{"pid":456,"birth":"child"}',456,'claude');"#,
     )?;
@@ -1547,7 +1598,7 @@ fn seed_interrupted_operations(db: &mut Connection) -> Result<()> {
     for state in WorkspaceState::ALL {
         db.execute("INSERT INTO workspaces(id,repository_id,name,path,branch,state,error) VALUES (?1,'repo',?1,?1,?1,?1,'original error')", [state])?;
     }
-    db.execute_batch("INSERT INTO executions(id,workspace_id,state) VALUES ('execution','preparing','running');
+    db.execute_batch("INSERT INTO executions(id,space_id,state) VALUES ('execution','preparing','running');
             INSERT INTO simulator_clean_requests(request_id,workspace_id,record)
                 VALUES ('clean','preparing','{\"status\":\"requested\",\"reason\":\"keep audit\"}');")?;
     Ok(())

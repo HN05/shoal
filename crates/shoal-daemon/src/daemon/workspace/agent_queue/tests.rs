@@ -352,7 +352,7 @@ async fn each_agent_execution_uses_its_own_slot() {
         .run(move |db| {
             for execution in ["first", "second"] {
                 db.execute(
-                    "INSERT INTO executions(id,workspace_id,state) VALUES (?1,?2,?3)",
+                    "INSERT INTO executions(id,space_id,state) VALUES (?1,?2,?3)",
                     params![execution, id, ExecutionState::Unknown],
                 )?;
             }
@@ -400,7 +400,7 @@ async fn a_ci_jobs_runner_awaiting_reattachment_holds_no_agent_slot() {
                 params![repository, id, job],
             )?;
             db.execute(
-                "INSERT INTO executions(id,workspace_id,state) VALUES ('runner',?1,?2)",
+                "INSERT INTO executions(id,space_id,state) VALUES ('runner',?1,?2)",
                 params![id, ExecutionState::Unknown],
             )?;
             Ok(())

@@ -311,7 +311,7 @@ pub(crate) fn record_chat_conversion(
     anyhow::ensure!(
         crate::daemon::store::exists(
             tx,
-            "SELECT 1 FROM workspaces JOIN executions ON executions.workspace_id=workspaces.id
+            "SELECT 1 FROM workspaces JOIN executions ON executions.space_id=workspaces.id
              WHERE workspaces.id=?1 AND workspaces.state=?2 AND executions.id=?3
                 AND executions.state=?4",
             params![
@@ -390,7 +390,7 @@ pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) ->
         [id],
     )?;
     move_agent_messages(tx, id)?;
-    tx.execute("DELETE FROM executions WHERE workspace_id=?1", [id])?;
+    forget_executions(tx, id)?;
     tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
     // Last, since deleting the workspace's row deletes the completion.
     if let Some(completion) = &row.space_completion {
@@ -460,10 +460,19 @@ pub(crate) fn replace_workspace(
     )?;
     move_agent_messages(tx, id)?;
     let released = release_decided_by(tx, id)?;
-    tx.execute("DELETE FROM executions WHERE workspace_id=?1", [id])?;
+    forget_executions(tx, id)?;
     tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
     forget(tx, id)?;
     Ok(released)
+}
+
+/// Delete the executions of the space `id` and the queue entries that
+/// restore or opened them, which removing a space deletes but a row that
+/// moves to the other table keeps.
+fn forget_executions(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
+    tx.execute("DELETE FROM executions WHERE space_id=?1", [id])?;
+    tx.execute("DELETE FROM agent_queue WHERE space_id=?1", [id])?;
+    Ok(())
 }
 
 /// Make the unread agent messages of the workspace `id` the unread messages

@@ -192,7 +192,7 @@ pub(super) fn idle(db: &Connection, home: &HomeKey) -> Result<Vec<AttachedFile>>
     Ok(db
         .prepare(&format!(
             "SELECT {COLUMNS} FROM workspace_files WHERE {IN_HOME}
-                AND space_id NOT IN (SELECT workspace_id FROM executions)
+                AND space_id NOT IN (SELECT space_id FROM executions)
                 AND space_id NOT IN (SELECT id FROM chats)
                 ORDER BY id"
         ))?

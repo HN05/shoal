@@ -916,7 +916,7 @@ fn stop_asks_before_forgetting_an_execution_it_cannot_prove_ended() {
     let insert = |fixture: &Fixture| {
         let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
         db.execute(
-            "INSERT INTO executions(id,workspace_id,state,wrapper) VALUES ('unlaunched',?1,'unknown',?2)",
+            "INSERT INTO executions(id,space_id,state,wrapper) VALUES ('unlaunched',?1,'unknown',?2)",
             rusqlite::params![
                 workspace["id"].as_str().unwrap(),
                 execution["wrapper"].to_string()

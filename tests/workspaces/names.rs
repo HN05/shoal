@@ -86,7 +86,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
     }
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
-        "INSERT INTO executions(id,workspace_id,state) VALUES ('unknown',?1,'unknown')",
+        "INSERT INTO executions(id,space_id,state) VALUES ('unknown',?1,'unknown')",
         [workspace["id"].as_str().unwrap()],
     )
     .unwrap();
@@ -388,7 +388,7 @@ fn work_rename_finishes_an_interrupted_rename() {
             git(path, &["branch", "-m", git_branch]);
         }
         db.execute(
-            "INSERT INTO executions(id,workspace_id,state) VALUES ('leftover',?1,'unknown')",
+            "INSERT INTO executions(id,space_id,state) VALUES ('leftover',?1,'unknown')",
             [id],
         )
         .unwrap();

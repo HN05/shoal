@@ -131,7 +131,7 @@ async fn removal_check_counts_only_its_executions_without_inspection_details() {
             .store
             .run(move |db| {
                 db.execute(
-                    "INSERT INTO executions(id,workspace_id,state) VALUES ('other',?1,'running')",
+                    "INSERT INTO executions(id,space_id,state) VALUES ('other',?1,'running')",
                     [other_id],
                 )?;
                 Ok(())
@@ -150,7 +150,7 @@ async fn removal_check_counts_only_its_executions_without_inspection_details() {
             .store
             .run(move |db| {
                 db.execute(
-                    "INSERT INTO executions(id,workspace_id,state,wrapper) VALUES
+                    "INSERT INTO executions(id,space_id,state,wrapper) VALUES
                      ('running',?1,'running','invalid'), ('unknown',?1,'unknown',NULL)",
                     [id],
                 )?;
@@ -178,7 +178,7 @@ async fn deleted_removal_checks_executions_without_inspection_details() {
                 .store
                 .run(move |db| {
                     db.execute(
-                        "INSERT INTO executions(id,workspace_id,state) VALUES ('unknown',?1,'unknown')",
+                        "INSERT INTO executions(id,space_id,state) VALUES ('unknown',?1,'unknown')",
                         [id],
                     )?;
                     Ok(())
@@ -264,7 +264,7 @@ async fn the_users_removal_takes_a_workspace_whose_setup_never_started() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO executions(id,workspace_id,state) VALUES ('setup',?1,'running')",
+                "INSERT INTO executions(id,space_id,state) VALUES ('setup',?1,'running')",
                 [id],
             )?;
             Ok(())
@@ -736,9 +736,9 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
                 .store
                 .run(move |db| {
                     db.execute(
-                    "INSERT INTO executions(id,workspace_id,state) VALUES ('legacy',?1,'unknown')",
-                    [id],
-                )?;
+                        "INSERT INTO executions(id,space_id,state) VALUES ('legacy',?1,'unknown')",
+                        [id],
+                    )?;
                     Ok(())
                 })
                 .await
@@ -824,7 +824,7 @@ async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO executions(id,workspace_id,state,wrapper) VALUES ('legacy',?1,'unknown',?2)",
+                "INSERT INTO executions(id,space_id,state,wrapper) VALUES ('legacy',?1,'unknown',?2)",
                 rusqlite::params![id, dead],
             )?;
             Ok(())
@@ -910,7 +910,7 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
         let (id, pid) = (workspace.id.clone(), live.pid);
         manager.store.run(move |db| {
             db.execute(
-                "INSERT INTO executions(id,workspace_id,state,wrapper,child,group_id) VALUES ('stale',?1,'unknown',?2,?2,?3)",
+                "INSERT INTO executions(id,space_id,state,wrapper,child,group_id) VALUES ('stale',?1,'unknown',?2,?2,?3)",
                 rusqlite::params![id, stale, pid],
             )?;
             Ok(())

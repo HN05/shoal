@@ -60,7 +60,7 @@ pub(super) fn runs_elsewhere(db: &Connection, place: &Origin, space: &SpaceId) -
         "SELECT origin FROM chats WHERE restore IS NULL AND id IS NOT ?1
            AND json_extract(origin,'$.host')=?2 AND json_extract(origin,'$.place')=?3
          UNION ALL
-         SELECT origin FROM executions WHERE workspace_id IS NOT ?1 AND agent IS NOT NULL
+         SELECT origin FROM executions WHERE space_id IS NOT ?1 AND agent IS NOT NULL
            AND json_extract(origin,'$.host')=?2 AND json_extract(origin,'$.place')=?3",
     )?;
     let origins = statement.query_map(params![space, place.host, place.id()], |row| {

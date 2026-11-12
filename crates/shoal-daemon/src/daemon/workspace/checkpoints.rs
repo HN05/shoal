@@ -347,7 +347,7 @@ impl Manager {
             .run(move |db| {
                 Ok(db
                     .query_row(
-                        "SELECT id FROM executions WHERE workspace_id=?1 AND (?2 IS NULL OR id != ?2) LIMIT 1",
+                        "SELECT id FROM executions WHERE space_id=?1 AND (?2 IS NULL OR id != ?2) LIMIT 1",
                         params![id, own],
                         |row| row.get(0),
                     )

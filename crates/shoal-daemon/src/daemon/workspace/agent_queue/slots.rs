@@ -59,25 +59,25 @@ fn persisted_slots(db: &rusqlite::Connection) -> Result<PersistedSlots> {
         .collect::<rusqlite::Result<_>>()?;
     let unknown = db
         .prepare(
-            "SELECT id,workspace_id FROM executions e WHERE state=?1
-             AND NOT EXISTS (SELECT 1 FROM ci_jobs j WHERE j.workspace_id=e.workspace_id)",
+            "SELECT id,space_id FROM executions e WHERE state=?1
+             AND NOT EXISTS (SELECT 1 FROM ci_jobs j WHERE j.workspace_id=e.space_id)",
         )?
         .query_map([ExecutionState::Unknown], |row| {
             Ok(UnknownExecution {
                 id: row.get("id")?,
-                workspace: row.get("workspace_id")?,
+                workspace: row.get("space_id")?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
     let starting = db
         .prepare(
-            "SELECT repository_id,workspace_id,seen_at,execution_id FROM agent_queue
+            "SELECT repository_id,space_id,seen_at,execution_id FROM agent_queue
              WHERE state=?1 AND kind!=?2",
         )?
         .query_map(params![QueueState::Starting, QueueKind::Job], |row| {
             Ok(StartingEntry {
                 repository: row.get("repository_id")?,
-                workspace: row.get("workspace_id")?,
+                workspace: row.get("space_id")?,
                 seen_at: row.get("seen_at")?,
                 execution: row.get("execution_id")?,
             })

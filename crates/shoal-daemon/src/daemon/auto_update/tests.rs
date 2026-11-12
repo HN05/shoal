@@ -18,8 +18,8 @@ async fn restart_waits_for_background_work_and_executions_that_cannot_reattach()
                 "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/test','/test',0);
                  INSERT INTO workspaces(id,repository_id,name,path,branch,state)
                     VALUES ('workspace','repo','work','/test/work','work','ready');
-                 INSERT INTO executions(id,workspace_id,state) VALUES ('legacy','workspace','running');
-                 INSERT INTO executions(id,workspace_id,state) VALUES ('unknown','workspace','unknown');"
+                 INSERT INTO executions(id,space_id,state) VALUES ('legacy','workspace','running');
+                 INSERT INTO executions(id,space_id,state) VALUES ('unknown','workspace','unknown');"
             )?;
             Ok(())
         }).await.unwrap();

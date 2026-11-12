@@ -313,7 +313,7 @@ fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
         )
         .unwrap();
     }
-    db.execute("INSERT INTO executions(id,workspace_id,state) VALUES ('execution',?1,'running'),('legacy',?1,'unknown')", [owner]).unwrap();
+    db.execute("INSERT INTO executions(id,space_id,state) VALUES ('execution',?1,'running'),('legacy',?1,'unknown')", [owner]).unwrap();
     db.execute(
         "INSERT INTO simulators(id,record) VALUES ('simulator',?1)",
         [simulator.to_string()],
@@ -1160,7 +1160,7 @@ fn reconcile_recovers_daemon_crash_and_requires_acknowledgement_without_launch_i
     // group.
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
-        "INSERT INTO executions(id,workspace_id,state,wrapper) VALUES ('unlaunched',?1,'unknown',?2)",
+        "INSERT INTO executions(id,space_id,state,wrapper) VALUES ('unlaunched',?1,'unknown',?2)",
         rusqlite::params![
             workspace["id"].as_str().unwrap(),
             execution["wrapper"].to_string()

@@ -94,7 +94,7 @@ fn record_setup_result(
         WorkspaceState::Failed
     };
     tx.execute(
-        "UPDATE workspaces SET state=?2,error=?3,setup_finished=?4 WHERE id=(SELECT workspace_id FROM executions WHERE id=?1) AND state=?5",
+        "UPDATE workspaces SET state=?2,error=?3,setup_finished=?4 WHERE id=(SELECT space_id FROM executions WHERE id=?1) AND state=?5",
         params![id, state, error, error.is_none(), WorkspaceState::Preparing],
     )?;
     Ok(())
@@ -103,7 +103,7 @@ fn record_setup_result(
 /// Fail the preparing workspace of setup execution `id`, which never ran.
 fn record_setup_not_started(tx: &Transaction<'_>, id: &ExecutionId) -> Result<()> {
     tx.execute(
-        "UPDATE workspaces SET state=?2,error=?3,setup_finished=0 WHERE id=(SELECT workspace_id FROM executions WHERE id=?1) AND state=?4",
+        "UPDATE workspaces SET state=?2,error=?3,setup_finished=0 WHERE id=(SELECT space_id FROM executions WHERE id=?1) AND state=?4",
         params![id, WorkspaceState::Failed, SETUP_NOT_STARTED, WorkspaceState::Preparing],
     )?;
     Ok(())

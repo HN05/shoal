@@ -49,7 +49,7 @@ async fn records_report_only_running_executions() {
             .store
             .run(move |db| {
                 db.execute(
-                    "INSERT OR REPLACE INTO executions(id,workspace_id,state) VALUES ('run',?1,?2)",
+                    "INSERT OR REPLACE INTO executions(id,space_id,state) VALUES ('run',?1,?2)",
                     [id.as_str(), state],
                 )?;
                 Ok(())

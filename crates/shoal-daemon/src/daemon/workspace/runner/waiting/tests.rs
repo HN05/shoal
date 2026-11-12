@@ -186,7 +186,7 @@ async fn a_job_ranks_with_its_workspace_ahead_of_that_workspaces_restore() {
             let (repository, topic, other) = &ids;
             for (id, workspace) in [("first", other), ("restore", topic)] {
                 db.execute(
-                    "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,workspace_id,execution_id)
+                    "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,space_id,execution_id)
                      VALUES (?1,'restore',?2,?1,'claude','queued',0,?3,?1)",
                     params![id, repository, workspace],
                 )?;

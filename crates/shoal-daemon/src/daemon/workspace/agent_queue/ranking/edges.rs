@@ -138,7 +138,7 @@ fn pr_spaces(db: &Connection, url: &str) -> Result<Vec<SpaceId>> {
 fn queue_blockers(db: &Connection, blocking: &Blocking) -> Result<Vec<Edge>> {
     let rows = db
         .prepare(
-            "SELECT b.entry_id,COALESCE(q.workspace_id,q.opens_workspace_id),b.kind,b.target
+            "SELECT b.entry_id,COALESCE(q.space_id,q.opens_workspace_id),b.kind,b.target
              FROM agent_queue_blockers b JOIN agent_queue q ON q.id=b.entry_id
              WHERE q.state=?1",
         )?

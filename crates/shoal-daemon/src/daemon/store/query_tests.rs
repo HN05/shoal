@@ -15,6 +15,15 @@ fn populated_database() -> Result<Connection> {
     Ok(db)
 }
 
+/// The column naming an execution's owner: its workspace before the
+/// upgrade, its space after.
+fn execution_space(db: &Connection) -> &'static str {
+    match db.prepare("SELECT space_id FROM executions") {
+        Ok(_) => "space_id",
+        Err(_) => "workspace_id",
+    }
+}
+
 fn add_owners(db: &Connection, start: i64, end: i64) -> Result<()> {
     for n in start..end {
         let owner = format!("owner-{n}");
@@ -38,7 +47,10 @@ fn add_owners(db: &Connection, start: i64, end: i64) -> Result<()> {
             db.execute("INSERT INTO resource_leases VALUES (?1,?2,'global','pool',?3,?3,'retained',123,'read')",
                 [&id, &owner, name])?;
             db.execute(
-                "INSERT INTO executions(id,workspace_id,state) VALUES (?1,?2,'running')",
+                &format!(
+                    "INSERT INTO executions(id,{},state) VALUES (?1,?2,'running')",
+                    execution_space(db)
+                ),
                 [&id, &owner],
             )?;
         }
@@ -186,7 +198,7 @@ fn execution_owner_reads_search_migrated_index() -> Result<()> {
         &db,
         &executions_query(),
         "executions",
-        "workspace_id",
+        "space_id",
         "owner-0",
     )
 }
@@ -220,12 +232,13 @@ fn ownership_snapshot(db: &mut Connection) -> Result<Vec<Vec<Vec<rusqlite::types
     .into_iter()
     .map(|table| {
         // Columns added after version 17 are absent before the upgrade.
+        let execution_columns = format!("id,{},state,wrapper,child,group_id", execution_space(db));
         let columns = match table {
             "repositories" => "id,path,source,last_used,name,workspaces_dir",
             "workspaces" => {
                 "id,repository_id,name,path,branch,state,error,base_commit,base_ref,git_dir,git_dir_id"
             }
-            "executions" => "id,workspace_id,state,wrapper,child,group_id",
+            "executions" => &execution_columns,
             _ => "*",
         };
         let mut statement = db.prepare(&format!("SELECT {columns} FROM {table} ORDER BY rowid"))?;
@@ -261,7 +274,7 @@ async fn v17_upgrade_and_reopen_preserve_ownership_leases_and_executions() -> Re
                     SCHEMA_VERSION
                 );
                 for (index, column) in [
-                    ("executions_workspace", "workspace_id"),
+                    ("executions_space", "space_id"),
                     ("workspaces_repository", "repository_id"),
                 ] {
                     let columns = db

@@ -28,7 +28,7 @@ pub(super) fn expire_starts(
 ) -> Result<Vec<FailedStart>> {
     let stale = tx
         .prepare(
-            "SELECT id,name,kind,workspace_id FROM agent_queue
+            "SELECT id,name,kind,space_id FROM agent_queue
              WHERE state=?1 AND env IS NOT NULL AND seen_at<?2",
         )?
         .query_map(params![QueueState::Starting, cutoff], |row| {

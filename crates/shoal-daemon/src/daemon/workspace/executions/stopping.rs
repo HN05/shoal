@@ -29,7 +29,7 @@ mod tests;
 /// left for `shoal stop <workspace>` rather than failing every bulk stop.
 fn running_workspaces(db: &rusqlite::Connection) -> Result<HashSet<SpaceId>> {
     Ok(db
-        .prepare("SELECT DISTINCT workspace_id FROM executions WHERE state=?1")?
+        .prepare("SELECT DISTINCT space_id FROM executions WHERE state=?1")?
         .query_map([ExecutionState::Running], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }

@@ -49,7 +49,7 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO executions(id,workspace_id,state) VALUES ('agent',?1,'running')",
+                "INSERT INTO executions(id,space_id,state) VALUES ('agent',?1,'running')",
                 [id],
             )?;
             Ok(())
@@ -158,7 +158,7 @@ async fn turn_generations_count_turn_starts_and_continue_after_the_state_goes() 
             Ok(())
         })
     };
-    execution("INSERT INTO executions(id,workspace_id,state) VALUES ('agent',?1,'running')")
+    execution("INSERT INTO executions(id,space_id,state) VALUES ('agent',?1,'running')")
         .await
         .unwrap();
     let selected = SpaceSelector::id(&workspace.id);
@@ -175,10 +175,10 @@ async fn turn_generations_count_turn_starts_and_continue_after_the_state_goes() 
     assert_eq!(turn(&manager, &workspace.id).await, first + 1);
 
     // The state goes with its execution, and the next one counts on.
-    execution("DELETE FROM executions WHERE workspace_id=?1")
+    execution("DELETE FROM executions WHERE space_id=?1")
         .await
         .unwrap();
-    execution("INSERT INTO executions(id,workspace_id,state) VALUES ('next',?1,'running')")
+    execution("INSERT INTO executions(id,space_id,state) VALUES ('next',?1,'running')")
         .await
         .unwrap();
     report(AgentState::Idle, "next").await.unwrap();
@@ -195,7 +195,7 @@ async fn an_interrupt_stays_with_the_execution_whose_turn_it_ended() {
         .run(move |db| {
             for execution in ["first", "second"] {
                 db.execute(
-                    "INSERT INTO executions(id,workspace_id,state) VALUES (?1,?2,'running')",
+                    "INSERT INTO executions(id,space_id,state) VALUES (?1,?2,'running')",
                     rusqlite::params![execution, id],
                 )?;
             }
@@ -228,7 +228,7 @@ async fn workspaces_show_no_state_while_the_reporting_execution_is_unknown() {
         let id = id.clone();
         manager.store.run(move |db| {
             db.execute(
-                "INSERT INTO executions(id,workspace_id,state) VALUES ('agent',?1,?2)
+                "INSERT INTO executions(id,space_id,state) VALUES ('agent',?1,?2)
                  ON CONFLICT(id) DO UPDATE SET state=excluded.state",
                 params![id, state],
             )?;
@@ -374,7 +374,7 @@ async fn a_forgotten_execution_keeps_its_turn_in_the_record_it_saved() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO executions(id,workspace_id,state) VALUES
+                "INSERT INTO executions(id,space_id,state) VALUES
                     ('stopped',?1,'unknown'),('exited',?1,'unknown')",
                 [id],
             )?;

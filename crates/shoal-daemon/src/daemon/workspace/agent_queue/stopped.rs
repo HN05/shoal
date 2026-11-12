@@ -112,7 +112,7 @@ fn insert(tx: &rusqlite::Transaction<'_>, restore: &Restore) -> Result<()> {
     );
     let now = crate::time::UnixTime::now();
     tx.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,env,execution_id,state,created_at,seen_at,workspace_id,automatic)
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,env,execution_id,state,created_at,seen_at,space_id,automatic)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9,?10,?11)
          ON CONFLICT(execution_id) DO UPDATE SET automatic=automatic AND excluded.automatic",
         params![
@@ -181,7 +181,7 @@ fn all_workspaces(db: &Connection) -> Result<Vec<SpaceId>> {
 /// The workspaces with a restore in the queue.
 fn restoring_workspaces(db: &Connection) -> Result<HashSet<SpaceId>> {
     Ok(db
-        .prepare("SELECT DISTINCT workspace_id FROM agent_queue WHERE kind=?1")?
+        .prepare("SELECT DISTINCT space_id FROM agent_queue WHERE kind=?1")?
         .query_map([QueueKind::Restore], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
@@ -197,7 +197,7 @@ fn stopped_restores(db: &Connection) -> Result<HashSet<ExecutionId>> {
 fn waiting_restores(db: &Connection) -> Result<Vec<(QueueEntryId, SpaceId, ExecutionId)>> {
     Ok(db
         .prepare(
-            "SELECT id,workspace_id,execution_id FROM agent_queue
+            "SELECT id,space_id,execution_id FROM agent_queue
              WHERE kind=?1 AND env IS NOT NULL AND state=?2",
         )?
         .query_map(params![QueueKind::Restore, QueueState::Queued], |row| {
@@ -241,7 +241,7 @@ fn stopped_agent(
 /// Delete the restores the daemon starts of `workspace_id`'s stopped agents.
 fn delete_stopped_restores(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
     db.execute(
-        "DELETE FROM agent_queue WHERE workspace_id=?1 AND kind=?2 AND env IS NOT NULL",
+        "DELETE FROM agent_queue WHERE space_id=?1 AND kind=?2 AND env IS NOT NULL",
         params![workspace_id, QueueKind::Restore],
     )?;
     Ok(())

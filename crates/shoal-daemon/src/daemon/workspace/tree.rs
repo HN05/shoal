@@ -274,7 +274,7 @@ fn has_agent(column: &str) -> String {
     format!(
         "({} OR EXISTS (SELECT 1 FROM space_agent_state WHERE space_agent_state.space_id={column})
             OR EXISTS (SELECT 1 FROM agent_queue
-                WHERE agent_queue.workspace_id={column} AND agent_queue.kind='{}')
+                WHERE agent_queue.space_id={column} AND agent_queue.kind='{}')
             OR EXISTS (SELECT 1 FROM chats WHERE chats.id={column} AND chats.restore='{}'))",
         runs_agent(column),
         crate::state::QueueKind::Restore,

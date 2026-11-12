@@ -28,11 +28,11 @@ async fn recovery_reads_only_its_executions_without_inspection_details() -> Resu
                     [&id],
                 )?;
                 db.execute(
-                    "INSERT INTO executions(id,workspace_id,state) VALUES ('unknown',?1,'unknown')",
+                    "INSERT INTO executions(id,space_id,state) VALUES ('unknown',?1,'unknown')",
                     [&id],
                 )?;
                 db.execute(
-                    "INSERT INTO executions(id,workspace_id,state,wrapper)
+                    "INSERT INTO executions(id,space_id,state,wrapper)
                      VALUES ('other',?1,'running','invalid')",
                     [&other.id],
                 )?;

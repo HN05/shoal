@@ -298,7 +298,7 @@ async fn saved_agents_do_not_hide_active_commands_from_merged_cleanup() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO executions(id,workspace_id,state) VALUES ('unknown',?1,'unknown')",
+                "INSERT INTO executions(id,space_id,state) VALUES ('unknown',?1,'unknown')",
                 [id],
             )?;
             Ok(())

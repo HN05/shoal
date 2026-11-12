@@ -859,7 +859,7 @@ async fn record_group(manager: &Manager, workspace: &crate::model::Workspace, gr
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE executions SET group_id=?2 WHERE workspace_id=?1",
+                "UPDATE executions SET group_id=?2 WHERE space_id=?1",
                 rusqlite::params![id, group],
             )?;
             Ok(())
