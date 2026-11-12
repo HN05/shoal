@@ -41,6 +41,16 @@ pub(super) fn all(db: &Connection) -> Result<HashMap<ExecutionId, Protection>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// The store could not record a stop, as on a full disk.
+#[derive(Debug)]
+pub(crate) struct Unrecorded;
+
+impl std::fmt::Display for Unrecorded {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the stop could not be recorded")
+    }
+}
+
 /// What a stop saves for the agent's restore before it is delivered: the
 /// reason and turn its recovery record keeps, and whether the stop goes only
 /// with it saved.
@@ -187,6 +197,7 @@ impl Manager {
         self.store
             .write(move |tx| insert(tx, &execution, &protection, between))
             .await
+            .context(Unrecorded)
     }
 
     /// Forget the stop of the agent of `id` and its turn state as it runs

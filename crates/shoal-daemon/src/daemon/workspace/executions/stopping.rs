@@ -129,6 +129,15 @@ impl StopRequest {
         }
     }
 
+    /// The stop of an agent protection stops for `reason` that the store
+    /// could not record, which saves its session for `shoal resume`.
+    pub(crate) fn unrecorded(reason: &str) -> Self {
+        Self {
+            reason: format!("{reason}; its stop could not be recorded"),
+            save: Save::Everything,
+        }
+    }
+
     pub fn repair() -> Self {
         Self {
             reason: "stopped to repair the workspace".into(),

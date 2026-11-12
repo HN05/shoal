@@ -128,3 +128,26 @@ async fn a_resume_after_a_stop_request_leaves_the_agent_stopped() {
     assert!(!manager.resume_agent_execution(id, None).await.unwrap());
     assert!(*execution.stop.borrow());
 }
+
+#[tokio::test]
+async fn a_load_stop_the_store_cannot_record_still_stops_the_agent() {
+    let (root, manager) = manager().await;
+    let execution = idle_agent(&manager, &root).await;
+    let id = &execution.plan.id;
+    // The store refuses every stop record, as on a full disk.
+    manager
+        .store
+        .run(|db| {
+            db.execute_batch("DROP TABLE agent_stops")?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(manager.stop_agent_for_overload("memory pressure").await);
+    assert!(*execution.stop.borrow());
+    let request = manager.executions.stop_request(id).await.unwrap();
+    assert_eq!(
+        request.save,
+        crate::daemon::workspace::executions::Save::Everything
+    );
+}

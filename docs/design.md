@@ -242,7 +242,9 @@ stop chosen between turns records itself only while the agent is still idle
 in the turn it was chosen in, and a report that starts a turn records none
 once a stop is recorded, leaving its update for the restore: each decides in
 one transaction, so whichever commits first wins, and the stop reaches the
-wrapper only after its record commits. A workspace with several agents keeps
+wrapper only after its record commits. A load or disk stop the store cannot
+record, as on a full disk, still stops the agent, as `shoal stop` does,
+leaving it for `shoal resume`. A workspace with several agents keeps
 the turn of the one that reported last, leaving the others' unknown, which
 counts as working. A record an earlier daemon left authorizes no signal: a
 reattaching wrapper restores it or, when its restore no longer waits, it is

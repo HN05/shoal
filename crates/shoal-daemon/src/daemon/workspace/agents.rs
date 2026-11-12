@@ -1029,8 +1029,38 @@ impl Manager {
                 stopped.handoff_saved = saved;
                 Some(stopped)
             }
+            // Load and disk space press, so a store that cannot record the
+            // stop, as on a full disk, does not keep the agent running.
+            Err(error) if error.is::<stops::Unrecorded>() && !protection.is_idle() => {
+                self.stop_unrecorded(stopped, &error).await
+            }
             Err(error) => {
                 let (name, reason) = (&stopped.name, &protection.reason);
+                log!("{name} not stopped for {reason}: {error:#}");
+                None
+            }
+        }
+    }
+
+    /// Stop the `stopped` agent, whose stop the store could not record, as
+    /// `shoal stop` does, saving its session for `shoal resume` instead of
+    /// an automatic restore.
+    async fn stop_unrecorded(
+        &self,
+        mut stopped: StoppedAgent,
+        error: &anyhow::Error,
+    ) -> Option<StoppedAgent> {
+        let (name, reason) = (&stopped.name, &stopped.protection.reason);
+        log!("{name} stops for {reason} without automatic restore: {error:#}");
+        let request = super::StopRequest::unrecorded(reason);
+        let connections = self.executions.connections().await;
+        match connections.stop(&stopped.id, &request).await {
+            Ok(true) => {
+                stopped.recorded = false;
+                Some(stopped)
+            }
+            Ok(false) => None,
+            Err(error) => {
                 log!("{name} not stopped for {reason}: {error:#}");
                 None
             }
@@ -1051,6 +1081,7 @@ impl Manager {
                 workspace: agent.workspace.clone(),
                 workspace_id: agent.workspace_id.clone(),
                 recover: agent.recover,
+                recorded: true,
                 handoff_saved: false,
                 protection: restored_after(protection, turn),
             })
@@ -1105,7 +1136,9 @@ impl Manager {
                 log!("completion unavailable to the stop notice: {error:#}");
                 false
             });
-        let recovery = if !agent.recover {
+        let recovery = if !agent.recorded {
+            "its stop could not be recorded, so it has no automatic restore".into()
+        } else if !agent.recover {
             "automatic recovery unavailable: configure [agents.<name>] resume_command with a session restore command".into()
         } else if protection.follows_overload_recovery()
             && !self.config().machine.overload.recovery.enabled
@@ -1123,7 +1156,7 @@ impl Manager {
             workspace,
             workspace_id,
             NotificationKind::AgentStopped,
-            format!("Stopping {name}: {}; {recovery}; after the wrapper exits, restore with shoal resume {workspace_id} --execution {id}{}; workspace and resource leases retained", protection.reason, if agent.handoff_saved { "" } else { "; recovery handoff could not be saved; run shoal stop if the wrapper exits" }),
+            format!("Stopping {name}: {}; {recovery}; after the wrapper exits, restore with shoal resume {workspace_id} --execution {id}{}; workspace and resource leases retained", protection.reason, if agent.handoff_saved || !agent.recorded { "" } else { "; recovery handoff could not be saved; run shoal stop if the wrapper exits" }),
         )
         .await;
     }
@@ -1183,6 +1216,9 @@ pub(crate) struct StoppedAgent {
     pub workspace: SpaceName,
     workspace_id: SpaceId,
     recover: bool,
+    /// Whether the store recorded its stop, without which it has no
+    /// automatic restore.
+    recorded: bool,
     handoff_saved: bool,
     /// What its automatic restore waits for.
     protection: Protection,
