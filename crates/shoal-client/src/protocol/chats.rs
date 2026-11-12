@@ -149,8 +149,9 @@ pub struct ChatScope {
 impl ChatMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
-            // A restart waits for requests of the `shoal resume` it runs.
-            Self::RestartChat { .. } => Lifetime::Open,
+            // A restart waits for requests of the `shoal resume` it runs,
+            // and a start for those of the chat start worker it runs.
+            Self::RestartChat { .. } | Self::LaunchChat { .. } => Lifetime::Open,
             _ => Lifetime::Reply,
         }
     }
