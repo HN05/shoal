@@ -248,15 +248,15 @@ impl Manager {
     }
 
     /// Forget what `space` kept outside its record once that is deleted or,
-    /// for a workspace, converted: the places it opened, and a workspace's
-    /// state and session logs.
+    /// for a workspace, converted: the places it opened, its agents'
+    /// recovery records and session logs, and a workspace's state.
     pub(crate) async fn forget_removed_space(&self, space: &PresentSpace) {
         self.close_space_places(space.id(), space.name()).await;
         self.report_times.forget(space.id());
         if let PresentSpace::Workspace(workspace) = space {
             self.forget_workspace(&workspace.id).await;
-            self.delete_session_logs(&workspace.id);
         }
+        self.delete_session_logs(space.id());
     }
 
     /// Delete the temporary directory and attached files of the removed
@@ -280,9 +280,10 @@ impl Manager {
         }
     }
 
-    /// Session logs are run data owned by the record just deleted.
+    /// Recovery records and session logs are run data owned by the record
+    /// just deleted.
     fn delete_session_logs(&self, id: &crate::client::space_ids::SpaceId) {
-        let _ = std::fs::remove_dir_all(self.paths.workspace_state(id));
+        let _ = std::fs::remove_dir_all(self.paths.space_state(id));
     }
 
     /// Delete the record of the workspace `id`, which `cause` removed, in

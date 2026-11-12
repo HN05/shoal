@@ -152,7 +152,7 @@ async fn saved_work_larger_than_a_frame_is_read_whole() {
         .create_workspace(&repo.id, "long".into(), None, None, None)
         .await
         .unwrap();
-    let state = manager.paths.workspace_state(&workspace.id);
+    let state = manager.paths.space_state(&workspace.id);
     std::fs::create_dir_all(&state).unwrap();
     let argv = ["sh", "-c", &"x".repeat(2 * crate::protocol::MAX_FRAME)];
     let record = serde_json::json!({ "argv": argv });

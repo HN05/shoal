@@ -125,10 +125,12 @@ impl Paths {
         self.state.join("releases")
     }
 
-    /// Run data Shoal keeps for one workspace, such as detached session logs;
-    /// deleted with the workspace record.
-    pub fn workspace_state(&self, workspace_id: &SpaceId) -> PathBuf {
-        self.state.join("workspaces").join(workspace_id)
+    /// Run data Shoal keeps for one space, a workspace or a chat, such as
+    /// its agents' recovery records and detached session logs; deleted with
+    /// the space's record. The directory keeps the name it had when only
+    /// workspaces had one.
+    pub fn space_state(&self, space_id: &SpaceId) -> PathBuf {
+        self.state.join("workspaces").join(space_id)
     }
 }
 

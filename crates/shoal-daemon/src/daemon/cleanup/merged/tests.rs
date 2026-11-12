@@ -163,7 +163,7 @@ async fn a_saved_agent_keeps_idle_and_unmerged_workspaces_only() {
 async fn saved_work_keeps_idle_and_unmerged_workspaces_only(name: &str, record: &str) {
     let f = Fixture::new().await;
     f.unlink_issue().await;
-    let directory = f.manager.paths.workspace_state(&f.workspace.id);
+    let directory = f.manager.paths.space_state(&f.workspace.id);
     fs::create_dir_all(&directory).unwrap();
     fs::write(directory.join(name), record).unwrap();
     assert_eq!(
@@ -209,7 +209,7 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
         &f.workspace.id,
         &ExecutionId::from("saved"),
     );
-    fs::create_dir_all(f.manager.paths.workspace_state(&f.workspace.id)).unwrap();
+    fs::create_dir_all(f.manager.paths.space_state(&f.workspace.id)).unwrap();
     let record = r#"{"agent":"claude","stage":"stopped","session":"kept-session","stop_reason":"memory pressure"}"#;
     fs::write(&path, record).unwrap();
     let saved = recovery::Record::load(&path).unwrap().unwrap();
@@ -291,7 +291,7 @@ async fn saved_agents_do_not_hide_active_commands_from_merged_cleanup() {
         &f.workspace.id,
         &ExecutionId::from("saved"),
     );
-    fs::create_dir_all(f.manager.paths.workspace_state(&f.workspace.id)).unwrap();
+    fs::create_dir_all(f.manager.paths.space_state(&f.workspace.id)).unwrap();
     fs::write(path, r#"{"agent":"claude","stage":"stopped"}"#).unwrap();
     let id = f.workspace.id.clone();
     f.manager

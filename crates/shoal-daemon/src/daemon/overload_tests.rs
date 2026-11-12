@@ -941,7 +941,7 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
     bounded(launched).await.unwrap().unwrap();
     assert!(!workspace.path.join("restored").exists());
     assert!(queue_is_empty(&manager).await);
-    let records = fs::read_dir(manager.paths.workspace_state(&workspace.id))
+    let records = fs::read_dir(manager.paths.space_state(&workspace.id))
         .unwrap()
         .map(|entry| entry.unwrap().path())
         .filter(|path| path.to_string_lossy().ends_with(".recovery.json"))
@@ -1415,7 +1415,7 @@ async fn critical_disk_space_stops_commands_and_restores_agents_once_space_recov
     bounded(monitor.check(&manager, now, empty)).await.unwrap();
     bounded(command).await.unwrap().unwrap();
     wait_paused(&manager, &workspace).await;
-    let records = fs::read_dir(manager.paths.workspace_state(&workspace.id))
+    let records = fs::read_dir(manager.paths.space_state(&workspace.id))
         .unwrap()
         .map(|entry| entry.unwrap().path())
         .filter(|path| path.to_string_lossy().ends_with(".recovery.json"))

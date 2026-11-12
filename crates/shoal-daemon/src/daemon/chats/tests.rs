@@ -584,6 +584,69 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
 }
 
 #[tokio::test]
+async fn a_removed_chat_takes_its_executions_restores_and_recovery_records() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "talk".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    process.kill();
+    let (id, repository) = (chat.id.clone(), repo.id.clone());
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO executions(id,space_id,state) VALUES ('stopped',?1,'unknown')",
+                [&id],
+            )?;
+            db.execute(
+                "INSERT INTO agent_queue(id,kind,repository_id,name,agent,execution_id,state,created_at,space_id)
+                    VALUES ('restore','restore',?2,'talk','claude','stopped','queued',1,?1)",
+                rusqlite::params![id, repository],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let state = manager.paths.space_state(&chat.id);
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::write(state.join("stopped.recovery.json"), "{}").unwrap();
+
+    manager
+        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .await
+        .unwrap();
+    let left = manager
+        .store
+        .run(|db| {
+            Ok(db.query_row(
+                "SELECT (SELECT COUNT(*) FROM executions) + (SELECT COUNT(*) FROM agent_queue)",
+                [],
+                |row| row.get::<_, i64>(0),
+            )?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
+    assert!(!state.exists());
+}
+
+#[tokio::test]
 async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_agent() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");

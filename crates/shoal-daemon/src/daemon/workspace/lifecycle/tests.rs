@@ -467,7 +467,7 @@ git --git-dir="$common" worktree add "$SHOAL_WORKSPACE_PATH" "$branch""#;
 #[tokio::test]
 async fn removal_retains_session_logs_until_ownership_is_released() {
     let (_root, manager, workspace) = fixture().await;
-    let state = manager.paths.workspace_state(&workspace.id);
+    let state = manager.paths.space_state(&workspace.id);
     fs::create_dir_all(&state).unwrap();
     let log = state.join("session.log");
     fs::write(&log, "session output").unwrap();

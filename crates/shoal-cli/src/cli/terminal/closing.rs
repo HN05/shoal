@@ -323,7 +323,7 @@ impl Marker {
     fn path(paths: &Paths, host: &str, workspace: &SpaceId, place: &str) -> Option<PathBuf> {
         (!place.is_empty() && !place.contains('/')).then(|| {
             paths
-                .workspace_state(workspace)
+                .space_state(workspace)
                 .join(format!("closing-{host}-{place}"))
         })
     }
@@ -332,7 +332,7 @@ impl Marker {
     /// with the tabs Herdr watchers of earlier releases mark by another name.
     fn watched(paths: &Paths, host: &str, workspace: &SpaceId) -> Vec<String> {
         let prefix = format!("closing-{host}-");
-        let Ok(entries) = std::fs::read_dir(paths.workspace_state(workspace)) else {
+        let Ok(entries) = std::fs::read_dir(paths.space_state(workspace)) else {
             return Vec::new();
         };
         entries

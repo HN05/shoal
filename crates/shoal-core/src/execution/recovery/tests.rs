@@ -398,7 +398,7 @@ fn a_restore_request_sits_beside_the_record_until_forgotten() {
 fn each_agent_keeps_a_last_session_and_a_single_earlier_one_gets_a_file() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
-    let state = paths.workspace_state(&SpaceId::from("workspace"));
+    let state = paths.space_state(&SpaceId::from("workspace"));
     std::fs::create_dir_all(&state).unwrap();
     std::fs::write(
         state.join("last-session.json"),

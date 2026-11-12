@@ -121,7 +121,7 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
     .unwrap();
     let request = manager
         .paths
-        .workspace_state(&workspace.id)
+        .space_state(&workspace.id)
         .join(format!("{}.restore-request.json", plan.id));
     std::fs::write(&request, "{}").unwrap();
     let finished = ExecutionEvent::Finished { exit_code: 143 };
@@ -211,7 +211,7 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
     )
     .unwrap();
     let request = paths
-        .workspace_state(&open.id)
+        .space_state(&open.id)
         .join("requested.restore-request.json");
     std::fs::write(&request, "{}").unwrap();
     assert!(!waits_for_resume(&paths, &open, &none).unwrap());

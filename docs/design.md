@@ -2397,9 +2397,10 @@ background sync keeps current, so an offline or diverged checkout still gets its
 chat. Its
 instructions describe the discussion only, from the `chat` rule that
 repositories can extend like the other rules.
-Belonging
-to no workspace, a chat is not a tracked execution: queuing and overload stops
-serve unattended agents, while the user attends a chat. It is still a
+A chat's agent
+is not a tracked execution, though an execution, its recovery records and its
+queue restore entry belong to a space of either kind: queuing and overload
+stops serve unattended agents, while the user attends a chat. It is still a
 daemon record, so lists and integrations can follow it: the agent replaces Shoal's
 process, leaving no wrapper to report its exit, so the chat runs while a
 process with the registered identity lives, checked periodically and before

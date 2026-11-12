@@ -156,7 +156,7 @@ fn session_files(paths: &Paths, workspace: &Workspace, name: &Agent) -> PathBuf 
         .map(|elapsed| elapsed.as_millis())
         .unwrap_or_default();
     paths
-        .workspace_state(&workspace.id)
+        .space_state(&workspace.id)
         .join(format!("{name}-{stamp_millis}"))
 }
 

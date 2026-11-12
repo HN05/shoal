@@ -470,7 +470,7 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     std::fs::write(
         manager
             .paths
-            .workspace_state(&stopped.id)
+            .space_state(&stopped.id)
             .join("lost.command.json"),
         "{",
     )
