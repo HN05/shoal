@@ -1,5 +1,6 @@
-//! Launching a chat's agent: in an app that runs it detached, in a
-//! background place, beside the caller, or here in place of this process.
+//! Launching a chat's agent: through the daemon, in an app that runs it
+//! detached, in a background place, beside the caller, or here in place of
+//! this process.
 use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_ids::SpaceId;
 use std::{ffi::OsString, os::unix::process::CommandExt, path::Path};
@@ -26,6 +27,7 @@ use crate::{
 };
 
 mod command;
+mod detached;
 
 /// Start a chat about `repo` and `topic` with the chosen agent. `settings`
 /// choose the agent before the refresh touches the checkout; the launch reads
@@ -71,6 +73,7 @@ pub(in crate::cli::commands) async fn launch(
         return Ok(Started::Exited(code));
     }
     match launch.options.place {
+        ChatPlace::Detached => launch.start_detached(ctx).await,
         ChatPlace::Background => (launch.hand_to_background(ctx).await).map(Started::Background),
         ChatPlace::Beside | ChatPlace::Here => {
             launch.run_in_terminal(ctx).await.map(Started::Exited)
@@ -110,6 +113,16 @@ impl Launch {
             topic,
             options,
         })
+    }
+
+    /// Have the daemon start the chat in a background place, as it does
+    /// for an app; one the daemon cannot start opens its place here.
+    async fn start_detached(self, ctx: &Context) -> Result<Started> {
+        let chosen = (&self.agent, &self.chat.name);
+        match detached::request(&self.topic, &self.options, chosen) {
+            Some(start) => detached::start(ctx, start).await,
+            None => (self.hand_to_background(ctx).await).map(Started::Background),
+        }
     }
 
     /// Hand the chat to a new background place, which runs it here, and

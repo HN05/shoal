@@ -1701,7 +1701,10 @@ approval, your notifications and administration stay with you. `--parent`
 names the space the chat goes below, by number or ID; a workspace's or a
 chat's agent that starts a chat starts it below its own space, or below one
 under it that `--parent` names, in the background, and returns once the chat
-holds its own scope, or with the error that stopped it. Such an agent's
+holds its own scope, or with the error that stopped it. A start without a
+terminal also runs its chat in the background. The daemon opens the place for
+these chats, as it does for an app, unless the chat continues or forks a
+session, which the calling process starts itself. Such an agent's
 `--here` is refused, so the chat's processes are never the agent's. A
 workspace process that cleared its scope token cannot run `shoal start` or
 `shoal rename --request`.

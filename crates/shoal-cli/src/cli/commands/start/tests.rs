@@ -278,14 +278,6 @@ fn a_workspace_start_takes_the_checked_repository_by_id() {
 }
 
 #[test]
-fn a_branchless_start_without_a_terminal_begins_in_a_background_place() {
-    use chat::ChatPlace::{Background, Beside, Here};
-    assert_eq!(branchless_place(false, Beside), Background);
-    assert_eq!(branchless_place(false, Here), Here);
-    assert_eq!(branchless_place(true, Beside), Beside);
-}
-
-#[test]
 fn a_numeric_positional_may_name_the_repository_whose_modes_apply() {
     let positional = |args: &[&str]| positional_repository(&start(args)).map(str::to_owned);
     assert_eq!(

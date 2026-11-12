@@ -1551,6 +1551,26 @@ fn any_space_opens_any_kind_of_child() {
     assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
 }
 
+/// A workspace's agent starts a chat in its own worktree, which the daemon
+/// starts below that workspace in a background place.
+#[test]
+fn a_workspace_agent_starts_a_chat_in_its_own_worktree() {
+    let fixture = Fixture::with_config(Some(
+        "[agents.claude]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    ));
+    install_test_script(fixture.root.path().join("bin").join("zmx"), terminal_zmx());
+    fixture.add("parent");
+    let parent = fixture.id("parent");
+    let args = [
+        "start", "--in", &parent, "--mode", "chat", "--agent", "claude", "--name", "reader",
+    ];
+    let reader = scoped_command(&fixture, "parent", &args);
+    assert!(reader.status.success(), "{reader:?}");
+    let chats = fixture.ok(&["list", "--chats"]);
+    assert_eq!(chats[0]["parent"]["id"], parent.as_str(), "{chats}");
+    assert_eq!(chats[0]["workspace"]["id"], parent.as_str(), "{chats}");
+}
+
 /// A chat between two workspaces decides for and coordinates the workspace
 /// below it, whose process reaches nothing above, and goes with the
 /// workspace above it.
@@ -2098,8 +2118,11 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     let (output, rows) = fixture.pick(&args, "chat", "");
     assert!(!output.status.success(), "{output:?}");
     assert!(rows.is_empty(), "a picker opened: {rows}");
+    // Without a terminal, the daemon starts the chat in a background place.
     let output = fixture.run(&["start", "--mode", "chat", repo, "--agent", "claude"]);
-    assert!(!output.status.success());
+    assert!(output.status.success(), "{output:?}");
+    let chats = fixture.ok(&["list", "--chats"]);
+    assert_eq!(chats[0]["agent"], "claude", "{chats}");
     // The checkout has no value for a workspace's placeholders.
     fs::write(
         fixture.repo.join(".shoal.toml"),

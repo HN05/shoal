@@ -65,8 +65,12 @@ pub(in crate::cli::commands) enum ChatPlace {
     Beside,
     /// In this terminal instead of a new tab or detached session.
     Here,
-    /// In a new background place, for the user to attach to.
+    /// In a new background place this process opens, for the user to
+    /// attach to.
     Background,
+    /// In a new background place the daemon opens for a new chat, as it
+    /// does for an app, for the user to attach to.
+    Detached,
 }
 
 impl ChatPlace {
@@ -75,6 +79,17 @@ impl ChatPlace {
         match here {
             true => Self::Here,
             false => Self::Beside,
+        }
+    }
+
+    /// Where a chat that a process, `scoped` or not and `on_terminal` or
+    /// not, starts in this place runs: one beside a terminal runs detached
+    /// for a scoped process, whose chats are not its own processes, and for
+    /// one without a terminal, which nothing could run it beside.
+    fn for_starter(self, scoped: bool, on_terminal: bool) -> Self {
+        match self {
+            Self::Beside if scoped || !on_terminal => Self::Detached,
+            place => place,
         }
     }
 }
@@ -190,29 +205,19 @@ impl Options {
         }
     }
 
-    /// These options as an agent's start takes them: its chat goes below
-    /// its own space, in a background place rather than beside it or here,
-    /// so its processes are not the agent's. Only that place runs it here,
-    /// with the scope its handoff carries.
+    /// These options as this process's start takes them: a scoped one's
+    /// chat goes below its own space, and one without a terminal or a
+    /// scoped one's runs detached rather than beside it. A scoped process
+    /// runs a chat here only as the place a handoff carries its scope to.
     pub fn for_caller(self, ctx: &Context) -> Result<Self> {
         ensure_scope_token(ctx)?;
-        if !crate::env::is_scoped() {
-            return Ok(self);
-        }
-        Ok(match self.place {
-            ChatPlace::Beside => Self {
-                place: ChatPlace::Background,
-                ..self
-            },
-            ChatPlace::Here => {
-                ensure!(
-                    handoff::awaited(),
-                    "scoped processes start chats in a background place; leave out --here"
-                );
-                self
-            }
-            ChatPlace::Background => self,
-        })
+        let scoped = crate::env::is_scoped();
+        ensure!(
+            !scoped || self.place != ChatPlace::Here || handoff::awaited(),
+            "scoped processes start chats in a background place; leave out --here"
+        );
+        let place = self.place.for_starter(scoped, ctx.on_terminal());
+        Ok(Self { place, ..self })
     }
 
     /// Refuse the agent `--agent` or `agent.default` names under
