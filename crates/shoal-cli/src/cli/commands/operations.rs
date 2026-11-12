@@ -13,10 +13,12 @@ use crate::{
     cli::{context::Context, progress::Spinner},
     client::approvals::Undecided,
     client::operations::{Followed, Following},
+    client::preparation::{Preparing, Unprepared},
     execution::SetupVerificationFailure,
+    paths::CommandPaths,
     protocol::{
         RemoteError,
-        operations::{Ended, Failure, OperationSpec, Outcome, Progress, Step, Stream},
+        operations::{Ended, Failure, OperationSpec, Outcome, Prepared, Progress, Step, Stream},
     },
 };
 pub(super) use worker::{Reporter, run as worker};
@@ -65,35 +67,57 @@ where
     T::try_from(follow(ctx, id).await?)
 }
 
-/// Show operation `id`'s output, below a spinner naming its step, until it
-/// ends, returning how it did. An interrupt or termination cancels it, as
-/// it stopped the work when the command ran it; a second one stops
-/// following and leaves it running.
+/// Follow operation `id` to its end, as [`show`] shows it, returning how it
+/// did.
 async fn follow(ctx: &Context, id: String) -> Result<Outcome> {
+    let mut following = Following::open(&ctx.paths, id.clone(), 0).await?;
+    match show(ctx, &id, async || following.next().await).await? {
+        Ended::Succeeded(outcome) => Ok(*outcome),
+        Ended::Failed(failure) => Err(error(failure)),
+    }
+}
+
+/// Follow a workspace's preparation to its end, as [`show`] shows it,
+/// returning the prepared workspace or how preparing it failed.
+pub(super) async fn follow_preparation(
+    ctx: &Context,
+    mut preparing: Preparing<'_, CommandPaths>,
+) -> Result<Result<Prepared, Unprepared>> {
+    let id = preparing.operation().to_owned();
+    show(ctx, &id, async || preparing.next().await).await
+}
+
+/// Show the output of operation `id` that `next` reports, below a spinner
+/// naming its step, until it ends, returning how it did. An interrupt or
+/// termination cancels it, as it stopped the work when the command ran it;
+/// a second one stops following and leaves it running.
+async fn show<E>(
+    ctx: &Context,
+    id: &str,
+    mut next: impl AsyncFnMut() -> Result<Followed<E>>,
+) -> Result<E> {
     let mut interrupt = signal(SignalKind::interrupt())?;
     let mut terminate = signal(SignalKind::terminate())?;
-    let mut following = Following::open(&ctx.paths, id.clone(), 0).await?;
     let mut spinner = Spinner::stderr(ctx.json, doing(None));
     let mut cancelled = false;
     loop {
         let followed = tokio::select! {
-            followed = following.next() => followed?,
+            followed = next() => followed?,
             _ = interrupt.recv() => {
                 spinner.clear();
-                cancelled = cancel(ctx, &id, cancelled).await?;
+                cancelled = cancel(ctx, id, cancelled).await?;
                 continue;
             }
             _ = terminate.recv() => {
                 spinner.clear();
-                cancelled = cancel(ctx, &id, cancelled).await?;
+                cancelled = cancel(ctx, id, cancelled).await?;
                 continue;
             }
             () = spinner.tick() => continue,
         };
         match followed {
-            Followed::Event(event) => show(ctx, &mut spinner, event.progress),
-            Followed::Ended(Ended::Succeeded(outcome)) => return Ok(*outcome),
-            Followed::Ended(Ended::Failed(failure)) => return Err(error(failure)),
+            Followed::Event(event) => show_progress(ctx, &mut spinner, event.progress),
+            Followed::Ended(ended) => return Ok(ended),
         }
     }
 }
@@ -112,7 +136,7 @@ async fn cancel(ctx: &Context, id: &str, cancelled: bool) -> Result<bool> {
 
 /// Show an output line where the command showed it, keeping stdout for
 /// the result with `--json`, and a step as the spinner's message.
-fn show(ctx: &Context, spinner: &mut Spinner<impl Write>, progress: Progress) {
+fn show_progress(ctx: &Context, spinner: &mut Spinner<impl Write>, progress: Progress) {
     let (stream, line) = match progress {
         Progress::Step { step } => return spinner.set_message(doing(Some(step))),
         Progress::Output { stream, line } => (stream, line),
@@ -139,7 +163,7 @@ fn doing(step: Option<Step>) -> &'static str {
 }
 
 /// `failure` as the error its command handles.
-fn error(failure: Failure) -> anyhow::Error {
+pub(super) fn error(failure: Failure) -> anyhow::Error {
     match failure {
         Failure::SetupUnverified { exit_code } => SetupVerificationFailure { exit_code }.into(),
         Failure::Approval { request } => Undecided(request).into(),

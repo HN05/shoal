@@ -11,7 +11,7 @@ use super::{
     target::AddTarget,
     waiting::{AfterSetup, follow_add_setup},
 };
-use crate::client::preparation::NewWorkspace;
+use crate::client::preparation::{self, NewWorkspace, Preparing, Unprepared};
 use crate::client::space_names::SpaceSelector;
 use crate::client::{agent::AgentSessionId, queue::QueueEntryId};
 use crate::{
@@ -26,11 +26,10 @@ use crate::{
         shell, terminal,
     },
     model::{QueueEntry, Workspace},
+    paths::CommandPaths,
     protocol::{
         ConfigTarget,
-        operations::{
-            OperationSpec, Preparation, Prepared, QueuedLaunch, StartedWorkspace, WorkspaceStart,
-        },
+        operations::{Preparation, Prepared, QueuedLaunch, WorkspaceStart},
     },
     start_plan::{AddPlan, Creation, ResolvedAddAgent},
     state::QueueState,
@@ -137,8 +136,9 @@ pub(super) async fn add_planned(
         waiting: own.filter(|_| launch.is_none()),
     };
     // The daemon gave the starting entry the workspace before its setup.
-    let started = start_add_workspace(ctx, &target, start, issue.as_ref()).await?;
-    let (branch, name) = (started.workspace.branch_or_name(), &started.workspace.name);
+    let preparing = start_add_workspace(ctx, &target, start, issue.as_ref()).await?;
+    let opened = preparing.workspace();
+    let (branch, name) = (opened.branch_or_name(), &opened.name);
     let label = match place_name {
         Some(place) => place.render(branch, name),
         None => name.to_string(),
@@ -147,9 +147,9 @@ pub(super) async fn add_planned(
     // workspace's only once it launches here.
     if launch.is_none() && placed.is_none() {
         let with_agent = agent.agent.is_some();
-        terminal::host_workspace(ctx, &started.workspace, with_agent, &label).await?;
+        terminal::host_workspace(ctx, opened, with_agent, &label).await?;
     }
-    let (name, number) = (started.workspace.name.clone(), started.workspace.number);
+    let (name, number) = (opened.name.clone(), opened.number);
     let subject = (issue.as_ref().map(issues::Issue::subject))
         .or(prompt.map(crate::config::templates::Subject::told));
     // Preparation leaves the agent it queues waiting itself.
@@ -159,7 +159,7 @@ pub(super) async fn add_planned(
         agent: launch.clone(),
         waiting,
     };
-    let finished = finish_add_workspace(ctx, started, &mut rest, &agent).await?;
+    let finished = finish_add_workspace(ctx, preparing, &mut rest, &agent).await?;
     // A failed setup frees the entry's slot, leaving the agent waiting.
     let (queue_entry, waits) = match rest.waiting {
         Some(waiting) => (waiting.starting.clone(), waiting.failed()),
@@ -308,9 +308,9 @@ struct AddStart {
     waiting: Option<Box<QueuedLaunch>>,
 }
 
-/// Open the planned workspace, assigned `issue`, and start preparing it.
-async fn start_add_workspace(
-    ctx: &Context,
+/// Open the planned workspace, assigned `issue`, and follow its preparation.
+async fn start_add_workspace<'c>(
+    ctx: &'c Context,
     target: &AddTarget,
     AddStart {
         creation,
@@ -321,7 +321,7 @@ async fn start_add_workspace(
         waiting,
     }: AddStart,
     issue: Option<&issues::Issue>,
-) -> Result<StartedWorkspace> {
+) -> Result<Preparing<'c, CommandPaths>> {
     let Creation {
         path,
         branch,
@@ -363,8 +363,8 @@ async fn start_add_workspace(
         waiting,
     };
     let env = crate::env::without_secrets();
-    let started = crate::client::preparation::start_workspace(&ctx.paths, new, env);
-    ctx.progress("Opening workspace", started).await
+    let preparing = preparation::create(&ctx.paths, new, env);
+    ctx.progress("Opening workspace", preparing).await
 }
 
 /// Follow the preparation of the started workspace, which sets it up, links
@@ -372,16 +372,16 @@ async fn start_add_workspace(
 /// `agent` takes the terminal.
 async fn finish_add_workspace(
     ctx: &Context,
-    started: StartedWorkspace,
+    preparing: Preparing<'_, CommandPaths>,
     rest: &mut AfterSetup,
     agent: &ResolvedAddAgent,
 ) -> Result<Option<Prepared>> {
-    let reused = started.reused;
+    let reused = preparing.reused();
     let Some(SetUp {
         workspace,
         post_setup,
         agent: entry,
-    }) = follow_add_setup(ctx, started, rest).await?
+    }) = follow_add_setup(ctx, preparing, rest).await?
     else {
         return Ok(None);
     };
@@ -432,23 +432,21 @@ async fn prepare_after_setup(
 ) -> Result<(Prepared, Result<()>)> {
     let (pr, agent) = (rest.pr.take(), rest.agent.take());
     let waits = rest.waiting.as_ref().is_some_and(WaitingAgent::failed);
-    let spec = OperationSpec::Prepare {
-        workspace: SpaceSelector::id(&workspace.id),
-        steps: Preparation {
-            post_setup: !reused || waits,
-            pr,
-            agent,
-            ..Default::default()
-        },
+    let steps = Preparation {
+        post_setup: !reused || waits,
+        pr,
+        agent,
+        ..Default::default()
     };
-    let (agent, result) = match operations::run::<Prepared>(ctx, spec).await {
-        Ok(prepared) => (prepared.agent, Ok(())),
-        Err(error) => (None, Err(error)),
-    };
-    let workspace =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id))
-            .await?
-            .workspace;
-    let workspace = Box::new(workspace);
-    Ok((Prepared { workspace, agent }, result))
+    let env = crate::env::without_secrets();
+    let preparing = preparation::prepare(&ctx.paths, &workspace, steps, env).await?;
+    let ended = operations::follow_preparation(ctx, preparing).await?;
+    Ok(match ended {
+        Ok(prepared) => (prepared, Ok(())),
+        Err(Unprepared { workspace, failure }) => {
+            let agent = None;
+            let error = operations::error(failure);
+            (Prepared { workspace, agent }, Err(error))
+        }
+    })
 }

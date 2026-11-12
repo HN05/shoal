@@ -128,8 +128,11 @@ branch, PR head or record it names, assigns the issue, removing a new workspace
 it cannot assign, and starts the operation, which sets it up, links its PR, runs
 a new workspace's post-setup hook and queues the detached agent the request
 names, with its mode, model, arguments, fork, issue and caller's place, as a
-scoped `start --agent` starts its agent. The CLI follows it
-and keeps its prompt for a failed setup and an agent it launches in the terminal. An interrupt or termination of the CLI cancels the operation, which
+scoped `start --agent` starts its agent. One `shoal_client` call sends the
+request and follows the preparation, returning the prepared workspace or the
+typed failure with the workspace as it left it, ready when only what follows
+setup failed. The CLI makes that call and keeps its prompt for a failed setup
+and an agent it launches in the terminal. An interrupt or termination of the CLI cancels the operation, which
 interrupts the worker as it interrupted the CLI; a CLI that ends otherwise leaves
 it running. The daemon keeps an operation in memory until ten minutes after it
 ends, so a client follows it again by its ID from any event; a restart forgets

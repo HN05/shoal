@@ -6,7 +6,10 @@ use crate::client::repository_ids::RepositoryId;
 use anyhow::Result;
 
 use crate::client::space_names::{SpaceName, SpaceSelector};
-use crate::client::{output::split::Child, preparation::NewSplit};
+use crate::client::{
+    output::split::Child,
+    preparation::{self, NewSplit, Preparing},
+};
 use crate::{
     cli::{
         args::create::CopyArgs,
@@ -16,9 +19,10 @@ use crate::{
         ui::{self, Fallback},
     },
     model::{SpaceRef, Workspace},
+    paths::CommandPaths,
     protocol::{
         CommitStart, CreationOptions, ItemContext,
-        operations::{Prepared, QueuedLaunch, StartedWorkspace},
+        operations::{Prepared, QueuedLaunch},
     },
     refusal::{Reason, Refusal},
     state::WorkspaceState,
@@ -69,8 +73,8 @@ pub(super) async fn run(
         issue: issue.as_ref().map(|issue| issue.url.clone()),
         ..NewSplit::new(parent.clone(), name)
     };
-    let child = start_child(ctx, start).await?;
-    let Some(child) = follow_preparation(ctx, child).await? else {
+    let preparing = start_child(ctx, start).await?;
+    let Some(child) = set_up(ctx, preparing).await? else {
         return Ok(1);
     };
     report(ctx, &child)?;
@@ -139,10 +143,13 @@ async fn commit_owner(
     }
 }
 
-/// Split the child `split` describes and start preparing it.
-pub(super) async fn start_child(ctx: &Context, split: NewSplit) -> Result<StartedWorkspace> {
+/// Split the child `split` describes and follow its preparation.
+pub(super) async fn start_child(
+    ctx: &Context,
+    split: NewSplit,
+) -> Result<Preparing<'_, CommandPaths>> {
     let env = crate::env::without_secrets();
-    crate::client::preparation::start_split(&ctx.paths, split, env).await
+    preparation::create(&ctx.paths, split, env).await
 }
 
 /// Run the child's setup and post-setup hook; `None` when setup failed.
@@ -157,25 +164,25 @@ pub(super) async fn prepare(ctx: &Context, child: Workspace) -> Result<Option<Wo
     }
 }
 
-/// Follow the preparation the daemon started for a workspace a request
-/// opened to its end; `None` when setup failed.
-pub(super) async fn follow_preparation(
+/// The workspace a request opened once the preparation the daemon started
+/// for it, followed to its end, set it up; `None` when setup failed.
+pub(super) async fn set_up(
     ctx: &Context,
-    started: StartedWorkspace,
+    preparing: Preparing<'_, CommandPaths>,
 ) -> Result<Option<Workspace>> {
-    let prepared = follow_queuing(ctx, started, None).await?;
+    let prepared = follow_queuing(ctx, preparing, None).await?;
     Ok(prepared.map(|prepared| *prepared.workspace))
 }
 
-/// Follow the preparation as [`follow_preparation`] does, with the agent it
-/// queued; `agent`, the one the request asked for, is queued after a setup
-/// failure the user ignored, which ends preparation before it.
+/// Follow the preparation as [`set_up`] does, with the agent it queued;
+/// `agent`, the one the request asked for, is queued after a setup failure
+/// the user ignored, which ends preparation before it.
 async fn follow_queuing(
     ctx: &Context,
-    started: StartedWorkspace,
+    preparing: Preparing<'_, CommandPaths>,
     agent: Option<Box<QueuedLaunch>>,
 ) -> Result<Option<Prepared>> {
-    match super::workspaces::follow_setup(ctx, started).await? {
+    match super::workspaces::follow_setup(ctx, preparing).await? {
         Some(set_up) => set_up.finish_queuing(ctx, agent).await.map(Some),
         None => Ok(None),
     }

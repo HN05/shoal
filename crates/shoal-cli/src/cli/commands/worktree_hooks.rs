@@ -36,8 +36,8 @@ pub(super) async fn create(ctx: &Context) -> Result<i32> {
     let parent = enclosing(&workspaces, &input.cwd)?.id.clone();
     let start =
         crate::client::preparation::NewSplit::new(SpaceSelector::id(&parent), Some(input.name));
-    let child = super::split::start_child(ctx, start).await?;
-    let Some(child) = super::split::follow_preparation(ctx, child).await? else {
+    let preparing = super::split::start_child(ctx, start).await?;
+    let Some(child) = super::split::set_up(ctx, preparing).await? else {
         return Ok(1);
     };
     outln!("{}", child.path.display());

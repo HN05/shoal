@@ -13,12 +13,12 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
+    client::preparation::{self, Preparing, Unprepared},
     client::recovery::ReconcileOptions,
-    env, execution, git,
+    env, git,
     model::{QueueEntry, Workspace},
-    protocol::operations::{
-        Failure, OperationSpec, Preparation, Prepared, QueuedLaunch, StartedWorkspace,
-    },
+    paths::CommandPaths,
+    protocol::operations::{Failure, OperationSpec, Preparation, Prepared, QueuedLaunch},
     removal::UnsavedWork,
     state::WorkspaceState,
 };
@@ -195,12 +195,10 @@ async fn prepare_settled(
     steps: Preparation,
     waiting: Option<&mut WaitingAgent>,
 ) -> Result<Option<SetUp>> {
-    let spec = OperationSpec::Prepare {
-        workspace: SpaceSelector::id(&workspace.id),
-        steps: steps.clone(),
-    };
-    let prepared = operations::run::<Prepared>(ctx, spec).await;
-    settle_setup(ctx, workspace, prepared, Some(steps), waiting).await
+    let env = env::without_secrets();
+    let preparing = preparation::prepare(&ctx.paths, workspace, steps.clone(), env).await?;
+    let prepared = operations::follow_preparation(ctx, preparing).await?;
+    settle_setup(ctx, prepared, Some(steps), waiting).await
 }
 
 /// Follow the preparation the daemon started for the workspace a request
@@ -208,69 +206,58 @@ async fn prepare_settled(
 /// alone, leaving what follows it to the caller.
 pub(in crate::cli::commands) async fn follow_setup(
     ctx: &Context,
-    started: StartedWorkspace,
+    preparing: Preparing<'_, CommandPaths>,
 ) -> Result<Option<SetUp>> {
-    let prepared = operations::follow_started::<Prepared>(ctx, started.operation).await;
-    settle_setup(ctx, &started.workspace, prepared, None, None).await
+    let prepared = operations::follow_preparation(ctx, preparing).await?;
+    settle_setup(ctx, prepared, None, None).await
 }
 
 /// The workspace a preparation left, once an interactive user decided what
 /// to do with a failed setup. A retry runs `retry`, or else setup alone,
-/// whose caller runs what follows it as after an ignored failure. A retry
-/// A failure leaves `waiting`, the agent of the start, waiting in the queue,
-/// which starts it once a setup succeeds, so a retry queues no other.
+/// whose caller runs what follows it as after an ignored failure. A failure
+/// leaves `waiting`, the agent of the start, waiting in the queue, which
+/// starts it once a setup succeeds, so a retry queues no other.
 pub(in crate::cli::commands) async fn settle_setup(
     ctx: &Context,
-    workspace: &Workspace,
-    prepared: Result<Prepared>,
+    prepared: Result<Prepared, Unprepared>,
     retry: Option<Preparation>,
     waiting: Option<&mut WaitingAgent>,
 ) -> Result<Option<SetUp>> {
-    match prepared {
-        Ok(prepared) => Ok(Some(SetUp {
-            workspace: *prepared.workspace,
-            post_setup: Some(Ok(())),
-            agent: prepared.agent,
+    let unprepared = match prepared {
+        Ok(prepared) => {
+            return Ok(Some(SetUp {
+                workspace: *prepared.workspace,
+                post_setup: Some(Ok(())),
+                agent: prepared.agent,
+            }));
+        }
+        Err(unprepared) => unprepared,
+    };
+    let set_up = unprepared.set_up();
+    let Unprepared { workspace, failure } = unprepared;
+    match failure {
+        Failure::SetupUnverified { exit_code } => {
+            report_setup_verification_failure(ctx, &workspace, exit_code)
+        }
+        Failure::HookFailed { .. } => Ok(Some(SetUp {
+            workspace: *workspace,
+            post_setup: Some(Err(operations::error(failure))),
+            agent: None,
         })),
-        Err(error) => match error.downcast::<execution::SetupVerificationFailure>() {
-            Ok(failure) => {
-                report_setup_verification_failure(ctx, workspace, failure.exit_code).await
-            }
-            Err(error) if is_hook_failure(&error) => {
-                let workspace = crate::client::workspaces::inspect(
-                    &ctx.paths,
-                    SpaceSelector::id(&workspace.id),
-                )
-                .await?;
-                Ok(Some(SetUp {
-                    workspace: workspace.workspace,
-                    post_setup: Some(Err(error)),
-                    agent: None,
-                }))
-            }
-            Err(error) if after_setup(ctx, workspace).await? => Err(error),
-            Err(error) => handle_setup_failure(ctx, workspace, error, retry, waiting).await,
-        },
+        failure if set_up => Err(operations::error(failure)),
+        failure => handle_setup_failure(ctx, &workspace, failure, retry, waiting).await,
     }
 }
 
-/// Whether `workspace` is ready, so what failed came after its setup, such
-/// as queuing its agent, and leaves no setup to recover.
-async fn after_setup(ctx: &Context, workspace: &Workspace) -> Result<bool> {
-    let inspection =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
-    Ok(inspection.workspace.state == WorkspaceState::Ready)
-}
-
 /// Let an interactive user retry, delete, ignore or keep the workspace whose
-/// setup failed with `error`; a workspace whose failure is ignored has not
+/// setup failed with `failure`; a workspace whose failure is ignored has not
 /// run its post-setup hook, nor has one retried without `retry`, which says
 /// what a retry runs. A setup that did not start leaves nothing to delete or
 /// ignore. The agent `waiting` for the setup waits in the queue from now on.
 async fn handle_setup_failure(
     ctx: &Context,
     workspace: &Workspace,
-    error: anyhow::Error,
+    failure: Failure,
     mut retry: Option<Preparation>,
     mut waiting: Option<&mut WaitingAgent>,
 ) -> Result<Option<SetUp>> {
@@ -286,11 +273,8 @@ async fn handle_setup_failure(
             retry.post_setup = true;
         }
     }
-    let ran = !matches!(
-        error.downcast_ref::<operations::Failed>(),
-        Some(operations::Failed(Failure::SetupNotStarted { .. }))
-    );
-    let error = format!("{error:#}");
+    let ran = !matches!(failure, Failure::SetupNotStarted { .. });
+    let error = format!("{:#}", operations::error(failure));
     let (name, number) = (&workspace.name, workspace.number);
     let failed = if ran {
         "Setup failed"
@@ -352,26 +336,15 @@ async fn retry_setup(
     }))
 }
 
-/// Whether the operation got past setup and failed in the post-setup hook.
-fn is_hook_failure(error: &anyhow::Error) -> bool {
-    matches!(
-        error.downcast_ref::<operations::Failed>(),
-        Some(operations::Failed(Failure::HookFailed { .. }))
-    )
-}
-
 /// Process uncertainty cannot be ignored or safely stopped from the still-live
 /// reporting wrapper. Keep the worktree and expose the daemon's actual evidence.
-async fn report_setup_verification_failure(
+fn report_setup_verification_failure(
     ctx: &Context,
     workspace: &Workspace,
     code: i32,
 ) -> Result<Option<SetUp>> {
-    let inspection =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
     let (name, number) = (&workspace.name, workspace.number);
-    let reason = inspection
-        .workspace
+    let reason = workspace
         .error
         .as_deref()
         .unwrap_or("process state is unknown");

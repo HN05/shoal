@@ -10,7 +10,7 @@ use super::{
     open::{print_warnings, publish, report_proposed},
 };
 use crate::client::output::items::Revert;
-use crate::client::preparation::{self, NewSplit, NewWorkspace};
+use crate::client::preparation::{self, NewSplit, NewWorkspace, Preparing};
 use crate::client::space_names::SpaceSelector;
 use crate::client::{forge_reads, items};
 use crate::{
@@ -32,10 +32,8 @@ use crate::{
     },
     git::revert::{self as git_revert, Merge, Merged, Reverted},
     model::{Chat, PresentSpace, Workspace},
-    protocol::{
-        ItemContext,
-        operations::{StartedWorkspace, WorkspaceStart},
-    },
+    paths::CommandPaths,
+    protocol::{ItemContext, operations::WorkspaceStart},
     removal::UnsavedWork,
     repository::Selector,
 };
@@ -153,7 +151,7 @@ async fn revert_workspace(
     let pr = merged.item.pr.as_ref().context("only PRs revert")?;
     let name = format!("revert-{}", merged.item.number);
     let base = Some(format!("origin/{}", pr.base));
-    let started = match from {
+    let preparing = match from {
         Reverting::Workspace(workspace) if crate::env::is_scoped() => {
             let start = NewSplit {
                 base,
@@ -171,24 +169,24 @@ async fn revert_workspace(
             start_workspace(ctx, repository, name, base, Some(chat.id.clone())).await?
         }
     };
-    split::follow_preparation(ctx, started).await
+    split::set_up(ctx, preparing).await
 }
 
 /// Start a new workspace `name` of `repository` on `base`, opened by
-/// `chat`, if any.
+/// `chat`, if any, and follow its preparation.
 async fn start_workspace(
     ctx: &Context,
     repository: RepositoryId,
     name: String,
     base: Option<String>,
     chat: Option<SpaceId>,
-) -> Result<StartedWorkspace> {
+) -> Result<Preparing<'_, CommandPaths>> {
     let new = NewWorkspace {
         base,
         parent: chat.map(SpaceSelector::Id),
         ..NewWorkspace::new(Selector::Id(repository), WorkspaceStart::Name(name))
     };
-    preparation::start_workspace(&ctx.paths, new, crate::env::without_secrets()).await
+    preparation::create(&ctx.paths, new, crate::env::without_secrets()).await
 }
 
 /// Revert the merge on the workspace's branch as tracked commands of that

@@ -9,7 +9,9 @@ use crate::cli::{
     },
     context::Context,
 };
-use crate::protocol::operations::{Preparation, Prepared, QueuedLaunch, StartedWorkspace};
+use crate::client::preparation::Preparing;
+use crate::paths::CommandPaths;
+use crate::protocol::operations::{Preparation, QueuedLaunch};
 
 /// What preparing the added workspace does after setup: linking `pr`, then
 /// the post-setup hook, then queuing `agent`.
@@ -25,24 +27,19 @@ pub(super) struct AfterSetup {
 /// follows setup with it.
 pub(super) async fn follow_add_setup(
     ctx: &Context,
-    started: StartedWorkspace,
+    preparing: Preparing<'_, CommandPaths>,
     rest: &mut AfterSetup,
 ) -> Result<Option<SetUp>> {
-    let StartedWorkspace {
-        operation,
-        workspace,
-        reused,
-    } = started;
-    let prepared = operations::follow_started::<Prepared>(ctx, operation).await;
     // The preparation left the agent waiting when setup failed, so a retry
     // queues none of its own.
     let retry = Preparation {
         setup: true,
-        post_setup: !reused,
+        post_setup: !preparing.reused(),
         pr: rest.pr.clone(),
         agent: rest.agent.clone(),
         waiting: None,
     };
+    let prepared = operations::follow_preparation(ctx, preparing).await?;
     let waiting = rest.waiting.as_mut();
-    settle_setup(ctx, &workspace, prepared, Some(retry), waiting).await
+    settle_setup(ctx, prepared, Some(retry), waiting).await
 }

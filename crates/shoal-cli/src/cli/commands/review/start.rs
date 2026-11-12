@@ -5,7 +5,7 @@ use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result, bail, ensure};
 
-use crate::client::preparation::NewWorkspace;
+use crate::client::preparation::{self, NewWorkspace};
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     agent::{Agent, ModelChoice},
@@ -351,9 +351,9 @@ async fn fork_pull_workspace(
         ..NewWorkspace::new((&repo.id).into(), start)
     };
     let env = crate::env::without_secrets();
-    let started = crate::client::preparation::start_workspace(&ctx.paths, new, env).await?;
+    let preparing = preparation::create(&ctx.paths, new, env).await?;
     // Reopening runs no hooks; only a new workspace is prepared.
-    let Some(workspace) = super::super::split::follow_preparation(ctx, started).await? else {
+    let Some(workspace) = super::super::split::set_up(ctx, preparing).await? else {
         bail!("PR #{}'s workspace could not be set up", pull.number);
     };
     eprintln!(

@@ -5,6 +5,7 @@ use anyhow::{Context as _, Result};
 
 use super::issues::Issue;
 use crate::client::output::convert::Converted;
+use crate::client::preparation::Preparing;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
@@ -54,7 +55,8 @@ pub(super) async fn to_workspace(
     };
     let env = crate::env::without_secrets();
     let started = crate::client::conversions::to_workspace(&ctx.paths, new, env).await?;
-    let Some(workspace) = super::split::follow_preparation(ctx, started).await? else {
+    let preparing = Preparing::follow(&ctx.paths, started).await?;
+    let Some(workspace) = super::split::set_up(ctx, preparing).await? else {
         return Ok(1);
     };
     let text = format!(

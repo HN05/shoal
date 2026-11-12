@@ -191,24 +191,6 @@ pub async fn create<'d, D: Daemon>(
     Preparing::follow(daemon, started).await
 }
 
-/// Open `workspace` and start preparing it with `env`.
-pub async fn start_workspace(
-    daemon: &impl Daemon,
-    workspace: NewWorkspace,
-    env: BTreeMap<String, String>,
-) -> Result<StartedWorkspace> {
-    connection::request(daemon, workspace.method(env)).await
-}
-
-/// Split `split` and start preparing it with `env`.
-pub async fn start_split(
-    daemon: &impl Daemon,
-    split: NewSplit,
-    env: BTreeMap<String, String>,
-) -> Result<StartedWorkspace> {
-    connection::request(daemon, split.method(env)).await
-}
-
 /// Run `steps` on `workspace` with `env` and follow them.
 pub async fn prepare<'d, D: Daemon>(
     daemon: &'d D,
