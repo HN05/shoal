@@ -16,6 +16,7 @@ use super::{
     blockers, expiry,
     limits::{Admission, Waiting, Wake, Work, admit},
     store::{QueuedRow, queued_rows},
+    wake::DueReading,
 };
 use crate::client::{queue::QueueEntryId, time::UnixTime};
 use crate::{
@@ -244,9 +245,11 @@ impl Manager {
                 }
                 (QueueKind::Restore, Some(execution), Some(workspace)) => {
                     let waits = waiters.contains(&execution);
-                    let wake = self
-                        .restore_wake(&workspace, &execution, automatic, waits)
-                        .await?;
+                    let due = match waits {
+                        true => DueReading::Read,
+                        false => DueReading::Skip,
+                    };
+                    let wake = (self.restore_wake(&workspace, &execution, automatic, due)).await?;
                     restores.insert(id.clone(), (execution, wake));
                     Work::Restore {
                         waiting: waits,

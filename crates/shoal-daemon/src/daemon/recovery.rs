@@ -321,7 +321,7 @@ impl Manager {
         }
         let mut notes = execution_notes(connected, &processes);
         let mut cleared = false;
-        if options.repair && clearable(connected, &processes, options.acknowledge_stopped) {
+        if clearable(connected, &processes, options) {
             match self
                 .clear_stopped_execution(workspace, &execution.id)
                 .await?
@@ -403,14 +403,16 @@ async fn stop_survivors(
     Processes::inspect(execution, workspace, scan).await
 }
 
-/// Whether the evidence proves the execution ended, so repair may clear it.
-fn clearable(connected: bool, processes: &Processes, acknowledge_stopped: bool) -> bool {
-    !connected
+/// Whether `options` ask for repair and the evidence proves the execution
+/// ended, so repair may clear it.
+fn clearable(connected: bool, processes: &Processes, options: ReconcileOptions) -> bool {
+    options.repair
+        && !connected
         && !processes.has_survivors()
         // An acknowledgement can cover a missing launch identity, but
         // never an environment that could not be inspected.
         && processes.unreadable.is_empty()
-        && (processes.visibility_complete() || acknowledge_stopped)
+        && (processes.visibility_complete() || options.acknowledge_stopped)
 }
 
 /// Explain what keeps an execution from being a provably stale record.

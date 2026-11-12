@@ -31,6 +31,14 @@ pub(crate) enum Grant {
     Queue,
 }
 
+/// Whether reading a restore's wake reads if an update is due, which only
+/// matters once its agent waits for one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum DueReading {
+    Read,
+    Skip,
+}
+
 /// A restore entry with the workspace and execution of its agent.
 struct RestoreRow {
     id: QueueEntryId,
@@ -111,8 +119,8 @@ impl Manager {
                     Work::Launch | Work::OneShot { .. } | Work::Job { .. } => continue,
                 }
             } else if waiters.contains(&restore.execution) {
-                self.restore_wake(workspace_id, &restore.execution, restore.automatic, false)
-                    .await?
+                let (execution, automatic) = (&restore.execution, restore.automatic);
+                (self.restore_wake(workspace_id, execution, automatic, DueReading::Skip)).await?
             } else {
                 continue;
             };
@@ -148,8 +156,8 @@ impl Manager {
     /// What the queued restore of `execution` in `workspace_id`, which a
     /// waiting wrapper carries out, waits for: a slot once `shoal resume`
     /// asked for it, no longer `automatic`,
-    /// otherwise what its recovery record says. Whether an update is due
-    /// only matters once its agent `waits`, and free disk space must have
+    /// otherwise what its recovery record says. Whether an update is due is
+    /// read as `due` says, and free disk space must have
     /// recovered as for any other restore, since disk protection stops
     /// agents that start below it.
     pub(super) async fn restore_wake(
@@ -157,7 +165,7 @@ impl Manager {
         workspace_id: &SpaceId,
         execution: &ExecutionId,
         automatic: bool,
-        waits: bool,
+        due: DueReading,
     ) -> Result<Wake> {
         if !automatic {
             return Ok(Wake::Slot);
@@ -165,7 +173,10 @@ impl Manager {
         if !self.restore_waits_for_update(workspace_id, execution) {
             return Ok(Wake::Recovery);
         }
-        let due = waits && self.restore_due(workspace_id, execution).await?;
+        let due = match due {
+            DueReading::Read => self.restore_due(workspace_id, execution).await?,
+            DueReading::Skip => false,
+        };
         Ok(Wake::Update { due })
     }
 

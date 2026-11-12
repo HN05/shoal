@@ -9,7 +9,7 @@ use super::{
     framing::{Batch, Cut, frame_cut},
     items::polled_items,
     poll::{wait_for_updates, watch_deadline},
-    wake::UNWATCHED_WAKE_DELAY,
+    wake::{UNWATCHED_WAKE_DELAY, WakePhase},
     *,
 };
 use crate::client::assignments::Done;
@@ -1162,7 +1162,12 @@ async fn a_hooked_agent_is_due_a_wake_once_no_wait_has_run_for_a_while() {
         .unwrap();
     let due = async || {
         manager
-            .agent_wake_due(&workspace, Some(&ExecutionId::from("e1")), true, true)
+            .agent_wake_due(
+                &workspace,
+                Some(&ExecutionId::from("e1")),
+                true,
+                WakePhase::Arming,
+            )
             .await
             .unwrap()
     };
@@ -2754,7 +2759,7 @@ async fn a_held_gate_delays_a_wake_but_keeps_an_issued_one_due() {
     let held = manager.gates.lock_prs([&workspace.id]).await;
     assert!(
         !manager
-            .wake_updates_due(workspace.clone(), true)
+            .wake_updates_due(workspace.clone(), WakePhase::Arming)
             .await
             .unwrap()
     );
@@ -2762,12 +2767,17 @@ async fn a_held_gate_delays_a_wake_but_keeps_an_issued_one_due() {
     // look finished with the updates it was prompted for.
     assert!(
         manager
-            .wake_updates_due(workspace.clone(), false)
+            .wake_updates_due(workspace.clone(), WakePhase::Prompted)
             .await
             .unwrap()
     );
     drop(held);
-    assert!(manager.wake_updates_due(workspace, true).await.unwrap());
+    assert!(
+        manager
+            .wake_updates_due(workspace, WakePhase::Arming)
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]

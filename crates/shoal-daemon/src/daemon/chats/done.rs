@@ -55,13 +55,13 @@ impl Manager {
             .write(move |tx| {
                 // A chat saved while blocked has nothing left to come back
                 // for once done.
-                let held = hold_blocked_restore(tx, &id)?;
+                ensure_running_or_held(tx, &id)?;
                 // Completion removes what blocked the space.
                 let progressed =
                     progress::record_status(tx, &id, recorded.summary.as_deref(), now)?
                         | progress::remove_blockers(tx, &id, now)?;
                 Ok((
-                    record_completion(tx, &id, &recorded, progressed, held)?,
+                    record_completion(tx, &id, &recorded, progressed)?,
                     progressed,
                 ))
             })
@@ -119,6 +119,21 @@ impl Manager {
     }
 }
 
+/// Hold the blocked restore of the chat `id`, as [`hold_blocked_restore`]
+/// does, and fail unless the chat runs or it held one.
+fn ensure_running_or_held(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<()> {
+    let held = hold_blocked_restore(tx, id)?;
+    ensure!(
+        store::exists(
+            tx,
+            "SELECT 1 FROM chats WHERE id=?1 AND (restore IS NULL OR ?2)",
+            params![id, held]
+        )?,
+        "the chat stopped running"
+    );
+    Ok(())
+}
+
 /// Make the automatic restore of the chat `id`, saved while its space is
 /// blocked, wait for `shoal resume`, as a workspace's completion cancels
 /// its agent's restore; whether it held one.
@@ -132,25 +147,16 @@ fn hold_blocked_restore(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<
     Ok(held)
 }
 
-/// Record `completion` for the running chat `id`, or the one whose blocked
-/// restore it `held`, and close its open questions, which its finished
-/// work waits on no longer; the questions it closed. A completion that
-/// would change nothing, without the status line it `progressed`, fails.
+/// Record `completion` for the chat `id` and close its open questions,
+/// which its finished work waits on no longer; the questions it closed. A
+/// completion that would change nothing, without the status line it
+/// `progressed`, fails.
 fn record_completion(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
     completion: &Completion,
     progressed: bool,
-    held: bool,
 ) -> Result<Vec<crate::daemon::item_numbers::ItemNumber>> {
-    ensure!(
-        store::exists(
-            tx,
-            "SELECT 1 FROM chats WHERE id=?1 AND (restore IS NULL OR ?2)",
-            params![id, held]
-        )?,
-        "the chat stopped running"
-    );
     let changed = done::record_completion(tx, id, completion)?;
     let closed = questions::close_open(tx, id)?;
     ensure!(

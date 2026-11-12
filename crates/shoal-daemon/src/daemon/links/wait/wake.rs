@@ -17,6 +17,25 @@ use crate::{
 /// that keeps failing.
 pub(super) const UNWATCHED_WAKE_DELAY: Duration = Duration::from_secs(3 * 60);
 
+/// Which side of a wake a wait looks for: one to fall due, before its agent
+/// is prompted, or the prompted agent to take what it was due.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum WakePhase {
+    Arming,
+    Prompted,
+}
+
+impl WakePhase {
+    /// The phase of a wait that returns once whether a wake is due matches
+    /// `due`.
+    fn waiting_for(due: bool) -> Self {
+        match due {
+            true => Self::Arming,
+            false => Self::Prompted,
+        }
+    }
+}
+
 impl Manager {
     /// Return once whether the workspace's agent is idle with settled
     /// undelivered messages that wake it or queued updates matches `due`, so a launcher
@@ -31,6 +50,7 @@ impl Manager {
         hooked: Option<&ExecutionId>,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
+        let phase = WakePhase::waiting_for(due);
         // Subscribe before reading, so a change in between still wakes.
         let mut messages = self.signals.watch_agent_messages();
         let mut queued = self.signals.watch_item_updates();
@@ -42,9 +62,9 @@ impl Manager {
                 .unread_agent_messages(&SpaceSelector::id(&workspace.id))
                 .await?;
             let hold = self.message_hold(&workspace, &unread.messages).await?;
-            let messages_due = wake_messages_due(unread.wakes, hold, due);
+            let messages_due = wake_messages_due(unread.wakes, hold, phase);
             if self
-                .agent_wake_due(&workspace, hooked, messages_due, due)
+                .agent_wake_due(&workspace, hooked, messages_due, phase)
                 .await?
                 == due
             {
@@ -118,30 +138,29 @@ impl Manager {
     }
 
     /// Whether updates make a wake due for the workspace's agent. Only
-    /// `arming` a wake waits for them to be deliverable: once prompted, the
+    /// arming a wake waits for them to be deliverable: once prompted, the
     /// agent stays due while they are recorded, so a gate cleanup takes
     /// meanwhile cannot end that wait and prompt it again.
     pub(super) async fn wake_updates_due(
         &self,
         workspace: Workspace,
-        arming: bool,
+        phase: WakePhase,
     ) -> Result<bool> {
-        if arming {
-            self.updates_deliverable(workspace).await
-        } else {
-            self.updates_recorded(workspace).await
+        match phase {
+            WakePhase::Arming => self.updates_deliverable(workspace).await,
+            WakePhase::Prompted => self.updates_recorded(workspace).await,
         }
     }
 
     /// Whether the workspace's idle agent is due a wake: `messages_due`, or
-    /// updates as [`Self::wake_updates_due`] counts them when `arming`, and
+    /// updates as [`Self::wake_updates_due`] counts them in `phase`, and
     /// the hook of the agent the `hooked` execution runs cannot wake it.
     pub(super) async fn agent_wake_due(
         &self,
         workspace: &Workspace,
         hooked: Option<&ExecutionId>,
         messages_due: bool,
-        arming: bool,
+        phase: WakePhase,
     ) -> Result<bool> {
         let id = workspace.id.clone();
         let state = self
@@ -157,7 +176,7 @@ impl Manager {
         {
             return Ok(false);
         }
-        Ok(messages_due || self.wake_updates_due(workspace.clone(), arming).await?)
+        Ok(messages_due || self.wake_updates_due(workspace.clone(), phase).await?)
     }
 
     /// Whether the hook that wakes the agent `execution` runs in the
@@ -180,11 +199,11 @@ impl Manager {
 }
 
 /// Whether unread messages, of which one `wakes` the agent and which settle
-/// after `hold`, make a wake due. Settling only delays `arming` a wake: once
+/// after `hold`, make a wake due. Settling only delays arming a wake: once
 /// prompted, the agent stays due until it takes them or starts a turn, so
 /// a message arriving meanwhile cannot end that wait and prompt it again.
-fn wake_messages_due(wakes: bool, hold: Option<Duration>, arming: bool) -> bool {
-    wakes && (hold.is_none() || !arming)
+fn wake_messages_due(wakes: bool, hold: Option<Duration>, phase: WakePhase) -> bool {
+    wakes && (hold.is_none() || phase == WakePhase::Prompted)
 }
 
 /// Whether the agent `idle` reports idle has idled for `delay`.
