@@ -993,6 +993,7 @@ mod agents;
 mod blocked;
 mod done;
 mod files;
+pub(crate) mod launches;
 mod processes;
 mod removal;
 mod removing;

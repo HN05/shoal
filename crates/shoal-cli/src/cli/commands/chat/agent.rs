@@ -15,36 +15,10 @@ pub(in crate::cli::commands) fn chat_agent(
     settings: &Effective,
     agent: Option<Agent>,
 ) -> Result<Agent> {
-    match named_agent(settings, agent)? {
+    match crate::agents::named_agent(settings, agent)? {
         Some(agent) => Ok(agent),
         None => pick_agent(ctx, settings),
     }
-}
-
-/// `--agent`, else `agent.default`, refused when unavailable; `None` when
-/// neither names one.
-pub(in crate::cli::commands) fn named_agent(
-    settings: &Effective,
-    agent: Option<Agent>,
-) -> Result<Option<Agent>> {
-    let Some(agent) = agent.or_else(|| settings.agent.default.clone()) else {
-        return Ok(None);
-    };
-    crate::agents::ensure_available(&agent, settings)?;
-    Ok(Some(agent))
-}
-
-/// [`named_agent`], refused with a `model` its launch cannot pass on.
-pub(in crate::cli::commands) fn checked_agent(
-    settings: &Effective,
-    agent: Option<Agent>,
-    model: &ModelChoice,
-) -> Result<Option<Agent>> {
-    let agent = named_agent(settings, agent)?;
-    if let Some(agent) = &agent {
-        check_model(settings, agent, model)?;
-    }
-    Ok(agent)
 }
 
 /// Refuse `model` for `agent` before anything else is asked for, when its

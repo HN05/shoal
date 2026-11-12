@@ -109,13 +109,48 @@ pub fn check_queued_launch(launch: &QueuedLaunch, settings: &Effective) -> Resul
     check_model(settings, agent, &model)
 }
 
+/// Why a start without a picker that names no agent is refused when no
+/// `agent.default` names one.
+pub const NO_AGENT: &str = "name the agent to start; no agent.default is configured";
+
+/// `agent`, else the `agent.default` of `settings`.
+fn named_or_default(settings: &Effective, agent: Option<Agent>) -> Option<Agent> {
+    agent.or_else(|| settings.agent.default.clone())
+}
+
+/// The agent `agent` names, else `agent.default`, refused when it cannot
+/// run under `settings`; `None` when neither names one.
+pub fn named_agent(settings: &Effective, agent: Option<Agent>) -> Result<Option<Agent>> {
+    let Some(agent) = named_or_default(settings, agent) else {
+        return Ok(None);
+    };
+    ensure_available(&agent, settings)?;
+    Ok(Some(agent))
+}
+
+/// [`named_agent`], refused with a requested `model` its launch cannot
+/// pass on.
+pub fn checked_agent(
+    settings: &Effective,
+    agent: Option<Agent>,
+    model: &ModelChoice,
+) -> Result<Option<Agent>> {
+    let agent = named_agent(settings, agent)?;
+    if let Some(agent) = &agent {
+        check_model(
+            settings,
+            agent,
+            &resolve_model(settings, agent, model.clone()),
+        )?;
+    }
+    Ok(agent)
+}
+
 /// The launch `request` asks for under `settings`: run by the agent it
 /// names, else `agent.default`, refused as [`check_queued_launch`] refuses
 /// it.
 pub fn resolve_launch(request: LaunchRequest, settings: &Effective) -> Result<QueuedLaunch> {
-    let agent = (request.agent.clone())
-        .or_else(|| settings.agent.default.clone())
-        .context("name the agent to start; no agent.default is configured")?;
+    let agent = named_or_default(settings, request.agent.clone()).context(NO_AGENT)?;
     let launch = request.run_by(agent);
     check_queued_launch(&launch, settings)?;
     Ok(launch)

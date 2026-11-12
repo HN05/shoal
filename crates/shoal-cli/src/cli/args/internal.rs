@@ -192,6 +192,10 @@ pub enum InternalCommand {
     QueueStart {
         entry: crate::client::queue::QueueEntryId,
     },
+    /// Start the chat whose resolved start the daemon writes to standard
+    /// input in a background place; the daemon runs it.
+    #[command(name = workers::CHAT_START)]
+    ChatStart,
     /// Add the planned workspace inside the place `host` opened for it.
     #[command(name = workers::ADD)]
     Add(AddWorkerArgs),

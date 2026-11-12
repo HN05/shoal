@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::{Result, ensure};
 
-use super::{agent::checked_agent, handoff};
+use super::handoff;
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::client::{agent::AgentSessionId, priority::Priority, space_ids::SpaceId};
 use crate::{
@@ -218,7 +218,7 @@ impl Options {
     /// Refuse the agent `--agent` or `agent.default` names under
     /// `settings`, or a `--model` it cannot take, before any picker opens.
     pub fn check_agent(&mut self, settings: &Effective) -> Result<()> {
-        self.agent = checked_agent(settings, self.agent.take(), &self.model)?;
+        self.agent = crate::agents::checked_agent(settings, self.agent.take(), &self.model)?;
         Ok(())
     }
 

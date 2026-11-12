@@ -10,7 +10,7 @@ use super::super::{
     workspace::Manager,
 };
 use crate::client::space_names::SpaceSelector;
-use crate::protocol::{Body, ChatMethod};
+use crate::protocol::{Body, ChatMethod, ChatStart};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -18,6 +18,15 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
+        ChatMethod::LaunchChat { start } => {
+            if caller.is_none() {
+                let (workspace, parent) = (start.workspace.as_ref(), start.parent.as_ref());
+                (manager.ensure_parent_not_host(workspace, parent)).await?;
+            }
+            let held = (start.repository.as_ref(), start.workspace.as_ref());
+            ensure_caller_holds(manager, caller, &start.narrowing, held).await?;
+            Body::StartedChat(manager.launch_chat(*start, caller).await?)
+        }
         ChatMethod::StartChat {
             repository,
             workspace,
@@ -172,6 +181,17 @@ impl Scoped for ChatMethod {
             } => {
                 (manager.ensure_parent_not_host(workspace.as_ref(), parent.as_ref())).await?;
                 manager.parent_below(caller, parent).await?;
+                workspace.as_mut()
+            }
+            // A chat the daemon starts goes where one the caller recorded
+            // itself would: the worker acts with the caller's scope, which
+            // puts it below the caller's own space without a parent.
+            ChatMethod::LaunchChat { start } => {
+                let ChatStart {
+                    parent, workspace, ..
+                } = &mut **start;
+                (manager.ensure_parent_not_host(workspace.as_ref(), parent.as_ref())).await?;
+                manager.parent_below(caller, &mut parent.clone()).await?;
                 workspace.as_mut()
             }
             // Its check takes the parent as its start would.

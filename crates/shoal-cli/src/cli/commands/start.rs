@@ -303,7 +303,7 @@ async fn picked_mode(ctx: &Context, args: &mut StartArgs) -> Result<modes::ModeN
         _ => mode_settings(ctx, args).await?,
     };
     let model = args.model.clone().into();
-    chat::checked_agent(&settings, args.agent.clone(), &model)?;
+    crate::agents::checked_agent(&settings, args.agent.clone(), &model)?;
     let fit = ui::ModeFit {
         kind: None,
         repository: selector.is_some().then_some(true),

@@ -38,7 +38,7 @@ mod wrapper;
 pub use agents::{AgentMethod, TurnEnd, WakeEnd, WokenTurn};
 pub use approvals::ApprovalMethod;
 pub use assignments::{AssignmentMethod, SavedAgent};
-pub use chats::{ChatMethod, ChatRoot, ChatScope};
+pub use chats::{ChatMethod, ChatRoot, ChatScope, ChatStart};
 pub use ci::CiMethod;
 pub use config::ConfigTarget;
 pub use daemon::{DaemonMethod, Exit, ExitRequest, Exited};

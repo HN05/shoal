@@ -92,15 +92,17 @@ impl Operations {
         self.forget(id);
     }
 
-    /// A new token that acts as `caller` until [`Self::revoke`] revokes it.
-    fn issue(&self, caller: &Caller) -> ScopeToken {
+    /// A new token that acts as `caller` for a worker, an operation's or
+    /// another the daemon runs for the caller, until [`Self::revoke`]
+    /// revokes it.
+    pub(crate) fn issue(&self, caller: &Caller) -> ScopeToken {
         let token = ScopeToken::generate();
         let mut scopes = self.scopes.lock().unwrap_or_else(PoisonError::into_inner);
         scopes.insert(token.clone(), caller.clone());
         token
     }
 
-    fn revoke(&self, token: &ScopeToken) {
+    pub(crate) fn revoke(&self, token: &ScopeToken) {
         let mut scopes = self.scopes.lock().unwrap_or_else(PoisonError::into_inner);
         scopes.remove(token);
     }

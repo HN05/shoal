@@ -1,18 +1,18 @@
 //! Starting a chat where the command line asks: in a repository's
 //! checkout, in a workspace's worktree, or without a repository in
 //! `root_dir`, below the parent it names and on the issue it names.
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::{Context as _, Result, ensure};
 
-use super::{Options, Topic, issue, launch::begin};
+use super::{ChatPlace, Narrowing, Options, Topic, issue, launch::begin};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{agents::ChatRepository, context::Context, ui},
     config::{Effective, templates},
     forge::items::reference::ItemInput,
     model::{Repository, SpaceKind, Workspace},
-    protocol::ConfigTarget,
+    protocol::{ChatStart, ConfigTarget},
     repository,
 };
 
@@ -88,6 +88,58 @@ pub(in crate::cli::commands) async fn start_outside_repositories(
     }
     .await;
     crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_ref(), started).await
+}
+
+/// The daemon's chat start worker: start the chat whose start, which the
+/// daemon resolved and checked, comes on standard input, in a background
+/// place this process opens, and report it.
+pub(in crate::cli::commands) async fn start_resolved(ctx: &Context) -> Result<i32> {
+    let resolved: ChatStart =
+        serde_json::from_reader(std::io::stdin().lock()).context("read the chat's start")?;
+    let ChatStart {
+        repository,
+        workspace,
+        parent,
+        name,
+        agent,
+        mode,
+        model,
+        narrowing,
+        issue,
+        args,
+        priority,
+        env: _,
+    } = resolved;
+    let mode = mode.context("the daemon names the chat's mode")?;
+    let options = Options {
+        agent,
+        place: ChatPlace::Background,
+        name,
+        model,
+        args: args.into_iter().map(OsString::from).collect(),
+        session: None,
+        fork: false,
+        restore: None,
+        handoff: None,
+        parent,
+        narrowing: Narrowing::Requested(narrowing),
+        priority,
+    };
+    let subject = Subject {
+        mode: ui::ModeChoice::Named(mode.clone()),
+        issue: issue.map(Some),
+        linked_issue: None,
+    };
+    match (workspace, repository) {
+        (Some(workspace), _) => start_in_workspace(ctx, Some(workspace), subject, options).await,
+        (None, Some(repository)) => {
+            start(ctx, Some(repository.value().to_owned()), subject, options).await
+        }
+        (None, None) => {
+            let topic = Topic::outside_repositories(&mode);
+            start_outside_repositories(ctx, topic, options).await
+        }
+    }
 }
 
 /// `root_dir`, where a chat without a repository runs, which the daemon

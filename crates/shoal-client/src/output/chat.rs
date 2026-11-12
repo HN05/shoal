@@ -25,4 +25,13 @@ pub struct RemovedChat {
     pub children: Vec<SpaceName>,
 }
 
-outputs!(BackgroundChat, RemovedChat);
+/// A new chat the daemon started for a client: in a background place, or
+/// in an app that runs its agent detached.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum StartedChat {
+    Background(BackgroundChat),
+    Detached(Box<crate::output::agents::DetachedChat>),
+}
+
+outputs!(BackgroundChat, RemovedChat, StartedChat);

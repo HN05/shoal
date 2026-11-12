@@ -24,8 +24,9 @@ use crate::{
         Completion, Inspection, QueueEntry, Relation, Repository, SyncedRepository, Workspace,
     },
     protocol::{
-        ApprovalMethod, AssignmentMethod, Body, ErrorCode, HoldMethod, ItemMethod, OperationMethod,
-        QuestionMethod, QueueMethod, RemoteError, RemovalMethod, RepositoryMethod, WorkspaceMethod,
+        ApprovalMethod, AssignmentMethod, Body, ChatStart, ErrorCode, HoldMethod, ItemMethod,
+        OperationMethod, QuestionMethod, QueueMethod, RemoteError, RemovalMethod, RepositoryMethod,
+        WorkspaceMethod,
         operations::{
             Ended, Failure, LaunchRequest, OperationSpec, Progress, Report, StartedWorkspace,
             WorkspaceStart,
@@ -693,6 +694,73 @@ async fn a_start_without_an_agent_queues_the_configured_default() {
     };
     assert_eq!(steps.agent.map(|launch| launch.agent), Some("probe".into()));
     worker.exit(1);
+}
+
+/// The resolved starts the daemon ran its chat start worker for, each with
+/// whether the worker acts with the caller's scope.
+fn launched_chats() -> Vec<(ChatStart, bool)> {
+    crate::daemon::chats::launches::tests::STARTED
+        .lock()
+        .unwrap()
+        .clone()
+}
+
+#[tokio::test]
+async fn an_app_starts_a_chat_whose_agent_and_mode_the_daemon_resolves() {
+    let daemon = TestDaemon::start().await;
+    let app = daemon.connector();
+    let start = || ChatStart {
+        repository: Some(daemon.repository.path.to_str().unwrap().into()),
+        args: vec!["Read the build".into()],
+        ..Default::default()
+    };
+    let error = crate::client::chats::launch(&app, start())
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("agent.default"), "{error:#}");
+    assert!(launched_chats().is_empty());
+    crate::daemon::test_support::configure(
+        &daemon.manager,
+        "[agent]\ndefault = \"probe\"\n[agents.probe]\ncommand = [\"true\"]\n",
+    )
+    .await;
+    crate::client::chats::launch(&app, start()).await.unwrap();
+    let [(launched, scoped)] = launched_chats().try_into().unwrap();
+    assert!(!scoped);
+    assert_eq!(launched.agent, Some("probe".into()));
+    assert_eq!(launched.mode, Some(crate::model::chat_mode()));
+    let repository = launched.repository.as_ref().map(|named| named.value());
+    assert_eq!(repository, Some(daemon.repository.id.as_str()));
+    assert_eq!(launched.parent, None);
+    assert_eq!(launched.args, ["Read the build"]);
+}
+
+#[tokio::test]
+async fn a_scoped_app_starts_chats_below_its_own_space() {
+    let daemon = TestDaemon::start().await;
+    crate::daemon::test_support::configure(
+        &daemon.manager,
+        "[agents.probe]\ncommand = [\"true\"]\n",
+    )
+    .await;
+    let parent = daemon.workspace("parent").await;
+    let other = daemon.workspace("other").await;
+    let agent = daemon.scoped(&parent).await;
+    let start = |parent: Option<SpaceSelector>| ChatStart {
+        repository: Some(daemon.repository.id.clone().into()),
+        agent: Some("probe".into()),
+        parent,
+        ..Default::default()
+    };
+    let outside = start(Some(SpaceSelector::id(&other.id)));
+    assert!(crate::client::chats::launch(&agent, outside).await.is_err());
+    crate::client::chats::launch(&agent, start(None))
+        .await
+        .unwrap();
+    // The worker records it with the caller's scope, below the caller.
+    let [(launched, scoped)] = launched_chats().try_into().unwrap();
+    assert!(scoped);
+    assert_eq!(launched.parent, None);
 }
 
 #[tokio::test]
