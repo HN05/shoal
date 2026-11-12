@@ -2961,6 +2961,51 @@ fn a_queued_issue_start_reopens_its_workspace_by_any_repository_name() {
     assert!(!failed(), "{}", fixture.ok(&["alerts", "--all"]));
 }
 
+/// A queued start of an existing workspace's worker opens where that
+/// workspace's own config says, which may differ from its repository's.
+#[test]
+fn a_queued_worker_start_opens_in_its_workspaces_terminal_host() {
+    let fixture = Fixture::with_config(Some(
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[terminal]\ndefault_host = 'herdr'\n[terminal.herdr]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agents.counter]\ncommand = ['sh', '-c', 'echo run >> \"$HOME/counted\"']\n",
+    ));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    let repo = fixture.repo.to_str().unwrap();
+    let workspace = fixture.add("hosted");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(
+        path.join(".shoal.toml"),
+        "[terminal]\ndefault_host = 'zmx'\n",
+    )
+    .unwrap();
+    let mut first = fixture
+        .command()
+        .args([
+            "start", repo, "--branch", "first", "--here", "--agent", "waiter",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("the first agent start", || {
+        (fixture.ok(&["list"]).as_array().unwrap().iter())
+            .any(|workspace| workspace["name"] == "first" && workspace["running"] == true)
+            && fixture.ok(&["queue"]) == serde_json::json!([])
+    });
+    let hosted = fixture.id("hosted");
+    let queued = fixture.ok(&["start", "--in", &hosted, "--here", "--agent", "counter"]);
+    assert_eq!(queued["state"], "queued", "{queued}");
+    fixture.ok(&["stop", &fixture.id("first")]);
+    first.wait().unwrap();
+    let runs = || fs::read_to_string(fixture.root.path().join("counted")).is_ok();
+    let failed = || {
+        (fixture.ok(&["alerts", "--all"]).as_array().unwrap().iter())
+            .any(|alert| alert["kind"] == "queue_failed")
+    };
+    wait_until("the queued start's outcome", || runs() || failed());
+    assert!(!failed(), "{}", fixture.ok(&["alerts", "--all"]));
+}
+
 /// `queue start --attach` starts a waiting agent and attaches this terminal
 /// to the session the daemon starts it in, as `attach` does for an agent
 /// Shoal stopped.

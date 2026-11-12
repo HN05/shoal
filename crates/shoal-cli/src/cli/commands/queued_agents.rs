@@ -165,7 +165,8 @@ async fn start_launch(ctx: &Context, entry: &QueueEntryId) -> Result<()> {
     }
     let mut plan = plan;
     plan.creation.build_on(queued.entry.base.clone());
-    super::workspaces::start_queued(ctx, plan, &queued.entry.name).await
+    let opens = queued.entry.opens.as_ref();
+    super::workspaces::start_queued(ctx, plan, opens, &queued.entry.name).await
 }
 
 pub(super) async fn entries(ctx: &Context) -> Result<Vec<QueueEntry>> {

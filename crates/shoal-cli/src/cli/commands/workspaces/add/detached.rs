@@ -172,7 +172,7 @@ async fn start_admitted(ctx: &Context, target: &AddTarget, plan: AddPlan) -> Res
         .find(|queued| queued.id == id)
         .context("the admitted agent left the agent queue")?;
     let name = planned_workspace_name(ctx, target, &plan.creation).await?;
-    let started = start_queued(ctx, plan, &name).await;
+    let started = start_queued(ctx, plan, entry.opens.as_ref(), &name).await;
     failing_entry(ctx, Some(&entry.id), started).await?;
     ctx.emit(&format!("Starting {name} in the background"), &entry)?;
     Ok(0)
