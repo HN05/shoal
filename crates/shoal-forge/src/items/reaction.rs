@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::{Backend, Reactions},
     items::{action::Acted, comment, link::ItemKind},
     numbers::CommentId,
     review::view::Details,

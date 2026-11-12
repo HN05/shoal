@@ -19,7 +19,7 @@ use crate::{
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
         list,
-        reaction::{Listed, Subject, allowed::AllowedReactions},
+        reaction::Subject,
     },
     numbers::{CommentId, IssueNumber, PullNumber},
     repo::locator::ItemRoute,
@@ -725,46 +725,11 @@ impl Backend for GitLab {
             .hint_login(self)
     }
 
-    fn reactions_endpoint(
-        &self,
-        repo: &ForgeRepo,
-        kind: ItemKind,
-        number: u64,
-        subject: Subject,
-    ) -> Result<String> {
-        Ok(reactions::endpoint(repo, kind, number, subject))
-    }
-
-    fn listed_reaction(&self, reaction: &Value) -> Result<Listed> {
-        reactions::listed(reaction)
-    }
-
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
         reactions::own_login(repo, account)
             .await
             .map(Some)
             .hint_login(self)
-    }
-
-    fn reaction_content(&self, name: &str) -> String {
-        reactions::github_name(name)
-    }
-
-    fn add_reaction(&self, endpoint: String, content: &str) -> Result<Request> {
-        Ok(reactions::add(endpoint, content))
-    }
-
-    fn remove_reaction(&self, endpoint: String, own: &Listed) -> Result<Request> {
-        reactions::remove(endpoint, own)
-    }
-
-    /// Any emoji GitLab knows, so GitHub's reactions are suggestions.
-    async fn allowed_reactions(
-        &self,
-        _repo: &ForgeRepo,
-        _account: &Account,
-    ) -> Result<AllowedReactions> {
-        Ok(AllowedReactions::github(true))
     }
 
     /// Discussion and inline comments are both an item's notes.

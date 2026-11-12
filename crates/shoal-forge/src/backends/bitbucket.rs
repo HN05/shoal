@@ -23,7 +23,7 @@ use crate::{
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
         list,
-        reaction::{Listed, Subject, allowed::AllowedReactions},
+        reaction::Subject,
     },
     numbers::{CommentId, IssueNumber, PullNumber},
     repo::locator::ItemRoute,
@@ -45,6 +45,7 @@ use crate::{
 mod attachments;
 mod checks;
 mod conventions;
+mod reactions;
 mod review;
 mod runs;
 
@@ -629,20 +630,6 @@ impl Backend for Bitbucket {
             .hint_login(self)
     }
 
-    fn reactions_endpoint(
-        &self,
-        _repo: &ForgeRepo,
-        _kind: ItemKind,
-        _number: u64,
-        _subject: Subject,
-    ) -> Result<String> {
-        Err(capability::unsupported(self, Capability::Reactions))
-    }
-
-    fn listed_reaction(&self, _reaction: &Value) -> Result<Listed> {
-        Err(capability::unsupported(self, Capability::Reactions))
-    }
-
     async fn own_login(&self, _repo: &ForgeRepo, _account: &Account) -> Result<Option<String>> {
         Err(capability::unsupported(self, Capability::Reactions))
     }
@@ -661,22 +648,6 @@ impl Backend for Bitbucket {
         let comment = repo.send(account, &Request::get(endpoint)).await?;
         let user = repo.send(account, &Request::get("user".into())).await?;
         same_account(&user, &comment["user"])
-    }
-
-    fn add_reaction(&self, _endpoint: String, _content: &str) -> Result<Request> {
-        Err(capability::unsupported(self, Capability::Reactions))
-    }
-
-    fn remove_reaction(&self, _endpoint: String, _own: &Listed) -> Result<Request> {
-        Err(capability::unsupported(self, Capability::Reactions))
-    }
-
-    async fn allowed_reactions(
-        &self,
-        _repo: &ForgeRepo,
-        _account: &Account,
-    ) -> Result<AllowedReactions> {
-        Err(capability::unsupported(self, Capability::Reactions))
     }
 
     fn default_branch<'a>(&self, value: &'a Value) -> Option<&'a str> {

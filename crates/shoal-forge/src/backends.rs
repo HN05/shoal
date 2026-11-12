@@ -24,7 +24,7 @@ use crate::{
         item::{Current, Item, ItemState},
         link::ItemKind,
         list,
-        reaction::{Listed, Subject, allowed::AllowedReactions},
+        reaction::Subject,
         revert::NewRevert,
     },
     numbers::{CommentId, IssueNumber, PullNumber},
@@ -119,7 +119,7 @@ macro_rules! dispatch {
 }
 
 mod area;
-pub(crate) use area::{Attachments, Checks, Conventions, Runners, Runs};
+pub(crate) use area::{Attachments, Checks, Conventions, Reactions, Runners, Runs};
 
 /// What a forge does its own way. Methods that need the repository take it
 /// as `repo`.
@@ -559,24 +559,6 @@ pub(crate) trait Backend {
         errors: &mut Vec<String>,
     ) -> Result<Option<Vec<Review>>>;
 
-    /// The endpoint that lists the reactions on `subject` of item `number`.
-    fn reactions_endpoint(
-        &self,
-        repo: &ForgeRepo,
-        kind: ItemKind,
-        number: u64,
-        subject: Subject,
-    ) -> Result<String>;
-
-    /// Whether the forge lists the reactions on `subject` in pages; by
-    /// default it does.
-    fn pages_reactions(&self, _subject: Subject) -> bool {
-        true
-    }
-
-    /// A reaction as the forge lists it, with GitHub's name for its content.
-    fn listed_reaction(&self, reaction: &Value) -> Result<Listed>;
-
     /// The login `account` signs in to the forge as; none when it reads
     /// anonymously.
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>>;
@@ -593,29 +575,6 @@ pub(crate) trait Backend {
         let login = (self.own_login(repo, account).await?)
             .context("editing a comment needs a login on the forge")?;
         Ok(comment.author.eq_ignore_ascii_case(&login))
-    }
-
-    /// The content [`Self::listed_reaction`] reports for a reaction the
-    /// forge names `name`; by default the name itself.
-    fn reaction_content(&self, name: &str) -> String {
-        name.to_owned()
-    }
-
-    /// The request that adds a reaction of `content` to the reactions at
-    /// `endpoint`.
-    fn add_reaction(&self, endpoint: String, content: &str) -> Result<Request>;
-
-    /// The request that removes `own`, the account's reaction, from the
-    /// reactions at `endpoint`.
-    fn remove_reaction(&self, endpoint: String, own: &Listed) -> Result<Request>;
-
-    /// The reactions the forge allows; by default GitHub's, and only those.
-    async fn allowed_reactions(
-        &self,
-        _repo: &ForgeRepo,
-        _account: &Account,
-    ) -> Result<AllowedReactions> {
-        Ok(AllowedReactions::github(false))
     }
 
     /// The default branch a read of the repository's own endpoint returned

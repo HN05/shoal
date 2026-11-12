@@ -3,17 +3,55 @@
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
-use super::username;
+use super::{GitLab, username};
 use crate::{
     ForgeRepo,
     account::Account,
+    backends::Reactions,
     items::{
         item::text,
         link::ItemKind,
-        reaction::{Listed, Subject},
+        reaction::{Listed, Subject, allowed::AllowedReactions},
     },
     transport::api::{HttpMethod, Request},
 };
+
+impl Reactions for GitLab {
+    fn reactions_endpoint(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        subject: Subject,
+    ) -> Result<String> {
+        Ok(endpoint(repo, kind, number, subject))
+    }
+
+    fn listed_reaction(&self, reaction: &Value) -> Result<Listed> {
+        listed(reaction)
+    }
+
+    fn reaction_content(&self, name: &str) -> String {
+        github_name(name)
+    }
+
+    fn add_reaction(&self, endpoint: String, content: &str) -> Result<Request> {
+        Ok(add(endpoint, content))
+    }
+
+    fn remove_reaction(&self, endpoint: String, own: &Listed) -> Result<Request> {
+        remove(endpoint, own)
+    }
+
+    /// Any emoji GitLab knows, so GitHub's reactions are suggestions.
+    async fn allowed_reactions(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+    ) -> Result<AllowedReactions> {
+        Ok(AllowedReactions::github(true))
+    }
+}
 
 /// GitHub's reaction names and GitLab's emoji for them, where they differ.
 const NAMES: [(&str, &str); 4] = [

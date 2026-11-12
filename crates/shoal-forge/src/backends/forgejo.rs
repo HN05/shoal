@@ -9,6 +9,7 @@ mod attachments;
 mod checks;
 mod conventions;
 mod organization;
+mod reactions;
 mod review;
 mod reviewers;
 mod runners;
@@ -35,7 +36,7 @@ use crate::{
         item::{Current, Item, ItemState, text},
         link::ItemKind,
         list,
-        reaction::{Listed, Subject, allowed::AllowedReactions},
+        reaction::Subject,
     },
     numbers::{CommentId, IssueNumber, PullNumber},
     repo::locator::ItemRoute,
@@ -588,25 +589,6 @@ impl Backend for Forgejo {
             .hint_login(self)
     }
 
-    fn reactions_endpoint(
-        &self,
-        repo: &ForgeRepo,
-        _kind: ItemKind,
-        number: u64,
-        subject: Subject,
-    ) -> Result<String> {
-        Ok(github_rest::reactions_endpoint(repo, number, subject, self))
-    }
-
-    /// Forgejo lists a comment's reactions all at once, ignoring pages.
-    fn pages_reactions(&self, subject: Subject) -> bool {
-        subject == Subject::Item
-    }
-
-    fn listed_reaction(&self, reaction: &Value) -> Result<Listed> {
-        github_rest::listed_reaction(reaction)
-    }
-
     /// Public repositories are readable without a login, which has none.
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
         if account.authorization(repo).await?.is_none() {
@@ -616,32 +598,6 @@ impl Backend for Forgejo {
             .await
             .map(Some)
             .hint_login(self)
-    }
-
-    fn add_reaction(&self, endpoint: String, content: &str) -> Result<Request> {
-        Ok(github_rest::add_reaction(endpoint, content))
-    }
-
-    /// Forgejo removes the account's reaction by its content.
-    fn remove_reaction(&self, endpoint: String, own: &Listed) -> Result<Request> {
-        Ok(Request::new(
-            HttpMethod::Delete,
-            endpoint,
-            Some(json!({ "content": own.content })),
-        ))
-    }
-
-    /// The instance's admin chooses them, under GitHub's names.
-    async fn allowed_reactions(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-    ) -> Result<AllowedReactions> {
-        let settings = repo
-            .send(account, &Request::get("settings/ui".to_owned()))
-            .await
-            .context("read the forge's UI settings")?;
-        AllowedReactions::only(&settings["allowed_reactions"])
     }
 
     fn edit_comment(

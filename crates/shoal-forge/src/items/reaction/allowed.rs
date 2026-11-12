@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{ForgeRepo, account::Account, backends::Backend, capability::Capability};
+use crate::{ForgeRepo, account::Account, backends::Reactions, capability::Capability};
 
 /// GitHub's reactions, which every forge with reactions allows by default.
 const GITHUB: [&str; 8] = [

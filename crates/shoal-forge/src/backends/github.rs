@@ -8,6 +8,7 @@ mod activity;
 mod attachments;
 mod checks;
 mod conventions;
+mod reactions;
 mod review;
 mod reviewers;
 mod runners;
@@ -31,7 +32,7 @@ use crate::{
         item::{Current, Item, ItemState, text},
         link::ItemKind,
         list,
-        reaction::{Listed, Subject},
+        reaction::Subject,
         revert::NewRevert,
     },
     numbers::{CommentId, IssueNumber, PullNumber},
@@ -560,35 +561,8 @@ impl Backend for GitHub {
         view::reviews(repo, account, kind, number).await
     }
 
-    fn reactions_endpoint(
-        &self,
-        repo: &ForgeRepo,
-        _kind: ItemKind,
-        number: u64,
-        subject: Subject,
-    ) -> Result<String> {
-        Ok(github_rest::reactions_endpoint(repo, number, subject, self))
-    }
-
-    fn listed_reaction(&self, reaction: &Value) -> Result<Listed> {
-        github_rest::listed_reaction(reaction)
-    }
-
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
         github_rest::own_login(repo, account).await.map(Some)
-    }
-
-    fn add_reaction(&self, endpoint: String, content: &str) -> Result<Request> {
-        Ok(github_rest::add_reaction(endpoint, content))
-    }
-
-    fn remove_reaction(&self, endpoint: String, own: &Listed) -> Result<Request> {
-        let id = own.number()?;
-        Ok(Request::new(
-            HttpMethod::Delete,
-            format!("{endpoint}/{id}"),
-            None,
-        ))
     }
 
     /// GitHub uploads name the repository by its numeric ID.
