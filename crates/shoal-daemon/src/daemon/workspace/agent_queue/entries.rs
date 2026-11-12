@@ -292,7 +292,8 @@ impl Manager {
             .write(move |tx| {
                 let started = tx.execute(
                     "UPDATE agent_queue SET workspace_id=?2
-                     WHERE id=?1 AND state=?3 AND (opens_workspace_id IS NULL OR opens_workspace_id=?2)",
+                     WHERE id=?1 AND state=?3 AND (opens_workspace_id IS NULL OR opens_workspace_id=?2)
+                     AND (workspace_id IS NULL OR workspace_id=?2)",
                     params![id, workspace.id, QueueState::Starting],
                 )?;
                 if started == 1 {

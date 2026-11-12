@@ -704,3 +704,57 @@ async fn following_ends_once_the_followers_scope_token_is_revoked() {
     );
     worker.exit(0);
 }
+
+#[tokio::test]
+async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
+    let daemon = TestDaemon::start().await;
+    daemon
+        .manager
+        .publish_config(crate::daemon::test_support::global_config(
+            "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false",
+        ));
+    // The user's start holds a slot it has yet to open a workspace for.
+    let request = crate::model::QueueRequest {
+        narrowing: Default::default(),
+        mode: None,
+        repository: daemon.repository.id.clone().into(),
+        name: "theirs".into(),
+        agent: "claude".into(),
+        issue_title: None,
+        plan: "{}".into(),
+        env: Default::default(),
+        now: false,
+        workspace: None,
+        blockers: Vec::new(),
+    };
+    let theirs = daemon
+        .manager
+        .queue_add(request)
+        .await
+        .unwrap()
+        .entry
+        .unwrap();
+    let chat = daemon
+        .manager
+        .start_chat(
+            daemon.repository.id.clone().into(),
+            "planner".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let token = daemon.manager.chat_scope(&chat.id).await.unwrap();
+    let agent = daemon.connector().scope(token);
+    let mut create = start_workspace(&daemon, WorkspaceStart::Name("api".into()));
+    if let OperationMethod::StartWorkspace { queue_entry, .. } = &mut create {
+        *queue_entry = Some(theirs.id.clone());
+    }
+    let started: StartedWorkspace = connection::request(&agent, create).await.unwrap();
+    fake::take(&started.operation).exit(1);
+    let entries = daemon.manager.queue_entries().await.unwrap();
+    let entry = entries.iter().find(|entry| entry.id == theirs.id).unwrap();
+    assert_eq!(entry.workspace_id, None, "{entry:?}");
+}

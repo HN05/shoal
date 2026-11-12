@@ -56,6 +56,9 @@ pub(super) async fn handle(
             env,
             queue_entry,
         } => {
+            // Only the user's process, which starts a queued launch, names
+            // the entry the workspace takes.
+            let queue_entry = queue_entry.filter(|_| caller.is_none());
             let queued = match caller {
                 Some(_) => None,
                 None => queued_start(manager, queue_entry.clone(), &mut parent, &mut start).await?,
