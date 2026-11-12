@@ -1,12 +1,12 @@
 //! What waits on what, from the waiting work to the work it waits on:
-//! queued launches and spaces on their blockers, a workspace on its
+//! queued launches and spaces on their blockers, a space on its
 //! children, a child with an open question on its parent, a stacked
 //! workspace on its base, and a space queued for a lease on the spaces
 //! holding it.
 use anyhow::Result;
 use rusqlite::{Connection, params};
 
-use super::super::rank::{Edge, Node};
+use super::super::rank::{Carries, Edge, Node};
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use crate::{
     daemon::{approvals::Target, progress, questions, store},
@@ -98,6 +98,7 @@ impl Blocking {
                 waiting: waiting.clone(),
                 on,
                 dependency: Dependency::Blocked,
+                carries: Carries::Rank,
             })
             .collect())
     }
@@ -182,14 +183,27 @@ fn progress_blockers(db: &Connection, blocking: &Blocking) -> Result<Vec<Edge>> 
     Ok(edges)
 }
 
-/// Each workspace on its children, whose work its own waits on. A chat's
-/// children compete with every other worker.
+/// Each space on its children, whose work its own waits on. A chat passes
+/// on only a priority set on it, so that its children compete with every
+/// other worker.
 fn children(db: &Connection) -> Result<Vec<Edge>> {
-    pairs(
-        db,
-        "SELECT p.parent_id,p.space_id FROM space_parents p JOIN workspaces w ON w.id=p.parent_id",
-        Dependency::Parent,
-    )
+    Ok(db
+        .prepare(
+            "SELECT p.parent_id,p.space_id,s.kind='chat'
+             FROM space_parents p JOIN spaces s ON s.id=p.parent_id",
+        )?
+        .query_map([], |row| {
+            Ok(Edge {
+                waiting: Node::Space(row.get(0)?),
+                on: Node::Space(row.get(1)?),
+                dependency: Dependency::Parent,
+                carries: match row.get(2)? {
+                    true => Carries::SetPriority,
+                    false => Carries::Rank,
+                },
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// Each child with an open question on its parent.
@@ -206,6 +220,7 @@ fn questions(db: &Connection) -> Result<Vec<Edge>> {
                 waiting: Node::Space(child),
                 on: Node::Space(parent),
                 dependency: Dependency::Question,
+                carries: Carries::Rank,
             });
         }
     }
@@ -214,23 +229,14 @@ fn questions(db: &Connection) -> Result<Vec<Edge>> {
 
 /// Each stacked workspace on the workspace it builds on.
 fn bases(db: &Connection) -> Result<Vec<Edge>> {
-    pairs(
-        db,
-        "SELECT id,base_workspace_id FROM workspaces WHERE base_workspace_id IS NOT NULL",
-        Dependency::Stacked,
-    )
-}
-
-/// An edge of `dependency` for each row of `query`, the waiting space
-/// first.
-fn pairs(db: &Connection, query: &str, dependency: Dependency) -> Result<Vec<Edge>> {
     Ok(db
-        .prepare(query)?
+        .prepare("SELECT id,base_workspace_id FROM workspaces WHERE base_workspace_id IS NOT NULL")?
         .query_map([], |row| {
             Ok(Edge {
                 waiting: Node::Space(row.get(0)?),
                 on: Node::Space(row.get(1)?),
-                dependency,
+                dependency: Dependency::Stacked,
+                carries: Carries::Rank,
             })
         })?
         .collect::<rusqlite::Result<_>>()?)
@@ -264,6 +270,7 @@ fn lease_holders(db: &Connection, leases: &[(Target, SpaceId)]) -> Result<Vec<Ed
                     waiting: Node::Space(waiting.clone()),
                     on: Node::Space(holder),
                     dependency: Dependency::Lease,
+                    carries: Carries::Rank,
                 }),
         );
     }

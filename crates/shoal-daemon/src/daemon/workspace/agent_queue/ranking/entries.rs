@@ -9,7 +9,7 @@ use super::super::{
     rank::{Entry, Work},
     state::WaitingOneShot,
 };
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId, time::UnixTime};
+use crate::client::{priority::Priority, queue::QueueEntryId, space_ids::SpaceId, time::UnixTime};
 use crate::{
     forge::ci::runner::Trigger,
     model::{QueuedJob, Tier},
@@ -46,7 +46,8 @@ fn queued(
 ) -> Result<Vec<(Arrived, Entry)>> {
     let rows = db
         .prepare(
-            "SELECT seq,id,kind,name,created_at,COALESCE(space_id,opens_workspace_id),job
+            "SELECT seq,id,kind,name,created_at,COALESCE(space_id,opens_workspace_id),job,
+                priority
              FROM agent_queue WHERE state=?1 ORDER BY seq",
         )?
         .query_map([QueueState::Queued], |row| {
@@ -58,15 +59,17 @@ fn queued(
                 row.get::<_, UnixTime>(4)?,
                 row.get::<_, Option<SpaceId>>(5)?,
                 row.get::<_, Option<String>>(6)?,
+                row.get::<_, Option<Priority>>(7)?,
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut entries = Vec::new();
-    for (seq, id, kind, name, queued_at, space, job) in rows {
+    for (seq, id, kind, name, queued_at, space, job, priority) in rows {
         let work = work(kind, space, job.as_deref(), jobs.get(&id))?;
         let entry = Entry {
             id,
             name,
+            priority,
             work,
             queued_at,
             arrival: 0,
@@ -84,6 +87,7 @@ fn oneshot(oneshot: &WaitingOneShot) -> (Arrived, Entry) {
     let entry = Entry {
         id: oneshot.id.clone(),
         name: "review".into(),
+        priority: None,
         work: Work::Review {
             space: serving.map(|serving| serving.space.clone()),
         },

@@ -2061,9 +2061,10 @@ among them,
 `waits_for_update` for a restore of an idle agent, `held_by` with its `reason`
 (`memory` with `needed` and `left` bytes, `disk`, `max_agents`, `max_jobs`,
 `repository_limit`, `permits` or `reading`), a waiting entry's `rank` with its
-`tier` and, when it took that from work waiting on it, `inherited` with that
-work's space number or launch name `from` and the `dependency` (`blocked`,
-`parent`, `question`, `stacked`, `lease` or `serves`), and
+`priority` and `tier` and, for each it took from other work, `priority_from`
+or `tier_from` with that work's space number or launch name `from` and the
+`dependency` (`blocked`, `parent`, `question`, `stacked`, `lease` or
+`serves`), and
 `base` once a launch starts on a blocker's branch, while `list --json` stays
 a list of workspaces. Each line starts with the entry's ID, which `queue
 start` and `cancel` take. On a terminal, `shoal queue` picks a waiting entry and
@@ -2083,26 +2084,31 @@ starting an entry is for the user.
 
 #### Queue order
 
-Waiting entries start by tier, highest first: `finishing`, the agents of a
+Waiting entries start by priority, highest first: a space's priority, from 0
+to 100, is 50 unless set, and a queued launch has the one it was queued with
+until its space exists. Within a priority they start by tier, highest first:
+`finishing`, the agents of a
 space with an open PR it opened or was assigned or with a ready mark, and CI
 jobs on PRs and on the default branch; `started`, restores of agents that have
 worked in their space; `new`, other launches and CI jobs. An entry rises one
-tier for each full hour it waits. Within a tier, the space with the larger
+tier for each full hour it waits, but never to a higher priority. Within a tier, the space with the larger
 share of its plan steps done goes first, then the space created earliest, then
 a CI job or review ahead of an agent of the same space, then the entry that
 arrived first.
 
-Work that other work waits on ranks at least as high as that work, through
-any chain of waits: what blocks a queued launch or a space's progress, which
+Work that other work waits on takes that work's priority and tier where they
+are higher, each on its own, through any chain of waits: what blocks a queued launch or a space's progress, which
 for an issue is the spaces working on it, for a PR the spaces that opened or
 were assigned it, and for a CI run its queued jobs and those of its workflow
 on the default branch; a workspace's children; the parent of a child with an
 open question; the workspace a stacked one builds on; and the spaces holding a
-lease another space queues for. A chat's children compete with every other
-worker. A CI job ranks with the highest of the spaces its run links, and a
-review with the workspace it reviews. `shoal queue` shows each waiting entry's
-tier, and when it took that from waiting work, that work and why, as in
-`finishing (from 12, blocked on this)`.
+lease another space queues for. A chat passes its children only a priority
+set on it, so they compete with every other worker. A CI job ranks with the
+highest of the spaces its run links, taking its priority even when lower, and
+a review with the workspace it reviews. `shoal queue` shows each waiting
+entry's priority and tier, and for each it took from waiting work, that work
+and why, as in `priority urgent (from 7, its parent), finishing (from 12,
+blocked on this)`.
 
 ### Agent accounts
 

@@ -24,8 +24,8 @@ use crate::{
     client::progress::Progress,
     config::modes::ModeName,
     model::{
-        Chat, Dependency, HeldBy, QueueEntry, QueueRank, Repository, ReviewMark, Tier, Workspace,
-        WorkspaceUsage,
+        Chat, Dependency, HeldBy, InheritedRank, QueueEntry, QueueRank, Repository, ReviewMark,
+        Tier, Workspace, WorkspaceUsage,
     },
     state::{AgentState, QueueKind, QueueState},
 };
@@ -333,16 +333,28 @@ fn waiting_reasons(entry: &QueueEntry) -> String {
     text
 }
 
-/// A waiting entry's rank: its tier, with the work it took that from and
-/// why, as in `finishing (from 12, blocked on this)`.
+/// A waiting entry's rank: its priority and tier, each with the work it
+/// took that from and why, as in `priority urgent (from 7, its parent),
+/// finishing (from 12, blocked on this)`.
 fn rank_label(rank: &QueueRank) -> String {
     let tier = match rank.tier {
         Tier::New => "new",
         Tier::Started => "started",
         Tier::Finishing => "finishing",
     };
-    let Some(inherited) = &rank.inherited else {
-        return tier.into();
+    format!(
+        "priority {}{}, {tier}{}",
+        rank.priority,
+        inherited_label(rank.priority_from.as_ref()),
+        inherited_label(rank.tier_from.as_ref())
+    )
+}
+
+/// The work a rank was taken from and why, as in ` (from 12, blocked on
+/// this)`; nothing for a rank of the entry's own.
+fn inherited_label(inherited: Option<&InheritedRank>) -> String {
+    let Some(inherited) = inherited else {
+        return String::new();
     };
     let why = match inherited.dependency {
         Dependency::Blocked => "blocked on this",
@@ -352,7 +364,7 @@ fn rank_label(rank: &QueueRank) -> String {
         Dependency::Lease => "waiting for its lease",
         Dependency::Serves => "which it serves",
     };
-    format!("{tier} (from {}, {why})", inherited.from)
+    format!(" (from {}, {why})", inherited.from)
 }
 
 /// What holds a waiting entry back: `memory: needs 4.0 GiB, 1.2 GiB left`,

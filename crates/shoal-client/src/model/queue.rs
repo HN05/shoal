@@ -73,13 +73,16 @@ pub struct QueueEntry {
     pub rank: Option<QueueRank>,
 }
 
-/// A waiting entry's rank: its tier, and the work it took that from when
-/// that work waits on it.
+/// A waiting entry's rank: its priority and tier, each with the work it
+/// took that from when that work waits on it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueRank {
+    pub priority: crate::priority::Priority,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority_from: Option<InheritedRank>,
     pub tier: Tier,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub inherited: Option<InheritedRank>,
+    pub tier_from: Option<InheritedRank>,
 }
 
 /// How close an entry's work is to finished; later tiers start first.

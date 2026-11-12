@@ -3,13 +3,13 @@ use std::collections::HashSet;
 use rusqlite::params;
 
 use super::*;
-use crate::client::{resources::Scope, space_names::SpaceSelector};
+use crate::client::{priority::Priority, resources::Scope, space_names::SpaceSelector};
 use crate::{
     daemon::{
         test_support::manager,
         workspace::agent_queue::{
             Serving, last_seq,
-            rank::{Edge, Node},
+            rank::{Carries, Edge, Node},
             tests::{add, create, limit_globally, register, request},
         },
     },
@@ -63,8 +63,10 @@ async fn a_launch_in_a_child_ranks_with_its_ready_parent_ahead_of_earlier_launch
                 "child".into(),
                 Some(1),
                 Some(QueueRank {
+                    priority: Priority::NORMAL,
+                    priority_from: None,
                     tier: Tier::Finishing,
-                    inherited: Some(InheritedRank {
+                    tier_from: Some(InheritedRank {
                         from: parent.number.to_string(),
                         dependency: Dependency::Parent,
                     }),
@@ -74,8 +76,10 @@ async fn a_launch_in_a_child_ranks_with_its_ready_parent_ahead_of_earlier_launch
                 "earlier".into(),
                 Some(2),
                 Some(QueueRank {
+                    priority: Priority::NORMAL,
+                    priority_from: None,
                     tier: Tier::New,
-                    inherited: None,
+                    tier_from: None,
                 })
             ),
         ]
@@ -158,6 +162,7 @@ async fn waits_come_from_blockers_questions_stacks_and_leases() {
         waiting,
         on,
         dependency,
+        carries: Carries::Rank,
     };
     let expected = HashSet::from([
         edge(space(&stacked), space(&base), Dependency::Stacked),
@@ -280,4 +285,52 @@ async fn the_last_sequence_number_holds_after_the_newest_entry_leaves() {
         .unwrap();
     assert!(before > 0);
     assert_eq!(after, before);
+}
+
+#[tokio::test]
+async fn a_space_and_a_queued_launch_rank_with_the_priority_set_on_them() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    add(&manager, &repo, "running").await;
+    let workspace = create(&manager, &repo, "worker").await;
+    add(&manager, &repo, "earlier").await;
+    let launch = add(&manager, &repo, "launch").await;
+    manager
+        .queue_add(QueueRequest {
+            workspace: Some(SpaceSelector::id(&workspace.id)),
+            ..request(&repo, "worker", false)
+        })
+        .await
+        .unwrap();
+    let ids = (workspace.id.clone(), launch.entry.unwrap().id);
+    manager
+        .store
+        .run(move |db| {
+            let (workspace, launch) = &ids;
+            db.execute(
+                "INSERT INTO space_priority(space_id,priority) VALUES (?1,?2)",
+                params![workspace, Priority::LOW],
+            )?;
+            db.execute(
+                "UPDATE agent_queue SET priority=?1 WHERE id=?2",
+                params![Priority::URGENT, launch],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let waiting: Vec<_> = (manager.queue_entries().await.unwrap().into_iter())
+        .filter(|entry| entry.state == QueueState::Queued)
+        .map(|entry| (entry.name.to_string(), entry.rank.unwrap().priority))
+        .collect();
+    assert_eq!(
+        waiting,
+        [
+            ("launch".into(), Priority::URGENT),
+            ("earlier".into(), Priority::NORMAL),
+            ("worker".into(), Priority::LOW),
+        ]
+    );
 }

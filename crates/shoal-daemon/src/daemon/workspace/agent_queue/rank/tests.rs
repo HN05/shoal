@@ -11,6 +11,7 @@ fn space(snapshot: &mut Snapshot, id: &str, tier: Tier, created: i64) {
         id.into(),
         Space {
             label: format!("#{id}"),
+            priority: None,
             tier,
             steps: Steps::default(),
             created_at: at(created),
@@ -23,6 +24,7 @@ fn entry(snapshot: &mut Snapshot, id: &str, work: Work) {
     snapshot.entries.push(Entry {
         id: id.into(),
         name: id.into(),
+        priority: None,
         work,
         queued_at: at(NOW),
         arrival,
@@ -34,6 +36,7 @@ fn edge(snapshot: &mut Snapshot, waiting: &str, on: &str, dependency: Dependency
         waiting: Node::Space(waiting.into()),
         on: Node::Space(on.into()),
         dependency,
+        carries: Carries::Rank,
     });
 }
 
@@ -69,6 +72,25 @@ fn rank_of(snapshot: &Snapshot, id: &str) -> QueueRank {
         .find(|ranked| ranked.id.as_str() == id)
         .unwrap()
         .rank
+}
+
+/// A rank of the default priority at `tier`, taken from `tier_from`.
+fn tiered(tier: Tier, tier_from: Option<InheritedRank>) -> QueueRank {
+    QueueRank {
+        priority: Priority::NORMAL,
+        priority_from: None,
+        tier,
+        tier_from,
+    }
+}
+
+/// Set `priority` on the space `id`.
+fn prioritize(snapshot: &mut Snapshot, id: &str, priority: Priority) {
+    snapshot
+        .spaces
+        .get_mut(&SpaceId::from(id))
+        .unwrap()
+        .priority = Some(priority);
 }
 
 fn inherited(from: &str, dependency: Dependency) -> Option<InheritedRank> {
@@ -150,10 +172,7 @@ fn work_waited_on_takes_the_rank_of_what_waits_transitively() {
     assert_eq!(order(&snapshot), ["base", "other"]);
     assert_eq!(
         rank_of(&snapshot, "base"),
-        QueueRank {
-            tier: Tier::Finishing,
-            inherited: inherited("#child", Dependency::Stacked),
-        }
+        tiered(Tier::Finishing, inherited("#child", Dependency::Stacked))
     );
 }
 
@@ -168,13 +187,11 @@ fn a_launch_without_a_space_passes_its_rank_to_what_blocks_it() {
         waiting: Node::Entry("blocked".into()),
         on: Node::Space("blocker".into()),
         dependency: Dependency::Blocked,
+        carries: Carries::Rank,
     });
     assert_eq!(
         rank_of(&snapshot, "blocker"),
-        QueueRank {
-            tier: Tier::Finishing,
-            inherited: inherited("blocked", Dependency::Blocked),
-        }
+        tiered(Tier::Finishing, inherited("blocked", Dependency::Blocked))
     );
 }
 
@@ -185,13 +202,7 @@ fn rank_flows_only_from_waiting_work_to_what_it_waits_on() {
     space(&mut snapshot, "awaited", Tier::Finishing, 2);
     edge(&mut snapshot, "waiting", "awaited", Dependency::Blocked);
     entry(&mut snapshot, "waiting", launch(Some("waiting")));
-    assert_eq!(
-        rank_of(&snapshot, "waiting"),
-        QueueRank {
-            tier: Tier::New,
-            inherited: None,
-        }
-    );
+    assert_eq!(rank_of(&snapshot, "waiting"), tiered(Tier::New, None));
 }
 
 #[test]
@@ -232,10 +243,7 @@ fn a_job_ranks_with_the_highest_space_it_serves_and_goes_ahead_of_its_agent() {
     assert_eq!(order(&snapshot), ["older", "job", "high", "alone"]);
     assert_eq!(
         rank_of(&snapshot, "job"),
-        QueueRank {
-            tier: Tier::Started,
-            inherited: inherited("#high", Dependency::Serves),
-        }
+        tiered(Tier::Started, inherited("#high", Dependency::Serves))
     );
 }
 
@@ -251,13 +259,7 @@ fn a_job_on_an_open_pr_keeps_its_own_tier_above_its_spaces() {
             spaces: vec!["fresh".into()],
         },
     );
-    assert_eq!(
-        rank_of(&snapshot, "job"),
-        QueueRank {
-            tier: Tier::Finishing,
-            inherited: None,
-        }
-    );
+    assert_eq!(rank_of(&snapshot, "job"), tiered(Tier::Finishing, None));
 }
 
 #[test]
@@ -277,10 +279,7 @@ fn a_review_ranks_with_its_workspace_and_what_that_inherits() {
     assert_eq!(order(&snapshot), ["review", "launch"]);
     assert_eq!(
         rank_of(&snapshot, "review"),
-        QueueRank {
-            tier: Tier::Finishing,
-            inherited: inherited("#child", Dependency::Serves),
-        }
+        tiered(Tier::Finishing, inherited("#child", Dependency::Serves))
     );
 }
 
@@ -300,13 +299,11 @@ fn a_job_that_work_is_blocked_on_takes_that_works_rank() {
         waiting: Node::Space("blocked".into()),
         on: Node::Entry("main-job".into()),
         dependency: Dependency::Blocked,
+        carries: Carries::Rank,
     });
     assert_eq!(
         rank_of(&snapshot, "main-job"),
-        QueueRank {
-            tier: Tier::Finishing,
-            inherited: inherited("#blocked", Dependency::Blocked),
-        }
+        tiered(Tier::Finishing, inherited("#blocked", Dependency::Blocked))
     );
 }
 
@@ -328,7 +325,7 @@ fn a_job_ranks_with_the_space_that_orders_first_among_equal_tiers() {
     );
     assert_eq!(order(&snapshot), ["job", "chat"]);
     assert_eq!(
-        rank_of(&snapshot, "job").inherited,
+        rank_of(&snapshot, "job").tier_from,
         inherited("#chat", Dependency::Serves)
     );
 }
@@ -350,16 +347,121 @@ fn an_hour_raises_work_from_the_tier_of_its_space() {
     }
     assert_eq!(
         rank_of(&snapshot, "review"),
-        QueueRank {
-            tier: Tier::Finishing,
-            inherited: inherited("#worked", Dependency::Serves),
-        }
+        tiered(Tier::Finishing, inherited("#worked", Dependency::Serves))
     );
+    assert_eq!(rank_of(&snapshot, "launch"), tiered(Tier::Finishing, None));
+}
+
+#[test]
+fn priority_goes_before_tier_and_a_launch_keeps_the_one_it_was_queued_with() {
+    let mut snapshot = snapshot();
+    space(&mut snapshot, "reviewed", Tier::Finishing, 1);
+    space(&mut snapshot, "fresh", Tier::New, 2);
+    space(&mut snapshot, "unwanted", Tier::Finishing, 3);
+    prioritize(&mut snapshot, "fresh", Priority::URGENT);
+    prioritize(&mut snapshot, "unwanted", Priority::LOW);
+    entry(&mut snapshot, "unwanted", restore("unwanted"));
+    entry(&mut snapshot, "reviewed", restore("reviewed"));
+    entry(&mut snapshot, "fresh", launch(Some("fresh")));
+    entry(&mut snapshot, "new", launch(None));
+    snapshot.entries[3].priority = Some(Priority::try_from(60).unwrap());
+    assert_eq!(order(&snapshot), ["fresh", "new", "reviewed", "unwanted"]);
+}
+
+#[test]
+fn priority_and_tier_flow_to_waited_on_work_each_from_where_it_is_highest() {
+    let mut snapshot = snapshot();
+    space(&mut snapshot, "urgent", Tier::New, 1);
+    space(&mut snapshot, "reviewed", Tier::Finishing, 2);
+    space(&mut snapshot, "base", Tier::New, 3);
+    prioritize(&mut snapshot, "urgent", Priority::URGENT);
+    edge(&mut snapshot, "urgent", "base", Dependency::Blocked);
+    edge(&mut snapshot, "reviewed", "base", Dependency::Stacked);
+    entry(&mut snapshot, "base", restore("base"));
     assert_eq!(
-        rank_of(&snapshot, "launch"),
+        rank_of(&snapshot, "base"),
         QueueRank {
+            priority: Priority::URGENT,
+            priority_from: inherited("#urgent", Dependency::Blocked),
             tier: Tier::Finishing,
-            inherited: None,
+            tier_from: inherited("#reviewed", Dependency::Stacked),
         }
     );
+}
+
+#[test]
+fn a_chat_passes_its_children_only_a_priority_set_on_it() {
+    let mut snapshot = snapshot();
+    for (id, created) in [("chat", 1), ("set", 2), ("child", 3), ("other", 4)] {
+        space(&mut snapshot, id, Tier::New, created);
+    }
+    snapshot
+        .spaces
+        .get_mut(&SpaceId::from("chat"))
+        .unwrap()
+        .tier = Tier::Finishing;
+    prioritize(&mut snapshot, "set", Priority::URGENT);
+    let urgent_child = Priority::try_from(70).unwrap();
+    prioritize(&mut snapshot, "chat", urgent_child);
+    for (parent, child) in [("chat", "child"), ("set", "other")] {
+        snapshot.edges.push(Edge {
+            waiting: Node::Space(parent.into()),
+            on: Node::Space(child.into()),
+            dependency: Dependency::Parent,
+            carries: Carries::SetPriority,
+        });
+    }
+    // The chat's set priority is passed on, its tier and what it inherits not.
+    edge(&mut snapshot, "set", "chat", Dependency::Blocked);
+    entry(&mut snapshot, "child", restore("child"));
+    entry(&mut snapshot, "other", restore("other"));
+    let child = rank_of(&snapshot, "child");
+    assert_eq!((child.priority, child.tier), (urgent_child, Tier::Started));
+    assert_eq!(child.priority_from, inherited("#chat", Dependency::Parent));
+    assert_eq!(rank_of(&snapshot, "other").priority, Priority::URGENT);
+}
+
+#[test]
+fn a_job_takes_the_priority_of_the_space_it_serves_even_when_lower() {
+    let mut snapshot = snapshot();
+    space(&mut snapshot, "unwanted", Tier::New, 1);
+    prioritize(&mut snapshot, "unwanted", Priority::LOW);
+    entry(
+        &mut snapshot,
+        "job",
+        Work::Job {
+            tier: Tier::New,
+            spaces: vec!["unwanted".into()],
+        },
+    );
+    entry(&mut snapshot, "launch", launch(None));
+    assert_eq!(order(&snapshot), ["launch", "job"]);
+    assert_eq!(
+        rank_of(&snapshot, "job").priority_from,
+        inherited("#unwanted", Dependency::Serves)
+    );
+}
+
+#[test]
+fn a_job_its_lower_priority_space_waits_on_keeps_that_priority() {
+    let mut snapshot = snapshot();
+    space(&mut snapshot, "unwanted", Tier::New, 1);
+    prioritize(&mut snapshot, "unwanted", Priority::LOW);
+    snapshot.edges.push(Edge {
+        waiting: Node::Space("unwanted".into()),
+        on: Node::Entry("job".into()),
+        dependency: Dependency::Blocked,
+        carries: Carries::Rank,
+    });
+    entry(
+        &mut snapshot,
+        "job",
+        Work::Job {
+            tier: Tier::New,
+            spaces: vec!["unwanted".into()],
+        },
+    );
+    entry(&mut snapshot, "launch", launch(None));
+    assert_eq!(order(&snapshot), ["launch", "job"]);
+    assert_eq!(rank_of(&snapshot, "job").priority, Priority::LOW);
 }

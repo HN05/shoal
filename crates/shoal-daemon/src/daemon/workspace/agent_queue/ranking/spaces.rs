@@ -1,12 +1,12 @@
-//! The spaces as ranking sees them: each one's own tier, its plan steps and
-//! when it was created.
+//! The spaces as ranking sees them: each one's priority and own tier, its
+//! plan steps and when it was created.
 use std::collections::HashMap;
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::super::rank::{Space, Steps};
-use crate::client::{events::EventKind, space_ids::SpaceId, time::UnixTime};
+use crate::client::{events::EventKind, priority::Priority, space_ids::SpaceId, time::UnixTime};
 use crate::{
     daemon::{progress, store},
     forge::{items::link::LinkKind, updates::SnapshotState},
@@ -18,6 +18,7 @@ struct Row {
     id: SpaceId,
     number: Option<i64>,
     name: String,
+    priority: Option<Priority>,
     /// Whether it has a ready mark.
     ready: bool,
     /// Whether an agent has worked in it.
@@ -39,6 +40,7 @@ fn rows(db: &Connection) -> Result<Vec<Row>> {
     Ok(db
         .prepare(
             "SELECT s.id,s.number,s.name,
+                (SELECT priority FROM space_priority WHERE space_id=s.id),
                 EXISTS(SELECT 1 FROM space_review WHERE space_id=s.id),
                 s.kind='chat' OR EXISTS(SELECT 1 FROM space_agent_state WHERE space_id=s.id)
                     OR EXISTS(SELECT 1 FROM workspace_events WHERE space_id=s.id AND NOT bulk
@@ -52,9 +54,10 @@ fn rows(db: &Connection) -> Result<Vec<Row>> {
                 id: row.get(0)?,
                 number: row.get(1)?,
                 name: row.get(2)?,
-                ready: row.get(3)?,
-                started: row.get(4)?,
-                created_at: row.get(5)?,
+                priority: row.get(3)?,
+                ready: row.get(4)?,
+                started: row.get(5)?,
+                created_at: row.get(6)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?)
@@ -77,6 +80,7 @@ fn space(db: &Connection, row: &Row) -> Result<Space> {
         label: row
             .number
             .map_or(row.name.clone(), |number| number.to_string()),
+        priority: row.priority,
         tier,
         steps: steps.unwrap_or_default(),
         created_at: row.created_at.unwrap_or(UnixTime::from_seconds(0)),

@@ -1,18 +1,19 @@
 //! The rank of the queue's waiting work, which decides what starts first.
-//! Each entry has a tier, how close its work is to finished, which rises one
-//! level for each hour it waits. Tiers flow along the dependency graph, from
-//! work that waits to the work it waits on, so that an entry ranks at least
-//! as high as anything waiting on it; a CI job or review ranks with the
-//! spaces it serves. Within a tier the larger share of a space's plan steps
-//! done goes first, then the space started earliest, then a CI job or review
-//! ahead of an agent, then arrival.
+//! Each entry has a priority, how much its work matters, which goes first,
+//! and a tier, how close its work is to finished, which rises one level for
+//! each hour it waits. Both flow along the dependency graph, from work that
+//! waits to the work it waits on, so that an entry ranks at least as high as
+//! anything waiting on it; a CI job or review ranks with the spaces it
+//! serves. Within a tier the larger share of a space's plan steps done goes
+//! first, then the space started earliest, then a CI job or review ahead of
+//! an agent, then arrival.
 use std::{
     cmp::Ordering,
     collections::{HashMap, hash_map},
     time::Duration,
 };
 
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId, time::UnixTime};
+use crate::client::{priority::Priority, queue::QueueEntryId, space_ids::SpaceId, time::UnixTime};
 use crate::model::{Dependency, InheritedRank, QueueRank, Tier};
 
 /// How long an entry waits to rise one tier.
@@ -34,6 +35,8 @@ pub(crate) struct Entry {
     pub id: QueueEntryId,
     /// What explanations call a launch that has no space yet.
     pub name: String,
+    /// The priority a launch that has no space yet was queued with.
+    pub priority: Option<Priority>,
     pub work: Work,
     pub queued_at: UnixTime,
     /// Its place in the order entries arrived in.
@@ -58,6 +61,8 @@ pub(crate) enum Work {
 pub(crate) struct Space {
     /// What explanations call it: its number, else its name.
     pub label: String,
+    /// The priority set on it; it has the default without one.
+    pub priority: Option<Priority>,
     /// Its own tier: `Finishing` with an open PR or a ready mark, `Started`
     /// once an agent has worked in it.
     pub tier: Tier,
@@ -89,12 +94,24 @@ pub(crate) enum Node {
     Entry(QueueEntryId),
 }
 
-/// `waiting` waits on `on`, so `on` ranks at least as high.
+/// `waiting` waits on `on`, so `on` ranks at least as high as what the
+/// edge carries.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct Edge {
     pub waiting: Node,
     pub on: Node,
     pub dependency: Dependency,
+    pub carries: Carries,
+}
+
+/// What of the waiting work's rank an edge passes on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum Carries {
+    /// Its priority and tier, its own or inherited.
+    Rank,
+    /// Only a priority set on its space, as a chat passes to its children,
+    /// which compete with every other worker.
+    SetPriority,
 }
 
 /// A waiting entry with its rank, in queue order.
@@ -121,53 +138,112 @@ pub(crate) fn rank(snapshot: &Snapshot) -> Vec<Ranked> {
         .collect()
 }
 
-/// Each node's tier, and the work it inherited it from.
-type Standing = HashMap<Node, (Tier, Option<InheritedRank>)>;
+/// Each node's rank, with the work it inherited each part from.
+type Standing = HashMap<Node, QueueRank>;
 
-/// Each space's own tier, raised by the aged tiers of the agents queued in
-/// it; a launch without a space stands alone.
+/// A rank of `priority` and `tier` taken from nothing.
+fn own(priority: Priority, tier: Tier) -> QueueRank {
+    QueueRank {
+        priority,
+        priority_from: None,
+        tier,
+        tier_from: None,
+    }
+}
+
+/// Each space's own rank, its tier raised by the aged tiers of the agents
+/// queued in it; a launch without a space stands alone.
 fn own_standing(snapshot: &Snapshot) -> Standing {
     let mut standing: Standing = (snapshot.spaces.iter())
-        .map(|(id, space)| (Node::Space(id.clone()), (space.tier, None)))
+        .map(|(id, space)| {
+            let rank = own(space.priority.unwrap_or_default(), space.tier);
+            (Node::Space(id.clone()), rank)
+        })
         .collect();
     for entry in &snapshot.entries {
         let Some(node) = agent_node(entry) else {
             continue;
         };
         let tier = aged(base_tier(entry, snapshot), entry, snapshot.now);
-        let held = standing.entry(node).or_insert((tier, None));
-        held.0 = held.0.max(tier);
+        let held =
+            (standing.entry(node)).or_insert_with(|| own(entry.priority.unwrap_or_default(), tier));
+        held.tier = held.tier.max(tier);
     }
     standing
 }
 
-/// Raise each node to the highest tier of the work waiting on it,
-/// transitively, remembering what it took that from.
+/// Raise each node to the highest priority and tier of the work waiting on
+/// it, transitively, remembering what it took each from.
 fn inherit(standing: &mut Standing, snapshot: &Snapshot) {
     let mut changed = true;
-    // Each pass raises some node a tier, so passes end within three per node.
+    // Each pass raises some node, and nothing falls, so the passes end.
     while changed {
         changed = false;
         for edge in &snapshot.edges {
-            let Some(&(tier, _)) = standing.get(&edge.waiting) else {
+            let Some(carried) = carried(edge, standing, snapshot) else {
                 continue;
             };
-            let raised = Some(InheritedRank {
-                from: label(&edge.waiting, snapshot),
-                dependency: edge.dependency,
-            });
+            // Work nothing else ranks, such as a CI job, takes what it
+            // carries as it is, a lower priority too.
             match standing.entry(edge.on.clone()) {
-                hash_map::Entry::Occupied(mut held) if held.get().0 < tier => {
-                    *held.get_mut() = (tier, raised);
-                }
-                hash_map::Entry::Occupied(_) => continue,
+                hash_map::Entry::Occupied(mut held) => changed |= raise(held.get_mut(), carried),
                 hash_map::Entry::Vacant(vacant) => {
-                    vacant.insert((tier, raised));
+                    vacant.insert(carried);
+                    changed = true;
                 }
             }
-            changed = true;
         }
     }
+}
+
+/// The rank `edge` carries from its waiting work, taken from it.
+fn carried(edge: &Edge, standing: &Standing, snapshot: &Snapshot) -> Option<QueueRank> {
+    let from = || {
+        Some(InheritedRank {
+            from: label(&edge.waiting, snapshot),
+            dependency: edge.dependency,
+        })
+    };
+    match edge.carries {
+        Carries::Rank => {
+            let waiting = standing.get(&edge.waiting)?;
+            Some(QueueRank {
+                priority: waiting.priority,
+                priority_from: from(),
+                tier: waiting.tier,
+                tier_from: from(),
+            })
+        }
+        Carries::SetPriority => {
+            let Node::Space(id) = &edge.waiting else {
+                return None;
+            };
+            let priority = snapshot.spaces.get(id)?.priority?;
+            Some(QueueRank {
+                priority,
+                priority_from: from(),
+                tier: Tier::New,
+                tier_from: None,
+            })
+        }
+    }
+}
+
+/// Raise `held` to each part of `by` that is higher, with what that came
+/// from, answering whether anything rose.
+fn raise(held: &mut QueueRank, by: QueueRank) -> bool {
+    let mut rose = false;
+    if by.priority > held.priority {
+        held.priority = by.priority;
+        held.priority_from = by.priority_from;
+        rose = true;
+    }
+    if by.tier > held.tier {
+        held.tier = by.tier;
+        held.tier_from = by.tier_from;
+        rose = true;
+    }
+    rose
 }
 
 /// What explanations call `node`.
@@ -239,7 +315,8 @@ struct Placed {
 
 impl Placed {
     fn order(&self, other: &Self) -> Ordering {
-        (other.rank.tier.cmp(&self.rank.tier))
+        (other.rank.priority.cmp(&self.rank.priority))
+            .then_with(|| other.rank.tier.cmp(&self.rank.tier))
             .then_with(|| other.steps.cmp_share(self.steps))
             .then_with(|| self.started.cmp(&other.started))
             .then_with(|| other.serves.cmp(&self.serves))
@@ -250,28 +327,19 @@ impl Placed {
 /// `entry` with its rank and the space whose progress and age order it
 /// within its tier.
 fn place(entry: &Entry, standing: &Standing, snapshot: &Snapshot) -> Placed {
-    let own = QueueRank {
-        tier: aged(own_tier(&entry.work), entry, snapshot.now),
-        inherited: None,
-    };
-    let (rank, space) = match &entry.work {
-        Work::Job { spaces, .. } => served(own, spaces, standing, snapshot),
-        Work::Review { space } => served(own, space.as_slice(), standing, snapshot),
-        Work::Launch { .. } | Work::Restore { .. } => {
-            let node = agent_node(entry).expect("an agent's entry has a node");
-            let rank = raised(own, standing.get(&node));
-            let space = match node {
-                Node::Space(id) => snapshot.spaces.get(&id),
-                Node::Entry(_) => None,
-            };
-            (rank, space)
-        }
+    let tier = aged(own_tier(&entry.work), entry, snapshot.now);
+    let (mut rank, space) = match &entry.work {
+        Work::Job { spaces, .. } => served(tier, spaces, standing, snapshot),
+        Work::Review { space } => served(tier, space.as_slice(), standing, snapshot),
+        Work::Launch { .. } | Work::Restore { .. } => agent_rank(entry, tier, standing, snapshot),
     };
     // Waiting raises it from the tier of its space as well as its own.
     let waited = aged(base_tier(entry, snapshot), entry, snapshot.now);
-    let rank = raised(rank.clone(), Some(&(waited, rank.inherited)));
+    rank.tier = rank.tier.max(waited);
     // Work may wait on the entry itself, such as on a CI run's job.
-    let rank = raised(rank, standing.get(&Node::Entry(entry.id.clone())));
+    if let Some(held) = standing.get(&Node::Entry(entry.id.clone())) {
+        raise(&mut rank, held.clone());
+    }
     Placed {
         id: entry.id.clone(),
         rank,
@@ -282,53 +350,78 @@ fn place(entry: &Entry, standing: &Standing, snapshot: &Snapshot) -> Placed {
     }
 }
 
-/// `rank`, or `held` where that is a higher tier.
-fn raised(rank: QueueRank, held: Option<&(Tier, Option<InheritedRank>)>) -> QueueRank {
-    match held {
-        Some((tier, inherited)) if *tier > rank.tier => QueueRank {
-            tier: *tier,
-            inherited: inherited.clone(),
-        },
-        _ => rank,
-    }
-}
-
-/// The rank of a CI job or review of rank `own` that serves `spaces`: that
-/// of the space among them that orders first, when above its own, with
-/// that space.
-fn served<'a>(
-    own: QueueRank,
-    spaces: &[SpaceId],
+/// The rank of the agent `entry` at its own `tier`: its node's priority,
+/// and its node's tier when higher, with the space it starts in.
+fn agent_rank<'a>(
+    entry: &Entry,
+    tier: Tier,
     standing: &Standing,
     snapshot: &'a Snapshot,
 ) -> (QueueRank, Option<&'a Space>) {
-    let tier = |id: &SpaceId| {
-        (standing.get(&Node::Space(id.clone()))).map_or(Tier::New, |(tier, _)| *tier)
+    let node = agent_node(entry).expect("an agent's entry has a node");
+    let rank = match standing.get(&node) {
+        Some(held) => {
+            let mut rank = QueueRank {
+                priority_from: held.priority_from.clone(),
+                ..own(held.priority, tier)
+            };
+            raise(&mut rank, held.clone());
+            rank
+        }
+        None => own(entry.priority.unwrap_or_default(), tier),
     };
-    let best = (spaces.iter())
-        .map(|id| (id, tier(id), snapshot.spaces.get(id)))
-        .min_by(|a, b| first_space((a.1, a.2), (b.1, b.2)));
-    let space = best.and_then(|(_, _, space)| space);
-    let rank = match best {
-        Some((id, tier, _)) if tier > own.tier => QueueRank {
-            tier,
-            inherited: Some(InheritedRank {
-                from: label(&Node::Space(id.clone()), snapshot),
-                dependency: Dependency::Serves,
-            }),
-        },
-        _ => own,
+    let space = match node {
+        Node::Space(id) => snapshot.spaces.get(&id),
+        Node::Entry(_) => None,
     };
     (rank, space)
 }
 
-/// Which of two spaces at their tiers orders first, as their agents would:
-/// the higher tier, then the larger share of steps done, then the older.
-fn first_space(a: (Tier, Option<&Space>), b: (Tier, Option<&Space>)) -> Ordering {
+/// The rank of a CI job or review of its own `tier` that serves `spaces`:
+/// the priority of the space among them that orders first, and its tier
+/// when above its own, with that space. Without one it has the default
+/// priority.
+fn served<'a>(
+    tier: Tier,
+    spaces: &[SpaceId],
+    standing: &Standing,
+    snapshot: &'a Snapshot,
+) -> (QueueRank, Option<&'a Space>) {
+    let mut rank = own(Priority::default(), tier);
+    let held = |id: &SpaceId| {
+        (standing.get(&Node::Space(id.clone())).cloned())
+            .unwrap_or_else(|| own(Priority::default(), Tier::New))
+    };
+    let best = (spaces.iter())
+        .map(|id| (id, held(id), snapshot.spaces.get(id)))
+        .min_by(|a, b| first_space((&a.1, a.2), (&b.1, b.2)));
+    let Some((id, best, space)) = best else {
+        return (rank, None);
+    };
+    let from = Some(InheritedRank {
+        from: label(&Node::Space(id.clone()), snapshot),
+        dependency: Dependency::Serves,
+    });
+    if best.priority != rank.priority {
+        rank.priority = best.priority;
+        rank.priority_from = from.clone();
+    }
+    if best.tier > rank.tier {
+        rank.tier = best.tier;
+        rank.tier_from = from;
+    }
+    (rank, space)
+}
+
+/// Which of two spaces at their ranks orders first, as their agents would:
+/// the higher priority, then the higher tier, then the larger share of
+/// steps done, then the older.
+fn first_space(a: (&QueueRank, Option<&Space>), b: (&QueueRank, Option<&Space>)) -> Ordering {
     let steps = |space: Option<&Space>| space.map(|space| space.steps).unwrap_or_default();
     // A space the snapshot lacks goes after every known one.
     let created = |space: Option<&Space>| (space.is_none(), space.map(|space| space.created_at));
-    (b.0.cmp(&a.0))
+    (b.0.priority.cmp(&a.0.priority))
+        .then_with(|| b.0.tier.cmp(&a.0.tier))
         .then_with(|| steps(b.1).cmp_share(steps(a.1)))
         .then_with(|| created(a.1).cmp(&created(b.1)))
 }

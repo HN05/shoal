@@ -1587,18 +1587,22 @@ The queue starts the work that gets the most done with the fewest agents
 running: work close to finished before new work, and work that other work
 waits on before the work waiting. One pure rank operation over a snapshot of
 the entries, spaces and what waits on what orders admission and the listing
-alike. Its tiers are `finishing` (a space with an open PR or a ready mark, CI
+alike. A space's priority, 0 to 100 and 50 unless set, goes first, so the user
+decides what matters; a queued launch carries its own until its space exists.
+Within a priority, its tiers are `finishing` (a space with an open PR or a ready mark, CI
 jobs on PRs and the default branch), `started` (restores of agents that have
-worked) and `new`; an hour's wait raises an entry a tier, so nothing starves.
-Rank flows along one dependency graph from waiting work to what it waits on:
+worked) and `new`; an hour's wait raises an entry a tier, so nothing starves
+within its priority, but never a priority: lower-priority work waits while
+higher-priority work keeps coming, as the user chose. Priority and tier each flow along one dependency graph from
+waiting work to what it waits on:
 blockers, a workspace parent to its children, a child with an open question to
 its parent, a stacked workspace to its base, and a space queued for a lease to
-its holders. A chat parent passes nothing on, so an orchestrator's children
-compete with every other worker. CI jobs and reviews have no rank of their
+its holders. A chat parent passes on only a priority set on it, so an
+orchestrator's children compete with every other worker. CI jobs and reviews have no rank of their
 own beyond a job's tier: each takes the rank of the spaces it serves and goes
 ahead of their agents, which wait on it. Within a tier, plan steps done, then
 the space's age, then arrival decide, and `shoal queue` explains a rank taken
-from other work.
+from other work, for its priority and its tier apart.
 For the same reason
 every caller sees the whole queue, while acting on an entry keeps the scope
 rules. Each waiting entry carries what held it back at the last admission

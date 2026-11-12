@@ -1,6 +1,6 @@
 use super::*;
 use crate::time::UnixTime;
-use crate::{forge::items::link::ItemKind, model::InheritedRank, state::WorkspaceState};
+use crate::{client::priority::Priority, forge::items::link::ItemKind, state::WorkspaceState};
 
 pub(super) fn workspace(
     repository: &str,
@@ -60,15 +60,20 @@ fn queue_status_names_the_work_a_launch_waits_for() {
     );
     entry.mode = None;
     entry.rank = Some(QueueRank {
+        priority: Priority::URGENT,
+        priority_from: Some(InheritedRank {
+            from: "7".into(),
+            dependency: Dependency::Parent,
+        }),
         tier: Tier::Finishing,
-        inherited: Some(InheritedRank {
+        tier_from: Some(InheritedRank {
             from: "12".into(),
             dependency: Dependency::Blocked,
         }),
     });
     assert_eq!(
         queue_status_cell(&entry).0,
-        "queued, position 2, finishing (from 12, blocked on this)"
+        "queued, position 2, priority urgent (from 7, its parent), finishing (from 12, blocked on this)"
     );
     entry.rank = None;
     entry.held_by = Some(HeldBy::Memory {
