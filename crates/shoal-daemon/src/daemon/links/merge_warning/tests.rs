@@ -193,3 +193,84 @@ async fn a_merge_is_refused_once_its_warning_is_not_the_one_confirmed() {
         .unwrap_err();
     assert!(refused.to_string().contains("only a merge"));
 }
+
+/// Watch the PR at `url` for the workspace `id`, its one linked PR, in the
+/// database at `database`.
+fn link_pull(database: &std::path::Path, id: &str, url: &str) {
+    let registration = Registration {
+        kind: RegistrationKind::Watch {
+            urls: vec![url.to_owned()],
+            merged_head: None,
+        },
+        error: None,
+    };
+    let db = rusqlite::Connection::open(database).unwrap();
+    db.busy_timeout(std::time::Duration::from_secs(60)).unwrap();
+    db.execute(
+        "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)
+         ON CONFLICT(space_id) DO UPDATE SET record=excluded.record",
+        params![id, serde_json::to_string(&registration).unwrap()],
+    )
+    .unwrap();
+}
+
+#[tokio::test]
+async fn a_confirmed_merge_keeps_the_pr_whose_warning_it_read() {
+    let (_root, manager, workspace) = changed_on_both_sides().await;
+    let head = crate::daemon::links::pr::current_head(&workspace)
+        .await
+        .unwrap();
+    let database = manager.paths.database();
+    let id = workspace.id.to_string();
+    let host = std::sync::Arc::new(std::sync::OnceLock::<String>::new());
+    let served = host.clone();
+    let reads = std::sync::atomic::AtomicUsize::new(0);
+    // Answering the merge's read of PR 1's warning, the second after the
+    // user's, links PR 2 instead.
+    let server = crate::forge::test_support::Server::start(move |request| {
+        let read = request.line == "GET /api/v1/repos/team/repo/pulls/1";
+        if read && reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 1 {
+            let other = format!("http://{}/team/repo/pulls/2", served.get().unwrap());
+            link_pull(&database, &id, &other);
+        }
+        let pull = serde_json::json!({
+            "number": 1, "title": "Fix", "state": "open", "merged": false,
+            "draft": false, "head": {"ref": "topic", "sha": head},
+            "base": {"ref": "main"}, "labels": [],
+        });
+        (200, Vec::new(), pull.to_string().into())
+    });
+    host.set(server.host.clone()).unwrap();
+    let host = &server.host;
+    crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::Forgejo);
+    crate::daemon::test_support::configure(
+        &manager,
+        &format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\ntoken = \"user\"\n"),
+    )
+    .await;
+    let checkout = manager.repository(&workspace.repository_id).await.unwrap();
+    let origin = format!("http://{host}/team/repo");
+    crate::daemon::test_support::git(&checkout.path, &["remote", "add", "origin", &origin]);
+    let first = format!("http://{host}/team/repo/pulls/1");
+    link_pull(&manager.paths.database(), workspace.id.as_str(), &first);
+
+    let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
+    let warning = manager.merge_warning(&context, None).await.unwrap();
+    assert!(warning.is_some());
+    let merge = Action::Merge {
+        method: crate::forge::items::action::MergeMethod::Merge,
+        delete_branch: false,
+    };
+    let confirmed = ConfirmedWarning { warning };
+    // Whatever the forge answers after the merge, it merged PR 1.
+    let _ = (manager.confirmed_merge(&context, None, merge, &confirmed)).await;
+    let merges: Vec<_> = (server.received().into_iter())
+        .filter(|request| request.line.starts_with("POST"))
+        .map(|request| request.line)
+        .collect();
+    assert!(!merges.is_empty());
+    assert!(
+        merges.iter().all(|line| line.contains("/pulls/1/")),
+        "{merges:?}"
+    );
+}
