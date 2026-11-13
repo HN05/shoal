@@ -4344,16 +4344,17 @@ fn forgejo_workflow_links_of_another_repository_link_the_run_for_the_user_only()
         [json!([dispatch, {"ref": "main", "inputs": {}, "return_run_info": true}])]
     );
 
-    // Workspace processes start runs only in their repository, on their branch.
+    // Workspace processes start runs only in their repository, on a branch
+    // their scope reaches.
     let exported = fixture.ok(&["internal", "env", &fixture.id("topic")]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let own_file = format!(
-        "{}/src/branch/main/.forgejo/workflows/deps.yml",
+        "{}/src/branch/elsewhere/.forgejo/workflows/deps.yml",
         fixture.web
     );
     for (workflow, error) in [
         (page.as_str(), "own repository"),
-        (own_file.as_str(), "branch of the workspace"),
+        (own_file.as_str(), "this space's scope"),
     ] {
         let refused = fixture.request_as(
             json!({"start_ci_run": {"workflow": workflow, "branch": null, "inputs": {}}}),
