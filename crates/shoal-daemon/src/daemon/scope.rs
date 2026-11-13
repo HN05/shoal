@@ -15,6 +15,7 @@ mod access;
 mod reach;
 
 pub(in crate::daemon) use access::NOT_NOW;
+use reach::outside_scope;
 
 /// A new scope token, which no other caller holds.
 pub(crate) fn new_token() -> ScopeToken {
@@ -56,13 +57,11 @@ pub(crate) async fn authorize(
         .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?;
     let reads_only = method.reads_space();
     if let Some(target) = method.scope(manager, &caller).await? {
-        let id = manager.space(target).await?.id().to_owned();
+        let space = manager.space(target).await?;
+        let id = space.id().to_owned();
         if !manager.reaches(&caller, &id).await? {
             let home = manager.chat_home(&caller.space_id).await?;
-            ensure!(
-                home.as_ref() == Some(&id),
-                "workspace processes can only access their own space and those below it"
-            );
+            ensure!(home.as_ref() == Some(&id), "{}", outside_scope(&space));
             ensure!(
                 reads_only,
                 "a chat only reads the workspace it runs in; ask the user, or the workspace's agent, to change it"

@@ -87,10 +87,7 @@ async fn narrow_to_removed(
         Some(parent) => manager.reaches(caller, parent).await?,
         None => manager.reach_root(Some(caller)).await?.is_none(),
     };
-    ensure!(
-        below,
-        "workspace processes can only access their own space and those below it"
-    );
+    ensure!(below, "space {} is outside this space's scope", space.id);
     *workspace = SpaceSelector::id(&space.id);
     Ok(())
 }

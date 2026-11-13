@@ -5,7 +5,10 @@ use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 
 use super::Caller;
-use crate::daemon::{store, workspace::Manager};
+use crate::{
+    daemon::{store, workspace::Manager},
+    model::PresentSpace,
+};
 
 impl Manager {
     /// The space whose subtree `caller`'s scope reaches; none when it
@@ -50,4 +53,9 @@ impl Manager {
             None => Ok(None),
         }
     }
+}
+
+/// Why a scoped caller is refused `space`, which its scope does not reach.
+pub(in crate::daemon) fn outside_scope(space: &PresentSpace) -> String {
+    format!("space {} is outside this space's scope", space.label())
 }
