@@ -67,7 +67,13 @@ async fn move_one(ctx: &Context, remote: &Remote, planned: &PlannedExport) -> Re
     };
     end_moved(ctx, planned.checked(), checkpoint)
         .await
-        .with_context(|| format!("it now exists here and on {}", remote.host))?;
+        .with_context(|| {
+            format!(
+                "it now exists here and on {}; once the work you want is there, shoal rm {} removes it here",
+                remote.host,
+                planned.id()
+            )
+        })?;
     Ok(imported)
 }
 

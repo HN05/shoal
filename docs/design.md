@@ -3245,8 +3245,9 @@ their order. `move ssh` runs both over SSH after checking Shoal answers there,
 and ends a space here only once its import there succeeded, since a chat keeps
 no record once it ends: it stops the space's agents, saving their sessions,
 exports it while it stays, and on a failed import queues their restores here,
-keeping no file; a workspace that changed here since its export stays,
-existing on both machines, rather than losing the newer work. Shoal keeps no
+keeping no file; a space that cannot end here after its import, such as a
+workspace that changed since its export, stays, existing on both machines,
+rather than losing the newer work. Shoal keeps no
 registry of machines, and
 deciding when and where to move work belongs to a caller outside the core.
 A branch is merged when the local default branch or its remote-tracking branch
