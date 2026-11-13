@@ -161,8 +161,8 @@ instead of the PR delivery guidance below.
   which the daemon starts detached so they never inherit the caller's scope, cancel their queue
   entries, send agent messages,
   answer questions, stop their executions and the chats below their own, restart their agents and those of the chats below their own,
-  queue restores of the agents they or the spaces below them stopped or whose restart by them left them stopped, restore in a background place the
-  chats below their own they or the spaces below them stopped, and discard stopped work; the nearest space above with an agent, of either kind, receives a child agent's messages,
+  queue restores of the agents, a workspace's or a chat's, they or the spaces below them stopped or whose restart by them left them stopped,
+  which the daemon starts a chat's in the place it ran in, and discard stopped work; the nearest space above with an agent, of either kind, receives a child agent's messages,
   questions, completion and ready marks and its agent's exits and stops instead of the user,
   except what a process causes in a child without an agent of its own. Own-workspace setup, rename, base workspace, PR registration,
   linking and watching CI runs of the own repository,
@@ -468,8 +468,8 @@ instead of the PR delivery guidance below.
   It accepts a positive fixed value or `none`; the global value limits the
   machine while a repository's fixed value limits that repository. Slots derive from tracked
   agents, executions awaiting reattachment, resume records and starting queue
-  entries, excluding done workspaces and agents of a `light` mode, never from a
-  separate counter. A light agent starts past the agent limits and memory room,
+  entries, excluding done workspaces, agents of a `light` mode and those of
+  spaces the user attends, as chats, never from a separate counter. A light agent starts past the agent limits and memory room,
   but not past critical or failed readings or low disk. A review holds no
   slot, but its memory counts and it waits for room and disk as a start does.
   A starting
@@ -493,7 +493,8 @@ instead of the PR delivery guidance below.
 - Machine-wide memory overload protection is opt-out; sustained CPU protection is
   opt-in. The machine-only `load` level sets the CPU and memory thresholds the
   file leaves out; explicit values win. Stop one connected tracked
-  agent of a mode that is not `light` at a time through its wrapper: agents no terminal shows before shown ones,
+  agent of a mode that is not `light`, in a space the user does not attend
+  as a chat, at a time through its wrapper: agents no terminal shows before shown ones,
   which still stop once no other is left, then the one idle longest first and
   otherwise the newest, with configurable thresholds
   and timing; retain work and leases, notify with the pressure reason and recovery
