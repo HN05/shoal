@@ -320,9 +320,11 @@ async fn a_split_request_waits_through_keepalives_until_the_daemon_goes_quiet() 
 
 #[tokio::test(start_paused = true)]
 async fn a_request_an_exiting_daemon_held_back_goes_to_the_next_daemon() -> Result<()> {
+    supervise(&RecordedOwner);
     let temp = tempfile::tempdir_in("/tmp")?;
     let paths = Paths::for_test(temp.path());
     paths.prepare()?;
+    own(&paths, "exiting")?;
     let listener = UnixListener::bind(&paths.socket)?;
     let cancel = || crate::protocol::OperationMethod::CancelOperation { id: "op".into() };
     let asking = tokio::spawn({
@@ -465,5 +467,51 @@ async fn a_daemon_that_goes_while_its_exit_waits_is_told_apart_from_one_that_nev
     let (ended, reported) = exit_answering(ExitWhen::Idle, bodies).await?;
     assert_eq!(ended, Ended::Gone(vec![Work::Other]));
     assert_eq!(reported, [vec![Work::Other]]);
+    Ok(())
+}
+
+/// Record this process, born at `birth`, as the daemon that owns the state
+/// directory of `paths`, as [`RecordedOwner`] reads it.
+fn own(paths: &Paths, birth: &str) -> Result<()> {
+    let owner = Identity {
+        pid: std::process::id(),
+        birth: birth.into(),
+        unique: None,
+    };
+    Ok(std::fs::write(
+        owner_file(paths),
+        serde_json::to_vec(&owner)?,
+    )?)
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_held_back_request_another_daemon_took_is_not_sent_again() -> Result<()> {
+    supervise(&RecordedOwner);
+    let temp = tempfile::tempdir_in("/tmp")?;
+    let paths = Paths::for_test(temp.path());
+    paths.prepare()?;
+    own(&paths, "exiting")?;
+    let listener = UnixListener::bind(&paths.socket)?;
+    let cancel = || crate::protocol::OperationMethod::CancelOperation { id: "op".into() };
+    let asking = tokio::spawn({
+        let paths = paths.clone();
+        async move { request::<()>(&paths, cancel()).await }
+    });
+    let exiting = Body::error(ErrorCode::Exiting, "the daemon is about to exit");
+    let (mut stream, _) = listener.accept().await?;
+    let request: Request = protocol::read(&mut stream).await?;
+    protocol::write(&mut stream, &Response::new(request.id, exiting)).await?;
+    drop(stream);
+    // The paused clock moves only once the client waits to send it again,
+    // having read the refusal.
+    sleep(timing::UPDATE_POLL_INTERVAL / 2).await;
+    // The next daemon takes the request and goes before it answers, so it
+    // may have run it.
+    own(&paths, "next")?;
+    let (mut taken, _) = listener.accept().await?;
+    let _: Request = protocol::read(&mut taken).await?;
+    drop(taken);
+    let error = asking.await?.unwrap_err();
+    assert!(stream_closed(&error), "{error:#}");
     Ok(())
 }

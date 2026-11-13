@@ -172,19 +172,23 @@ pub async fn open_buffered(
     let request = request_to(daemon, method);
     let mut waiting = DaemonWait::default();
     loop {
+        let mut reached = None;
         let sent = async {
             let mut stream = connect(daemon.paths()).await?;
+            reached = waiting.reached(daemon.paths());
             protocol::write(&mut stream, &request).await?;
             let mut stream = BufReader::new(stream);
             let body = reply(&mut stream, &request).await?;
             Ok((stream, body))
         };
         match sent.await {
-            Ok((stream, body)) => match waiting.held_back(&request, body) {
+            Ok((stream, body)) => match waiting.held_back(daemon.paths(), &request, body) {
                 Some(body) => return Ok((stream, body)),
                 None => waiting.pause().await?,
             },
-            Err(error) => waiting.retry(daemon.paths(), &request, error).await?,
+            Err(error) => {
+                (waiting.retry(daemon.paths(), &request, error, reached)).await?;
+            }
         }
     }
 }
@@ -200,8 +204,10 @@ pub async fn open_split(
     let request = request_to(daemon, method);
     let mut waiting = DaemonWait::default();
     loop {
+        let mut reached = None;
         let sent = async {
             let (reader, mut writer) = connect(daemon.paths()).await?.into_split();
+            reached = waiting.reached(daemon.paths());
             protocol::write(&mut writer, &request).await?;
             let mut reader = BufReader::new(reader);
             let body = reply_kept_alive(&mut reader, &request, limit).await?;
@@ -211,19 +217,17 @@ pub async fn open_split(
         let sent: Result<_> = match sent.await {
             Ok((reader, writer, Ok(body))) => Ok((reader, writer, body)),
             Ok((_, _, Err(error))) => Err(error),
-            Err(error)
-                if waiting.exiting() && (is_unreachable(&error) || stream_closed(&error)) =>
-            {
-                Err(error)
-            }
+            Err(error) if waiting.gap(&error, reached.as_ref()) => Err(error),
             Err(error) => return Err(error),
         };
         match sent {
-            Ok((reader, writer, body)) => match waiting.held_back(&request, body) {
+            Ok((reader, writer, body)) => match waiting.held_back(daemon.paths(), &request, body) {
                 Some(body) => return Ok((reader, writer, body)),
                 None => waiting.pause().await?,
             },
-            Err(error) => waiting.retry(daemon.paths(), &request, error).await?,
+            Err(error) => {
+                (waiting.retry(daemon.paths(), &request, error, reached)).await?;
+            }
         }
     }
 }
@@ -257,13 +261,15 @@ struct DaemonWait {
     /// A daemon held the request back for its exit, so the next daemon may
     /// not listen yet.
     exiting: bool,
+    /// The daemon that held it back, when supervision tells.
+    held_by: Option<Identity>,
 }
 
 impl DaemonWait {
     /// `body`, unless it says a daemon about to exit held `request` back,
     /// which is then sent again, except a daemon control, which reports the
     /// daemon that runs.
-    fn held_back(&mut self, request: &Request, body: Body) -> Option<Body> {
+    fn held_back(&mut self, paths: &Paths, request: &Request, body: Body) -> Option<Body> {
         let held_back = matches!(
             &body,
             Body::Error {
@@ -276,6 +282,9 @@ impl DaemonWait {
         }
         if !self.exiting {
             self.exiting = true;
+            self.held_by = SUPERVISION
+                .get()
+                .and_then(|supervision| supervision.owner(paths));
             if let Some(supervision) = SUPERVISION.get() {
                 supervision.waiting_for_restart();
             }
@@ -283,23 +292,33 @@ impl DaemonWait {
         None
     }
 
-    /// Whether a daemon held the request back for its exit.
-    fn exiting(&self) -> bool {
-        self.exiting
+    /// The daemon an attempt connected to, once one held the request back.
+    fn reached(&self, paths: &Paths) -> Option<Identity> {
+        let supervision = SUPERVISION.get().filter(|_| self.exiting)?;
+        supervision.owner(paths)
+    }
+
+    /// Whether `error` of an attempt that connected to `reached` is the gap
+    /// before the next daemon after a daemon held the request back: no
+    /// socket, or a connection the daemon that held it back closed
+    /// unanswered as it exits, which ran none of it. Another daemon that
+    /// closed it may have run it, so it is not sent again.
+    fn gap(&self, error: &anyhow::Error, reached: Option<&Identity>) -> bool {
+        let by_holder = reached.is_some() && reached == self.held_by.as_ref();
+        self.exiting && (is_unreachable(error) || (by_holder && stream_closed(error)))
     }
 
     /// Return after a pause to send `request` again, or fail with `error`.
+    /// An attempt that fails after connecting to `reached` waits for the
+    /// next daemon while that is [`Self::gap`].
     async fn retry(
         &mut self,
         paths: &Paths,
         request: &Request,
         error: anyhow::Error,
+        reached: Option<Identity>,
     ) -> Result<()> {
-        // The next daemon listens once the one that held the request back
-        // has exited and its service manager started it again. Until then
-        // the exiting daemon may take the connection without answering;
-        // having held the request back, it runs none, so it is not replayed.
-        if self.exiting && (is_unreachable(&error) || stream_closed(&error)) {
+        if self.gap(&error, reached.as_ref()) {
             return self.pause().await.map_err(|timeout| error.context(timeout));
         }
         if !awaits_update(paths, &request.method, &error) {
