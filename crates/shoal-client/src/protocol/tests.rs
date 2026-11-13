@@ -1,5 +1,4 @@
 use super::*;
-use crate::config::repo::ConfigLayers;
 use crate::executions::ExecutionKind;
 use crate::model::{ExecutionPlan, Workspace};
 use crate::notifications::Notification;
@@ -364,15 +363,12 @@ fn extraction_preserves_wire_shapes() {
     ] {
         let body: Body = serde_json::from_value(wire.clone()).unwrap();
         assert_eq!(body.variant_name(), expected);
-        // Config layers serialize defaults; other bodies round-trip exactly.
-        if expected != "LayeredConfig" {
-            assert_eq!(serde_json::to_value(&body).unwrap(), wire);
-        }
+        assert_eq!(serde_json::to_value(&body).unwrap(), wire);
         match expected {
             "Ok" => <()>::try_from(body).unwrap(),
             "Workspaces" => assert!(Vec::<Workspace>::try_from(body).unwrap().is_empty()),
             "LayeredConfig" => {
-                Box::<ConfigLayers>::try_from(body).unwrap();
+                RepositoryLayers::try_from(body).unwrap();
             }
             "Error" => {
                 let error = DaemonStatus::try_from(body).unwrap_err();

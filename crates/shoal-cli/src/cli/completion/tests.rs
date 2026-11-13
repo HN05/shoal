@@ -5,8 +5,8 @@ use crate::{
     config::repo::ConfigLayers,
     model::{Chat, OwnedPlace, RunningAgent},
     protocol::{
-        self, Body, ChatMethod, ConfigTarget, ExecutionMethod, Method, Operation, Request,
-        Response, WorkspaceMethod,
+        self, Body, ChatMethod, ConfigTarget, ExecutionMethod, Method, Operation, RepositoryLayers,
+        Request, Response, WorkspaceMethod,
     },
     sessions::{HostName, Origin},
     state::WorkspaceState,
@@ -177,7 +177,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
         {
             let mut layers = ConfigLayers::default();
             layers.local_config.terminal.herdr.enabled = Some(workspace != "w5");
-            Body::LayeredConfig(Box::new(layers))
+            Body::LayeredConfig(RepositoryLayers::of(&layers).unwrap())
         } else if matches!(
             request.method,
             Method::Operation(Operation::Chat(ChatMethod::ListChats))

@@ -6,6 +6,7 @@ use crate::space_ids::SpaceId;
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::Result;
+use serde::de::DeserializeOwned;
 
 use crate::space_names::SpaceSelector;
 use crate::{
@@ -16,7 +17,7 @@ use crate::{
         Blocker, ConflictCheck, DiffBase, Inspection, MergePreview, OwnedPlace, PresentSpace,
         RenamedWorkspace, SpaceStatus, SpaceTarget, Spaces, UntrackedWorktree, Workspace,
     },
-    protocol::{CommitStart, ConfigTarget, CreationOptions, WorkspaceMethod},
+    protocol::{CommitStart, ConfigTarget, CreationOptions, RepositoryLayers, WorkspaceMethod},
     repository::Selector,
     sessions::{Origin, PlaceClose, PlaceOwnership},
 };
@@ -368,11 +369,14 @@ pub async fn hook(
 }
 
 /// The repository configuration layers that apply to `target`, below the
-/// global configuration.
-pub async fn config_layers(daemon: &impl Daemon, target: ConfigTarget) -> Result<ConfigLayers> {
-    let layers: Box<ConfigLayers> =
+/// global configuration, read as `L`.
+pub async fn config_layers<L: DeserializeOwned>(
+    daemon: &impl Daemon,
+    target: ConfigTarget,
+) -> Result<L> {
+    let layers: RepositoryLayers =
         request(daemon, WorkspaceMethod::LayeredConfig { target }).await?;
-    Ok(*layers)
+    layers.read()
 }
 
 /// The settings that apply to `target` after every layer. The global config
@@ -386,7 +390,7 @@ pub async fn configuration(
     daemon: &impl Daemon,
     target: ConfigTarget,
 ) -> Result<(Config, Effective)> {
-    let layers = config_layers(daemon, target).await?;
+    let layers: ConfigLayers = config_layers(daemon, target).await?;
     let config = Config::load_with_templates(daemon.paths())?;
     let settings = config.resolve(&layers)?;
     // With every layer's mode and rule files read, a launch refuses a mode

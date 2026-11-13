@@ -11,7 +11,9 @@ use super::super::{
     workspace::{self, Manager},
 };
 use crate::client::{events::EventCursor, space_names::SpaceSelector};
-use crate::protocol::{self, Body, ConfigTarget, ErrorCode, Response, WorkspaceMethod};
+use crate::protocol::{
+    self, Body, ConfigTarget, ErrorCode, RepositoryLayers, Response, WorkspaceMethod,
+};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -295,9 +297,9 @@ pub(super) async fn handle(
         WorkspaceMethod::WorkspaceHook { workspace, kind } => {
             Body::Hook(manager.selected_workspace_hook(&workspace, kind).await?)
         }
-        WorkspaceMethod::LayeredConfig { target } => {
-            Body::LayeredConfig(Box::new(manager.config_layers_for(target).await?))
-        }
+        WorkspaceMethod::LayeredConfig { target } => Body::LayeredConfig(RepositoryLayers::of(
+            &manager.config_layers_for(target).await?,
+        )?),
     }))
 }
 

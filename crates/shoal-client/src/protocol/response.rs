@@ -3,7 +3,6 @@ use super::{
     ChatScope, DaemonStatus, DownloadPiece, Exited, MAX_FRAME, ReviewPiece, VERSION, ViewPiece,
     WokenTurn, chats, frame_pages, operations,
 };
-use crate::config::repo::ConfigLayers;
 use crate::events::EventItem;
 use crate::model::{
     ConflictCheck, DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation,
@@ -263,7 +262,7 @@ response_bodies! {
     MergeWarning(Option<crate::model::MergeWarning>),
     MergePreview(crate::model::MergePreview),
     Hook(Option<std::path::PathBuf>),
-    LayeredConfig(Box<ConfigLayers>),
+    LayeredConfig(super::RepositoryLayers),
     SyncedRepository(SyncedRepository),
     FailingSyncs(Vec<crate::model::CheckoutSync>),
     Notifications(Vec<Notification>),
