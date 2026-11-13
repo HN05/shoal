@@ -22,7 +22,7 @@ fn job(id: &str, memory: u64) -> Waiting {
             },
         },
         light: false,
-        waited: Duration::ZERO,
+        waited_for_memory: Duration::ZERO,
     }
 }
 
@@ -77,7 +77,7 @@ fn waiting(entries: &[(&str, &str)]) -> Vec<Waiting> {
                 Work::Launch
             },
             light: id.starts_with('l'),
-            waited: Duration::ZERO,
+            waited_for_memory: Duration::ZERO,
         })
         .collect()
 }
@@ -441,7 +441,7 @@ fn a_oneshot_run_holds_no_slot_but_waits_for_memory_room_and_low_disk() {
         repository: "a".into(),
         work: Work::OneShot { after_stop: false },
         light: false,
-        waited: Duration::ZERO,
+        waited_for_memory: Duration::ZERO,
     }];
     let admitted = |limits: &Limits| !admit(&["a".into()], &review, limits, false).is_empty();
     // The machine's and the repository's one slot is taken.
@@ -488,7 +488,7 @@ fn work_that_fits_starts_ahead_until_the_entry_waiting_for_memory_waited_its_lim
     };
     let queue = |waited| {
         let mut queue = waiting(&[("agent", "a")]);
-        queue[0].waited = waited;
+        queue[0].waited_for_memory = waited;
         queue.push(job("job", GIB / 2));
         queue
     };
@@ -509,13 +509,19 @@ fn work_that_fits_starts_ahead_until_the_entry_waiting_for_memory_waited_its_lim
                     left: GIB
                 }
             ),
-            (
-                "job".into(),
-                HeldBy::Memory {
-                    needed: 2 * GIB,
-                    left: GIB
-                }
-            ),
+            ("job".into(), HeldBy::MemoryKept),
         ]
+    );
+    // Jobs under a fixed limit do not measure memory, so none is kept from them.
+    let fixed_jobs = Limits {
+        jobs: JobLimits {
+            fixed: Some(1),
+            ..JobLimits::default()
+        },
+        ..limits
+    };
+    assert_eq!(
+        admit(&[], &queue(BACKFILL_FOR), &fixed_jobs, false),
+        ["job"]
     );
 }

@@ -211,7 +211,6 @@ impl Manager {
     /// restore the daemon starts is admitted like a launch once it waits for
     /// nothing.
     async fn waiting_work(&self) -> Result<WaitingWork> {
-        let now = UnixTime::now();
         let held = self.agent_queue.held();
         let mut queued = self.store.run(|db| queued_rows(db)).await?;
         queued.retain(|row| !held.contains(&row.id));
@@ -235,7 +234,6 @@ impl Manager {
             automatic,
             job,
             mode,
-            queued_at,
         } in queued
         {
             let is_light = kind != QueueKind::Job
@@ -277,21 +275,21 @@ impl Manager {
                 _ => Work::Launch,
             };
             waiting.push(Waiting {
+                waited_for_memory: self.agent_queue.waited_for_memory(&id),
                 id,
                 repository,
                 work,
                 light: is_light,
-                waited: now.duration_since(queued_at),
             });
         }
         let oneshots = oneshots.into_iter().map(|oneshot| Waiting {
+            waited_for_memory: self.agent_queue.waited_for_memory(&oneshot.id),
             id: oneshot.id,
             repository: oneshot.repository,
             work: Work::OneShot {
                 after_stop: oneshot.after_stop,
             },
             light: false,
-            waited: now.duration_since(oneshot.requested_at),
         });
         waiting.extend(oneshots);
         self.in_rank_order(&mut waiting).await?;

@@ -375,6 +375,7 @@ pub fn held_by_label(held: HeldBy) -> String {
             size_label(needed),
             size_label(left)
         ),
+        HeldBy::MemoryKept => "memory kept for a higher-ranked entry".into(),
         HeldBy::Disk => "low disk space".into(),
         HeldBy::MaxAgents => "machine.max_agents".into(),
         HeldBy::MaxJobs => "machine.max_jobs".into(),

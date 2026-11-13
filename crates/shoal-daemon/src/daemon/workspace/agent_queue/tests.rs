@@ -1744,3 +1744,22 @@ async fn a_launch_waits_for_a_setup_the_daemon_never_started() {
     assert_eq!(entry.state, QueueState::Queued);
     assert_eq!(entry.blockers, vec!["setup of child".to_owned()]);
 }
+
+#[tokio::test]
+async fn an_entrys_wait_for_memory_lasts_while_passes_hold_it_for_memory() {
+    let (_temp, manager) = manager().await;
+    let queue = &manager.agent_queue;
+    let id = QueueEntryId::from("waiting");
+    let memory = crate::model::HeldBy::Memory { needed: 2, left: 1 };
+    let hold = |held| queue.record_held_back([(id.clone(), held)].into());
+    hold(memory);
+    let first = queue.waited_for_memory(&id);
+    hold(memory);
+    assert!(queue.waited_for_memory(&id) >= first);
+    // Held for anything else, or started, it waits for memory anew.
+    hold(crate::model::HeldBy::MaxAgents);
+    assert_eq!(queue.waited_for_memory(&id), Duration::ZERO);
+    hold(memory);
+    queue.record_held_back(Default::default());
+    assert_eq!(queue.waited_for_memory(&id), Duration::ZERO);
+}

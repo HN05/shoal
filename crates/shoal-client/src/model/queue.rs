@@ -132,6 +132,9 @@ pub enum HeldBy {
     /// Memory below the warning threshold has `left` bytes, no more than the
     /// `needed` bytes the entry is expected to use.
     Memory { needed: u64, left: u64 },
+    /// Memory is kept for a higher-ranked entry that has waited for it as
+    /// long as work may start ahead of it.
+    MemoryKept,
     /// Free disk space is below the warning threshold.
     Disk,
     /// `machine.max_agents` is reached.

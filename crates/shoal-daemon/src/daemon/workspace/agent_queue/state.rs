@@ -10,7 +10,7 @@ use std::{
         Mutex as StdMutex,
         atomic::{AtomicBool, Ordering},
     },
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use tokio::sync::{Mutex, MutexGuard, Notify, futures::Notified, watch};
@@ -31,6 +31,9 @@ pub(crate) struct AgentQueue {
     oneshots: StdMutex<OneShots>,
     /// What held back each waiting entry at the last admission pass.
     held_back: StdMutex<HashMap<QueueEntryId, HeldBy>>,
+    /// Since when each entry has been held back for its own memory, pass
+    /// after pass.
+    memory_since: StdMutex<HashMap<QueueEntryId, Instant>>,
     wake: Notify,
     /// Admission waits while the system shuts down.
     suspended: AtomicBool,
@@ -120,9 +123,24 @@ impl AgentQueue {
         self.holds.lock().unwrap().keys().cloned().collect()
     }
 
-    /// Replace what held back waiting entries with the last pass's `held`.
+    /// Replace what held back waiting entries with the last pass's `held`,
+    /// and keep since when each one held for its memory has been, which an
+    /// entry held for anything else or started starts over.
     pub(crate) fn record_held_back(&self, held: HashMap<QueueEntryId, HeldBy>) {
+        let mut since = self.memory_since.lock().unwrap();
+        since.retain(|id, _| matches!(held.get(id), Some(HeldBy::Memory { .. })));
+        for (id, held) in &held {
+            if let HeldBy::Memory { .. } = held {
+                since.entry(id.clone()).or_insert_with(Instant::now);
+            }
+        }
         *self.held_back.lock().unwrap() = held;
+    }
+
+    /// How long the entry `id` has been held back for its memory.
+    pub(crate) fn waited_for_memory(&self, id: &QueueEntryId) -> Duration {
+        let since = self.memory_since.lock().unwrap();
+        since.get(id).map_or(Duration::ZERO, Instant::elapsed)
     }
 
     /// What held back the entry `id` at the last admission pass.

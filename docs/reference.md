@@ -1977,8 +1977,9 @@ with the checks the caller's own start would meet, and queue `--json` names
 the caller's space in its `queued_by`. The daemon starts waiting entries
 in [rank order](#queue-order) as slots free, passing over an entry whose
 repository is full or that does not fit in memory, and records a
-`queue_started` notification. Once an entry has waited 15 minutes for memory,
-nothing it outranks that needs memory starts until it fits. An entry queued from another host's pane, block
+`queue_started` notification. Once an entry has been held 15 minutes for its
+memory, nothing it outranks that needs measured memory starts until it fits;
+each such entry waits with `memory_kept`. An entry queued from another host's pane, block
 or tab opens a background tab or window where it was queued; otherwise it runs where
 `terminal.default_host` puts it, by default a detached zmx session that `shoal attach`
 reaches. A start keeps its slot through setup until
@@ -2070,7 +2071,7 @@ agent; `shoal list` shows the entries after the workspaces. `queue --json` gives
 with its run, `blockers` while any remain, the setup of the workspace it opens
 among them,
 `waits_for_update` for a restore of an idle agent, `held_by` with its `reason`
-(`memory` with `needed` and `left` bytes, `disk`, `max_agents`, `max_jobs`,
+(`memory` with `needed` and `left` bytes, `memory_kept`, `disk`, `max_agents`, `max_jobs`,
 `repository_limit`, `permits` or `reading`), a waiting entry's `rank` with its
 `priority` and `tier` and, for each it took from other work, `priority_from`
 or `tier_from` with that work's space number or launch name `from` and the
