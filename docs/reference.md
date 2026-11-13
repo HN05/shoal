@@ -3484,7 +3484,7 @@ branch, never to an existing one that removal would then delete. Holds, open que
 unattended removal as they keep any workspace. `status` shows `Disposable: yes`
 and `--json` `disposable`.
 
-Removal stops tracked commands, then the workspace's
+Removal stops tracked commands, then the space's
 [untracked processes](#untracked-processes) as `shoal stop --processes` does,
 including those hooks and `shoal internal env` exports started. Automatic cleanup
 leaves out leftovers working in the worktree, which keep the workspace as

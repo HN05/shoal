@@ -239,3 +239,39 @@ impl Manager {
 pub fn names(spaces: &[crate::client::output::messages::Recipient]) -> Vec<&str> {
     spaces.iter().map(|space| space.name.as_str()).collect()
 }
+
+/// A process of `chat` outside its executions, as an agent Shoal did not
+/// start under a wrapper is, with the chat's identity, in its temporary
+/// directory, which ties it to the chat where a platform binary hides that
+/// identity. This test, which runs the daemon, did not start it, so it is
+/// not the daemon's own. Its ID, which [`ended`] waits on.
+pub async fn chat_process(manager: &Manager, chat: &crate::model::Chat) -> u32 {
+    let repository = manager.chat_repository(chat).await.unwrap();
+    let directory = manager.chat_tmp_dir(repository.as_ref(), chat).unwrap();
+    let output = unmarked("sh")
+        .args(["-c", "sleep 6021 </dev/null >/dev/null 2>&1 & echo $!"])
+        .env(crate::env::CHAT, &chat.id)
+        .current_dir(directory.unwrap())
+        .output()
+        .unwrap();
+    String::from_utf8(output.stdout)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap()
+}
+
+/// Whether the process `pid` ends within a hang guard.
+pub fn ended(pid: u32) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    // SAFETY: kill with signal 0 only checks that the process exists.
+    while unsafe { libc::kill(pid as libc::pid_t, 0) } == 0 {
+        if std::time::Instant::now() >= deadline {
+            // SAFETY: kill only sends a signal.
+            unsafe { libc::kill(pid as libc::pid_t, libc::SIGKILL) };
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    true
+}

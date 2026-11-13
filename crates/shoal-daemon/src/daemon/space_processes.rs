@@ -137,6 +137,14 @@ impl Manager {
         })
     }
 
+    /// Stop the processes of `chat` outside its executions, those carrying
+    /// its identity or working in its temporary directory, such as an agent
+    /// Shoal did not start under a wrapper.
+    pub(crate) async fn stop_chat_processes(&self, chat: &Chat) -> Result<()> {
+        let space = self.chat_space(chat).await?;
+        (self.stop_untracked(space, Selection::Processes, None).await).map(drop)
+    }
+
     /// What ties processes to `chat`: its identity and its temporary
     /// directory, while that is the one Shoal created.
     pub(crate) async fn chat_space(&self, chat: &Chat) -> Result<Space> {

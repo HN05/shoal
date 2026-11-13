@@ -126,14 +126,20 @@ impl Manager {
     }
 
     /// Stop the agent of `space` and its commands for a removal, as `policy`
-    /// and `request` say, and refuse while any of them runs on.
+    /// and `request` say, and refuse while any of them runs on. A chat's
+    /// processes outside its executions go too, as a workspace's go with its
+    /// worktree.
     pub(in crate::daemon::workspace) async fn stop_space_agent(
         &self,
         space: &PresentSpace,
         policy: StopPolicy,
         request: &StopRequest,
     ) -> Result<()> {
-        self.stop_executions(space.id(), policy, request).await
+        self.stop_executions(space.id(), policy, request).await?;
+        match space {
+            PresentSpace::Chat(chat) => self.stop_chat_processes(chat).await,
+            PresentSpace::Workspace(_) => Ok(()),
+        }
     }
 
     /// Reserve the space `id` for `removal`. A manual removal also takes a

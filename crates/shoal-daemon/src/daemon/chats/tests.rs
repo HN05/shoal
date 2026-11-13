@@ -4,7 +4,7 @@ use crate::paths::StateFiles;
 use crate::{
     daemon::{
         events::{ChatEventKind, EventItem, EventKind},
-        test_support::{manager, repository},
+        test_support::{chat_process, ended, manager, repository},
     },
     model::{SpaceKind, SpaceRef},
 };
@@ -487,6 +487,30 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
     assert!(manager.chats().await.unwrap().is_empty());
     // The removal took the chat's agent.
     assert!(manager.running_agents().await.unwrap().is_empty());
+}
+
+/// Removing a chat stops a process carrying its identity outside its
+/// executions, which would otherwise work on in what the removal deletes.
+#[tokio::test]
+async fn removing_a_chat_stops_its_processes_outside_its_executions() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(repo.id.into(), "talk".into(), "claude".into(), None)
+        .await
+        .unwrap();
+    let process = chat_process(&manager, &chat).await;
+
+    manager
+        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .await
+        .unwrap();
+
+    assert!(ended(process));
 }
 
 #[tokio::test]
