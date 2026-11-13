@@ -34,14 +34,14 @@ pub async fn ref_exists(
         .context("check reference existence; Git 2.43 or newer is required")
 }
 
-/// Whether the repository has the commit `commit`.
-pub async fn has_commit(repo: &Path, commit: &str) -> Result<bool> {
+/// Whether the repository has the commit `rev` names.
+pub async fn has_commit(repo: &Path, rev: &str) -> Result<bool> {
     let mut command = super::isolated_command(repo);
     command.args([
         "rev-parse",
         "--verify",
         "--quiet",
-        &format!("{commit}^{{commit}}"),
+        &format!("{rev}^{{commit}}"),
     ]);
     predicate(command, 1).await
 }

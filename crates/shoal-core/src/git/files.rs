@@ -32,13 +32,13 @@ pub async fn in_worktree(worktree: &Path, name: &str) -> Result<Vec<PathBuf>> {
         .collect())
 }
 
-/// The content of every file named `name` at `revision`.
-pub async fn at_revision(repo: &Path, revision: &str, name: &str) -> Result<Vec<String>> {
+/// The content of every file named `name` at `rev`.
+pub async fn at_revision(repo: &Path, rev: &str, name: &str) -> Result<Vec<String>> {
     // `ls-tree` takes no glob pathspecs.
-    let listing = run(repo, &["ls-tree", "-r", "-z", "--name-only", revision]).await?;
+    let listing = run(repo, &["ls-tree", "-r", "-z", "--name-only", rev]).await?;
     let mut contents = Vec::new();
     for path in paths(&listing).filter(|path| Path::new(path).file_name() == Some(name.as_ref())) {
-        contents.push(run(repo, &["cat-file", "blob", &format!("{revision}:{path}")]).await?);
+        contents.push(run(repo, &["cat-file", "blob", &format!("{rev}:{path}")]).await?);
     }
     Ok(contents)
 }

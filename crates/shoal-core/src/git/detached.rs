@@ -5,44 +5,44 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-/// Check out `commit` at `path`, a new linked worktree of `repo` on no branch,
+/// Check out `rev` at `path`, a new linked worktree of `repo` on no branch,
 /// whose files and directories nobody may write. No hooks run, so a
 /// repository's `post-checkout` hook sets nothing up. The caller owns
 /// `path`, so a registration a killed checkout left there, locked while it
 /// was being created, is replaced.
-pub async fn add(repo: &Path, path: &Path, commit: &str) -> Result<()> {
-    worktree_add(repo, path, commit, &["--force", "--force"]).await?;
+pub async fn add(repo: &Path, path: &Path, rev: &str) -> Result<()> {
+    worktree_add(repo, path, rev, &["--force", "--force"]).await?;
     set_writable(path, false).with_context(|| format!("make {} read-only", path.display()))
 }
 
-/// Check out `commit` at `path`, a new linked worktree of `repo` on no
+/// Check out `rev` at `path`, a new linked worktree of `repo` on no
 /// branch, for a workspace at a commit. No hooks run.
-pub async fn add_workspace(repo: &Path, path: &Path, commit: &str) -> Result<()> {
-    worktree_add(repo, path, commit, &[]).await
+pub async fn add_workspace(repo: &Path, path: &Path, rev: &str) -> Result<()> {
+    worktree_add(repo, path, rev, &[]).await
 }
 
-/// Move the detached worktree at `worktree` to `commit`, which Git refuses
+/// Move the detached worktree at `worktree` to `rev`, which Git refuses
 /// when that would overwrite changes. No hooks run.
-pub async fn move_to(worktree: &Path, commit: &str) -> Result<()> {
+pub async fn move_to(worktree: &Path, rev: &str) -> Result<()> {
     let mut command = super::isolated_command_without_submodules(worktree);
-    command.args(["checkout", "--detach", commit, "--"]);
+    command.args(["checkout", "--detach", rev, "--"]);
     super::output(command)
         .await
-        .with_context(|| format!("check out {commit} at {}", worktree.display()))
+        .with_context(|| format!("check out {rev} at {}", worktree.display()))
         .map(drop)
 }
 
-async fn worktree_add(repo: &Path, path: &Path, commit: &str, options: &[&str]) -> Result<()> {
+async fn worktree_add(repo: &Path, path: &Path, rev: &str, options: &[&str]) -> Result<()> {
     let mut command = super::isolated_command_without_submodules(repo);
     command
         .args(["worktree", "add", "--detach"])
         .args(options)
         .arg("--")
         .arg(path)
-        .arg(commit);
+        .arg(rev);
     super::output(command)
         .await
-        .with_context(|| format!("check out {commit} at {}", path.display()))
+        .with_context(|| format!("check out {rev} at {}", path.display()))
         .map(drop)
 }
 
