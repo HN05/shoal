@@ -387,7 +387,10 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
         .answer_question(asked.number, "Postgres".into(), None)
         .await
         .unwrap();
-    let messages = manager.chat_messages(&chat.id).await.unwrap();
+    let messages = manager
+        .agent_messages(&SpaceSelector::id(&chat.id))
+        .await
+        .unwrap();
     let message = &messages[0].message;
     assert!(
         message.contains(&format!("question {}", asked.number))
@@ -395,7 +398,7 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
         "{message}"
     );
     manager
-        .mark_chat_messages_delivered(&chat.id, vec![messages[0].id])
+        .mark_agent_messages_delivered(&SpaceSelector::id(&chat.id), vec![messages[0].id])
         .await
         .unwrap();
     assert!(manager.question(asked.number).await.is_err());

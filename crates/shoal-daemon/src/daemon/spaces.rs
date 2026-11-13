@@ -1,25 +1,14 @@
 //! Spaces: workspaces and chats, which share one namespace of IDs and names,
 //! so a request naming a space acts on whichever of them it names.
 use crate::client::space_ids::SpaceId;
-use crate::client::space_names::SpaceName;
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 
 use super::{workspace::Manager, workspace_files::Attacher};
 use crate::{
     client::{assignments::Done, space_names::SpaceSelector},
     config::Effective,
-    daemon::notifications::NotificationKind,
     model::{Completion, PresentSpace, SpaceKind},
 };
-
-/// The space a message for another space's agent is about.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct About<'a> {
-    pub name: &'a SpaceName,
-    pub id: Option<&'a SpaceId>,
-    /// The notification the event would be for the user.
-    pub kind: Option<NotificationKind>,
-}
 
 impl Manager {
     /// The settings of `space`: a workspace's own, or a chat's
@@ -47,70 +36,6 @@ impl Manager {
         }
     }
 
-    /// Queue `message` for the agent of the space `id`, with Shoal's copies
-    /// `attachments` of files another space's files already keep, `about`
-    /// another space when it concerns one. A space whose agent is not
-    /// running receives it once its agent starts. It reads the space as
-    /// recorded, stopping no chat, so a caller holding the approval
-    /// announcement gate may queue one.
-    pub(crate) async fn queue_space_message(
-        &self,
-        id: &SpaceId,
-        about: Option<About<'_>>,
-        message: String,
-        attachments: Vec<std::path::PathBuf>,
-    ) -> Result<()> {
-        let space = id.to_owned();
-        let kind = self.store.run(move |db| space_kind(db, &space)).await?;
-        match kind.with_context(|| format!("no space {id}"))? {
-            SpaceKind::Workspace => {
-                let message = match about {
-                    Some(about) => format!("{}: {message}", self.about_label(about).await?),
-                    None => message,
-                };
-                (self.queue_agent_message_attached(id, message, attachments)).await
-            }
-            SpaceKind::Chat => {
-                let (name, about_id, kind) = match about {
-                    Some(about) => (Some(about.name), about.id, about.kind),
-                    None => (None, None, None),
-                };
-                (self.queue_chat_message(id, name, about_id, kind, message, attachments)).await
-            }
-        }
-    }
-
-    /// Wake the waits for the messages of a space of `kind`, after the
-    /// transaction that queued one with [`queue_shoal_message`] commits.
-    pub(crate) fn space_message_queued(&self, kind: SpaceKind) {
-        match kind {
-            SpaceKind::Workspace => self.signals.agent_message_queued(),
-            SpaceKind::Chat => self.signals.chat_message_queued(),
-        }
-    }
-
-    /// The space `about` names, by number and name while it has a number,
-    /// since names repeat.
-    async fn about_label(&self, about: About<'_>) -> Result<String> {
-        let Some(id) = about.id.cloned() else {
-            return Ok(about.name.to_string());
-        };
-        let number = (self.store)
-            .run(move |db| {
-                let query = "SELECT number FROM spaces WHERE id=?1";
-                Ok(rusqlite::OptionalExtension::optional(db.query_row(
-                    query,
-                    [&id],
-                    |row| row.get(0),
-                ))?)
-            })
-            .await?;
-        Ok(match number {
-            Some(number) => crate::client::space_names::label(number, about.name),
-            None => about.name.to_string(),
-        })
-    }
-
     /// Withdraw the completion the workspace or chat `selector`
     /// names recorded.
     pub async fn undo_space_done(&self, selector: &SpaceSelector) -> Result<Completion> {
@@ -121,25 +46,6 @@ impl Manager {
             PresentSpace::Chat(chat) => self.undo_chat_done(&chat.id).await,
         }
     }
-}
-
-/// Queue `message` from Shoal, about no other space, for the agent of the
-/// space `id` in the caller's transaction, as
-/// [`Manager::queue_space_message`] queues one, for a caller that decides
-/// in the same transaction whether to send it: the kind of the space, whose
-/// waits [`Manager::space_message_queued`] wakes after committing, or `None`
-/// when an identical message is unread.
-pub(crate) fn queue_shoal_message(
-    tx: &rusqlite::Transaction<'_>,
-    id: &SpaceId,
-    message: &str,
-) -> Result<Option<SpaceKind>> {
-    let kind = space_kind(tx, id)?.with_context(|| format!("no space {id}"))?;
-    let queued = match kind {
-        SpaceKind::Workspace => super::agent_messages::insert(tx, id, message, &[])?,
-        SpaceKind::Chat => super::chat_messages::insert_from_user(tx, id, message)?,
-    };
-    Ok(queued.map(|_| kind))
 }
 
 /// The kind of the space `id`, while it exists.

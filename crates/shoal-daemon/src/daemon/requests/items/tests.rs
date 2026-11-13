@@ -19,7 +19,7 @@ async fn item_waits_close_unanswered_while_an_update_restarts_the_daemon() {
         .await
         .unwrap();
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
             Vec::new(),

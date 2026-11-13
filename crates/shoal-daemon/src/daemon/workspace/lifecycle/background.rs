@@ -11,10 +11,9 @@ use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
-        log,
+        agent_messages, log,
         notifications::{About, NotificationKind},
         scope::Caller,
-        spaces,
         workspace::Manager,
     },
     model::Workspace,
@@ -91,9 +90,9 @@ impl Manager {
             workspace.number
         );
         if let Some(requester) = requester {
-            let about = spaces::About {
-                name: &workspace.name,
-                id: Some(&workspace.id),
+            let about = agent_messages::About {
+                name: workspace.name.clone(),
+                id: Some(workspace.id.clone()),
                 kind: Some(kind),
             };
             let queued =

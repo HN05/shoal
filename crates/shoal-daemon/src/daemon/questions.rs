@@ -18,7 +18,7 @@ use std::time::Duration;
 pub(crate) use crate::client::questions::{Ask, Listing, Question, QuestionStatus};
 use crate::{
     daemon::{
-        agent_messages, chat_messages,
+        agent_messages,
         item_numbers::{self, ItemKind, ItemNumber},
         notifications::{self, About, NotificationKind},
         workspace::Manager,
@@ -133,8 +133,7 @@ const SPACE: &str = "COALESCE(q.workspace_id,q.chat_id)";
 const SELECT: &str = concat!(
     "SELECT q.space_number,q.number,COALESCE(q.workspace_id,q.chat_id),COALESCE(w.name,c.name),q.created_at,
     q.question,q.recommendation,q.reason,q.choices,q.answer,q.answered_at,
-    CASE WHEN q.chat_id IS NULL THEN (SELECT m.id FROM agent_messages m WHERE m.id=q.message_id)
-        ELSE (SELECT m.id FROM chat_messages m WHERE m.id=q.message_id) END,
+    (SELECT m.id FROM space_messages m WHERE m.id=q.message_id),
     q.closed_at,q.withdrawn,q.in_chat,",
     sent_files!("q.files"),
     " FROM questions q LEFT JOIN workspaces w ON w.id=q.workspace_id
@@ -365,25 +364,10 @@ fn record_answer(
     let status = QuestionStatus::Answered {
         answer,
         answered_at: crate::time::UnixTime::now(),
-        message_id: queue_answer(tx, &question, &message)?,
+        message_id: agent_messages::queue_shoal_message(tx, &question.space_id, &message)?,
     };
     store_status(tx, &mut question, status)?;
     Ok(question)
-}
-
-/// Queue `message`, which answers `question`, for the agents of its space:
-/// its ID, or `None` when an identical message is already unread.
-fn queue_answer(tx: &Transaction<'_>, question: &Question, message: &str) -> Result<Option<i64>> {
-    let asked_by_chat: bool = tx.query_row(
-        "SELECT chat_id IS NOT NULL FROM questions WHERE space_number=?1 AND number=?2",
-        params![question.number.space, question.number.item],
-        |row| row.get(0),
-    )?;
-    if asked_by_chat {
-        chat_messages::insert_from_user(tx, &question.space_id, message)
-    } else {
-        agent_messages::insert(tx, &question.space_id, message, &[])
-    }
 }
 
 /// How many questions of the workspace or chat `space_id` are open.
@@ -761,9 +745,8 @@ impl Manager {
             .store
             .write(move |tx| record_answer(tx, number, &answer, shown.as_ref()))
             .await?;
-        // The answer waits in the inbox of a workspace's or chat's agents.
-        self.signals.agent_message_queued();
-        self.signals.chat_message_queued();
+        // The answer waits in the inbox of the space's agent.
+        self.space_message_queued();
         self.signals.question_changed();
         Ok(question)
     }

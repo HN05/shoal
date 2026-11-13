@@ -272,7 +272,7 @@ async fn a_blocked_child_tells_its_coordinator_rather_than_the_user() {
         .unwrap();
 
     let messages = manager
-        .space_messages(&SpaceSelector::id(&parent.id))
+        .agent_messages(&SpaceSelector::id(&parent.id))
         .await
         .unwrap();
     assert!(

@@ -195,7 +195,7 @@ mod streams {
         .await;
 
         manager
-            .send_agent_message(
+            .send_space_message(
                 &SpaceSelector::id(&workspace.id),
                 "Rebase on main".into(),
                 Vec::new(),
@@ -584,7 +584,7 @@ mod streams {
                 .unwrap();
             daemon
                 .manager
-                .send_agent_message(
+                .send_space_message(
                     &SpaceSelector::id(&workspace.id),
                     "Rebase on main".into(),
                     Vec::new(),

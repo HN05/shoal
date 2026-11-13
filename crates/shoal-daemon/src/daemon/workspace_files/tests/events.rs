@@ -51,7 +51,7 @@ async fn every_route_records_one_added_event_per_file() {
     // Sending the same files again keeps their records, so adds nothing.
     for _ in 0..2 {
         manager
-            .send_agent_message(
+            .send_space_message(
                 &SpaceSelector::id(&workspace.id),
                 "See".into(),
                 vec![log.clone().into(), shot.clone().into()],

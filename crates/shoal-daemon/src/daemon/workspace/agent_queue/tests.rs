@@ -1296,7 +1296,7 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
 
     // An update makes it due; it waits for the launch's slot like a launch.
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&idle.id),
             "Review requested".into(),
             Vec::new(),
@@ -1395,7 +1395,7 @@ async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     manager.queue_agent_restore(&execution).await.unwrap();
     let restoring = await_restore(&manager, &execution).await;
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&idle.id),
             "Review requested".into(),
             Vec::new(),

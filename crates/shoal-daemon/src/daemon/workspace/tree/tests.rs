@@ -1577,7 +1577,7 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
     // the reply says.
     let mut n = 0;
     while manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&root.id),
             format!("note {n}"),
             Vec::new(),
@@ -1879,7 +1879,10 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .unwrap()
         .unwrap();
     assert_eq!(routed.decider.as_ref(), Some(&chat.id));
-    let told = manager.chat_messages(&chat.id).await.unwrap();
+    let told = manager
+        .agent_messages(&SpaceSelector::id(&chat.id))
+        .await
+        .unwrap();
     assert!(!told.is_empty());
     // A malformed record of another space's history, its own or one its
     // repository owns, leaves the chat's requests readable.
@@ -2079,7 +2082,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
     // A coordinator whose messages are full cannot be told; the user decides.
     let mut n = 0;
     while manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&parent.id),
             format!("note {n}"),
             Vec::new(),

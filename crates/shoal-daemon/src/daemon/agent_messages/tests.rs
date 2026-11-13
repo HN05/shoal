@@ -37,7 +37,7 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     let changed = manager.signals.watch_agent_messages();
     for _ in 0..2 {
         manager
-            .send_agent_message(
+            .send_space_message(
                 &SpaceSelector::id(&workspace.id),
                 "Stop the dev server".into(),
                 Vec::new(),
@@ -48,7 +48,7 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     }
     assert!(changed.has_changed().unwrap());
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
             Vec::new(),
@@ -57,7 +57,7 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
         .await
         .unwrap();
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             "Move:\n\tabc123 to api".into(),
             Vec::new(),
@@ -71,7 +71,7 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     ] {
         assert!(
             manager
-                .send_agent_message(
+                .send_space_message(
                     &SpaceSelector::id(&workspace.id),
                     rejected,
                     Vec::new(),
@@ -105,7 +105,7 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     assert_eq!(remaining, messages[1..]);
     // A delivered message may be sent again.
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             "Stop the dev server".into(),
             Vec::new(),
@@ -554,7 +554,7 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
     std::fs::write(&file, "panic").unwrap();
     for _ in 0..2 {
         manager
-            .send_agent_message(
+            .send_space_message(
                 &SpaceSelector::id(&workspace.id),
                 "See the log".into(),
                 vec![file.clone().into()],
@@ -564,7 +564,7 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
             .unwrap();
     }
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             String::new(),
             vec![file.clone().into()],
@@ -612,7 +612,7 @@ async fn a_refused_message_leaves_no_copies() {
     let workspace = workspace(&temp, &manager, "receiver").await;
     for n in 0..super::MAX_UNREAD {
         manager
-            .send_agent_message(
+            .send_space_message(
                 &SpaceSelector::id(&workspace.id),
                 format!("message {n}"),
                 Vec::new(),
@@ -625,7 +625,7 @@ async fn a_refused_message_leaves_no_copies() {
     std::fs::write(&file, "panic").unwrap();
     assert!(
         manager
-            .send_agent_message(
+            .send_space_message(
                 &SpaceSelector::id(&workspace.id),
                 "See the log".into(),
                 vec![file.into()],
@@ -655,7 +655,7 @@ async fn an_attached_send_waits_for_the_files_gate() {
         let (manager, id) = (manager.clone(), workspace.id.clone());
         async move {
             manager
-                .send_agent_message(
+                .send_space_message(
                     &SpaceSelector::id(&id),
                     "See the log".into(),
                     vec![file.into()],
@@ -706,7 +706,7 @@ async fn a_send_waiting_through_removal_leaves_no_files() {
         let (manager, id) = (manager.clone(), workspace.id.clone());
         async move {
             manager
-                .send_agent_message(
+                .send_space_message(
                     &SpaceSelector::id(&id),
                     "See the log".into(),
                     vec![file.into()],
@@ -753,7 +753,7 @@ async fn attachments_must_be_files() {
         "relative.png".into(),
     ] {
         let sent = manager
-            .send_agent_message(
+            .send_space_message(
                 &SpaceSelector::id(&workspace.id),
                 "See".into(),
                 vec![refused.clone().into()],
@@ -764,7 +764,7 @@ async fn attachments_must_be_files() {
     }
     assert!(
         manager
-            .send_agent_message(
+            .send_space_message(
                 &SpaceSelector::id(&workspace.id),
                 String::new(),
                 Vec::new(),

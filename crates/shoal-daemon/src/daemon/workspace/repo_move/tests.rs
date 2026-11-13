@@ -450,7 +450,7 @@ async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> 
     let file = temp.path().join("crash.log");
     fs::write(&file, "panic")?;
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             "See the log".into(),
             vec![file.clone().into()],
@@ -521,7 +521,7 @@ async fn a_move_waits_for_a_send_keeping_attached_files() -> Result<()> {
     moving.await??;
     // A send after the move copies to the new place.
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             "See the log".into(),
             vec![file.into()],

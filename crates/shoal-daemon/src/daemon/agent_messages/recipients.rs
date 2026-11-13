@@ -21,7 +21,7 @@ use crate::{
 };
 
 impl Manager {
-    /// [`Self::send_to_space`] to the space `selector` names; the
+    /// [`Self::send_to`] to the space `selector` names; the
     /// space it reached, by whether its agent runs, receives it once it next
     /// runs, or has no agent to read it until one starts there.
     pub async fn send_space_message(
@@ -33,14 +33,14 @@ impl Manager {
     ) -> Result<Reached> {
         let space = self.space(selector).await?;
         let reader = self.reader(&self.agents().await?, &space);
-        self.send_to_space(&space, message, attachments, attacher)
+        self.send_to(space.clone(), message, attachments, attacher)
             .await?;
         let mut reached = Reached::default();
         outcome(&mut reached, reader, Ok(())).space(&space);
         Ok(reached)
     }
 
-    /// [`Self::send_to_space`] to every workspace and chat with an
+    /// [`Self::send_to`] to every workspace and chat with an
     /// agent, running, reattaching, stopped, queued or waiting for its
     /// restore, but the sending chat `sender_chat`, of `repository` when it
     /// names one, or only to the workspaces below `below`, the sender's own
@@ -64,7 +64,12 @@ impl Manager {
         let mut reached = Reached::default();
         for (space, reader) in self.recipients(repository, below, sender_chat).await? {
             let sent = self
-                .send_to_space(&space, message.clone(), attachments.clone(), attacher)
+                .send_to(
+                    space.clone(),
+                    message.clone(),
+                    attachments.clone(),
+                    attacher,
+                )
                 .await;
             outcome(&mut reached, reader, sent).space(&space);
         }

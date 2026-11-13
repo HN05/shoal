@@ -139,7 +139,7 @@ async fn an_interrupted_agent_alone_is_due_a_wake_for_its_interruption() {
         .await
         .unwrap();
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
             Vec::new(),
@@ -186,7 +186,7 @@ async fn a_chats_interrupted_agent_is_due_its_wrappers_wake_for_a_message() {
         .await
         .unwrap();
     manager
-        .send_chat_message(
+        .send_space_message(
             &selected,
             "Rebase onto main".into(),
             Vec::new(),
@@ -213,9 +213,12 @@ async fn a_chats_interrupted_agent_is_due_its_wrappers_wake_for_a_message() {
     // After an interrupt, which its hook does not follow, the wrapper
     // prompts it, until it takes the message.
     wait(true, Some(&id)).await.expect("wait ended").unwrap();
-    let messages = manager.chat_messages(&chat.id).await.unwrap();
+    let messages = manager
+        .agent_messages(&SpaceSelector::id(&chat.id))
+        .await
+        .unwrap();
     let delivered = messages.iter().map(|message| message.id).collect();
-    (manager.mark_chat_messages_delivered(&chat.id, delivered))
+    (manager.mark_agent_messages_delivered(&SpaceSelector::id(&chat.id), delivered))
         .await
         .unwrap();
     wait(false, Some(&id)).await.expect("wait ended").unwrap();

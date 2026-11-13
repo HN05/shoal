@@ -142,7 +142,7 @@ async fn an_agents_files_name_its_kind_and_session() {
         .await
         .unwrap();
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             "See the log".into(),
             vec![log.into()],
@@ -244,7 +244,7 @@ async fn files_sent_with_messages_are_listed_until_removal() {
     // Sending the same file again keeps one record of its copy.
     for _ in 0..2 {
         manager
-            .send_agent_message(
+            .send_space_message(
                 &SpaceSelector::id(&workspace.id),
                 "See the log".into(),
                 vec![file.clone().into()],
@@ -318,7 +318,7 @@ async fn added_files_need_no_message() {
         .await
         .unwrap();
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             String::new(),
             vec![file.into()],
@@ -377,7 +377,7 @@ async fn titles_stay_with_their_files_until_a_new_one() {
         .await
         .unwrap();
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             String::new(),
             vec![titled(&shot, "Login screen"), report.clone().into()],
@@ -464,7 +464,7 @@ async fn deleting_by_name_keeps_the_other_files() {
     std::fs::write(&log, "panic").unwrap();
     std::fs::write(&shot, "image").unwrap();
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             "See".into(),
             vec![log.clone().into(), shot.into()],
@@ -503,7 +503,7 @@ async fn deleting_by_name_keeps_the_other_files() {
 
     // Sending the same files again copies the deleted one anew.
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             "See".into(),
             vec![log.into(), temp.path().join("shot.png").into()],
@@ -947,7 +947,7 @@ async fn deleting_a_record_keeps_other_copies_of_the_same_name() {
         .await
         .unwrap();
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             String::new(),
             vec![file.into()],
@@ -1024,7 +1024,7 @@ async fn upgrading_records_the_copies_messages_attached_before() {
     std::fs::write(&log, "panic").unwrap();
     std::fs::write(&env, "PORT=1").unwrap();
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             "See".into(),
             vec![log.into(), env.into()],
@@ -1043,6 +1043,7 @@ async fn upgrading_records_the_copies_messages_attached_before() {
     manager
         .store
         .run(|db| {
+            db.execute_batch(include_str!("../store/space_messages_undo.sql"))?;
             db.execute_batch(include_str!("../store/chat_removed_events_undo.sql"))?;
             db.execute_batch(include_str!("../store/space_records_undo.sql"))?;
             db.execute_batch(include_str!("../store/chat_executions_undo.sql"))?;
@@ -1157,7 +1158,7 @@ async fn an_earlier_copy_that_cannot_be_read_is_recorded_on_a_later_pass() {
     let file = temp.path().join("crash.log");
     std::fs::write(&file, "panic").unwrap();
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             "See".into(),
             vec![file.into()],
@@ -1174,6 +1175,7 @@ async fn an_earlier_copy_that_cannot_be_read_is_recorded_on_a_later_pass() {
     manager
         .store
         .run(|db| {
+            db.execute_batch(include_str!("../store/space_messages_undo.sql"))?;
             db.execute_batch(include_str!("../store/chat_removed_events_undo.sql"))?;
             db.execute_batch(include_str!("../store/space_records_undo.sql"))?;
             db.execute_batch(include_str!("../store/chat_executions_undo.sql"))?;
@@ -1218,7 +1220,7 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
     let file = temp.path().join("crash.log");
     std::fs::write(&file, "panic").unwrap();
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             "See".into(),
             vec![file.into()],
@@ -1229,6 +1231,7 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
     manager
         .store
         .run(|db| {
+            db.execute_batch(include_str!("../store/space_messages_undo.sql"))?;
             db.execute_batch(include_str!("../store/chat_removed_events_undo.sql"))?;
             db.execute_batch(include_str!("../store/space_records_undo.sql"))?;
             db.execute_batch(include_str!("../store/chat_executions_undo.sql"))?;

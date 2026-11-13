@@ -524,6 +524,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 165 {
         db.execute_batch(include_str!("chat_removed_events.sql"))?;
     }
+    if version >= 166 {
+        db.execute_batch(include_str!("space_messages.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -714,7 +717,7 @@ fn migration_names_recorded_chats_and_keeps_what_they_own() -> Result<()> {
         )?,
         "second"
     );
-    assert_eq!(count(&db, "chat_messages")?, 1);
+    assert_eq!(count(&db, "space_messages")?, 1);
     // The journal gains no events and names its chats as the rows do.
     assert_eq!(count(&db, "workspace_events")?, events);
     let started = db
@@ -2051,7 +2054,8 @@ fn chats_may_have_no_repository_once_migrated_and_keep_what_references_them() ->
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     assert_eq!(repositories, [None, Some("repo".to_owned())]);
-    let messages: i64 = db.query_row("SELECT count(*) FROM chat_messages", [], |row| row.get(0))?;
+    let messages: i64 =
+        db.query_row("SELECT count(*) FROM space_messages", [], |row| row.get(0))?;
     assert_eq!(messages, 1);
     Ok(())
 }
@@ -2193,5 +2197,97 @@ fn chats_keep_their_agents_to_restore_once_they_record_no_process() -> Result<()
         |row| row.get(0),
     )?;
     assert_eq!(left, 0);
+    Ok(())
+}
+
+#[test]
+fn every_space_keeps_its_unread_messages_in_one_table() -> Result<()> {
+    let mut db = historical_database(165)?;
+    db.execute_batch(
+        r#"INSERT INTO chats(id,repository_id,name,agent,started_at)
+             VALUES ('chat','repo','chat','claude',1);
+         INSERT INTO agent_messages(id,workspace_id,created_at,message,attachments,wakes)
+             VALUES (3,'workspace',1,'quiet','["/repo/a.txt"]',0),(5,'workspace',2,'hello','[]',1);
+         INSERT INTO chat_messages(id,chat_id,created_at,workspace,workspace_id,kind,message)
+             VALUES (2,'chat',3,'',NULL,NULL,'from the user'),
+                 (4,'chat',4,'worker','workspace','agent_message','done');
+         UPDATE sqlite_sequence SET seq=9 WHERE name='chat_messages';
+         INSERT INTO questions(chat_id,created_at,question,recommendation,choices,answer,
+                 answered_at,message_id,number)
+             VALUES ('chat',1,'Which?','A','[]','A',2,4,1);"#,
+    )?;
+    migrate(&mut db)?;
+    type Row = (
+        i64,
+        String,
+        String,
+        bool,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    );
+    let rows: Vec<Row> = db
+        .prepare(
+            "SELECT id,space_id,message,wakes,about,about_id,kind FROM space_messages ORDER BY id",
+        )?
+        .query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+                r.get(6)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let row = |id, space: &str, message: &str, wakes, about: Option<&str>, kind: Option<&str>| {
+        let owned = |text: Option<&str>| text.map(str::to_owned);
+        let about_id = about.map(|_| "workspace".to_owned());
+        (
+            id,
+            space.into(),
+            message.into(),
+            wakes,
+            owned(about),
+            about_id,
+            owned(kind),
+        )
+    };
+    // Chats' messages move above every ID either table gave.
+    assert_eq!(
+        rows,
+        [
+            row(3, "workspace", "quiet", false, None, None),
+            row(5, "workspace", "hello", true, None, None),
+            row(11, "chat", "from the user", true, None, None),
+            row(
+                13,
+                "chat",
+                "done",
+                true,
+                Some("worker"),
+                Some("agent_message")
+            ),
+        ]
+    );
+    let message_id: i64 = db.query_row("SELECT message_id FROM questions", [], |r| r.get(0))?;
+    assert_eq!(message_id, 13);
+    db.execute(
+        "INSERT INTO space_messages(space_id,created_at,message) VALUES ('workspace',5,'next')",
+        [],
+    )?;
+    assert_eq!(db.last_insert_rowid(), 14);
+    // A space's messages go with its row.
+    db.execute("DELETE FROM chats WHERE id='chat'", [])?;
+    assert_eq!(
+        db.query_row(
+            "SELECT COUNT(*) FROM space_messages WHERE space_id='chat'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )?,
+        0
+    );
     Ok(())
 }

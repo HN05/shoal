@@ -7,7 +7,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use anyhow::Result;
 use rusqlite::Connection;
 
-use super::{log, spaces, workspace::Manager};
+use super::{agent_messages, log, workspace::Manager};
 use crate::{
     client::space_ids::SpaceId, daemon::workspace::agent_state, model::PresentSpace, time::UnixTime,
 };
@@ -82,12 +82,12 @@ impl Manager {
         let (space, turn, message) = (id.to_owned(), idle.turn, wake_message(minutes));
         let queued = (self.store)
             .write(move |tx| match still_idle(tx, &space, turn)? {
-                true => spaces::queue_shoal_message(tx, &space, &message),
+                true => agent_messages::queue_shoal_message(tx, &space, &message),
                 false => Ok(None),
             })
             .await?;
-        if let Some(kind) = queued {
-            self.space_message_queued(kind);
+        if queued.is_some() {
+            self.space_message_queued();
         }
         woken.0.insert(id.to_owned(), now);
         Ok(())

@@ -18,7 +18,6 @@ use crate::{
         approvals::DecisionStatus,
         notifications::{Notification, NotificationKind},
         scope::Caller,
-        store,
         workspace::Manager,
     },
     forge::{items::link::LinkKind, updates::Snapshot},
@@ -323,7 +322,8 @@ async fn messages(
     caller: Option<&Caller>,
     visible: &Visible,
 ) -> Result<Vec<Record>> {
-    let mut messages: Vec<Record> = agent_messages(manager)
+    let mut messages: Vec<Record> = (manager.store)
+        .read(|db| crate::daemon::agent_messages::every_unread(db))
         .await?
         .into_iter()
         .filter_map(|(workspace_id, message)| {
@@ -399,30 +399,4 @@ async fn item_activity(manager: &Manager) -> Result<HashMap<SpaceId, HashMap<Str
         }
     }
     Ok(activity)
-}
-
-/// Every message queued for a workspace's agent, with its workspace's ID.
-async fn agent_messages(manager: &Manager) -> Result<Vec<(SpaceId, AgentMessage)>> {
-    manager
-        .store
-        .run(|db| {
-            let mut statement = db.prepare(
-                "SELECT workspace_id,id,created_at,message,attachments FROM agent_messages ORDER BY id",
-            )?;
-            let mut rows = statement.query([])?;
-            let mut messages = Vec::new();
-            while let Some(row) = rows.next()? {
-                messages.push((
-                    row.get("workspace_id")?,
-                    AgentMessage {
-                        id: row.get("id")?,
-                        created_at: row.get("created_at")?,
-                        message: row.get("message")?,
-                        attachments: store::json_column(row, "attachments")?.unwrap_or_default(),
-                    },
-                ));
-            }
-            Ok(messages)
-        })
-        .await
 }

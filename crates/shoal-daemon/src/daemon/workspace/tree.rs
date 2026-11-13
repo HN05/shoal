@@ -182,9 +182,9 @@ impl Manager {
                 return false;
             }
         };
-        let about = super::super::spaces::About {
-            name,
-            id: workspace_id,
+        let about = crate::daemon::agent_messages::About {
+            name: name.clone(),
+            id: workspace_id.cloned(),
             kind,
         };
         let queued = self

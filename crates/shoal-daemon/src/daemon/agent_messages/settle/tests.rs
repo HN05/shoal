@@ -68,7 +68,7 @@ async fn age_messages(manager: &Manager, workspace: &Workspace, seconds: i64) {
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE agent_messages SET created_at=created_at-?2 WHERE workspace_id=?1",
+                "UPDATE space_messages SET created_at=created_at-?2 WHERE space_id=?1",
                 rusqlite::params![id, seconds],
             )?;
             Ok(())
@@ -114,7 +114,7 @@ async fn idle_agent(manager: &Manager, workspace: &Workspace) {
 async fn send(manager: &Manager, workspace: &Workspace, messages: &[&str]) {
     for &message in messages {
         manager
-            .send_agent_message(
+            .send_space_message(
                 &SpaceSelector::id(&workspace.id),
                 message.into(),
                 Vec::new(),

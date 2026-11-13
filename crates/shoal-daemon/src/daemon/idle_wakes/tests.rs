@@ -74,7 +74,7 @@ async fn report(manager: &Manager, id: &SpaceId, state: AgentState) {
 /// The unread messages of the space `id`.
 async fn messages(manager: &Manager, id: &SpaceId) -> Vec<String> {
     (manager
-        .space_messages(&SpaceSelector::id(id))
+        .agent_messages(&SpaceSelector::id(id))
         .await
         .unwrap())
     .into_iter()

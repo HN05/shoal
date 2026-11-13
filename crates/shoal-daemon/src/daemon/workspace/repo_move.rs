@@ -481,12 +481,6 @@ impl Manager {
                 )?;
                 crate::daemon::agent_messages::rebase_attachments(
                     tx,
-                    &id,
-                    Path::new(&source),
-                    Path::new(&destination),
-                )?;
-                crate::daemon::chat_messages::rebase_attachments(
-                    tx,
                     Path::new(&source),
                     Path::new(&destination),
                 )?;

@@ -196,7 +196,7 @@ pub(super) async fn handle(
             )
         }
         AgentMethod::AgentMessages { space } => {
-            Body::AgentMessages(manager.space_messages(&space).await?)
+            Body::AgentMessages(manager.agent_messages(&space).await?)
         }
         AgentMethod::GitCredential { host } => {
             Body::GitCredential(manager.agent_git_credential(caller, &host).await?)
@@ -205,7 +205,7 @@ pub(super) async fn handle(
             Body::PrUpdates(manager.space_updates(&space).await?)
         }
         AgentMethod::MarkAgentMessagesDelivered { space, ids } => {
-            manager.mark_space_messages_delivered(&space, ids).await?;
+            manager.mark_agent_messages_delivered(&space, ids).await?;
             Body::Ok
         }
     }))

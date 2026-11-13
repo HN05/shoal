@@ -196,7 +196,11 @@ impl Manager {
     /// chat `id`; activity an item change holds back under its PR gate
     /// counts only when `held` counts.
     async fn chat_updates_waiting(&self, id: &SpaceId, held: bool) -> Result<bool> {
-        if !self.chat_messages(id).await?.is_empty() {
+        if !self
+            .agent_messages(&SpaceSelector::id(id))
+            .await?
+            .is_empty()
+        {
             return Ok(true);
         }
         Ok(match self.queued_chat_updates(id, 0).await? {

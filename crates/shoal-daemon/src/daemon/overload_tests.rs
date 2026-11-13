@@ -787,7 +787,7 @@ async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
     let generation = manager.config_state.generation();
     manager.config_state.publish_disk_reading(Some(generation));
     manager
-        .send_agent_message(
+        .send_space_message(
             &SpaceSelector::id(&workspace.id),
             "Review requested".into(),
             Vec::new(),

@@ -37,7 +37,10 @@ async fn chat_and_worker(
 }
 
 async fn received(manager: &Manager, chat: &Chat) -> Vec<String> {
-    let messages = manager.chat_messages(&chat.id).await.unwrap();
+    let messages = manager
+        .agent_messages(&SpaceSelector::id(&chat.id))
+        .await
+        .unwrap();
     messages.into_iter().map(|m| m.message).collect()
 }
 
@@ -197,10 +200,14 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
 
     let ids = woken.messages.iter().map(|m| m.id).collect();
     manager
-        .mark_chat_messages_delivered(&chat.id, ids)
+        .mark_agent_messages_delivered(&SpaceSelector::id(&chat.id), ids)
         .await
         .unwrap();
-    assert!(received(&manager, &chat).await.is_empty());
+    let unread = (manager.store)
+        .read(|db| crate::daemon::agent_messages::every_unread(db))
+        .await
+        .unwrap();
+    assert!(unread.iter().all(|(space, _)| *space != chat.id));
 
     // A hook delivery replaces a wait still running, which leaves the next
     // messages to the delivery.
@@ -246,7 +253,7 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
         async move { manager.wait_chat_messages(&chat).await }
     });
     manager
-        .send_chat_message(
+        .send_space_message(
             &SpaceSelector::id(&chat.id),
             "Pick a new name".into(),
             Vec::new(),
@@ -259,7 +266,7 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
 
     // Sent again before the chat reads it, by ID this time, it collapses.
     manager
-        .send_chat_message(
+        .send_space_message(
             &SpaceSelector::id(&chat.id),
             "Pick a new name".into(),
             Vec::new(),
@@ -270,7 +277,7 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
     assert_eq!(received(&manager, &chat).await, ["Pick a new name"]);
 
     manager
-        .send_chat_message(
+        .send_space_message(
             &"missing".into(),
             "Pick a new name".into(),
             Vec::new(),
@@ -351,7 +358,11 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
         .remove_chat(&SpaceSelector::id(&chat.id), None)
         .await
         .unwrap();
-    assert!(received(&manager, &chat).await.is_empty());
+    let unread = (manager.store)
+        .read(|db| crate::daemon::agent_messages::every_unread(db))
+        .await
+        .unwrap();
+    assert!(unread.iter().all(|(space, _)| *space != chat.id));
     let unread = (
         Some("worker".to_owned()),
         NotificationKind::AgentMessage,
@@ -360,6 +371,73 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
     assert_eq!(user(&manager).await, [unread]);
     // The worker went first, with the chat it was below.
     assert!(manager.workspace_by_id(&worker.id).await.is_err());
+}
+
+#[tokio::test]
+async fn a_removed_workspace_gives_the_user_the_events_it_had_not_received() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    for space in [&parent, &child] {
+        manager
+            .set_agent_state(
+                &SpaceSelector::id(&space.id),
+                AgentState::Working,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+    }
+    manager
+        .send_message(
+            &SpaceSelector::id(&child.id),
+            "unread".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    // Shoal's own messages stand for no notification.
+    manager
+        .queue_agent_message(&parent.id, "from Shoal".into())
+        .await
+        .unwrap();
+    assert!(user(&manager).await.is_empty());
+
+    manager
+        .remove_workspace(
+            &SpaceSelector::id(&parent.id),
+            crate::removal::UnsavedWork::default(),
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    let messages: Vec<_> = (user(&manager).await.into_iter())
+        .filter(|(_, kind, _)| *kind == NotificationKind::AgentMessage)
+        .collect();
+    let unread = (
+        Some("child".to_owned()),
+        NotificationKind::AgentMessage,
+        "unread".to_owned(),
+    );
+    assert_eq!(messages, [unread]);
 }
 
 #[tokio::test]
@@ -474,7 +552,10 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
         )
         .await
         .unwrap();
-    let messages = manager.chat_messages(&chat.id).await.unwrap();
+    let messages = manager
+        .agent_messages(&SpaceSelector::id(&chat.id))
+        .await
+        .unwrap();
     let [copy] = messages[0].attachments.as_slice() else {
         panic!("{messages:?}");
     };
@@ -492,12 +573,15 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
         .store
         .write(move |tx| {
             crate::daemon::workspace_files::rebase(tx, &id, &from, &to)?;
-            super::rebase_attachments(tx, &from, &to)?;
+            crate::daemon::agent_messages::rebase_attachments(tx, &from, &to)?;
             Ok(())
         })
         .await
         .unwrap();
-    let messages = manager.chat_messages(&chat.id).await.unwrap();
+    let messages = manager
+        .agent_messages(&SpaceSelector::id(&chat.id))
+        .await
+        .unwrap();
     let [moved] = messages[0].attachments.as_slice() else {
         panic!("{messages:?}");
     };

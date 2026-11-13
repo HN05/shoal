@@ -16,8 +16,9 @@ use super::{
 };
 use crate::{
     daemon::{
+        agent_messages,
         approvals::{ApprovalRequest, release_decided_by},
-        chat_messages, events, spaces, workspace_files,
+        events, spaces, workspace_files,
     },
     fsutil::off_runtime,
     model::{PresentSpace, Workspace},
@@ -328,7 +329,7 @@ fn delete_record(
         "spaces were opened below it during removal; retaining it"
     );
     events::record(tx, id, events::EventKind::Removed, cause, None)?;
-    let notification = chat_messages::hand_to_user(tx, id)?;
+    let notification = agent_messages::hand_to_user(tx, id)?;
     workspace_files::keep_removed(tx, id, expires_at)?;
     // With the record, so no request is left with a removed decider.
     let released = release_decided_by(tx, id)?;

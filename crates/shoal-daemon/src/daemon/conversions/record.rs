@@ -288,14 +288,6 @@ pub(crate) fn replace_chat(tx: &Transaction<'_>, id: &SpaceId) -> Result<ChatRow
         [id],
     )?;
     tx.execute(
-        "INSERT INTO agent_messages(workspace_id,created_at,message,attachments)
-            SELECT chat_id,created_at,
-                CASE workspace WHEN '' THEN message ELSE workspace || ': ' || message END,
-                attachments
-            FROM chat_messages WHERE chat_id=?1 ORDER BY id",
-        [id],
-    )?;
-    tx.execute(
         "INSERT INTO workspace_scopes(token,workspace_id)
             SELECT scope_token,id FROM chats WHERE id=?1 AND scope_token IS NOT NULL",
         [id],
@@ -328,7 +320,6 @@ pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) ->
         "UPDATE questions SET chat_id=workspace_id,workspace_id=NULL WHERE workspace_id=?1",
         [id],
     )?;
-    move_agent_messages(tx, id)?;
     // The chat's agent, which has yet to move, runs on as the chat's.
     tx.execute(
         "DELETE FROM executions WHERE space_id=?1 AND agent IS NULL",
@@ -393,7 +384,6 @@ pub(crate) fn replace_workspace(
         "UPDATE questions SET chat_id=workspace_id,workspace_id=NULL WHERE workspace_id=?1",
         [id],
     )?;
-    move_agent_messages(tx, id)?;
     let released = release_decided_by(tx, id)?;
     forget_executions(tx, id)?;
     forget_completion(tx, id)?;
@@ -415,18 +405,6 @@ fn forget_completion(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
 fn forget_executions(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     tx.execute("DELETE FROM executions WHERE space_id=?1", [id])?;
     tx.execute("DELETE FROM agent_queue WHERE space_id=?1", [id])?;
-    Ok(())
-}
-
-/// Make the unread agent messages of the workspace `id` the unread messages
-/// of the chat that replaces it under that ID.
-fn move_agent_messages(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
-    tx.execute(
-        "INSERT INTO chat_messages(chat_id,created_at,workspace,message,attachments)
-            SELECT workspace_id,created_at,'',message,attachments
-            FROM agent_messages WHERE workspace_id=?1 ORDER BY id",
-        [id],
-    )?;
     Ok(())
 }
 

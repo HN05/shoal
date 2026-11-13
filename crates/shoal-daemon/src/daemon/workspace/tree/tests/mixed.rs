@@ -133,7 +133,10 @@ async fn a_chat_below_a_workspace_decides_and_coordinates_for_the_spaces_below_i
         )
         .await
         .unwrap();
-    let told = manager.chat_messages(&chat.id).await.unwrap();
+    let told = manager
+        .agent_messages(&SpaceSelector::id(&chat.id))
+        .await
+        .unwrap();
     assert_eq!(
         told.last().unwrap().message,
         format!("{} worker: first", worker.number)

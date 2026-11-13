@@ -334,11 +334,10 @@ fn deliver(tx: &Transaction<'_>, workspace_id: &SpaceId, now: UnixTime) -> Resul
         return Ok(false);
     };
     if due.deliverable {
-        agent_messages::insert(
+        agent_messages::queue_shoal_message(
             tx,
             workspace_id,
             &continuation(due.failure, due.attempt),
-            &[],
         )?;
         tx.execute(
             "UPDATE workspace_turn_retries SET delivered=1 WHERE workspace_id=?1",
@@ -453,7 +452,7 @@ impl Manager {
             log!("turn retry for {workspace} not delivered: {error:#}");
         }
         if delivered.queued {
-            self.signals.agent_message_queued();
+            self.space_message_queued();
         }
         Ok(delivered.next)
     }

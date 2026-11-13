@@ -2508,8 +2508,9 @@ cleanup. Removing the workspace removes its chats first through the chat
 removal path, so a workspace one of them opened that cannot go keeps the chat,
 which keeps the workspace. Nothing moves a session between directories: a chat
 about another workspace is a new chat.
-Having no workspace, a chat keeps its messages in its own queue, which the same
-hooks deliver, including the user's request to rename it; a removed chat gives the user the notifications its unread
+Having no workspace, a chat keeps its messages in the queue a workspace's share,
+which the same hooks deliver, including the user's request to rename it; a
+removed space, of either kind, gives the user the notifications its unread
 messages stand for.
 A chat passes a question up by asking the user, who attends it. The approval
 requests of the spaces below it come to it when it is the nearest space above

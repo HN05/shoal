@@ -238,7 +238,7 @@ impl Manager {
         // Subscribe before reading, so a message queued in between still wakes.
         let mut queued = self.signals.watch_chat_messages();
         let mut background = self.signals.watch_item_updates();
-        let messages = self.chat_messages(id).await?;
+        let messages = self.agent_messages(&SpaceSelector::id(id)).await?;
         let updates = if messages.is_empty() {
             tokio::select! {
                 updates = wait_for_updates(deadline, &mut background, || {
@@ -267,7 +267,7 @@ impl Manager {
     ) -> Result<Vec<AgentMessage>> {
         loop {
             queued.changed().await?;
-            let messages = self.chat_messages(id).await?;
+            let messages = self.agent_messages(&SpaceSelector::id(id)).await?;
             if !messages.is_empty() {
                 return Ok(messages);
             }
