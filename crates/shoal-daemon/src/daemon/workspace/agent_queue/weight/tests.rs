@@ -38,7 +38,11 @@ async fn a_light_agent_holds_no_slot_and_starts_beside_full_limits() {
         .await
         .unwrap();
     assert_eq!(
-        manager.occupied_slots(&HashSet::new()).await.unwrap().len(),
+        manager
+            .occupied_slots(&HashSet::new(), &manager.light().await.unwrap())
+            .await
+            .unwrap()
+            .len(),
         1
     );
     let triage = |name| QueueRequest {
@@ -75,7 +79,11 @@ async fn a_stopped_light_agent_waiting_for_its_restore_holds_no_slot() {
         std::fs::write(&record, saved.to_string()).unwrap();
     }
     assert_eq!(
-        manager.occupied_slots(&HashSet::new()).await.unwrap().len(),
+        manager
+            .occupied_slots(&HashSet::new(), &manager.light().await.unwrap())
+            .await
+            .unwrap()
+            .len(),
         1
     );
     let light = manager.light().await.unwrap();

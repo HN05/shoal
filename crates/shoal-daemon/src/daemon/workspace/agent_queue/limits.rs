@@ -374,7 +374,8 @@ impl Manager {
         if !any_runner {
             return Ok(false);
         }
-        let slots = self.occupied_slots(&HashSet::new()).await?;
+        let light = self.light().await?;
+        let slots = self.occupied_slots(&HashSet::new(), &light).await?;
         let jobs = self.job_activities().await?;
         let limits = self.agent_limits(Vec::new(), &slots, &jobs).await?;
         let occupied: Vec<RepositoryId> = slots.into_iter().map(|slot| slot.repository).collect();

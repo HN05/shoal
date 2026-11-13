@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::Result;
 use rusqlite::params;
 
+use super::weight::Light;
 use crate::client::space_ids::SpaceId;
 use crate::client::time::UnixTime;
 use crate::{
@@ -102,8 +103,11 @@ impl Manager {
     /// each admitted one-shot run until it ends. An
     /// admitted restore starts in its agent's slot, and one of a last
     /// session, which holds none, as a launch. A light agent holds none.
-    pub(super) async fn occupied_slots(&self, dormant: &HashSet<ExecutionId>) -> Result<Vec<Slot>> {
-        let light = self.light().await?;
+    pub(super) async fn occupied_slots(
+        &self,
+        dormant: &HashSet<ExecutionId>,
+        light: &Light,
+    ) -> Result<Vec<Slot>> {
         let mut agents = self.agent_executions().await;
         let PersistedSlots {
             open,

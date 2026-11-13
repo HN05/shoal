@@ -17,6 +17,7 @@ use super::{
     limits::{Admission, Waiting, Wake, Work, admit},
     store::{QueuedRow, queued_rows},
     wake::DueReading,
+    weight::Light,
 };
 use crate::client::{queue::QueueEntryId, time::UnixTime};
 use crate::{
@@ -49,6 +50,8 @@ struct WaitingWork {
     /// The jobs left out of `entries` while their repository's permits are
     /// all held.
     permits_busy: Vec<QueueEntryId>,
+    /// Which agents are light, read once for the pass while any entry waits.
+    light: Light,
 }
 
 impl WaitingWork {
@@ -164,7 +167,7 @@ impl Manager {
             .collect();
         let mut dormant = dormant_restores(&work.entries, &work.restores);
         dormant.extend(work.stopped.iter().cloned());
-        let slots = self.occupied_slots(&dormant).await?;
+        let slots = self.occupied_slots(&dormant, &work.light).await?;
         let jobs = self.job_activities().await?;
         let limits = self.agent_limits(repositories, &slots, &jobs).await?;
         let occupied: Vec<RepositoryId> = slots.into_iter().map(|slot| slot.repository).collect();
@@ -208,10 +211,14 @@ impl Manager {
     /// restore the daemon starts is admitted like a launch once it waits for
     /// nothing.
     async fn waiting_work(&self) -> Result<WaitingWork> {
-        let light = self.light().await?;
         let held = self.agent_queue.held();
         let mut queued = self.store.run(|db| queued_rows(db)).await?;
         queued.retain(|row| !held.contains(&row.id));
+        let oneshots = self.agent_queue.waiting_oneshots();
+        let light = match queued.is_empty() && oneshots.is_empty() {
+            true => Light::default(),
+            false => self.light().await?,
+        };
         let waiters = self.agent_queue.restore_waiters();
         let mut restores = HashMap::new();
         let mut stopped = HashSet::new();
@@ -274,18 +281,14 @@ impl Manager {
                 light: is_light,
             });
         }
-        let oneshots = self
-            .agent_queue
-            .waiting_oneshots()
-            .into_iter()
-            .map(|oneshot| Waiting {
-                id: oneshot.id,
-                repository: oneshot.repository,
-                work: Work::OneShot {
-                    after_stop: oneshot.after_stop,
-                },
-                light: false,
-            });
+        let oneshots = oneshots.into_iter().map(|oneshot| Waiting {
+            id: oneshot.id,
+            repository: oneshot.repository,
+            work: Work::OneShot {
+                after_stop: oneshot.after_stop,
+            },
+            light: false,
+        });
         waiting.extend(oneshots);
         self.in_rank_order(&mut waiting).await?;
         Ok(WaitingWork {
@@ -293,6 +296,7 @@ impl Manager {
             restores,
             stopped,
             permits_busy,
+            light,
         })
     }
 

@@ -372,7 +372,11 @@ async fn each_agent_execution_uses_its_own_slot() {
     std::fs::create_dir_all(record.parent().unwrap()).unwrap();
     std::fs::write(&record, "{\"agent\":\"claude\"}").unwrap();
     assert_eq!(
-        manager.occupied_slots(&HashSet::new()).await.unwrap().len(),
+        manager
+            .occupied_slots(&HashSet::new(), &Default::default())
+            .await
+            .unwrap()
+            .len(),
         2
     );
     assert!(!add(&manager, &repo, "waiting").await.start);
@@ -412,7 +416,7 @@ async fn a_ci_jobs_runner_awaiting_reattachment_holds_no_agent_slot() {
         .unwrap();
     assert!(
         manager
-            .occupied_slots(&HashSet::new())
+            .occupied_slots(&HashSet::new(), &Default::default())
             .await
             .unwrap()
             .is_empty()
@@ -498,7 +502,12 @@ async fn protection_stopped_agents_keep_their_slot_without_load() {
         slots.into_iter().map(|slot| slot.activity).collect()
     };
     assert!(matches!(
-        activities(manager.occupied_slots(&HashSet::new()).await.unwrap())[..],
+        activities(
+            manager
+                .occupied_slots(&HashSet::new(), &Default::default())
+                .await
+                .unwrap()
+        )[..],
         [Activity::Running { .. }]
     ));
     assert!(
@@ -508,7 +517,12 @@ async fn protection_stopped_agents_keep_their_slot_without_load() {
     );
     // Until its processes are proven stopped the agent's load may still show.
     assert!(matches!(
-        activities(manager.occupied_slots(&HashSet::new()).await.unwrap())[..],
+        activities(
+            manager
+                .occupied_slots(&HashSet::new(), &Default::default())
+                .await
+                .unwrap()
+        )[..],
         [Activity::Running { .. }]
     ));
     manager.queue_agent_restore(&agent.0).await.unwrap();
@@ -516,7 +530,12 @@ async fn protection_stopped_agents_keep_their_slot_without_load() {
     assert!(!manager.queue_entries().await.unwrap()[0].waits_for_update);
     let _restoring = await_restore(&manager, &agent.0).await;
     assert_eq!(
-        activities(manager.occupied_slots(&HashSet::new()).await.unwrap()),
+        activities(
+            manager
+                .occupied_slots(&HashSet::new(), &Default::default())
+                .await
+                .unwrap()
+        ),
         [Activity::Stopped]
     );
 }
