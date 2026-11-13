@@ -432,7 +432,8 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
         )
         .await;
     // The parent stopped the child's agent and the child its own child's;
-    // the user stopped the other agent of each.
+    // the user stopped the other agent of each, which the parent resumes as
+    // well.
     for (workspace, stopped_by) in [(&child, &parent), (&grandchild, &child)] {
         for (execution, stopped_by) in [("ours", Some(stopped_by.id.clone())), ("users", None)] {
             crate::execution::recovery::LastSession {
@@ -476,22 +477,22 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
         (parent.id.as_str(), false),
         (sibling.id.as_str(), false),
     ] {
-        for mut method in [stop(target, false), restore(target, "ours")] {
+        for mut method in [
+            stop(target, false),
+            restore(target, "ours"),
+            restore(target, "users"),
+        ] {
             let authorized =
                 crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
             assert_eq!(authorized.is_ok(), allowed, "{target}: {method:?}");
         }
-        let mut users = restore(target, "users");
-        let authorized =
-            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut users).await;
-        assert!(authorized.is_err(), "{target}");
         // Only the user starts a restore regardless of the limits.
         let mut now = restore_now(target, "ours", true);
         let authorized =
             crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut now).await;
         assert!(authorized.is_err(), "{target}");
     }
-    // The child resumes what it stopped, but not what its parent stopped.
+    // The child resumes the agents below it, but not its own.
     manager
         .executions
         .issue_scope(

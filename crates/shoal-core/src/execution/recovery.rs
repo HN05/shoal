@@ -831,16 +831,6 @@ pub fn discard_undelivered(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) 
     }
 }
 
-/// The space whose process stopped the agent that execution `id` of
-/// `space_id` keeps as stopped work or a last session, when one did.
-pub fn stopped_by(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) -> Result<Option<SpaceId>> {
-    if let Some(record) = Record::load(&record_path(paths, space_id, id))? {
-        return Ok(record.stopped_by);
-    }
-    let path = LastSession::path(paths, space_id, id);
-    Ok(LastSession::load(&path)?.and_then(|last| last.stopped_by))
-}
-
 /// The file keeping the agent stopped as `id`: its recovery record, or else
 /// its last session.
 pub fn saved_path(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) -> PathBuf {

@@ -82,7 +82,7 @@ impl Scoped for AssignmentMethod {
                 agents, launches, ..
             } => {
                 for agent in agents {
-                    (manager.stopped_below(caller, &mut agent.workspace, &agent.execution)).await?;
+                    manager.stopped_below(caller, &mut agent.workspace).await?;
                 }
                 for workspace in launches {
                     manager.setup_below(caller, workspace).await?;

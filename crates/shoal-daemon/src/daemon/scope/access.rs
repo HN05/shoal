@@ -13,7 +13,6 @@ use crate::{
         approvals::ApprovalRequest, item_numbers::ItemNumber, questions::Question,
         workspace::Manager,
     },
-    execution::recovery,
     model::{Chat, PresentSpace, QueueEntry, QueueRequest, Repository, RunningAgent, SpaceTarget},
     repository::Selector,
 };
@@ -148,33 +147,18 @@ impl Manager {
         Ok(space)
     }
 
-    /// `space`, which must be one below the caller's whose agent stopped as
-    /// `execution` the caller's process or one below it stopped, or whose
-    /// restart by one of them left it stopped: an agent the user or Shoal
-    /// stopped, or that exited on its own, is the user's to resume.
+    /// `space`, which must be one the caller's scope reaches other than its
+    /// own, whose stopped agent the caller restores, whoever stopped it.
     pub(in crate::daemon) async fn stopped_below<'a>(
         &self,
         caller: &Caller,
         space: &'a mut SpaceSelector,
-        execution: &ExecutionId,
     ) -> Result<&'a mut SpaceSelector> {
-        let space = self
-            .workspace_below(
-                caller,
-                space,
-                "scoped processes restore agents only in the spaces below their own",
-            )
+        const REFUSAL: &str =
+            "scoped processes restore the agents of the spaces below their own, not their own";
+        let space = self.workspace_below(caller, space, REFUSAL).await?;
+        self.ensure_reaches(caller, &self.space(space).await?)
             .await?;
-        let id = self.space(space).await?.id().clone();
-        let stopper = recovery::stopped_by(&self.paths, &id, execution)?;
-        let ours = match stopper {
-            Some(stopper) => self.within_subtree(&caller.space_id, &stopper).await?,
-            None => false,
-        };
-        ensure!(
-            ours,
-            "scoped processes restore only the agents that they or the spaces below them stopped, with shoal stop or a restart; ask the user to restore this one"
-        );
         Ok(space)
     }
 

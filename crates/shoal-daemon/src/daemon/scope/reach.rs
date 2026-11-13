@@ -2,7 +2,7 @@
 //! or, for a chat without a repository, which manages the spaces of every
 //! repository, every space.
 use crate::client::space_ids::SpaceId;
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
 use super::Caller;
 use crate::{
@@ -40,6 +40,20 @@ impl Manager {
             Some(root) => self.within_subtree(&root, id).await,
             None => Ok(true),
         }
+    }
+
+    /// Refuse `caller` the `space` its scope does not reach.
+    pub(in crate::daemon) async fn ensure_reaches(
+        &self,
+        caller: &Caller,
+        space: &PresentSpace,
+    ) -> Result<()> {
+        ensure!(
+            self.reaches(caller, space.id()).await?,
+            "{}",
+            outside_scope(space)
+        );
+        Ok(())
     }
 
     /// The IDs of the spaces `caller`'s scope reaches; none when it

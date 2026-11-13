@@ -104,14 +104,9 @@ impl Scoped for QueueMethod {
                         .await?,
                 )
             }
-            QueueMethod::QueueRestore {
-                workspace,
-                execution,
-                now,
-                ..
-            } => {
+            QueueMethod::QueueRestore { workspace, now, .. } => {
                 ensure!(!*now, NOT_NOW);
-                Some(manager.stopped_below(caller, workspace, execution).await?)
+                Some(manager.stopped_below(caller, workspace).await?)
             }
             QueueMethod::QueuedPlan { .. }
             | QueueMethod::QueueStart { .. }

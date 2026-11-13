@@ -395,8 +395,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
         (SpaceSelector::id(&master.id), repos[1].id.clone())
     );
 
-    // It resumes the agent of a space it reaches only when it or a space
-    // below it stopped that agent.
+    // It resumes the agent of any space it reaches, whoever stopped it.
     let resume = |stopper: &str| {
         let last: crate::execution::recovery::LastSession = serde_json::from_value(
             serde_json::json!({"execution": "e1", "agent": "claude", "stopped_by": stopper}),
@@ -410,14 +409,11 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
             now: false,
         }
     };
-    let by_other =
-        crate::daemon::scope::authorize(&manager, Some(&token), &mut resume(chat.id.as_str()))
-            .await;
-    assert!(by_other.is_err());
-    let mut by_below = resume(below_id.as_str());
-    crate::daemon::scope::authorize(&manager, Some(&token), &mut by_below)
-        .await
-        .unwrap();
+    for stopper in [chat.id.as_str(), below_id.as_str()] {
+        crate::daemon::scope::authorize(&manager, Some(&token), &mut resume(stopper))
+            .await
+            .unwrap();
+    }
 
     // What the scope keeps from every agent stays the user's.
     let mut merge = ItemMethod::ItemAction {

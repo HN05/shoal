@@ -619,67 +619,6 @@ fn copied_agents_are_told_the_workspace_is_a_copy() {
 }
 
 #[test]
-fn the_space_that_asked_for_a_stop_outlasts_the_wrappers_save_and_shoal_stop() {
-    let root = tempfile::tempdir().unwrap();
-    let paths = Paths::for_test(root.path());
-    let path = save_record_stopped_by(
-        &paths,
-        &SpaceId::from("workspace"),
-        &ExecutionId::from("execution"),
-        &crate::execution::TrackedAgent::named("codex"),
-        Some("restart"),
-        None,
-        Some(&SpaceId::from("parent")),
-    )
-    .unwrap();
-    let recovery = Recovery {
-        narrowing: Default::default(),
-        mode: "worker".into(),
-        model: Default::default(),
-        agent: "codex".into(),
-        command: vec![],
-        automatic: false,
-        handoff_delivered: false,
-        proxy: None,
-    };
-    // The wrapper completes the record without knowing who asked.
-    recovery
-        .save(
-            &paths,
-            &SpaceId::from("workspace"),
-            &ExecutionId::from("execution"),
-            None,
-            None,
-            Restorer::User,
-        )
-        .unwrap();
-    let stopper = stopped_by(
-        &paths,
-        &SpaceId::from("workspace"),
-        &ExecutionId::from("execution"),
-    )
-    .unwrap();
-    assert_eq!(stopper.as_ref().map(SpaceId::as_str), Some("parent"));
-    // A stop that names no stopper keeps the one the record names.
-    keep_as_last_session(
-        &paths,
-        &SpaceId::from("workspace"),
-        &ExecutionId::from("execution"),
-        &path,
-        None,
-    )
-    .unwrap();
-    assert!(!path.exists());
-    let stopper = stopped_by(
-        &paths,
-        &SpaceId::from("workspace"),
-        &ExecutionId::from("execution"),
-    )
-    .unwrap();
-    assert_eq!(stopper.as_ref().map(SpaceId::as_str), Some("parent"));
-}
-
-#[test]
 fn a_permission_change_reaches_each_saved_agent_and_keeps_the_rest() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
