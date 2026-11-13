@@ -9,7 +9,7 @@ use std::{
 use anyhow::Result;
 
 use super::{
-    Agent, Agents, Arguments, Environment,
+    Agent, Agents, Arguments, Environment, IntegrationKind,
     builtin::{self, Provider},
     validate::skill_dir,
 };
@@ -83,25 +83,6 @@ impl LaunchProfile {
     pub fn environment_with(&self, choice: &ModelChoice) -> Environment {
         self.environment
             .with_effort(self.effort_variable, choice.effort.as_deref())
-    }
-}
-
-shoal_states::states!(
-    /// The Shoal integration a tool runs with: that of the built-in tool its
-    /// lineage ends at. Agent hooks name it to the commands they run.
-    IntegrationKind: ValueEnum {
-        Claude => "claude",
-        Codex => "codex",
-        /// Configuration says everything about the tool.
-        None => "none",
-    }
-);
-
-impl IntegrationKind {
-    /// Whether Shoal's hooks report the end of each turn of its agents,
-    /// with the turn's final message.
-    pub fn reports_turn_ends(self) -> bool {
-        self != Self::None
     }
 }
 

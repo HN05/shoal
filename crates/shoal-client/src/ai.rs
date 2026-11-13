@@ -12,11 +12,10 @@ mod launch;
 mod resolve;
 pub mod validate;
 
+pub use crate::integrations::IntegrationKind;
 pub use builtin::{PROVIDERS, default_commands};
 pub use launch::{Arguments, Environment, ReviewFields, oneshot_command};
-pub use resolve::{
-    DEFAULT_PROMPT_CACHE, IntegrationKind, LaunchProfile, Tool, Tools, inherit_launchers, tools,
-};
+pub use resolve::{DEFAULT_PROMPT_CACHE, LaunchProfile, Tool, Tools, inherit_launchers, tools};
 pub use validate::validate;
 
 pub type Agents = BTreeMap<String, Agent>;

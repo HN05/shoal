@@ -22,6 +22,7 @@ pub mod files;
 pub mod forge_reads;
 pub mod fsutil;
 mod ids;
+pub mod integrations;
 pub mod item_numbers;
 pub mod items;
 pub mod leases;

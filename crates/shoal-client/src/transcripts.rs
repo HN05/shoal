@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 use crate::agent::AgentSessionId;
 use crate::space_names::SpaceSelector;
 use crate::{
-    ai::IntegrationKind,
     connection::{Daemon, request},
+    integrations::IntegrationKind,
     protocol::WorkspaceMethod,
 };
 
