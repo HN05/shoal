@@ -9,7 +9,7 @@ use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
 
 use super::blockers;
-use super::store::{ENTRY_COLUMNS, entry};
+use super::store::{ENTRY_COLUMNS, copy_launch_waiting, entry};
 use crate::{
     config::permissions::PermissionsConfig,
     daemon::{log, store, workspace::Manager},
@@ -144,12 +144,7 @@ fn return_start(
     let waiting = match start.reopening_plan() {
         Some(plan) => {
             let id = QueueEntryId::generate();
-            tx.execute(
-                "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,opens_workspace_id,mode,narrowing,scope_space_id,priority)
-                 SELECT ?2,kind,repository_id,name,agent,issue_title,?3,env,?4,created_at,?5,mode,narrowing,scope_space_id,priority
-                 FROM agent_queue WHERE id=?1",
-                params![start.id, id, plan, QueueState::Queued, start.workspace],
-            )?;
+            copy_launch_waiting(tx, &start.id, &id, &plan, &start.workspace)?;
             blockers::wait_for_setup(tx, &id, &start.workspace)?;
             Some((id, start.workspace))
         }

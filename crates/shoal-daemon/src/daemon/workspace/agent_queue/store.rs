@@ -241,6 +241,24 @@ pub(super) fn insert_launch(
     Ok(())
 }
 
+/// Record a launch `id` with `plan`, waiting to open `workspace`, that
+/// keeps what [`insert_launch`] recorded for the launch `from`.
+pub(super) fn copy_launch_waiting(
+    tx: &rusqlite::Transaction<'_>,
+    from: &QueueEntryId,
+    id: &QueueEntryId,
+    plan: &str,
+    workspace: &SpaceId,
+) -> Result<()> {
+    tx.execute(
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,opens_workspace_id,mode,narrowing,scope_space_id,priority)
+         SELECT ?2,kind,repository_id,name,agent,issue_title,?3,env,?4,created_at,?5,mode,narrowing,scope_space_id,priority
+         FROM agent_queue WHERE id=?1",
+        params![from, id, plan, QueueState::Queued, workspace],
+    )?;
+    Ok(())
+}
+
 /// Refuse the space `id` a launch's scope names once it is gone, while
 /// `removing` holds it, or while its worktree is not ready.
 fn require_queuing_space(
