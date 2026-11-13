@@ -1,13 +1,16 @@
 use super::*;
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     approvals::proposals::PR,
     test_support::{manager, repository},
 };
-use crate::paths::StateFiles;
+use crate::forge::items::attach::Attachment;
+use crate::model::Repository;
+use std::sync::Arc;
 
-#[tokio::test]
-async fn the_sweep_keeps_only_files_pending_proposals_attach() {
+/// A manager with a registered repository and one of its workspaces.
+async fn with_workspace() -> (tempfile::TempDir, Arc<Manager>, Repository, Workspace) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -18,33 +21,107 @@ async fn the_sweep_keeps_only_files_pending_proposals_attach() {
         .create_workspace(&repo.id, "topic".into(), None, None, None)
         .await
         .unwrap();
-    let files = manager.paths.proposal_files();
-    let kept = files.join("kept/0/shot.png");
-    std::fs::create_dir_all(kept.parent().unwrap()).unwrap();
-    std::fs::write(&kept, "png").unwrap();
-    std::fs::create_dir_all(files.join("stale/0")).unwrap();
-    let pull = NewPull {
-        attachments: vec![Attachment {
-            path: kept.clone(),
-            alt: None,
-        }],
-        ..NewPull::default()
-    };
+    (root, manager, repo, workspace)
+}
+
+/// The PR the workspace proposes with `body` and `attachments`, stored as
+/// pending.
+pub(crate) async fn store_pull_proposal(
+    manager: &Manager,
+    workspace: &Workspace,
+    body: String,
+    attachments: Vec<Attachment>,
+) -> ApprovalRequest {
     let specification = Specification::Pull(PullSpecification {
-        pull,
+        pull: NewPull {
+            body,
+            attachments,
+            ..NewPull::default()
+        },
         commit: "head".into(),
         agent: None,
         follow_up: None,
         push: None,
     });
     let request = proposal(&workspace.id, Target::PrOpen, PR, specification);
-    manager
+    let (request, _) = manager
         .store_proposal(request, proposals::propose_pull)
         .await
         .unwrap();
+    request
+}
+
+/// Shoal's copy of a file `name` the workspace proposes with a body that
+/// shows it, for the repository `repository`.
+pub(crate) async fn kept_copy(
+    manager: &Manager,
+    workspace: &Workspace,
+    repository: &RepositoryId,
+    name: &str,
+) -> (String, Attachment) {
+    let file = workspace.path.join(name);
+    std::fs::write(&file, name).unwrap();
+    let mut body = format!("![shot]({})", file.display());
+    let mut attachments = vec![Attachment {
+        path: file,
+        alt: None,
+    }];
+    let _files = manager
+        .lock_proposal_files_of(repository, &attachments)
+        .await
+        .unwrap();
+    manager
+        .keep_attachments(&workspace.id, repository, &mut body, &mut attachments)
+        .await
+        .unwrap();
+    (body, attachments.remove(0))
+}
+
+#[tokio::test]
+async fn copies_go_to_the_repository_directory_reserved_first_when_missing() {
+    let (_root, manager, repo, workspace) = with_workspace().await;
+    let (body, copy) = kept_copy(&manager, &workspace, &repo.id, "shot.png").await;
+    let directory = repo.workspaces_dir.clone().unwrap();
+    assert!(
+        copy.path.starts_with(directory.join(".proposals")),
+        "{copy:?}"
+    );
+    assert_eq!(std::fs::read_to_string(&copy.path).unwrap(), "shot.png");
+    assert!(body.contains(&copy.path.display().to_string()), "{body}");
+
+    // A registration from before the repository directory layout reserves
+    // its directory first.
+    let id = repo.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            Ok(db.execute(
+                "UPDATE repositories SET workspaces_dir=NULL WHERE id=?1",
+                [id],
+            )?)
+        })
+        .await
+        .unwrap();
+    let (_, copy) = kept_copy(&manager, &workspace, &repo.id, "other.png").await;
+    let reserved = manager.repository(&repo.id).await.unwrap().workspaces_dir;
+    let reserved = reserved.expect("a reserved directory");
+    assert!(
+        copy.path.starts_with(reserved.join(".proposals")),
+        "{copy:?}"
+    );
+    assert!(!manager.paths.state.join("proposals").exists());
+}
+
+#[tokio::test]
+async fn the_sweep_keeps_only_files_pending_proposals_attach() {
+    let (_root, manager, repo, workspace) = with_workspace().await;
+    let (_, kept) = kept_copy(&manager, &workspace, &repo.id, "shot.png").await;
+    let files = repo.workspaces_dir.clone().unwrap().join(".proposals");
+    std::fs::create_dir_all(files.join("stale/0")).unwrap();
+    store_pull_proposal(&manager, &workspace, String::new(), vec![kept.clone()]).await;
 
     manager.sweep_proposal_files().await.unwrap();
-    assert!(kept.exists());
+    assert!(kept.path.exists());
     assert!(!files.join("stale").exists());
 
     // Removing the workspace takes its PR proposal, and the next sweep
@@ -55,7 +132,47 @@ async fn the_sweep_keeps_only_files_pending_proposals_attach() {
         .await
         .unwrap();
     manager.sweep_proposal_files().await.unwrap();
-    assert!(!files.join("kept").exists());
+    assert!(!kept.path.exists());
+}
+
+#[tokio::test]
+async fn a_decided_proposal_takes_its_files_and_a_removed_repository_the_rest() {
+    let (_root, manager, repo, workspace) = with_workspace().await;
+    let (_, decided) = kept_copy(&manager, &workspace, &repo.id, "decided.png").await;
+    let request =
+        store_pull_proposal(&manager, &workspace, String::new(), vec![decided.clone()]).await;
+    manager.forget_proposal(&request).await.unwrap();
+    manager.prune_proposal_files(&request).await;
+    assert!(!decided.path.exists());
+
+    let (_, left) = kept_copy(&manager, &workspace, &repo.id, "left.png").await;
+    manager.remove_repository(&repo.id).await.unwrap();
+    assert!(!left.path.exists());
+    let files = repo.workspaces_dir.clone().unwrap().join(".proposals");
+    assert!(!files.exists());
+}
+
+#[tokio::test]
+async fn copies_from_before_the_upgrade_stay_until_no_proposal_attaches_them() {
+    let (_root, manager, _repo, workspace) = with_workspace().await;
+    let old = manager.paths.state.join("proposals");
+    let kept = old.join("kept/0/shot.png");
+    std::fs::create_dir_all(kept.parent().unwrap()).unwrap();
+    std::fs::write(&kept, "png").unwrap();
+    std::fs::create_dir_all(old.join("stale/0")).unwrap();
+    let attachment = Attachment {
+        path: kept.clone(),
+        alt: None,
+    };
+    let request = store_pull_proposal(&manager, &workspace, String::new(), vec![attachment]).await;
+
+    manager.sweep_proposal_files().await.unwrap();
+    assert!(kept.exists());
+    assert!(!old.join("stale").exists());
+
+    manager.forget_proposal(&request).await.unwrap();
+    manager.prune_proposal_files(&request).await;
+    assert!(!old.exists());
 }
 
 #[tokio::test]

@@ -6,16 +6,18 @@ use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
+use std::path::Path;
 
 use super::{
-    ApprovalRequest, DecisionStatus, Target,
-    store::{COLUMNS, by_key, current, decode_record, list, record_row, retire},
+    ApprovalRequest, DecisionStatus, Specification, Target,
+    store::{COLUMNS, by_key, current, decode_record, list, record_row, retire, write_record},
 };
 pub(crate) use crate::client::approvals::{
     Duplicate, Finding, ISSUE, IssueSpecification, PR, ProposalDecision, PullSpecification,
     PushSpecification,
 };
 use crate::daemon::{item_numbers, links::space::require_ready_space, store};
+use crate::forge::items::attach::{self, Attachment};
 
 /// A stored proposal, and whether this call recorded it.
 pub type Recorded = (ApprovalRequest, bool);
@@ -194,6 +196,67 @@ pub fn push_pending(db: &Connection, workspace: &SpaceId) -> Result<bool> {
 pub fn pull_pending(db: &Connection, workspace: &SpaceId) -> Result<bool> {
     Ok(current(db, workspace, &Target::PrOpen, PR)?
         .is_some_and(|request| request.status == DecisionStatus::Pending))
+}
+
+/// Point the pending proposals' copies below `source`, a repository
+/// directory moved to `destination`, at their new place, in their files and
+/// the descriptions that show them, in the caller's transaction.
+pub fn rebase_files(tx: &Transaction<'_>, source: &Path, destination: &Path) -> Result<()> {
+    let pending = list(tx, None)?
+        .into_iter()
+        .filter(|request| request.status == DecisionStatus::Pending);
+    for mut request in pending {
+        let mut moved = false;
+        for (body, attachments) in shown_files(&mut request.specification) {
+            moved |= rebase(body, attachments, source, destination);
+        }
+        if moved {
+            write_record(tx, &request)?;
+        }
+    }
+    Ok(())
+}
+
+/// Each description a proposal posts with the files it shows: an issue's
+/// and its duplicates' findings, or a PR's.
+fn shown_files(specification: &mut Specification) -> Vec<(&mut String, &mut Vec<Attachment>)> {
+    match specification {
+        Specification::Issue(issue) => {
+            let findings = (issue.duplicates.iter_mut())
+                .map(|finding| (&mut finding.body, &mut finding.attachments));
+            std::iter::once((&mut issue.issue.body, &mut issue.issue.attachments))
+                .chain(findings)
+                .collect()
+        }
+        Specification::Pull(pull) => vec![(&mut pull.pull.body, &mut pull.pull.attachments)],
+        _ => Vec::new(),
+    }
+}
+
+/// Point `attachments` below `source` and the references `body` makes to
+/// them below `destination` instead; whether any was.
+fn rebase(
+    body: &mut String,
+    attachments: &mut [Attachment],
+    source: &Path,
+    destination: &Path,
+) -> bool {
+    let moved: Vec<_> = attachments
+        .iter()
+        .map(|attachment| Attachment {
+            path: match attachment.path.strip_prefix(source) {
+                Ok(inside) => destination.join(inside),
+                Err(_) => attachment.path.clone(),
+            },
+            alt: attachment.alt.clone(),
+        })
+        .collect();
+    if moved == attachments {
+        return false;
+    }
+    *body = attach::retarget(body, attachments, &moved);
+    attachments.clone_from_slice(&moved);
+    true
 }
 
 #[cfg(test)]

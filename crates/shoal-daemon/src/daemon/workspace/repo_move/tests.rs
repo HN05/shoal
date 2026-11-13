@@ -3,6 +3,7 @@ use crate::client::assignments::Done;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
+    links::proposals::tests as proposals,
     test_support,
     workspace::{ExecutionKind, identity},
     workspace_files::Attacher,
@@ -492,6 +493,29 @@ async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> 
     let result = &files[1].path;
     assert!(result.starts_with(root.join("origin")), "{result:?}");
     assert_eq!(fs::read_to_string(result)?, "panic");
+    Ok(())
+}
+
+#[tokio::test]
+async fn pending_proposals_follow_their_copies_to_the_new_root() -> Result<()> {
+    let (_temp, manager, repo, workspace, root) = cloned().await?;
+    let (body, copy) = proposals::kept_copy(&manager, &workspace, &repo.id, "shot.png").await;
+    let pull = proposals::store_pull_proposal(&manager, &workspace, body, vec![copy.clone()]).await;
+
+    manager.move_repositories(Layout::Regular).await?;
+    let moved = manager
+        .approval_request(pull.number)
+        .await?
+        .context("no proposal")?;
+    let proposed = &moved.proposed_pull().context("no PR")?.pull;
+    let path = &proposed.attachments[0].path;
+    assert!(
+        path.starts_with(root.join("origin").join(".proposals")),
+        "{path:?}"
+    );
+    assert_eq!(fs::read_to_string(path)?, "shot.png");
+    let shown = &proposed.body;
+    assert!(shown.contains(&path.display().to_string()), "{shown}");
     Ok(())
 }
 

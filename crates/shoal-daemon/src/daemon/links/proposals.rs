@@ -3,14 +3,9 @@
 //! as duplicates once the user decides.
 use crate::client::space_ids::SpaceId;
 use crate::daemon::approvals::ApprovalRequestExt;
-use crate::paths::StateFiles;
 use anyhow::{Context, Result, bail, ensure};
 use shoal_refs::{BranchName, CommitId};
-use std::{
-    collections::BTreeSet,
-    ffi::OsString,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
 pub(crate) use crate::client::links::{OpenOutcome, Proposed};
 use crate::{
@@ -23,7 +18,6 @@ use crate::{
                 PushSpecification, Recorded,
             },
         },
-        file_copies::keep_copies,
         links::LinkSpace,
         workspace::Manager,
     },
@@ -32,7 +26,6 @@ use crate::{
         account::Account,
         conventions,
         items::action::{Action, Edit, Sent},
-        items::attach::{self, Attachment},
         items::create::{NewIssue, NewPull},
         items::item::{Item, Opened},
         items::link::{ItemKind, LinkKind},
@@ -88,8 +81,11 @@ impl Manager {
         link: bool,
         proposer: Proposer,
     ) -> Result<Proposed> {
-        let files = self.gates.lock_proposal_files().await;
-        self.keep_attachments(space.id(), &mut issue.body, &mut issue.attachments)
+        let (id, home) = (space.id(), space.repository_id());
+        let files = self
+            .lock_proposal_files_of(home, &issue.attachments)
+            .await?;
+        self.keep_attachments(id, home, &mut issue.body, &mut issue.attachments)
             .await?;
         let (branch, commit) = proposed_from(space).await?;
         let specification = Specification::Issue(IssueSpecification {
@@ -125,9 +121,17 @@ impl Manager {
         push: Option<PushSpecification>,
         proposer: Proposer,
     ) -> Result<Proposed> {
-        let files = self.gates.lock_proposal_files().await;
-        self.keep_attachments(&workspace.id, &mut pull.body, &mut pull.attachments)
+        let repository = &workspace.repository_id;
+        let files = self
+            .lock_proposal_files_of(repository, &pull.attachments)
             .await?;
+        self.keep_attachments(
+            &workspace.id,
+            repository,
+            &mut pull.body,
+            &mut pull.attachments,
+        )
+        .await?;
         let specification = Specification::Pull(PullSpecification {
             pull,
             commit,
@@ -138,66 +142,6 @@ impl Manager {
         let request = proposal(&workspace.id, Target::PrOpen, proposals::PR, specification);
         self.record_proposal(request, proposals::propose_pull, files)
             .await
-    }
-
-    /// Copy the files a proposal attaches into Shoal's state and point
-    /// `body` at the copies. The directory is named by the proposal's
-    /// content, files included, so proposing it again reuses the copies and
-    /// finds the same request, and copies never change. The caller holds
-    /// `proposal_files` until the proposal is stored, since pruning takes it
-    /// too.
-    async fn keep_attachments(
-        &self,
-        owner: &SpaceId,
-        body: &mut String,
-        attachments: &mut Vec<Attachment>,
-    ) -> Result<()> {
-        if attachments.is_empty() {
-            return Ok(());
-        }
-        let root = self.paths.proposal_files();
-        let (owner, text, originals) = (owner.to_owned(), body.clone(), attachments.clone());
-        let copies = tokio::task::spawn_blocking(move || {
-            keep_copies(&root, &owner, &text, &originals).map(|copies| copies.attachments)
-        })
-        .await??;
-        *body = attach::retarget(body, attachments, &copies);
-        *attachments = copies;
-        Ok(())
-    }
-
-    /// [`Self::prune_proposal_files`] for the cleanup sweep, which also
-    /// catches proposals removed with their workspace or repository.
-    pub(crate) async fn sweep_proposal_files(&self) -> Result<()> {
-        let _files = self.gates.lock_proposal_files().await;
-        self.remove_unattached_files().await
-    }
-
-    /// Delete copied files no pending proposal attaches any more. Failure
-    /// only logs.
-    pub(crate) async fn prune_proposal_files(&self) {
-        let _files = self.gates.lock_proposal_files().await;
-        if let Err(error) = self.remove_unattached_files().await {
-            crate::daemon::log::log!("proposal files not pruned: {error:#}");
-        }
-    }
-
-    async fn remove_unattached_files(&self) -> Result<()> {
-        let root = self.paths.proposal_files();
-        let pending: Vec<_> = self
-            .approval_requests(None)
-            .await?
-            .into_iter()
-            .filter(|request| request.status == DecisionStatus::Pending)
-            .collect();
-        let kept: BTreeSet<_> = pending
-            .iter()
-            .flat_map(ApprovalRequest::attachments)
-            .filter_map(|attachment| attachment.path.strip_prefix(&root).ok())
-            .filter_map(|path| path.components().next())
-            .map(|component| component.as_os_str().to_owned())
-            .collect();
-        tokio::task::spawn_blocking(move || remove_unattached(&root, &kept)).await?
     }
 
     /// Store the proposal `request` with `record` and tell whoever decides
@@ -211,7 +155,7 @@ impl Manager {
     ) -> Result<Proposed> {
         let (request, new) = self.store_proposal(request, record).await?;
         drop(files);
-        self.prune_proposal_files().await;
+        self.prune_proposal_files(&request).await;
         if new {
             self.notify_approval(&request).await;
         }
@@ -282,7 +226,7 @@ impl Manager {
         message: String,
     ) -> Result<()> {
         self.forget_proposal(request).await?;
-        self.prune_proposal_files().await;
+        self.prune_proposal_files(request).await;
         if let Some(space) = space {
             self.tell_space(space.id(), message).await;
         }
@@ -879,21 +823,6 @@ async fn head_commit(
     }
 }
 
-/// Remove the directories below `root` whose names `kept` leaves out.
-fn remove_unattached(root: &Path, kept: &BTreeSet<OsString>) -> Result<()> {
-    let Ok(entries) = std::fs::read_dir(root) else {
-        return Ok(());
-    };
-    for entry in entries {
-        let entry = entry?;
-        if !kept.contains(&entry.file_name()) {
-            std::fs::remove_dir_all(entry.path())
-                .with_context(|| format!("remove {}", entry.path().display()))?;
-        }
-    }
-    Ok(())
-}
-
 /// The branch and commit a space proposes an issue from: a workspace's; a
 /// chat works on neither.
 async fn proposed_from(space: &LinkSpace) -> Result<(Option<String>, Option<String>)> {
@@ -948,5 +877,6 @@ fn comment(finding: Finding) -> Action {
     }
 }
 
+mod files;
 #[cfg(test)]
 pub(crate) mod tests;

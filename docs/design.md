@@ -2873,7 +2873,8 @@ the `issue_open` and `pr_open` permissions can make a scoped `issue open` or `pr
 propose instead of open (`"direct"` is the default; unscoped callers always open).
 A proposal is an approval request whose record carries the command's options with
 their defaults resolved, the workspace, branch, commit and agent, and copies of its
-attachments in the state directory until no pending proposal uses them; the command
+attachments in its repository directory's `.proposals` until no pending proposal
+uses them, which a move of that directory carries over; the command
 reports it and exits 0, because the agent goes on with its work and hears the
 decision as a message. A proposal is routed like any request, to the nearest
 space above with an agent and up to the user. Publishing to a forge other people see is the review

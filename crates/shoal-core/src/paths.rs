@@ -75,12 +75,6 @@ pub trait StateFiles {
         self.state().join("hook-reports")
     }
 
-    /// Copies of the files proposed issues and PRs attach, kept until the
-    /// user decides, since the agent's copies may be gone by then.
-    fn proposal_files(&self) -> PathBuf {
-        self.state().join("proposals")
-    }
-
     /// The workspaces each command last acted on, which `-` selects from.
     fn recent_workspaces(&self) -> PathBuf {
         self.state().join("recent-workspaces.json")

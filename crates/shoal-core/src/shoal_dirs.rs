@@ -24,15 +24,18 @@ pub enum Contents {
     TmpDirs,
     /// The files attached to workspaces and chats.
     Attachments,
+    /// Copies of the files proposed issues and PRs attach.
+    ProposalFiles,
 }
 
 impl Contents {
-    pub const ALL: [Self; 2] = [Self::TmpDirs, Self::Attachments];
+    pub const ALL: [Self; 3] = [Self::TmpDirs, Self::Attachments, Self::ProposalFiles];
 
     fn directory(self) -> &'static str {
         match self {
             Self::TmpDirs => ".tmp",
             Self::Attachments => ".attachments",
+            Self::ProposalFiles => ".proposals",
         }
     }
 
@@ -40,6 +43,7 @@ impl Contents {
         match self {
             Self::TmpDirs => "temporary files",
             Self::Attachments => "attached files",
+            Self::ProposalFiles => "proposals' files",
         }
     }
 }

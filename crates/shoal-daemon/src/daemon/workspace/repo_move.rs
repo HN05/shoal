@@ -187,6 +187,7 @@ impl Manager {
             let _fetch = self.gates.lock_fetch(&id).await;
             let _git = self.gates.lock_git(&id).await;
             let _files = self.gates.lock_message_files(&id).await;
+            let _proposals = self.gates.lock_proposal_files().await;
             self.finish_repository_move(&id)
                 .await
                 .context("finish an interrupted repository move")?;
@@ -308,6 +309,8 @@ impl Manager {
         let _fetch = self.gates.lock_fetch(&repo.id).await;
         let _git = self.gates.lock_git(&repo.id).await;
         let _files = self.gates.lock_message_files(&repo.id).await;
+        // Nor may a proposal copy files into it meanwhile.
+        let _proposals = self.gates.lock_proposal_files().await;
         let repo = self.repository(&repo.id).await?;
         self.check_movable(&repo, Running::Refused).await?;
         let workspaces = self.repository_workspaces(&repo.id).await?;
@@ -487,6 +490,11 @@ impl Manager {
                 crate::daemon::workspace_files::rebase(
                     tx,
                     &id,
+                    Path::new(&source),
+                    Path::new(&destination),
+                )?;
+                crate::daemon::approvals::proposals::rebase_files(
+                    tx,
                     Path::new(&source),
                     Path::new(&destination),
                 )?;

@@ -454,7 +454,7 @@ impl Manager {
         let _announcement = self.gates.lock_announcements().await;
         let (request, retracted) = self.record_withdrawal(selected).await?;
         if request.target.is_proposal() {
-            self.prune_proposal_files().await;
+            self.prune_proposal_files(&request).await;
         }
         if !retracted {
             self.announce_withdrawal(&request).await;
