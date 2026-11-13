@@ -41,10 +41,22 @@ pub(in crate::cli::commands) async fn resume_stopped(
     ctx: &Context,
     execution: &ExecutionId,
 ) -> Result<bool> {
+    resume_restore(ctx, |entry| entry.execution.as_ref() == Some(execution)).await
+}
+
+/// Start the queued restore of an agent of the space `space`, as
+/// [`resume_stopped`] does; `false` when none waits in the queue.
+pub(in crate::cli::commands) async fn resume_space(ctx: &Context, space: &SpaceId) -> Result<bool> {
+    resume_restore(ctx, |entry| entry.space() == Some(space)).await
+}
+
+/// Start the first queued restore that `restores` picks, unless it is
+/// already starting, and wait until its agent runs in a session, failing at
+/// once when it leaves the queue without one; `false` when none waits.
+async fn resume_restore(ctx: &Context, restores: impl Fn(&QueueEntry) -> bool) -> Result<bool> {
     let entries = queued_agents::entries(ctx).await?;
-    let restore = entries.into_iter().find(|entry| {
-        entry.kind == QueueKind::Restore && entry.execution.as_ref() == Some(execution)
-    });
+    let restore =
+        (entries.into_iter()).find(|entry| entry.kind == QueueKind::Restore && restores(entry));
     let Some(restore) = restore else {
         return Ok(false);
     };
@@ -53,7 +65,7 @@ pub(in crate::cli::commands) async fn resume_stopped(
         QueueState::Starting => restore,
     };
     ctx.emit(&format!("Resuming {}", entry.name), &entry)?;
-    agent_terminal_session(ctx, &entry, Some(execution)).await?;
+    agent_terminal_session(ctx, &entry, entry.execution.as_ref()).await?;
     Ok(true)
 }
 

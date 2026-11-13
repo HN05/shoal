@@ -10,7 +10,6 @@ use crate::{
     cli::{
         agents,
         args::SpaceTargets,
-        commands::queued_agents,
         context::Context,
         recent,
         terminal::{self, Recorded},
@@ -19,7 +18,6 @@ use crate::{
     model::{Chat, Inspection},
     protocol::{ConfigTarget, Protection},
     sessions::Origin,
-    state::{QueueKind, QueueState},
     terminal::Session,
 };
 
@@ -223,28 +221,30 @@ impl Target {
 
     /// Wake the target's agent at once, whatever the agent limits and the
     /// queue's rank: start the restore that waits for it, as for an agent
-    /// that sleeps, or when `stopped` too restore its stopped work as
-    /// `shoal restore --now` does. Whether it woke one.
+    /// that sleeps, or when `stopped` too restore its stopped work now.
+    /// Whether it woke one.
     async fn wake(&self, ctx: &Context, stopped: bool) -> Result<bool> {
-        let entries = queued_agents::entries(ctx).await?;
-        let restore = (entries.into_iter())
-            .find(|entry| entry.kind == QueueKind::Restore && entry.space() == Some(self.id()));
-        if let Some(entry) = restore {
-            if entry.state == QueueState::Queued {
-                crate::client::queue::start(&ctx.paths, entry.id.to_string()).await?;
-            }
+        if super::queue::resume_space(ctx, self.id()).await? {
             return Ok(true);
         }
-        let space = SpaceSelector::id(self.id());
-        if !stopped
-            || crate::client::saved::read(&ctx.paths, space.clone())
-                .await?
-                .is_empty()
-        {
+        if !stopped || !self.has_stopped_work(ctx).await? {
             return Ok(false);
         }
+        self.restore_now(ctx).await?;
+        Ok(true)
+    }
+
+    /// Whether the target saved stopped work or a last session to restore.
+    async fn has_stopped_work(&self, ctx: &Context) -> Result<bool> {
+        let saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(self.id())).await?;
+        Ok(!saved.is_empty())
+    }
+
+    /// Restore the target's stopped work as `shoal restore --now` does, and
+    /// wait for the restore it starts through the queue.
+    async fn restore_now(&self, ctx: &Context) -> Result<()> {
         let targets = SpaceTargets {
-            space: vec![space],
+            space: vec![SpaceSelector::id(self.id())],
             all: false,
         };
         let now = super::restore::agents::Options {
@@ -256,7 +256,10 @@ impl Target {
             change: None,
         };
         super::restore::run(ctx, targets, None, now).await?;
-        Ok(true)
+        // A restore whose agent registered already left the queue, which
+        // `awaited` finds running.
+        super::queue::resume_space(ctx, self.id()).await?;
+        Ok(())
     }
 
     /// The target, read again, with the session its agent, only
