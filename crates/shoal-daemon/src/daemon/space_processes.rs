@@ -111,6 +111,14 @@ impl Manager {
         stopped
     }
 
+    /// Stop the processes of `space` outside its executions, those with its
+    /// identity or in its temporary directory, such as an agent Shoal did not
+    /// start under a wrapper.
+    pub(crate) async fn stop_outside_executions(&self, space: &PresentSpace) -> Result<()> {
+        let ties = self.space_ties(space, WorktreeTies::None).await?;
+        (self.stop_untracked(ties, Selection::Processes, None).await).map(drop)
+    }
+
     /// What ties processes to `space`: its identity, its temporary directory
     /// while that is the one Shoal created, and its worktree, where it has
     /// one, as `ties` says, which the caller verified is the space's.

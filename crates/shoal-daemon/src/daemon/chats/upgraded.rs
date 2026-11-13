@@ -9,7 +9,7 @@ use rusqlite::Connection;
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::{
-    daemon::{log, space_processes::WorktreeTies, workspace::Manager},
+    daemon::{log, workspace::Manager},
     execution::{
         TrackedAgent,
         recovery::{self, LastSession, LastSessionExt, Record, RecordExt, Stage},
@@ -55,10 +55,7 @@ impl Manager {
             return Ok(());
         };
         let space = crate::model::PresentSpace::Chat(chat.clone());
-        (self
-            .stop_removed_processes(&space, WorktreeTies::None)
-            .await)
-            .context("stop its agent")?;
+        (self.stop_outside_executions(&space).await).context("stop its agent")?;
         let execution = ExecutionId::generate();
         if !upgraded.saved {
             if self.completion(&chat.id).await?.is_none() {

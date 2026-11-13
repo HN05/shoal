@@ -19,7 +19,7 @@ pub enum CleanupReason {
     PushRequest,
     /// An agent launch in the workspace waits in the agent queue or is starting.
     QueuedAgent,
-    /// A chat's agent runs.
+    /// The space's agent runs.
     AgentRunning,
     /// A chat runs in the workspace's worktree.
     ChatRunning,

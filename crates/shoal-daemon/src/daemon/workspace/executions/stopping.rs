@@ -559,7 +559,7 @@ impl Manager {
     /// or an agent Shoal did not start under a wrapper, since none outlives
     /// removal. Its worktree, where it has one, ties processes to it as
     /// `ties` says once the directory is verified to be its worktree still.
-    pub(crate) async fn stop_removed_processes(
+    pub(in crate::daemon::workspace) async fn stop_removed_processes(
         &self,
         space: &PresentSpace,
         ties: WorktreeTies,
