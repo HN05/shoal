@@ -208,6 +208,7 @@ impl Manager {
     /// restore the daemon starts is admitted like a launch once it waits for
     /// nothing.
     async fn waiting_work(&self) -> Result<WaitingWork> {
+        let light = self.light().await?;
         let held = self.agent_queue.held();
         let mut queued = self.store.run(|db| queued_rows(db)).await?;
         queued.retain(|row| !held.contains(&row.id));
@@ -225,8 +226,14 @@ impl Manager {
             started_here,
             automatic,
             job,
+            mode,
         } in queued
         {
+            let is_light = match (kind, &execution) {
+                (QueueKind::Job, _) => false,
+                (_, Some(execution)) => light.execution(execution),
+                (_, None) => light.mode(&repository, mode.as_ref()),
+            };
             let work = match (kind, execution, workspace) {
                 // A job waits while its repository's permits are all held.
                 (QueueKind::Job, ..) if self.runners.permits_busy(&repository) => {
@@ -267,6 +274,7 @@ impl Manager {
                 id,
                 repository,
                 work,
+                light: is_light,
             });
         }
         let oneshots = self
@@ -279,6 +287,7 @@ impl Manager {
                 work: Work::OneShot {
                     after_stop: oneshot.after_stop,
                 },
+                light: false,
             });
         waiting.extend(oneshots);
         self.in_rank_order(&mut waiting).await?;

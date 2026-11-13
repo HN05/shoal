@@ -7,9 +7,11 @@ use std::collections::{HashMap, HashSet};
 use anyhow::Result;
 use rusqlite::params;
 
+use super::weight::Light;
 use crate::client::space_ids::SpaceId;
 use crate::client::time::UnixTime;
 use crate::{
+    config::modes::ModeName,
     daemon::workspace::{Manager, capacity::Activity},
     state::{ExecutionState, QueueKind, QueueState},
 };
@@ -46,6 +48,8 @@ struct StartingEntry {
     seen_at: Option<UnixTime>,
     /// The execution a restore resumes; a launch has none.
     execution: Option<ExecutionId>,
+    /// The mode a launch's agent starts in.
+    mode: Option<ModeName>,
 }
 
 /// Read the workspaces, executions and queue entries that slots are counted from.
@@ -71,7 +75,7 @@ fn persisted_slots(db: &rusqlite::Connection) -> Result<PersistedSlots> {
         .collect::<rusqlite::Result<_>>()?;
     let starting = db
         .prepare(
-            "SELECT repository_id,space_id,seen_at,execution_id FROM agent_queue
+            "SELECT repository_id,space_id,seen_at,execution_id,mode FROM agent_queue
              WHERE state=?1 AND kind!=?2",
         )?
         .query_map(params![QueueState::Starting, QueueKind::Job], |row| {
@@ -80,6 +84,7 @@ fn persisted_slots(db: &rusqlite::Connection) -> Result<PersistedSlots> {
                 workspace: row.get("space_id")?,
                 seen_at: row.get("seen_at")?,
                 execution: row.get("execution_id")?,
+                mode: row.get("mode")?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
@@ -90,6 +95,15 @@ fn persisted_slots(db: &rusqlite::Connection) -> Result<PersistedSlots> {
     })
 }
 
+/// Whether the starting `entry` starts a light agent: a restore of one, or
+/// a launch in a light mode.
+fn is_light(entry: &StartingEntry, light: &Light) -> bool {
+    match &entry.execution {
+        Some(execution) => light.execution(execution),
+        None => light.mode(&entry.repository, entry.mode.as_ref()),
+    }
+}
+
 impl Manager {
     /// The used slots. Each agent in a workspace that is not done uses one
     /// while it runs, awaits reattachment or waits for resume, counted once by
@@ -97,8 +111,9 @@ impl Manager {
     /// update; so does each starting launch until its agent registers, and
     /// each admitted one-shot run until it ends. An
     /// admitted restore starts in its agent's slot, and one of a last
-    /// session, which holds none, as a launch.
+    /// session, which holds none, as a launch. A light agent holds none.
     pub(super) async fn occupied_slots(&self, dormant: &HashSet<ExecutionId>) -> Result<Vec<Slot>> {
+        let light = self.light().await?;
         let mut agents = self.agent_executions().await;
         let PersistedSlots {
             open,
@@ -120,9 +135,12 @@ impl Manager {
                     .or_insert_with(|| stopped(workspace.clone()));
             }
         }
-        agents.retain(|execution, _| !dormant.contains(execution));
+        agents.retain(|execution, _| !dormant.contains(execution) && !light.execution(execution));
         let mut launches = Vec::new();
         for entry in starting {
+            if is_light(&entry, &light) {
+                continue;
+            }
             match entry.execution.as_ref().and_then(|id| agents.get_mut(id)) {
                 Some((_, activity)) => *activity = starting_since(entry.seen_at),
                 None => launches.push(entry),

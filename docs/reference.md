@@ -1946,7 +1946,8 @@ an agent starts only when none uses a slot, and below
 value counts every agent on the machine; a fixed [`agent.max_running`](config.md#agent) counts
 only one repository's agents, within the machine limit. Each tracked agent uses a slot while it runs, awaits reattachment
 after a daemon restart, or waits for `shoal resume`, unless its workspace is
-done or its restore waits in the queue; `shoal done`, the agent's exit,
+done, its restore waits in the queue or its mode is
+[light](config.md#modes-and-rules), which starts it at once beside any limit; `shoal done`, the agent's exit,
 `resume --discard` and removal free it.
 A [local review](#local-reviews)'s reviewer also uses a slot while it runs; a
 queued review ranks with the workspace it reviews.

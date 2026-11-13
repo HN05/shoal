@@ -17,6 +17,7 @@ mod state;
 mod stopped;
 mod store;
 mod wake;
+mod weight;
 mod worker;
 
 pub(crate) use dispatch::Start;

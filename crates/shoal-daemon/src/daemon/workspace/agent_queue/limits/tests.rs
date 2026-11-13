@@ -21,6 +21,7 @@ fn job(id: &str, memory: u64) -> Waiting {
                 memory: Some(memory),
             },
         },
+        light: false,
     }
 }
 
@@ -73,6 +74,7 @@ fn waiting(entries: &[(&str, &str)]) -> Vec<Waiting> {
             } else {
                 Work::Launch
             },
+            light: id.starts_with('l'),
         })
         .collect()
 }
@@ -394,4 +396,12 @@ fn each_entry_passed_over_names_what_holds_it() {
         held(&[], &queue, &dynamic(reading)),
         held_by(&[("a1", HeldBy::Reading), ("j1", HeldBy::Reading)])
     );
+}
+
+#[test]
+fn a_light_agent_starts_beside_full_limits_and_takes_no_slot() {
+    let queue = waiting(&[("light", "a"), ("a1", "a"), ("lighter", "a")]);
+    let limits = limits(Some(1), &[("a", None)]);
+    let admitted = admit(&["a".into()], &queue, &limits, false);
+    assert_eq!(admitted, [QueueEntryId::from("light"), "lighter".into()]);
 }

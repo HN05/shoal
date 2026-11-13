@@ -1538,7 +1538,10 @@ opening does, so clients do not rebuild it.
 dispatcher share one count. Slots derive from what the daemon tracks: connected
 agents, executions awaiting reattachment, resume records, starting queue entries
 and admitted one-shot runs such as reviews, excluding completed workspaces.
-Agents therefore count however they started. A one-shot run's slot is its
+Agents therefore count however they started. An agent of a `light` mode, such
+as a plan or a chat that waits for the user, uses little of the machine, so it
+counts nowhere: it starts at once, holds no slot and load never stops it,
+which lets the user talk to an agent while heavy work fills the machine. A one-shot run's slot is its
 in-memory request, which ends with the run, or with the daemon for a run whose
 processes could not be proven stopped, so no slot outlives a restart. `machine.max_agents`
 limits the machine; the repository option `agent.max_running` limits each repository,

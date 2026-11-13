@@ -113,6 +113,8 @@ pub(crate) struct Waiting {
     pub id: QueueEntryId,
     pub repository: RepositoryId,
     pub work: Work,
+    /// Whether it starts a light agent, which needs neither a slot nor room.
+    pub light: bool,
 }
 
 /// What one admission pass decided.
@@ -191,6 +193,10 @@ pub(crate) fn admit(
             Work::Restore { waiting: false, .. } => continue,
             Work::Restore { waiting: true, .. } => 1,
         };
+        if entry.light {
+            admission.admitted.push(entry.id.clone());
+            continue;
+        }
         if let Err(held) = measured_fit(limits.room, started, capacity::Room::fits_agent) {
             admission.hold(entry, held);
             continue;
@@ -271,6 +277,7 @@ pub(crate) fn room_for_a_job(occupied: &[RepositoryId], limits: &Limits) -> bool
         work: Work::Job {
             cost: capacity::JobCost { memory: Some(0) },
         },
+        light: false,
     }];
     !admit(occupied, &probe, limits, false).admitted.is_empty()
 }
