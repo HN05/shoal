@@ -1293,6 +1293,14 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     let restore = entries.iter().find(|entry| entry.name == "idle").unwrap();
     assert_eq!(restore.state, Queued);
     assert!(restore.waits_for_update);
+    let asleep = manager.workspace_by_id(&idle.id).await.unwrap().asleep;
+    assert_eq!(
+        asleep.map(|asleep| (asleep.reason, asleep.wakes_when)),
+        Some((
+            "critical memory pressure".into(),
+            crate::daemon::workspace::agents::WAKES_ON_UPDATE.into()
+        ))
+    );
 
     // An update makes it due; it waits for the launch's slot like a launch.
     manager

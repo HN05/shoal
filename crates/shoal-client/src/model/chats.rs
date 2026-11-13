@@ -81,6 +81,10 @@ pub struct Chat {
     /// having stayed idle.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sleep: Option<crate::state::Sleep>,
+    /// Why Shoal put its stopped agent to sleep and what wakes it, while
+    /// Shoal brings that agent back on its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asleep: Option<crate::model::Asleep>,
     /// The space above it.
     #[serde(default)]
     pub parent: Option<SpaceRef>,

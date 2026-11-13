@@ -95,6 +95,7 @@ fn chat(
         agent_state: None,
         progress: None,
         sleep: None,
+        asleep: None,
         parent: None,
         children: Vec::new(),
         converted: false,

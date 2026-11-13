@@ -62,6 +62,10 @@ pub struct Workspace {
     /// having stayed idle.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sleep: Option<crate::state::Sleep>,
+    /// Why Shoal put its stopped agent to sleep and what wakes it, while
+    /// Shoal brings that agent back on its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asleep: Option<crate::model::Asleep>,
     /// In a list, the turn state its coordinator's agent reports while no
     /// agent of its own has started here, so that agent does its work.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -234,6 +238,7 @@ impl Workspace {
             agent_state: None,
             progress: None,
             sleep: None,
+            asleep: None,
             coordinator_state: None,
             base_workspace: None,
             stacked_workspaces: Vec::new(),

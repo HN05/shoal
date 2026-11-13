@@ -16,6 +16,16 @@ pub struct AgentStatus {
     pub prompt_cache_expires_at: Option<crate::time::UnixTime>,
 }
 
+/// Why Shoal put a space's agent to sleep and what wakes it: an asleep
+/// agent comes back on its own through the agent queue, unlike a stopped
+/// one, which waits for `shoal restore`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Asleep {
+    pub reason: String,
+    /// Completes "wakes once …".
+    pub wakes_when: String,
+}
+
 /// A connected agent, or an execution whose wrapper is gone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunningAgent {

@@ -211,6 +211,12 @@ async fn entry(manager: &Manager, execution: &str) -> QueueEntry {
         .unwrap()
 }
 
+/// Why the agent of the workspace `name` is asleep and what wakes it.
+async fn asleep(manager: &Manager, name: &str) -> Option<Asleep> {
+    let id = manager.named(name).await;
+    manager.workspace(&id).await.unwrap().asleep
+}
+
 #[tokio::test]
 async fn a_signal_stopped_idle_agent_waits_for_an_update_unless_resumed() {
     let (temp, manager) = manager().await;
@@ -243,6 +249,15 @@ async fn a_signal_stopped_idle_agent_waits_for_an_update_unless_resumed() {
         .await
         .unwrap();
     assert!(!entry(&manager, "resumed-agent").await.waits_for_update);
+    // Shoal brings the idle one back on its own; the resumed one waits for
+    // its slot because the user asked for it.
+    assert_eq!(
+        asleep(&manager, "idle")
+            .await
+            .map(|asleep| asleep.wakes_when),
+        Some(agents::WAKES_ON_UPDATE.into())
+    );
+    assert_eq!(asleep(&manager, "resumed").await, None);
     manager
         .consume_queue_entry(&working.id, &workspaces[2].id)
         .await;

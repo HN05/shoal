@@ -3,6 +3,7 @@
 //! order as slots free.
 mod actions;
 mod agents;
+pub(crate) mod asleep;
 mod blockers;
 mod dispatch;
 mod entries;

@@ -13,6 +13,7 @@ fn workspace(name: &str, path: &Path) -> Workspace {
         agent_state: None,
         progress: None,
         sleep: None,
+        asleep: None,
         coordinator_state: None,
         base_workspace: None,
         stacked_workspaces: Vec::new(),

@@ -114,14 +114,14 @@ impl ProtectionExt for Protection {
     fn idle(reason: &str) -> Self {
         Self {
             reason: reason.into(),
-            resumes_when: "an update arrives for it".into(),
+            resumes_when: WAKES_ON_UPDATE.into(),
         }
     }
 
     fn blocked() -> Self {
         Self {
             reason: BLOCKED_REASON.into(),
-            resumes_when: "nothing blocks its space".into(),
+            resumes_when: WAKES_UNBLOCKED.into(),
         }
     }
 
@@ -154,6 +154,13 @@ const IDLE_EXPIRED_REASON: &str = "idle with its prompt cache expired";
 /// The stop reason of an agent whose turn ended while its space is blocked,
 /// which its recovery record keeps.
 pub(crate) const BLOCKED_REASON: &str = "its space is blocked";
+
+/// What wakes an agent stopped between turns, which has nothing to do until
+/// then.
+pub(crate) const WAKES_ON_UPDATE: &str = "an update arrives for it";
+
+/// What wakes an agent stopped because its space is blocked.
+pub(crate) const WAKES_UNBLOCKED: &str = "nothing blocks its space";
 
 /// The agent a request comes from.
 pub(crate) struct CallerAgent {
@@ -1296,7 +1303,7 @@ fn restored_after(protection: &Protection, turn: Option<AgentState>) -> Protecti
     match turn {
         Some(AgentState::Idle) if !protection.is_blocked() => Protection {
             reason: protection.reason.clone(),
-            resumes_when: "an update arrives for it".into(),
+            resumes_when: WAKES_ON_UPDATE.into(),
         },
         _ => protection.clone(),
     }

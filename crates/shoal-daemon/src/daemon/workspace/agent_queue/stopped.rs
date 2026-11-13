@@ -21,9 +21,9 @@ use rusqlite::{Connection, params};
 use super::Start;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::workspace::Manager,
+    daemon::workspace::{Manager, agents},
     execution::recovery,
-    model::{PresentSpace, QueueEntry},
+    model::{Asleep, PresentSpace, QueueEntry},
     paths::Paths,
     state::{QueueKind, QueueState},
 };
@@ -54,9 +54,10 @@ struct Restore {
     agent: crate::agent::Agent,
     execution: ExecutionId,
     env: String,
-    /// Shoal queued it on its own rather than `shoal restore`, so an agent
-    /// stopped between turns waits for an update.
-    automatic: bool,
+    /// Why Shoal put the agent to sleep and what wakes it, when Shoal queued
+    /// it on its own rather than `shoal restore`, so an agent stopped between
+    /// turns waits for an update.
+    asleep: Option<Asleep>,
     /// Queued, or starting at once.
     state: QueueState,
 }
@@ -67,7 +68,7 @@ impl Restore {
         execution: &ExecutionId,
         agent: &crate::agent::Agent,
         env: &BTreeMap<String, String>,
-        automatic: bool,
+        asleep: Option<Asleep>,
     ) -> Result<Self> {
         Ok(Self {
             id: QueueEntryId::generate(),
@@ -75,9 +76,14 @@ impl Restore {
             agent: agent.to_owned(),
             execution: execution.to_owned(),
             env: serde_json::to_string(env)?,
-            automatic,
+            asleep,
             state: QueueState::Queued,
         })
+    }
+
+    /// Whether Shoal queued it on its own.
+    fn automatic(&self) -> bool {
+        self.asleep.is_some()
     }
 
     /// The restore, admitted as the entry `id` as it is recorded.
@@ -125,8 +131,8 @@ fn insert(tx: &rusqlite::Transaction<'_>, restore: &Restore) -> Result<()> {
     );
     let now = crate::time::UnixTime::now();
     tx.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,env,execution_id,state,created_at,seen_at,space_id,automatic)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9,?10,?11)
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,env,execution_id,state,created_at,seen_at,space_id,automatic,stop_reason,wakes_when)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9,?10,?11,?12,?13)
          ON CONFLICT(execution_id) DO UPDATE SET automatic=automatic AND excluded.automatic",
         params![
             restore.id,
@@ -139,7 +145,9 @@ fn insert(tx: &rusqlite::Transaction<'_>, restore: &Restore) -> Result<()> {
             restore.state,
             now,
             restore.target.id,
-            restore.automatic,
+            restore.automatic(),
+            restore.asleep.as_ref().map(|asleep| &asleep.reason),
+            restore.asleep.as_ref().map(|asleep| &asleep.wakes_when),
         ],
     )?;
     Ok(())
@@ -152,7 +160,7 @@ fn keep_wrapper_restore(db: &Connection, restore: &Restore) -> Result<bool> {
     let kept = db.execute(
         "UPDATE agent_queue SET automatic=automatic AND ?2
          WHERE execution_id=?1 AND kind=?3 AND env IS NULL",
-        params![restore.execution, restore.automatic, QueueKind::Restore],
+        params![restore.execution, restore.automatic(), QueueKind::Restore],
     )?;
     Ok(kept == 1)
 }
@@ -237,6 +245,29 @@ fn resolved_restores(
         .map(|(id, _, _)| id)
         .collect()
 }
+
+/// Why the agent whose stop saved `record` is asleep and what wakes it, for
+/// a restore Shoal queues on its own: once nothing blocks its space for an
+/// agent stopped because it was blocked, else once an update arrives for
+/// one stopped between turns, else once the queue starts it.
+fn asleep(record: &recovery::Record) -> Asleep {
+    let reason = record.stop_reason.as_deref();
+    let wakes_when = match reason == Some(agents::BLOCKED_REASON) {
+        true => agents::WAKES_UNBLOCKED,
+        false if record.between_turns() => agents::WAKES_ON_UPDATE,
+        false => WAKES_IN_QUEUE,
+    };
+    Asleep {
+        reason: reason.unwrap_or(UNKNOWN_STOP).to_owned(),
+        wakes_when: wakes_when.to_owned(),
+    }
+}
+
+/// What wakes an agent interrupted mid-turn whose restore the daemon starts.
+pub(super) const WAKES_IN_QUEUE: &str = "the agent queue starts it";
+
+/// Why a stop that saved no reason put an agent to sleep.
+pub(super) const UNKNOWN_STOP: &str = "its session ended";
 
 /// The agent stopped as `execution` in `workspace_id`, from its recovery
 /// record or else its last session.
@@ -335,7 +366,7 @@ impl Manager {
     ) -> Result<QueueEntry> {
         let agent = stopped_agent(&self.paths, space.id(), execution)?
             .with_context(|| format!("{} has no stopped agent {execution}", space.name()))?;
-        let restore = Restore::new(Target::of(space), execution, &agent, &env, false)?;
+        let restore = Restore::new(Target::of(space), execution, &agent, &env, None)?;
         // Read the entry before dispatch can start it and its agent take it.
         let _gate = self.agent_queue.lock_admission().await;
         self.store.write(move |tx| insert(tx, &restore)).await?;
@@ -366,7 +397,7 @@ impl Manager {
             .with_context(|| format!("{} has no stopped agent {execution}", space.name()))?;
         let env = crate::terminal::detached_start_environment(record.origin.as_ref());
         let restore =
-            Restore::new(Target::of(space), execution, &record.agent, &env, false)?.starting(id);
+            Restore::new(Target::of(space), execution, &record.agent, &env, None)?.starting(id);
         let start = Start {
             id: restore.id.clone(),
             name: space.name().clone(),
@@ -395,7 +426,13 @@ impl Manager {
         };
         let env = crate::terminal::detached_start_environment(record.origin.as_ref());
         let queued = async {
-            let restore = Restore::new(Target::of(space), execution, agent, &env, true)?;
+            let restore = Restore::new(
+                Target::of(space),
+                execution,
+                agent,
+                &env,
+                Some(asleep(&record)),
+            )?;
             let _gate = self.agent_queue.lock_admission().await;
             self.store.write(move |tx| insert(tx, &restore)).await
         };
@@ -446,7 +483,8 @@ impl Manager {
     ) -> Result<()> {
         let path = recovery::record_path(&self.paths, &space.id, execution);
         if let Some(record) = recovery::Record::load(&path).ok().flatten() {
-            let restore = Restore::new(space.clone(), execution, &record.agent, env, true)?;
+            let asleep = Some(asleep(&record));
+            let restore = Restore::new(space.clone(), execution, &record.agent, env, asleep)?;
             if let Err(error) = self.store.write(move |tx| insert(tx, &restore)).await {
                 crate::daemon::log!("agent queue: cannot queue restore of {execution}: {error:#}");
                 return Ok(());
