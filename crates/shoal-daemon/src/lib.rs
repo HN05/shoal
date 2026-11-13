@@ -9,8 +9,8 @@ use shoal_core::test_support;
 use shoal_core::{
     agents, ai, build, caches, config, config_file, daemon_handoff, daemon_owner, env, execution,
     fsutil, git, git_profile, hooks, installed, paths, presets, process, profile, refusal,
-    releases, removal, repository, reviews, secrets, service, sessions, start_plan, terminal,
-    tmp_dirs, tools, transfer,
+    releases, removal, repository, reviews, secrets, service, sessions, shell, start_plan,
+    terminal, tmp_dirs, tools, transfer,
 };
 // Tests stand in for the worker processes the daemon starts.
 #[cfg(not(test))]

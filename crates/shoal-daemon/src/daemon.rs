@@ -65,6 +65,7 @@ pub(crate) mod test_daemon;
 #[cfg(test)]
 pub(crate) mod test_support;
 mod tmp_dirs;
+mod unmoved_packages;
 mod untracked;
 mod warnings;
 pub mod workspace;
@@ -317,6 +318,13 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     }
     let chat_files = manager.rekey_chat_files();
     if let Err(error) = startup.step("naming chat files", chat_files).await {
+        log!("{error:#}");
+    }
+    let unmoved = manager.move_unmoved_packages();
+    if let Err(error) = startup
+        .step("moving packages of failed moves", unmoved)
+        .await
+    {
         log!("{error:#}");
     }
     let upgraded = manager.save_upgraded_chat_agents();
