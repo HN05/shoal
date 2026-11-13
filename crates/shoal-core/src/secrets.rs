@@ -289,7 +289,7 @@ async fn fetch(name: &str, secret: &Secret, path: Option<&OsStr>) -> Result<OsSt
 }
 
 /// Configured secrets name variables Shoal may set, with commands it can run.
-pub fn validate(secrets: &Secrets) -> Result<()> {
+pub(crate) fn validate(secrets: &Secrets) -> Result<()> {
     for (name, secret) in secrets {
         crate::env::validate_configured_name("[secrets]", name)?;
         ensure!(
