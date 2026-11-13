@@ -7,10 +7,15 @@ use anyhow::Result;
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
+    client::executions::{ProxyRetry, TurnRetry},
     client::links::{issue, pr::Registration},
     config::permissions::Permissions,
     daemon::{
-        approvals, forge_hosts::ForgeHosts, links::pr, questions, workspace::Manager,
+        approvals,
+        forge_hosts::ForgeHosts,
+        links::pr,
+        questions, store,
+        workspace::{Manager, turn_retry},
         workspace_files,
     },
     forge::{ForgeRepo, account::Account, items::reference::ItemRef, review::status::PrStatus},
@@ -40,6 +45,7 @@ impl Manager {
         let attention = self.attention(&space).await?;
         let jobs = self.linked_job_workspaces(space.id()).await?;
         let waiting_jobs = self.linked_waiting_jobs(space.id()).await?;
+        let (turn_retry, proxy_retry) = self.agent_retries(space.id()).await?;
         Ok(SpaceStatus {
             space,
             issues: records.issues,
@@ -52,6 +58,8 @@ impl Manager {
             permissions_error,
             jobs,
             waiting_jobs,
+            turn_retry,
+            proxy_retry,
         })
     }
 
@@ -100,6 +108,16 @@ impl Manager {
                 })
             })
             .await
+    }
+
+    /// The retry of the turn an API failure ended for the agent of the space
+    /// `id`, and the request its proxy waits to retry.
+    async fn agent_retries(&self, id: &SpaceId) -> Result<(Option<TurnRetry>, Option<ProxyRetry>)> {
+        let id = id.to_owned();
+        let (turn_retry, executions) = (self.store)
+            .read(move |tx| Ok((turn_retry::get(tx, &id)?, store::executions(tx, &id)?)))
+            .await?;
+        Ok((turn_retry, self.proxy_retry(&executions)))
     }
 
     /// What the chat `id` records about its links, with its `completion`.

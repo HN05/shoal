@@ -40,18 +40,12 @@ impl Manager {
         let cleanup_reason = self.cleanup_reason(&workspace).await;
         let cleanup_at = self.cleanup_at(&workspace.id).await?;
         let workspace_id = workspace.id.clone();
-        let (setup_finished, turn_retry) = self
+        let setup_finished = self
             .store
-            .run(move |db| {
-                Ok((
-                    store::setup_finished(db, &workspace_id)?,
-                    super::turn_retry::get(db, &workspace_id)?,
-                ))
-            })
+            .run(move |db| store::setup_finished(db, &workspace_id))
             .await?;
         workspace.usage = self.workspace_usage(&workspace.id);
         workspace.job = self.workspace_job(&workspace.id).await?;
-        let proxy_retry = self.proxy_retry(&executions);
         simulators.retain(|simulator| simulator.workspace_id.as_ref() == Some(&workspace.id));
         let (leftover_count, leftovers) = self.leftovers.of(&workspace.id);
         let sync = self.checkout_sync(&workspace.repository_id);
@@ -77,8 +71,6 @@ impl Manager {
             cleanup_error,
             cleanup_reason,
             cleanup_at,
-            turn_retry,
-            proxy_retry,
             leftover_count,
             leftovers,
             sync,

@@ -64,6 +64,12 @@ pub struct SpaceStatus {
     /// each with what holds it back.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub waiting_jobs: Vec<super::QueueEntry>,
+    /// The retry of the agent's turn an API failure ended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_retry: Option<crate::executions::TurnRetry>,
+    /// The request the agent's proxy waits to retry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_retry: Option<crate::executions::ProxyRetry>,
 }
 
 /// What awaits the user about a space.
@@ -165,12 +171,6 @@ pub struct WorktreeStatus {
     /// runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cleanup_at: Option<crate::time::UnixTime>,
-    /// The retry of the agent's turn an API failure ended.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub turn_retry: Option<crate::executions::TurnRetry>,
-    /// The request the agent's proxy waits to retry.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub proxy_retry: Option<crate::executions::ProxyRetry>,
     /// How many processes are still running after what started them exited,
     /// as the cleanup sweep last found them.
     #[serde(default)]

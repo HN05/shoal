@@ -177,7 +177,7 @@ fn render_sync(status: &WorktreeStatus, palette: Palette) {
 }
 
 /// What runs in the space: a workspace's executions and agent, the CI jobs
-/// for either, and the sessions of either.
+/// for either, the sessions of either and its agent's retries.
 fn render_activity(view: &StatusView, palette: Palette) {
     if let Some(worktree) = view.status.space.worktree() {
         render_processes(worktree, palette);
@@ -188,6 +188,7 @@ fn render_activity(view: &StatusView, palette: Palette) {
     if let Some(worktree) = view.status.space.worktree() {
         render_agent(worktree);
     }
+    render_retries(&view.status);
 }
 
 /// The agent sessions found for the space, or why they could not be listed.
@@ -295,11 +296,16 @@ fn render_jobs(status: &SpaceStatus, palette: Palette) {
     }
 }
 
-/// The turn state the workspace's agent reported and its retries.
+/// The turn state the workspace's agent reported.
 fn render_agent(status: &WorktreeStatus) {
     render_agent_state(status.workspace.agent_state);
     render_sleep(status.workspace.sleep);
     render_asleep(status.workspace.asleep.as_ref(), status.workspace.number);
+}
+
+/// The retries of the space's agent: the request its proxy waits to make
+/// and its turn an API failure ended.
+fn render_retries(status: &SpaceStatus) {
     if let Some(retry) = &status.proxy_retry {
         outln!("API retry:     {}", proxy_retry_label(retry));
     }

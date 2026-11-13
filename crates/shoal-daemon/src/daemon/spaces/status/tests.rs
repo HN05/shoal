@@ -126,3 +126,41 @@ async fn status_counts_the_spaces_own_open_questions() {
         0
     );
 }
+
+#[tokio::test]
+async fn a_chats_status_shows_its_agents_retries() {
+    use crate::{client::executions::ProxyRetry, state::TurnFailure, time::UnixTime};
+    let (_temp, manager) = crate::daemon::test_support::manager().await;
+    let chat = crate::daemon::test_support::chat(&manager, "talk", "chat", None, None).await;
+    let execution = manager.workspace_executions(&chat.id).await.unwrap()[0]
+        .id
+        .clone();
+    let selector = crate::client::space_names::SpaceSelector::id(&chat.id);
+    let retry = ProxyRetry {
+        failure: TurnFailure::Overloaded,
+        attempt: 2,
+        next_at: UnixTime::from_seconds(1_000),
+    };
+    manager
+        .report_proxy_retry(&selector, execution.clone(), Some(retry.clone()))
+        .await
+        .unwrap();
+    let failure = TurnFailure::ServerError;
+    manager
+        .report_turn_failure(
+            &selector,
+            failure,
+            Some(execution),
+            None,
+            Default::default(),
+            None,
+        )
+        .await
+        .unwrap();
+    let status = manager.space_status(&selector).await.unwrap();
+    assert_eq!(status.proxy_retry, Some(retry));
+    let turn_retry = status
+        .turn_retry
+        .map(|retry| (retry.failure, retry.attempt));
+    assert_eq!(turn_retry, Some((failure, 1)));
+}
