@@ -33,10 +33,7 @@ pub(in crate::cli::commands) async fn start(
     subject: Subject,
     options: Options,
 ) -> Result<i32> {
-    // A restore runs where nobody may watch it, so any failure reaches the
-    // user through the daemon.
-    let restores = options.restore.clone();
-    let started = async {
+    async {
         let mut options = options.for_caller(ctx)?;
         let repo = match &subject.issue {
             Some(input) => issue::repository(ctx, input.as_ref(), repository).await?,
@@ -65,8 +62,7 @@ pub(in crate::cli::commands) async fn start(
         )
         .await
     }
-    .await;
-    crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_ref(), started).await
+    .await
 }
 
 /// Start a chat about `topic` without a repository, in `root_dir`, which
@@ -76,8 +72,7 @@ pub(in crate::cli::commands) async fn start_outside_repositories(
     topic: Topic,
     options: Options,
 ) -> Result<i32> {
-    let restores = options.restore.clone();
-    let started = async {
+    async {
         let options = options.for_caller(ctx)?;
         check_parent(ctx, None, None, options.parent.as_ref()).await?;
         let repository = ChatRepository::Outside(root_dir(ctx).await?);
@@ -86,8 +81,7 @@ pub(in crate::cli::commands) async fn start_outside_repositories(
         options.check_given(ctx, None).await?;
         begin(ctx, repository, settings, topic, options).await
     }
-    .await;
-    crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_ref(), started).await
+    .await
 }
 
 /// The daemon's chat start worker: start the chat whose start, which the
@@ -119,7 +113,6 @@ pub(in crate::cli::commands) async fn start_resolved(ctx: &Context) -> Result<i3
         args: args.into_iter().map(OsString::from).collect(),
         session: None,
         fork: false,
-        restore: None,
         handoff: None,
         parent,
         narrowing: Narrowing::Requested(narrowing),
@@ -156,8 +149,7 @@ pub(in crate::cli::commands) async fn start_in_workspace(
     subject: Subject,
     options: Options,
 ) -> Result<i32> {
-    let restores = options.restore.clone();
-    let started = async {
+    async {
         let mut options = options.for_caller(ctx)?;
         let workspace = chosen_workspace(ctx, workspace).await?;
         let repo = workspace_repository(ctx, &workspace).await?;
@@ -185,8 +177,7 @@ pub(in crate::cli::commands) async fn start_in_workspace(
         )
         .await
     }
-    .await;
-    crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_ref(), started).await
+    .await
 }
 
 /// Refuse `parent`, the space a chat in `repo`, or without one, in the

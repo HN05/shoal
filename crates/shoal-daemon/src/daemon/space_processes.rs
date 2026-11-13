@@ -70,8 +70,7 @@ impl Manager {
     ) -> Result<Stopped> {
         let workspace = match self.space(selector).await? {
             PresentSpace::Workspace(workspace) => workspace,
-            PresentSpace::Chat(_) => {
-                let chat = self.running_chat(selector).await?;
+            PresentSpace::Chat(chat) => {
                 let stopped = self
                     .stop_untracked(self.chat_space(&chat).await?, selection, requester)
                     .await?;
@@ -153,7 +152,7 @@ impl Manager {
     }
 
     /// The processes Shoal tracks: every execution's wrapper and command,
-    /// every chat's agent, and the daemon, which runs hooks.
+    /// a chat's agent's among them, and the daemon, which runs hooks.
     async fn tracked_processes(&self) -> Result<Vec<Identity>> {
         let executions = self.store.run(|db| store::all_executions(db)).await?;
         let mut tracked: Vec<Identity> = executions
@@ -161,7 +160,6 @@ impl Manager {
             .flat_map(|execution| [execution.wrapper, execution.child])
             .flatten()
             .collect();
-        tracked.extend(self.chat_processes().await?);
         tracked.extend(identity::capture(std::process::id())?);
         Ok(tracked)
     }
@@ -189,7 +187,6 @@ impl Manager {
         selection: Selection,
         requester: Option<Identity>,
     ) -> Result<Vec<StoppedProcess>> {
-        let _handoffs = self.chat_handoffs.read().await;
         let mut stopped = Vec::new();
         for _ in 0..ROUNDS {
             let targets = self.selected(&space, selection, requester.clone()).await?;

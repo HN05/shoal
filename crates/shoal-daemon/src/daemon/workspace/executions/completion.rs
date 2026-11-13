@@ -1,10 +1,21 @@
 //! Persist verified execution completion and setup readiness in one transaction.
 use crate::client::execution_ids::ExecutionId;
+use crate::client::space_ids::SpaceId;
 use anyhow::Result;
-use rusqlite::{Transaction, params};
+use rusqlite::{OptionalExtension, Transaction, params};
 
 use super::{ExecutionKind, Manager};
-use crate::state::{ExecutionState, WorkspaceState};
+use crate::{
+    daemon::approvals::{ApprovalRequest, release_decided_by},
+    state::{ExecutionState, WorkspaceState},
+};
+
+/// What a verified completion recorded: the demo the execution ran, and
+/// the requests it gave back to the user.
+pub(super) struct Completed {
+    pub demo: Option<String>,
+    pub released: Vec<ApprovalRequest>,
+}
 
 impl Manager {
     pub(super) async fn record_execution_completion(
@@ -13,7 +24,7 @@ impl Manager {
         kind: ExecutionKind,
         exit_code: Option<i32>,
         issue: Option<String>,
-    ) -> Result<Option<String>> {
+    ) -> Result<Completed> {
         let complete = issue.is_none();
         let record_id = id.to_owned();
         let hosts: Vec<_> = self.session_hosts.iter().map(|host| host.name()).collect();
@@ -22,13 +33,15 @@ impl Manager {
                 if kind == ExecutionKind::Setup {
                     record_setup_result(tx, &record_id, exit_code, issue.as_deref())?;
                 }
-                let demo = if complete {
-                    super::super::sessions::pending::record_demo(tx, &record_id, &hosts)?
+                let (demo, released) = if complete {
+                    let demo =
+                        super::super::sessions::pending::record_demo(tx, &record_id, &hosts)?;
+                    (demo, release_attended_decisions(tx, &record_id)?)
                 } else {
-                    None
+                    (None, Vec::new())
                 };
                 record_execution_end(tx, &record_id, complete)?;
-                Ok(demo)
+                Ok(Completed { demo, released })
             })
             .await
     }
@@ -112,6 +125,27 @@ fn record_setup_not_started(tx: &Transaction<'_>, id: &ExecutionId) -> Result<()
 /// Why a workspace whose setup never ran is failed.
 const SETUP_NOT_STARTED: &str =
     "setup did not start: its wrapper left before the daemon registered it; retry with shoal setup";
+
+/// Give the user back the requests the space of execution `id` decides
+/// when the user attends that space, a chat, whose one execution is its
+/// agent: without it no one is there to decide them.
+fn release_attended_decisions(
+    tx: &Transaction<'_>,
+    id: &ExecutionId,
+) -> Result<Vec<ApprovalRequest>> {
+    let space: Option<SpaceId> = tx
+        .query_row(
+            "SELECT space_id FROM executions WHERE id=?1
+                AND EXISTS (SELECT 1 FROM chats WHERE chats.id=executions.space_id)",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    match space {
+        Some(space) => release_decided_by(tx, &space),
+        None => Ok(Vec::new()),
+    }
+}
 
 /// Retain unverified executions for recovery; only verified completion deletes
 /// the record, together with any demo it owns.

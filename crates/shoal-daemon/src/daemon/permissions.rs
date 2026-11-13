@@ -93,23 +93,6 @@ impl Manager {
         change.ensure_held(&fallback, &held)
     }
 
-    /// [`Self::ensure_change_held`] for the running `chat` a restart
-    /// restarts; for a chat no longer running, only for the values `change`
-    /// sets.
-    pub(crate) async fn ensure_chat_restart_held(
-        &self,
-        giver: Option<&SpaceId>,
-        chat: Option<&Chat>,
-        change: &PermissionChange,
-    ) -> Result<()> {
-        let Some(chat) = chat else {
-            return (self.ensure_caller_holds(giver, &change.set, None)).await;
-        };
-        let repository = chat.repository_id.clone();
-        let space = PresentSpace::Chat(chat.clone());
-        (self.ensure_change_held(giver, &space, change, repository.as_ref())).await
-    }
-
     /// Refuse an agent in `mode` of the space `space` names that the scoped
     /// process of the space `giver` queues or registers with `given`, which
     /// replaces what the space recorded, where it changes that as
@@ -143,21 +126,6 @@ impl Manager {
         let change = PermissionChange::between(&recorded, given);
         let repository = space.repository_id().cloned();
         (self.ensure_change_held(giver, &space, &change, repository.as_ref())).await
-    }
-
-    /// Refuse a restore of `chat` the scoped process of the space `giver`
-    /// asks for with `given` where it changes what the chat recorded as
-    /// [`Self::ensure_change_held`] refuses a change.
-    pub(crate) async fn ensure_restore_held(
-        &self,
-        giver: Option<&SpaceId>,
-        chat: &Chat,
-        given: &PermissionsConfig,
-    ) -> Result<()> {
-        let change = PermissionChange::between(&chat.narrowing, given);
-        let space = PresentSpace::Chat(chat.clone());
-        let repository = chat.repository_id.as_ref();
-        (self.ensure_change_held(giver, &space, &change, repository)).await
     }
 
     /// The effective permissions an agent starting in `mode` in `workspace`

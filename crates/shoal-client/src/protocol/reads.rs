@@ -22,9 +22,7 @@ impl Operation {
                 | Self::Approval(
                     ApprovalMethod::ListApprovals { .. } | ApprovalMethod::ShowApproval { .. }
                 )
-                | Self::Chat(
-                    ChatMethod::CheckChatParent { .. } | ChatMethod::CheckChatRestore { .. }
-                )
+                | Self::Chat(ChatMethod::CheckChatParent { .. })
                 | Self::Ci(
                     CiMethod::CheckLog { .. }
                         | CiMethod::ViewCiRun { .. }

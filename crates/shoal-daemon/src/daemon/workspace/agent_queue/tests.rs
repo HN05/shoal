@@ -1129,8 +1129,8 @@ async fn a_launch_a_space_queued_keeps_it_and_goes_with_it() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,number)
-                 SELECT id,repository_id,name,'claude',1,'birth',0,number
+                "INSERT INTO chats(id,repository_id,name,agent,started_at,number)
+                 SELECT id,repository_id,name,'claude',0,number
                  FROM workspaces WHERE id=?1",
                 [&parent_id],
             )?;
@@ -1184,8 +1184,7 @@ async fn a_space_a_removal_holds_refuses_the_launches_it_queues() {
         .create_workspace(&repo.id, "parent".into(), None, None, None)
         .await
         .unwrap();
-    let (chat, _process) =
-        crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
+    let chat = crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
     let queued_by = |space_id: &crate::client::space_ids::SpaceId| crate::daemon::scope::Caller {
         space_id: space_id.clone(),
         execution: None,
@@ -1604,7 +1603,6 @@ async fn a_launch_waiting_for_setup_takes_a_permission_change() {
     let change_for = async |launches: &[SpaceSelector]| {
         let targets = PermissionTargets {
             agents: &[],
-            chats: &[],
             launches,
         };
         manager
@@ -1786,8 +1784,7 @@ async fn a_chats_restore_starts_on_a_full_machine() {
     limit_globally(&manager, 1);
     let busy = add(&manager, &repo, "busy").await;
     assert!(busy.start);
-    let (chat, _agent) =
-        crate::daemon::test_support::chat(&manager, "master", "chat", None, None).await;
+    let chat = crate::daemon::test_support::chat(&manager, "master", "chat", None, None).await;
     let execution = ExecutionId::from("stopped");
     crate::execution::recovery::save_record(
         &manager.paths,

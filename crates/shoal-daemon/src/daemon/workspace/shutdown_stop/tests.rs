@@ -182,8 +182,8 @@ async fn suspending_waits_for_an_admission_pass_in_progress() {
     assert!(queue.suspended());
 }
 
-fn workspace(root: &std::path::Path, name: &str, done: bool) -> Workspace {
-    let mut workspace = Workspace::new_record(
+fn workspace(root: &std::path::Path, name: &str, done: bool) -> PresentSpace {
+    let mut workspace = crate::model::Workspace::new_record(
         "repo".into(),
         name.into(),
         root.join(name),
@@ -192,7 +192,7 @@ fn workspace(root: &std::path::Path, name: &str, done: bool) -> Workspace {
     );
     workspace.done = done;
     workspace.number = if done { 7 } else { 3 }.into();
-    workspace
+    PresentSpace::Workspace(workspace)
 }
 
 #[test]
@@ -204,7 +204,7 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
     assert!(!waits_for_resume(&paths, &open, &none).unwrap());
     recovery::save_record(
         &paths,
-        &open.id,
+        open.id(),
         &ExecutionId::from("requested"),
         &crate::execution::TrackedAgent::named("claude"),
         None,
@@ -212,19 +212,19 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
     )
     .unwrap();
     let request = paths
-        .space_state(&open.id)
+        .space_state(open.id())
         .join("requested.restore-request.json");
     std::fs::write(&request, "{}").unwrap();
     assert!(!waits_for_resume(&paths, &open, &none).unwrap());
     // A done workspace's request waits for `shoal resume` to name it.
-    let done = Workspace {
-        done: true,
-        ..open.clone()
-    };
+    let mut done = open.clone();
+    if let PresentSpace::Workspace(workspace) = &mut done {
+        workspace.done = true;
+    }
     assert!(waits_for_resume(&paths, &done, &none).unwrap());
     recovery::save_record(
         &paths,
-        &open.id,
+        open.id(),
         &ExecutionId::from("unattended"),
         &crate::execution::TrackedAgent::named("claude"),
         None,

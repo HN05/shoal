@@ -81,13 +81,12 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         name: "plan-cache".into(),
         agent: "claude".into(),
         workspace: None,
-        pid: 1,
+        running: true,
         started_at: UnixTime::from_seconds(0),
         origin: None,
         tmp_dir: None,
         root_dir: None,
         session: Some("s1".into()),
-        restore: None,
         links: crate::model::SpaceLinks {
             issue: Some("https://forge.example/team/repo/issues/12".parse().unwrap()),
             issue_title: Some("Plan the cache".into()),
@@ -455,7 +454,7 @@ fn a_copy_forks_its_agents_sessions_in_no_place_of_the_original() {
 fn a_chat_continues_by_a_command_that_quotes_its_name() {
     let chat: Chat = serde_json::from_value(serde_json::json!({
         "id": "chat", "repository_id": "repo", "name": "shoal chat's $HOME", "agent": "claude",
-        "pid": 1, "started_at": 0, "session": "session",
+        "started_at": 0, "session": "session",
     }))
     .unwrap();
 

@@ -12,7 +12,7 @@ use crate::{
     cli::{context::Context, ui},
     config::permissions::PermissionChange,
     execution::recovery::Saved,
-    model::{QueueEntry, Workspace},
+    model::{PresentSpace, QueueEntry},
     protocol::ConfigTarget,
     terminal,
 };
@@ -30,14 +30,11 @@ pub(super) async fn queue_below(
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
     let mut stopped = Vec::new();
-    for selector in selected.workspaces.clone().unwrap_or_default() {
+    for selector in selected.spaces.clone().unwrap_or_default() {
         stopped.push(stopped_agents(ctx, selector, execution.as_ref()).await?);
     }
-    for chat in &selected.chats {
-        crate::client::chats::check_restore(&ctx.paths, &chat.id).await?;
-    }
-    permission_change::apply(ctx, &stopped, &selected.chats, &selected.setups, change).await?;
-    let resumed = super::set_up_and_restore_chats(ctx, &selected, change, false).await;
+    permission_change::apply(ctx, &stopped, &selected.setups, change).await?;
+    let resumed = super::set_up(ctx, &selected, false).await;
     queue_all(ctx, stopped, resumed, false).await
 }
 
@@ -53,15 +50,12 @@ pub(in crate::cli::commands) async fn queue_stopped(
     stopped: &Stopped,
 ) -> Result<Queued> {
     let mut queued = Vec::new();
-    for (workspace, executions) in stopped {
-        let workspace =
-            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace))
-                .await?
-                .workspace;
-        let mut saved = saved(ctx, &workspace).await?;
+    for (space, executions) in stopped {
+        let space = super::present_space(ctx, &SpaceSelector::id(space)).await?;
+        let mut saved = saved(ctx, &space).await?;
         saved.retain(|id| executions.contains(id));
         if !(saved.agents.is_empty() && saved.sessions.is_empty()) {
-            queued.push((workspace, saved));
+            queued.push((space, saved));
         }
     }
     Ok(queue_each(ctx, queued, false).await)
@@ -74,11 +68,9 @@ async fn stopped_agents(
     ctx: &Context,
     selector: SpaceSelector,
     execution: Option<&ExecutionId>,
-) -> Result<(Workspace, Saved)> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
-        .await?
-        .workspace;
-    let mut saved = saved(ctx, &workspace).await?;
+) -> Result<(PresentSpace, Saved)> {
+    let space = super::present_space(ctx, &selector).await?;
+    let mut saved = saved(ctx, &space).await?;
     if let Some(execution) = execution {
         saved.retain_execution(execution, true);
     }
@@ -87,49 +79,47 @@ async fn stopped_agents(
     ensure!(
         !(saved.agents.is_empty() && saved.sessions.is_empty()),
         "{} has no stopped agent to resume",
-        workspace.name
+        space.name()
     );
-    Ok((workspace, saved))
+    Ok((space, saved))
 }
 
 /// Restore `workspace`'s stopped agents, only `execution`'s when given, as
 /// [`Saved::restore`] decides for `queuing`, making `change` when given.
-pub(super) async fn queue_workspace(
+pub(super) async fn queue_space(
     ctx: &Context,
-    workspace: SpaceSelector,
+    space: SpaceSelector,
     execution: Option<ExecutionId>,
     queuing: Queuing,
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
-        .await?
-        .workspace;
-    let mut saved = saved(ctx, &workspace).await?;
+    let space = super::present_space(ctx, &space).await?;
+    let mut saved = saved(ctx, &space).await?;
     if let Some(execution) = &execution {
         saved.retain_execution(execution, true);
     }
     ensure!(
         !saved.is_empty(),
-        "no stopped agents or commands for this workspace"
+        "no stopped agents or commands for this {}",
+        space.kind()
     );
     let now = match saved.restore(queuing) {
         Restore::Continue => {
-            return super::workspace::continue_last_session(ctx, &workspace, saved, false, change)
-                .await;
+            return super::space::continue_last_session(ctx, &space, saved, false, change).await;
         }
         Restore::Queue { now } => now,
     };
-    let stopped = vec![(workspace, saved)];
+    let stopped = vec![(space, saved)];
     if matches!(queuing, Queuing::Daemon { .. }) {
         ensure_daemon_starts(ctx, &stopped).await?;
     }
-    permission_change::apply(ctx, &stopped, &[], &[], change).await?;
+    permission_change::apply(ctx, &stopped, &[], change).await?;
     queue_all(ctx, stopped, Queued::default(), now).await
 }
 
 /// What `workspace` saved.
-async fn saved(ctx: &Context, workspace: &Workspace) -> Result<Saved> {
-    crate::client::saved::read(&ctx.paths, SpaceSelector::id(&workspace.id)).await
+async fn saved(ctx: &Context, space: &PresentSpace) -> Result<Saved> {
+    crate::client::saved::read(&ctx.paths, SpaceSelector::id(space.id())).await
 }
 
 /// Refuse, before any is queued, the restores of `stopped` agents that the
@@ -137,21 +127,18 @@ async fn saved(ctx: &Context, workspace: &Workspace) -> Result<Saved> {
 /// a waiting wrapper restores its agent where it stopped.
 pub(super) async fn ensure_daemon_starts(
     ctx: &Context,
-    stopped: &[(Workspace, Saved)],
+    stopped: &[(PresentSpace, Saved)],
 ) -> Result<()> {
-    for (workspace, saved) in stopped {
+    for (space, saved) in stopped {
         if !saved.restores_outside_wrappers() {
             continue;
         }
-        let settings = crate::config::settings(
-            &ctx.paths,
-            ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
-        )
-        .await?;
+        let target = ConfigTarget::Space(SpaceSelector::id(space.id()));
+        let settings = crate::config::settings(&ctx.paths, target).await?;
         crate::cli::terminal::ensure_background(&settings).with_context(|| {
             format!(
                 "cannot restore the agents of {} in the background; pass --focus to restore one here",
-                workspace.name
+                space.name()
             )
         })?;
     }
@@ -164,7 +151,7 @@ pub(super) async fn ensure_daemon_starts(
 /// the stopped chats, setups and failures `resumed` reports already.
 pub(super) async fn queue_all(
     ctx: &Context,
-    stopped: Vec<(Workspace, Saved)>,
+    stopped: Vec<(PresentSpace, Saved)>,
     resumed: Queued,
     now: bool,
 ) -> Result<i32> {
@@ -172,7 +159,6 @@ pub(super) async fn queue_all(
     let mut failed = resumed.failed;
     failed.append(&mut queued.failed);
     queued.failed = failed;
-    queued.chats = resumed.chats;
     queued.set_up = resumed.set_up;
     reports::queued(ctx, &queued)?;
     Ok(if queued.failed.is_empty() { 0 } else { 1 })
@@ -184,24 +170,24 @@ pub(super) async fn queue_all(
 /// fails, which it reports.
 pub(super) async fn queue_each(
     ctx: &Context,
-    stopped: Vec<(Workspace, Saved)>,
+    stopped: Vec<(PresentSpace, Saved)>,
     now: bool,
 ) -> Queued {
     let mut queued = Vec::new();
     let mut commands = Vec::new();
     let mut failed = Vec::new();
-    for (workspace, mut saved) in stopped {
+    for (space, mut saved) in stopped {
         if !saved.restores_outside_wrappers() {
             let _claims = commands::claim(&mut saved.commands);
-            match commands::report(ctx, &workspace, &saved.commands) {
+            match commands::report(ctx, &space, &saved.commands) {
                 Ok(report) => commands.push(report),
-                Err(error) => failed.push(ui::failure(ctx, "resume", &workspace.name, &error)),
+                Err(error) => failed.push(ui::failure(ctx, "resume", space.name(), &error)),
             }
         }
         for saved in saved.agents.iter().chain(&saved.sessions) {
-            match queue(ctx, &workspace, &saved.id, now).await {
+            match queue(ctx, &space, &saved.id, now).await {
                 Ok(entry) => queued.push(entry),
-                Err(error) => failed.push(ui::failure(ctx, "resume", &workspace.name, &error)),
+                Err(error) => failed.push(ui::failure(ctx, "resume", space.name(), &error)),
             }
         }
     }
@@ -213,22 +199,24 @@ pub(super) async fn queue_each(
     }
 }
 
-/// Queue the restore of the agent stopped as `execution` in `workspace`,
-/// once an execution a daemon restart left unknown is proven ended,
-/// starting it at once when `now`.
+/// Queue the restore of the agent stopped as `execution` in `space`, once
+/// an execution a daemon restart left unknown in a workspace is proven
+/// ended, starting it at once when `now`.
 pub(super) async fn queue(
     ctx: &Context,
-    workspace: &Workspace,
+    space: &PresentSpace,
     execution: &ExecutionId,
     now: bool,
 ) -> Result<QueueEntry> {
-    let inspection =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
-    stale::reconcile(ctx, &inspection, Some(execution)).await?;
-    let (workspace, execution) = (workspace.id.clone(), execution.to_owned());
+    if let PresentSpace::Workspace(workspace) = space {
+        let selector = SpaceSelector::id(&workspace.id);
+        let inspection = crate::client::workspaces::inspect(&ctx.paths, selector).await?;
+        stale::reconcile(ctx, &inspection, Some(execution)).await?;
+    }
+    let execution = execution.to_owned();
     crate::client::queue::restore(
         &ctx.paths,
-        SpaceSelector::id(&workspace),
+        SpaceSelector::id(space.id()),
         execution,
         terminal::start_environment(),
         now,

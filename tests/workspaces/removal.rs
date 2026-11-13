@@ -26,8 +26,8 @@ fn cleanup_removes_idle_candidates_on_request() {
     assert!(!denied.status.success());
     // Chats are spaces too: one whose agent stopped goes, a running one stays.
     let (mut talking, _) = start_test_chat(&fixture, "talk");
-    let (mut parked, _) = start_test_chat(&fixture, "parked");
-    parked.kill().unwrap();
+    let (mut parked, parked_id) = start_test_chat(&fixture, "parked");
+    fixture.end_chat_agent(&parked_id);
     parked.wait().unwrap();
     let preview = fixture.ok(&["cleanup", "--dry-run"]);
     assert_eq!(preview["removed"], serde_json::json!(["clean", "parked"]));

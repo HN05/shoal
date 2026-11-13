@@ -54,8 +54,7 @@ async fn a_retained_workspace_records_its_cleanup_as_the_cause() {
 #[tokio::test]
 async fn a_retained_chat_records_its_cleanup_as_the_cause() {
     let (_root, manager) = manager().await;
-    let (chat, _process) =
-        crate::daemon::test_support::chat(&manager, "notes", "chat", None, None).await;
+    let chat = crate::daemon::test_support::chat(&manager, "notes", "chat", None, None).await;
 
     let removal: Result<bool> = Err(anyhow::anyhow!("agent running"));
     let space = PresentSpace::Chat(chat);

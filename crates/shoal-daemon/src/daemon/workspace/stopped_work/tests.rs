@@ -12,86 +12,74 @@ use crate::{
     protocol::SavedAgent,
 };
 
-/// The stopped `agents` and `chats`, without waiting launches.
-fn stopped_of<'a>(agents: &'a [SavedAgent], chats: &'a [SpaceSelector]) -> PermissionTargets<'a> {
+/// The stopped `agents`, without waiting launches.
+fn stopped_of(agents: &[SavedAgent]) -> PermissionTargets<'_> {
     PermissionTargets {
         agents,
-        chats,
         launches: &[],
     }
 }
 
 #[tokio::test]
-async fn a_permission_change_changes_no_agent_or_chat_when_one_is_refused() {
+async fn a_permission_change_changes_no_agent_when_one_is_refused() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (mut agents, mut stopped_id, mut running_id) = (Vec::new(), None, None);
-    for name in ["stopped", "running"] {
-        let workspace = manager
-            .create_workspace(&repo.id, name.into(), None, None, None)
-            .await
-            .unwrap();
-        agents.push(SavedAgent {
-            workspace: SpaceSelector::id(&workspace.id),
-            execution: ExecutionId::from(format!("{name}-agent")),
-        });
-        if name == "stopped" {
-            let agent = TrackedAgent::named("claude");
-            LastSession::save(
-                &manager.paths,
-                &workspace.id,
-                &agent,
-                &ExecutionId::from("stopped-agent"),
-            )
-            .unwrap();
-            stopped_id = Some(workspace.id);
-        } else {
-            running_id = Some(workspace.id);
-        }
-    }
-    let stopped = |manager: &crate::daemon::workspace::Manager| {
-        LastSession::all(&manager.paths, stopped_id.as_ref().unwrap()).unwrap()[0].narrowing
-    };
-    let change = PermissionChange::assigned("merge=direct").unwrap();
-    let (talk, _process) = chat(&manager, "talk", "chat", Some(&repo), None).await;
-    let chats = [SpaceSelector::id(&talk.id)];
-
-    // The second workspace saved no agent, so the first keeps its own.
-    let changed = manager.change_stopped_permissions(stopped_of(&agents, &[]), &change, None);
-    assert!(changed.await.is_err());
-    assert_eq!(stopped(&manager), PermissionsConfig::default());
-    // A running chat is not saved, so the agent keeps its own too.
-    let changed =
-        manager.change_stopped_permissions(stopped_of(&agents[..1], &chats), &change, None);
-    assert!(changed.await.is_err());
-    assert_eq!(stopped(&manager), PermissionsConfig::default());
-    // A space's process gives only what it holds: no workspace's mode merges
-    // directly here.
-    manager.save_chat(&talk.id, None).await.unwrap();
-    let giver = running_id.as_ref();
-    let changed =
-        manager.change_stopped_permissions(stopped_of(&agents[..1], &chats), &change, giver);
-    assert!(changed.await.is_err());
-    assert_eq!(stopped(&manager), PermissionsConfig::default());
-    let saved = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
-    assert_eq!(saved.narrowing, PermissionsConfig::default());
-    // Chats change all or none: one restored since refuses the rest.
-    let (running, _running) = chat(&manager, "busy", "chat", Some(&repo), None).await;
-    let both = vec![(talk.id.clone(), change.set), (running.id, change.set)];
-    assert!(manager.give_saved_chats(both).await.is_err());
-    let saved = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
-    assert_eq!(saved.narrowing, PermissionsConfig::default());
-    // The user gives any, to a saved chat as to a stopped agent.
-    (manager.change_stopped_permissions(stopped_of(&agents[..1], &chats), &change, None))
+    let workspace = manager
+        .create_workspace(&repo.id, "stopped".into(), None, None, None)
         .await
         .unwrap();
-    assert_eq!(stopped(&manager), change.set);
-    let saved = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
-    assert_eq!(saved.narrowing, change.set);
+    let running = manager
+        .create_workspace(&repo.id, "running".into(), None, None, None)
+        .await
+        .unwrap();
+    let talk = chat(&manager, "talk", "chat", Some(&repo), None).await;
+    manager.end_executions(&talk.id).await;
+    // A stopped workspace agent and a stopped chat agent, and one the
+    // running workspace never saved.
+    let mut agents = Vec::new();
+    for (space, name) in [
+        (&workspace.id, "stopped"),
+        (&talk.id, "talk"),
+        (&running.id, "running"),
+    ] {
+        let execution = ExecutionId::from(format!("{name}-agent"));
+        if name != "running" {
+            let agent = TrackedAgent::named("claude");
+            LastSession::save(&manager.paths, space, &agent, &execution).unwrap();
+        }
+        agents.push(SavedAgent {
+            workspace: SpaceSelector::id(space),
+            execution,
+        });
+    }
+    let stopped = |manager: &crate::daemon::workspace::Manager, space| {
+        LastSession::all(&manager.paths, space).unwrap()[0].narrowing
+    };
+    let change = PermissionChange::assigned("merge=direct").unwrap();
+
+    // The running workspace saved no agent, so the others keep their own.
+    let changed = manager.change_stopped_permissions(stopped_of(&agents), &change, None);
+    assert!(changed.await.is_err());
+    assert_eq!(stopped(&manager, &talk.id), PermissionsConfig::default());
+    // A space's process gives only what it holds: no workspace's mode merges
+    // directly here.
+    let giver = Some(&running.id);
+    let changed = manager.change_stopped_permissions(stopped_of(&agents[..2]), &change, giver);
+    assert!(changed.await.is_err());
+    assert_eq!(
+        stopped(&manager, &workspace.id),
+        PermissionsConfig::default()
+    );
+    // The user gives any, to a stopped chat's agent as to a workspace's.
+    (manager.change_stopped_permissions(stopped_of(&agents[..2]), &change, None))
+        .await
+        .unwrap();
+    assert_eq!(stopped(&manager, &workspace.id), change.set);
+    assert_eq!(stopped(&manager, &talk.id), change.set);
 }
 
 #[tokio::test]
@@ -190,7 +178,7 @@ async fn a_chats_stopped_agent_is_its_saved_work() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (talk, _agent) = chat(&manager, "talk", "chat", Some(&repo), None).await;
+    let talk = chat(&manager, "talk", "chat", Some(&repo), None).await;
     let execution = ExecutionId::from("agent");
     crate::execution::recovery::save_record(
         &manager.paths,

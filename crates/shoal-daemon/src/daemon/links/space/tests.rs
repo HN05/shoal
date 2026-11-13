@@ -7,7 +7,7 @@ use crate::{
     forge::items::create::NewIssue,
     model::{Chat, Repository},
     protocol::{ItemContext, ItemMethod},
-    test_support::{ProcessGroup, repository},
+    test_support::repository,
 };
 
 /// Register a repository for each of `names`.
@@ -29,28 +29,25 @@ async fn repositories(
     repos
 }
 
-/// Start the chat `name` of `repository`, or without one, running as the
-/// returned process.
+/// Start the chat `name` of `repository`, or without one, with its agent
+/// running.
 async fn chat(
-    manager: &Manager,
+    manager: &std::sync::Arc<Manager>,
     name: &str,
     repository: Option<&Repository>,
-) -> (Chat, ProcessGroup) {
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+) -> Chat {
     let new = NewChat {
         priority: None,
         narrowing: Default::default(),
         name: name.into(),
         agent: "claude".into(),
         mode: "orchestrate".into(),
-        pid: process.id(),
         origin: None,
-        hands_over: false,
         parent: None,
     };
     let repository = repository.map(|repository| repository.id.clone().into());
     let chat = manager.start_new_chat(repository, None, new).await.unwrap();
-    (chat, process)
+    manager.run_chat_agent(chat).await.unwrap()
 }
 
 /// The context of `chat` acting in `repository`.
@@ -69,7 +66,7 @@ async fn a_chat_without_a_repository_acts_in_each_repository_under_its_permissio
     (manager.write_local_config(&repos[0].id, Some(config.into())))
         .await
         .unwrap();
-    let (master, _process) = chat(&manager, "master", None).await;
+    let master = chat(&manager, "master", None).await;
     let mut openings = Vec::new();
     for repo in &repos {
         let space = manager
@@ -116,7 +113,7 @@ async fn a_chat_without_a_repository_acts_in_each_repository_under_its_permissio
     assert_eq!(*found.repository_id(), repos[0].id);
 
     // A chat of a repository acts only in its own.
-    let (planning, _planning_process) = chat(&manager, "planning", Some(&repos[0])).await;
+    let planning = chat(&manager, "planning", Some(&repos[0])).await;
     let elsewhere = manager
         .context_space(&acting_in(&planning, &repos[1]))
         .await;
@@ -161,8 +158,8 @@ async fn a_name_or_url_finds_the_registered_repository_it_names() {
 async fn a_change_from_a_checkout_is_made_by_a_chat_without_a_repository_acting_there() {
     let (temp, manager) = manager().await;
     let repos = repositories(&temp, &manager, &["repo"]).await;
-    let (master, _process) = chat(&manager, "master", None).await;
-    let (planning, _planning_process) = chat(&manager, "planning", Some(&repos[0])).await;
+    let master = chat(&manager, "master", None).await;
+    let planning = chat(&manager, "planning", Some(&repos[0])).await;
     let open = || ItemMethod::OpenIssue {
         context: ItemContext::Checkout(repos[0].id.clone()),
         issue: NewIssue {
@@ -196,8 +193,8 @@ async fn a_change_from_a_checkout_is_made_by_a_chat_without_a_repository_acting_
 async fn a_chat_without_a_repository_follows_ci_in_a_registered_checkout_as_itself() {
     let (temp, manager) = manager().await;
     let repos = repositories(&temp, &manager, &["repo", "other"]).await;
-    let (master, _process) = chat(&manager, "master", None).await;
-    let (planning, _planning_process) = chat(&manager, "planning", Some(&repos[0])).await;
+    let master = chat(&manager, "master", None).await;
+    let planning = chat(&manager, "planning", Some(&repos[0])).await;
     let list = || crate::protocol::CiMethod::ListCiRuns {
         context: ItemContext::Checkout(repos[1].id.clone()),
         pr: None,
@@ -231,7 +228,7 @@ async fn a_chat_without_a_repository_follows_ci_in_a_registered_checkout_as_itse
 #[tokio::test]
 async fn a_chat_without_a_repository_opens_no_issue_elsewhere_unless_allowed_directly() {
     let (_temp, manager) = manager().await;
-    let (master, _process) = chat(&manager, "master", None).await;
+    let master = chat(&manager, "master", None).await;
     let caller = crate::daemon::scope::Caller {
         space_id: master.id.clone(),
         execution: None,

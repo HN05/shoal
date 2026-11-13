@@ -2,6 +2,7 @@
 //! differs by kind: its agent, reserving it for removal, and its record.
 //! Cleanup and removal call only these, and ask nothing else of a space's
 //! kind than whether it has a worktree.
+use crate::client::space_ids::SpaceId;
 use crate::paths::StateFiles;
 use anyhow::{Context as _, Result, ensure};
 
@@ -69,60 +70,59 @@ impl SpaceReservation<'_> {
 impl Manager {
     /// The agent of `space`, leaving out the restores of idle agents, which
     /// their wrappers wait to carry out, and the `cancelled` ones a removal
-    /// stopped.
+    /// stopped. A running chat's agent is use; a workspace's is among the
+    /// commands its worktree's cleanup counts.
     pub(crate) async fn space_agent(
         &self,
         space: &PresentSpace,
         cancelled: &[IdleRestore],
     ) -> Result<SpaceAgent> {
-        match space {
-            PresentSpace::Workspace(workspace) => {
-                let idle = self.idle_restores(&workspace.id).await?;
-                let pending = crate::execution::recovery::pending_except(
-                    &self.paths,
-                    &workspace.id,
-                    |execution| {
-                        idle.contains(execution)
-                            || cancelled
-                                .iter()
-                                .any(|stopped| stopped.execution == *execution)
-                    },
-                )?;
-                // A saved chat in its worktree comes back there, as a saved
-                // agent does.
-                let saved = pending || self.chat_saved_in(&workspace.id).await?;
-                Ok(SpaceAgent {
-                    state: if saved {
-                        AgentState::Saved
-                    } else {
-                        AgentState::Stopped
-                    },
-                    stopped_at: None,
-                })
-            }
-            PresentSpace::Chat(chat) => Ok(SpaceAgent {
-                state: if chat.restore.is_none() {
-                    AgentState::Running
-                } else if self.chat_saved(&chat.id).await? {
-                    AgentState::Saved
-                } else {
-                    AgentState::Stopped
-                },
-                stopped_at: self.chat_stopped_at(&chat.id).await?,
-            }),
+        if let PresentSpace::Chat(chat) = space
+            && chat.running
+        {
+            return Ok(SpaceAgent {
+                state: AgentState::Running,
+                stopped_at: None,
+            });
         }
+        let id = space.id();
+        let mut saved = self.saved_agent(id, cancelled).await?;
+        // A saved chat in its worktree comes back there, as a saved agent
+        // does.
+        if let Some(workspace) = space.worktree() {
+            for chat in self.chats_in(&workspace.id).await? {
+                saved = saved || self.saved_agent(&chat.id, cancelled).await?;
+            }
+        }
+        Ok(SpaceAgent {
+            state: if saved {
+                AgentState::Saved
+            } else {
+                AgentState::Stopped
+            },
+            stopped_at: self.agent_stopped_at(id).await?,
+        })
     }
 
-    /// Refuse while processes the stopped agent of `space` owned still run,
-    /// as after a stop that did not end them. A workspace's agent is one of
-    /// its commands, which its worktree's removal checks.
-    pub(crate) async fn ensure_agent_ended(&self, space: &PresentSpace) -> Result<()> {
-        match space {
-            PresentSpace::Chat(chat) if chat.restore.is_some() => {
-                self.ensure_ended(chat, std::process::id()).await
-            }
-            PresentSpace::Chat(_) | PresentSpace::Workspace(_) => Ok(()),
-        }
+    /// Whether the space `id` has stopped work saved to restore, other than
+    /// the restores of idle agents, which their wrappers wait to carry out,
+    /// and the `cancelled` ones a removal stopped.
+    async fn saved_agent(&self, id: &SpaceId, cancelled: &[IdleRestore]) -> Result<bool> {
+        let idle = self.idle_restores(id).await?;
+        crate::execution::recovery::pending_except(&self.paths, id, |execution| {
+            idle.contains(execution)
+                || cancelled
+                    .iter()
+                    .any(|stopped| stopped.execution == *execution)
+        })
+    }
+
+    /// When the agent of the space `id` last stopped or exited.
+    async fn agent_stopped_at(&self, id: &SpaceId) -> Result<Option<UnixTime>> {
+        let id = id.to_owned();
+        (self.store)
+            .run(move |db| events::agent_stopped_at(db, &id))
+            .await
     }
 
     /// Stop the agent of `space` and its commands for a removal, as `policy`
@@ -133,21 +133,7 @@ impl Manager {
         policy: StopPolicy,
         request: &StopRequest,
     ) -> Result<()> {
-        match space {
-            PresentSpace::Workspace(workspace) => {
-                self.stop_executions(&workspace.id, policy, request).await
-            }
-            PresentSpace::Chat(chat) => {
-                // A save or restore under way would run the agent this stops.
-                let _saving = self.chat_saves.lock().await;
-                let chat =
-                    (self.chat_by_id(&chat.id).await?).context("the chat was removed meanwhile")?;
-                if chat.restore.is_none() {
-                    self.stop_chat(&chat.id).await?;
-                }
-                self.ensure_ended(&chat, std::process::id()).await
-            }
-        }
+        self.stop_executions(space.id(), policy, request).await
     }
 
     /// Reserve the space `id` for `removal`. A manual removal also takes a
@@ -190,9 +176,8 @@ impl Manager {
                 })
             }
             PresentSpace::Chat(chat) => {
-                // Under the lock a restore holds, so none runs its agent
-                // while the removal goes on.
-                let _saving = self.chat_saves.lock().await;
+                // Reserved first, so no agent of it registers while the
+                // removal goes on.
                 let reservation = self.chat_removals.reserve(&chat.id)?;
                 let chat =
                     (self.chat_by_id(&chat.id).await?).context("the chat was removed meanwhile")?;

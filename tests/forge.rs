@@ -821,16 +821,7 @@ fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
 #[test]
 fn a_chat_opens_issues_and_acts_on_its_linked_items() {
     let fixture = Fixture::new(Forge::Forgejo, "");
-    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
-    // The sleep stands in for the chat's agent.
-    let mut agent = support::isolated(fixture.root.path(), "sleep")
-        .arg("600")
-        .current_dir(fixture.root.path())
-        .spawn()
-        .unwrap();
-    let chat = fixture.request(json!({"start_chat": {"repository": repository,
-        "name": "planning", "agent": "claude", "pid": agent.id()}}));
-    let chat = chat["data"]["id"].as_str().unwrap().to_owned();
+    let (mut agent, chat) = fixture.run_chat("planning", &[]);
     let created = json!({"number": 40, "title": "Flaky", "state": "open", "labels": []});
     fixture.respond(json!({
         "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
@@ -885,16 +876,7 @@ fn a_chat_opens_issues_and_acts_on_its_linked_items() {
 #[test]
 fn a_chat_marks_its_pr_ready_at_its_head_or_itself_at_its_checkout() {
     let fixture = Fixture::new(Forge::Forgejo, "");
-    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
-    // The sleep stands in for the chat's agent.
-    let mut agent = support::isolated(fixture.root.path(), "sleep")
-        .arg("600")
-        .current_dir(fixture.root.path())
-        .spawn()
-        .unwrap();
-    let chat = fixture.request(json!({"start_chat": {"repository": repository,
-        "name": "planning", "agent": "claude", "pid": agent.id()}}));
-    assert_eq!(chat["type"], "chat", "{chat}");
+    let (mut agent, _) = fixture.run_chat("planning", &[]);
     // Nothing linked marks the chat itself, at its checkout's HEAD.
     let head = git(&fixture.repo, &["rev-parse", "HEAD"]);
     let marks = fixture.ok(&["ready", "--space", &fixture.id("planning")]);
@@ -3878,16 +3860,7 @@ fn watch_reports_failed_steps_or_log_lookup_errors_without_hiding_comments() {
 #[test]
 fn status_finds_the_chats_that_link_a_pr() {
     let fixture = Fixture::new(Forge::Forgejo, "");
-    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
-    // The sleep stands in for the chat's agent.
-    let mut agent = support::isolated(fixture.root.path(), "sleep")
-        .arg("600")
-        .current_dir(fixture.root.path())
-        .spawn()
-        .unwrap();
-    let chat = fixture.request(json!({"start_chat": {"repository": repository,
-        "name": "planning", "agent": "claude", "pid": agent.id()}}));
-    assert_eq!(chat["type"], "chat", "{chat}");
+    let (mut agent, _) = fixture.run_chat("planning", &[]);
     fixture.respond(
         json!({"GET repos/team/project/pulls/12": {"body": pull(12, "open", "Fix", &[])}}),
     );
@@ -3915,16 +3888,7 @@ fn status_finds_the_chats_that_link_a_pr() {
 #[test]
 fn a_chats_watch_reports_the_failed_step_of_a_check() {
     let fixture = Fixture::new(Forge::Forgejo, "");
-    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
-    // The sleep stands in for the chat's agent.
-    let mut agent = support::isolated(fixture.root.path(), "sleep")
-        .arg("600")
-        .current_dir(fixture.root.path())
-        .spawn()
-        .unwrap();
-    let chat = fixture.request(json!({"start_chat": {"repository": repository,
-        "name": "planning", "agent": "claude", "pid": agent.id()}}));
-    assert_eq!(chat["type"], "chat", "{chat}");
+    let (mut agent, _) = fixture.run_chat("planning", &[]);
     let mut responses = failed_check_responses();
     responses["GET repos/team/project/pulls/8"]["body"] = json!({
         "number": 8, "title": "Fix crash", "state": "open",
@@ -4457,16 +4421,7 @@ fn ci_runs_are_started_viewed_and_listed_from_a_registered_checkout() {
 #[test]
 fn a_chat_runs_ci_on_the_default_branch_and_acts_on_its_linked_prs_runs() {
     let fixture = Fixture::new(Forge::Forgejo, "");
-    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
-    // The sleep stands in for the chat's agent.
-    let mut agent = support::isolated(fixture.root.path(), "sleep")
-        .arg("600")
-        .current_dir(fixture.root.path())
-        .spawn()
-        .unwrap();
-    let chat = fixture.request(json!({"start_chat": {"repository": repository,
-        "name": "planning", "agent": "claude", "pid": agent.id()}}));
-    assert_eq!(chat["type"], "chat", "{chat}");
+    let (mut agent, _) = fixture.run_chat("planning", &[]);
     let mut open = pull(8, "open", "Fix", &[]);
     open["head"]["sha"] = json!("head");
     let run = json!({"id": 9331, "index_in_repo": 2765, "prettyref": "topic",
@@ -4679,16 +4634,7 @@ fn linked_runs_are_viewed_and_watched_until_they_finish() {
 #[test]
 fn a_chat_links_views_and_watches_items_as_a_workspace_does() {
     let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
-    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
-    // The sleep stands in for the chat's agent.
-    let mut agent = support::isolated(fixture.root.path(), "sleep")
-        .arg("600")
-        .current_dir(fixture.root.path())
-        .spawn()
-        .unwrap();
-    let chat = fixture.request(json!({"start_chat": {"repository": repository,
-        "name": "planning", "agent": "claude", "pid": agent.id()}}));
-    assert_eq!(chat["type"], "chat", "{chat}");
+    let (mut agent, _) = fixture.run_chat("planning", &[]);
     let respond = |status: &str| {
         fixture.respond(json!({
             "GET repos/team/project/actions/runs?run_number=2765": {"body": {"workflow_runs": [
@@ -5497,16 +5443,7 @@ fn a_chats_change_without_a_token_names_the_missing_one() {
     let untokened = "[machine.forges.\"{forge}\"]\ntype = \"{type}\"\n";
     for (config, signed) in [(AGENT_TOKEN, true), (untokened, false)] {
         let fixture = Fixture::new(Forge::Forgejo, config);
-        let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
-        // The sleep stands in for the chat's agent.
-        let mut agent = support::isolated(fixture.root.path(), "sleep")
-            .arg("600")
-            .current_dir(fixture.root.path())
-            .spawn()
-            .unwrap();
-        let chat = fixture.request(json!({"start_chat": {"repository": repository,
-            "name": "planning", "agent": "claude", "pid": agent.id()}}));
-        let chat = chat["data"]["id"].as_str().unwrap().to_owned();
+        let (mut agent, chat) = fixture.run_chat("planning", &[]);
         let scope = fixture.request(json!({"chat_scope": {"chat": chat}}));
         let token = scope["data"]["token"].as_str().unwrap().to_owned();
         let created = json!({"number": 40, "title": "Flaky", "state": "open", "labels": []});
@@ -5551,16 +5488,7 @@ fn a_chats_change_without_a_token_names_the_missing_one() {
 #[test]
 fn a_chats_proposed_issue_opens_from_its_checkout_on_approval() {
     let fixture = Fixture::new(Forge::GitHub, "[permissions]\nissue_open = 'propose'\n");
-    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
-    // The sleep stands in for the chat's agent.
-    let mut agent = support::isolated(fixture.root.path(), "sleep")
-        .arg("600")
-        .current_dir(fixture.root.path())
-        .spawn()
-        .unwrap();
-    let chat = fixture.request(json!({"start_chat": {"repository": repository,
-        "name": "planning", "agent": "claude", "pid": agent.id()}}));
-    let chat = chat["data"]["id"].as_str().unwrap().to_owned();
+    let (mut agent, chat) = fixture.run_chat("planning", &[]);
     let scope = fixture.request(json!({"chat_scope": {"chat": chat}}));
     let token = scope["data"]["token"].as_str().unwrap().to_owned();
     let created = json!({"number": 40, "title": "Flaky", "state": "open", "labels": []});
@@ -5639,16 +5567,7 @@ fn a_parent_with_the_permission_opens_a_proposal_below_it_with_its_edits() {
     let config = "[permissions]\nissue_open = 'propose'\n\
                   [modes.chat.permissions]\nissue_open = 'direct'\n";
     let fixture = Fixture::new(Forge::GitHub, config);
-    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
-    // The sleep stands in for the chat's agent.
-    let mut agent = support::isolated(fixture.root.path(), "sleep")
-        .arg("600")
-        .current_dir(fixture.root.path())
-        .spawn()
-        .unwrap();
-    let chat = fixture.request(json!({"start_chat": {"repository": repository,
-        "name": "lead", "agent": "claude", "pid": agent.id()}}));
-    let chat = chat["data"]["id"].as_str().unwrap().to_owned();
+    let (mut agent, chat) = fixture.run_chat("lead", &[]);
     let repo = fixture.repo.to_str().unwrap();
     fixture.ok(&[
         "start",

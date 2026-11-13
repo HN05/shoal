@@ -749,7 +749,7 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
                 fs::remove_dir_all(&workspace.path).unwrap();
             }
             let error = manager
-                .stop_workspace(
+                .stop_space(
                     &SpaceSelector::id(&workspace.id),
                     crate::daemon::workspace::StopRequest::manual(),
                 )
@@ -835,7 +835,7 @@ async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
         .unwrap();
     // Waiting for confirmation is not a failure the workspace records.
     let unproven = manager
-        .stop_workspace(
+        .stop_space(
             &SpaceSelector::id(&workspace.id),
             crate::daemon::workspace::StopRequest::manual(),
         )
@@ -858,7 +858,7 @@ async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
         .spawn()
         .unwrap();
     let blocked = manager
-        .stop_workspace_manually(
+        .stop_space_manually(
             &SpaceSelector::id(&workspace.id),
             true,
             None,
@@ -875,7 +875,7 @@ async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
     user.wait().await.unwrap();
 
     manager
-        .stop_workspace_manually(
+        .stop_space_manually(
             &SpaceSelector::id(&workspace.id),
             true,
             None,
@@ -918,7 +918,7 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
             Ok(())
         }).await.unwrap();
         let stopped = manager
-            .stop_workspace(
+            .stop_space(
                 &SpaceSelector::id(&workspace.id),
                 crate::daemon::workspace::StopRequest::manual(),
             )
@@ -926,7 +926,7 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
         assert!(stopped.is_err());
         // The user's acknowledgement never covers a live process.
         let acknowledged = manager
-            .stop_workspace_manually(
+            .stop_space_manually(
                 &SpaceSelector::id(&workspace.id),
                 true,
                 None,

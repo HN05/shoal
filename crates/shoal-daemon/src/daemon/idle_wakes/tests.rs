@@ -163,8 +163,8 @@ async fn a_chat_sleeps_only_in_a_mode_that_wakes_it() {
         .await
         .unwrap();
     configure(&manager, "[modes.plan]\nidle_wake_minutes = 30\n").await;
-    let (talks, _talks_process) = chat(&manager, "talks", ModeName::CHAT, Some(&repo), None).await;
-    let (plans, _plans_process) = chat(&manager, "plans", ModeName::PLAN, Some(&repo), None).await;
+    let talks = chat(&manager, "talks", ModeName::CHAT, Some(&repo), None).await;
+    let plans = chat(&manager, "plans", ModeName::PLAN, Some(&repo), None).await;
     let slept = (manager.sleep(&SpaceSelector::id(&talks.id), Some(Sleep::Permanent)))
         .await
         .unwrap();

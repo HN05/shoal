@@ -15,8 +15,8 @@ use crate::{
     state::QueueState,
 };
 
-/// Restore the stopped agent `execution` of the one workspace `targets`
-/// names for the daemon's start of the queued restore `entry`, whose slot the
+/// Restore the stopped agent `execution` of the one space `targets` names
+/// for the daemon's start of the queued restore `entry`, whose slot the
 /// agent takes over.
 pub async fn start_entry(
     ctx: &Context,
@@ -28,8 +28,8 @@ pub async fn start_entry(
         !crate::env::inherits_scope(&ctx.paths.state),
         "resume agents outside scoped executions"
     );
-    let ([workspace], Some(execution)) = (targets.space.as_slice(), execution) else {
-        anyhow::bail!("a queued restore names one workspace and its stopped execution");
+    let ([space], Some(execution)) = (targets.space.as_slice(), execution) else {
+        anyhow::bail!("a queued restore names one space and its stopped execution");
     };
     crate::env::launch_queue_entry(&entry);
     let _hold = queued_agents::Hold::start(&ctx.paths, &entry).await;
@@ -39,7 +39,7 @@ pub async fn start_entry(
         .iter()
         .any(|queued| queued.id == entry && queued.state == QueueState::Starting);
     ensure!(admitted, "the queued restore was cancelled");
-    let restored = super::workspace::run(ctx, workspace.clone(), Some(execution), true, None).await;
+    let restored = super::space::run(ctx, space.clone(), Some(execution), true, None).await;
     if let Err(error) = &restored {
         queued_agents::fail(ctx, &entry, error).await;
     }
@@ -53,24 +53,19 @@ pub(in crate::cli::commands) async fn start_queued(
     ctx: &Context,
     entry: &QueueEntry,
 ) -> Result<()> {
-    let (Some(workspace), Some(execution)) = (&entry.space_id, &entry.execution) else {
+    let (Some(space), Some(execution)) = (&entry.space_id, &entry.execution) else {
         anyhow::bail!("the queued restore names no stopped agent");
     };
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace))
-        .await?
-        .workspace;
-    let settings = crate::config::settings(
-        &ctx.paths,
-        ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
-    )
-    .await?;
-    let saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
+    let space = super::present_space(ctx, &SpaceSelector::id(space)).await?;
+    let target = ConfigTarget::Space(SpaceSelector::id(space.id()));
+    let settings = crate::config::settings(&ctx.paths, target).await?;
+    let saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(space.id())).await?;
     let stopped = saved
         .session(execution)
         .and_then(|session| session.origin.as_ref());
     let args = [
         "resume",
-        workspace.id.as_str(),
+        space.id().as_str(),
         "--execution",
         execution.as_str(),
         "--focus",
@@ -78,30 +73,30 @@ pub(in crate::cli::commands) async fn start_queued(
         entry.id.as_str(),
     ]
     .map(OsString::from);
-    terminal::restore_queued(ctx, &settings, &workspace, stopped, &args).await
+    super::places::restore_queued(ctx, &settings, &space, stopped, &args).await
 }
 
 /// Record the place this restore runs in, one `host` opened in the
-/// background for it, as the workspace's, before anything runs there.
+/// background for it, as the space's, before anything runs there.
 pub async fn record_place(ctx: &Context, host: HostName, targets: &SpaceTargets) {
-    if let Some(workspace) = background_workspace(targets) {
-        terminal::record_owned_here(ctx, host, &workspace).await;
+    if let Some(space) = background_space(targets) {
+        terminal::record_owned_here(ctx, host, &space).await;
     }
 }
 
 /// Close the place this restore runs in, one `host` opened in the
-/// background for it, once the one workspace `targets` names is done.
+/// background for it, once the one space `targets` names is done.
 pub async fn close_place_when_done(ctx: &Context, host: HostName, targets: &SpaceTargets) {
-    if let Some(workspace) = background_workspace(targets) {
-        terminal::close_background_place_when_done(ctx, host, &workspace).await;
+    if let Some(space) = background_space(targets) {
+        terminal::close_background_place_when_done(ctx, host, &space).await;
     }
 }
 
-/// The one workspace a restore in a background place names, which
+/// The one space a restore in a background place names, which
 /// [`start_queued`] passes by its ID.
-fn background_workspace(targets: &SpaceTargets) -> Option<SpaceId> {
+fn background_space(targets: &SpaceTargets) -> Option<SpaceId> {
     match targets.space.as_slice() {
-        [workspace] => Some(SpaceId::from(workspace.to_string())),
+        [space] => Some(SpaceId::from(space.to_string())),
         _ => None,
     }
 }

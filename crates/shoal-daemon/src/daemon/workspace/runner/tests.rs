@@ -791,7 +791,7 @@ async fn a_chat_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
         .create_workspace(&fixture.repository, "pull".into(), None, None, None)
         .await
         .unwrap();
-    let (chat, _process) =
+    let chat =
         crate::daemon::test_support::chat(manager, "talk", "chat", Some(&repository), None).await;
     let url = format!("http://{}/team/repo/pulls/12", fixture.server.host);
     watch_pull(manager, &pull.id, Some(url.clone())).await;
@@ -882,7 +882,7 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
     );
 
     let stopped = manager
-        .stop_workspace_manually(
+        .stop_space_manually(
             &SpaceSelector::id(&claimed[0].workspace_id),
             false,
             None,

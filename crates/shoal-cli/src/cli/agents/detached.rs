@@ -5,12 +5,10 @@ use crate::paths::StateFiles;
 use shoal_refs::BranchName;
 use std::{
     ffi::OsString,
-    os::unix::process::CommandExt,
     path::{Path, PathBuf},
-    process::{Child, Stdio},
 };
 
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use futures_util::future::BoxFuture;
 
 use super::{ChatLaunch, Launch};
@@ -76,7 +74,7 @@ pub(super) async fn start(
     let (launch, prepared) = launch_session(
         ctx,
         &agent,
-        &workspace,
+        &(&workspace).into(),
         &files,
         prepared,
         app.not_inherited(),
@@ -87,21 +85,21 @@ pub(super) async fn start(
     Ok(0)
 }
 
-/// Launch the `prepared` session of `agent` in `workspace` as a detached
+/// Launch the `prepared` session of `agent` in `space` as a detached
 /// execution logging beside its other `files`, without the variables of
 /// this process its app must not inherit, discarding the preparation when
 /// it cannot start.
 async fn launch_session(
     ctx: &Context,
     agent: &execution::TrackedAgent,
-    workspace: &Workspace,
+    space: &crate::model::ExecutionSpace,
     files: &Path,
     prepared: Box<dyn Prepared>,
     not_inherited: &[&str],
 ) -> Result<(DetachedLaunch, Box<dyn Prepared>)> {
     let launched = execution::launch_detached(
         &ctx.paths,
-        workspace,
+        space,
         files.with_extension(crate::paths::SESSION_LOG),
         prepared.command(),
         not_inherited,
@@ -271,9 +269,8 @@ fn chat_dir_args(app: &dyn App, settings: &Effective, home: &Path, chat: &Chat) 
 }
 
 /// Start `chat` as a session of `app`, agent `name`, in its checkout or
-/// worktree, detached as workspace sessions are, since the user continues
-/// it in the app. It is no tracked execution: the chat lasts while the
-/// session's process runs.
+/// worktree, detached and tracked as workspace sessions are, as an
+/// execution of the chat, since the user continues it in the app.
 pub(super) async fn start_chat(
     ctx: &Context,
     integration: &dyn Integration,
@@ -290,7 +287,6 @@ pub(super) async fn start_chat(
         priority,
         settings,
         model,
-        restores,
         links,
         ..
     } = chat;
@@ -307,8 +303,6 @@ pub(super) async fn start_chat(
         )
         .await;
     }
-    // This process holds the chat until the session runs, which is not in
-    // this terminal.
     let new = crate::client::chats::NewChat {
         priority: *priority,
         name: chat_name,
@@ -317,8 +311,7 @@ pub(super) async fn start_chat(
         narrowing: *narrowing,
         parent: parent.as_ref(),
     };
-    let record =
-        crate::client::chats::record(&ctx.paths, home, new, None, true, restores.as_ref()).await?;
+    let record = crate::client::chats::start(&ctx.paths, home, new, None).await?;
     super::link_chat(ctx, &record, links).await;
     let (prompt, args) = chat_input(app, &ctx.paths.home, &record, chat);
     let args = [model_args, args].concat();
@@ -332,11 +325,29 @@ pub(super) async fn start_chat(
         args,
     };
     let prepared = with_effort(app.prepare(session).await?, app, settings, model);
-    let log = files.with_extension(crate::paths::SESSION_LOG);
-    let (record, prepared) =
-        hand_to_session(ctx, app, home.path(), &record, &log, prepared).await?;
+    let agent = execution::TrackedAgent {
+        name: app.execution_agent(),
+        model: model.clone(),
+        mode: mode.clone(),
+        narrowing: *narrowing,
+    };
+    let space = crate::model::ExecutionSpace {
+        id: record.id.clone(),
+        number: record.number,
+        kind: crate::model::SpaceKind::Chat,
+        path: home.path().to_owned(),
+    };
+    let (launch, prepared) =
+        launch_session(ctx, &agent, &space, &files, prepared, app.not_inherited()).await?;
     let delivered = prepared.deliver().await;
-    report_chat(ctx, app, repository.registered(), &record, &log, delivered)?;
+    report_chat(
+        ctx,
+        app,
+        repository.registered(),
+        &record,
+        &launch,
+        delivered,
+    )?;
     Ok(0)
 }
 
@@ -373,44 +384,21 @@ fn chat_input(
     }
 }
 
-/// Start the `prepared` session of `app` for `chat`, logging to `log`, and
-/// hand the chat to it, discarding the preparation when either fails.
-/// Returns the chat as the daemon now records it.
-async fn hand_to_session(
-    ctx: &Context,
-    app: &dyn App,
-    directory: &Path,
-    chat: &Chat,
-    log: &Path,
-    prepared: Box<dyn Prepared>,
-) -> Result<(Chat, Box<dyn Prepared>)> {
-    let token = crate::client::chats::scope(&ctx.paths, chat).await?;
-    let spawned = spawn_session(ctx, app, directory, (chat, &token), log, prepared.as_ref());
-    let handed_over = match spawned {
-        Ok(session) => hand_over(ctx, chat, session).await,
-        Err(error) => Err(error),
-    };
-    match handed_over {
-        Ok(moved) => Ok((moved, prepared)),
-        Err(error) => {
-            prepared.discard().await;
-            Err(error)
-        }
-    }
-}
-
-/// Report the `chat` session started with its output in `log`, with what
-/// `delivered` says of its first message.
+/// Report the `chat` session `launch` started, with what `delivered` says
+/// of its first message.
 fn report_chat(
     ctx: &Context,
     app: &dyn App,
     repository: Option<&Repository>,
     chat: &Chat,
-    log: &Path,
+    launch: &DetachedLaunch,
     delivered: Delivered,
 ) -> Result<()> {
+    let log = &launch.log;
     let report = DetachedChat {
         chat: chat.clone(),
+        execution_id: launch.execution_id.clone(),
+        pid: launch.pid,
         log: log.to_owned(),
         delivery: delivered.fields,
     };
@@ -421,77 +409,13 @@ fn report_chat(
             app.agent(),
             chat.name,
             repository.map_or("every repository", crate::repository::name),
-            chat.pid,
+            launch.pid,
             app.place(),
             log.display(),
             delivered.note,
         ),
         report,
     )
-}
-
-/// Hand `chat` to `session`'s process, stopping the session when the daemon
-/// cannot record it, since the chat would end with this process.
-async fn hand_over(ctx: &Context, chat: &Chat, session: Child) -> Result<Chat> {
-    let moved = crate::client::chats::move_to(&ctx.paths, chat, session.id()).await;
-    if moved.is_err() {
-        stop_session(session);
-    }
-    moved
-}
-
-/// Stop a session started by [`spawn_session`] with the agent it started:
-/// the session leads its own process group.
-fn stop_session(mut session: Child) {
-    // SAFETY: killpg takes no pointers. The leader is not reaped yet, so its
-    // ID still names this group alone.
-    unsafe { libc::killpg(session.id() as libc::pid_t, libc::SIGKILL) };
-    let _ = session.wait();
-}
-
-/// Start the `prepared` session of `app` in a session of its own in
-/// `directory` with the chat's identity and agent logins, writing to `log`.
-fn spawn_session(
-    ctx: &Context,
-    app: &dyn App,
-    directory: &Path,
-    (chat, token): (&Chat, &crate::client::scope_tokens::ScopeToken),
-    log: &Path,
-    prepared: &dyn Prepared,
-) -> Result<Child> {
-    if let Some(parent) = log.parent() {
-        std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
-    }
-    let output = std::fs::File::create(log).with_context(|| format!("create {}", log.display()))?;
-    let command = prepared.command();
-    let mut session = std::process::Command::new(&command[0]);
-    for name in crate::env::not_chat_identity() {
-        session.env_remove(name);
-    }
-    session
-        .args(&command[1..])
-        .current_dir(directory)
-        .envs(crate::env::chat_environment(chat, token, &ctx.paths))
-        .stdin(Stdio::null())
-        .stdout(output.try_clone()?)
-        .stderr(output);
-    crate::agent_git::Launch::agent_logins(&ctx.paths)?.apply(&mut session);
-    for name in app.not_inherited() {
-        session.env_remove(name);
-    }
-    session.envs(prepared.env());
-    // SAFETY: setsid detaches the forked child without allocating, before exec.
-    unsafe {
-        session.pre_exec(|| {
-            if libc::setsid() == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-    session
-        .spawn()
-        .with_context(|| format!("start the {} session", app.name()))
 }
 
 #[cfg(test)]

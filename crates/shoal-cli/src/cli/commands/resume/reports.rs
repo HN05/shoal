@@ -6,7 +6,8 @@ use std::fmt::Display;
 use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::{DiscardedWork, Queued, Resumed, SetUp, StoppedCommands};
 use crate::{
-    cli::context::Context, execution::recovery::SavedCommand, model::Workspace, state::QueueState,
+    cli::context::Context, execution::recovery::SavedCommand, model::PresentSpace,
+    state::QueueState,
 };
 
 /// Report that no space has anything to resume, as a resume that starts
@@ -72,7 +73,7 @@ pub(super) fn started(
     output: &Resumed,
     in_wrappers: usize,
     place: Option<&str>,
-    listed: &[(&Workspace, &ExecutionId)],
+    listed: &[(&PresentSpace, &ExecutionId)],
 ) -> Result<()> {
     ctx.show(output, |output| {
         set_up(&output.set_up);
@@ -88,11 +89,11 @@ pub(super) fn started(
         if !listed.is_empty() {
             outln!("Resume each agent in its own terminal:");
         }
-        for (workspace, id) in listed {
+        for (space, id) in listed {
             let words = [
                 "shoal",
                 "resume",
-                &workspace.name,
+                space.name(),
                 "--execution",
                 id.as_str(),
                 "--focus",
@@ -114,11 +115,11 @@ pub(super) fn discarded(ctx: &Context, discarded: &DiscardedWork, names: &[&str]
     })
 }
 
-/// List `workspace`'s stopped `commands`, which no agent receives, in text
+/// List the stopped `commands` of `space`, which no agent receives, in text
 /// output.
-pub(super) fn stopped_commands(ctx: &Context, workspace: &Workspace, commands: &[SavedCommand]) {
+pub(super) fn stopped_commands(ctx: &Context, space: &PresentSpace, commands: &[SavedCommand]) {
     if !commands.is_empty() && !ctx.json {
-        outln!("{}", command_list(workspace, commands));
+        outln!("{}", command_list(space, commands));
     }
 }
 
@@ -154,24 +155,24 @@ pub(super) fn starting_copied(agent: impl Display, forked: bool) {
 
 /// List `workspace`'s stopped `commands`, which the restored agent was not
 /// told about.
-pub(super) fn commands_not_told(workspace: &Workspace, commands: &[SavedCommand]) {
-    eprintln!("{}", command_list(workspace, commands));
+pub(super) fn commands_not_told(space: &PresentSpace, commands: &[SavedCommand]) {
+    eprintln!("{}", command_list(space, commands));
 }
 
 /// The stopped `commands` of `workspace`, each as the command that reruns
 /// it there.
-fn command_list(workspace: &Workspace, commands: &[SavedCommand]) -> String {
-    let mut text = format!("Stopped commands in {}, not restarted:", workspace.label());
+fn command_list(space: &PresentSpace, commands: &[SavedCommand]) -> String {
+    let mut text = format!("Stopped commands in {}, not restarted:", space.label());
     for command in commands {
-        text.push_str(&format!("\n  {}", rerun(workspace, &command.argv)));
+        text.push_str(&format!("\n  {}", rerun(space, &command.argv)));
     }
     text
 }
 
-/// The command that runs `argv` in `workspace` again, selecting it by its
+/// The command that runs `argv` in `space` again, selecting it by its
 /// number, since names select nothing.
-fn rerun(workspace: &Workspace, argv: &[String]) -> String {
-    let number = workspace.number.to_string();
+fn rerun(space: &PresentSpace, argv: &[String]) -> String {
+    let number = space.number().to_string();
     let mut words = vec!["shoal", "run", "--workspace", &number, "--"];
     words.extend(argv.iter().map(String::as_str));
     crate::shell::quote(&words)

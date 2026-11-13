@@ -454,8 +454,8 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
         }
     }
     let stop = |workspace: &str, acknowledge_unproven| {
-        Operation::from(RemovalMethod::StopWorkspace {
-            workspace: workspace.into(),
+        Operation::from(RemovalMethod::StopSpace {
+            space: workspace.into(),
             acknowledge_unproven,
             launches: crate::protocol::QueuedLaunches::Cancel,
             processes: crate::protocol::UntrackedProcesses::Keep,
@@ -716,9 +716,7 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -1660,7 +1658,7 @@ async fn a_request_withdrawn_once_given_back_notifies_nobody() {
 }
 
 #[tokio::test]
-async fn a_saved_chat_leaves_its_workspaces_requests_to_the_user() {
+async fn a_stopped_chat_leaves_its_workspaces_requests_to_the_user() {
     use crate::{
         daemon::approvals::{
             ApprovalRequest, Lifetime, SecretSpecification, Specification, Target,
@@ -1678,9 +1676,7 @@ async fn a_saved_chat_leaves_its_workspaces_requests_to_the_user() {
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -1701,16 +1697,8 @@ async fn a_saved_chat_leaves_its_workspaces_requests_to_the_user() {
         )
         .await
         .unwrap();
-    // Saved, the chat keeps its workspace but has no agent to tell.
-    let id = chat.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute("UPDATE chats SET restore='resume' WHERE id=?1", [&id])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
+    // Stopped, the chat keeps its workspace but has no agent to tell.
+    manager.end_executions(&chat.id).await;
     let requested = manager
         .request_approval(ApprovalRequest::new(
             &worker.id,
@@ -1736,13 +1724,13 @@ async fn a_saved_chat_leaves_its_workspaces_requests_to_the_user() {
 }
 
 #[tokio::test]
-async fn saving_a_chat_gives_the_requests_it_decides_back_to_the_user() {
+async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user() {
     use crate::{
         daemon::{
             approvals::{ApprovalRequest, Lifetime, SecretSpecification, Specification, Target},
             notifications::NotificationKind,
         },
-        state::{AgentState, ChatRestore},
+        state::AgentState,
     };
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
@@ -1750,17 +1738,12 @@ async fn saving_a_chat_gives_the_requests_it_decides_back_to_the_user() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
         .start_chat(
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -1804,8 +1787,8 @@ async fn saving_a_chat_gives_the_requests_it_decides_back_to_the_user() {
         .unwrap();
     assert_eq!(routed.decider.as_ref(), Some(&chat.id));
 
-    // Saved after the request reached it, the chat decides it no more.
-    manager.save_chats(ChatRestore::Resume).await;
+    // Stopped after the request reached it, the chat decides it no more.
+    manager.end_executions(&chat.id).await;
     let given_back = manager
         .approval_request(requested.number)
         .await
@@ -1837,17 +1820,12 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
         .start_chat(
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -1929,9 +1907,8 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .unwrap();
     assert_eq!(listed.len(), 1);
 
-    // Retrying the request once the chat exited tells it without ending it
-    // under the announcement gate, which ending it takes.
-    process.kill();
+    // Retrying the request once the chat's agent ended asks the user.
+    manager.end_executions(&chat.id).await;
     tokio::time::timeout(
         std::time::Duration::from_secs(10),
         manager.notify_approval(&routed),

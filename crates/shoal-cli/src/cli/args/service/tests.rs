@@ -13,7 +13,6 @@ fn a_config_setup_parses_back_from_its_command_line() {
         },
         name: Some("setup".into()),
         session: Some("s1".into()),
-        restore: Some(SpaceId::from("c1")),
         handoff: Some("/tmp/shoal-chat.1".into()),
         args: vec!["--search".into()],
     };

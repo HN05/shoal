@@ -530,20 +530,13 @@ async fn a_chat_stopped_or_removed_before_the_write_takes_no_report() {
         .await
         .unwrap();
     let chat = manager
-        .start_chat(
-            repo.id.into(),
-            "talk".into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     // The report was checked against the running chat; the stop, then the
     // removal, commit before it is written.
     for ended in [
-        "UPDATE chats SET restore='resume' WHERE id=?1",
+        "DELETE FROM executions WHERE space_id=?1",
         "DELETE FROM chats WHERE id=?1",
     ] {
         let id = chat.id.clone();

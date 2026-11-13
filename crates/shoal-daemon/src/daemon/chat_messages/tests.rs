@@ -12,7 +12,10 @@ use crate::{
 
 /// A repository with a workspace named `worker` and a chat whose process is
 /// this test.
-async fn chat_and_worker(temp: &tempfile::TempDir, manager: &Manager) -> (Chat, Workspace) {
+async fn chat_and_worker(
+    temp: &tempfile::TempDir,
+    manager: &std::sync::Arc<Manager>,
+) -> (Chat, Workspace) {
     let checkout = repository(temp.path(), "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
@@ -23,14 +26,7 @@ async fn chat_and_worker(temp: &tempfile::TempDir, manager: &Manager) -> (Chat, 
         .await
         .unwrap();
     let chat = manager
-        .start_chat(
-            repo.id.into(),
-            "chat-1".into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.into(), "chat-1".into(), "claude".into(), None)
         .await
         .unwrap();
     manager
@@ -288,17 +284,12 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
 async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
     let (temp, manager) = manager().await;
     let (_, worker) = chat_and_worker(&temp, &manager).await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
         .start_chat(
             worker.repository_id.clone().into(),
             "chat-2".into(),
             "codex".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -347,8 +338,7 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
     assert!(user(&manager).await.is_empty());
 
     // A stopped chat keeps them for its restore.
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
+    manager.end_executions(&chat.id).await;
     assert_eq!(
         received(&manager, &chat).await,
         [
@@ -376,17 +366,12 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
 async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
     let (temp, manager) = manager().await;
     let (_, worker) = chat_and_worker(&temp, &manager).await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
         .start_chat(
             worker.repository_id.clone().into(),
             "chat-3".into(),
             "codex".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -429,8 +414,7 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
         .await
         .unwrap();
 
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
+    manager.end_executions(&chat.id).await;
     // Opened outside the chat, the worker is the user's and stays when the
     // chat is removed.
     manager.assign_parent(&worker.id, None).await.unwrap();
@@ -457,17 +441,12 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
 async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_moved() {
     let (temp, manager) = manager().await;
     let (_, worker) = chat_and_worker(&temp, &manager).await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
         .start_chat(
             worker.repository_id.clone().into(),
             "chat-4".into(),
             "codex".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -528,8 +507,7 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
     );
 
     // Removed with nothing below it, the chat hands the files to the user.
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
+    manager.end_executions(&chat.id).await;
     manager.assign_parent(&worker.id, None).await.unwrap();
     manager
         .remove_chat(&SpaceSelector::id(&chat.id), None)
@@ -551,17 +529,12 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
 async fn same_named_spaces_reach_their_own_coordinators() {
     let (temp, manager) = manager().await;
     let (chat, worker) = chat_and_worker(&temp, &manager).await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let other_chat = manager
         .start_chat(
             worker.repository_id.clone().into(),
             "chat-2".into(),
             "codex".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();

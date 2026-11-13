@@ -127,14 +127,7 @@ async fn new_work_is_refused_once_a_contribution_removal_begins() {
     let repo = contribution(&manager, root.path()).await;
     assert!(manager.begin_contribution_removal(&repo).await.unwrap());
     manager
-        .start_chat(
-            (&repo.id).into(),
-            "chat-1".into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
+        .start_chat((&repo.id).into(), "chat-1".into(), "claude".into(), None)
         .await
         .unwrap_err();
     manager
@@ -220,17 +213,12 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
 async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
     let (root, manager) = manager().await;
     let repo = contribution(&manager, root.path()).await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
         .start_chat(
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -244,8 +232,7 @@ async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
         )
         .await
         .unwrap();
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
+    manager.end_executions(&chat.id).await;
     manager
         .remove_chat(&SpaceSelector::id(&chat.id), None)
         .await

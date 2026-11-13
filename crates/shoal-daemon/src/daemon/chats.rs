@@ -1,16 +1,14 @@
 //! Chats: agents the user talks with in a repository's registered checkout,
 //! or in a workspace's worktree, where they are not the workspace's agent,
 //! or without a repository in `root_dir`, managing the spaces of every
-//! repository.
-//! They are records, not tracked executions, so they never queue or stop
-//! under pressure. A chat runs while its process lives; once its agent exits
-//! or Shoal saves it, the chat is stopped until it is restored, and it lasts
-//! until it is removed.
+//! repository. A chat's agent runs under the execution wrapper as an
+//! execution of the chat, which runs while its execution is recorded; the
+//! chat lasts until it is removed.
 use crate::client::agent::AgentSessionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_ids::{SpaceId, SpaceNumber};
-use std::{path::Path, sync::Arc, time::Duration};
+use std::path::Path;
 
 use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -19,52 +17,26 @@ use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
-        approvals::{ApprovalRequest, release_decided_by},
-        log, store,
+        store,
         workspace::{self, Manager},
     },
     fsutil::off_runtime,
     model::{
         Chat, RenamedChat, Repository, SpaceKind, SpaceLinks, SpaceRef, Workspace, WorkspaceRef,
     },
-    process::identity::{self, Identity},
-    state::ChatRestore,
     tmp_dirs,
 };
 
-/// How soon a chat's stop reaches the journal when nothing lists chats, and
-/// a saved chat comes back once agents may start.
-const SWEEP_INTERVAL: Duration = Duration::from_secs(5);
-
-pub(super) async fn run(manager: Arc<Manager>) {
-    loop {
-        tokio::time::sleep(SWEEP_INTERVAL).await;
-        let _operation = manager.gates.operation().await;
-        if let Err(error) = manager.stop_finished_chats().await {
-            log!("chats: {error:#}");
-        }
-        if let Err(error) = manager.save_blocked_chats().await {
-            log!("chats: {error:#}");
-        }
-        if let Err(error) = restores::restore_automatic(&manager).await.map(drop) {
-            log!("chats: {error:#}");
-        }
-    }
-}
-
 impl Manager {
-    /// Record the chat `name` whose agent replaces process `pid` in the
-    /// repository's checkout, or when `hands_over`, runs in a session `pid`
-    /// starts and [`Self::move_chat`] names, at the top.
+    /// Record the chat `name` in the repository's checkout, at the top, with
+    /// its agent running.
     #[cfg(test)]
     pub async fn start_chat(
-        &self,
+        self: &std::sync::Arc<Self>,
         repository: crate::repository::Selector,
         name: SpaceName,
         agent: crate::agent::Agent,
-        pid: u32,
         origin: Option<crate::sessions::Origin>,
-        hands_over: bool,
     ) -> Result<Chat> {
         let new = NewChat {
             priority: None,
@@ -72,25 +44,22 @@ impl Manager {
             name,
             agent,
             mode: crate::model::chat_mode(),
-            pid,
             origin,
-            hands_over,
             parent: None,
         };
-        self.start_new_chat(Some(repository), None, new).await
+        let chat = self.start_new_chat(Some(repository), None, new).await?;
+        self.run_chat_agent(chat).await
     }
 
     /// [`Self::start_chat`] in the worktree of the workspace `workspace`
     /// names, which must be ready, in the workspace's repository.
     #[cfg(test)]
     pub async fn start_chat_in_workspace(
-        &self,
+        self: &std::sync::Arc<Self>,
         workspace: &SpaceSelector,
         name: SpaceName,
         agent: crate::agent::Agent,
-        pid: u32,
         origin: Option<crate::sessions::Origin>,
-        hands_over: bool,
     ) -> Result<Chat> {
         let workspace = self.chat_workspace(workspace).await?;
         let new = NewChat {
@@ -99,14 +68,50 @@ impl Manager {
             name,
             agent,
             mode: crate::model::chat_mode(),
-            pid,
             origin,
-            hands_over,
             parent: None,
         };
         let repository = Some(workspace.repository_id.clone());
-        self.record_new_chat(repository, Some(workspace_ref(&workspace)), new)
-            .await
+        let chat = (self.record_new_chat(repository, Some(workspace_ref(&workspace)), new)).await?;
+        self.run_chat_agent(chat).await
+    }
+
+    /// Run the agent of `chat` as its execution, as its wrapper registers
+    /// and tracks it, and return the chat running it. Asked to stop, the
+    /// agent ends its processes and exits, as its wrapper stops it.
+    #[cfg(test)]
+    pub(crate) async fn run_chat_agent(self: &std::sync::Arc<Self>, chat: Chat) -> Result<Chat> {
+        let place = (chat.origin.clone()).map(|origin| workspace::places::ExecutionPlace {
+            origin,
+            agent: true,
+        });
+        let request = workspace::ExecutionRequest {
+            place,
+            agent: true,
+            ..Default::default()
+        };
+        let selector = SpaceSelector::id(&chat.id);
+        let kind = workspace::ExecutionKind::Command;
+        let mut started =
+            (self.begin_execution_placed(&selector, None, kind, None, request)).await?;
+        let agent = crate::execution::TrackedAgent {
+            name: chat.agent.clone(),
+            model: Default::default(),
+            mode: chat.mode.clone(),
+            narrowing: chat.narrowing,
+        };
+        let id = started.plan.id.clone();
+        let running = std::time::Duration::ZERO;
+        (self.track_agent(&id, &agent, &chat.id, &chat.name, true, running)).await;
+        let manager = self.clone();
+        tokio::spawn(async move {
+            if started.stop.wait_for(|stop| *stop).await.is_ok() {
+                manager.end_test_execution(id).await;
+            }
+        });
+        self.chat_by_id(&chat.id)
+            .await?
+            .context("the chat was removed")
     }
 
     /// Record the chat `new` in the checkout of `repository`, in the
@@ -190,16 +195,11 @@ impl Manager {
             agent,
             mode,
             narrowing,
-            pid,
             origin,
-            hands_over,
             parent,
             priority,
         } = new;
         let home = self.reserve_chat_home(repository).await?;
-        let process = identity::capture(pid)?.context("the chat process is not running")?;
-        // A save under way would miss it, and a shutdown's would not come again.
-        let _saving = self.chat_saves.lock().await;
         ensure!(
             !self.agent_queue.suspended(),
             "Shoal is stopping work for a shutdown or a daemon stop; start the chat once it is over"
@@ -214,13 +214,12 @@ impl Manager {
             mode,
             narrowing,
             workspace,
-            pid: process.pid,
             started_at,
             origin,
             tmp_dir: None,
             root_dir: home.root_dir.clone(),
             session: None,
-            restore: None,
+            running: false,
             links: SpaceLinks::default(),
             review: Vec::new(),
             completion: None,
@@ -231,19 +230,18 @@ impl Manager {
             children: Vec::new(),
             converted: false,
         };
-        let (recorded, removing) = (process.clone(), self.chat_removals.clone());
-        let below = parent.map(|parent| (parent, removing));
+        let below = parent.map(|parent| (parent, self.chat_removals.clone()));
         let chat = self
             .store
             .write(move |tx| {
-                let chat = insert(tx, chat, &recorded, hands_over, below)?;
+                let chat = insert(tx, chat, below)?;
                 if let Some(priority) = priority {
                     super::spaces::priority::set(tx, &chat.id, priority)?;
                 }
                 Ok(chat)
             })
             .await?;
-        let chat = (self.give_tmp_dir(chat, home.repository.as_ref(), process)).await?;
+        let chat = (self.give_tmp_dir(chat, home.repository.as_ref())).await?;
         self.take_chat_place(&chat).await?;
         Ok(chat)
     }
@@ -268,15 +266,9 @@ impl Manager {
         })
     }
 
-    /// `chat`, just recorded with `process`, with its temporary directory,
-    /// created now; a chat that cannot have one is forgotten, having never
-    /// run.
-    async fn give_tmp_dir(
-        &self,
-        mut chat: Chat,
-        repository: Option<&Repository>,
-        process: Identity,
-    ) -> Result<Chat> {
+    /// `chat`, just recorded, with its temporary directory, created now; a
+    /// chat that cannot have one is forgotten, having never run.
+    async fn give_tmp_dir(&self, mut chat: Chat, repository: Option<&Repository>) -> Result<Chat> {
         match self.chat_tmp_dir(repository, &chat) {
             Ok(tmp_dir) => {
                 chat.tmp_dir = tmp_dir;
@@ -284,9 +276,7 @@ impl Manager {
             }
             Err(error) => {
                 let id = chat.id.clone();
-                self.store
-                    .run(move |db| forget_unstarted(db, &id, &process))
-                    .await?;
+                self.store.run(move |db| forget_unstarted(db, &id)).await?;
                 Err(error)
             }
         }
@@ -305,17 +295,6 @@ impl Manager {
             chat: renamed,
             previous_name: old.name,
         })
-    }
-
-    /// Make process `pid` the one whose life a running chat lasts.
-    pub async fn move_chat(&self, chat: &SpaceId, pid: u32) -> Result<Chat> {
-        let process = identity::capture(pid)?.context("the chat process is not running")?;
-        let chat = chat.to_owned();
-        let _handoff = self.chat_handoffs.write().await;
-        let owner = self.root_dir_owner();
-        self.store
-            .run(move |db| move_to(db, &owner, &chat, &process))
-            .await
     }
 
     /// Record `session` as the agent session the running chat `id` continues.
@@ -342,110 +321,15 @@ impl Manager {
         Ok(())
     }
 
-    /// Running and stopped chats in start order, after stopping those whose
-    /// process exited.
+    /// Running and stopped chats in start order.
     pub async fn chats(&self) -> Result<Vec<Chat>> {
-        self.stop_finished_chats().await?;
         let owner = self.root_dir_owner();
         self.store.run(move |db| recorded(db, &owner)).await
-    }
-
-    /// The agent processes of the running chats.
-    pub(crate) async fn chat_processes(&self) -> Result<Vec<Identity>> {
-        let recorded = self.store.run(|db| recorded_processes(db)).await?;
-        Ok(recorded.into_iter().map(|(_, process)| process).collect())
-    }
-
-    /// The running chat with the ID `id`.
-    pub(crate) async fn running_chat_by_id(&self, id: &SpaceId) -> Result<Option<Chat>> {
-        Ok((self.chat_by_id(id).await?).filter(|chat| chat.restore.is_none()))
     }
 
     /// The running or stopped chat with the ID `id`.
     pub(crate) async fn chat_by_id(&self, id: &SpaceId) -> Result<Option<Chat>> {
         Ok(self.chats().await?.into_iter().find(|chat| chat.id == *id))
-    }
-
-    /// Stop the running chat `id`: stop every process it owns, so none goes
-    /// on writing the agent's session, then record the chat stopped, as when
-    /// the process it runs as exits. Until the stop finishes, the chat stays
-    /// running, so nothing restores it meanwhile.
-    pub(crate) async fn stop_chat(&self, id: &SpaceId) -> Result<()> {
-        self.stop_chat_recording(id, |found| self.record_chat_stopping(id, found))
-            .await
-    }
-
-    /// Stop the processes of the chat `id` that became a workspace, whose
-    /// agent ran as `process`, as ending a chat stops them, after the stops
-    /// that signalled `stopped`, with `record` keeping what each round
-    /// signals before it does.
-    pub(crate) async fn stop_converted_chat<R>(
-        &self,
-        id: &SpaceId,
-        process: &Identity,
-        stopped: Vec<Identity>,
-        record: impl Fn(Vec<Identity>) -> R,
-    ) -> Result<()>
-    where
-        R: Future<Output = Result<()>>,
-    {
-        let wrappers = self.execution_wrappers().await?;
-        match processes::ChatProcesses::of(id, process, wrappers.clone())? {
-            Some(processes) => processes.stop(stopped, record).await,
-            None => processes::stop_owned(id, process, stopped, &wrappers, record).await,
-        }
-    }
-
-    /// [`Self::stop_chat`], with `record` keeping what each round of the
-    /// stop signals before it does.
-    async fn stop_chat_recording<R>(
-        &self,
-        id: &SpaceId,
-        record: impl Fn(Vec<Identity>) -> R,
-    ) -> Result<()>
-    where
-        R: Future<Output = Result<()>>,
-    {
-        let stopping = self.chat_stops.hold(id);
-        let chat = id.to_owned();
-        let recorded = self
-            .store
-            .run(move |db| recorded_process(db, &chat))
-            .await?
-            .context("the chat is not running")?;
-        let wrappers = self.execution_wrappers().await?;
-        let stopped = self.stopped_chat_processes(id).await?;
-        processes::ChatProcesses::of(id, &recorded, wrappers)?
-            .context("the chat is not running")?
-            .stop(stopped, record)
-            .await?;
-        drop(stopping);
-        self.stop_finished_chats().await
-    }
-
-    /// The wrappers of the executions running, which belong to their
-    /// workspaces even when a chat started them.
-    async fn execution_wrappers(&self) -> Result<Vec<Identity>> {
-        let executions = self.store.run(|db| store::all_executions(db)).await?;
-        Ok(executions
-            .into_iter()
-            .filter_map(|execution| execution.wrapper)
-            .collect())
-    }
-
-    /// Whether Shoal saved the stopped chat `id`'s session, rather than its
-    /// agent exiting.
-    pub(crate) async fn chat_saved(&self, id: &SpaceId) -> Result<bool> {
-        let id = id.to_owned();
-        self.store
-            .run(move |db| {
-                store::exists(
-                    db,
-                    "SELECT 1 FROM chats WHERE id=?1 AND restore IS NOT NULL AND saved",
-                    [id],
-                )
-            })
-            .await
     }
 
     /// The chats running or stopped in the worktree of the workspace `id`,
@@ -486,83 +370,19 @@ impl Manager {
             .await
     }
 
-    /// Whether a chat runs in the worktree of the workspace `id`.
+    /// Whether a chat runs its agent in the worktree of the workspace `id`.
     pub(crate) async fn chat_runs_in(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
                 store::exists(
                     db,
-                    "SELECT 1 FROM chats WHERE workspace_id=?1 AND restore IS NULL",
+                    "SELECT 1 FROM chats JOIN executions ON executions.space_id=chats.id
+                     WHERE chats.workspace_id=?1",
                     [id],
                 )
             })
             .await
-    }
-
-    /// Whether Shoal saved the session of a stopped chat in the worktree of
-    /// the workspace `id`.
-    pub(crate) async fn chat_saved_in(&self, id: &SpaceId) -> Result<bool> {
-        let id = id.to_owned();
-        self.store
-            .run(move |db| {
-                store::exists(
-                    db,
-                    "SELECT 1 FROM chats WHERE workspace_id=?1 AND restore IS NOT NULL AND saved",
-                    [id],
-                )
-            })
-            .await
-    }
-
-    /// Whether the space `id` is a chat whose restore waits to run its
-    /// agent once the daemon starts agents again.
-    pub(crate) async fn restore_waits(&self, id: &SpaceId) -> Result<bool> {
-        let id = id.to_owned();
-        self.store
-            .run(move |db| {
-                store::exists(
-                    db,
-                    "SELECT 1 FROM chats WHERE id=?1 AND restore=?2",
-                    params![id, ChatRestore::Automatic],
-                )
-            })
-            .await
-    }
-
-    /// When the chat `id`'s agent stopped, while it is stopped.
-    pub(crate) async fn chat_stopped_at(
-        &self,
-        id: &SpaceId,
-    ) -> Result<Option<crate::time::UnixTime>> {
-        let id = id.to_owned();
-        self.store
-            .run(move |db| {
-                let stopped_at = db
-                    .query_row("SELECT stopped_at FROM chats WHERE id=?1", [id], |row| {
-                        row.get(0)
-                    })
-                    .optional()?;
-                Ok(stopped_at.flatten())
-            })
-            .await
-    }
-
-    /// Stop the running chats whose process has exited, other than those a
-    /// stop is under way for, which stop once it finishes.
-    pub(crate) async fn stop_finished_chats(&self) -> Result<()> {
-        let exited: Vec<_> = finished(self.store.run(|db| recorded_processes(db)).await?)
-            .into_iter()
-            // Read after the processes: a stop's hold begins before it
-            // signals the agent.
-            .filter(|(id, _)| !self.chat_stops.under_way(id))
-            .collect();
-        if exited.is_empty() {
-            return Ok(());
-        }
-        let released = self.store.write(move |tx| stop(tx, &exited)).await?;
-        self.ask_user_about(&released).await;
-        Ok(())
     }
 
     /// The settings of `chat`: its repository's, or the global config's
@@ -647,18 +467,15 @@ impl Manager {
     }
 }
 
-/// What a process records to start a chat as itself: the chat's name,
-/// agent and mode, where it runs in a terminal host, whether it `hands_over` to a
-/// session it starts, and the space it goes below.
+/// What a process records to start a chat: the chat's name, agent and
+/// mode, where it runs in a terminal host, and the space it goes below.
 pub struct NewChat {
     pub name: SpaceName,
     pub agent: crate::agent::Agent,
     pub mode: crate::config::modes::ModeName,
     /// The permissions `--permission` gives its agent, whatever its mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
-    pub pid: u32,
     pub origin: Option<crate::sessions::Origin>,
-    pub hands_over: bool,
     pub parent: Option<SpaceId>,
     pub priority: Option<crate::client::priority::Priority>,
 }
@@ -672,10 +489,6 @@ fn workspace_ref(workspace: &Workspace) -> WorkspaceRef {
     }
 }
 
-/// Insert `chat` unless its name is taken, or the repository or the
-/// workspace it runs in is being removed, starting until it is moved when
-/// it `hands_over`, below the space `parent` when given, which must take it
-/// and, as `removing` shows, not be a chat being removed.
 /// Where a new chat keeps its temporary directory, and the registry gate a
 /// chat without a repository is recorded under.
 struct ChatHome<'a> {
@@ -684,33 +497,30 @@ struct ChatHome<'a> {
     _registry: Option<tokio::sync::MutexGuard<'a, ()>>,
 }
 
+/// Insert `chat` unless the repository or the workspace it runs in is being
+/// removed, below the space `parent` when given, which must take it and, as
+/// `removing` shows, not be a chat being removed.
 fn insert(
     tx: &rusqlite::Transaction<'_>,
     mut chat: Chat,
-    process: &Identity,
-    hands_over: bool,
     parent: Option<(SpaceId, Removing)>,
 ) -> Result<Chat> {
     let workspace = chat.workspace.as_ref().map(|workspace| &workspace.id);
     ensure_place_free(tx, chat.repository_id.as_ref(), workspace)?;
     tx.execute(
-        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,starting,
-            unique_id,scope_token,workspace_id,mode,root_dir,narrowing)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+        "INSERT INTO chats(id,repository_id,name,agent,started_at,origin,scope_token,
+            workspace_id,mode,root_dir,narrowing)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
         params![
             chat.id,
             chat.repository_id,
             chat.name,
             chat.agent,
-            chat.pid,
-            process.birth,
             chat.started_at,
             chat.origin
                 .as_ref()
                 .map(serde_json::to_string)
                 .transpose()?,
-            hands_over,
-            unique_id(process)?,
             crate::daemon::scope::new_token(),
             workspace,
             chat.mode,
@@ -740,17 +550,6 @@ pub(crate) fn scope_token(db: &Connection, id: &SpaceId) -> Result<Option<ScopeT
         })
         .optional()?
         .flatten())
-}
-
-/// The never-reused ID of `process` as JSON, where the platform reports one,
-/// which finds what the chat's agent started once it ended, as after it
-/// exits.
-pub(crate) fn unique_id(process: &Identity) -> Result<Option<String>> {
-    Ok(process
-        .unique
-        .as_ref()
-        .map(serde_json::to_string)
-        .transpose()?)
 }
 
 /// Refuse a chat in the repository `repository_id` while it is being
@@ -799,7 +598,7 @@ fn rename(
     let old = recorded(tx, owner)?
         .into_iter()
         .find(|running| running.id == *chat)
-        .with_context(|| format!("no running chat {chat}"))?;
+        .with_context(|| format!("no chat {chat}"))?;
     if old.name != *name {
         tx.execute(
             "UPDATE chats SET name=?2 WHERE id=?1",
@@ -813,29 +612,15 @@ fn rename(
     Ok((old, renamed))
 }
 
-/// Make `process` the one the running chat `chat` runs as. A stopped
-/// chat's agent was stopped, so a session started for it is refused, which
-/// its launcher then stops.
-fn move_to(db: &mut Connection, owner: &Path, chat: &SpaceId, process: &Identity) -> Result<Chat> {
-    let moved = db.execute(
-        "UPDATE chats SET pid=?2,birth=?3,unique_id=?4,starting=0 WHERE id=?1 AND restore IS NULL",
-        params![chat, process.pid, process.birth, unique_id(process)?],
-    )?;
-    anyhow::ensure!(moved == 1, "no running chat {chat}");
-    recorded(db, owner)?
-        .into_iter()
-        .find(|running| running.id == *chat)
-        .context("the chat ended")
-}
-
 /// The running and stopped chats in start order, a chat without a
 /// repository with its temporary directory in the `root_dir` it started in,
 /// marked as `owner`'s, the daemon's state directory.
 fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
     db.prepare(
-        "SELECT chats.id,chats.repository_id,chats.name,chats.agent,chats.pid,
+        "SELECT chats.id,chats.repository_id,chats.name,chats.agent,
+                    EXISTS (SELECT 1 FROM executions e WHERE e.space_id=chats.id) AS running,
                     chats.started_at,chats.origin,repositories.workspaces_dir,chats.session,
-                    chats.restore,space_completion.record AS completion,
+                    space_completion.record AS completion,
                     workspaces.id,workspaces.name,workspaces.branch,chats.number,chats.mode,
                     chats.root_dir,chats.narrowing,chats.converted
              FROM chats LEFT JOIN repositories ON repositories.id=chats.repository_id
@@ -847,7 +632,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
         let id: SpaceId = row.get(0)?;
         let repository_id: Option<RepositoryId> = row.get(1)?;
         let root_dir = row
-            .get::<_, Option<String>>(16)?
+            .get::<_, Option<String>>(15)?
             .map(std::path::PathBuf::from);
         let tmp_dir = match (&repository_id, row.get::<_, Option<String>>(7)?) {
             (Some(repository_id), Some(directory)) => {
@@ -859,27 +644,26 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
         };
         Ok(Chat {
             id,
-            number: row.get(14)?,
+            number: row.get(13)?,
             repository_id,
             name: row.get(2)?,
             agent: row.get(3)?,
-            mode: row.get(15)?,
+            mode: row.get(14)?,
             narrowing: store::json_column(row, "narrowing")?.unwrap_or_default(),
-            workspace: match row.get::<_, Option<SpaceId>>(11)? {
+            workspace: match row.get::<_, Option<SpaceId>>(10)? {
                 Some(id) => Some(WorkspaceRef {
                     id,
-                    name: row.get(12)?,
-                    branch: row.get(13)?,
+                    name: row.get(11)?,
+                    branch: row.get(12)?,
                 }),
                 None => None,
             },
-            pid: row.get(4)?,
             started_at: row.get(5)?,
             origin: store::json_column(row, "origin")?,
             tmp_dir,
             root_dir,
             session: row.get(8)?,
-            restore: row.get(9)?,
+            running: row.get("running")?,
             links: SpaceLinks::default(),
             review: Vec::new(),
             // An unreadable record fails the cleanup that reads it, for that
@@ -891,7 +675,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
             sleep: None,
             parent: None,
             children: Vec::new(),
-            converted: row.get(18)?,
+            converted: row.get(17)?,
         })
     })?
     .collect::<rusqlite::Result<Vec<Chat>>>()?
@@ -909,103 +693,23 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
     .collect()
 }
 
-/// The process the chat `id` runs as, unless it is stopped.
-fn recorded_process(db: &mut Connection, id: &SpaceId) -> Result<Option<Identity>> {
-    Ok(db
-        .query_row(
-            "SELECT pid,birth FROM chats WHERE id=?1 AND restore IS NULL",
-            [id],
-            |row| {
-                Ok(Identity {
-                    pid: row.get(0)?,
-                    birth: row.get(1)?,
-                    unique: None,
-                })
-            },
-        )
-        .optional()?)
-}
-
-/// The process each running chat runs as.
-fn recorded_processes(db: &Connection) -> Result<Vec<(SpaceId, Identity)>> {
-    Ok(db
-        .prepare("SELECT id,pid,birth FROM chats WHERE restore IS NULL")?
-        .query_map([], |row| {
-            Ok((
-                row.get(0)?,
-                Identity {
-                    pid: row.get(1)?,
-                    birth: row.get(2)?,
-                    unique: None,
-                },
-            ))
-        })?
-        .collect::<rusqlite::Result<_>>()?)
-}
-
-/// The chats whose process no longer has its recorded identity. A process
-/// that cannot be read keeps its chat.
-fn finished(recorded: Vec<(SpaceId, Identity)>) -> Vec<(SpaceId, Identity)> {
-    recorded
-        .into_iter()
-        .filter(|(id, process)| match identity::capture(process.pid) {
-            Ok(current) => current.as_ref() != Some(process),
-            Err(error) => {
-                log!("chat {id}: {error:#}");
-                false
-            }
-        })
-        .collect()
-}
-
-/// Record the chats still running as the processes `exited` found ended
-/// stopped, to wait for `shoal resume`, returning the requests they decided,
-/// given back to the user, since a stopped chat decides none.
-fn stop(
-    tx: &rusqlite::Transaction<'_>,
-    exited: &[(SpaceId, Identity)],
-) -> Result<Vec<ApprovalRequest>> {
-    let mut released = Vec::new();
-    for (id, process) in exited {
-        let stopped = tx.execute(
-            "UPDATE chats SET restore=?4,starting=0,stopped_at=unixepoch(),saved=0,stopped_by=NULL
-             WHERE id=?1 AND pid=?2 AND birth=?3 AND restore IS NULL",
-            params![id, process.pid, process.birth, ChatRestore::Resume],
-        )?;
-        if stopped == 1 {
-            released.extend(release_decided_by(tx, id)?);
-        }
-    }
-    Ok(released)
-}
-
-/// Delete the record of the chat `id`, just started as `process`, which
-/// never ran.
-fn forget_unstarted(db: &mut Connection, id: &SpaceId, process: &Identity) -> Result<()> {
+/// Delete the record of the chat `id`, just started, which never ran.
+fn forget_unstarted(db: &mut Connection, id: &SpaceId) -> Result<()> {
     db.execute(
-        "DELETE FROM chats WHERE id=?1 AND pid=?2 AND birth=?3 AND restore IS NULL",
-        params![id, process.pid, process.birth],
+        "DELETE FROM chats WHERE id=?1 AND NOT EXISTS
+            (SELECT 1 FROM executions WHERE space_id=?1)",
+        [id],
     )?;
     Ok(())
 }
 
-mod agents;
-mod blocked;
 mod done;
 mod files;
 pub(crate) mod launches;
-mod processes;
 mod removal;
 mod removing;
-mod restart;
-pub(crate) mod restores;
-mod saved;
-mod stopped;
-mod stopping;
 
-pub(crate) use agents::{ChatAgents, listed_execution};
 pub(crate) use removing::{Removing, Reservation};
-pub(crate) use stopping::Stopping;
 
 #[cfg(test)]
 mod tests;

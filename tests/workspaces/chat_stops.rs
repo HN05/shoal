@@ -14,7 +14,6 @@ fn the_user_stops_a_chat_and_resumes_it() {
     run_chat_until_stopped(&fixture, "talk", None, || {
         let stopped = fixture.ok(&["stop", &fixture.id("talk")]);
         assert_eq!(stopped["stopped"], true, "{stopped}");
-        assert_eq!(stopped["already_stopped"], Value::Null, "{stopped}");
     });
     assert!(!chat_runs(&fixture, "talk"));
 
@@ -40,6 +39,8 @@ fn a_workspaces_agent_stops_and_resumes_a_chat_below() {
 fn a_chats_agent_stops_and_resumes_a_chat_below() {
     let fixture = parent_fixture();
     let (mut agent, id) = start_test_chat(&fixture, "planning");
+    let started = fixture.root.path().join("chat-started");
+    wait_until("the parent chat started", || started.exists());
     let parent = Parent::chat(&fixture, "planning", id);
     stops_and_resumes_the_chats_below(&fixture, &parent);
     agent.kill().unwrap();
@@ -133,8 +134,7 @@ fn stops_and_resumes_the_chats_below(fixture: &Fixture, parent: &Parent) {
     wait_until("the parent's restore", || restored.exists());
 
     fixture.ok(&["stop", &talk]);
-    let stopped = parent.ok(fixture, &["stop", &talk]);
-    assert_eq!(stopped["already_stopped"], true, "{stopped}");
+    parent.ok(fixture, &["stop", &talk]);
     let output = parent.run(fixture, &["resume", &talk]);
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("ask the user"), "{output:?}");
@@ -174,41 +174,32 @@ fn run_chat_until_stopped(
 fn chat_runs(fixture: &Fixture, name: &str) -> bool {
     let chats = fixture.ok(&["list", "--chats"]);
     let chat = (chats.as_array().unwrap().iter()).find(|chat| chat["name"] == name);
-    chat.unwrap_or_else(|| panic!("no chat {name}: {chats}"))["restore"] == Value::Null
+    chat.unwrap_or_else(|| panic!("no chat {name}: {chats}"))["running"] == true
 }
 
-/// A chat whose agent is a `sleep`, which a thread reaps once a stop ends
-/// it, so the daemon sees it gone; the chat's agent ends with the test.
-struct SleepingChat {
-    pid: u32,
-}
+/// A chat whose agent runs until a stop ends it or the test does.
+struct SleepingChat(std::process::Child);
 
 impl SleepingChat {
-    /// Start the chat `name`, placed below the spaces `placement`'s
-    /// `parent` and `workspace` name.
+    /// Start the chat `name`, placed below the space `placement`'s `parent`
+    /// names, or in the worktree of the one its `workspace` names.
     fn start(fixture: &Fixture, name: &str, placement: Value) -> Self {
-        let repository = fixture.ok(&["repo", "ls"])[0].clone();
-        let mut agent = support::isolated(fixture.root.path(), "sleep")
-            .arg("600")
-            .current_dir(fixture.root.path())
-            .spawn()
-            .unwrap();
-        let pid = agent.id();
-        std::thread::spawn(move || agent.wait());
-        let mut request = serde_json::json!({
-            "repository": repository["id"], "name": name, "agent": "claude", "pid": pid
-        });
-        let placement = (placement.as_object().unwrap().iter())
-            .map(|(key, space)| (key.clone(), fixture.id(space.as_str().unwrap()).into()));
-        request.as_object_mut().unwrap().extend(placement);
-        let response = fixture.request(serde_json::json!({"start_chat": request}));
-        assert_eq!(response["type"], "chat", "{response}");
-        Self { pid }
+        let mut args = Vec::new();
+        for (key, space) in placement.as_object().unwrap() {
+            let flag = match key.as_str() {
+                "parent" => "--parent",
+                _ => "--in",
+            };
+            args.extend([flag.to_owned(), fixture.id(space.as_str().unwrap())]);
+        }
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        Self(fixture.run_chat(name, &args).0)
     }
 }
 
 impl Drop for SleepingChat {
     fn drop(&mut self) {
-        let _ = Command::new("kill").arg(self.pid.to_string()).status();
+        let _ = self.0.kill();
+        let _ = self.0.wait();
     }
 }

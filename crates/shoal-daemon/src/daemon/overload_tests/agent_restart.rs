@@ -197,7 +197,7 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
         panic!("expected the restarted agent: {agents:?}");
     };
     assert_ne!(agent.execution, execution);
-    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
+    bounded(manager.stop_space(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(renewed).await.unwrap().unwrap();
@@ -295,7 +295,7 @@ async fn a_restart_in_a_new_wrapper_is_joined_by_the_execution_the_agent_ran_as(
     bounded(manager.join_restart(&execution, first, Some("third".into())))
         .await
         .unwrap();
-    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
+    bounded(manager.stop_space(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(renewed).await.unwrap().unwrap();
@@ -341,7 +341,7 @@ async fn a_restart_in_a_new_wrapper_keeps_a_done_workspaces_completion() {
     bounded(restarted).await.unwrap().unwrap();
     wait_start_handled(&manager, &workspace).await;
     assert!(manager.completion(&workspace.id).await.unwrap().is_some());
-    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
+    bounded(manager.stop_space(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(renewed).await.unwrap().unwrap();

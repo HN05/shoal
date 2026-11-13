@@ -9,7 +9,6 @@ use crate::{
         workspace::Manager,
     },
     model::{HoldPlacer, Repository},
-    state::ChatRestore,
 };
 use shoal_refs::BranchName;
 
@@ -91,8 +90,7 @@ async fn a_workspace_without_a_running_agent_has_none_to_carry_on() {
 async fn a_chat_is_a_chat_already() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
-    let (talk, _talk) =
-        crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
+    let talk = crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
 
     let refused = refusal(&manager, &talk.id).await;
 
@@ -121,13 +119,6 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
     (manager.set_progress(&SpaceSelector::id(&workspace.id), status))
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let identity = crate::process::identity::capture(process.id())
-        .unwrap()
-        .unwrap();
-    process.kill();
     let execution = ExecutionId::generate();
     let carried_on = crate::execution::recovery::LastSession {
         execution: execution.clone(),
@@ -149,7 +140,6 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
         execution,
         session: Some("s1".into()),
         origin: None,
-        process: identity,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
         stopped_by: None,
@@ -172,7 +162,7 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
         (converted.number, &converted.name),
         (workspace.number, &workspace.name)
     );
-    assert_eq!(converted.restore, Some(ChatRestore::Resume));
+    assert!(!converted.running);
     assert!(converted.converted);
     assert_eq!(
         converted.session.map(|session| session.to_string()),
@@ -205,19 +195,11 @@ async fn a_converted_workspace_restores_beside_the_chat_it_became() {
         .await
         .unwrap();
     std::fs::write(workspace.path.join("notes.txt"), "unsaved").unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let identity = crate::process::identity::capture(process.id())
-        .unwrap()
-        .unwrap();
-    process.kill();
     let chat = ConvertedChat {
         agent: "claude".into(),
         execution: ExecutionId::generate(),
         session: None,
         origin: None,
-        process: identity,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
         stopped_by: None,
@@ -250,19 +232,11 @@ async fn a_conversion_of_a_workspace_whose_agent_stopped_is_not_recorded() {
         .create_workspace(&repo.id, "fix-login".into(), None, None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let identity = crate::process::identity::capture(process.id())
-        .unwrap()
-        .unwrap();
-    process.kill();
     let chat = ConvertedChat {
         agent: "claude".into(),
         execution: ExecutionId::generate(),
         session: None,
         origin: None,
-        process: identity,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
         stopped_by: None,
@@ -293,19 +267,11 @@ async fn a_workspace_built_on_after_the_command_keeps_its_worktree() {
         .create_workspace(&repo.id, "stacked".into(), None, None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let identity = crate::process::identity::capture(process.id())
-        .unwrap()
-        .unwrap();
-    process.kill();
     let chat = ConvertedChat {
         agent: "claude".into(),
         execution: ExecutionId::generate(),
         session: None,
         origin: None,
-        process: identity,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
         stopped_by: None,
@@ -341,19 +307,11 @@ async fn nothing_builds_on_a_workspace_that_becomes_a_chat() {
         .create_workspace(&repo.id, "stacked".into(), None, None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let identity = crate::process::identity::capture(process.id())
-        .unwrap()
-        .unwrap();
-    process.kill();
     let chat = ConvertedChat {
         agent: "claude".into(),
         execution: ExecutionId::generate(),
         session: None,
         origin: None,
-        process: identity,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
         stopped_by: None,

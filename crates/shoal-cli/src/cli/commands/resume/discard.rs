@@ -1,8 +1,8 @@
 //! `shoal resume --discard`: forgetting stopped agents, commands and last
-//! sessions instead of restoring them, and removing stopped chats.
+//! sessions instead of restoring them.
 use anyhow::Result;
 
-use super::{chats, reports};
+use super::reports;
 use crate::client::assignments;
 use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::DiscardedWork;
@@ -10,70 +10,60 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, ui},
     execution::recovery::Saved,
-    model::{Chat, Workspace},
+    model::PresentSpace,
 };
 
-/// Forget the workspace's stopped work and last sessions, only
-/// `execution`'s when given.
+/// Forget the space's stopped work and last sessions, only `execution`'s
+/// when given.
 pub(super) async fn discard_work(
     ctx: &Context,
-    workspace: SpaceSelector,
+    space: SpaceSelector,
     execution: Option<ExecutionId>,
 ) -> Result<i32> {
-    let discarded = assignments::discard_stopped_work(&ctx.paths, workspace, execution).await?;
+    let discarded = assignments::discard_stopped_work(&ctx.paths, space, execution).await?;
     let forgotten = DiscardedWork {
         discarded: discarded.executions,
-        chats: Vec::new(),
         failed: Vec::new(),
     };
     reports::discarded(ctx, &forgotten, &[discarded.space.as_str()])?;
     Ok(0)
 }
 
-/// Remove the stopped `chats` and forget every workspace's stopped agents and
-/// commands, going on after one fails.
-pub(super) async fn discard_each(
-    ctx: &Context,
-    stopped: &[(Workspace, Saved)],
-    chats: &[Chat],
-) -> Result<i32> {
-    let (chats, mut failed) = chats::discard_each(ctx, chats).await;
+/// Forget every space's stopped agents and commands, going on after one
+/// fails.
+pub(super) async fn discard_each(ctx: &Context, stopped: &[(PresentSpace, Saved)]) -> Result<i32> {
+    let mut failed = Vec::new();
     let mut ids = Vec::new();
     let mut names = Vec::new();
-    for (workspace, saved) in stopped {
-        match discard_saved(ctx, workspace, saved).await {
+    for (space, saved) in stopped {
+        match discard_saved(ctx, space, saved).await {
             Ok(executions) => {
                 ids.extend(executions);
-                names.push(workspace.name.as_str());
+                names.push(space.name().as_str());
             }
-            Err(error) => failed.push(ui::failure(ctx, "discard", &workspace.name, &error)),
+            Err(error) => failed.push(ui::failure(ctx, "discard", space.name(), &error)),
         }
     }
     let discarded = DiscardedWork {
         discarded: ids,
-        chats,
         failed,
     };
     reports::discarded(ctx, &discarded, &names)?;
     Ok(if discarded.failed.is_empty() { 0 } else { 1 })
 }
 
-/// Forget `workspace`'s stopped records each by itself, leaving agents a
+/// Forget the stopped records of `space` each by itself, leaving agents a
 /// wrapper waits to restore, and return the executions forgotten.
 async fn discard_saved(
     ctx: &Context,
-    workspace: &Workspace,
+    space: &PresentSpace,
     saved: &Saved,
 ) -> Result<Vec<ExecutionId>> {
     let mut ids = Vec::new();
     for execution in saved.execution_ids() {
-        let workspace = workspace.id.clone();
-        let discarded = assignments::discard_stopped_work(
-            &ctx.paths,
-            SpaceSelector::id(&workspace),
-            Some(execution),
-        )
-        .await?;
+        let selector = SpaceSelector::id(space.id());
+        let discarded =
+            assignments::discard_stopped_work(&ctx.paths, selector, Some(execution)).await?;
         ids.extend(discarded.executions);
     }
     Ok(ids)

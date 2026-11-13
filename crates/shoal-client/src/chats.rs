@@ -41,15 +41,13 @@ pub struct NewChat<'a> {
     pub priority: Option<crate::priority::Priority>,
 }
 
-/// Record the `chat` whose agent replaces this process at `home`, running
-/// at `origin` in a terminal host when it runs in one, or when `hands_over`
-/// runs in a session this process starts and [`move_to`] names.
+/// Record the `chat` at `home`, running at `origin` in a terminal host when
+/// it runs in one, whose agent the execution wrapper then runs.
 pub async fn start(
     daemon: &impl Daemon,
     home: ChatHome<'_>,
     chat: NewChat<'_>,
     origin: Option<Origin>,
-    hands_over: bool,
 ) -> Result<Chat> {
     request(
         daemon,
@@ -62,9 +60,7 @@ pub async fn start(
             agent: chat.agent.to_owned(),
             mode: Some(chat.mode.to_owned()),
             narrowing: chat.narrowing,
-            pid: std::process::id(),
             origin,
-            hands_over,
             parent: chat.parent.cloned(),
             priority: chat.priority,
         },
@@ -88,13 +84,6 @@ pub async fn check_parent(
     request::<()>(daemon, method).await
 }
 
-/// Refuse the restore of the stopped chat `chat`, by ID, that the daemon
-/// would refuse this process, before anything opens a place for it.
-pub async fn check_restore(daemon: &impl Daemon, chat: &SpaceId) -> Result<()> {
-    let chat = SpaceSelector::id(chat);
-    request::<()>(daemon, ChatMethod::CheckChatRestore { chat }).await
-}
-
 /// `root_dir`, where a chat without a repository runs, prepared as
 /// registering a repository prepares it.
 pub async fn root(daemon: &impl Daemon) -> Result<std::path::PathBuf> {
@@ -109,18 +98,6 @@ pub async fn scope(daemon: &impl Daemon, chat: &Chat) -> Result<ScopeToken> {
     Ok(scope.token)
 }
 
-/// Hand `chat` to process `pid`, whose agent now runs it.
-pub async fn move_to(daemon: &impl Daemon, chat: &Chat, pid: u32) -> Result<Chat> {
-    request(
-        daemon,
-        ChatMethod::MoveChat {
-            chat: SpaceSelector::id(&chat.id),
-            pid,
-        },
-    )
-    .await
-}
-
 /// Rename `chat` to `name`.
 pub async fn rename(
     daemon: &impl Daemon,
@@ -130,85 +107,16 @@ pub async fn rename(
     request(daemon, ChatMethod::RenameChat { chat, name }).await
 }
 
-/// Running chats; listing them ends those whose agent exited.
+/// Running chats.
 pub async fn list(daemon: &impl Daemon) -> Result<Vec<Chat>> {
     let mut chats = recorded(daemon).await?;
-    chats.retain(|chat| chat.restore.is_none());
+    chats.retain(|chat| chat.running);
     Ok(chats)
 }
 
 /// Running and stopped chats.
 pub async fn recorded(daemon: &impl Daemon) -> Result<Vec<Chat>> {
     request(daemon, ChatMethod::ListChats).await
-}
-
-/// [`start`], or for a start that `restores` a stopped chat, by ID,
-/// [`restore`], which keeps the chat's own name, agent and mode.
-pub async fn record(
-    daemon: &impl Daemon,
-    home: ChatHome<'_>,
-    chat: NewChat<'_>,
-    origin: Option<Origin>,
-    hands_over: bool,
-    restores: Option<&SpaceId>,
-) -> Result<Chat> {
-    match restores {
-        Some(restored) => restore(daemon, restored, chat.narrowing, origin, hands_over).await,
-        None => start(daemon, home, chat, origin, hands_over).await,
-    }
-}
-
-/// Run the stopped chat `chat`, by ID, again in this process under
-/// `narrowing`, which replaces the one it recorded, as [`start`] records a
-/// new chat.
-pub async fn restore(
-    daemon: &impl Daemon,
-    chat: &SpaceId,
-    narrowing: crate::config::permissions::PermissionsConfig,
-    origin: Option<Origin>,
-    hands_over: bool,
-) -> Result<Chat> {
-    request(
-        daemon,
-        ChatMethod::RestoreChat {
-            chat: SpaceSelector::id(chat),
-            pid: std::process::id(),
-            narrowing,
-            origin,
-            hands_over,
-        },
-    )
-    .await
-}
-
-/// Report that this process could not restore the stopped chat `chat`, which
-/// waits for `shoal resume` again if this process had taken it over.
-pub async fn save(daemon: &impl Daemon, chat: &SpaceId, error: &anyhow::Error) -> Result<()> {
-    request::<()>(
-        daemon,
-        ChatMethod::SaveChat {
-            chat: SpaceSelector::id(chat),
-            pid: std::process::id(),
-            error: format!("{error:#}"),
-        },
-    )
-    .await
-}
-
-/// `ran`, a start in this process, after reporting its failure when it
-/// `restores` a stopped chat: the chat waits for `shoal resume` again, if this
-/// process had taken it over, and the user learns why.
-pub async fn keep_failed_restore<T>(
-    daemon: &impl Daemon,
-    restores: Option<&SpaceId>,
-    ran: Result<T>,
-) -> Result<T> {
-    if let (Err(failure), Some(chat)) = (&ran, restores)
-        && let Err(error) = save(daemon, chat, failure).await
-    {
-        eprintln!("warning: the chat could not wait for shoal resume again: {error:#}");
-    }
-    ran
 }
 
 /// Remove the chat `chat`, by ID or name, stopping its agent: first the

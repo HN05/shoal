@@ -120,7 +120,7 @@ impl Manager {
         self.ensure_own_space(&chat.id, &chat.name, caller)?;
         self.ensure_not_converting(&chat.id, &chat.name).await?;
         ensure!(
-            chat.restore.is_none(),
+            chat.running,
             "chat {} is stopped; resume it before converting it",
             chat.name
         );

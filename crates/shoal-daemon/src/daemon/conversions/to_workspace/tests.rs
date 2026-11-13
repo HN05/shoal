@@ -59,8 +59,8 @@ async fn a_workspace_is_a_workspace_already() {
 async fn an_agent_converts_only_its_own_chat() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
-    let (lead, _lead) = chat(&manager, "lead", "chat", Some(&repo), None).await;
-    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), Some(&lead.id)).await;
+    let lead = chat(&manager, "lead", "chat", Some(&repo), None).await;
+    let talk = chat(&manager, "talk", "worker", Some(&repo), Some(&lead.id)).await;
     let caller = Caller {
         space_id: lead.id.clone(),
         execution: None,
@@ -80,17 +80,12 @@ async fn a_chat_in_a_workspaces_worktree_stays_a_chat() {
         .create_workspace(&repo.id, "worker".into(), None, None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let inside = manager
         .start_chat_in_workspace(
             &SpaceSelector::id(&workspace.id),
             "inside".into(),
             "claude".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -104,9 +99,8 @@ async fn a_chat_in_a_workspaces_worktree_stays_a_chat() {
 async fn a_stopped_chat_is_resumed_before_it_converts() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
-    let (talk, process) = chat(&manager, "talk", "worker", Some(&repo), None).await;
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
+    let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    manager.end_executions(&talk.id).await;
 
     let refused = refusal(&manager, SpaceSelector::id(&talk.id), None).await;
 
@@ -117,7 +111,7 @@ async fn a_stopped_chat_is_resumed_before_it_converts() {
 async fn a_mode_no_config_defines_is_refused_before_anything_changes() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
-    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
     let conversion = WorkspaceConversion {
         mode: "missing".into(),
         ..conversion()

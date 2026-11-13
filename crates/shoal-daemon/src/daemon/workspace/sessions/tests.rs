@@ -672,9 +672,7 @@ async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> 
             workspace.repository_id.clone().into(),
             "chat".into(),
             "claude".into(),
-            std::process::id(),
             Some(chat_place),
-            false,
         )
         .await?;
     manager.close_owned_places(Some(workspace.id.clone())).await;
@@ -837,7 +835,7 @@ async fn a_session_its_host_labels_closes_through_the_host_without_a_record() ->
 /// Start the chat `name` of `workspace`'s repository running in `place`,
 /// with a sleep standing in for its agent.
 async fn chat_in(
-    manager: &Manager,
+    manager: &std::sync::Arc<Manager>,
     workspace: &Workspace,
     name: &str,
     place: Origin,
@@ -849,9 +847,7 @@ async fn chat_in(
             workspace.repository_id.clone().into(),
             name.into(),
             "claude".into(),
-            process.id(),
             Some(place),
-            false,
         )
         .await?;
     Ok((chat, process))

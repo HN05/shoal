@@ -30,7 +30,7 @@ pub(super) async fn run(
     if scoped {
         selection::ensure_below(&selection)?;
     }
-    let plan = selection.plan(agent.as_ref(), options.in_place);
+    let plan = selection.plan(agent.as_ref());
     if plan.restarts.is_empty() && plan.skipped.is_empty() {
         let message = match &agent {
             Some(agent) => format!("No running {agent} agents"),

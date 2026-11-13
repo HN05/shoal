@@ -63,7 +63,7 @@ fn a_question_notes_its_recommendation_and_files() {
 fn a_chat_in_a_workspace_names_the_workspace() {
     let chat: crate::model::Chat = serde_json::from_value(serde_json::json!({
         "id": "c", "repository_id": "r1", "name": "worker-chat", "agent": "claude",
-        "pid": 1, "started_at": 0,
+        "running": true, "started_at": 0,
         "workspace": {"id": "w", "name": "worker", "branch": "worker"},
     }))
     .unwrap();
@@ -82,7 +82,7 @@ fn a_chat_in_a_workspace_names_the_workspace() {
 fn a_chat_item_shows_its_mode_in_its_own_column() {
     let chat: crate::model::Chat = serde_json::from_value(serde_json::json!({
         "id": "c", "repository_id": "r1", "name": "repo-plan-7", "agent": "claude",
-        "mode": "plan", "pid": 1, "started_at": 0,
+        "mode": "plan", "running": true, "started_at": 0,
     }))
     .unwrap();
     let inbox = Inbox {
@@ -96,18 +96,18 @@ fn a_chat_item_shows_its_mode_in_its_own_column() {
 
 #[test]
 fn a_running_chat_whose_agent_needs_input_is_listed() {
-    let chat = |id: &str, state: &str, restore: Option<&str>| -> crate::model::Chat {
+    let chat = |id: &str, state: &str, running: bool| -> crate::model::Chat {
         serde_json::from_value(serde_json::json!({
             "id": id, "repository_id": "r1", "name": id, "agent": "claude",
-            "pid": 1, "started_at": 0, "restore": restore,
+            "running": running, "started_at": 0,
             "agent_state": {"state": state, "since": 0},
         }))
         .unwrap()
     };
     let chats = [
-        chat("asking", "waiting", None),
-        chat("working", "working", None),
-        chat("stopped", "waiting", Some("resume")),
+        chat("asking", "waiting", true),
+        chat("working", "working", true),
+        chat("stopped", "waiting", false),
     ];
     let listed: Vec<String> = super::chat_items(&chats)
         .into_iter()

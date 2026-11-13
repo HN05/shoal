@@ -507,9 +507,7 @@ async fn a_chats_post_ready_hook_gets_the_configured_environment() {
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();

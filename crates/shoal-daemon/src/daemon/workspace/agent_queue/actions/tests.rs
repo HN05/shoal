@@ -62,7 +62,7 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
             .await
             .unwrap()
             .into_iter()
-            .map(|workspace| workspace.id)
+            .map(|space| space.id().clone())
             .collect::<Vec<_>>()
     };
     assert_eq!(
@@ -72,7 +72,7 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
     assert!(targets(QueuedLaunches::Keep).await.is_empty());
 
     let kept = manager
-        .stop_workspace_manually(
+        .stop_space_manually(
             &SpaceSelector::id(&child.id),
             false,
             None,
@@ -83,7 +83,7 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
     assert!(kept.cancelled.is_empty());
     assert_eq!(waiting(&manager).await, ["child", "later"]);
     let cancelled = manager
-        .stop_workspace_manually(
+        .stop_space_manually(
             &SpaceSelector::id(&child.id),
             false,
             None,

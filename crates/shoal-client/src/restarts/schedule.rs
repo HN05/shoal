@@ -7,13 +7,13 @@ use anyhow::Result;
 use futures_util::{StreamExt, stream::FuturesUnordered};
 use tokio::time::{Instant, sleep, sleep_until};
 
-use super::plan::{Restart, running_agents, space_skip_reason, stopped_reason};
+use super::plan::{Restart, running_agents, skip_reason, stopped_reason};
 use crate::{
     agents,
     config::permissions::PermissionChange,
     connection::Daemon,
     executions::STAGGER,
-    model::{PresentSpace, RunningAgent, Workspace},
+    model::{PresentSpace, RunningAgent},
     output::agents::Skipped,
     protocol::{ErrorCode, RemoteError},
     saved,
@@ -89,52 +89,32 @@ impl Restart {
         let run = Some(run.to_owned());
         let joins = self.joins.clone();
         let change = options.change.clone();
-        match &self.space {
-            PresentSpace::Chat(chat) => {
-                agents::restart_chat(daemon, &chat.id, joins, run, change).await
-            }
-            PresentSpace::Workspace(workspace) => {
-                self.restart_agent(daemon, workspace, run, options).await
-            }
-        }
-    }
-
-    /// [`Self::run`] for the agent of `workspace`, naming how to restore it
-    /// when its restart failed.
-    async fn restart_agent(
-        &self,
-        daemon: &impl Daemon,
-        workspace: &Workspace,
-        run: Option<String>,
-        options: &Options,
-    ) -> Result<Option<Origin>> {
-        let (execution, joins) = (self.agent.execution.clone(), self.joins.clone());
-        let (in_place, change) = (options.in_place, options.change.clone());
+        let execution = self.agent.execution.clone();
+        let in_place = options.in_place;
         match agents::restart(daemon, execution, joins, run, in_place, change).await {
             // A restart that waits still restores the agent itself, as a
             // wrapper waiting for its restore does.
             Err(error) if waits(&error).is_none() => {
-                Err(with_restore(daemon, workspace, error).await)
+                Err(with_restore(daemon, &self.space, error).await)
             }
             restarted => restarted,
         }
     }
 }
 
-/// `error`, of the failed restart of `workspace`'s agent, naming how to
-/// restore the agent when the workspace saved stopped work for that, as the
-/// daemon names it for a chat. The daemon's error stays its cause, which
-/// callers can inspect.
+/// `error`, of the failed restart of `space`'s agent, naming how to restore
+/// the agent when the space saved stopped work for that. The daemon's error
+/// stays its cause, which callers can inspect.
 async fn with_restore(
     daemon: &impl Daemon,
-    workspace: &Workspace,
+    space: &PresentSpace,
     error: anyhow::Error,
 ) -> anyhow::Error {
-    let saved = saved::read(daemon, SpaceSelector::id(&workspace.id)).await;
+    let saved = saved::read(daemon, SpaceSelector::id(space.id())).await;
     match saved.is_ok_and(|saved| saved.is_resumable()) {
         true => error.context(format!(
             "the agent stays stopped; restore it with shoal resume {}",
-            workspace.number
+            space.number()
         )),
         false => error,
     }
@@ -269,7 +249,7 @@ fn refresh(restarts: &mut Vec<Restart>, running: &[RunningAgent], run: &str) -> 
         };
         let restarted = restart.joins.is_none() && current.restarted_by.iter().any(|by| by == run);
         let reason = stopped_reason(&restart.space.number().to_string(), current)
-            .or_else(|| space_skip_reason(&restart.space, current));
+            .or_else(|| skip_reason(&restart.space, current));
         match reason {
             Some(reason) => ended.push(restart.skipped(reason)),
             None if restarted => {

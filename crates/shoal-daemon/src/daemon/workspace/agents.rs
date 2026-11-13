@@ -2,7 +2,7 @@
 //! not turn an unknown execution into an automatic signal target.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
-use crate::client::space_names::SpaceName;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::execution::recovery::LastSessionExt;
 use rusqlite::OptionalExtension;
 use std::{
@@ -36,7 +36,7 @@ mod interrupts;
 mod restart;
 mod stops;
 pub use restart::RestartWaits;
-pub(crate) use restart::{Outcome, Renewals, Restart, Restarts, forget_ended_renewals, restarted};
+pub(crate) use restart::{Renewals, forget_ended_renewals};
 pub(crate) use stops::recorded as stop_recorded;
 
 /// Operations on the client type [`Protection`] that only the `shoal` command uses.
@@ -235,6 +235,10 @@ impl Agent {
 }
 
 impl Manager {
+    /// Tell the user, or the coordinator, that the agent of `space` exited
+    /// with `exit_code`, `complete` when its processes are proven stopped,
+    /// or stopped for `overload`. An attended space's agent that exits
+    /// cleanly tells no one: the user saw it end.
     pub(crate) async fn notify_agent_exit(
         &self,
         space: &crate::model::PresentSpace,
@@ -243,6 +247,10 @@ impl Manager {
         complete: bool,
         overload: Option<(&ExecutionId, &str)>,
     ) {
+        let clean = overload.is_none() && complete && exit_code.is_some();
+        if clean && space.space_kind().attended() {
+            return;
+        }
         let message = if let Some((execution_id, reason)) = overload {
             let status = exit_code.map_or_else(
                 || "without an exit code".into(),
@@ -492,7 +500,7 @@ impl Manager {
 
     /// Whether the user attends the space `id`, as its kind says; a space
     /// that cannot be read counts as unattended.
-    async fn attended(&self, id: &SpaceId) -> bool {
+    pub(super) async fn attended(&self, id: &SpaceId) -> bool {
         let id = id.to_owned();
         let kind = self
             .store
@@ -504,7 +512,7 @@ impl Manager {
     /// Keep the name, model, effort, mode and narrowing of the agent
     /// execution `id` runs with its record, which outlives this daemon,
     /// unlike the tracked agent; the mode and narrowing become its
-    /// workspace's.
+    /// space's.
     async fn record_execution_agent(&self, id: &ExecutionId, agent: &TrackedAgent) {
         let (execution, agent) = (id.to_owned(), agent.clone());
         let recorded = self
@@ -523,11 +531,15 @@ impl Manager {
                         narrowing
                     ],
                 )?;
-                db.execute(
-                    "UPDATE workspaces SET mode=?2,narrowing=?3
-                     WHERE id=(SELECT space_id FROM executions WHERE id=?1)",
-                    rusqlite::params![execution, agent.mode, narrowing],
-                )?;
+                for table in ["workspaces", "chats"] {
+                    db.execute(
+                        &format!(
+                            "UPDATE {table} SET mode=?2,narrowing=?3
+                             WHERE id=(SELECT space_id FROM executions WHERE id=?1)"
+                        ),
+                        rusqlite::params![execution, agent.mode, narrowing],
+                    )?;
+                }
                 Ok(())
             })
             .await;
@@ -756,19 +768,21 @@ impl Manager {
         }
     }
 
-    /// Check that a stopped agent's workspace is ready and still the
-    /// recorded worktree, so a replaced one never receives the agent.
-    pub(crate) async fn verify_restore_workspace(
-        &self,
-        workspace_id: &SpaceId,
-    ) -> anyhow::Result<()> {
-        let workspace = self.workspace_by_id(workspace_id).await?;
-        self.verify_worktree(&workspace).await?;
-        anyhow::ensure!(
-            workspace.state == crate::state::WorkspaceState::Ready,
-            "workspace is no longer ready for agent recovery"
-        );
-        Ok(())
+    /// Check that the space `id` can take an agent's restore: a workspace
+    /// is ready and still the recorded worktree, so a replaced one never
+    /// receives the agent, and a chat's directory is there.
+    pub(crate) async fn verify_restore_space(&self, id: &SpaceId) -> anyhow::Result<()> {
+        match self.space(&SpaceSelector::id(id)).await? {
+            crate::model::PresentSpace::Workspace(workspace) => {
+                self.verify_worktree(&workspace).await?;
+                anyhow::ensure!(
+                    workspace.state == crate::state::WorkspaceState::Ready,
+                    "workspace is no longer ready for agent recovery"
+                );
+                Ok(())
+            }
+            crate::model::PresentSpace::Chat(chat) => self.chat_path(&chat).await.map(drop),
+        }
     }
 
     /// Check that an admitted restore's workspace is ready and verified. A
@@ -781,7 +795,7 @@ impl Manager {
         workspace_id: &SpaceId,
         grant: Grant,
     ) -> anyhow::Result<bool> {
-        self.verify_restore_workspace(workspace_id).await?;
+        self.verify_restore_space(workspace_id).await?;
         let current = match grant {
             Grant::Update | Grant::Queue => true,
             Grant::Recovery(epoch) => self.overload_recovery.epoch() == epoch,

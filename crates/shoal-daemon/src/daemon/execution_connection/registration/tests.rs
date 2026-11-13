@@ -95,16 +95,11 @@ async fn chat_fixture() -> (tempfile::TempDir, Arc<Manager>, crate::model::Chat)
         .await
         .unwrap();
     let chat = manager
-        .start_chat(
-            repo.id.into(),
-            "talk".into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
+    // Stopped, so the wrapper below registers its agent.
+    manager.end_executions(&chat.id).await;
     (root, manager, chat)
 }
 

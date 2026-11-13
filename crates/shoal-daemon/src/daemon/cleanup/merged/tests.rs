@@ -586,18 +586,8 @@ async fn merged_cleanup_removes_a_chat_stopped_for_its_idle_period() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    manager
-        .start_chat(
-            repo.id.into(),
-            "talk".into(),
-            "claude".into(),
-            process.id(),
-            None,
-            false,
-        )
+    let chat = manager
+        .start_chat(repo.id.into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     let mut state = State::default();
@@ -607,8 +597,7 @@ async fn merged_cleanup_removes_a_chat_stopped_for_its_idle_period() {
         .await
         .unwrap();
     assert_eq!(manager.chats().await.unwrap().len(), 1);
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
+    manager.end_executions(&chat.id).await;
     // Stopped just now, it is not idle yet.
     sweep_at(&manager, &mut state, now, &Default::default())
         .await

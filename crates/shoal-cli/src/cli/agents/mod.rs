@@ -8,7 +8,6 @@ mod launch;
 mod sessions;
 mod trust;
 
-use crate::client::space_ids::SpaceId;
 use std::{
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},
@@ -43,11 +42,6 @@ pub(in crate::cli) use trust::{cleanup_moved_trust, cleanup_repository_trust};
 pub(in crate::cli) fn chat_place(name: &Agent) -> Option<&'static str> {
     let app = added(name).and_then(|added| added.integration.detached());
     app.map(crate::agents::detached::App::place)
-}
-
-/// How updates reach the chat agent `name` launched under `settings`.
-pub(in crate::cli) fn chat_delivery(settings: &Effective, name: &Agent) -> templates::Delivery {
-    launch::chat_delivery(agent_integration(settings, name))
 }
 
 /// One launch of an agent in a ready workspace; settings are never cached
@@ -136,8 +130,6 @@ pub(in crate::cli) struct ChatLaunch {
     /// The model and effort it runs with.
     pub model: ModelChoice,
     pub args: Vec<OsString>,
-    /// The stopped chat, by ID, it restores instead of recording a new one.
-    pub restores: Option<SpaceId>,
     /// What the chat is linked to once recorded, such as the issue it plans.
     pub links: Vec<(Relation, LinkedItem)>,
 }

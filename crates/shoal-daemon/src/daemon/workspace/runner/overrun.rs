@@ -69,7 +69,7 @@ impl Manager {
             reason: "its CI job's run finished on the forge".into(),
             save: Save::Nothing,
         };
-        self.stop_workspace(&SpaceSelector::id(&job.workspace_id), request)
+        self.stop_space(&SpaceSelector::id(&job.workspace_id), request)
             .await
     }
 }

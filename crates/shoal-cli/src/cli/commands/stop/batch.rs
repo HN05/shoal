@@ -6,19 +6,19 @@ use crate::client::output::agents::{CancelledRun, StoppedSpaces};
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     cli::{context::Context, ui},
-    model::{PresentSpace, QueueEntry, StoppedChat, Workspace},
+    model::{PresentSpace, QueueEntry},
     protocol::QueuedLaunches,
 };
 
 use super::{
-    cancelled_run_message, chats, continue_hint, other_processes, other_processes_stop,
-    removed_launches,
+    cancelled_run_message, continue_hint, other_processes, other_processes_stop, removed_launches,
 };
 
-/// Stop every settled workspace with a running execution, an agent whose
-/// restore is queued or requested, or an agent launch waiting to start in
-/// it, which stopping cancels, and every running chat; the daemon selects
-/// them while no restore or launch can move between the queue and its agent.
+/// Stop every settled workspace and every chat with a running execution or
+/// an agent whose restore is queued or requested, and every workspace with
+/// an agent launch waiting to start in it, which stopping cancels; the
+/// daemon selects them while no restore or launch can move between the
+/// queue and its agent.
 pub(super) async fn stop_all(ctx: &Context) -> Result<i32> {
     let running = crate::client::stopping::targets(&ctx.paths).await?;
     if running.is_empty() {
@@ -66,11 +66,10 @@ pub(super) async fn stop_each(
                         workspace: name.clone(),
                         run,
                     }),
-                    Stop::Workspace { cancelled, .. } => {
+                    Stop::Space { cancelled, .. } => {
                         removed.extend(cancelled);
                         Outcome::Stopped(name.clone())
                     }
-                    Stop::Chat(_) => Outcome::Stopped(name.clone()),
                 };
                 report.done(ctx, &message, outcome);
             }
@@ -99,27 +98,13 @@ pub(super) async fn stop_each(
     })
 }
 
-/// Stop `space`, a workspace with its untracked processes or a chat.
+/// Stop the agents and commands of `space`, cancelling the launches
+/// waiting to start in it, then its untracked processes; a CI job's
+/// workspace has its run cancelled instead.
 async fn stop(ctx: &Context, space: &PresentSpace, acknowledge_unproven: bool) -> Result<Stop> {
-    match space {
-        PresentSpace::Workspace(workspace) => {
-            stop_workspace(ctx, workspace, acknowledge_unproven).await
-        }
-        PresentSpace::Chat(chat) => Ok(Stop::Chat(chats::stop(ctx, chat).await?)),
-    }
-}
-
-/// Stop `workspace`'s agents and commands, cancelling the launches waiting
-/// to start in it, then its untracked processes; a CI job's workspace has
-/// its run cancelled instead.
-async fn stop_workspace(
-    ctx: &Context,
-    workspace: &Workspace,
-    acknowledge_unproven: bool,
-) -> Result<Stop> {
-    let stopped = crate::client::stopping::stop_workspace(
+    let stopped = crate::client::stopping::stop_space(
         &ctx.paths,
-        SpaceSelector::id(&workspace.id),
+        SpaceSelector::id(space.id()),
         acknowledge_unproven,
         QueuedLaunches::Cancel,
         other_processes_stop(),
@@ -128,7 +113,7 @@ async fn stop_workspace(
     if let Some(run) = stopped.cancelled_run {
         return Ok(Stop::CancelledRun(run));
     }
-    Ok(Stop::Workspace {
+    Ok(Stop::Space {
         other_processes: stopped.other_processes,
         cancelled: stopped.cancelled,
         saved: stopped.saved,
@@ -137,24 +122,23 @@ async fn stop_workspace(
 
 /// What stopping one space did.
 enum Stop {
-    /// A workspace's agents and commands stopped, with how many untracked
+    /// A space's agents and commands stopped, with how many untracked
     /// processes, the launches the stop removed from the queue, and whether
     /// it saved work for `shoal resume`.
-    Workspace {
+    Space {
         other_processes: usize,
         cancelled: Vec<QueueEntry>,
         saved: bool,
     },
     /// A CI job's workspace, whose run the forge was asked to cancel.
     CancelledRun(String),
-    Chat(StoppedChat),
 }
 
 impl Stop {
     /// What the report says of the space `name` this stop stopped.
     fn message(&self, name: &SpaceName) -> String {
         match self {
-            Self::Workspace {
+            Self::Space {
                 other_processes: processes,
                 cancelled,
                 ..
@@ -169,18 +153,15 @@ impl Stop {
                 message
             }
             Self::CancelledRun(run) => cancelled_run_message(name, run),
-            Self::Chat(stopped) => chats::stopped_message(name, *stopped),
         }
     }
 
     /// Whether this stop saved work for `shoal resume`, which refuses to
-    /// resume a workspace without any; a chat stopped before is left to
-    /// whoever stopped it.
+    /// resume a space without any.
     fn saved(&self) -> bool {
         match self {
-            Self::Workspace { saved, .. } => *saved,
+            Self::Space { saved, .. } => *saved,
             Self::CancelledRun(_) => false,
-            Self::Chat(stopped) => !stopped.already_stopped,
         }
     }
 }

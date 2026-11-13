@@ -359,9 +359,7 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -419,9 +417,7 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -492,9 +488,7 @@ async fn a_chats_wait_takes_activity_an_item_change_held_back() {
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();

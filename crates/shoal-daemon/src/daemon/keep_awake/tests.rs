@@ -185,14 +185,7 @@ async fn a_chats_agent_has_work_as_a_workspaces_does() {
         .await
         .unwrap();
     let chat = manager
-        .start_chat(
-            repo.id.into(),
-            "talk".into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     for (state, work) in [(AgentState::Working, true), (AgentState::Idle, false)] {

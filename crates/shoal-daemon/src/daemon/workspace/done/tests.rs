@@ -637,8 +637,7 @@ async fn undone_keeps_an_unreadable_completion() {
 #[tokio::test]
 async fn an_unreadable_chat_completion_leaves_other_spaces_to_completion_cleanup() {
     let (_root, manager, workspace) = fixture().await;
-    let (chat, _process) =
-        crate::daemon::test_support::chat(&manager, "notes", "chat", None, None).await;
+    let chat = crate::daemon::test_support::chat(&manager, "notes", "chat", None, None).await;
     let id = chat.id.clone();
     manager
         .store
@@ -1125,29 +1124,23 @@ async fn a_held_parents_completion_takes_the_chats_below_it_deepest_first() {
         )
         .await
         .unwrap();
-    let agents = [(); 2].map(|()| {
-        crate::daemon::test_support::ProcessGroup::spawn(
-            std::process::Command::new("sleep").arg("600"),
-        )
-    });
     let mut above = parent.id.clone();
     let mut chats = Vec::new();
-    for (name, agent) in ["sub", "nested"].into_iter().zip(&agents) {
+    for name in ["sub", "nested"] {
         let start = crate::daemon::chats::NewChat {
             priority: None,
             narrowing: Default::default(),
             mode: "chat".into(),
             name: name.into(),
             agent: "claude".into(),
-            pid: agent.id(),
             origin: None,
-            hands_over: false,
             parent: Some(above),
         };
         let chat = manager
             .start_new_chat(Some(parent.repository_id.clone().into()), None, start)
             .await
             .unwrap();
+        let chat = manager.run_chat_agent(chat).await.unwrap();
         above = chat.id.clone();
         chats.push(chat);
     }
@@ -1311,18 +1304,8 @@ async fn a_worker_opened_outside_its_done_chat_after_the_sweep_chose_it_stays() 
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
-        .start_chat(
-            repo.id.clone().into(),
-            "talk".into(),
-            "claude".into(),
-            process.id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     let worker = manager
@@ -1370,18 +1353,8 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
-        .start_chat(
-            repo.id.clone().into(),
-            "talk".into(),
-            "claude".into(),
-            process.id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     let root = manager

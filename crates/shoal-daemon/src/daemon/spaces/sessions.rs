@@ -130,7 +130,7 @@ fn chat_session(chat: &Chat) -> Option<ReportedSession> {
         agent: chat.agent.clone(),
         session: chat.session.clone()?,
         execution: None,
-        current: chat.restore.is_none(),
+        current: chat.running,
     })
 }
 

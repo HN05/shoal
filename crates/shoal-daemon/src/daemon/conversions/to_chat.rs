@@ -98,14 +98,10 @@ impl Manager {
         let agent = recorded
             .agent
             .context("the execution to carry on runs no agent")?;
-        let process = recorded
-            .wrapper
-            .context("the agent to carry on has no process")?;
         Ok(ConvertedChat {
             agent,
             session: recovery::reported_session(&self.paths, id, &execution),
             origin: recorded.origin,
-            process,
             mode,
             narrowing: recorded.narrowing,
             execution,

@@ -159,7 +159,7 @@ impl Manager {
         if running
             && quiescent
             && let Err(error) = self
-                .stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::repair())
+                .stop_space(&SpaceSelector::id(&workspace.id), StopRequest::repair())
                 .await
         {
             report.issues.push(format!("connected stop: {error:#}"));

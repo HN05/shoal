@@ -17,12 +17,12 @@ mod start;
 mod topic;
 
 pub(super) use agent::{chat_agent, check_model};
-pub(super) use launch::{Started, launch};
+pub(super) use launch::{Started, launch, start_converted};
 pub(super) use list::{list, listed};
 pub(super) use options::{ChatPlace, Narrowing, Options, ensure_scope_token};
 pub(super) use rename::{rename, request_name};
 pub(super) use start::{
-    Subject, hosting_workspace, root_dir, settings, start, start_in_workspace,
-    start_outside_repositories, start_resolved,
+    Subject, root_dir, settings, start, start_in_workspace, start_outside_repositories,
+    start_resolved,
 };
 pub(super) use topic::{Relaunch, Topic};

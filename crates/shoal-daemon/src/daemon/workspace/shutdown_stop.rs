@@ -15,9 +15,8 @@ use crate::{
         notifications::{About, NotificationKind},
     },
     execution::recovery::{self, Saved, SavedExt as _},
-    model::Workspace,
+    model::PresentSpace,
     protocol::QueuedLaunches,
-    state::ChatRestore,
 };
 
 /// What shuts down, which the stop and the user's notifications name.
@@ -53,38 +52,32 @@ impl Shutdown {
 }
 
 impl Manager {
-    /// Stop the workspaces `shoal stop --all` stops before the system shuts
+    /// Stop the spaces `shoal stop --all` stops before the system shuts
     /// down. See [`Manager::stop_for_shutdown_of`].
     pub(crate) async fn stop_for_system_shutdown(&self) {
         self.stop_for_shutdown_of(Shutdown::System).await;
     }
 
-    /// Stop the workspaces `shoal stop --all` stops, each wrapper saving its
+    /// Stop the spaces `shoal stop --all` stops, each wrapper saving its
     /// agent before the stop and requesting restores that need no user,
-    /// which the stop keeps with those already waiting, and the running
-    /// chats, saved to come back on their own. Hold the agent queue until a
-    /// system shutdown is cancelled, so nothing starts again before it. The
-    /// user learns what to continue. An update waits for the stop. Once a
-    /// stop before a shutdown finished, later ones wait for it and leave the
-    /// work alone.
+    /// which the stop keeps with those already waiting. Hold the agent queue
+    /// until a system shutdown is cancelled, so nothing starts again before
+    /// it. The user learns what to continue. An update waits for the stop.
+    /// Once a stop before a shutdown finished, later ones wait for it and
+    /// leave the work alone.
     pub(crate) async fn stop_for_shutdown_of(&self, shutdown: Shutdown) {
         let mut finished = self.shutdown_stopped.lock().await;
         if *finished {
             return;
         }
-        // Chats save beside the workspaces' stops, not after them, so a
-        // shutdown that outlasts those still finds them saved; the held
-        // queue keeps them from coming back meanwhile.
-        self.agent_queue.suspend(true).await;
-        let (stopped, ()) = tokio::join!(
-            self.stop_every_target(shutdown.moment(), |workspace| async move {
+        let stopped = self
+            .stop_every_target(shutdown.moment(), |space| async move {
                 // A CI job's run ends on its forge, before its runner stops.
-                self.cancel_job_before_stopping(&workspace).await;
-                self.stop_keeping_restores(&SpaceSelector::id(&workspace), shutdown.request())
+                self.cancel_job_before_stopping(&space).await;
+                self.stop_keeping_restores(&SpaceSelector::id(&space), shutdown.request())
                     .await
-            }),
-            self.save_chats(ChatRestore::Automatic)
-        );
+            })
+            .await;
         self.notify_shutdown_stop(shutdown, &stopped).await;
         *finished = true;
     }
@@ -96,11 +89,11 @@ impl Manager {
         self.agent_queue.suspend(false).await;
     }
 
-    /// Stop each workspace `shoal stop --all` stops with `stop`, given its
-    /// ID, in parallel, holding the agent queue so nothing starts again, and
+    /// Stop each space `shoal stop --all` stops with `stop`, given its ID,
+    /// in parallel, holding the agent queue so nothing starts again, and
     /// tell the user of each that failed to stop `moment`. Returns those
     /// stopped.
-    pub(super) async fn stop_every_target<F, Fut>(&self, moment: &str, stop: F) -> Vec<Workspace>
+    pub(super) async fn stop_every_target<F, Fut>(&self, moment: &str, stop: F) -> Vec<PresentSpace>
     where
         F: Fn(SpaceId) -> Fut,
         Fut: Future<Output = Result<()>>,
@@ -110,25 +103,25 @@ impl Manager {
         let targets = match self.stop_targets(QueuedLaunches::Keep).await {
             Ok(targets) => targets,
             Err(error) => {
-                log!("stop {moment}: running workspaces unavailable: {error:#}");
+                log!("stop {moment}: running spaces unavailable: {error:#}");
                 return Vec::new();
             }
         };
-        let results = join_all(targets.iter().map(|workspace| stop(workspace.id.clone()))).await;
+        let results = join_all(targets.iter().map(|space| stop(space.id().clone()))).await;
         let mut stopped = Vec::new();
-        for (workspace, result) in targets.into_iter().zip(results) {
+        for (space, result) in targets.into_iter().zip(results) {
             match result {
-                Ok(()) => stopped.push(workspace),
-                Err(error) => self.notify_stop_failed(moment, &workspace, &error).await,
+                Ok(()) => stopped.push(space),
+                Err(error) => self.notify_stop_failed(moment, &space, &error).await,
             }
         }
         stopped
     }
 
-    async fn notify_stop_failed(&self, moment: &str, workspace: &Workspace, error: &anyhow::Error) {
-        log!("stop {moment}: {} not stopped: {error:#}", workspace.name);
+    async fn notify_stop_failed(&self, moment: &str, space: &PresentSpace, error: &anyhow::Error) {
+        log!("stop {moment}: {} not stopped: {error:#}", space.name());
         self.notify_about(
-            About::space(&workspace.name, &workspace.id),
+            About::space(space.name(), space.id()),
             NotificationKind::StopFailed,
             format!("Could not stop tracked executions {moment}: {error:#}"),
         )
@@ -136,7 +129,7 @@ impl Manager {
     }
 
     /// Tell the user what the stop of `stopped` saved and how it continues.
-    async fn notify_shutdown_stop(&self, shutdown: Shutdown, stopped: &[Workspace]) {
+    async fn notify_shutdown_stop(&self, shutdown: Shutdown, stopped: &[PresentSpace]) {
         if stopped.is_empty() {
             return;
         }
@@ -147,13 +140,13 @@ impl Manager {
                 log!("shutdown stop: agent queue unavailable: {error:#}");
                 HashSet::new()
             });
-        let waiting: Vec<&Workspace> = stopped
+        let waiting: Vec<&PresentSpace> = stopped
             .iter()
-            .filter(|workspace| {
-                waits_for_resume(&self.paths, workspace, &queued).unwrap_or_else(|error| {
+            .filter(|space| {
+                waits_for_resume(&self.paths, space, &queued).unwrap_or_else(|error| {
                     log!(
                         "shutdown stop: stopped work of {} unreadable: {error:#}",
-                        workspace.name
+                        space.name()
                     );
                     true
                 })
@@ -161,34 +154,30 @@ impl Manager {
             .collect();
         let continues = continuation(&waiting);
         let count = stopped.len();
-        let workspaces = if count == 1 {
-            "workspace"
-        } else {
-            "workspaces"
-        };
+        let spaces = if count == 1 { "space" } else { "spaces" };
         let moment = shutdown.moment();
         self.notify(
             None,
             shutdown.notification(),
-            format!("Stopped work in {count} {workspaces} {moment}; {continues}"),
+            format!("Stopped work in {count} {spaces} {moment}; {continues}"),
         )
         .await;
     }
 }
 
-/// Whether the workspace saved work only `shoal resume` continues: a
-/// command, or an agent whose restore is neither `queued` nor requested. A
-/// done workspace's requests wait for `shoal resume` to name it.
+/// Whether the space saved work only `shoal resume` continues: a command,
+/// or an agent whose restore is neither `queued` nor requested. A done
+/// space's requests wait for `shoal resume` to name it.
 fn waits_for_resume(
     paths: &crate::paths::Paths,
-    workspace: &Workspace,
+    space: &PresentSpace,
     queued: &HashSet<ExecutionId>,
 ) -> Result<bool> {
-    let saved = Saved::load(paths, &workspace.id)?;
-    let requested: HashSet<ExecutionId> = if workspace.done {
+    let saved = Saved::load(paths, space.id())?;
+    let requested: HashSet<ExecutionId> = if space.done() {
         HashSet::new()
     } else {
-        recovery::restore_requests(paths, &workspace.id)?
+        recovery::restore_requests(paths, space.id())?
             .into_iter()
             .map(|(execution, _)| execution)
             .collect()
@@ -200,11 +189,11 @@ fn waits_for_resume(
             .any(|agent| !requested.contains(&agent.id) && !queued.contains(&agent.id)))
 }
 
-/// How the work of the `waiting` workspaces continues. `shoal resume --all`
-/// skips done workspaces, so they are named.
-fn continuation(waiting: &[&Workspace]) -> String {
-    let (done, open): (Vec<&Workspace>, Vec<&Workspace>) =
-        waiting.iter().partition(|workspace| workspace.done);
+/// How the work of the `waiting` spaces continues. `shoal resume --all`
+/// skips done spaces, so they are named.
+fn continuation(waiting: &[&PresentSpace]) -> String {
+    let (done, open): (Vec<&PresentSpace>, Vec<&PresentSpace>) =
+        waiting.iter().partition(|space| space.done());
     let mut commands = Vec::new();
     if !open.is_empty() {
         commands.push("shoal resume --all".to_owned());
@@ -212,7 +201,7 @@ fn continuation(waiting: &[&Workspace]) -> String {
     if !done.is_empty() {
         let numbers: Vec<String> = done
             .iter()
-            .map(|workspace| workspace.number.to_string())
+            .map(|space| space.number().to_string())
             .collect();
         commands.push(format!("shoal resume {}", numbers.join(" ")));
     }

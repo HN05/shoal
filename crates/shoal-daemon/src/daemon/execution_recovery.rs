@@ -179,7 +179,7 @@ async fn restart_once_stopped(
     };
     let resume = async {
         ready?;
-        manager.verify_restore_workspace(workspace_id).await?;
+        manager.verify_restore_space(workspace_id).await?;
         if manager.restart_in_place(execution_id).await {
             resume(manager, execution_id, workspace_id, None).await
         } else {
@@ -230,7 +230,10 @@ async fn admit_restore(
     workspace_id: &SpaceId,
     hold: &mut Option<OwnedRwLockReadGuard<()>>,
 ) -> Result<Grant> {
-    if !manager.restore_waits_for_update(workspace_id, execution_id) {
+    if !manager
+        .restore_waits_for_update(workspace_id, execution_id)
+        .await
+    {
         return manager
             .admit_agent_restore(execution_id, workspace_id)
             .await;

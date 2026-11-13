@@ -149,7 +149,9 @@ impl Manager {
         let restores = self.store.run(|db| restore_rows(db)).await?;
         let mut waiting = HashSet::new();
         for row in restores {
-            if self.restore_waits_for_update(&row.workspace, &row.execution)
+            if self
+                .restore_waits_for_update(&row.workspace, &row.execution)
+                .await
                 && !self.restore_waits_for_unblock(&row.workspace, &row.execution)
             {
                 waiting.insert(row.id);
@@ -175,7 +177,7 @@ impl Manager {
         if !automatic {
             return Ok(Wake::Slot);
         }
-        if !self.restore_waits_for_update(workspace_id, execution) {
+        if !self.restore_waits_for_update(workspace_id, execution).await {
             return Ok(Wake::Recovery);
         }
         let due = match due {
@@ -195,7 +197,7 @@ impl Manager {
         execution: &ExecutionId,
         automatic: bool,
     ) -> Result<Work> {
-        if !automatic || !self.restore_waits_for_update(workspace_id, execution) {
+        if !automatic || !self.restore_waits_for_update(workspace_id, execution).await {
             return Ok(Work::Launch);
         }
         let due = self.restore_due(workspace_id, execution).await?;
@@ -248,14 +250,19 @@ impl Manager {
     }
 
     /// Whether the recovery record of `execution` says it stopped between
-    /// turns, so its restore waits for an update. An unreadable record leaves
-    /// the turn unknown, which counts as mid-turn.
-    pub(crate) fn restore_waits_for_update(
+    /// turns, so its restore waits for an update; in a space `id` the user
+    /// attends, who brings it the next turn, only while the space blocks
+    /// it. An unreadable record leaves the turn unknown, which counts as
+    /// mid-turn.
+    pub(crate) async fn restore_waits_for_update(
         &self,
-        workspace_id: &SpaceId,
+        id: &SpaceId,
         execution: &ExecutionId,
     ) -> bool {
-        let path = recovery::record_path(&self.paths, workspace_id, execution);
+        if self.attended(id).await {
+            return self.restore_waits_for_unblock(id, execution);
+        }
+        let path = recovery::record_path(&self.paths, id, execution);
         recovery::Record::load(&path)
             .ok()
             .flatten()

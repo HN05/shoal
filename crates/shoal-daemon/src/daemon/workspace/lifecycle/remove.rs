@@ -409,7 +409,6 @@ impl Manager {
         {
             bail!("{retention}; retaining the {}", space.kind());
         }
-        self.ensure_agent_ended(&space).await?;
         // Automatic cleanup takes only spaces whose agent stopped, so one
         // restored since its snapshot goes on running.
         if matches!(removal, Removal::Automatic { .. })

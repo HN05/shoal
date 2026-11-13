@@ -6,8 +6,8 @@ fn spaces(db: &Connection) -> Result<()> {
         "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
         INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES
             ('first','repo','first','/first','first','ready');
-        INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
-            VALUES ('chat','repo','planning','claude',1,'b',1);",
+        INSERT INTO chats(id,repository_id,name,agent,started_at)
+            VALUES ('chat','repo','planning','claude',1);",
     )?;
     Ok(())
 }

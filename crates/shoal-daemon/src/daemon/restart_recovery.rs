@@ -15,7 +15,7 @@ use super::{notifications::NotificationKind, store, workspace::Manager};
 use crate::daemon::log;
 use crate::{
     execution::recovery::{Record, Stage, record_path},
-    model::{Execution, Workspace},
+    model::{Execution, PresentSpace},
     process::{execution::Processes, identity as process},
     state::ExecutionState,
 };
@@ -31,14 +31,14 @@ mod earlier_boot;
 
 /// An unknown execution of an agent whose stop saved a recovery record.
 struct Interrupted {
-    workspace: Workspace,
+    space: PresentSpace,
     execution: Execution,
     record: Record,
 }
 
 /// An unknown execution whose saved recovery record cannot be read.
 struct Unreadable {
-    workspace: Workspace,
+    space: PresentSpace,
     execution: ExecutionId,
     error: anyhow::Error,
 }
@@ -168,13 +168,13 @@ impl Manager {
         let ids: HashSet<_> = interrupted.iter().map(|i| i.execution.id.clone()).collect();
         let scan = process::scan(ids).await?;
         for interrupted in interrupted {
-            let outcome = match Processes::inspect(
-                &interrupted.execution,
-                &interrupted.workspace.path,
-                &scan,
-            )
-            .await
-            {
+            let inspected = match self.space_directory(&interrupted.space).await {
+                Ok(directory) => {
+                    Processes::inspect(&interrupted.execution, &directory, &scan).await
+                }
+                Err(error) => Err(error),
+            };
+            let outcome = match inspected {
                 Ok(processes) => assess(&interrupted, &processes),
                 Err(error) => Outcome::Unresolved(format!("process inspection failed: {error:#}")),
             };
@@ -192,23 +192,23 @@ impl Manager {
 
     async fn interrupted_agents(&self) -> Result<(Vec<Interrupted>, Vec<Unreadable>)> {
         let (mut interrupted, mut unreadable) = (Vec::new(), Vec::new());
-        for workspace in self.list_workspaces().await? {
-            let id = workspace.id.clone();
+        for space in self.present_spaces().await? {
+            let id = space.id().clone();
             let executions = self.store.run(move |db| store::executions(db, &id)).await?;
             for execution in executions {
                 if execution.state != ExecutionState::Unknown {
                     continue;
                 }
-                let path = record_path(&self.paths, &workspace.id, &execution.id);
+                let path = record_path(&self.paths, space.id(), &execution.id);
                 match Record::load(&path) {
                     Ok(Some(record)) => interrupted.push(Interrupted {
-                        workspace: workspace.clone(),
+                        space: space.clone(),
                         execution,
                         record,
                     }),
                     Ok(None) => {}
                     Err(error) => unreadable.push(Unreadable {
-                        workspace: workspace.clone(),
+                        space: space.clone(),
                         execution: execution.id,
                         error,
                     }),
@@ -235,7 +235,7 @@ impl Manager {
             log!(
                 "reconciled stopped {} in {}",
                 interrupted.record.agent,
-                interrupted.workspace.name
+                interrupted.space.name()
             );
         }
         Ok(())
@@ -243,7 +243,7 @@ impl Manager {
 
     async fn notify_unresolved(&self, interrupted: &Interrupted, issue: &str) {
         let Interrupted {
-            workspace,
+            space,
             execution,
             record,
         } = interrupted;
@@ -251,11 +251,11 @@ impl Manager {
             .stop_reason
             .as_deref()
             .map_or(String::new(), |reason| format!(" ({reason})"));
-        self.notify_space(&workspace.name, &workspace.id,
+        self.notify_space(space.name(), space.id(),
             NotificationKind::RecoveryBlocked,
             format!(
                 "{} stopped{reason}, but its execution {} is not proven stopped: {issue}; Shoal reconciles it once those processes exit, or stop them with shoal stop {}; then run shoal resume {} --execution {}",
-                record.agent, execution.id, workspace.number, workspace.number, execution.id
+                record.agent, execution.id, space.number(), space.number(), execution.id
             ),
         )
         .await;
@@ -263,15 +263,15 @@ impl Manager {
 
     async fn notify_unreadable(&self, unreadable: &Unreadable) {
         let Unreadable {
-            workspace,
+            space,
             execution,
             error,
         } = unreadable;
-        self.notify_space(&workspace.name, &workspace.id,
+        self.notify_space(space.name(), space.id(),
             NotificationKind::RecoveryBlocked,
             format!(
                 "The recovery record of execution {execution} cannot be read: {error:#}; check or remove {}",
-                crate::execution::recovery::record_path(&self.paths, &workspace.id, execution).display()
+                crate::execution::recovery::record_path(&self.paths, space.id(), execution).display()
             ),
         )
         .await;

@@ -1,6 +1,6 @@
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::test_support::{ProcessGroup, manager, repository},
+    daemon::test_support::{manager, repository},
     removal::{InspectionPolicy, UnsavedWork},
 };
 
@@ -16,16 +16,8 @@ async fn a_number_selects_a_workspace_or_a_chat_and_a_command_takes_its_kind() {
         .create_workspace(&repo.id, "worker".into(), None, None, None)
         .await
         .unwrap();
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = manager
-        .start_chat(
-            repo.id.clone().into(),
-            "talk".into(),
-            "claude".into(),
-            process.id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     let number = SpaceSelector::Number;

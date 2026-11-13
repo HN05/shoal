@@ -6,7 +6,7 @@ use crate::execution::recovery::LastSessionExt;
 use crate::{
     daemon::{
         chats::NewChat,
-        test_support::{ProcessGroup, manager, repository},
+        test_support::{ProcessGroup, agent_process, manager, repository},
         workspace::Manager,
         workspace_files::Attacher,
     },
@@ -38,20 +38,23 @@ async fn repositories(
 
 /// Start the chat `name` without a repository, below `parent` when given,
 /// running as the returned process.
-async fn outside(manager: &Manager, name: &str, parent: Option<&SpaceId>) -> (Chat, ProcessGroup) {
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+async fn outside(
+    manager: &std::sync::Arc<Manager>,
+    name: &str,
+    parent: Option<&SpaceId>,
+) -> (Chat, ProcessGroup) {
     let new = NewChat {
         priority: None,
         narrowing: Default::default(),
         name: name.into(),
         agent: "claude".into(),
         mode: "orchestrate".into(),
-        pid: process.id(),
         origin: None,
-        hands_over: false,
         parent: parent.cloned(),
     };
     let chat = manager.start_new_chat(None, None, new).await.unwrap();
+    let chat = manager.run_chat_agent(chat).await.unwrap();
+    let process = agent_process(manager, &chat.id).await;
     (chat, process)
 }
 
@@ -162,16 +165,13 @@ async fn a_chat_without_a_repository_takes_children_in_every_repository() {
         )
         .await;
     assert!(foreign.is_err());
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let below_workspace = NewChat {
         priority: None,
         narrowing: Default::default(),
         name: "below".into(),
         agent: "claude".into(),
         mode: "orchestrate".into(),
-        pid: process.id(),
         origin: None,
-        hands_over: false,
         parent: Some(first.id.clone()),
     };
     let refused = manager.start_new_chat(None, None, below_workspace).await;
@@ -257,15 +257,12 @@ async fn a_broadcast_with_files_reaches_a_chat_without_a_repository() {
     let (temp, manager) = manager().await;
     let repos = repositories(&temp, &manager, &["repo"]).await;
     let (_master, _process) = outside(&manager, "master", None).await;
-    let talking = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let talk = manager
         .start_chat(
             repos[0].id.clone().into(),
             "talk".into(),
             "claude".into(),
-            talking.id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -316,15 +313,12 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
         worked(&manager, &repos[1], "user", None).await,
     );
     let below_id = below.id.clone();
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = manager
         .start_chat(
             repos[0].id.clone().into(),
             "planning".into(),
             "claude".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();

@@ -270,9 +270,7 @@ async fn a_chat_lists_no_demos_of_its_own() {
             first.repository_id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();

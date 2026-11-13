@@ -9,11 +9,8 @@ use super::{setups::FailedSetup, targets::Selected};
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    cli::context::Context,
-    config::permissions::PermissionChange,
-    execution::recovery::Saved,
-    model::{Chat, Workspace},
-    protocol::SavedAgent,
+    cli::context::Context, config::permissions::PermissionChange, execution::recovery::Saved,
+    model::PresentSpace, protocol::SavedAgent,
 };
 
 /// Refuse `change` for the stopped agents and last sessions of the
@@ -28,20 +25,16 @@ pub(super) async fn check(
     execution: Option<&ExecutionId>,
     change: &PermissionChange,
 ) -> Result<()> {
-    let selectors = (selected.workspaces.as_deref())
+    let selectors = (selected.spaces.as_deref())
         .context("--permission changes the permissions of the spaces a resume names")?;
     for selector in selectors {
-        let (workspace, saved) = saved_agents(ctx, selector, execution).await?;
+        let (space, saved) = saved_agents(ctx, selector, execution).await?;
         ensure!(
             !saved.agents.iter().any(|agent| agent.waits_in_wrapper),
             "the agent of {} restores in the wrapper that waits for it, which keeps its permissions; resume it without --permission",
-            workspace.name
+            space.name()
         );
-        let repository = Some(workspace.repository_id.as_str().into());
-        super::super::permissions::ensure_held(ctx, repository, &change.set).await?;
-    }
-    for chat in &selected.chats {
-        let repository = (chat.repository_id.as_ref()).map(|id| id.as_str().into());
+        let repository = space.repository_id().map(|id| id.as_str().into());
         super::super::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
     for setup in selected
@@ -55,63 +48,57 @@ pub(super) async fn check(
     Ok(())
 }
 
-/// The workspace `selector` names with the agents and last sessions it
-/// saved, only `execution`'s when given.
+/// The space `selector` names with the agents and last sessions it saved,
+/// only `execution`'s when given.
 async fn saved_agents(
     ctx: &Context,
     selector: &SpaceSelector,
     execution: Option<&ExecutionId>,
-) -> Result<(Workspace, Saved)> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
-        .await?
-        .workspace;
-    let mut saved =
-        crate::client::saved::read(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
+) -> Result<(PresentSpace, Saved)> {
+    let space = super::present_space(ctx, selector).await?;
+    let mut saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(space.id())).await?;
     if let Some(execution) = execution {
         saved.retain_execution(execution, false);
     }
-    Ok((workspace, saved))
+    Ok((space, saved))
 }
 
 /// Have the daemon make `change`, when given, to the permissions each agent
-/// and last session the `stopped` workspaces keep, each of the stopped
-/// `chats` and the agent waiting for each of the failed `setups` was given,
+/// and last session the `stopped` spaces keep and the agent waiting for
+/// each of the failed `setups` was given,
 /// as their restores and setups begin, so one that fails keeps it too; it
 /// changes none when it refuses one.
 pub(super) async fn apply(
     ctx: &Context,
-    stopped: &[(Workspace, Saved)],
-    chats: &[Chat],
+    stopped: &[(PresentSpace, Saved)],
     setups: &[FailedSetup],
     change: Option<&PermissionChange>,
 ) -> Result<()> {
-    let agents = stopped.iter().flat_map(|(workspace, saved)| {
+    let agents = stopped.iter().flat_map(|(space, saved)| {
         (saved.agents.iter().chain(&saved.sessions)).map(|saved| SavedAgent {
-            workspace: SpaceSelector::id(&workspace.id),
+            workspace: SpaceSelector::id(space.id()),
             execution: saved.id.clone(),
         })
     });
-    let chats = chats.iter().map(|chat| SpaceSelector::id(&chat.id));
     let launches = (setups.iter())
         .filter(|setup| setup.launch.is_some())
         .map(|setup| SpaceSelector::id(&setup.workspace.id));
     let targets = PermissionTargets {
         agents: agents.collect(),
-        chats: chats.collect(),
         launches: launches.collect(),
     };
     request(ctx, targets, change).await
 }
 
-/// [`apply`] for the agent or last session `execution` of `workspace`.
+/// [`apply`] for the agent or last session `execution` of `space`.
 pub(super) async fn apply_one(
     ctx: &Context,
-    workspace: &Workspace,
+    space: &PresentSpace,
     execution: &ExecutionId,
     change: Option<&PermissionChange>,
 ) -> Result<()> {
     let agent = SavedAgent {
-        workspace: SpaceSelector::id(&workspace.id),
+        workspace: SpaceSelector::id(space.id()),
         execution: execution.clone(),
     };
     let targets = PermissionTargets {
@@ -126,31 +113,24 @@ pub(super) async fn apply_one(
 #[derive(Default)]
 struct PermissionTargets {
     agents: Vec<SavedAgent>,
-    chats: Vec<SpaceSelector>,
     /// The workspaces whose failed setup an agent waits for.
     launches: Vec<SpaceSelector>,
 }
 
-/// Have the daemon make `change`, when given, for the `targets` agents,
-/// chats and waiting launches.
+/// Have the daemon make `change`, when given, for the `targets` agents and
+/// waiting launches.
 async fn request(
     ctx: &Context,
     targets: PermissionTargets,
     change: Option<&PermissionChange>,
 ) -> Result<()> {
-    let PermissionTargets {
-        agents,
-        chats,
-        launches,
-    } = targets;
+    let PermissionTargets { agents, launches } = targets;
     match change {
-        Some(change) if !(agents.is_empty() && chats.is_empty() && launches.is_empty()) => {
+        Some(change) if !(agents.is_empty() && launches.is_empty()) => {
             let change = change.clone();
             let paths = &ctx.paths;
-            crate::client::assignments::change_stopped_permissions(
-                paths, agents, chats, launches, change,
-            )
-            .await
+            crate::client::assignments::change_stopped_permissions(paths, agents, launches, change)
+                .await
         }
         _ => Ok(()),
     }

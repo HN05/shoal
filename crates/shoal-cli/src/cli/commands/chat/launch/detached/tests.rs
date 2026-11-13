@@ -29,7 +29,6 @@ fn options() -> Options {
         args: vec!["Read the build".into()],
         session: None,
         fork: false,
-        restore: None,
         handoff: None,
         parent: Some(SpaceSelector::from("7")),
         narrowing: Narrowing::Requested(PermissionsConfig::default()),
@@ -62,12 +61,8 @@ fn a_new_chat_on_an_issue_becomes_the_daemons_start_in_its_repository() {
 }
 
 #[test]
-fn a_restore_or_a_continued_session_starts_here() {
+fn a_continued_session_starts_here() {
     let topic = Topic::repository(&repository(), &ModeName::CHAT);
-    let restore = Options {
-        restore: Some("c1".into()),
-        ..options()
-    };
     let session = Options {
         session: Some("s1".into()),
         ..options()
@@ -77,7 +72,7 @@ fn a_restore_or_a_continued_session_starts_here() {
         ..options()
     };
     let (agent, name) = (Agent::from("claude"), SpaceName::from("talk"));
-    for options in [restore, session, recorded] {
+    for options in [session, recorded] {
         assert!(request(&topic, &options, (&agent, &name)).is_none());
     }
 }

@@ -171,11 +171,6 @@ states!(
         Ended => "chat_ended",
         /// The chat took a new name, which its `chat` carries.
         Renamed => "chat_renamed",
-        /// The chat stopped, as Shoal saved its session or its agent
-        /// exited, to restore as its `chat`'s `restore` says.
-        Saved => "chat_saved",
-        /// A saved chat runs again.
-        Restored => "chat_restored",
     }
 );
 

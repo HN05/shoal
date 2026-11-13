@@ -39,7 +39,6 @@ fn a_chats_start_parses_back_from_its_command_line() {
         },
         session: Some("s1".into()),
         fork_session: true,
-        restore: Some(SpaceId::from("c1")),
         linked_issue: Some("https://forge.example/team/repo/issues/7".parse().unwrap()),
         linked_issue_title: Some("Decide".into()),
         handoff: Some("/tmp/shoal-chat.1".into()),

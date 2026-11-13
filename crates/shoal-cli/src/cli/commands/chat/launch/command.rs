@@ -51,7 +51,6 @@ pub(super) fn chat_launch(
         workspace: topic.workspace.clone(),
         settings,
         args: [resumed, options.args.clone()].concat(),
-        restores: options.restore.clone(),
         links: topic.links.clone(),
     })
 }
@@ -108,11 +107,12 @@ fn resumed_args(settings: &Effective, agent: &Agent, session: &AgentSessionId) -
 }
 
 /// The agent's configured launcher with the chat instructions, its opening
-/// task, the hooks that deliver its messages and the arguments that give it
-/// `directories`, run in `path`, the chat's checkout or worktree.
+/// task and `shoal_args`, Shoal's arguments such as the hooks that deliver
+/// its messages and its directories, run in `path`, the chat's checkout or
+/// worktree.
 pub(super) fn command(
     settings: &Effective,
-    directories: Vec<OsString>,
+    shoal_args: Vec<OsString>,
     path: &Path,
     agent: &Agent,
     instructions: String,
@@ -128,22 +128,7 @@ pub(super) fn command(
             None,
         ),
     };
-    let (args, prompt) = agents::input(
-        settings,
-        name,
-        instructions,
-        opening,
-        [
-            crate::agents::hook_args(
-                settings.integration(name),
-                crate::agents::AgentSpace::Chat,
-                false,
-            )?,
-            directories,
-        ]
-        .concat(),
-        args,
-    );
+    let (args, prompt) = agents::input(settings, name, instructions, opening, shoal_args, args);
     configured::expand_outside_workspace(
         &settings.launchers,
         name.name(),
@@ -170,7 +155,10 @@ fn brief(
     let place = templates::Place::Chat {
         repo: repo.registered().map(repository::name),
         home: topic.home(repo),
-        delivery: agents::chat_delivery(settings, agent),
+        delivery: crate::agents::delivery(
+            crate::agents::agent_integration(settings, agent),
+            settings,
+        ),
     };
     let told = (topic.subject.as_ref()).filter(|_| !resumes || topic.tells_resumed);
     let mut brief = match told {

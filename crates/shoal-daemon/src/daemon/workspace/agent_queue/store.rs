@@ -254,7 +254,7 @@ fn require_queuing_space(
 
 /// The restore of a stopped agent whose wrapper waits for it.
 pub(super) struct WaitingRestore {
-    pub workspace: crate::model::Workspace,
+    pub space: crate::model::PresentSpace,
     pub execution: ExecutionId,
     pub agent: crate::agent::Agent,
 }
@@ -267,7 +267,7 @@ pub(super) fn record_waiting_restore(
     restore: &WaitingRestore,
 ) -> Result<QueueEntryId> {
     let now = UnixTime::now();
-    let workspace = &restore.workspace;
+    let space = &restore.space;
     db.execute(
         "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,seen_at,space_id,execution_id,automatic)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?7,?8,?9,1)
@@ -275,12 +275,12 @@ pub(super) fn record_waiting_restore(
         params![
             QueueEntryId::generate(),
             QueueKind::Restore,
-            workspace.repository_id,
-            workspace.name,
+            space.repository_id(),
+            space.name(),
             restore.agent,
             QueueState::Queued,
             now,
-            workspace.id,
+            space.id(),
             restore.execution,
         ],
     )?;

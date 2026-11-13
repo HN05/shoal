@@ -14,7 +14,7 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_or_id() {
         "state": "ready",
     }))
     .unwrap();
-    let chat = |id: &str, number, name: &str, restore| Chat {
+    let chat = |id: &str, number, name: &str, running| Chat {
         narrowing: Default::default(),
         mode: "chat".into(),
         number,
@@ -23,13 +23,12 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_or_id() {
         name: name.into(),
         agent: "claude".into(),
         workspace: None,
-        pid: 1,
         started_at: crate::time::UnixTime::EPOCH,
         origin: None,
         tmp_dir: None,
         root_dir: None,
         session: None,
-        restore,
+        running,
         links: Default::default(),
         review: Vec::new(),
         completion: None,
@@ -43,13 +42,8 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_or_id() {
     let spaces = Spaces {
         workspaces: vec![workspace],
         chats: vec![
-            chat("c1", 1.into(), "talk", None),
-            chat(
-                "c2",
-                2.into(),
-                "saved",
-                Some(crate::state::ChatRestore::Resume),
-            ),
+            chat("c1", 1.into(), "talk", true),
+            chat("c2", 2.into(), "saved", false),
         ],
     };
     let found = |selector: &str| {
@@ -89,7 +83,7 @@ fn the_spaces_below_a_space_include_those_below_them() {
     let chat = |id: &str, children: Vec<SpaceRef>| -> Chat {
         let mut chat: Chat = serde_json::from_value(serde_json::json!({
             "id": id, "repository_id": "repo", "name": id, "agent": "claude",
-            "pid": 1, "started_at": 1,
+            "started_at": 1,
         }))
         .unwrap();
         chat.children = children;

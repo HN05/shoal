@@ -353,7 +353,7 @@ impl Manager {
             .collect();
         let launch = crate::execution::launch_detached(
             &self.paths,
-            workspace,
+            &workspace.into(),
             log,
             command.argv,
             &[],

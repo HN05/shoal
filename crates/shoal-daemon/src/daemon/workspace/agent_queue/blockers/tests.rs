@@ -104,7 +104,7 @@ async fn launches_blocked_by_a_chat_start_once_it_is_done_or_removed() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
-    let (notes, _process) =
+    let notes =
         crate::daemon::test_support::chat(&manager, "notes", "chat", Some(&repo), None).await;
     let blocker = Blocker::Space(notes.id.to_string());
     let ui = add_blocked(&manager, &repo, "ui", vec![blocker]).await;
@@ -120,12 +120,10 @@ async fn launches_blocked_by_a_chat_start_once_it_is_done_or_removed() {
     assert_eq!(entry(&manager, &ui.id).await.base, None);
 
     // A removed chat no longer blocks.
-    let (talk, process) =
-        crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
+    let talk = crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
     let blocker = Blocker::Space(talk.id.to_string());
     let docs = add_blocked(&manager, &repo, "docs", vec![blocker]).await;
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
+    manager.end_executions(&talk.id).await;
     manager
         .remove_chat(&SpaceSelector::id(&talk.id), None)
         .await

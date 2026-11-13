@@ -1244,11 +1244,10 @@ async fn pr_cleanup_passes_over_a_stacked_workspace_it_removed_earlier() {
     assert!(!stacked.path.exists());
 }
 
-/// A chat with a workspace below it, whose agent `process` runs.
+/// A chat with a workspace below it, whose agent runs.
 async fn chat_with_workspace(
     temp: &tempfile::TempDir,
-    manager: &Manager,
-    process: &crate::daemon::test_support::ProcessGroup,
+    manager: &std::sync::Arc<Manager>,
 ) -> (crate::model::Chat, Workspace) {
     let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
@@ -1256,14 +1255,7 @@ async fn chat_with_workspace(
         .await
         .unwrap();
     let chat = manager
-        .start_chat(
-            repo.id.clone().into(),
-            "talk".into(),
-            "claude".into(),
-            process.id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     let opened = manager
@@ -1282,35 +1274,16 @@ async fn chat_with_workspace(
 #[tokio::test]
 async fn idle_cleanup_removes_a_stopped_chat_with_the_workspaces_below_it() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
+    let (chat, opened) = chat_with_workspace(&temp, &manager).await;
     // A running chat is in use.
     assert_eq!(manager.cleanup_snapshot(&chat.id).await.unwrap(), None);
-    process.kill();
+    manager.end_executions(&chat.id).await;
     let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     let snapshot = (manager.cleanup_snapshot(&stopped.id))
         .await
         .unwrap()
         .unwrap();
     assert_eq!(snapshot.tree, 0);
-    // A restore and a new stop between two passes is another snapshot.
-    let id = chat.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute("UPDATE chats SET stopped_at=stopped_at+1 WHERE id=?1", [id])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    let restarted = (manager.cleanup_snapshot(&stopped.id))
-        .await
-        .unwrap()
-        .unwrap();
-    assert_ne!(restarted, snapshot);
-    let snapshot = restarted;
     let mut timers = Timers::default();
     timers.idle.insert(
         chat.id.clone(),
@@ -1328,66 +1301,35 @@ async fn idle_cleanup_removes_a_stopped_chat_with_the_workspaces_below_it() {
 #[tokio::test]
 async fn automatic_cleanup_leaves_a_chat_restored_since_its_snapshot_running() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let (chat, _) = chat_with_workspace(&temp, &manager, &process).await;
-    let set_restore = async |restore: Option<&str>| {
-        let (id, restore) = (chat.id.clone(), restore.map(str::to_owned));
-        manager
-            .store
-            .run(move |db| {
-                db.execute(
-                    "UPDATE chats SET restore=?2,stopped_at=1 WHERE id=?1",
-                    rusqlite::params![id, restore],
-                )?;
-                Ok(())
-            })
-            .await
-            .unwrap();
-    };
-    set_restore(Some("resume")).await;
+    let (chat, _) = chat_with_workspace(&temp, &manager).await;
+    manager.end_executions(&chat.id).await;
     let snapshot = manager.cleanup_snapshot(&chat.id).await.unwrap().unwrap();
     // Its agent runs again before the removal reserves it.
-    set_restore(None).await;
+    manager
+        .begin_agent_execution(chat.id.as_str())
+        .await
+        .unwrap();
     let space = PresentSpace::Chat(manager.chat_by_id(&chat.id).await.unwrap().unwrap());
     let removed = manager.remove_unused(&space, snapshot, EventCause::Manual);
     assert!(removed.await.is_err());
     let kept = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
-    assert_eq!(kept.restore, None);
+    assert!(kept.running);
 }
 
 #[tokio::test]
 async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let (chat, _) = chat_with_workspace(&temp, &manager, &process).await;
+    let (chat, _) = chat_with_workspace(&temp, &manager).await;
     manager
         .mark_chat_done(&chat.id, Done::default(), &Attacher::User)
         .await
         .unwrap();
-    // A save to come back on its own keeps it, as a queued agent does.
-    manager
-        .save_chats(crate::state::ChatRestore::Automatic)
-        .await;
-    let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
-    assert_eq!(manager.cleanup_snapshot(&saved.id).await.unwrap(), None);
     // Saved for `shoal resume`, it is kept as a workspace's saved agent
     // keeps it.
-    let id = chat.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute("UPDATE chats SET restore='resume' WHERE id=?1", [id])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    manager.end_executions(&chat.id).await;
+    let saved = save_agent(&manager, &chat.id);
     let idle = async || {
-        (manager.cleanup_candidacy(&stopped.id))
+        (manager.cleanup_candidacy(&chat.id))
             .await
             .unwrap()
             .unwrap_err()
@@ -1395,32 +1337,26 @@ async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup()
     assert_eq!(idle().await, CleanupReason::Recovering);
     // Once its agent exited instead, its completion still keeps it from
     // idle cleanup, which merged cleanup disregards.
-    let id = chat.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute("UPDATE chats SET saved=0 WHERE id=?1", [id])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
+    std::fs::remove_file(saved).unwrap();
     assert_eq!(idle().await, CleanupReason::Completed { integrated: false });
-    assert!(
-        manager
-            .merged_snapshot(&stopped.id)
-            .await
-            .unwrap()
-            .is_some()
-    );
+    assert!(manager.merged_snapshot(&chat.id).await.unwrap().is_some());
+}
+
+/// Save a stopped agent for `shoal resume` in the space `id`, returning
+/// its record.
+fn save_agent(manager: &Manager, id: &crate::client::space_ids::SpaceId) -> std::path::PathBuf {
+    use crate::paths::StateFiles;
+    let directory = manager.paths.space_state(id);
+    std::fs::create_dir_all(&directory).unwrap();
+    let record = directory.join("saved.recovery.json");
+    std::fs::write(&record, r#"{"agent":"claude","stage":"stopped"}"#).unwrap();
+    record
 }
 
 #[tokio::test]
 async fn completion_cleanup_removes_a_done_chat_whatever_prs_it_watches() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
+    let (chat, opened) = chat_with_workspace(&temp, &manager).await;
     let record = serde_json::json!({
         "kind": "watch",
         "urls": ["https://github.com/team/repo/pull/1"],
@@ -1455,56 +1391,13 @@ async fn completion_cleanup_removes_a_done_chat_whatever_prs_it_watches() {
     manager.sweep_completed().await.unwrap();
     assert!(manager.chats().await.unwrap().is_empty());
     assert!(manager.workspace_by_id(&opened.id).await.is_err());
-    assert!(!process_wait(process).success());
-}
-
-/// How `process` exited.
-fn process_wait(
-    mut process: crate::daemon::test_support::ProcessGroup,
-) -> std::process::ExitStatus {
-    process.wait().unwrap()
-}
-
-#[tokio::test]
-async fn a_stopped_chat_whose_processes_run_on_starts_no_grace_period() {
-    let (temp, manager) = crate::daemon::test_support::manager().await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
-    // As a stop that never ended the agent left it.
-    let id = chat.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "UPDATE chats SET restore='resume',stopped_at=0 WHERE id=?1",
-                [id],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
-    let snapshot = (manager.merged_snapshot(&stopped.id))
-        .await
-        .unwrap()
-        .unwrap();
-    let removed = manager
-        .remove_unused(&PresentSpace::Chat(stopped), snapshot, EventCause::Merged)
-        .await;
-    assert!(removed.is_err());
-    assert_eq!(manager.cleanup_at(&chat.id).await.unwrap(), None);
-    assert!(manager.workspace_by_id(&opened.id).await.is_ok());
+    assert!(manager.running_agents().await.unwrap().is_empty());
 }
 
 #[tokio::test]
 async fn a_stalled_directory_below_a_done_chat_starts_no_grace_period() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
+    let (chat, opened) = chat_with_workspace(&temp, &manager).await;
     manager
         .write_local_config(
             &opened.repository_id,
@@ -1543,10 +1436,7 @@ async fn a_stalled_directory_below_a_done_chat_starts_no_grace_period() {
 #[tokio::test]
 async fn a_stopped_chat_withdraws_its_completion_and_stays() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
+    let (chat, opened) = chat_with_workspace(&temp, &manager).await;
     manager
         .mark_chat_done(
             &chat.id,
@@ -1558,8 +1448,7 @@ async fn a_stopped_chat_withdraws_its_completion_and_stays() {
         )
         .await
         .unwrap();
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
+    manager.end_executions(&chat.id).await;
 
     let withdrawn = manager
         .undo_space_done(&SpaceSelector::id(&chat.id))
@@ -1575,10 +1464,7 @@ async fn a_stopped_chat_withdraws_its_completion_and_stays() {
 #[tokio::test]
 async fn a_done_chat_something_keeps_still_takes_the_workspaces_below_it() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
+    let (chat, opened) = chat_with_workspace(&temp, &manager).await;
     manager
         .mark_chat_done(
             &chat.id,
@@ -1616,10 +1502,7 @@ async fn a_done_chat_something_keeps_still_takes_the_workspaces_below_it() {
 #[tokio::test]
 async fn a_chats_open_question_keeps_it_from_every_unattended_removal() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let (chat, _) = chat_with_workspace(&temp, &manager, &process).await;
+    let (chat, _) = chat_with_workspace(&temp, &manager).await;
     let ask = crate::daemon::questions::Ask {
         question: "Which database?".into(),
         recommendation: "SQLite".into(),
@@ -1635,7 +1518,7 @@ async fn a_chats_open_question_keeps_it_from_every_unattended_removal() {
         )
         .await
         .unwrap();
-    process.kill();
+    manager.end_executions(&chat.id).await;
     let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     assert_eq!(
         (manager.cleanup_candidacy(&stopped.id))
@@ -1650,11 +1533,8 @@ async fn a_chats_open_question_keeps_it_from_every_unattended_removal() {
 #[tokio::test]
 async fn a_link_made_while_idle_cleanup_starts_keeps_the_chat_and_its_workspaces() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
-    process.kill();
+    let (chat, opened) = chat_with_workspace(&temp, &manager).await;
+    manager.end_executions(&chat.id).await;
     let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     let snapshot = (manager.cleanup_snapshot(&stopped.id))
         .await
@@ -1702,17 +1582,12 @@ async fn a_chat_in_a_workspace_keeps_it_while_it_runs_and_from_idle_cleanup_whil
     let reason = || async { manager.cleanup_reason(&workspace).await };
     let merged = || async { manager.merged_snapshot(&workspace.id).await.unwrap() };
     assert!(merged().await.is_some());
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
         .start_chat_in_workspace(
             &SpaceSelector::id(&workspace.id),
             "kept-chat".into(),
             "claude".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -1722,22 +1597,14 @@ async fn a_chat_in_a_workspace_keeps_it_while_it_runs_and_from_idle_cleanup_whil
 
     // A chat Shoal saved keeps it from idle cleanup, as a saved agent does,
     // but not from merged cleanup.
-    manager.save_chats(crate::state::ChatRestore::Resume).await;
+    manager.end_executions(&chat.id).await;
+    let saved = save_agent(&manager, &chat.id);
     assert_eq!(reason().await, CleanupReason::Recovering);
     assert!(merged().await.is_some());
 
     // One whose agent exited keeps it from neither.
-    let id = chat.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute("UPDATE chats SET saved=0 WHERE id=?1", [id])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
+    std::fs::remove_file(saved).unwrap();
     assert_eq!(reason().await, CleanupReason::Idle { minutes: 10 });
-    drop(process);
 }
 
 #[tokio::test]

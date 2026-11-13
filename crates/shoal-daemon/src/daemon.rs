@@ -194,7 +194,6 @@ pub async fn run(
         "lost hook reports",
         workspace::lost_reports::run,
     );
-    spawn_supervised(&mut background, &manager, "chats", chats::run);
     spawn_supervised(&mut background, &manager, "conversions", conversions::run);
     spawn_supervised(
         &mut background,

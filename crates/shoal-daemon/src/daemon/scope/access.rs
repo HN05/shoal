@@ -147,24 +147,24 @@ impl Manager {
         Ok(space)
     }
 
-    /// `workspace`, which must be one below the caller's whose agent stopped
-    /// as `execution` the caller's process or one below it stopped, or whose
+    /// `space`, which must be one below the caller's whose agent stopped as
+    /// `execution` the caller's process or one below it stopped, or whose
     /// restart by one of them left it stopped: an agent the user or Shoal
     /// stopped, or that exited on its own, is the user's to resume.
     pub(in crate::daemon) async fn stopped_below<'a>(
         &self,
         caller: &Caller,
-        workspace: &'a mut SpaceSelector,
+        space: &'a mut SpaceSelector,
         execution: &ExecutionId,
     ) -> Result<&'a mut SpaceSelector> {
-        let workspace = self
+        let space = self
             .workspace_below(
                 caller,
-                workspace,
-                "scoped processes resume agents only in the workspaces below their own space",
+                space,
+                "scoped processes resume agents only in the spaces below their own",
             )
             .await?;
-        let id = self.workspace(workspace).await?.id;
+        let id = self.space(space).await?.id().clone();
         let stopper = recovery::stopped_by(&self.paths, &id, execution)?;
         let ours = match stopper {
             Some(stopper) => self.within_subtree(&caller.space_id, &stopper).await?,
@@ -174,7 +174,7 @@ impl Manager {
             ours,
             "scoped processes resume only the agents that they or the spaces below them stopped, with shoal stop or a restart; ask the user to resume this one"
         );
-        Ok(workspace)
+        Ok(space)
     }
 
     /// `workspace`, which must be one below the caller's space, whose
@@ -189,33 +189,6 @@ impl Manager {
         let id = self.workspace(workspace).await?.id;
         ensure!(self.reaches(caller, &id).await?, REFUSAL);
         Ok(workspace)
-    }
-
-    /// `chat`, which must be a stopped chat below the caller's space that
-    /// the caller's process or one below it stopped: a chat the user or
-    /// Shoal stopped, or whose agent exited, is the user's to resume.
-    pub(in crate::daemon) async fn stopped_chat_below<'a>(
-        &self,
-        caller: &Caller,
-        chat: &'a mut SpaceSelector,
-    ) -> Result<&'a mut SpaceSelector> {
-        let chat = self
-            .workspace_below(
-                caller,
-                chat,
-                "scoped processes resume only the chats below their own space",
-            )
-            .await?;
-        let id = self.space(chat).await?.id().to_owned();
-        let ours = match self.chat_stopped_by(&id).await? {
-            Some(stopper) => self.within_subtree(&caller.space_id, &stopper).await?,
-            None => false,
-        };
-        ensure!(
-            ours,
-            "scoped processes resume only the chats that they or the spaces below them stopped; ask the user to resume this one"
-        );
-        Ok(chat)
     }
 
     /// `workspace`, which must be one below the caller's that the user

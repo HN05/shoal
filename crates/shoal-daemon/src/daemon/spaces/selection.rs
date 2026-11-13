@@ -93,13 +93,6 @@ impl Manager {
         }
     }
 
-    /// The running chat `selector` names.
-    pub(crate) async fn running_chat(&self, selector: &SpaceSelector) -> Result<Chat> {
-        let chat = self.chat(selector).await?;
-        anyhow::ensure!(chat.restore.is_none(), "no running chat {selector}");
-        Ok(chat)
-    }
-
     /// The chat, running or stopped, `selector` names, refusing a
     /// workspace.
     pub(crate) async fn chat(&self, selector: &SpaceSelector) -> Result<Chat> {

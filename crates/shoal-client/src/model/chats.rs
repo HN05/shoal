@@ -42,7 +42,6 @@ pub struct Chat {
     /// registered checkout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<WorkspaceRef>,
-    pub pid: u32,
     pub started_at: crate::time::UnixTime,
     /// Where it runs in a terminal host, when it runs in one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -58,10 +57,11 @@ pub struct Chat {
     /// The agent session its hooks reported last, which an export continues.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<AgentSessionId>,
-    /// How the chat comes back once its agent stopped, by exiting or as
-    /// Shoal saved its session; none while it runs.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub restore: Option<crate::state::ChatRestore>,
+    /// Whether its agent runs: an execution of it is recorded. A stopped
+    /// chat keeps what its agent's stop saved for `shoal resume`, as a
+    /// workspace does.
+    #[serde(default)]
+    pub running: bool,
     /// The issues, PRs and CI runs it links.
     #[serde(default)]
     pub links: SpaceLinks,
@@ -135,13 +135,6 @@ impl<'a> ChatHome<'a> {
             Self::Workspace(workspace) => Some(workspace),
         }
     }
-}
-
-/// What `shoal stop` did to a chat.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StoppedChat {
-    /// It was stopped before, and keeps the space recorded as its stopper.
-    pub already_stopped: bool,
 }
 
 /// A chat after a rename, with the name it had before.

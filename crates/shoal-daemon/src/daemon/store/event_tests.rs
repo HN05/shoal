@@ -200,6 +200,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    db.execute_batch(include_str!("chat_executions_undo.sql"))?;
     db.execute_batch(include_str!("space_priority_undo.sql"))?;
     db.execute_batch(include_str!("execution_spaces_undo.sql"))?;
     db.execute_batch(include_str!("agent_stops_undo.sql"))?;
@@ -436,8 +437,8 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
     migrate(&mut db)?;
     db.execute_batch(
         "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-         INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
-             VALUES ('c','repo','planner','claude',1,'birth',1);
+         INSERT INTO chats(id,repository_id,name,agent,started_at)
+             VALUES ('c','repo','planner','claude',1);
          INSERT INTO space_review(space_id,url,kind,head) VALUES ('c','',NULL,'abc');",
     )?;
     crate::daemon::events::record_link(
@@ -513,8 +514,8 @@ fn renames_questions_and_children_reach_their_spaces_logs() -> Result<()> {
          INSERT INTO space_parents(space_id,parent_id) VALUES ('child','parent');
          INSERT INTO workspaces(id,repository_id,name,path,branch,state)
              VALUES ('child','repo','fix','/fix','fix','ready');
-         INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
-             VALUES ('chat','repo','helper','claude',1,'birth',1);
+         INSERT INTO chats(id,repository_id,name,agent,started_at)
+             VALUES ('chat','repo','helper','claude',1);
          INSERT INTO space_parents(space_id,parent_id) VALUES ('chat','parent');
          UPDATE workspaces SET name='Fix login' WHERE id='child';
          UPDATE workspaces SET branch='fix/login' WHERE id='child';

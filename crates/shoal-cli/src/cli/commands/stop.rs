@@ -1,9 +1,7 @@
-//! Stopping keeps agent sessions and commands, and chats, for
-//! `shoal resume`; agents stay down until it continues them. The other
-//! processes of a workspace,
-//! and with `--processes` or `--leftovers` those of a chat, stop for good,
-//! and the agent launches waiting in the queue leave it, having nothing to
-//! save.
+//! Stopping keeps agent sessions and commands for `shoal resume`, a
+//! workspace's or a chat's; agents stay down until it continues them. The
+//! other processes of a space stop for good, and the agent launches waiting
+//! in the queue leave it, having nothing to save.
 use anyhow::{Result, ensure};
 
 use crate::client::output::agents::SpaceStopped;
@@ -12,12 +10,11 @@ use crate::{
     cli::{
         args::lifecycle::StopArgs, commands::queued_agents, context::Context, output::Style, ui,
     },
-    model::{PresentSpace, StoppedWorkspace, Workspace},
+    model::{PresentSpace, StoppedSpace},
     protocol::{ErrorCode, QueuedLaunches, RemoteError, UntrackedProcesses},
 };
 
 mod batch;
-mod chats;
 mod processes;
 mod targets;
 
@@ -48,8 +45,7 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
         ensure_below(&selected)?;
     }
     match selected.as_slice() {
-        [PresentSpace::Workspace(workspace)] => stop_one(ctx, workspace, yes).await,
-        [PresentSpace::Chat(chat)] => chats::stop_one(ctx, chat).await,
+        [space] => stop_one(ctx, space, yes).await,
         spaces => {
             check_each(ctx, spaces).await?;
             stop_each(ctx, spaces, "", yes).await
@@ -57,16 +53,16 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     }
 }
 
-/// Stop `workspace`, reporting it alone.
-async fn stop_one(ctx: &Context, workspace: &Workspace, yes: bool) -> Result<i32> {
-    let selector = SpaceSelector::id(&workspace.id);
+/// Stop `space`, reporting it alone.
+async fn stop_one(ctx: &Context, space: &PresentSpace, yes: bool) -> Result<i32> {
+    let selector = SpaceSelector::id(space.id());
     let launches = QueuedLaunches::Cancel;
     let stopped = stop(ctx, &selector, yes, launches, other_processes_stop()).await?;
     if let Some(run) = &stopped.cancelled_run {
         // The job runs until its runner stops it, and its workspace goes then.
         ctx.emit_styled(
             Style::Success,
-            &cancelled_run_message(&workspace.name, run),
+            &cancelled_run_message(space.name(), run),
             SpaceStopped {
                 stopped: false,
                 saved: false,
@@ -78,13 +74,16 @@ async fn stop_one(ctx: &Context, workspace: &Workspace, yes: bool) -> Result<i32
         )?;
         return Ok(0);
     }
-    let StoppedWorkspace {
+    let StoppedSpace {
         cancelled,
         other_processes: processes,
         saved,
         ..
     } = stopped;
-    let mut message = "Workspace processes stopped".to_owned();
+    let mut message = match space {
+        PresentSpace::Workspace(_) => "Workspace processes stopped".to_owned(),
+        PresentSpace::Chat(_) => "Chat processes stopped".to_owned(),
+    };
     if processes > 0 {
         message = format!("{message}. Stopped {}", other_processes(processes));
     }
@@ -92,10 +91,7 @@ async fn stop_one(ctx: &Context, workspace: &Workspace, yes: bool) -> Result<i32
         message = format!("{message}. {}", removed_launches(cancelled.len()));
     }
     if saved {
-        message = format!(
-            "{message}. {}",
-            continue_hint(&workspace.number.to_string())
-        );
+        message = format!("{message}. {}", continue_hint(&space.number().to_string()));
     }
     ctx.emit_styled(
         Style::Success,
@@ -144,22 +140,22 @@ pub(super) fn other_processes_stop() -> UntrackedProcesses {
     }
 }
 
-/// Stop `workspace`, doing with the agent launches waiting to start in it
+/// Stop `space`, doing with the agent launches waiting to start in it
 /// what `launches` says and with its untracked processes what `processes`
 /// says, and return what the stop did, or the run the forge was asked to
 /// cancel for a CI job's workspace. An execution Shoal cannot prove ended
 /// stops only once the user confirms it did, or with `yes`.
 pub(super) async fn stop(
     ctx: &Context,
-    workspace: &SpaceSelector,
+    space: &SpaceSelector,
     yes: bool,
     launches: QueuedLaunches,
     processes: UntrackedProcesses,
-) -> Result<StoppedWorkspace> {
+) -> Result<StoppedSpace> {
     let request_stop = |acknowledge_unproven| {
-        crate::client::stopping::stop_workspace(
+        crate::client::stopping::stop_space(
             &ctx.paths,
-            workspace.clone(),
+            space.clone(),
             acknowledge_unproven,
             launches,
             processes,

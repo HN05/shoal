@@ -10,7 +10,7 @@ use anyhow::{Result, ensure};
 
 use super::handoff;
 use crate::client::space_names::{SpaceName, SpaceSelector};
-use crate::client::{agent::AgentSessionId, priority::Priority, space_ids::SpaceId};
+use crate::client::{agent::AgentSessionId, priority::Priority};
 use crate::{
     agent::{Agent, ModelChoice},
     cli::{
@@ -42,9 +42,6 @@ pub(in crate::cli::commands) struct Options {
     /// Whether the chat starts from a fork of `session`, which stays
     /// unchanged, instead of continuing it.
     pub fork: bool,
-    /// The stopped chat, by ID, that this start restores under its own name
-    /// instead of recording a new one.
-    pub restore: Option<SpaceId>,
     /// The handoff of a starter that waits on this place to start the chat,
     /// with its scope when it is scoped.
     pub handoff: Option<PathBuf>,
@@ -105,7 +102,6 @@ impl Options {
             args: std::mem::take(&mut args.args),
             session: args.session.take(),
             fork: args.fork_session,
-            restore: args.restore.take(),
             handoff: args.handoff.take(),
             parent: args.parent.take(),
             narrowing: match args.recorded_narrowing.take() {
@@ -129,7 +125,6 @@ impl Options {
             args,
             session,
             fork,
-            restore,
             handoff,
             parent,
             narrowing,
@@ -147,7 +142,6 @@ impl Options {
             args,
             session,
             fork_session,
-            restore,
             handoff,
             parent,
             permissions,
@@ -187,7 +181,6 @@ impl Options {
             args,
             session,
             fork: _,
-            restore,
             handoff,
             parent: _,
             narrowing: _,
@@ -199,7 +192,6 @@ impl Options {
             model: ModelArgs { model, effort },
             name,
             session,
-            restore,
             handoff,
             args,
         }

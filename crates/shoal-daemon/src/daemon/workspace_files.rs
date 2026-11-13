@@ -243,7 +243,7 @@ impl Manager {
             return Attacher::User;
         };
         match self.chat(&SpaceSelector::id(chat)).await {
-            Ok(chat) if chat.restore.is_none() => Attacher::Chat {
+            Ok(chat) if chat.running => Attacher::Chat {
                 agent: chat.agent,
                 chat: chat.id,
             },

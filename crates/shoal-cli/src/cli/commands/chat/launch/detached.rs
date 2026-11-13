@@ -39,8 +39,7 @@ pub(super) fn request(
     let Narrowing::Requested(narrowing) = options.narrowing else {
         return None;
     };
-    let carried = options.restore.is_none()
-        && options.session.is_none()
+    let carried = options.session.is_none()
         && options.handoff.is_none()
         && linked_issue.is_none()
         && !topic.tells_resumed;

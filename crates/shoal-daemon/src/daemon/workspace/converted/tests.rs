@@ -45,8 +45,8 @@ async fn kinds(manager: &Manager, id: &crate::client::space_ids::SpaceId) -> Vec
 async fn a_chat_becomes_a_workspace_under_its_id_number_name_and_parent() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
-    let (lead, _lead) = chat(&manager, "lead", "chat", Some(&repo), None).await;
-    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), Some(&lead.id)).await;
+    let lead = chat(&manager, "lead", "chat", Some(&repo), None).await;
+    let talk = chat(&manager, "talk", "worker", Some(&repo), Some(&lead.id)).await;
     let status = ProgressChange::Status(Some("Reproduced".into()));
     (manager.set_progress(&SpaceSelector::id(&talk.id), status))
         .await
@@ -87,7 +87,7 @@ async fn a_chat_becomes_a_workspace_under_its_id_number_name_and_parent() {
     let Some(Pending::Workspace { chat, .. }) = pending else {
         panic!("expected the chat's restart to wait: {pending:?}");
     };
-    assert_eq!(chat.agent().unwrap().pid, talk.pid);
+    assert_eq!(chat.agent().unwrap().agent, talk.agent);
     let kinds = kinds(&manager, &talk.id).await;
     assert!(
         kinds.contains(&EventKind::Converted.to_string()),
@@ -105,7 +105,7 @@ async fn a_chat_becomes_a_workspace_under_its_id_number_name_and_parent() {
 async fn a_worktree_that_cannot_be_made_gives_the_chat_back() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
-    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
     let attacher = crate::daemon::workspace_files::Attacher::User;
     let done = (manager.mark_chat_done(&talk.id, Default::default(), &attacher))
         .await
@@ -123,8 +123,8 @@ async fn a_worktree_that_cannot_be_made_gives_the_chat_back() {
     assert!(created.is_err());
     let restored = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
     assert_eq!(
-        (restored.number, restored.pid, &restored.name),
-        (talk.number, talk.pid, &talk.name)
+        (restored.number, restored.running, &restored.name),
+        (talk.number, true, &talk.name)
     );
     assert!(manager.workspace_by_id(&talk.id).await.is_err());
     assert_eq!(manager.completion(&talk.id).await.unwrap(), Some(done));
@@ -148,7 +148,7 @@ async fn a_branch_another_workspace_holds_is_refused_before_anything_changes() {
         .create_workspace(&repo.id, "fix-login".into(), None, None, None)
         .await
         .unwrap();
-    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
     let converting = Converting {
         chat: talk.clone(),
         mode: ModeName::DEFAULT,
@@ -170,7 +170,7 @@ async fn a_branch_another_workspace_holds_is_refused_before_anything_changes() {
 async fn the_chats_open_questions_stay_with_the_space() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
-    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
     let selector = SpaceSelector::id(&talk.id);
     let ask = crate::client::questions::Ask {
         question: "Which database?".into(),
@@ -213,7 +213,7 @@ async fn a_remote_branch_named_with_its_remote_opens_as_that_branch() {
         &["remote", "add", "origin", remote_path],
     );
     crate::daemon::test_support::git(Path::new(checkout), &["fetch", "-q", "origin"]);
-    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
     let converting = Converting {
         chat: talk,
         mode: ModeName::DEFAULT,
@@ -238,7 +238,7 @@ async fn a_branch_only_the_remote_has_opens_without_a_fetch() {
     let repo = registered(root.path(), &manager).await;
     let remote_path = remote.to_str().unwrap();
     crate::daemon::test_support::git(&repo.path, &["remote", "add", "origin", remote_path]);
-    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
     let converting = Converting {
         chat: talk,
         mode: ModeName::DEFAULT,
@@ -259,7 +259,7 @@ async fn a_new_branch_whose_namespace_a_branch_blocks_is_allocated_as_any() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
     crate::daemon::test_support::git(&repo.path, &["branch", "feature"]);
-    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
     let converting = Converting {
         chat: talk,
         mode: ModeName::DEFAULT,
@@ -280,8 +280,8 @@ async fn a_new_branch_whose_namespace_a_branch_blocks_is_allocated_as_any() {
 async fn a_chat_stopped_before_its_conversion_records_stays_a_chat() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
-    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
-    manager.save_chat(&talk.id, None).await.unwrap();
+    let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    manager.end_executions(&talk.id).await;
     let converting = Converting {
         chat: talk.clone(),
         mode: ModeName::DEFAULT,
@@ -297,7 +297,7 @@ async fn a_chat_stopped_before_its_conversion_records_stays_a_chat() {
         "{refused:#}"
     );
     let chat = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
-    assert!(chat.restore.is_some());
+    assert!(!chat.running);
 }
 
 #[tokio::test]
@@ -313,7 +313,7 @@ async fn a_mode_the_branch_does_not_define_gives_the_chat_back() {
     .unwrap();
     crate::daemon::test_support::git(&checkout, &["add", ".shoal.toml"]);
     crate::daemon::test_support::git(&checkout, &["commit", "-qm", "Add a mode"]);
-    let (talk, _talk) = chat(&manager, "talk", "worker", Some(&repo), None).await;
+    let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
     let converting = Converting {
         chat: talk.clone(),
         mode: "extra".into(),
@@ -339,8 +339,8 @@ async fn a_conversion_during_the_repositorys_removal_waits_for_it() {
     let (root, manager) = manager().await;
     let manager = std::sync::Arc::new(manager);
     let repo = registered(root.path(), &manager).await;
-    let (first, _first) = chat(&manager, "first", "worker", Some(&repo), None).await;
-    let (second, _second) = chat(&manager, "second", "worker", Some(&repo), None).await;
+    let first = chat(&manager, "first", "worker", Some(&repo), None).await;
+    let second = chat(&manager, "second", "worker", Some(&repo), None).await;
     let converting = Converting {
         chat: first,
         mode: ModeName::DEFAULT,

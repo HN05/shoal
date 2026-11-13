@@ -1043,6 +1043,7 @@ async fn upgrading_records_the_copies_messages_attached_before() {
     manager
         .store
         .run(|db| {
+            db.execute_batch(include_str!("../store/chat_executions_undo.sql"))?;
             db.execute_batch(include_str!("../store/space_priority_undo.sql"))?;
             db.execute_batch(include_str!("../store/execution_spaces_undo.sql"))?;
             db.execute_batch(include_str!("../store/agent_stops_undo.sql"))?;
@@ -1171,6 +1172,7 @@ async fn an_earlier_copy_that_cannot_be_read_is_recorded_on_a_later_pass() {
     manager
         .store
         .run(|db| {
+            db.execute_batch(include_str!("../store/chat_executions_undo.sql"))?;
             db.execute_batch(include_str!("../store/space_priority_undo.sql"))?;
             db.execute_batch(include_str!("../store/execution_spaces_undo.sql"))?;
             db.execute_batch(include_str!("../store/agent_stops_undo.sql"))?;
@@ -1223,6 +1225,7 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
     manager
         .store
         .run(|db| {
+            db.execute_batch(include_str!("../store/chat_executions_undo.sql"))?;
             db.execute_batch(include_str!("../store/space_priority_undo.sql"))?;
             db.execute_batch(include_str!("../store/execution_spaces_undo.sql"))?;
             db.execute_batch(include_str!("../store/agent_stops_undo.sql"))?;
@@ -1377,22 +1380,18 @@ const BEFORE_ATTACHED_FILES: &str = "DROP TRIGGER workspace_sleep_removed;
     ALTER TABLE chats DROP COLUMN mode;
     PRAGMA user_version=87;";
 
-/// Start a chat named `name` in the repository of `workspace` whose process
-/// is `process`.
+/// Start a chat named `name` in the repository of `workspace`.
 async fn chat(
-    manager: &Manager,
+    manager: &std::sync::Arc<Manager>,
     workspace: &Workspace,
     name: &str,
-    process: &crate::daemon::test_support::ProcessGroup,
 ) -> crate::model::Chat {
     manager
         .start_chat(
             workspace.repository_id.clone().into(),
             name.into(),
             "claude".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap()
@@ -1406,10 +1405,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
     };
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let chat = chat(&manager, &workspace, "planning", &process).await;
+    let chat = chat(&manager, &workspace, "planning").await;
     let report = temp.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();
     let added = manager
@@ -1455,8 +1451,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
             .is_err()
     );
 
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
+    manager.end_executions(&chat.id).await;
     manager
         .remove_chat(&SpaceSelector::id(&chat.id), None)
         .await
@@ -1529,20 +1524,17 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
 #[tokio::test]
 async fn a_chat_without_a_repository_keeps_its_files_in_root_dir() {
     let (temp, manager) = manager().await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = crate::daemon::chats::NewChat {
         priority: None,
         narrowing: Default::default(),
         name: "master".into(),
         agent: "claude".into(),
         mode: "orchestrate".into(),
-        pid: process.id(),
         origin: None,
-        hands_over: false,
         parent: None,
     };
     let chat = manager.start_new_chat(None, None, new).await.unwrap();
+    let chat = manager.run_chat_agent(chat).await.unwrap();
     let report = temp.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();
     let added = manager
@@ -1570,8 +1562,7 @@ async fn a_chat_without_a_repository_keeps_its_files_in_root_dir() {
     // Deleting the files of every idle space spares a running chat's.
     assert!(manager.remove_idle_files().await.unwrap().is_empty());
 
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
+    manager.end_executions(&chat.id).await;
     manager
         .remove_chat(&SpaceSelector::id(&chat.id), None)
         .await
@@ -1599,20 +1590,17 @@ async fn a_chat_without_a_repository_keeps_its_files_in_root_dir() {
 #[tokio::test]
 async fn files_of_a_chat_without_a_repository_stay_with_the_root_dir_it_started_in() {
     let (temp, manager) = manager().await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = crate::daemon::chats::NewChat {
         priority: None,
         narrowing: Default::default(),
         name: "master".into(),
         agent: "claude".into(),
         mode: "orchestrate".into(),
-        pid: process.id(),
         origin: None,
-        hands_over: false,
         parent: None,
     };
     let chat = manager.start_new_chat(None, None, new).await.unwrap();
+    let chat = manager.run_chat_agent(chat).await.unwrap();
     let root_dir = manager.config().root_dir(&manager.paths).unwrap();
     let space = SpaceSelector::id(&chat.id);
     let attach = |name: &str| {
@@ -1644,8 +1632,7 @@ async fn files_of_a_chat_without_a_repository_stay_with_the_root_dir_it_started_
         .unwrap();
     assert!(!early.exists());
 
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
+    manager.end_executions(&chat.id).await;
     manager
         .remove_chat(&SpaceSelector::id(&chat.id), None)
         .await
@@ -1672,10 +1659,7 @@ async fn files_of_a_chat_without_a_repository_stay_with_the_root_dir_it_started_
 async fn a_chats_agent_attaches_as_its_chat_outside_any_workspace() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let chat = chat(&manager, &workspace, "planning", &process).await;
+    let chat = chat(&manager, &workspace, "planning").await;
     let as_chat = Attacher::Chat {
         agent: "claude".into(),
         chat: chat.id.clone(),
@@ -1705,7 +1689,7 @@ async fn a_chats_agent_attaches_as_its_chat_outside_any_workspace() {
         .unwrap();
     assert_eq!(added[0].attached_by, Some(as_chat));
 
-    process.kill();
+    manager.end_executions(&chat.id).await;
     assert_eq!(manager.attacher(None, Some(&chat.id)).await, Attacher::User);
 }
 

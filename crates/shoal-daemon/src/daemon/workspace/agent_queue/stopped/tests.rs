@@ -394,7 +394,7 @@ async fn restores_leave_the_queue_once_resolved_or_cancelled() {
 
     // A stop cancels the restore and leaves the agent stopped.
     manager
-        .stop_workspace(
+        .stop_space(
             &manager.named("work").await,
             crate::daemon::workspace::StopRequest::manual(),
         )
@@ -454,7 +454,7 @@ async fn a_stop_or_completion_keeps_stopped_agents_down() {
     let signalled = create(&manager, &repo, "signalled").await;
     signal_stop(&manager, &signalled, "requested");
     manager
-        .stop_workspace(
+        .stop_space(
             &manager.named("signalled").await,
             crate::daemon::workspace::StopRequest::manual(),
         )
@@ -506,7 +506,7 @@ async fn a_manual_stop_keeps_stopped_agents_as_last_sessions() {
     assert_eq!(queue(&manager).await.len(), 1);
     let parent = create(&manager, &repo, "parent").await;
     manager
-        .stop_workspace_manually(
+        .stop_space_manually(
             &manager.named("work").await,
             false,
             Some(&parent.id),
@@ -610,7 +610,7 @@ async fn a_stop_cancels_an_admitted_restore_before_its_agent_registers() {
     // The agent may take over the slot only while its start is admitted.
     drop(manager.reserve_queue_entry(&entry.id).await.unwrap());
     manager
-        .stop_workspace(
+        .stop_space(
             &manager.named("work").await,
             crate::daemon::workspace::StopRequest::manual(),
         )
@@ -658,7 +658,7 @@ async fn a_stop_forgets_a_request_while_a_resume_holds_its_record() {
     let path = record_path(&manager.paths, &workspace.id, &ExecutionId::from("agent"));
     let resuming = crate::execution::recovery::claim(&path).unwrap();
     manager
-        .stop_workspace(
+        .stop_space(
             &manager.named("work").await,
             crate::daemon::workspace::StopRequest::manual(),
         )
@@ -717,7 +717,7 @@ async fn stop_all_selects_running_agents_and_pending_restores() {
         .await
         .unwrap()
         .into_iter()
-        .map(|workspace| workspace.name.into())
+        .map(|space| space.name().clone().into())
         .collect();
     targets.sort();
     assert_eq!(targets, ["queued", "requested", "running"]);

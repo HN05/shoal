@@ -1,7 +1,7 @@
 use super::*;
 use crate::time::UnixTime;
 use crate::{
-    model::{AgentStatus, PendingRestart},
+    model::{AgentStatus, PendingRestart, Workspace},
     state::WorkspaceState,
 };
 
@@ -73,7 +73,7 @@ fn idle_agents_restart_first_and_waiting_or_silent_ones_count_as_working() {
         agents,
         named: false,
     };
-    let plan = selection.plan(None, false);
+    let plan = selection.plan(None);
     assert_eq!(restarted(&plan), ["idle", "working", "waiting", "silent"]);
     assert!(plan.skipped.is_empty());
 }
@@ -95,7 +95,7 @@ fn an_agent_name_selects_its_agents_and_unrestorable_ones_are_skipped() {
         spaces: spaces([claude, codex, custom, gone, commands]),
         named: false,
     };
-    let plan = selection.plan(Some(&"claude".into()), false);
+    let plan = selection.plan(Some(&"claude".into()));
     assert_eq!(restarted(&plan), ["claude"]);
     assert_eq!(skipped(&plan), ["custom", "gone"]);
 }
@@ -108,7 +108,7 @@ fn a_named_workspace_without_the_agent_is_reported() {
         spaces: spaces([codex]),
         named: true,
     };
-    let plan = selection.plan(Some(&"claude".into()), false);
+    let plan = selection.plan(Some(&"claude".into()));
     assert!(plan.restarts.is_empty());
     assert_eq!(skipped(&plan), ["codex"]);
 }
@@ -141,11 +141,11 @@ fn agents_waiting_for_their_restore_are_left_out_unless_named() {
         named,
     };
 
-    let plan = selection(false).plan(None, false);
+    let plan = selection(false).plan(None);
     assert_eq!(restarted(&plan), ["running-too"]);
     assert!(plan.skipped.is_empty());
 
-    let plan = selection(true).plan(None, false);
+    let plan = selection(true).plan(None);
     assert_eq!(restarted(&plan), ["running-too"]);
     assert_eq!(skipped(&plan), ["stopped"]);
     let reason = &plan.skipped[0].reason;
@@ -176,7 +176,7 @@ fn only_an_agents_own_report_makes_it_idle() {
         spaces: spaces([shared_state]),
         named: false,
     };
-    let plan = selection.plan(None, false);
+    let plan = selection.plan(None);
     let order: Vec<_> = plan
         .restarts
         .iter()
@@ -216,7 +216,7 @@ fn a_rerun_continues_the_interrupted_run_and_skips_what_it_restarted() {
         spaces: spaces([pending, again, earlier, other]),
         named: false,
     };
-    let plan = selection.plan(None, false);
+    let plan = selection.plan(None);
     assert_eq!(plan.run, "interrupted");
     // The restart in progress comes first, ready although its turn was
     // working, since its agent is already stopped.
@@ -241,7 +241,7 @@ fn without_restarts_in_progress_a_run_restarts_every_agent_under_a_new_name() {
         spaces: spaces([recent]),
         named: false,
     };
-    let plan = selection.plan(None, false);
+    let plan = selection.plan(None);
     assert_eq!(restarted(&plan), ["recent"]);
     assert_ne!(plan.run, "earlier");
 }
@@ -263,7 +263,7 @@ fn a_rerun_skips_what_any_run_of_a_pending_restart_restarted() {
         spaces: spaces([pending, done]),
         named: false,
     };
-    let plan = selection.plan(None, false);
+    let plan = selection.plan(None);
     assert_eq!(restarted(&plan), ["pending"]);
     assert_eq!(skipped(&plan), ["done"]);
 }
@@ -276,7 +276,7 @@ fn chat(name: &str) -> PresentSpace {
             "repository_id": "repository",
             "name": name,
             "agent": "claude",
-            "pid": 1,
+            "running": true,
             "started_at": 0,
         }))
         .unwrap(),
@@ -302,7 +302,7 @@ fn chat_agent(name: &str, restorable: bool) -> RunningAgent {
 }
 
 #[test]
-fn chats_restart_beside_workspace_agents_but_never_in_place() {
+fn chats_restart_beside_workspace_agents() {
     let api = workspace("api");
     let agents = vec![
         reporting(&api, Some(AgentState::Idle)),
@@ -319,11 +319,7 @@ fn chats_restart_beside_workspace_agents_but_never_in_place() {
         named: false,
     };
 
-    let plan = selection().plan(None, false);
+    let plan = selection().plan(None);
     assert_eq!(restarted(&plan), ["api", "talk"]);
     assert_eq!(skipped(&plan), ["quiet"]);
-
-    let plan = selection().plan(None, true);
-    assert_eq!(restarted(&plan), ["api"]);
-    assert_eq!(skipped(&plan), ["talk", "quiet"]);
 }

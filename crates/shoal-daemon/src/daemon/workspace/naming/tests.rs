@@ -74,9 +74,7 @@ async fn a_request_cannot_create_a_space_under_a_name_no_one_could_set() {
                 repo.id.clone().into(),
                 name.to_owned().into(),
                 "claude".into(),
-                std::process::id(),
                 None,
-                false,
             )
             .await;
         assert!(chat.is_err(), "{name:?}");

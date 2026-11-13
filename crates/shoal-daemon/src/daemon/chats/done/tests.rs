@@ -1,9 +1,9 @@
 use super::*;
 use crate::client::space_names::SpaceSelector;
-use crate::daemon::test_support::{ProcessGroup, manager, repository};
+use crate::daemon::test_support::{manager, repository};
 
 /// A running chat in a repository whose completions request no cleanup.
-async fn chat(manager: &Manager, root: &std::path::Path, process: &ProcessGroup) -> Chat {
+async fn chat(manager: &std::sync::Arc<Manager>, root: &std::path::Path) -> Chat {
     let checkout = repository(root, "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
@@ -14,14 +14,7 @@ async fn chat(manager: &Manager, root: &std::path::Path, process: &ProcessGroup)
         .await
         .unwrap();
     manager
-        .start_chat(
-            repo.id.into(),
-            "audit".into(),
-            "claude".into(),
-            process.id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.into(), "audit".into(), "claude".into(), None)
         .await
         .unwrap()
 }
@@ -36,8 +29,7 @@ fn summarized(summary: &str) -> Done {
 #[tokio::test]
 async fn a_chats_summary_ends_its_notice_and_each_done_replaces_it() {
     let (root, manager) = manager().await;
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
-    let chat = chat(&manager, root.path(), &process).await;
+    let chat = chat(&manager, root.path()).await;
     let completion = (manager.mark_chat_done(&chat.id, summarized("No leak"), &Attacher::User))
         .await
         .unwrap();
@@ -74,8 +66,7 @@ async fn a_chats_summary_ends_its_notice_and_each_done_replaces_it() {
 #[tokio::test]
 async fn an_invalid_chat_summary_is_refused_before_anything_is_recorded() {
     let (root, manager) = manager().await;
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
-    let chat = chat(&manager, root.path(), &process).await;
+    let chat = chat(&manager, root.path()).await;
     let report = root.path().join("report.md");
     std::fs::write(&report, "findings").unwrap();
     for summary in [

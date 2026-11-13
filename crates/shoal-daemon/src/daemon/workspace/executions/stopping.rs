@@ -11,7 +11,7 @@ use crate::{
         store,
     },
     fsutil::off_runtime,
-    model::{Execution, QueueEntry, StoppedWorkspace, Workspace},
+    model::{Execution, PresentSpace, QueueEntry, StoppedSpace, Workspace},
     process::identity::{self as process, Identity},
     protocol::{QueuedLaunches, timing},
     state::{ExecutionState, WorkspaceState},
@@ -153,6 +153,15 @@ impl StopRequest {
         }
     }
 
+    /// The agent of a chat that became a workspace, whose session its
+    /// conversion keeps to continue in the worktree.
+    pub(crate) fn conversion() -> Self {
+        Self {
+            reason: "its chat became a workspace".into(),
+            save: Save::Nothing,
+        }
+    }
+
     /// Removal of a missing worktree, which keeps no checkpoint or record.
     pub(in crate::daemon::workspace) fn removal() -> Self {
         Self {
@@ -197,6 +206,15 @@ enum Protected {
     Keep,
 }
 
+/// How a stop ends a space's executions and what it keeps of them.
+#[derive(Clone, Copy)]
+struct Stopping<'a> {
+    request: &'a StopRequest,
+    protected: Protected,
+    policy: StopPolicy,
+    keep: Keep<'a>,
+}
+
 /// What a stop keeps of the agents it stopped.
 #[derive(Clone, Copy)]
 enum Keep<'a> {
@@ -211,14 +229,15 @@ enum Keep<'a> {
 }
 
 impl Manager {
-    /// The settled workspaces `shoal stop --all` stops: those with a running
-    /// execution or a stopped agent whose restore is requested or queued,
-    /// and those a waiting launch opens when the stop cancels `launches`.
+    /// The spaces `shoal stop --all` stops: the settled workspaces and the
+    /// chats with a running execution or a stopped agent whose restore is
+    /// requested or queued, and the workspaces a waiting launch opens when
+    /// the stop cancels `launches`.
     /// The queue gate keeps restores and launches from moving between the
     /// queue and their agents meanwhile, and executions are read before
     /// requests, which an agent a signal stops saves before its execution
     /// ends.
-    pub async fn stop_targets(&self, launches: QueuedLaunches) -> Result<Vec<Workspace>> {
+    pub async fn stop_targets(&self, launches: QueuedLaunches) -> Result<Vec<PresentSpace>> {
         let _gate = self.agent_queue.lock_admission().await;
         let mut targets = self.store.run(|db| running_workspaces(db)).await?;
         let converting = self.store.run(|db| converting_workspaces(db)).await?;
@@ -227,27 +246,23 @@ impl Manager {
         if launches == QueuedLaunches::Cancel {
             targets.extend(self.waiting_launch_workspaces().await?);
         }
-        Ok(self
-            .list_workspaces()
-            .await?
-            .into_iter()
-            .filter(|workspace| {
-                let stoppable = matches!(
-                    workspace.state,
-                    WorkspaceState::Ready | WorkspaceState::Failed
-                );
-                (stoppable || converting.contains(&workspace.id)) && targets.contains(&workspace.id)
-            })
+        let workspaces = (self.list_workspaces().await?.into_iter()).filter(|workspace| {
+            let stoppable = matches!(
+                workspace.state,
+                WorkspaceState::Ready | WorkspaceState::Failed
+            );
+            (stoppable || converting.contains(&workspace.id)) && targets.contains(&workspace.id)
+        });
+        let chats = (self.chats().await?.into_iter()).filter(|chat| targets.contains(&chat.id));
+        Ok((workspaces.map(PresentSpace::Workspace))
+            .chain(chats.map(PresentSpace::Chat))
             .collect())
     }
 
-    /// Stop every execution, cancelling agents' waiting restores.
-    pub async fn stop_workspace(
-        &self,
-        selector: &SpaceSelector,
-        request: StopRequest,
-    ) -> Result<()> {
-        self.stop_workspace_executions(
+    /// Stop every execution of the space `selector` names, cancelling its
+    /// agents' waiting restores.
+    pub async fn stop_space(&self, selector: &SpaceSelector, request: StopRequest) -> Result<()> {
+        self.stop_space_executions(
             selector,
             request,
             Protected::Stop,
@@ -258,25 +273,25 @@ impl Manager {
         Ok(())
     }
 
-    /// Stop as [`Manager::stop_workspace`] does at the user's request, then
+    /// Stop as [`Manager::stop_space`] does at the user's request, then
     /// keep the stopped agents as last sessions, which stay down until the
-    /// user resumes them, or the process of workspace `stopped_by` that
+    /// user resumes them, or the process of the space `stopped_by` that
     /// stopped them. With `acknowledge_unproven`, executions whose launch
     /// identity was never recorded count as ended once nothing of them is
     /// visible, because the user checked. Returns the waiting launches it
     /// cancelled as `launches` says. A CI job's workspace cancels the job's
     /// run on the forge instead, whose runner then stops it.
-    pub async fn stop_workspace_manually(
+    pub async fn stop_space_manually(
         &self,
         selector: &SpaceSelector,
         acknowledge_unproven: bool,
         stopped_by: Option<&SpaceId>,
         launches: QueuedLaunches,
-    ) -> Result<StoppedWorkspace> {
+    ) -> Result<StoppedSpace> {
         if let Some(run) = self.cancel_job_in(selector).await? {
-            return Ok(StoppedWorkspace {
+            return Ok(StoppedSpace {
                 cancelled_run: Some(run),
-                ..StoppedWorkspace::default()
+                ..StoppedSpace::default()
             });
         }
         let policy = if acknowledge_unproven {
@@ -289,7 +304,7 @@ impl Manager {
             launches,
         };
         let cancelled = self
-            .stop_workspace_executions(
+            .stop_space_executions(
                 selector,
                 StopRequest::manual(),
                 Protected::Stop,
@@ -297,9 +312,9 @@ impl Manager {
                 keep,
             )
             .await?;
-        Ok(StoppedWorkspace {
+        Ok(StoppedSpace {
             cancelled,
-            ..StoppedWorkspace::default()
+            ..StoppedSpace::default()
         })
     }
 
@@ -321,7 +336,7 @@ impl Manager {
         selector: &SpaceSelector,
         request: StopRequest,
     ) -> Result<()> {
-        self.stop_workspace_executions(
+        self.stop_space_executions(
             selector,
             request,
             Protected::Keep,
@@ -332,11 +347,12 @@ impl Manager {
         Ok(())
     }
 
-    /// Stop the executions of the workspace `selector` names and `keep` what
-    /// they saved, all under one reservation: no execution registers
-    /// meanwhile, and no other stop keeps the saved agents first. Returns
-    /// the waiting launches `keep` cancels.
-    async fn stop_workspace_executions(
+    /// Stop the executions of the space `selector` names and `keep` what
+    /// they saved: a workspace's under one reservation of its lifecycle, so
+    /// no execution registers meanwhile and no other stop keeps the saved
+    /// agents first, while a chat runs only its agent. Returns the waiting
+    /// launches `keep` cancels.
+    async fn stop_space_executions(
         &self,
         selector: &SpaceSelector,
         request: StopRequest,
@@ -344,10 +360,30 @@ impl Manager {
         policy: StopPolicy,
         keep: Keep<'_>,
     ) -> Result<Vec<QueueEntry>> {
-        let workspace = self.workspace(selector).await?;
+        let stopping = Stopping {
+            request: &request,
+            protected,
+            policy,
+            keep,
+        };
+        match self.space(selector).await? {
+            PresentSpace::Workspace(workspace) => {
+                self.stop_workspace_executions(workspace, stopping).await
+            }
+            PresentSpace::Chat(chat) => self.stop_and_keep(&chat.id, stopping).await,
+        }
+    }
+
+    /// [`Self::stop_space_executions`] of `workspace`, under the reservation
+    /// of its lifecycle.
+    async fn stop_workspace_executions(
+        &self,
+        workspace: Workspace,
+        stopping: Stopping<'_>,
+    ) -> Result<Vec<QueueEntry>> {
         // A stop that keeps the agents down until shoal resume keeps the
         // chat a conversion makes of the workspace down too.
-        let stop = match keep {
+        let stop = match stopping.keep {
             Keep::LastSessions { stopped_by, .. } => ConversionStop {
                 stopped_by,
                 holds: true,
@@ -371,38 +407,7 @@ impl Manager {
             // Once reserved, so a conversion recorded meanwhile, which needs
             // a ready workspace, is found here.
             self.stop_converting_agent(&workspace.id, stop).await?;
-            let stopping = self.unstopped_executions(&workspace.id).await?;
-            // Before stopping, so an admission cannot start one after.
-            let cancelled = match keep {
-                Keep::LastSessions {
-                    launches: QueuedLaunches::Cancel,
-                    ..
-                } => self.cancel_waiting_launches(&workspace.id).await?,
-                Keep::LastSessions { .. } | Keep::Records => Vec::new(),
-            };
-            // Before stopping, so a restore admitted meanwhile cannot start
-            // after, and again once stopped, for the request of an agent a
-            // signal was ending meanwhile.
-            if protected == Protected::Stop {
-                self.cancel_stopped_restores(&workspace.id).await?;
-            }
-            self.stop_executions_keeping(&workspace.id, policy, &request, protected)
-                .await?;
-            if protected == Protected::Stop {
-                self.cancel_stopped_restores(&workspace.id).await?;
-            }
-            if let Keep::LastSessions { stopped_by, .. } = keep {
-                let stopper = stopped_by.map(|workspace| Stopper {
-                    workspace,
-                    executions: stopping,
-                });
-                self.keep_stopped_as_last_sessions(
-                    &SpaceSelector::id(&workspace.id),
-                    stopper.as_ref(),
-                )
-                .await?;
-            }
-            anyhow::Ok(cancelled)
+            self.stop_and_keep(&workspace.id, stopping).await
         }
         .await;
         // A stop waiting for the user's confirmation has not failed.
@@ -417,6 +422,46 @@ impl Manager {
         )
         .await?;
         result
+    }
+
+    /// Stop the executions of the space `id` as `stopping` says and keep
+    /// what they saved, returning the waiting launches it cancels.
+    async fn stop_and_keep(&self, id: &SpaceId, stopping: Stopping<'_>) -> Result<Vec<QueueEntry>> {
+        let Stopping {
+            request,
+            protected,
+            policy,
+            keep,
+        } = stopping;
+        let unstopped = self.unstopped_executions(id).await?;
+        // Before stopping, so an admission cannot start one after.
+        let cancelled = match keep {
+            Keep::LastSessions {
+                launches: QueuedLaunches::Cancel,
+                ..
+            } => self.cancel_waiting_launches(id).await?,
+            Keep::LastSessions { .. } | Keep::Records => Vec::new(),
+        };
+        // Before stopping, so a restore admitted meanwhile cannot start
+        // after, and again once stopped, for the request of an agent a
+        // signal was ending meanwhile.
+        if protected == Protected::Stop {
+            self.cancel_stopped_restores(id).await?;
+        }
+        self.stop_executions_keeping(id, policy, request, protected)
+            .await?;
+        if protected == Protected::Stop {
+            self.cancel_stopped_restores(id).await?;
+        }
+        if let Keep::LastSessions { stopped_by, .. } = keep {
+            let stopper = stopped_by.map(|space| Stopper {
+                space,
+                executions: unstopped,
+            });
+            self.keep_stopped_as_last_sessions(&SpaceSelector::id(id), stopper.as_ref())
+                .await?;
+        }
+        Ok(cancelled)
     }
 
     /// Before the daemon exits, ask every connected execution to stop. Wrappers
@@ -486,10 +531,16 @@ impl Manager {
         self.forget_execution(&execution.id).await
     }
 
-    /// Fail while processes use the workspace's directory: an acknowledgement
-    /// that an unprovable execution ended cannot cover a visible process.
-    async fn ensure_directory_unused(&self, workspace_id: &SpaceId) -> Result<()> {
-        let path = self.workspace_by_id(workspace_id).await?.path;
+    /// Fail while processes use the worktree of the space `id`: an
+    /// acknowledgement that an unprovable execution ended cannot cover a
+    /// visible process. A chat's directory is another's, which it does not
+    /// tell apart.
+    async fn ensure_directory_unused(&self, id: &SpaceId) -> Result<()> {
+        let space = self.space(&SpaceSelector::id(id)).await?;
+        let Some(workspace) = space.worktree() else {
+            return Ok(());
+        };
+        let path = workspace.path.clone();
         let users = if off_runtime::is_dir(&path).await? {
             crate::process::in_directory(&path).await?
         } else {
@@ -533,7 +584,8 @@ impl Manager {
             .await
     }
 
-    /// Wrappers decide what to save; setup and merge save nothing.
+    /// Wrappers decide what to save; setup and merge save nothing. The
+    /// agent of a chat that became the workspace `id` is handed over first.
     async fn stop_executions_keeping(
         &self,
         id: &SpaceId,
@@ -542,6 +594,29 @@ impl Manager {
         protected: Protected,
     ) -> Result<()> {
         self.hand_over_before_removal(id).await?;
+        self.stop_recorded_executions(id, policy, request, protected)
+            .await
+    }
+
+    /// Stop the agent of the chat that became the workspace `id`, which a
+    /// conversion hands over, an execution of the space it ran in.
+    pub(crate) async fn stop_space_agent_executions(
+        &self,
+        id: &SpaceId,
+        request: &StopRequest,
+    ) -> Result<()> {
+        let policy = StopPolicy::RequireCompleteProof;
+        (self.stop_recorded_executions(id, policy, request, Protected::Stop)).await
+    }
+
+    /// [`Self::stop_executions_keeping`] of the executions recorded now.
+    async fn stop_recorded_executions(
+        &self,
+        id: &SpaceId,
+        policy: StopPolicy,
+        request: &StopRequest,
+        protected: Protected,
+    ) -> Result<()> {
         let id = id.to_owned();
         let deadline = Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
         loop {

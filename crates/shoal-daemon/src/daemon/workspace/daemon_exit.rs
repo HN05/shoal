@@ -9,10 +9,7 @@ use super::{
     shutdown_stop::Shutdown,
 };
 use crate::client::space_names::SpaceSelector;
-use crate::{
-    protocol::{Exit, QueuedLaunches},
-    state::ChatRestore,
-};
+use crate::protocol::{Exit, QueuedLaunches};
 
 /// What becomes of running work as the daemon exits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,35 +53,33 @@ impl Manager {
     }
 
     /// Stop what `shoal stop --all` stops, as it does, keeping stopped
-    /// agents down until `shoal resume`, and the running chats, saved for
-    /// `shoal resume` too, after a stop before a shutdown that is under way.
+    /// agents down until `shoal resume`, after a stop before a shutdown that
+    /// is under way.
     async fn stop_all_for_exit(&self) {
         let _shutdown_stop = self.shutdown_stopped.lock().await;
-        tokio::join!(
-            self.stop_every_target("before the Shoal daemon stopped", |workspace| async move {
-                // A CI job's runner would end once it saw its run cancelled,
-                // after the daemon has gone; stop it now, as removal does,
-                // also when the forge refused the cancellation.
-                if self.cancel_job_before_stopping(&workspace).await {
-                    let request = StopRequest {
-                        reason: "the Shoal daemon stopped".into(),
-                        save: Save::Everything,
-                    };
-                    return self
-                        .stop_workspace(&SpaceSelector::id(&workspace), request)
-                        .await;
-                }
-                self.stop_workspace_manually(
-                    &SpaceSelector::id(&workspace),
-                    false,
-                    None,
-                    QueuedLaunches::Keep,
-                )
-                .await?;
-                Ok(())
-            }),
-            self.save_chats(ChatRestore::Resume)
-        );
+        self.stop_every_target("before the Shoal daemon stopped", |workspace| async move {
+            // A CI job's runner would end once it saw its run cancelled,
+            // after the daemon has gone; stop it now, as removal does,
+            // also when the forge refused the cancellation.
+            if self.cancel_job_before_stopping(&workspace).await {
+                let request = StopRequest {
+                    reason: "the Shoal daemon stopped".into(),
+                    save: Save::Everything,
+                };
+                return self
+                    .stop_space(&SpaceSelector::id(&workspace), request)
+                    .await;
+            }
+            self.stop_space_manually(
+                &SpaceSelector::id(&workspace),
+                false,
+                None,
+                QueuedLaunches::Keep,
+            )
+            .await?;
+            Ok(())
+        })
+        .await;
     }
 }
 

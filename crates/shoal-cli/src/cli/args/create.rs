@@ -1,5 +1,4 @@
 //! Arguments of commands that create workspaces.
-use crate::client::space_ids::SpaceId;
 use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Subcommand};
@@ -248,10 +247,6 @@ pub struct StartArgs {
     /// move import passes for a copy.
     #[arg(long, hide = true, requires = "session")]
     pub fork_session: bool,
-    /// Stopped chat, by ID, that this start restores under its own name,
-    /// which shoal resume passes.
-    #[arg(long, hide = true, requires = "name")]
-    pub restore: Option<SpaceId>,
     /// Issue, by URL, that an imported chat is linked to, whose fields its
     /// rules take without asking the forge, which shoal move import passes.
     #[arg(long, hide = true, value_parser = linked_issue)]
@@ -304,7 +299,6 @@ impl StartArgs {
             model: ModelArgs { model, effort },
             session,
             fork_session,
-            restore,
             linked_issue,
             linked_issue_title,
             handoff,
@@ -349,7 +343,6 @@ impl StartArgs {
         line.values("effort", effort);
         line.values("session", session.as_ref().map(|session| session.as_str()));
         line.switch("fork_session", *fork_session);
-        line.values("restore", restore.as_ref().map(|restore| restore.as_str()));
         line.values(
             "linked_issue",
             linked_issue.as_ref().map(ToString::to_string),

@@ -11,10 +11,10 @@ mod cli;
 #[cfg(test)]
 use shoal_core::test_support;
 use shoal_core::{
-    agent_git, agents, ai, build, config, config_file, daemon_handoff, daemon_owner, env,
-    execution, fsutil, git, git_credential, installed, opened_pull, operations, paths, process,
-    profile, proxy, push_gate, queued_launches, refusal, releases, removal, repository, reviews,
-    secrets, service, sessions, shell, start_plan, stdout, terminal, tools, transfer, workers,
+    agents, ai, build, config, config_file, daemon_handoff, daemon_owner, env, execution, fsutil,
+    git, git_credential, installed, opened_pull, operations, paths, process, profile, proxy,
+    push_gate, queued_launches, refusal, releases, removal, repository, reviews, secrets, service,
+    sessions, shell, start_plan, stdout, terminal, tools, transfer, workers,
 };
 
 use shoal_client as client;

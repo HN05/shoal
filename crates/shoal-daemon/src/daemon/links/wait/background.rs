@@ -60,7 +60,7 @@ impl Manager {
         let ready = workspaces.filter(|w| w.state == crate::state::WorkspaceState::Ready);
         let mut spaces: Vec<LinkSpace> = ready.map(LinkSpace::from).collect();
         let chats = self.chats().await?.into_iter();
-        for chat in chats.filter(|chat| chat.restore.is_none()) {
+        for chat in chats.filter(|chat| chat.running) {
             if let Some(checkout) = self.chat_repository(&chat).await? {
                 spaces.push(LinkSpace::Chat { chat, checkout });
             }

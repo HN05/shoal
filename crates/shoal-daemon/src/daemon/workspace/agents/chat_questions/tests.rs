@@ -348,17 +348,12 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
         .start_chat(
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -444,8 +439,7 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
         .await
         .unwrap();
     assert_eq!(manager.questions(None).await.unwrap().questions.len(), 1);
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
+    manager.end_executions(&chat.id).await;
     assert_eq!(manager.questions(None).await.unwrap().questions.len(), 1);
     manager
         .remove_chat(&SpaceSelector::id(&chat.id), None)

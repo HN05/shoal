@@ -8,9 +8,9 @@ fn the_summary_counts_queued_agents() {
 
 #[test]
 fn a_stopped_command_reruns_in_its_workspace_by_number() {
-    let workspace = Workspace {
+    let workspace = crate::model::Workspace {
         number: 7.into(),
-        ..Workspace::new_record(
+        ..crate::model::Workspace::new_record(
             "repo".into(),
             "Fix login".into(),
             "/work/fix-login".into(),
@@ -20,7 +20,7 @@ fn a_stopped_command_reruns_in_its_workspace_by_number() {
     };
     let argv = ["npm".to_owned(), "test".to_owned()];
     assert_eq!(
-        rerun(&workspace, &argv),
+        rerun(&crate::model::PresentSpace::Workspace(workspace), &argv),
         "shoal run --workspace 7 -- npm test"
     );
 }

@@ -170,7 +170,8 @@ async fn a_failed_restart_names_the_resume_and_keeps_the_daemons_error() {
         code: ErrorCode::ScopeDenied,
         message: "refused".into(),
     };
-    let error = with_restore(&paths, &workspace, refused.into()).await;
+    let space = crate::model::PresentSpace::Workspace(workspace.clone());
+    let error = with_restore(&paths, &space, refused.into()).await;
     server.await.unwrap();
     assert!(format!("{error:#}").contains(&format!("shoal resume {}", workspace.number)));
     let remote = error.downcast_ref::<RemoteError>().unwrap();

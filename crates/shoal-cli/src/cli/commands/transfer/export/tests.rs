@@ -5,7 +5,7 @@ use super::*;
 fn chat(name: &str, workspace: Option<&str>) -> Chat {
     serde_json::from_value(serde_json::json!({
         "id": name, "repository_id": "repo", "name": name, "agent": "claude",
-        "pid": 1, "started_at": 0, "session": "session",
+        "started_at": 0, "session": "session",
         "workspace": workspace.map(|workspace| serde_json::json!({
             "id": workspace, "name": workspace, "branch": workspace,
         })),

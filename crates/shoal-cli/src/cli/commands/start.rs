@@ -429,13 +429,9 @@ async fn in_workspace_kind(
 
 /// Whether the start continues a chat whatever its mode's kind: one the
 /// place it opens in starts, or one a flag only a chat's start takes asks
-/// for, such as a session it continues or a stopped chat it restores.
+/// for, such as a session it continues.
 fn asks_chat(args: &StartArgs) -> bool {
-    args.as_chat
-        || args.session.is_some()
-        || args.restore.is_some()
-        || args.linked_issue.is_some()
-        || args.handoff.is_some()
+    args.as_chat || args.session.is_some() || args.linked_issue.is_some() || args.handoff.is_some()
 }
 
 /// The kind of space a start that [`asks_chat`] asks for, whatever the

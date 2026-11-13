@@ -210,8 +210,8 @@ impl Manager {
     }
 
     /// The registered checkout a request from `context` acts in outside a
-    /// workspace: the one it names, or the repository's of the running chat
-    /// it names.
+    /// workspace: the one it names, or the repository's of the chat it
+    /// names.
     pub(crate) async fn context_checkout(&self, context: &ItemContext) -> Result<Repository> {
         match context {
             ItemContext::Checkout(selector) => self.repository(selector).await,
@@ -219,7 +219,7 @@ impl Manager {
                 Ok(self.chat_acting_in(chat, repository).await?.1)
             }
             ItemContext::Chat(selector) => {
-                let chat = self.running_chat(selector).await?;
+                let chat = self.chat(selector).await?;
                 self.chat_own_checkout(&chat).await
             }
             ItemContext::Workspace(_) => bail!("a workspace acts in its worktree"),

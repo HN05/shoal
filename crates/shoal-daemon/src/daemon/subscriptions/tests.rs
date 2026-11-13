@@ -310,9 +310,7 @@ mod streams {
                 daemon.repository.id.clone().into(),
                 "planning".into(),
                 "claude".into(),
-                std::process::id(),
                 None,
-                false,
             )
             .await
             .unwrap();
@@ -351,9 +349,7 @@ mod streams {
                 daemon.repository.id.clone().into(),
                 "planning".into(),
                 "claude".into(),
-                std::process::id(),
                 None,
-                false,
             )
             .await
             .unwrap();
@@ -389,9 +385,7 @@ mod streams {
                 daemon.repository.id.clone().into(),
                 "planning".into(),
                 "claude".into(),
-                std::process::id(),
                 None,
-                false,
             )
             .await
             .unwrap();

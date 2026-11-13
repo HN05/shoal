@@ -50,7 +50,8 @@ fn delete(
     ensure!(
         store::exists(
             tx,
-            "SELECT 1 FROM chats WHERE id=?1 AND restore IS NOT NULL",
+            "SELECT 1 FROM chats WHERE id=?1
+                AND NOT EXISTS (SELECT 1 FROM executions WHERE space_id=?1)",
             [id]
         )?,
         "the chat runs again"

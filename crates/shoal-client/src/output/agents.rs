@@ -159,6 +159,8 @@ pub struct DetachedSession {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetachedChat {
     pub chat: crate::model::Chat,
+    pub execution_id: ExecutionId,
+    pub pid: u32,
     pub log: std::path::PathBuf,
     #[serde(flatten)]
     pub delivery: Delivery,

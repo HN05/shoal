@@ -20,7 +20,7 @@ mod sync;
 mod workspaces;
 
 pub use agents::{AgentSession, AgentStatus, PendingRestart, RunningAgent};
-pub use chats::{Chat, ChatHome, RenamedChat, StoppedChat, chat_mode};
+pub use chats::{Chat, ChatHome, RenamedChat, chat_mode};
 pub use checkpoints::{Checkpoint, CheckpointCause, CheckpointNumber, RestoredCheckpoint};
 pub use cleanup::CleanupReason;
 pub use completion::{Completion, HandedBack};
@@ -35,7 +35,7 @@ pub use merges::{
 pub use ports::{PortCatalog, PortOverview, PortRequest, PortReservation, PortSuggestion};
 pub use queue::{
     Blocker, Dependency, HeldBy, InheritedRank, QueueAdmission, QueueEntry, QueueRank,
-    QueueRequest, QueuedJob, QueuedPlan, StoppedWorkspace, Tier,
+    QueueRequest, QueuedJob, QueuedPlan, StoppedSpace, Tier,
 };
 pub use ready::{ReadyMarks, ReadyOutcome, ReviewMark, SkippedPr};
 pub use removal::{

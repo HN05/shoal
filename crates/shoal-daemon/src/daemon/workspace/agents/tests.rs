@@ -645,16 +645,11 @@ async fn load_leaves_a_chats_agent_running_while_disk_space_stops_it() {
         .await
         .unwrap();
     let chat = manager
-        .start_chat(
-            repo.id.into(),
-            "talk".into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
+    // Stopped, so the execution registered below is its agent.
+    manager.end_executions(&chat.id).await;
     let execution = manager
         .begin_agent_execution(chat.id.as_str())
         .await

@@ -448,13 +448,6 @@ impl Manager {
         made: Option<SystemTime>,
     ) -> Result<Option<AgentStatus>> {
         let space = self.space(selector).await?;
-        // A chat's agent reports from no execution and keeps its interrupt
-        // with its transient metadata.
-        if let PresentSpace::Chat(chat) = &space
-            && execution.is_none()
-        {
-            (self.chat_agents).record_turn(&chat.id, ending.interrupted_after(state));
-        }
         if let Some(session) = session {
             self.record_agent_session(&space, execution.as_ref(), session)
                 .await?;
@@ -483,10 +476,9 @@ impl Manager {
         Ok(Some(status))
     }
 
-    /// Record the agent `session` reported in `space`: a chat keeps its
-    /// agent's session, which its export continues elsewhere, and a
-    /// workspace keeps the session of the agent `execution` runs for
-    /// resuming it.
+    /// Record the agent `session` reported in `space`: the session of the
+    /// agent `execution` runs, for resuming it, and a chat's own, which its
+    /// export continues elsewhere.
     async fn record_agent_session(
         &self,
         space: &PresentSpace,
@@ -498,19 +490,22 @@ impl Manager {
             "invalid agent session ID"
         );
         match (space, execution) {
-            (PresentSpace::Chat(chat), _) => self.record_chat_session(&chat.id, session).await?,
-            (PresentSpace::Workspace(workspace), Some(execution)) => {
+            (_, Some(execution)) => {
                 // A subscription follows the session, which the store leaves out.
-                if recovery::save_session(&self.paths, &workspace.id, execution, &session)? {
+                if recovery::save_session(&self.paths, space.id(), execution, &session)? {
                     self.signals.agent_changed();
                 }
             }
             // The agent of a chat that became the workspace, which its
             // hand-over continues.
             (PresentSpace::Workspace(workspace), None) => {
-                self.record_converting_session(&workspace.id, session)
+                self.record_converting_session(&workspace.id, session.clone())
                     .await?
             }
+            (PresentSpace::Chat(_), None) => {}
+        }
+        if let PresentSpace::Chat(chat) = space {
+            self.record_chat_session(&chat.id, session).await?;
         }
         Ok(())
     }
@@ -697,7 +692,8 @@ fn stopped(db: &Connection, report: &Report) -> Result<bool> {
 fn takes_report(db: &Connection, id: &SpaceId) -> Result<bool> {
     Ok(db.query_row(
         "SELECT EXISTS (SELECT 1 FROM workspaces WHERE id=?1)
-            OR EXISTS (SELECT 1 FROM chats WHERE id=?1 AND restore IS NULL)",
+            OR EXISTS (SELECT 1 FROM chats WHERE id=?1
+                AND EXISTS (SELECT 1 FROM executions WHERE space_id=?1))",
         [id],
         |row| row.get(0),
     )?)

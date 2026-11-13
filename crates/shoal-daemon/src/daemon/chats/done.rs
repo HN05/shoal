@@ -2,14 +2,13 @@
 //! agent and session keep running until completion cleanup, when requested,
 //! removes the chat as it removes any space.
 use crate::client::space_ids::SpaceId;
-use anyhow::{Context as _, Result, bail, ensure};
-use rusqlite::params;
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     client::assignments::Done,
     daemon::{
         notifications::{About, NotificationKind},
-        progress, questions, store,
+        progress, questions,
         workspace::{
             Manager,
             done::{self, push_completion_details},
@@ -17,13 +16,12 @@ use crate::{
         workspace_files::Attacher,
     },
     model::{Chat, Completion, PresentSpace},
-    state::ChatRestore,
 };
 
 impl Manager {
-    /// Record `done` for the running chat `selector` names, or one saved
-    /// while blocked, whose restore it cancels, at its checkout's HEAD, with copies of the files it hands back attached by
-    /// `attacher`; its open questions close, as a finished workspace's do.
+    /// Record `done` for the chat `selector` names, at its checkout's HEAD,
+    /// with copies of the files it hands back attached by `attacher`; its
+    /// open questions close, as a finished workspace's do.
     pub async fn mark_chat_done(
         &self,
         selector: &SpaceId,
@@ -35,7 +33,8 @@ impl Manager {
             !done.integrated && !done.keep_demos,
             "a chat has no branch or demos; integrated and keep_demos apply to workspaces"
         );
-        let chat = self.done_chat(selector).await?;
+        let chat =
+            (self.chat_by_id(selector).await?).with_context(|| format!("no chat {selector}"))?;
         let _guard = self.gates.lock_prs([&chat.id]).await;
         let settings = self.chat_settings(&chat).await?;
         let head = self.chat_head(&chat).await?;
@@ -53,9 +52,6 @@ impl Manager {
         let now = crate::time::UnixTime::now();
         let (closed, progressed) = (self.store)
             .write(move |tx| {
-                // A chat saved while blocked has nothing left to come back
-                // for once done.
-                ensure_running_or_held(tx, &id)?;
                 // Completion removes what blocked the space.
                 let progressed =
                     progress::record_status(tx, &id, recorded.summary.as_deref(), now)?
@@ -94,18 +90,6 @@ impl Manager {
             .await
     }
 
-    async fn done_chat(&self, id: &SpaceId) -> Result<Chat> {
-        if let Some(chat) = self.running_chat_by_id(id).await? {
-            return Ok(chat);
-        }
-        let saved = (self.chat_by_id(id).await?)
-            .filter(|chat| chat.restore == Some(ChatRestore::Automatic));
-        match saved {
-            Some(chat) if self.space_blocked(&chat.id).await? => Ok(chat),
-            _ => bail!("no running chat {id}"),
-        }
-    }
-
     /// The HEAD of `chat`'s checkout, which its completion records; empty
     /// for a chat without a repository, which has no checkout.
     async fn chat_head(&self, chat: &Chat) -> Result<String> {
@@ -117,34 +101,6 @@ impl Manager {
             .context("cannot read the checkout's HEAD")?;
         Ok(head.into())
     }
-}
-
-/// Hold the blocked restore of the chat `id`, as [`hold_blocked_restore`]
-/// does, and fail unless the chat runs or it held one.
-fn ensure_running_or_held(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<()> {
-    let held = hold_blocked_restore(tx, id)?;
-    ensure!(
-        store::exists(
-            tx,
-            "SELECT 1 FROM chats WHERE id=?1 AND (restore IS NULL OR ?2)",
-            params![id, held]
-        )?,
-        "the chat stopped running"
-    );
-    Ok(())
-}
-
-/// Make the automatic restore of the chat `id`, saved while its space is
-/// blocked, wait for `shoal resume`, as a workspace's completion cancels
-/// its agent's restore; whether it held one.
-fn hold_blocked_restore(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<bool> {
-    let blocked = progress::current(tx, id)?.is_some_and(|progress| progress.blocked());
-    let held = blocked
-        && tx.execute(
-            "UPDATE chats SET restore=?3 WHERE id=?1 AND restore=?2",
-            params![id, ChatRestore::Automatic, ChatRestore::Resume],
-        )? > 0;
-    Ok(held)
 }
 
 /// Record `completion` for the chat `id` and close its open questions,

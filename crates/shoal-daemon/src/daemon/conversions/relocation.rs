@@ -7,7 +7,7 @@ use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 
 use super::{Pending, record::ChatRow, record::ConvertedChat};
 use crate::protocol::operations::{Ended, Failure};
@@ -19,7 +19,6 @@ use crate::{
         workspace::Manager,
     },
     execution::recovery::{self, LastSession, LastSessionExt},
-    process::identity,
     sessions::Origin,
     state::{AgentState, WorkspaceState},
 };
@@ -125,7 +124,6 @@ impl Manager {
         let idle = state.is_some_and(|status| status.state == AgentState::Idle);
         match pending {
             Pending::Workspace {
-                chat,
                 preparation,
                 prepared,
                 ..
@@ -137,8 +135,8 @@ impl Manager {
                 {
                     return Ok(false);
                 }
-                let process = chat.agent()?.process()?;
-                Ok(idle || !identity::alive(&process)?)
+                let running = self.running_agents().await?;
+                Ok(idle || !running.iter().any(|agent| agent.space_id == *id))
             }
             Pending::Chat { chat, .. } => {
                 let running = self.running_agents().await?;
@@ -303,10 +301,9 @@ impl Manager {
     /// Keep the session of the agent of the chat that became the workspace
     /// `id`, whose row was `chat`, as the workspace's last session under
     /// `execution`, marked converted, in `mode`, stopped by the process of
-    /// the space `stopped_by` when given, then stop the agent where it
-    /// ran, keeping what each round signals for a hand-over that was
-    /// interrupted to go on stopping, and forget the conversion and the
-    /// scope the agent carried there.
+    /// the space `stopped_by` when given, then stop the agent where it ran,
+    /// an execution of the space, and forget the conversion and the scope
+    /// the agent carried there.
     async fn hand_over(
         &self,
         id: &SpaceId,
@@ -331,16 +328,9 @@ impl Manager {
             narrowing: agent.narrowing()?,
         };
         last.write(&self.paths, id)?;
-        let space = id.to_owned();
-        let stopped = (self.store)
-            .run(move |db| super::record::stopped_processes(db, &space))
-            .await?;
-        let record = |signalled: Vec<_>| {
-            let space = id.to_owned();
-            self.store
-                .write(move |tx| super::record::record_stopped(tx, &space, &signalled))
-        };
-        (self.stop_converted_chat(id, &agent.process()?, stopped, record)).await?;
+        // The workspace runs nothing else before the agent moves there.
+        let request = crate::daemon::workspace::StopRequest::conversion();
+        (self.stop_space_agent_executions(id, &request)).await?;
         let (space, token) = (id.to_owned(), agent.scope_token.clone());
         self.store
             .write(move |tx| super::record::relocated_chat(tx, &space, token.as_ref()))
@@ -351,8 +341,9 @@ impl Manager {
 
     /// Make the workspace `id` the stopped `chat` its agent carries on in:
     /// stop the agent, remove the worktree as `shoal rm` does, and restore
-    /// the chat in the repository's checkout, continuing the session the
-    /// agent reported last, whether it still runs or exited, unless a stop
+    /// the chat's agent in the repository's checkout through the agent
+    /// queue, continuing the session the agent reported last, whether it
+    /// still runs or exited, told what the space is now, unless a stop
     /// `held` it, which leaves the chat for `shoal resume`.
     async fn relocate_to_chat(&self, id: &SpaceId, chat: ConvertedChat, held: bool) -> Result<()> {
         let chat = ConvertedChat {
@@ -360,14 +351,30 @@ impl Manager {
             ..chat
         };
         self.convert_worktree_to_chat(id, &chat).await?;
+        let last = LastSession {
+            execution: chat.execution.clone(),
+            agent: chat.agent.clone(),
+            session: chat.session.clone(),
+            moved: false,
+            copied: None,
+            converted: true,
+            origin: chat.origin.clone(),
+            stopped_by: chat.stopped_by.clone(),
+            stop: None,
+            model: Default::default(),
+            mode: chat.mode.clone(),
+            narrowing: chat.narrowing,
+        };
+        last.write(&self.paths, id)?;
         if held {
             return Ok(());
         }
-        let chat = self
-            .chat_by_id(id)
-            .await?
-            .context("the chat the workspace became is gone")?;
-        self.restore_converted_chat(&chat).await
+        let env = crate::terminal::detached_start_environment(chat.origin.as_ref());
+        let selector = crate::client::space_names::SpaceSelector::id(id);
+        (self
+            .start_stopped_restore(&selector, &chat.execution, env)
+            .await)
+            .map(drop)
     }
 
     /// The session the agent `chat` carries on reported last in the workspace
@@ -440,6 +447,7 @@ async fn resume_workspace(
     id: &SpaceId,
     origin: Option<&Origin>,
 ) -> Result<()> {
+    use anyhow::Context as _;
     use std::process::Stdio;
 
     let mut argv = crate::workers::shoal_argv(paths)?;

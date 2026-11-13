@@ -54,17 +54,6 @@ states!(QueueKind {
     /// A CI job waiting in the forge's queue for this machine's runner.
     Job => "job",
 });
-states!(
-    /// How a stopped chat comes back.
-    ChatRestore {
-        /// The daemon restores it once it starts agents again, as after a
-        /// shutdown or a logout.
-        Automatic => "automatic",
-        /// It waits for `shoal resume`, as after `shoal daemon stop` or once
-        /// its agent exited.
-        Resume => "resume",
-    }
-);
 states!(BlockerKind {
     /// A space, by ID.
     Space => "space",

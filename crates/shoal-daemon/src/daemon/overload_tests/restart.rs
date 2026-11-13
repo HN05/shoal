@@ -510,7 +510,7 @@ async fn update_restart_discards_a_stop_that_never_reached_the_agent() {
     assert!(record(&reopened, &workspace, &id).is_none());
     assert!(blocked(&reopened).await.is_empty());
     // A stop the agent receives saves the wrapper's record as usual.
-    bounded(reopened.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
+    bounded(reopened.stop_space(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);

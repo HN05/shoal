@@ -21,7 +21,7 @@ pub(in crate::cli::commands) fn losses(chat: &Chat, spaces: &Spaces) -> Vec<Stri
             below.join(", ")
         ));
     }
-    if chat.restore.is_none() {
+    if chat.running {
         lines.push("Stops its agent".into());
     }
     lines

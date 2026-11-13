@@ -431,12 +431,16 @@ async fn fail_launch(link: &mut Link, mode: &Mode, error: anyhow::Error) -> anyh
     error
 }
 
-/// Where the wrapper runs in a terminal host. A detached command or a demo
-/// never runs in the caller's terminal.
+/// Where the wrapper runs in a terminal host, Shoal's own when it opened
+/// that place for this process. A detached command or a demo never runs in
+/// the caller's terminal.
 async fn terminal_place(mode: &Mode) -> Option<Origin> {
     match mode {
         Mode::Detached { .. } | Mode::Demo { .. } => None,
-        _ => crate::terminal::current_place().await,
+        _ => (crate::terminal::current_place().await).map(|place| Origin {
+            owned: place.owned || crate::env::opened_chat_place(),
+            ..place
+        }),
     }
 }
 
@@ -597,14 +601,20 @@ async fn prepare_agent_launch(
 }
 
 /// The helper that holds back the pushes of `agent`, starting in its mode
-/// and narrowing, to the remotes of `workspace`'s repository for approval,
-/// or refuses them, as its `push` permission at launch says; none where it
-/// pushes directly.
+/// and narrowing, to the remotes of the repository of the workspace `space`
+/// names for approval, or refuses them, as its `push` permission at launch
+/// says; none where it pushes directly, or in a chat, which has no branch
+/// of its own for push approvals to bind.
 async fn prepare_push_gate(
     paths: &CommandPaths,
-    workspace: &SpaceSelector,
+    space: &SpaceSelector,
     agent: &crate::execution::TrackedAgent,
 ) -> Result<crate::push_gate::Launch> {
+    let records = crate::agents::HomeRecords::read(paths, space).await?;
+    let crate::agents::AgentHome::Workspace(workspace) = records.home()? else {
+        return Ok(Default::default());
+    };
+    let workspace = &SpaceSelector::id(&workspace.id);
     let (mode, narrowing) = (agent.mode.clone(), agent.narrowing);
     let permissions =
         crate::client::workspaces::launch_permissions(paths, workspace.clone(), mode, narrowing)

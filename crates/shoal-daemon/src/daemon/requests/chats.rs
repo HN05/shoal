@@ -1,7 +1,7 @@
 //! The daemon's answers to [`ChatMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::super::{
     answer::Answer,
@@ -34,9 +34,7 @@ pub(super) async fn handle(
             agent,
             mode,
             narrowing,
-            pid,
             origin,
-            hands_over,
             parent,
             priority,
         } => {
@@ -51,9 +49,7 @@ pub(super) async fn handle(
                 agent,
                 mode: mode.unwrap_or_else(crate::model::chat_mode),
                 narrowing,
-                pid,
                 origin,
-                hands_over,
                 parent: manager.space_id(parent.as_ref()).await?,
                 priority,
             };
@@ -63,34 +59,8 @@ pub(super) async fn handle(
                     .await?,
             )
         }
-        ChatMethod::RestoreChat {
-            chat,
-            pid,
-            narrowing,
-            origin,
-            hands_over,
-        } => {
-            let recorded = manager.chat(&chat).await?;
-            let giver = caller.map(|caller| &caller.space_id);
-            (manager.ensure_restore_held(giver, &recorded, &narrowing)).await?;
-            let restored = manager.restore_chat(&recorded.id, pid, narrowing, origin, hands_over);
-            Body::Chat(restored.await?)
-        }
-        ChatMethod::CheckChatRestore { .. } => Body::Ok,
-        ChatMethod::SaveChat { chat, pid, error } => {
-            let id = manager.chat(&chat).await?.id;
-            let stopped_by = caller.map(|caller| &caller.space_id);
-            manager
-                .return_to_saved(&id, pid, &error, stopped_by)
-                .await?;
-            Body::Ok
-        }
         ChatMethod::RemoveChat { chat, children } => {
             Body::RemovedChat(manager.remove_chat(&chat, children).await?)
-        }
-        ChatMethod::MoveChat { chat, pid } => {
-            let id = manager.chat(&chat).await?.id;
-            Body::Chat(manager.move_chat(&id, pid).await?)
         }
         ChatMethod::ListChats => Body::Chats(manager.visible_chats(caller).await?),
         ChatMethod::RenameChat { chat, name } => {
@@ -118,22 +88,6 @@ pub(super) async fn handle(
                 token: manager.chat_scope(&id).await?,
             })
         }
-        ChatMethod::ChatAgents => {
-            let agents = manager.running_chat_agents().await?;
-            Body::RunningAgents(manager.visible_agents(caller, agents).await?)
-        }
-        ChatMethod::RestartChat {
-            chat,
-            join,
-            run,
-            change,
-        } => Body::RestartedPlace(match join {
-            Some(joined) => manager.join_chat_restart(&chat, joined.run, run).await?,
-            None => {
-                let stopped_by = caller.map(|caller| caller.space_id.clone());
-                (manager.restart_chat(&chat, run, stopped_by, change)).await?
-            }
-        }),
     }))
 }
 
@@ -173,7 +127,7 @@ impl Scoped for ChatMethod {
             ),
             // A scoped caller starts chats only in its own tree, below its
             // own space unless it names one below it, in a worktree of its
-            // tree, and hands each to the session it starts, with its scope.
+            // tree, and runs each in the session it starts, with its scope.
             // A named parent is never the workspace the chat runs in; one
             // it leaves out is its own space, wherever the chat runs.
             ChatMethod::StartChat {
@@ -202,21 +156,7 @@ impl Scoped for ChatMethod {
                 manager.parent_below(caller, parent).await?;
                 None
             }
-            // The handler narrows the list to the chats below the caller's
-            // space, the ones it may restart.
-            ChatMethod::ChatAgents => None,
-            // The chat may have ended already, as one a joined restart
-            // answers for does, so its ID is checked as given.
-            ChatMethod::RestartChat { chat, .. } => {
-                ensure!(
-                    *chat != caller.space_id && manager.reaches(caller, chat).await?,
-                    "scoped processes restart only the agents of the spaces below their own"
-                );
-                None
-            }
-            ChatMethod::MoveChat { chat, .. }
-            | ChatMethod::SaveChat { chat, .. }
-            | ChatMethod::ChatScope { chat } => Some(
+            ChatMethod::ChatScope { chat } => Some(
                 manager
                     .workspace_below(
                         caller,
@@ -235,11 +175,6 @@ impl Scoped for ChatMethod {
                     .await?,
             ),
             ChatMethod::ChatRoot => None,
-            // A scoped caller restores a chat from the background place it
-            // opens for it, with its scope, once its check passed here.
-            ChatMethod::RestoreChat { chat, .. } | ChatMethod::CheckChatRestore { chat } => {
-                Some(manager.stopped_chat_below(caller, chat).await?)
-            }
         })
     }
 }

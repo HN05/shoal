@@ -405,24 +405,47 @@ pub fn output_setting() -> (String, String) {
     (OUTPUT.into(), std::env::var(OUTPUT).unwrap_or_default())
 }
 
-/// The scope token a starter handed this process with a chat to start,
-/// which stands in for [`SCOPE_TOKEN`] without entering any environment.
-static HANDED_SCOPE: std::sync::OnceLock<ScopeToken> = std::sync::OnceLock::new();
+/// The scope token a starter handed this process with a chat to start, or
+/// the chat's own once the process runs it, which stands in for
+/// [`SCOPE_TOKEN`] without entering any environment.
+static HANDED_SCOPE: std::sync::RwLock<Option<ScopeToken>> = std::sync::RwLock::new(None);
+
+/// The scope token this process holds in place of the one it inherited.
+fn held_scope() -> Option<ScopeToken> {
+    (HANDED_SCOPE.read())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
+}
+
+/// Hold `token` in place of the scope token this process inherited.
+fn hold_scope(token: ScopeToken) {
+    *(HANDED_SCOPE.write()).unwrap_or_else(std::sync::PoisonError::into_inner) = Some(token);
+}
 
 /// Take `token`, which a starter handed this process, as its scope token;
 /// false when it already took one.
 pub fn take_handed_scope(token: ScopeToken) -> bool {
-    HANDED_SCOPE.set(token).is_ok()
+    let first = held_scope().is_none();
+    if first {
+        hold_scope(token);
+    }
+    first
 }
 
-/// The scope token this process was handed, else the one it inherited.
+/// Act from now on in the scope of `token`, that of the chat this scoped
+/// process runs, whose agent outlasts the scope it was handed or inherited.
+pub fn act_in_chat_scope(token: ScopeToken) {
+    hold_scope(token);
+}
+
+/// The scope token this process holds, else the one it inherited.
 pub fn scope_token() -> Option<ScopeToken> {
-    (HANDED_SCOPE.get().cloned()).or_else(|| std::env::var(SCOPE_TOKEN).ok().map(ScopeToken::from))
+    held_scope().or_else(|| std::env::var(SCOPE_TOKEN).ok().map(ScopeToken::from))
 }
 
 /// True when this process carries cooperative workspace scope.
 pub fn is_scoped() -> bool {
-    HANDED_SCOPE.get().is_some() || std::env::var_os(SCOPE_TOKEN).is_some()
+    held_scope().is_some() || std::env::var_os(SCOPE_TOKEN).is_some()
 }
 
 /// The chat this process runs under, if any.

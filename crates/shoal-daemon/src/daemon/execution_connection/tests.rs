@@ -342,9 +342,21 @@ async fn a_wrapper_registers_again_from_where_it_runs() {
     bounded(executing).await.unwrap().unwrap();
 }
 
-/// The refusal of an agent's start in `workspace`, which leaves it no
+/// The refusal of an agent's start in `workspace`, which leaves it no new
 /// execution.
 async fn refused_agent(manager: &Arc<Manager>, workspace: &crate::model::Workspace) -> String {
+    let selector = SpaceSelector::id(&workspace.id);
+    let ids = |executions: Vec<crate::model::Execution>| -> Vec<_> {
+        executions
+            .into_iter()
+            .map(|execution| execution.id)
+            .collect()
+    };
+    let recorded = ids(manager
+        .inspect_workspace(&selector)
+        .await
+        .unwrap()
+        .executions);
     let wrapper = crate::process::identity::capture(std::process::id())
         .unwrap()
         .unwrap();
@@ -373,13 +385,12 @@ async fn refused_agent(manager: &Arc<Manager>, workspace: &crate::model::Workspa
     let Body::Error { message, .. } = response.body else {
         panic!("the agent was admitted: {:?}", response.body);
     };
-    let selector = SpaceSelector::id(&workspace.id);
-    let executions = manager
+    let executions = ids(manager
         .inspect_workspace(&selector)
         .await
         .unwrap()
-        .executions;
-    assert!(executions.is_empty(), "{executions:?}");
+        .executions);
+    assert_eq!(executions, recorded);
     message
 }
 
@@ -401,9 +412,6 @@ async fn no_agent_starts_in_a_workspace_that_becomes_a_chat() {
         execution: crate::client::execution_ids::ExecutionId::generate(),
         session: Some("s1".into()),
         origin: None,
-        process: crate::process::identity::capture(std::process::id())
-            .unwrap()
-            .unwrap(),
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
         stopped_by: None,
@@ -431,7 +439,7 @@ async fn no_agent_starts_in_a_workspace_a_chats_agent_moves_to() {
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (talk, _talk) =
+    let talk =
         crate::daemon::test_support::chat(&manager, "talk", "worker", Some(&repo), None).await;
     let converting = crate::daemon::conversions::Converting {
         chat: talk,

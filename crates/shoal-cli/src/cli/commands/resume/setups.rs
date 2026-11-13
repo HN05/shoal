@@ -12,7 +12,7 @@ use crate::{
         ui,
     },
     config::permissions::PermissionChange,
-    model::{QueueEntry, Workspace},
+    model::{PresentSpace, QueueEntry, Workspace},
     state::{QueueKind, QueueState},
 };
 
@@ -25,20 +25,24 @@ pub(super) struct FailedSetup {
 }
 
 /// Move the selected workspaces whose setup failed or never started from
-/// `selected`'s workspaces to its setups.
+/// `selected`'s spaces to its setups; a chat has no setup.
 pub(super) async fn take_failed(ctx: &Context, selected: &mut Selected) -> Result<()> {
-    let Some(selectors) = selected.workspaces.take() else {
+    let Some(selectors) = selected.spaces.take() else {
         return Ok(());
     };
     let (mut failed, mut rest) = (Vec::new(), Vec::new());
     for selector in selectors {
-        let inspection = crate::client::workspaces::inspect(&ctx.paths, selector.clone()).await?;
-        match workspaces::awaits_setup(&inspection) {
-            true => failed.push(inspection.workspace),
-            false => rest.push(selector),
+        if let PresentSpace::Workspace(_) = super::present_space(ctx, &selector).await? {
+            let inspection =
+                crate::client::workspaces::inspect(&ctx.paths, selector.clone()).await?;
+            if workspaces::awaits_setup(&inspection) {
+                failed.push(inspection.workspace);
+                continue;
+            }
         }
+        rest.push(selector);
     }
-    selected.workspaces = Some(rest);
+    selected.spaces = Some(rest);
     selected.setups = waiting(ctx, failed).await?;
     Ok(())
 }
@@ -130,7 +134,7 @@ pub(super) async fn retry_here(
     let launch = (setup.launch.as_ref())
         .with_context(|| format!("no agent waits for the setup of {name} to start here"))?;
     let setups = std::slice::from_ref(setup);
-    permission_change::apply(ctx, &[], &[], setups, change).await?;
+    permission_change::apply(ctx, &[], setups, change).await?;
     let _held = queued_agents::Hold::start(&ctx.paths, &launch.id).await;
     set_up(ctx, &setup.workspace).await?;
     let entry = crate::client::queue::start_here(&ctx.paths, &launch.id).await?;

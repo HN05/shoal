@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::test_support::{ProcessGroup, chat, manager, repository, workspace_below};
+use crate::daemon::test_support::{chat, manager, repository, workspace_below};
 
 #[tokio::test]
 async fn a_scoped_caller_gives_at_most_its_own_spaces_priority() {
@@ -9,9 +9,9 @@ async fn a_scoped_caller_gives_at_most_its_own_spaces_priority() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
+    let top = chat(&manager, "top", "chat", Some(&repo), None).await;
     let child = workspace_below(&manager, &repo, "child", &top.id, None).await;
-    let (master, _master) = chat(&manager, "master", "orchestrate", None, None).await;
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
     let caller = |space_id: &SpaceId| Caller {
         space_id: space_id.clone(),
         execution: None,
@@ -44,19 +44,17 @@ async fn a_scoped_caller_gives_at_most_its_own_spaces_priority() {
 #[tokio::test]
 async fn a_chat_started_with_a_priority_records_it() {
     let (_temp, manager) = manager().await;
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = crate::daemon::chats::NewChat {
         priority: Some(Priority::URGENT),
         name: "urgent".into(),
         agent: "claude".into(),
         mode: "chat".into(),
         narrowing: Default::default(),
-        pid: process.id(),
         origin: None,
-        hands_over: false,
         parent: None,
     };
     let chat = manager.start_new_chat(None, None, new).await.unwrap();
+    let chat = manager.run_chat_agent(chat).await.unwrap();
     let stored = manager.store.read(move |tx| current(tx, &chat.id)).await;
     assert_eq!(stored.unwrap(), Priority::URGENT);
 }
@@ -143,7 +141,7 @@ async fn a_scoped_caller_that_names_no_priority_gives_its_own_when_lower() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
+    let top = chat(&manager, "top", "chat", Some(&repo), None).await;
     let caller = Caller {
         space_id: top.id.clone(),
         execution: None,

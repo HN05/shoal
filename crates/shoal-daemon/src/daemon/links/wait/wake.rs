@@ -7,8 +7,8 @@ use anyhow::Result;
 use super::{delivery::receiving, poll::POLL_INTERVAL};
 use crate::{
     client::{execution_ids::ExecutionId, space_ids::SpaceId, space_names::SpaceSelector},
-    daemon::workspace::Manager,
-    model::{AgentStatus, Workspace},
+    daemon::{links::wait::waits::ActiveWaits, workspace::Manager},
+    model::{AgentStatus, PresentSpace, Workspace},
     time::UnixTime,
 };
 
@@ -37,19 +37,34 @@ impl WakePhase {
 }
 
 impl Manager {
-    /// Return once whether the workspace's agent is idle with settled
+    /// Return once whether the space's agent is idle with settled
     /// undelivered messages that wake it or queued updates matches `due`, so a launcher
     /// can prompt an agent that has no hook to wake it, then wait for it to
     /// take them. With `hooked`, that execution's agent has a hook that
     /// wakes it, so it is due only while the hook cannot, as
-    /// [`Self::hook_cannot_wake`] says.
+    /// [`Self::hook_cannot_wake`] says. A chat's messages wait for it apart
+    /// from a workspace agent's.
     pub async fn wait_agent_wake(
         &self,
         selector: &SpaceSelector,
         due: bool,
         hooked: Option<&ExecutionId>,
     ) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
+        match self.space(selector).await? {
+            PresentSpace::Workspace(workspace) => {
+                self.wait_workspace_wake(workspace, due, hooked).await
+            }
+            PresentSpace::Chat(chat) => self.wait_chat_wake(&chat.id, due, hooked).await,
+        }
+    }
+
+    /// [`Self::wait_agent_wake`] for the agent of `workspace`.
+    async fn wait_workspace_wake(
+        &self,
+        workspace: Workspace,
+        due: bool,
+        hooked: Option<&ExecutionId>,
+    ) -> Result<()> {
         let phase = WakePhase::waiting_for(due);
         // Subscribe before reading, so a change in between still wakes.
         let mut messages = self.signals.watch_agent_messages();
@@ -82,12 +97,57 @@ impl Manager {
         }
     }
 
+    /// [`Self::wait_agent_wake`] for the agent of the chat `id`.
+    async fn wait_chat_wake(
+        &self,
+        id: &SpaceId,
+        due: bool,
+        hooked: Option<&ExecutionId>,
+    ) -> Result<()> {
+        let phase = WakePhase::waiting_for(due);
+        // Subscribe before reading, so a change in between still wakes.
+        let mut messages = self.signals.watch_chat_messages();
+        let mut queued = self.signals.watch_item_updates();
+        let mut changed = self.signals.watch_agents();
+        loop {
+            if self.chat_wake_due(id, hooked, phase).await? == due {
+                return Ok(());
+            }
+            tokio::select! {
+                Ok(()) = messages.changed() => {}
+                Ok(()) = queued.changed() => {}
+                Ok(()) = changed.changed() => {}
+                () = tokio::time::sleep(POLL_INTERVAL) => {}
+            }
+        }
+    }
+
+    /// Whether the idle agent of the chat `id` is due a wake: messages or
+    /// activity on its items wait for it, and the hook of the agent the
+    /// `hooked` execution runs cannot wake it. Activity an item change holds
+    /// back arms no wake, while a prompted agent stays due for it.
+    async fn chat_wake_due(
+        &self,
+        id: &SpaceId,
+        hooked: Option<&ExecutionId>,
+        phase: WakePhase,
+    ) -> Result<bool> {
+        if !self.wakeable(id, hooked, &self.chat_waits).await? {
+            return Ok(false);
+        }
+        self.chat_updates_waiting(id, phase == WakePhase::Prompted)
+            .await
+    }
+
     /// Whether messages that wake an idle agent or queued updates wait for
-    /// the workspace's agent. While cleanup or an item change holds the PR
+    /// the space's agent. While cleanup or an item change holds the PR
     /// gates of the workspaces whose activity it receives, only messages
     /// count, as in a hook delivery.
     pub(crate) async fn updates_waiting(&self, selector: &SpaceSelector) -> Result<bool> {
-        let workspace = self.workspace(selector).await?;
+        let workspace = match self.space(selector).await? {
+            PresentSpace::Workspace(workspace) => workspace,
+            PresentSpace::Chat(chat) => return self.chat_updates_waiting(&chat.id, false).await,
+        };
         if self
             .unread_agent_messages(&SpaceSelector::id(&workspace.id))
             .await?
@@ -114,11 +174,14 @@ impl Manager {
     }
 
     /// Whether messages that wake an idle agent or queued updates are
-    /// recorded for the workspace's agent, read without the PR gates, so a
+    /// recorded for the space's agent, read without the PR gates, so a
     /// caller holding them, as cleanup does, sees every update their holders
     /// queued.
-    pub(crate) async fn agent_updates_recorded(&self, workspace_id: &SpaceId) -> Result<bool> {
-        let workspace = self.workspace_by_id(workspace_id).await?;
+    pub(crate) async fn agent_updates_recorded(&self, id: &SpaceId) -> Result<bool> {
+        let workspace = match self.space(&SpaceSelector::id(id)).await? {
+            PresentSpace::Workspace(workspace) => workspace,
+            PresentSpace::Chat(chat) => return self.chat_updates_waiting(&chat.id, true).await,
+        };
         if self
             .unread_agent_messages(&SpaceSelector::id(&workspace.id))
             .await?
@@ -127,6 +190,19 @@ impl Manager {
             return Ok(true);
         }
         self.updates_recorded(workspace).await
+    }
+
+    /// Whether messages or activity on its items wait for the agent of the
+    /// chat `id`; activity an item change holds back under its PR gate
+    /// counts only when `held` counts.
+    async fn chat_updates_waiting(&self, id: &SpaceId, held: bool) -> Result<bool> {
+        if !self.chat_messages(id).await?.is_empty() {
+            return Ok(true);
+        }
+        Ok(match self.queued_chat_updates(id, 0).await? {
+            Some(updates) => !updates.is_empty(),
+            None => held,
+        })
     }
 
     /// Whether updates are queued for the workspace's agent, read without
@@ -162,27 +238,43 @@ impl Manager {
         messages_due: bool,
         phase: WakePhase,
     ) -> Result<bool> {
-        let id = workspace.id.clone();
-        let state = self
-            .store
-            .run(move |db| crate::daemon::workspace::agent_state::get(db, &id))
-            .await?;
-        let Some(idle) = state.filter(|status| status.state == crate::state::AgentState::Idle)
-        else {
-            return Ok(false);
-        };
-        if let Some(execution) = hooked
-            && !self.hook_cannot_wake(&workspace.id, execution, &idle).await
+        if !self
+            .wakeable(&workspace.id, hooked, &self.item_waits)
+            .await?
         {
             return Ok(false);
         }
         Ok(messages_due || self.wake_updates_due(workspace.clone(), phase).await?)
     }
 
+    /// Whether the agent of the space `id` is idle and the hook of the
+    /// agent the `hooked` execution runs cannot wake it, the hook's waits
+    /// running in `waits`.
+    async fn wakeable(
+        &self,
+        id: &SpaceId,
+        hooked: Option<&ExecutionId>,
+        waits: &ActiveWaits,
+    ) -> Result<bool> {
+        let space = id.clone();
+        let state = self
+            .store
+            .run(move |db| crate::daemon::workspace::agent_state::get(db, &space))
+            .await?;
+        let Some(idle) = state.filter(|status| status.state == crate::state::AgentState::Idle)
+        else {
+            return Ok(false);
+        };
+        Ok(match hooked {
+            Some(execution) => self.hook_cannot_wake(id, execution, &idle, waits).await,
+            None => true,
+        })
+    }
+
     /// Whether the hook that wakes the agent `execution` runs in the
-    /// workspace `id`, `idle` as its status says, cannot: an interrupt ended
+    /// space `id`, `idle` as its status says, cannot: an interrupt ended
     /// its last turn, after which the hook does not run, or the agent has
-    /// idled and no wait for the workspace's updates has run for
+    /// idled and no wait of `waits` for the space's updates has run for
     /// [`UNWATCHED_WAKE_DELAY`], so the hook has ended or cannot wait. A turn
     /// that ran that long without a delivery leaves no wait behind it either,
     /// so the hook starting as it ends gets the delay too.
@@ -191,10 +283,11 @@ impl Manager {
         id: &SpaceId,
         execution: &ExecutionId,
         idle: &AgentStatus,
+        waits: &ActiveWaits,
     ) -> bool {
         self.turn_interrupted(execution).await
             || (idled_for(idle, UNWATCHED_WAKE_DELAY)
-                && self.item_waits.unwatched_for(id, UNWATCHED_WAKE_DELAY))
+                && waits.unwatched_for(id, UNWATCHED_WAKE_DELAY))
     }
 }
 

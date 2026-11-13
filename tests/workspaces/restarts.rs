@@ -255,6 +255,8 @@ fn a_workspaces_agent_restarts_the_agents_below_its_workspace() {
 fn a_chats_agent_restarts_the_agents_below_its_chat() {
     let fixture = parent_fixture();
     let (mut agent, id) = start_test_chat(&fixture, "planning");
+    let started = fixture.root.path().join("chat-started");
+    wait_until("the parent chat started", || started.exists());
     let parent = Parent::chat(&fixture, "planning", id);
     restarts_the_agents_below(&fixture, &parent);
     agent.kill().unwrap();
@@ -276,6 +278,8 @@ fn a_workspaces_agent_resumes_the_chats_it_stopped() {
 fn a_chats_agent_resumes_the_chats_it_stopped() {
     let fixture = parent_fixture();
     let (mut agent, id) = start_test_chat(&fixture, "planning");
+    let started = fixture.root.path().join("chat-started");
+    wait_until("the parent chat started", || started.exists());
     let parent = Parent::chat(&fixture, "planning", id);
     resumes_the_chats_it_stopped(&fixture, &parent);
     agent.kill().unwrap();
@@ -344,6 +348,12 @@ pub(super) fn parent_fixture() -> Fixture {
              while :; do sleep 1; done\n",
             support::shoal_binary()
         ),
+    )
+    .unwrap();
+    // A restore runs the agent again, continuing its session.
+    fs::write(
+        fixture.repo.join("resume.sh"),
+        "exec sh ./agent.sh --resume \"$@\"\n",
     )
     .unwrap();
     fixture
@@ -428,6 +438,8 @@ fn restarts_the_agents_below(fixture: &Fixture, parent: &Parent) {
         "the old wrapper still runs"
     );
 
+    // A parent chat's agent marked its own start.
+    let _ = fs::remove_file(home.join("chat-started"));
     std::thread::scope(|scope| {
         let chat = scope.spawn(|| {
             fixture.interactive_command(
@@ -468,6 +480,8 @@ fn resumes_the_chats_it_stopped(fixture: &Fixture, parent: &Parent) {
     let home = fixture.root.path().to_owned();
     let zmx = home.join("bin/zmx");
     let restored = home.join("chat-restored");
+    // A parent chat's agent marked its own start.
+    let _ = fs::remove_file(home.join("chat-started"));
     std::thread::scope(|scope| {
         let chat = scope.spawn(|| {
             fixture.interactive_command(
@@ -493,20 +507,10 @@ fn resumes_the_chats_it_stopped(fixture: &Fixture, parent: &Parent) {
         chat.join().unwrap();
     });
     install_test_script(&zmx, terminal_zmx());
-    let failed_restores = || {
-        let alerts = fixture.ok(&["alerts", "--all"]);
-        let alerts = alerts.as_array().unwrap().clone();
-        (alerts.into_iter())
-            .filter(|alert| alert["kind"] == "chat_restore_failed")
-            .count()
-    };
-    let failed = failed_restores();
     let output = parent.run(fixture, &["resume", &fixture.id("talk")]);
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("ask the user"), "{output:?}");
     assert!(!restored.exists());
-    // The refusal comes before a place opens, so no restore failed.
-    assert_eq!(failed_restores(), failed);
 
     fixture.ok(&["resume", &fixture.id("talk")]);
     wait_until("the user's restore", || restored.exists());
@@ -516,7 +520,7 @@ fn resumes_the_chats_it_stopped(fixture: &Fixture, parent: &Parent) {
     assert!(!output.status.success(), "{output:?}");
     install_test_script(&zmx, terminal_zmx());
     let resumed = parent.ok(fixture, &["resume", &fixture.id("talk")]);
-    assert_eq!(resumed["chats"][0]["chat"], "talk", "{resumed}");
+    assert_eq!(resumed["queued"][0]["name"], "talk", "{resumed}");
     wait_until("the parent's restore", || restored.exists());
     fixture.ok(&["rm", "--wait", &fixture.id("talk"), "--yes"]);
     wait_zmx_sessions_ended(&home);

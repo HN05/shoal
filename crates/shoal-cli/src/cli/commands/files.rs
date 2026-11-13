@@ -159,7 +159,7 @@ async fn running_space(ctx: &Context, selector: &SpaceSelector) -> Result<Option
         Some(PresentSpace::Workspace(workspace)) => {
             workspace.running.then(|| workspace.name.to_string())
         }
-        Some(PresentSpace::Chat(chat)) => chat.restore.is_none().then(|| chat.name.into()),
+        Some(PresentSpace::Chat(chat)) => chat.running.then(|| chat.name.into()),
         None => None,
     })
 }

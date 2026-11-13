@@ -244,7 +244,6 @@ impl Package {
             args: Vec::new(),
             session,
             fork: self.copy.is_some(),
-            restore: None,
             handoff: None,
             parent: None,
         })

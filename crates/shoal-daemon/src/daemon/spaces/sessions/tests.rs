@@ -122,9 +122,7 @@ async fn a_chat_lists_the_session_its_hooks_reported() -> Result<()> {
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await?;
     assert_eq!(

@@ -173,22 +173,63 @@ async fn an_interrupted_agent_alone_is_due_a_wake_for_its_interruption() {
     wait(true).await.expect("wait ended").unwrap();
 }
 
+#[tokio::test]
+async fn a_chats_interrupted_agent_is_due_its_wrappers_wake_for_a_message() {
+    let (temp, manager) = manager().await;
+    let chat = chat(&manager, temp.path()).await;
+    let selected = SpaceSelector::id(&chat.id);
+    let id = manager.workspace_executions(&chat.id).await.unwrap()[0]
+        .id
+        .clone();
+    manager
+        .end_agent_turn(&selected, Some(id.clone()), None, TurnEnd::default())
+        .await
+        .unwrap();
+    manager
+        .send_chat_message(
+            &selected,
+            "Rebase onto main".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    // A hang guard only: each wait answers the state it is given.
+    let wait = |due, hooked| {
+        tokio::time::timeout(
+            Duration::from_secs(60),
+            manager.wait_agent_wake(&selected, due, hooked),
+        )
+    };
+    // Its hook wakes an agent whose turn ended normally, while an agent
+    // without one is due its wrapper's prompt.
+    wait(false, Some(&id)).await.expect("wait ended").unwrap();
+    wait(true, None).await.expect("wait ended").unwrap();
+    manager
+        .set_agent_state(&selected, AgentState::Working, Some(id.clone()), None)
+        .await
+        .unwrap();
+    manager.interrupt_turn(&selected, id.clone()).await.unwrap();
+    // After an interrupt, which its hook does not follow, the wrapper
+    // prompts it, until it takes the message.
+    wait(true, Some(&id)).await.expect("wait ended").unwrap();
+    let messages = manager.chat_messages(&chat.id).await.unwrap();
+    let delivered = messages.iter().map(|message| message.id).collect();
+    (manager.mark_chat_messages_delivered(&chat.id, delivered))
+        .await
+        .unwrap();
+    wait(false, Some(&id)).await.expect("wait ended").unwrap();
+}
+
 /// A running chat with a Claude Code agent in a repository under `root`.
-async fn chat(manager: &Manager, root: &std::path::Path) -> Chat {
+async fn chat(manager: &std::sync::Arc<Manager>, root: &std::path::Path) -> Chat {
     let checkout = repository(root, "chat-repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager
-        .start_chat(
-            repo.id.into(),
-            "talk".into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap()
 }
@@ -211,7 +252,10 @@ async fn an_interrupt_leaves_a_chats_agent_idle_until_a_turn_starts() {
     let (temp, manager) = manager().await;
     let chat = chat(&manager, temp.path()).await;
     let selected = SpaceSelector::id(&chat.id);
-    let report = |state| manager.set_agent_state(&selected, state, None, None);
+    let agent = manager.workspace_executions(&chat.id).await.unwrap()[0]
+        .id
+        .clone();
+    let report = |state| manager.set_agent_state(&selected, state, Some(agent.clone()), None);
     report(AgentState::Working).await.unwrap();
     let (state, interrupted, execution) = listed(&manager, &chat.id).await;
     assert_eq!((state, interrupted), (Some(AgentState::Working), false));

@@ -239,6 +239,59 @@ impl Manager {
             .await
     }
 
+    /// End every execution of the space `id` as exited, as their wrappers
+    /// report when they exit.
+    #[cfg(test)]
+    pub(crate) async fn end_executions(&self, id: &SpaceId) {
+        let space = id.clone();
+        let executions = self
+            .store
+            .run(move |db| {
+                let mut statement = db.prepare("SELECT id FROM executions WHERE space_id=?1")?;
+                let rows = statement.query_map([&space], |row| row.get::<_, ExecutionId>(0))?;
+                Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+            })
+            .await
+            .unwrap();
+        for execution in executions {
+            self.end_test_execution(execution).await;
+        }
+    }
+
+    /// End execution `id` as its wrapper does once its command exits: the
+    /// process group it recorded ends, then it reports the exit, which the
+    /// space's log records for an agent.
+    #[cfg(test)]
+    pub(crate) async fn end_test_execution(&self, id: ExecutionId) {
+        let query = id.clone();
+        let recorded = self
+            .store
+            .run(move |db| store::find_execution(db, &query))
+            .await
+            .unwrap();
+        if let Some(execution) = &recorded
+            && let Some(name) = execution.agent.clone()
+        {
+            let ended = crate::daemon::events::AgentEvent {
+                name,
+                execution_id: Some(id.clone()),
+                exit_code: Some(0),
+            };
+            let kind = crate::daemon::events::EventKind::AgentExited;
+            self.record_agent(&execution.space_id, kind, ended).await;
+        }
+        if let Some(group) = recorded.and_then(|execution| execution.group_id) {
+            // SAFETY: kill only sends a signal.
+            unsafe { libc::kill(-(group as libc::pid_t), libc::SIGKILL) };
+            while process::group_alive(group).await.unwrap() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }
+        self.finish_execution(id, ExecutionKind::Command, Some(0))
+            .await
+            .unwrap();
+    }
+
     /// Register an execution and issue its scope token, recording the demo it
     /// runs and the place it runs at with it. The returned receiver fires
     /// when the workspace asks its commands to stop.
@@ -669,9 +722,11 @@ impl Manager {
         let complete = issue.is_none();
         self.keep_stopped_turn(&id, None).await;
         let connections = self.executions.connections().await;
-        let demo = self
+        let completed = self
             .record_execution_completion(&id, kind, exit_code, issue)
             .await?;
+        self.ask_user_about(&completed.released).await;
+        let demo = completed.demo;
         if connections.disconnect(&id).await {
             self.agent_queue.wake();
         }
@@ -851,8 +906,9 @@ impl Manager {
         execution: &Execution,
         scan: &process::Scan,
     ) -> Result<Processes> {
-        let workspace = self.workspace_by_id(&execution.space_id).await?;
-        Processes::inspect(execution, &workspace.path, scan).await
+        let space = self.space(&SpaceSelector::id(&execution.space_id)).await?;
+        let directory = self.space_directory(&space).await?;
+        Processes::inspect(execution, &directory, scan).await
     }
 
     /// Delete an execution record whose processes the caller proved stopped.

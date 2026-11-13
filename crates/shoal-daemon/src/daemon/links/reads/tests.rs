@@ -1,6 +1,6 @@
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::test_support::{ProcessGroup, git, manager, repository},
+    daemon::test_support::{git, manager, repository},
     forge::items::link::{LinkKind, Selection},
     protocol::ItemContext,
 };
@@ -15,26 +15,11 @@ async fn a_stopped_chat_reads_in_its_repositorys_checkout() {
         .unwrap();
     let origin = "https://github.com/team/repo";
     git(&checkout, &["remote", "add", "origin", origin]);
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = manager
-        .start_chat(
-            repo.id.into(),
-            "talk".into(),
-            "claude".into(),
-            process.id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
-    assert!(
-        manager
-            .running_chat(&SpaceSelector::id(&chat.id))
-            .await
-            .is_err()
-    );
+    manager.end_executions(&chat.id).await;
 
     let forge = manager
         .context_forge(&ItemContext::Chat(SpaceSelector::id(&chat.id)))

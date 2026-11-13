@@ -478,12 +478,16 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
     );
 }
 
-/// A chat's idle agent keeps running with its prompt cache expired, since
-/// the user attends it, while `[idle_stop]` stops a workspace's.
-#[tokio::test]
-async fn a_chats_idle_agent_keeps_running_once_its_cache_expires() {
-    let (root, manager) = manager().await;
-    let repo = repository(root.path(), "repo");
+/// An idle chat in a repository under `root` with `[idle_stop]` enabled,
+/// whose prompt cache has expired, and its agent's execution.
+async fn idle_chat(
+    manager: &std::sync::Arc<Manager>,
+    root: &std::path::Path,
+) -> (
+    crate::model::Chat,
+    crate::daemon::workspace::StartedExecution,
+) {
+    let repo = repository(root, "repo");
     let repo = manager
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
@@ -493,16 +497,11 @@ async fn a_chats_idle_agent_keeps_running_once_its_cache_expires() {
         .await
         .unwrap();
     let chat = manager
-        .start_chat(
-            repo.id.into(),
-            "talk".into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
+    // Stopped, so the execution registered below is its agent.
+    manager.end_executions(&chat.id).await;
     let execution = manager
         .begin_agent_execution(chat.id.as_str())
         .await
@@ -538,8 +537,40 @@ async fn a_chats_idle_agent_keeps_running_once_its_cache_expires() {
         })
         .await
         .unwrap();
+    (chat, execution)
+}
+
+/// A chat's idle agent keeps running with its prompt cache expired, since
+/// the user attends it, while `[idle_stop]` stops a workspace's.
+#[tokio::test]
+async fn a_chats_idle_agent_keeps_running_once_its_cache_expires() {
+    let (root, manager) = manager().await;
+    let (_, execution) = idle_chat(&manager, root.path()).await;
 
     manager.stop_idle_agents().await.unwrap();
 
     assert!(!*execution.stop.borrow());
+}
+
+/// A blocked chat's idle agent stops as a workspace's does, its wrapper
+/// waiting to restore it in place once the space clears.
+#[tokio::test]
+async fn a_blocked_chats_idle_agent_stops_until_its_space_clears() {
+    use crate::client::progress::ProgressChange;
+    let (root, manager) = manager().await;
+    let (chat, execution) = idle_chat(&manager, root.path()).await;
+    let blocker = crate::model::Blocker::Pr("https://github.com/team/app/pull/8".parse().unwrap());
+    let change = ProgressChange::AddBlocker {
+        blocker,
+        step: None,
+        reason: "Needs the API".into(),
+    };
+    (manager.set_progress(&SpaceSelector::id(&chat.id), change))
+        .await
+        .unwrap();
+
+    manager.stop_idle_agents().await.unwrap();
+
+    assert!(*execution.stop.borrow());
+    assert!(manager.restore_waits_for_unblock(&chat.id, &execution.plan.id));
 }

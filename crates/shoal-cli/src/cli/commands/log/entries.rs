@@ -23,8 +23,6 @@ pub(super) fn describe(entry: &LogEntry) -> (String, String) {
             let (label, details) = match event.kind {
                 ChatEventKind::Started => ("Created", chat.agent.to_string()),
                 ChatEventKind::Renamed => ("Renamed", chat.name.to_string()),
-                ChatEventKind::Saved => ("Agent stopped", chat.agent.to_string()),
-                ChatEventKind::Restored => ("Agent started", chat.agent.to_string()),
                 ChatEventKind::Ended => ("Removed", String::new()),
             };
             (label.to_owned(), details)

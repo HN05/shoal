@@ -4,7 +4,7 @@
 use std::ffi::OsString;
 
 use super::Options;
-use crate::client::{space_ids::SpaceId, space_names::SpaceSelector};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         agents::ChatRepository,
@@ -12,7 +12,7 @@ use crate::{
     },
     config::templates,
     forge::items::reference::ItemRef,
-    model::{Chat, ChatHome, LinkedItem, Relation, Repository, SpaceLinks, Workspace},
+    model::{ChatHome, LinkedItem, Relation, Repository, SpaceLinks, Workspace},
     repository,
 };
 
@@ -139,33 +139,6 @@ impl Topic {
     /// Where the chat about this topic in `repo` runs.
     pub(super) fn home<'a>(&'a self, repo: &'a ChatRepository) -> ChatHome<'a> {
         repo.home(self.workspace.as_ref())
-    }
-}
-
-/// `topic` for a chat that restores the saved chat `restore` among `chats`
-/// in `home`: with the issue that one is linked to when the topic names
-/// none, for its restored agent's rules, and told what its space is now when
-/// it was a workspace. A restore relaunched in a new place names only the
-/// chat, so its topic comes from the saved chat there.
-pub(super) fn with_saved(
-    topic: Topic,
-    chats: &[Chat],
-    restore: &SpaceId,
-    home: &std::path::Path,
-) -> Topic {
-    let Some(saved) = chats.iter().find(|chat| chat.id == *restore) else {
-        return topic;
-    };
-    let topic = match topic.linked_issue {
-        Some(_) => topic,
-        None => Topic {
-            linked_issue: templates::IssueFields::linked(&saved.links),
-            ..topic
-        },
-    };
-    match saved.converted {
-        true => topic.converted(home),
-        false => topic,
     }
 }
 

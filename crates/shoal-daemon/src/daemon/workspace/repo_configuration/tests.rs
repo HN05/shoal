@@ -263,9 +263,7 @@ async fn a_chats_layers_are_its_repositorys() {
             &SpaceSelector::id(&workspace.id),
             "reviewing".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();

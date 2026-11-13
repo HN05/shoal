@@ -470,9 +470,7 @@ async fn a_workspace_at_a_commit_goes_below_the_chat_or_workspace_it_names() {
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -685,16 +683,8 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
         )
         .await
         .unwrap();
-    let start = |name: &str| {
-        manager.start_chat(
-            repo.id.clone().into(),
-            name.into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
-    };
+    let start =
+        |name: &str| manager.start_chat(repo.id.clone().into(), name.into(), "claude".into(), None);
     let (first, second) = (
         start("first").await.unwrap(),
         start("second").await.unwrap(),
@@ -831,9 +821,7 @@ async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
             repos[0].id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();

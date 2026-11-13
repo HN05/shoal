@@ -12,7 +12,7 @@ use super::super::{
 use crate::client::space_names::SpaceSelector;
 use crate::{
     client::processes::Selection,
-    model::{PresentSpace, StoppedWorkspace},
+    model::{PresentSpace, StoppedSpace},
     process::identity,
     protocol::{Body, QueuedLaunches, RemovalMethod, UntrackedProcesses},
     removal::InspectionPolicy,
@@ -28,31 +28,26 @@ pub(super) async fn handle(
             let listed = manager.removed_workspaces().await;
             return Ok(Answer::pages(listed, Body::RemovedWorkspaces));
         }
-        RemovalMethod::StopTargets => Body::Spaces(stop_targets(manager).await?),
-        RemovalMethod::StopWorkspace {
-            workspace,
+        RemovalMethod::StopTargets => {
+            Body::Spaces(manager.stop_targets(QueuedLaunches::Cancel).await?)
+        }
+        RemovalMethod::StopSpace {
+            space,
             acknowledge_unproven,
             launches,
             processes,
         } => {
-            let stop = WorkspaceStop {
+            let stop = SpaceStop {
                 acknowledge_unproven,
                 launches,
                 processes,
             };
-            Body::StoppedWorkspace(stop_workspace(manager, &workspace, stop, caller).await?)
-        }
-        RemovalMethod::StopChat { chat } => {
-            let chat = manager.chat(&chat).await?;
-            let stopped_by = caller.map(|caller| &caller.space_id);
-            Body::StoppedChat(manager.stop_chat_for_resume(&chat, stopped_by).await?)
+            Body::StoppedSpace(stop_space(manager, &space, stop, caller).await?)
         }
         RemovalMethod::CheckStop { space } => {
-            match manager.space(&space).await? {
-                PresentSpace::Workspace(workspace) => {
-                    manager.check_lifecycle(&workspace.id).await?
-                }
-                PresentSpace::Chat(chat) => manager.check_chat_stop(&chat)?,
+            // A chat has no lifecycle state that refuses a stop.
+            if let PresentSpace::Workspace(workspace) = manager.space(&space).await? {
+                manager.check_lifecycle(&workspace.id).await?
             }
             Body::Ok
         }
@@ -134,53 +129,37 @@ pub(super) async fn handle(
     }))
 }
 
-/// The spaces `shoal stop --all` stops: the workspaces
-/// [`Manager::stop_targets`] selects, then the chats
-/// [`Manager::chat_stop_targets`] selects.
-async fn stop_targets(manager: &Manager) -> Result<Vec<PresentSpace>> {
-    let workspaces = manager.stop_targets(QueuedLaunches::Cancel).await?;
-    let chats = manager.chat_stop_targets().await?.into_iter();
-    Ok((workspaces.into_iter().map(PresentSpace::Workspace))
-        .chain(chats.map(PresentSpace::Chat))
-        .collect())
-}
-
-/// What a [`RemovalMethod::StopWorkspace`] request asks of the stop.
-struct WorkspaceStop {
+/// What a [`RemovalMethod::StopSpace`] request asks of the stop.
+struct SpaceStop {
     acknowledge_unproven: bool,
     launches: QueuedLaunches,
     processes: UntrackedProcesses,
 }
 
-/// Stop `workspace`'s agents and commands as `caller`, then its untracked
+/// Stop the agents and commands of `space` as `caller`, then its untracked
 /// processes as `stop` says, reporting whether the stop saved work for
 /// `shoal resume`; a CI job's workspace has its run cancelled instead.
-async fn stop_workspace(
+async fn stop_space(
     manager: &Manager,
-    workspace: &SpaceSelector,
-    stop: WorkspaceStop,
+    space: &SpaceSelector,
+    stop: SpaceStop,
     caller: Option<&Caller>,
-) -> Result<StoppedWorkspace> {
+) -> Result<StoppedSpace> {
     let stopped_by = caller.map(|caller| &caller.space_id);
     let mut stopped = manager
-        .stop_workspace_manually(
-            workspace,
-            stop.acknowledge_unproven,
-            stopped_by,
-            stop.launches,
-        )
+        .stop_space_manually(space, stop.acknowledge_unproven, stopped_by, stop.launches)
         .await?;
     if stopped.cancelled_run.is_some() {
         return Ok(stopped);
     }
     if let UntrackedProcesses::Stop { requester } = stop.processes {
         let untracked = manager
-            .stop_space_processes(workspace, Selection::Processes, identity_of(requester))
+            .stop_space_processes(space, Selection::Processes, identity_of(requester))
             .await?;
         stopped.other_processes = untracked.processes;
     }
     // A read that fails reports nothing saved rather than failing the stop.
-    stopped.saved = (manager.saved_work(workspace).await).is_ok_and(|saved| !saved.is_empty());
+    stopped.saved = (manager.saved_work(space).await).is_ok_and(|saved| !saved.is_empty());
     Ok(stopped)
 }
 
@@ -205,32 +184,24 @@ impl Scoped for RemovalMethod {
                 .unheld_workspace_below(caller, workspace, REFUSAL)
                 .await
                 .map(Some),
-            RemovalMethod::StopWorkspace {
-                workspace,
+            RemovalMethod::StopSpace {
+                space,
                 acknowledge_unproven,
                 ..
             } => {
                 ensure!(
                     !*acknowledge_unproven,
-                    "only the user can confirm that an execution Shoal cannot prove ended did; ask the user to stop this workspace"
+                    "only the user can confirm that an execution Shoal cannot prove ended did; ask the user to stop this space"
                 );
                 manager
                     .workspace_below(
                         caller,
-                        workspace,
-                        "workspace processes stop only the workspaces below theirs",
+                        space,
+                        "scoped processes stop only the spaces below theirs",
                     )
                     .await
                     .map(Some)
             }
-            RemovalMethod::StopChat { chat } => manager
-                .workspace_below(
-                    caller,
-                    chat,
-                    "scoped processes stop only the spaces below theirs",
-                )
-                .await
-                .map(Some),
             // Its own processes too: a scoped caller's shells and their
             // commands descend from its execution, which keeps them.
             RemovalMethod::StopProcesses { space, .. } => Ok(Some(space)),

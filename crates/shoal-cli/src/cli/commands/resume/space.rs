@@ -1,5 +1,5 @@
-//! Resuming one workspace's stopped agent or last session, in this terminal
-//! or where it stopped or in the background.
+//! Resuming one space's stopped agent or last session, a workspace's or a
+//! chat's, in this terminal or where it stopped or in the background.
 use anyhow::{Context as _, Result, ensure};
 use std::path::PathBuf;
 
@@ -15,47 +15,41 @@ use crate::{
         Copied, LastSession, Recovery, Restored, Saved, SavedCommand, claim_last_session,
         claim_record,
     },
-    model::Workspace,
+    model::{PresentSpace, Workspace},
     protocol::ConfigTarget,
 };
 
-/// Resume `workspace`'s stopped agent, the `execution` one when given. The
-/// agent restores in this terminal when `here`, otherwise where it stopped
-/// or in the background, making `change` when given; one whose wrapper
-/// waits to restore it starts there at once.
+/// Resume the stopped agent of the space `space` names, the `execution` one
+/// when given. The agent restores in this terminal when `here`, otherwise
+/// where it stopped or in the background, making `change` when given; one
+/// whose wrapper waits to restore it starts there at once.
 pub(super) async fn run(
     ctx: &Context,
-    workspace: SpaceSelector,
+    space: SpaceSelector,
     execution: Option<ExecutionId>,
     here: bool,
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
-    let mut inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
-    let workspace_id = inspection.workspace.id.clone();
-    let mut saved =
-        crate::client::saved::read(&ctx.paths, SpaceSelector::id(&workspace_id)).await?;
+    let space = super::present_space(ctx, &space).await?;
+    let mut saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(space.id())).await?;
     if let Some(execution) = &execution {
         saved.retain_execution(execution, true);
     }
     ensure!(
         !saved.is_empty(),
-        "no stopped agents or commands for this workspace"
+        "no stopped agents or commands for this {}",
+        space.kind()
     );
     if saved.agents.is_empty() && !saved.sessions.is_empty() {
-        let workspace = &inspection.workspace;
-        return continue_last_session(ctx, workspace, saved, here, change).await;
+        return continue_last_session(ctx, &space, saved, here, change).await;
     }
     let recovery_id = execution
         .as_ref()
         .or_else(|| (saved.agents.len() == 1).then(|| &saved.agents[0].id));
-    stale::reconcile(ctx, &inspection, recovery_id).await?;
-    inspection =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace_id)).await?;
-    let workspace = &inspection.workspace;
-    let active = |id: &ExecutionId| inspection.executions.iter().any(|e| e.id == *id);
+    let active = active_executions(ctx, &space, recovery_id).await?;
     if saved.agents.is_empty() {
         let _commands = commands::claim(&mut saved.commands);
-        let report = commands::report(ctx, workspace, &saved.commands)?;
+        let report = commands::report(ctx, &space, &saved.commands)?;
         reports::commands_only(ctx, &report)?;
         return Ok(0);
     }
@@ -63,16 +57,16 @@ pub(super) async fn run(
     let (selected_id, selected) = (picked.id.clone(), picked.path.clone());
     if picked.waits_in_wrapper {
         saved.retain_execution(&selected_id, true);
-        let stopped = vec![(workspace.clone(), saved)];
+        let stopped = vec![(space, saved)];
         return queue::queue_all(ctx, stopped, Default::default(), true).await;
     }
     ensure!(
-        !active(&selected_id),
+        !active.contains(&selected_id),
         "selected execution is active or unknown; stop or reconcile it first"
     );
-    permission_change::apply_one(ctx, workspace, &selected_id, change).await?;
+    permission_change::apply_one(ctx, &space, &selected_id, change).await?;
     if !here {
-        let session = (workspace.clone(), picked);
+        let session = (space, picked);
         return sessions::start_sessions(ctx, vec![session], true, Resumed::default()).await;
     }
     // The restore claims the commands it reports, which a restore started
@@ -83,24 +77,42 @@ pub(super) async fn run(
         reports::restoring(&recorded.agent, reason);
     }
     let session = recorded.into_last_session(selected_id, &selected);
-    restore(ctx, workspace, session, selected, saved.commands).await
+    restore(ctx, &space, session, selected, saved.commands).await
 }
 
-/// Continue one of the workspace's last sessions that `saved` keeps, the
+/// The executions of `space` recorded once a daemon restart's unknown
+/// `selected` one, when any, is proven ended, as a workspace's repair
+/// proves it; a chat's agent registers only while none of it runs.
+async fn active_executions(
+    ctx: &Context,
+    space: &PresentSpace,
+    selected: Option<&ExecutionId>,
+) -> Result<Vec<ExecutionId>> {
+    let PresentSpace::Workspace(workspace) = space else {
+        return Ok(Vec::new());
+    };
+    let selector = SpaceSelector::id(&workspace.id);
+    let inspection = crate::client::workspaces::inspect(&ctx.paths, selector.clone()).await?;
+    stale::reconcile(ctx, &inspection, selected).await?;
+    let inspection = crate::client::workspaces::inspect(&ctx.paths, selector).await?;
+    Ok(inspection.executions.into_iter().map(|e| e.id).collect())
+}
+
+/// Continue one of the last sessions that `saved` keeps of `space`, the
 /// only one or one picked on a terminal, telling it about the stopped
 /// commands: in this terminal when `here`, otherwise where it stopped or in
 /// the background, making `change` when given.
 pub(super) async fn continue_last_session(
     ctx: &Context,
-    workspace: &Workspace,
+    space: &PresentSpace,
     saved: Saved,
     here: bool,
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
     let picked = picker::select_agent(ctx, &saved.sessions, picker::session_label)?;
-    permission_change::apply_one(ctx, workspace, &picked.id, change).await?;
+    permission_change::apply_one(ctx, space, &picked.id, change).await?;
     if !here {
-        let session = (workspace.clone(), picked);
+        let session = (space.clone(), picked);
         return sessions::start_sessions(ctx, vec![session], true, Resumed::default()).await;
     }
     let (_claim, last) = claim_last_session(&picked.path)?;
@@ -109,41 +121,37 @@ pub(super) async fn continue_last_session(
     if !last.moved {
         reports::continuing(&last.agent);
     }
-    restore(ctx, workspace, last, picked.path, commands).await
+    restore(ctx, space, last, picked.path, commands).await
 }
 
-/// Restore the agent of `session`, saved at `path`, telling it about its stop
-/// and the stopped `commands`, which the caller claimed; it consumes their
-/// records once it runs.
+/// Restore the agent of `session` in `space`, saved at `path`, telling it
+/// about its stop and the stopped `commands`, which the caller claimed; it
+/// consumes their records once it runs.
 async fn restore(
     ctx: &Context,
-    workspace: &Workspace,
+    space: &PresentSpace,
     session: LastSession,
     path: PathBuf,
     commands: Vec<SavedCommand>,
 ) -> Result<i32> {
     let handoff = commands::handoff(&commands);
     let mut records = vec![path];
-    if session.converted {
-        records.extend(commands.into_iter().map(|command| command.path));
-        return start_converted(ctx, workspace, &session, handoff.as_deref(), records).await;
+    let changed = session.converted || session.copied.is_some() || session.moved;
+    match (space, changed) {
+        (PresentSpace::Workspace(workspace), true) => {
+            records.extend(commands.into_iter().map(|command| command.path));
+            return start_changed(ctx, workspace, session, handoff.as_deref(), records).await;
+        }
+        // A chat changes only by a workspace becoming it.
+        (PresentSpace::Chat(chat), true) => {
+            records.extend(commands.into_iter().map(|command| command.path));
+            let start = crate::cli::commands::chat::start_converted(ctx, chat, &session, records);
+            return start.await;
+        }
+        (_, false) => {}
     }
-    if let Some(copied) = session.copied {
-        records.extend(commands.into_iter().map(|command| command.path));
-        return start_copied(
-            ctx,
-            workspace,
-            &session,
-            copied,
-            handoff.as_deref(),
-            records,
-        )
-        .await;
-    }
-    if session.moved {
-        records.extend(commands.into_iter().map(|command| command.path));
-        return start_moved(ctx, workspace, &session, handoff.as_deref(), records).await;
-    }
+    let selector = SpaceSelector::id(space.id());
+    let home = crate::agents::HomeRecords::read(&ctx.paths, &selector).await?;
     let restored = Restored {
         agent: &session.agent,
         model: &session.model,
@@ -153,17 +161,36 @@ async fn restore(
     };
     let recovery = Recovery::resolve(
         &ctx.paths,
-        workspace,
+        home.home()?,
         restored,
         handoff.as_deref(),
         session.stop.as_ref(),
     )
     .await?;
     if !commands.is_empty() && !recovery.handoff_delivered {
-        reports::commands_not_told(workspace, &commands);
+        reports::commands_not_told(space, &commands);
     }
     records.extend(commands.into_iter().map(|command| command.path));
-    launch(ctx, workspace, recovery, records).await
+    launch(ctx, space, recovery, records).await
+}
+
+/// Start the agent of `session` in `workspace`, which changed since it
+/// stopped: converted from a chat, copied from another workspace or moved,
+/// told so; it consumes `records` once it has started.
+async fn start_changed(
+    ctx: &Context,
+    workspace: &Workspace,
+    session: LastSession,
+    handoff: Option<&str>,
+    records: Vec<PathBuf>,
+) -> Result<i32> {
+    if session.converted {
+        return start_converted(ctx, workspace, &session, handoff, records).await;
+    }
+    if let Some(copied) = session.copied {
+        return start_copied(ctx, workspace, &session, copied, handoff, records).await;
+    }
+    start_moved(ctx, workspace, &session, handoff, records).await
 }
 
 /// Start the agent of `session` as a new agent is started, with the model
@@ -278,10 +305,11 @@ async fn start_told(
     crate::cli::agents::launch_agent(ctx, launch, workspace.clone(), opening, vec![], options).await
 }
 
-/// Start the restore command, consuming `records` once the agent runs.
+/// Start the restore command in `space`, consuming `records` once the agent
+/// runs.
 async fn launch(
     ctx: &Context,
-    workspace: &Workspace,
+    space: &PresentSpace,
     recovery: Recovery,
     records: Vec<PathBuf>,
 ) -> Result<i32> {
@@ -297,28 +325,26 @@ async fn launch(
             recovery.agent
         );
     }
-    let settings = crate::config::settings(
-        &ctx.paths,
-        ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
-    )
-    .await?;
     let agent = recovery.tracked();
-    if let Some(code) = terminal::run_agent(
-        ctx,
-        &settings,
-        workspace,
-        &agent,
-        &records,
-        &recovery.command,
-    )
-    .await?
-    {
-        return Ok(code);
-    }
-    terminal::label_current(&ctx.paths, crate::terminal::Owner::Workspace(&workspace.id)).await?;
+    let owner = match space {
+        // A host that runs agents in places of its own runs a workspace's
+        // there; a chat runs where its resume runs, as its start does.
+        PresentSpace::Workspace(workspace) => {
+            let target = ConfigTarget::Space(SpaceSelector::id(&workspace.id));
+            let settings = crate::config::settings(&ctx.paths, target).await?;
+            let command = &recovery.command;
+            let ran = terminal::run_agent(ctx, &settings, workspace, &agent, &records, command);
+            if let Some(code) = ran.await? {
+                return Ok(code);
+            }
+            crate::terminal::Owner::Workspace(&workspace.id)
+        }
+        PresentSpace::Chat(chat) => crate::terminal::Owner::Chat(&chat.id),
+    };
+    terminal::label_current(&ctx.paths, owner).await?;
     crate::execution::run_recovery(
         &ctx.paths,
-        SpaceSelector::Id(workspace.id.clone()),
+        SpaceSelector::id(space.id()),
         recovery.command,
         agent,
         records,

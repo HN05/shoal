@@ -24,7 +24,7 @@ use crate::{
 /// `s1`, converted into a workspace on `fix-login`.
 async fn converted(
     root: &std::path::Path,
-    manager: &Manager,
+    manager: &std::sync::Arc<Manager>,
 ) -> (
     Workspace,
     ProcessGroup,
@@ -35,8 +35,9 @@ async fn converted(
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (talk, process) =
+    let talk =
         crate::daemon::test_support::chat(manager, "talk", "worker", Some(&repo), None).await;
+    let process = crate::daemon::test_support::agent_process(manager, &talk.id).await;
     let selector = SpaceSelector::id(&talk.id);
     let working = AgentState::Working;
     (manager.set_agent_state(&selector, working, None, Some("s1".into())))
@@ -136,11 +137,11 @@ async fn a_stop_of_the_workspace_keeps_the_converting_agents_session() {
     let targets = (manager.stop_targets(crate::protocol::QueuedLaunches::Keep))
         .await
         .unwrap();
-    assert!(targets.iter().any(|target| target.id == workspace.id));
+    assert!(targets.iter().any(|target| *target.id() == workspace.id));
 
     let selector = SpaceSelector::id(&workspace.id);
     let keep = crate::protocol::QueuedLaunches::Keep;
-    (manager.stop_workspace_manually(&selector, false, None, keep))
+    (manager.stop_space_manually(&selector, false, None, keep))
         .await
         .unwrap();
 
@@ -169,11 +170,11 @@ async fn a_stop_while_the_workspace_is_set_up_stops_the_converting_agent() {
     let targets = (manager.stop_targets(crate::protocol::QueuedLaunches::Keep))
         .await
         .unwrap();
-    assert!(targets.iter().any(|target| target.id == workspace.id));
+    assert!(targets.iter().any(|target| *target.id() == workspace.id));
 
     let selector = SpaceSelector::id(&workspace.id);
     let keep = crate::protocol::QueuedLaunches::Keep;
-    (manager.stop_workspace_manually(&selector, false, None, keep))
+    (manager.stop_space_manually(&selector, false, None, keep))
         .await
         .unwrap();
 
@@ -191,7 +192,7 @@ async fn the_relocation_restarts_no_agent_a_stop_handed_over() {
         .await
         .unwrap();
     let keep = crate::protocol::QueuedLaunches::Keep;
-    (manager.stop_workspace_manually(&selector, false, None, keep))
+    (manager.stop_space_manually(&selector, false, None, keep))
         .await
         .unwrap();
 
@@ -212,11 +213,6 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
         .create_workspace(&repo.id, "fix-login".into(), None, None, None)
         .await
         .unwrap();
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
-    let identity = crate::process::identity::capture(process.id())
-        .unwrap()
-        .unwrap();
-    process.kill();
     let execution = crate::client::execution_ids::ExecutionId::generate();
     // The agent exited on its own after the conversion was asked for,
     // keeping its session as a last session.
@@ -240,7 +236,6 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
         execution,
         session: Some("s1".into()),
         origin: None,
-        process: identity,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
         stopped_by: None,
@@ -255,6 +250,14 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
         chat.session.map(|session| session.to_string()),
         Some("s2".into())
     );
+}
+
+/// Whether a restore of the agent of the space `id` is queued.
+async fn restore_queued(manager: &Manager, id: &crate::client::space_ids::SpaceId) -> bool {
+    let entries = manager.queue_entries().await.unwrap();
+    entries
+        .iter()
+        .any(|entry| entry.space_id.as_ref() == Some(id))
 }
 
 /// Record that `workspace` becomes `chat` once its agent's turn ends.
@@ -284,23 +287,16 @@ async fn a_stop_keeps_the_chat_a_workspace_becomes_down_for_its_stopper() {
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (lead, _lead) =
-        crate::daemon::test_support::chat(&manager, "lead", "chat", Some(&repo), None).await;
+    let lead = crate::daemon::test_support::chat(&manager, "lead", "chat", Some(&repo), None).await;
     let workspace = manager
         .create_workspace(&repo.id, "fix-login".into(), None, None, None)
         .await
         .unwrap();
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
-    let identity = crate::process::identity::capture(process.id())
-        .unwrap()
-        .unwrap();
-    process.kill();
     let chat = crate::daemon::conversions::record::ConvertedChat {
         agent: "claude".into(),
         execution: crate::client::execution_ids::ExecutionId::generate(),
         session: Some("s1".into()),
         origin: None,
-        process: identity,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
         stopped_by: None,
@@ -308,21 +304,20 @@ async fn a_stop_keeps_the_chat_a_workspace_becomes_down_for_its_stopper() {
     record_chat_conversion(&manager, &workspace, chat).await;
     let selector = SpaceSelector::id(&workspace.id);
     let keep = crate::protocol::QueuedLaunches::Keep;
-    (manager.stop_workspace_manually(&selector, false, Some(&lead.id), keep))
+    (manager.stop_space_manually(&selector, false, Some(&lead.id), keep))
         .await
         .unwrap();
 
     manager.relocate_finished_turns().await.unwrap();
 
     let chat = manager.chat_by_id(&workspace.id).await.unwrap().unwrap();
-    assert!(chat.restore.is_some());
-    let resumed = crate::daemon::chats::restores::tests::RESUMED
-        .lock()
-        .unwrap()
-        .clone();
-    assert!(!resumed.contains(&workspace.id));
-    let stopper = manager.chat_stopped_by(&workspace.id).await.unwrap();
-    assert_eq!(stopper, Some(lead.id));
+    assert!(!chat.running);
+    assert!(!restore_queued(&manager, &workspace.id).await);
+    let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
+    let stoppers: Vec<_> = (sessions.iter())
+        .map(|last| last.stopped_by.clone())
+        .collect();
+    assert_eq!(stoppers, [Some(lead.id)]);
 }
 
 #[tokio::test]
@@ -333,7 +328,7 @@ async fn a_coordinators_stop_of_a_converting_agent_is_its_to_resume() {
     let selector = SpaceSelector::id(&workspace.id);
     let keep = crate::protocol::QueuedLaunches::Keep;
 
-    (manager.stop_workspace_manually(&selector, false, Some(&coordinator), keep))
+    (manager.stop_space_manually(&selector, false, Some(&coordinator), keep))
         .await
         .unwrap();
 
@@ -344,41 +339,6 @@ async fn a_coordinators_stop_of_a_converting_agent_is_its_to_resume() {
         .map(|last| last.stopped_by.clone())
         .collect();
     assert_eq!(stoppers, [Some(coordinator)]);
-}
-
-#[tokio::test]
-async fn the_processes_a_hand_over_signalled_outlive_it() {
-    let (root, manager) = manager().await;
-    let (workspace, _process, _token) = converted(root.path(), &manager).await;
-    let identity = |pid: u32| crate::process::identity::Identity {
-        pid,
-        birth: format!("birth-{pid}"),
-        unique: None,
-    };
-    let id = workspace.id.clone();
-    let (first, second) = (
-        vec![identity(1), identity(2)],
-        vec![identity(2), identity(3)],
-    );
-
-    let stopped = (manager.store)
-        .write(move |tx| {
-            crate::daemon::conversions::record::record_stopped(tx, &id, &first)?;
-            crate::daemon::conversions::record::record_stopped(tx, &id, &second)?;
-            crate::daemon::conversions::record::stopped_processes(tx, &id)
-        })
-        .await
-        .unwrap();
-
-    let pids: Vec<_> = stopped.iter().map(|process| process.pid).collect();
-    assert_eq!(pids, [1, 2, 3]);
-    // The conversion itself reads as it did.
-    let id = workspace.id.clone();
-    let pending = (manager.store)
-        .run(move |db| crate::daemon::conversions::pending(db, &id))
-        .await
-        .unwrap();
-    assert!(pending.is_some());
 }
 
 #[tokio::test]
@@ -393,17 +353,11 @@ async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
         .create_workspace(&repo.id, "fix-login".into(), None, None, None)
         .await
         .unwrap();
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
-    let identity = crate::process::identity::capture(process.id())
-        .unwrap()
-        .unwrap();
-    process.kill();
     let chat = crate::daemon::conversions::record::ConvertedChat {
         agent: "claude".into(),
         execution: crate::client::execution_ids::ExecutionId::generate(),
         session: Some("s1".into()),
         origin: None,
-        process: identity,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
         stopped_by: None,
@@ -441,12 +395,8 @@ async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
     relocating.await.unwrap().unwrap();
 
     let chat = manager.chat_by_id(&workspace.id).await.unwrap().unwrap();
-    assert!(chat.restore.is_some());
-    let resumed = crate::daemon::chats::restores::tests::RESUMED
-        .lock()
-        .unwrap()
-        .clone();
-    assert!(!resumed.contains(&workspace.id));
+    assert!(!chat.running);
+    assert!(!restore_queued(&manager, &workspace.id).await);
 }
 
 #[tokio::test]
@@ -483,19 +433,16 @@ async fn a_relocation_hands_over_the_converting_agents_its_removal_reaches() {
         .unwrap();
     // A chat in its worktree, below which a chat became a workspace whose
     // agent has yet to restart there.
-    let inside_process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let inside = manager
         .start_chat_in_workspace(
             &SpaceSelector::id(&workspace.id),
             "inside".into(),
             "claude".into(),
-            inside_process.id(),
             None,
-            false,
         )
         .await
         .unwrap();
-    let (below, mut below_process) = crate::daemon::test_support::chat(
+    let below = crate::daemon::test_support::chat(
         &manager,
         "below",
         "worker",
@@ -503,6 +450,7 @@ async fn a_relocation_hands_over_the_converting_agents_its_removal_reaches() {
         Some(&inside.id),
     )
     .await;
+    let mut below_process = crate::daemon::test_support::agent_process(&manager, &below.id).await;
     let converting = Converting {
         chat: below,
         mode: ModeName::DEFAULT,
@@ -511,17 +459,11 @@ async fn a_relocation_hands_over_the_converting_agents_its_removal_reaches() {
         .create_converted_workspace(converting, "part".into(), None, Default::default())
         .await
         .unwrap();
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
-    let identity = crate::process::identity::capture(process.id())
-        .unwrap()
-        .unwrap();
-    process.kill();
     let chat = crate::daemon::conversions::record::ConvertedChat {
         agent: "claude".into(),
         execution: crate::client::execution_ids::ExecutionId::generate(),
         session: Some("s1".into()),
         origin: None,
-        process: identity,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
         stopped_by: None,

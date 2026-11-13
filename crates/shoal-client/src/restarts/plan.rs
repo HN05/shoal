@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::{
     connection::Daemon,
-    model::{PendingRestart, PresentSpace, RunningAgent, Workspace},
+    model::{PendingRestart, PresentSpace, RunningAgent},
     output::agents::Skipped,
     state::AgentState,
 };
@@ -55,10 +55,10 @@ impl Restart {
 
 impl Selection {
     /// The agents named `agent` to restart, ready ones first, and those that
-    /// cannot restart, `in_place` when asked, or already run again. Agents
-    /// protection stopped wait for their restore and are left out, and
-    /// reported as skipped when their space was named and runs no other.
-    pub fn plan(self, agent: Option<&crate::agent::Agent>, in_place: bool) -> Plan {
+    /// cannot restart or already run again. Agents protection stopped wait
+    /// for their restore and are left out, and reported as skipped when
+    /// their space was named and runs no other.
+    pub fn plan(self, agent: Option<&crate::agent::Agent>) -> Plan {
         let mut plan = Plan {
             restarts: Vec::new(),
             skipped: Vec::new(),
@@ -83,7 +83,7 @@ impl Selection {
                 });
             }
             for running in agents {
-                match run_skip_reason(&space, &running, in_place) {
+                match skip_reason(&space, &running) {
                     Some(reason) => plan.skipped.push(Skipped {
                         space: space.name().clone(),
                         agent: running.agent,
@@ -140,31 +140,7 @@ impl Plan {
 
 /// The agents of workspaces and of chats, as a run selects and follows them.
 pub async fn running_agents(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
-    let mut agents = crate::agents::all(daemon).await?;
-    agents.extend(crate::agents::of_chats(daemon).await?);
-    Ok(agents)
-}
-
-/// Why a run that restarts `in_place` when asked cannot restart `running`,
-/// the agent of `space`, if it cannot.
-fn run_skip_reason(space: &PresentSpace, running: &RunningAgent, in_place: bool) -> Option<String> {
-    match space {
-        PresentSpace::Chat(_) if in_place => {
-            Some("a chat restarts only in a new place; omit --in-place".into())
-        }
-        space => space_skip_reason(space, running),
-    }
-}
-
-/// Why `running`, the agent of `space`, cannot restart, if it cannot.
-pub(super) fn space_skip_reason(space: &PresentSpace, running: &RunningAgent) -> Option<String> {
-    match space {
-        PresentSpace::Workspace(workspace) => skip_reason(workspace, running),
-        PresentSpace::Chat(_) if !running.restorable => {
-            Some("its agent cannot resume its session".into())
-        }
-        PresentSpace::Chat(_) => None,
-    }
+    crate::agents::all(daemon).await
 }
 
 /// Why `space`, a number, restarts no agent named `agent`, when the only ones
@@ -203,8 +179,8 @@ pub(super) fn stopped_reason(space: &str, running: &RunningAgent) -> Option<Stri
 }
 
 /// Why `running` cannot restart in place, if it cannot.
-fn skip_reason(workspace: &Workspace, running: &RunningAgent) -> Option<String> {
-    let manual = format!("use shoal stop {0} and shoal resume {0}", workspace.number);
+pub(super) fn skip_reason(space: &PresentSpace, running: &RunningAgent) -> Option<String> {
+    let manual = format!("use shoal stop {0} and shoal resume {0}", space.number());
     match &running.agent {
         None => Some(format!(
             "execution {} is disconnected; {manual}",

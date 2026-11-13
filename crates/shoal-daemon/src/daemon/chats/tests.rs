@@ -44,17 +44,12 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
         .create_workspace(&repo.id, "worker".into(), None, None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let ending = manager
         .start_chat(
             repo.id.clone().into(),
             "stopping".into(),
             "claude".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -63,9 +58,7 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
             repo.id.clone().into(),
             "running".into(),
             "codex".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -110,9 +103,9 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
         .await
         .unwrap();
 
-    // The chat stops with its process, waiting for `shoal resume` with its
+    // The chat stops with its agent, waiting for `shoal resume` with its
     // workspace and its name.
-    process.kill();
+    manager.end_executions(&ending.id).await;
     let worker = SpaceRef {
         id: workspace.id.clone(),
         name: workspace.name.clone(),
@@ -120,7 +113,7 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
         branch: workspace.branch.clone(),
     };
     let stopped = Chat {
-        restore: Some(ChatRestore::Resume),
+        running: false,
         children: vec![worker],
         ..ending.clone()
     };
@@ -145,34 +138,8 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
             format!("worker {:?}", Some(&ending.id)),
             "worker None".to_owned(),
             format!("worker {:?}", Some(&ending.id)),
-            format!("{} stopping", ChatEventKind::Saved),
         ]
     );
-}
-
-#[tokio::test]
-async fn a_chat_needs_a_running_process() {
-    let (temp, manager) = manager().await;
-    let checkout = repository(temp.path(), "repo");
-    let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let mut process = std::process::Command::new("true").spawn().unwrap();
-    let pid = process.id();
-    process.wait().unwrap();
-    manager
-        .start_chat(
-            repo.id.into(),
-            "chat-4".into(),
-            "claude".into(),
-            pid,
-            None,
-            false,
-        )
-        .await
-        .unwrap_err();
-    assert!(manager.chats().await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -184,14 +151,7 @@ async fn a_chat_keeps_the_session_its_agent_reports() {
         .await
         .unwrap();
     let chat = manager
-        .start_chat(
-            repo.id.into(),
-            "reporter".into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.into(), "reporter".into(), "claude".into(), None)
         .await
         .unwrap();
     assert_eq!(chat.session, None);
@@ -238,18 +198,8 @@ async fn a_chat_shows_its_agents_turn_state_until_it_stops() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
-        .start_chat(
-            repo.id.into(),
-            "talk".into(),
-            "claude".into(),
-            process.id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     let shown = || async {
@@ -258,150 +208,20 @@ async fn a_chat_shows_its_agents_turn_state_until_it_stops() {
     };
     assert_eq!(shown().await, None);
     let selected = SpaceSelector::id(&chat.id);
-    let report = |state| manager.set_agent_state(&selected, state, None, None);
+    let agent = manager.workspace_executions(&chat.id).await.unwrap()[0]
+        .id
+        .clone();
+    let report = |state| manager.set_agent_state(&selected, state, Some(agent.clone()), None);
     report(crate::state::AgentState::Waiting).await.unwrap();
     assert_eq!(shown().await, Some(crate::state::AgentState::Waiting));
 
     // The state ends with the chat's agent, and a report arriving after
     // the stop is not recorded.
-    process.kill();
-    assert!(manager.chats().await.unwrap()[0].restore.is_some());
+    manager.end_executions(&chat.id).await;
+    assert!(!manager.chats().await.unwrap()[0].running);
     assert_eq!(shown().await, None);
     report(crate::state::AgentState::Working).await.unwrap();
     assert_eq!(shown().await, None);
-}
-
-#[tokio::test]
-async fn a_moved_chat_runs_while_its_new_process_runs() {
-    let (temp, manager) = manager().await;
-    let checkout = repository(temp.path(), "repo");
-    let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let chat = manager
-        .start_chat(
-            repo.id.into(),
-            "chat-5".into(),
-            "happy-claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
-        .await
-        .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let moved = manager.move_chat(&chat.id, process.id()).await.unwrap();
-    assert_eq!(
-        moved,
-        Chat {
-            pid: process.id(),
-            ..chat.clone()
-        }
-    );
-    assert_eq!(manager.chats().await.unwrap(), [moved]);
-
-    // The recording process still runs, but the chat stops with the new one.
-    process.kill();
-    assert!(manager.chats().await.unwrap()[0].restore.is_some());
-    assert!(
-        manager
-            .move_chat(&chat.id, std::process::id())
-            .await
-            .is_err()
-    );
-}
-
-/// A process stop reads the tracked processes and stops the rest under the
-/// handoff lock, so a chat's new process, a descendant of the launcher that
-/// waits for its handoff, is never found untracked meanwhile.
-#[tokio::test]
-async fn a_chat_handoff_waits_for_a_process_stop_in_progress() {
-    let (temp, manager) = manager().await;
-    let checkout = repository(temp.path(), "repo");
-    let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let chat = manager
-        .start_chat(
-            repo.id.into(),
-            "chat-6".into(),
-            "happy-claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
-        .await
-        .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let stopping = manager.chat_handoffs.read().await;
-
-    let handoff = tokio::spawn({
-        let manager = manager.clone();
-        let chat = chat.id.clone();
-        let pid = process.id();
-        async move { manager.move_chat(&chat, pid).await }
-    });
-    // The lock prefers writers, so new readers wait once the handoff queues.
-    while manager.chat_handoffs.try_read().is_ok() {
-        assert!(!handoff.is_finished());
-        tokio::task::yield_now().await;
-    }
-    assert!(!handoff.is_finished());
-    assert_eq!(manager.chats().await.unwrap()[0].pid, std::process::id());
-    drop(stopping);
-
-    assert_eq!(handoff.await.unwrap().unwrap().pid, process.id());
-}
-
-#[tokio::test]
-async fn a_chat_moved_after_its_process_was_found_ended_keeps_running() {
-    let (temp, manager) = manager().await;
-    let checkout = repository(temp.path(), "repo");
-    let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let recording = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let chat = manager
-        .start_chat(
-            repo.id.into(),
-            "chat-6".into(),
-            "happy-claude".into(),
-            recording.id(),
-            None,
-            false,
-        )
-        .await
-        .unwrap();
-    // A sweep finds the recording process ended...
-    let recorded = manager
-        .store
-        .run(|db| recorded_processes(db))
-        .await
-        .unwrap();
-    recording.kill();
-    let exited = finished(recorded);
-    assert_eq!(exited.len(), 1);
-    // ...while the chat moves to its session's process.
-    let moved = manager
-        .move_chat(&chat.id, std::process::id())
-        .await
-        .unwrap();
-    let released = manager
-        .store
-        .write(move |tx| stop(tx, &exited))
-        .await
-        .unwrap();
-    assert!(released.is_empty());
-    assert_eq!(manager.chats().await.unwrap(), [moved]);
 }
 
 #[tokio::test]
@@ -416,16 +236,8 @@ async fn chats_and_workspaces_may_share_a_name() {
         .create_workspace(&repo.id, "worker".into(), None, None, None)
         .await
         .unwrap();
-    let start = |name: &str| {
-        manager.start_chat(
-            repo.id.clone().into(),
-            name.into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
-    };
+    let start =
+        |name: &str| manager.start_chat(repo.id.clone().into(), name.into(), "claude".into(), None);
 
     // A chat takes a workspace's name or another chat's, unchanged.
     let first = start("worker").await.unwrap();
@@ -473,9 +285,7 @@ async fn a_renamed_chat_keeps_its_files() {
             repo.id.clone().into(),
             name.into(),
             "happy-claude".into(),
-            std::process::id(),
             None,
-            false,
         )
     };
     let talk = start("talk").await.unwrap();
@@ -535,18 +345,8 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
-        .start_chat(
-            repo.id.clone().into(),
-            "talk".into(),
-            "claude".into(),
-            process.id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     let tmp_dir = chat.tmp_dir.clone().unwrap();
@@ -561,8 +361,8 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
     std::fs::write(tmp_dir.join("scratch"), "garbage").unwrap();
 
     // A stopped chat keeps it.
-    process.kill();
-    assert!(manager.chats().await.unwrap()[0].restore.is_some());
+    manager.end_executions(&chat.id).await;
+    assert!(!manager.chats().await.unwrap()[0].running);
     assert!(tmp_dir.exists());
     manager
         .remove_chat(&SpaceSelector::id(&chat.id), None)
@@ -575,14 +375,7 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
     std::fs::remove_dir_all(directory.join(".tmp")).unwrap();
     std::fs::create_dir(directory.join(".tmp")).unwrap();
     manager
-        .start_chat(
-            repo.id.clone().into(),
-            "talk".into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap_err();
     assert!(manager.chats().await.unwrap().is_empty());
@@ -596,29 +389,15 @@ async fn a_removed_chat_takes_its_executions_restores_and_recovery_records() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
-        .start_chat(
-            repo.id.clone().into(),
-            "talk".into(),
-            "claude".into(),
-            process.id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
-    process.kill();
+    // Its agent runs while a stopped one waits for its restore.
     let (id, repository) = (chat.id.clone(), repo.id.clone());
     manager
         .store
         .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state) VALUES ('stopped',?1,'unknown')",
-                [&id],
-            )?;
             db.execute(
                 "INSERT INTO agent_queue(id,kind,repository_id,name,agent,execution_id,state,created_at,space_id)
                     VALUES ('restore','restore',?2,'talk','claude','stopped','queued',1,?1)",
@@ -659,18 +438,8 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
-        .start_chat(
-            repo.id.clone().into(),
-            "talk".into(),
-            "claude".into(),
-            process.id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     let opened = manager
@@ -716,15 +485,8 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
     assert!(manager.workspace_by_id(&split.id).await.is_err());
     assert!(manager.workspace_by_id(&other.id).await.is_ok());
     assert!(manager.chats().await.unwrap().is_empty());
-    // The removal stopped the chat's agent.
-    assert!(!process_wait(process).success());
-}
-
-/// How `process` exited.
-fn process_wait(
-    mut process: crate::daemon::test_support::ProcessGroup,
-) -> std::process::ExitStatus {
-    process.wait().unwrap()
+    // The removal took the chat's agent.
+    assert!(manager.running_agents().await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -736,14 +498,7 @@ async fn a_workspace_whose_creation_fails_stays_below_the_chat_that_opened_it() 
         .await
         .unwrap();
     let chat = manager
-        .start_chat(
-            repo.id.clone().into(),
-            "talk".into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     // A base that does not resolve fails the worktree after the record.
@@ -775,14 +530,7 @@ async fn a_chat_being_removed_takes_no_new_space() {
         .await
         .unwrap();
     let chat = manager
-        .start_chat(
-            repo.id.clone().into(),
-            "talk".into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     // A creation that reaches its record after the removal began is refused,
@@ -813,9 +561,7 @@ async fn a_chat_being_removed_takes_no_new_space() {
         mode: "chat".into(),
         name: "late-chat".into(),
         agent: "claude".into(),
-        pid: std::process::id(),
         origin: None,
-        hands_over: false,
         parent: Some(chat.id.clone()),
     };
     manager
@@ -884,9 +630,7 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
             &SpaceSelector::id(&workspace.id),
             "worker-chat".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -933,20 +677,15 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
 }
 
 #[tokio::test]
-async fn a_chat_in_a_workspace_names_it_and_restores_only_while_its_worktree_is_there() {
+async fn a_chat_in_a_workspace_names_it_and_runs_only_while_its_worktree_is_there() {
     let (temp, manager) = manager().await;
     let (repo, workspace) = workspace(temp.path(), &manager).await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
         .start_chat_in_workspace(
             &SpaceSelector::id(&workspace.id),
             "worker-chat".into(),
             "claude".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -964,37 +703,19 @@ async fn a_chat_in_a_workspace_names_it_and_restores_only_while_its_worktree_is_
     assert!(recorded.children.is_empty());
 
     // A stopped chat keeps naming the workspace.
-    process.kill();
+    manager.end_executions(&chat.id).await;
     let stopped = manager.chats().await.unwrap();
-    assert_eq!(stopped[0].restore, Some(ChatRestore::Resume));
+    assert!(!stopped[0].running);
     assert_eq!(stopped[0].workspace, named);
 
     let moved = temp.path().join("moved");
     std::fs::rename(&workspace.path, &moved).unwrap();
-    assert!(
-        manager
-            .restore_chat(
-                &chat.id,
-                std::process::id(),
-                Default::default(),
-                None,
-                false
-            )
-            .await
-            .is_err()
-    );
+    let restore = || manager.begin_agent_execution(chat.id.as_str());
+    assert!(restore().await.is_err());
     std::fs::rename(&moved, &workspace.path).unwrap();
-    let restored = manager
-        .restore_chat(
-            &chat.id,
-            std::process::id(),
-            Default::default(),
-            None,
-            false,
-        )
-        .await
-        .unwrap();
-    assert_eq!((restored.restore, restored.workspace), (None, named));
+    restore().await.unwrap();
+    let restored = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    assert_eq!((restored.running, restored.workspace), (true, named));
 }
 
 #[tokio::test]
@@ -1002,16 +723,8 @@ async fn a_chat_runs_only_in_a_ready_workspace_with_its_worktree() {
     let (temp, manager) = manager().await;
     let (_, workspace) = workspace(temp.path(), &manager).await;
     let selected = SpaceSelector::id(&workspace.id);
-    let start = |name: &str| {
-        manager.start_chat_in_workspace(
-            &selected,
-            name.into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
-    };
+    let start =
+        |name: &str| manager.start_chat_in_workspace(&selected, name.into(), "claude".into(), None);
     let moved = temp.path().join("moved");
     std::fs::rename(&workspace.path, &moved).unwrap();
     assert!(start("missing").await.is_err());
@@ -1035,101 +748,6 @@ async fn a_chat_runs_only_in_a_ready_workspace_with_its_worktree() {
     assert!(manager.chats().await.unwrap().is_empty());
 }
 
-/// Processes a test left running in the background, killed when it ends.
-struct Orphans(Vec<u32>);
-
-impl Drop for Orphans {
-    fn drop(&mut self) {
-        for pid in &self.0 {
-            // SAFETY: kill only sends a signal.
-            unsafe { libc::kill(*pid as libc::pid_t, libc::SIGKILL) };
-        }
-    }
-}
-
-/// Run `script` in `directory` as a process whose starter exited, as a
-/// detached session's is, and return the process IDs it writes to the
-/// files it names `$1`, `$2`, ... in `files`.
-fn orphan(directory: &std::path::Path, script: &str, files: &[&std::path::Path]) -> Vec<u32> {
-    let status = std::process::Command::new("sh")
-        .arg("-c")
-        .arg(format!("cd \"$0\" && {{ sh -c '{script}' sh \"$@\" & }}"))
-        .arg(directory)
-        .args(files)
-        .status()
-        .unwrap();
-    assert!(status.success());
-    files
-        .iter()
-        .map(|file| {
-            for _ in 0..400 {
-                if let Some(pid) = std::fs::read_to_string(file)
-                    .ok()
-                    .and_then(|pid| pid.trim().parse().ok())
-                {
-                    return pid;
-                }
-                std::thread::sleep(Duration::from_millis(25));
-            }
-            panic!("{} names no process", file.display());
-        })
-        .collect()
-}
-
-#[tokio::test]
-async fn a_chats_processes_in_a_workspace_are_not_its_leftovers() {
-    let (temp, manager) = manager().await;
-    let (_, workspace) = workspace(temp.path(), &manager).await;
-    let file = |name: &str| temp.path().join(name);
-    let (agent, child, stray) = (file("agent"), file("child"), file("stray"));
-    // The chat's agent runs detached in the worktree with a child there,
-    // beside a stray process its starter left there.
-    let chat_pids = orphan(
-        &workspace.path,
-        "echo $$ > \"$1\"; sleep 600 & echo $! > \"$2\"; wait",
-        &[&agent, &child],
-    );
-    let stray_pid = orphan(
-        &workspace.path,
-        "echo $$ > \"$1\"; exec sleep 600",
-        &[&stray],
-    );
-    let _orphans = Orphans([chat_pids.clone(), stray_pid.clone()].concat());
-    manager
-        .start_chat_in_workspace(
-            &SpaceSelector::id(&workspace.id),
-            "worker-chat".into(),
-            "claude".into(),
-            chat_pids[0],
-            None,
-            false,
-        )
-        .await
-        .unwrap();
-
-    let space = manager
-        .workspace_space(
-            &workspace,
-            crate::daemon::space_processes::WorktreeTies::All,
-        )
-        .await
-        .unwrap();
-    let found = manager
-        .untracked_processes(vec![space], None)
-        .await
-        .unwrap()
-        .remove(&workspace.id)
-        .unwrap_or_default();
-    let leftovers: Vec<u32> = (found.iter())
-        .filter(|process| process.leftover)
-        .map(|process| process.identity.pid)
-        .collect();
-    assert!(leftovers.contains(&stray_pid[0]), "{found:?}");
-    for pid in &chat_pids {
-        assert!(!leftovers.contains(pid), "{pid} in {found:?}");
-    }
-}
-
 #[tokio::test]
 async fn a_chat_records_the_mode_its_agent_started_in() {
     let (root, manager) = manager().await;
@@ -1144,9 +762,7 @@ async fn a_chat_records_the_mode_its_agent_started_in() {
         mode: "plan".into(),
         name: "repo-plan-7".into(),
         agent: "claude".into(),
-        pid: std::process::id(),
         origin: None,
-        hands_over: false,
         parent: None,
     };
     let chat = manager
@@ -1166,18 +782,8 @@ async fn a_chat_s_log_shows_a_removal_that_failed() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
     let chat = manager
-        .start_chat(
-            repo.id.clone().into(),
-            "talk".into(),
-            "claude".into(),
-            process.id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     manager
@@ -1209,5 +815,4 @@ async fn a_chat_s_log_shows_a_removal_that_failed() {
         .filter(|kind| matches!(kind, EventKind::RemovalStarted | EventKind::Retained))
         .collect();
     assert_eq!(removal, [EventKind::RemovalStarted, EventKind::Retained]);
-    drop(process);
 }

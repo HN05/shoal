@@ -2,6 +2,7 @@
 //! waiting for its admission, and keeping, returning or removing its entry.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceSelector;
 use anyhow::{Context, Result, bail};
 use rusqlite::{OptionalExtension, params};
 
@@ -14,16 +15,16 @@ use crate::{daemon::workspace::Manager, state::QueueState};
 
 impl Manager {
     /// Queue the automatic restore of `execution`, an agent that protection
-    /// stopped in `workspace_id`, behind the work already waiting. A wrapper
+    /// stopped in the space `id`, behind the work already waiting. A wrapper
     /// that reattached while waiting keeps its place and waits again.
     pub(crate) async fn queue_restore(
         &self,
         execution: &ExecutionId,
         agent: &crate::agent::Agent,
-        workspace_id: &SpaceId,
+        id: &SpaceId,
     ) -> Result<()> {
         let restore = WaitingRestore {
-            workspace: self.workspace_by_id(workspace_id).await?,
+            space: self.space(&SpaceSelector::id(id)).await?,
             execution: execution.to_owned(),
             agent: agent.to_owned(),
         };

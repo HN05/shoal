@@ -7,7 +7,7 @@ use crate::daemon::approvals::ApprovalRequestExt;
 use crate::{
     daemon::{
         approvals::{ApprovalRequest, Lifetime, SecretSpecification, Specification, Target},
-        test_support::{ProcessGroup, manager, repository},
+        test_support::{ProcessGroup, agent_process, manager, repository},
         workspace::Manager,
         workspace_files::Attacher,
     },
@@ -19,26 +19,23 @@ use crate::{
 /// A workspace `root` with an agent, a chat below it running as the
 /// returned process, and a workspace `worker` with an agent below the chat.
 async fn mixed_tree(
-    manager: &Manager,
+    manager: &std::sync::Arc<Manager>,
     repository_id: &RepositoryId,
 ) -> (Workspace, Chat, Workspace, ProcessGroup) {
     let root = manager
         .create_workspace(repository_id, "root".into(), None, None, None)
         .await
         .unwrap();
-    // Not this test's own process, whose children the other tests start.
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = manager
         .start_chat(
             repository_id.to_owned().into(),
             "planning".into(),
             "claude".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();
+    let process = agent_process(manager, &chat.id).await;
     let (space, parent) = (chat.id.clone(), root.id.clone());
     manager
         .store
@@ -99,15 +96,7 @@ pub(super) async fn decider(
 /// End `chat`'s agent, `process`, as a stop leaves it to resume.
 pub(super) async fn stop_chat(manager: &Manager, chat: &Chat, process: ProcessGroup) {
     process.kill();
-    let id = chat.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute("UPDATE chats SET restore='resume' WHERE id=?1", [&id])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
+    manager.end_executions(&chat.id).await;
 }
 
 #[tokio::test]
@@ -255,9 +244,7 @@ async fn a_chat_opens_workspaces_only_in_its_own_repository() {
             repos[0].id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -282,19 +269,21 @@ async fn a_chat_opens_workspaces_only_in_its_own_repository() {
 
 /// Start the chat `name` in the worktree of `workspace`, running as a
 /// process that lives until stopped.
-async fn chat_in(manager: &Manager, workspace: &Workspace, name: &str) -> (Chat, ProcessGroup) {
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+async fn chat_in(
+    manager: &std::sync::Arc<Manager>,
+    workspace: &Workspace,
+    name: &str,
+) -> (Chat, ProcessGroup) {
     let chat = manager
         .start_chat_in_workspace(
             &SpaceSelector::id(&workspace.id),
             name.into(),
             "claude".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();
+    let process = agent_process(manager, &chat.id).await;
     (chat, process)
 }
 
@@ -446,7 +435,6 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
             },
         )
         .await;
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let start = |workspace: &Workspace| crate::protocol::ChatMethod::StartChat {
         priority: None,
         narrowing: Default::default(),
@@ -455,9 +443,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         workspace: Some(SpaceSelector::id(&workspace.id)),
         name: "auditing".into(),
         agent: "claude".into(),
-        pid: process.id(),
         origin: None,
-        hands_over: false,
         parent: None,
     };
     // The workspace above the chat is outside its tree...
@@ -485,15 +471,14 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         mode: "chat".into(),
         name: "auditing".into(),
         agent: "claude".into(),
-        pid: process.id(),
         origin: None,
-        hands_over: false,
         parent: parent.map(|parent| SpaceId::from(parent.to_string())),
     };
     let auditing = manager
         .start_new_chat(repository, workspace.as_ref(), new)
         .await
         .unwrap();
+    let auditing = manager.run_chat_agent(auditing).await.unwrap();
     assert_eq!(
         auditing.workspace.map(|home| home.id),
         Some(worker.id.clone())
@@ -509,9 +494,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         workspace: None,
         name: "nested".into(),
         agent: "claude".into(),
-        pid: process.id(),
         origin: None,
-        hands_over: false,
         parent: Some(SpaceSelector::id(&parent.id)),
     };
     let mut method = below(&worker);
@@ -564,6 +547,9 @@ async fn a_scoped_process_restarts_only_the_chats_below_its_space() {
         .await
         .unwrap();
     let (root, chat, worker, _process) = mixed_tree(&manager, &repo.id).await;
+    let execution = manager.workspace_executions(&chat.id).await.unwrap()[0]
+        .id
+        .clone();
     for (caller, allowed) in [(&root.id, true), (&chat.id, false), (&worker.id, false)] {
         let token = crate::client::scope_tokens::ScopeToken::from(caller.as_str());
         let space_id = caller.clone();
@@ -572,11 +558,11 @@ async fn a_scoped_process_restarts_only_the_chats_below_its_space() {
             execution: None,
         };
         manager.executions.issue_scope(token.clone(), scope).await;
-        // An ended chat is gone, so the request names it by ID.
-        let mut restart = crate::protocol::ChatMethod::RestartChat {
-            chat: chat.id.clone(),
+        let mut restart = crate::protocol::ExecutionMethod::RestartAgent {
+            execution: execution.clone(),
             join: None,
             run: None,
+            in_place: false,
             change: None,
         };
         let authorized = crate::daemon::scope::authorize(&manager, Some(&token), &mut restart);

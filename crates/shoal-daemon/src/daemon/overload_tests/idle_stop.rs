@@ -129,7 +129,7 @@ async fn an_idle_agent_with_a_background_command_keeps_running() {
     sweep(&manager).await;
     assert!(manager.agent_overload(&id).await.is_none());
     assert!(crate::process::identity::alive(&background).unwrap());
-    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
+    bounded(manager.stop_space(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();

@@ -167,14 +167,15 @@ pub async fn record_attach(ctx: &Context, selector: &SpaceSelector) {
     remember(ctx, ATTACH, selector, false).await;
 }
 
-/// Remember that this terminal showed the agent session of the running chat
-/// `selector` names or identifies and left it running, as [`record_attach`]
-/// does for a workspace. Failing to keep it never fails the command.
+/// Remember that this terminal showed the agent session of the chat
+/// `selector` names or identifies, whose agent runs or is about to, and left
+/// it running, as [`record_attach`] does for a workspace. Failing to keep it
+/// never fails the command.
 pub async fn record_chat_attach(ctx: &Context, selector: &SpaceSelector) {
     if !keeps_history(ctx) {
         return;
     }
-    let Ok(chats) = crate::client::chats::list(&ctx.paths).await else {
+    let Ok(chats) = crate::client::chats::recorded(&ctx.paths).await else {
         return;
     };
     let named = |chat: &&Chat| selector.selects(&chat.id, chat.number);

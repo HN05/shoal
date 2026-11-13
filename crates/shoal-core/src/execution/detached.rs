@@ -18,27 +18,28 @@ use tokio::{
 
 use crate::{
     env,
-    model::Workspace,
+    model::ExecutionSpace,
     paths::Paths,
     protocol::timing,
     workers::{Worker, detached_command, internal_command},
 };
 
-/// Start `command` in `workspace` as a tracked execution that outlives this
-/// process: a new session running this binary's detached wrapper, with the
-/// command's output in `log`, the inherited `clear` variables removed and
-/// `env` added to its environment, and `agent` naming the shortcut for the
-/// exit notification. Returns once the daemon has recorded the launch.
+/// Start `command` in `space`, a workspace or a chat, as a tracked
+/// execution that outlives this process: a new session running this
+/// binary's detached wrapper, with the command's output in `log`, the
+/// inherited `clear` variables removed and `env` added to its environment,
+/// and `agent` naming the shortcut for the exit notification. Returns once
+/// the daemon has recorded the launch.
 pub async fn launch_detached(
     paths: &Paths,
-    workspace: &Workspace,
+    space: &ExecutionSpace,
     log: PathBuf,
     command: Vec<OsString>,
     clear: &[&str],
     env: &[(&str, String)],
     agent: Option<&super::TrackedAgent>,
 ) -> Result<DetachedLaunch> {
-    let launch = DetachedCommand::prepare(paths, workspace, log, command, clear, env, agent)?;
+    let launch = DetachedCommand::prepare(paths, space, log, command, clear, env, agent)?;
     launch.start().await
 }
 
@@ -74,20 +75,20 @@ struct DetachedCommand {
 impl DetachedCommand {
     fn prepare(
         paths: &Paths,
-        workspace: &Workspace,
+        space: &ExecutionSpace,
         log: PathBuf,
         command: Vec<OsString>,
         clear: &[&str],
         env: &[(&str, String)],
         agent: Option<&super::TrackedAgent>,
     ) -> Result<Self> {
-        ensure!(workspace.path.is_dir(), "workspace directory is missing");
-        let file = prepare_detached_log(&log, workspace, &command)?;
+        ensure!(space.path.is_dir(), "{} directory is missing", space.kind);
+        let file = prepare_detached_log(&log, space, &command)?;
         let command = internal_command(
             paths,
             false,
             Worker::Detached {
-                workspace: &workspace.id,
+                workspace: &space.id,
                 log: &log,
                 agent,
                 command: &command,
@@ -118,7 +119,7 @@ impl DetachedCommand {
 
 fn prepare_detached_log(
     log: &Path,
-    workspace: &Workspace,
+    space: &ExecutionSpace,
     command: &[OsString],
 ) -> Result<std::fs::File> {
     if let Some(parent) = log.parent() {
@@ -137,7 +138,7 @@ fn prepare_detached_log(
             .map(|arg| arg.to_string_lossy())
             .collect::<Vec<_>>()
             .join(" "),
-        workspace.path.display()
+        space.path.display()
     )?;
     Ok(file)
 }

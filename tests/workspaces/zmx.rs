@@ -766,20 +766,15 @@ fn attach_previous_returns_to_a_running_chat() {
     let fixture = Fixture::new();
     fixture.add("persist");
     let home = fixture.root.path();
-    let repository = fixture.ok(&["repo", "ls"])[0].clone();
     let persist = agent_in_session(&fixture, "persist", "persist");
-    // The sleep stands in for the chat's agent.
-    let mut chat_agent = Command::new("sleep").arg("600").spawn().unwrap();
-    let response = fixture.request(serde_json::json!({"start_chat":{
-        "repository": repository["id"], "name": "talk", "agent": "claude",
-        "pid": chat_agent.id(), "origin": {"host": "zmx", "place": "chat"}
-    }}));
-    assert_eq!(response["type"], "chat", "{response}");
     fs::write(
         home.join("zmx-sessions"),
         "  name=persist\tpid=1\tclients=0\tshoal.workspace=w0\n  name=chat\tpid=1\tclients=0\n",
     )
     .unwrap();
+    let (mut chat_agent, talk) = fixture.run_chat_with("talk", &[], |command| {
+        command.env("ZMX_SESSION", "chat");
+    });
     let previous = || {
         let (output, transcript) = fixture.interactive(&["attach", "-"], "");
         assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -794,7 +789,7 @@ fn attach_previous_returns_to_a_running_chat() {
     }
     assert_eq!(previous(), ["attach", "chat"]);
     // A chat whose agent exited is passed over, as a removed workspace is.
-    chat_agent.kill().unwrap();
+    fixture.end_chat_agent(&talk);
     chat_agent.wait().unwrap();
     assert_eq!(previous(), ["attach", "persist"]);
     drop(persist);

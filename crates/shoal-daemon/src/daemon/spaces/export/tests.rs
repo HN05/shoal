@@ -14,14 +14,13 @@ use crate::{
 mod transfer;
 
 /// A manager with a chat `name` about a registered repository, whose
-/// process this test reaps once a signal ends it, so the chat ends with it.
+/// agent's process this test reaps once a signal ends it.
 async fn chat(name: &str) -> (tempfile::TempDir, Arc<Manager>, u32) {
     chat_running(name, "exec sleep 6021").await
 }
 
-/// [`chat`] whose process runs the shell `script` with the chat's identity,
-/// as a chat's agent runs: the chat starts with this process, then moves to
-/// the script's.
+/// [`chat`] whose agent's process runs the shell `script` with the chat's
+/// identity, as the child its execution records.
 async fn chat_running(name: &str, script: &str) -> (tempfile::TempDir, Arc<Manager>, u32) {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
@@ -30,14 +29,7 @@ async fn chat_running(name: &str, script: &str) -> (tempfile::TempDir, Arc<Manag
         .await
         .unwrap();
     let chat = manager
-        .start_chat(
-            repo.id.into(),
-            name.into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            true,
-        )
+        .start_chat(repo.id.into(), name.into(), "claude".into(), None)
         .await
         .unwrap();
     // It leads its process group, as a chat's process does in a terminal.
@@ -54,13 +46,25 @@ async fn chat_running(name: &str, script: &str) -> (tempfile::TempDir, Arc<Manag
         .unwrap();
     let pid = process.id();
     std::thread::spawn(move || process.wait());
-    manager.move_chat(&chat.id, pid).await.unwrap();
+    let execution = manager.workspace_executions(&chat.id).await.unwrap()[0]
+        .id
+        .clone();
+    let child = identity::capture(pid).unwrap();
+    manager
+        .record_execution_child(execution, child, pid)
+        .await
+        .unwrap();
     (root, manager, pid)
 }
 
-/// The loop that keeps a chat's script running until the test that started
-/// it ends, also when the test is killed and nothing stops the script.
-const UNTIL_THE_TEST_ENDS: &str = "while kill -0 $PPID 2>/dev/null; do sleep 1; done";
+/// Stop the agent of `chat`, as `shoal stop` does.
+async fn stop(manager: &Manager, chat: &crate::model::Chat) {
+    let request = crate::daemon::workspace::StopRequest::manual();
+    manager
+        .stop_space(&SpaceSelector::id(&chat.id), request)
+        .await
+        .unwrap();
+}
 
 /// The process ID the chat's script writes to `file`, once it has.
 async fn written_pid(file: &Path) -> u32 {
@@ -130,7 +134,7 @@ async fn a_chat_without_a_session_keeps_running() {
     let chat = manager.chats().await.unwrap().remove(0);
     assert!(identity::capture(pid).unwrap().is_some());
     assert!(!file.exists());
-    manager.stop_chat(&chat.id).await.unwrap();
+    stop(&manager, &chat).await;
 }
 
 #[tokio::test]
@@ -158,99 +162,6 @@ async fn a_chat_ends_with_the_agent_its_launcher_started() {
     identity::signal(&agent, libc::SIGKILL).unwrap();
     assert!(!survived);
     assert_eq!(identity::capture(pid).unwrap(), None);
-}
-
-#[tokio::test]
-async fn a_chat_ends_with_what_its_process_starts_as_it_stops() {
-    let directory = tempfile::tempdir().unwrap();
-    let child = directory.path().join("late-pid");
-    let ready = directory.path().join("ready-pid");
-    // A process that starts another when told to stop, and says so once it
-    // will.
-    let script = format!(
-        "trap 'sleep 6021 & echo $! > \"{}\"; exit 0' TERM; echo $$ > \"{}\"; \
-         {UNTIL_THE_TEST_ENDS}",
-        child.display(),
-        ready.display()
-    );
-    let (root, manager, pid) = chat_running("forking", &script).await;
-    assert_eq!(written_pid(&ready).await, pid);
-    let chat = manager.chats().await.unwrap().remove(0);
-    manager
-        .record_chat_session(&chat.id, "s1".into())
-        .await
-        .unwrap();
-
-    export(&manager, "forking", &root.path().join("forking.shoal"))
-        .await
-        .unwrap();
-    // Written as it started, before the export finished; stopped, it is gone
-    // once whichever process adopts orphans reaps it.
-    let late = written_pid(&child).await;
-    for _ in 0..400 {
-        if identity::capture(late).unwrap().is_none() {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
-    }
-    let survivor = identity::capture(late).unwrap();
-    // A survivor would hold the test runner's output open.
-    if let Some(survivor) = &survivor {
-        identity::signal(survivor, libc::SIGKILL).unwrap();
-    }
-    assert_eq!(survivor, None);
-    assert_eq!(identity::capture(pid).unwrap(), None);
-}
-
-#[tokio::test]
-async fn a_chat_ends_without_the_workspace_executions_it_started() {
-    let directory = tempfile::tempdir().unwrap();
-    let started = directory.path().join("wrapper-pid");
-    // A command in the chat started a workspace's execution, whose wrapper
-    // stays among the chat's processes.
-    let script = format!(
-        "sleep 6021 & echo $! > '{}'; {UNTIL_THE_TEST_ENDS}",
-        started.display()
-    );
-    let (root, manager, _) = chat_running("coordinator", &script).await;
-    let wrapper = identity::capture(written_pid(&started).await)
-        .unwrap()
-        .expect("the wrapper runs");
-    let chat = manager.chats().await.unwrap().remove(0);
-    let repository = chat.repository_id.clone().unwrap();
-    let workspace = manager
-        .create_workspace(&repository, "worker".into(), None, None, None)
-        .await
-        .unwrap();
-    let recorded = serde_json::to_string(&wrapper).unwrap();
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state,wrapper)
-                 VALUES ('worker-run',?1,'running',?2)",
-                rusqlite::params![workspace.id, recorded],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    manager
-        .record_chat_session(&chat.id, "s1".into())
-        .await
-        .unwrap();
-
-    export(
-        &manager,
-        "coordinator",
-        &root.path().join("coordinator.shoal"),
-    )
-    .await
-    .unwrap();
-    assert!(manager.chats().await.unwrap().is_empty());
-    let kept = identity::alive(&wrapper).unwrap();
-    identity::signal(&wrapper, libc::SIGKILL).unwrap();
-    assert!(kept, "the workspace's execution was stopped with the chat");
 }
 
 #[tokio::test]
@@ -319,9 +230,7 @@ async fn a_chat_in_a_workspace_is_not_moved() {
             &SpaceSelector::id(&workspace.id),
             "worker-chat".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -348,9 +257,7 @@ async fn a_workspace_with_a_chat_in_it_is_not_moved() {
             &SpaceSelector::id(&workspace.id),
             "reading".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -396,9 +303,7 @@ async fn a_chat_that_starts_after_the_export_checked_keeps_everything() {
             &SpaceSelector::id(&split.id),
             "reading".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -454,7 +359,7 @@ async fn a_chat_copy_keeps_the_chat_running() {
         sessions.reported().collect::<Vec<_>>(),
         [(&crate::agent::Agent::from("claude"), &"s1".into())]
     );
-    manager.stop_chat(&chat.id).await.unwrap();
+    stop(&manager, &chat).await;
 }
 
 #[tokio::test]
@@ -470,5 +375,5 @@ async fn a_chat_without_a_session_has_none_to_fork() {
     );
     assert!(!file.exists());
     let chat = manager.chats().await.unwrap().remove(0);
-    manager.stop_chat(&chat.id).await.unwrap();
+    stop(&manager, &chat).await;
 }

@@ -55,7 +55,7 @@ fn an_entry_keeps_the_journal_lines_json() {
     let chat: LogEntry = serde_json::from_value(serde_json::json!({
         "type": "chat", "id": 8, "created_at": 2, "kind": "chat_renamed",
         "chat": {"id": "c", "repository_id": null, "name": "helper", "agent": "claude",
-            "pid": 1, "started_at": 1},
+            "started_at": 1},
     }))
     .unwrap();
     assert_eq!(

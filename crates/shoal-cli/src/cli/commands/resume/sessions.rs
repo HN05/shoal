@@ -10,31 +10,30 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, terminal, ui},
     execution::recovery::{Saved, SavedSession},
-    model::Workspace,
+    model::PresentSpace,
     protocol::ConfigTarget,
 };
 
-/// Resume each workspace's stopped work, reporting it with what `resumed`
-/// holds already. Commands without an agent to receive them, as none
-/// restoring through its waiting wrapper does, are reported here. An agent
-/// resumes where it stopped when the terminal backend can reuse that place,
+/// Resume each space's stopped work, reporting it with what `resumed` holds
+/// already. Commands without an agent to receive them, as none restoring
+/// through its waiting wrapper does, are reported here. An agent resumes
+/// where it stopped when the terminal backend can reuse that place,
 /// otherwise in the backend's background; without a backend one agent
-/// resumes in this terminal unless `resumed` reports chats, setups or
-/// failures, and
-/// the others are listed for their own terminals.
+/// resumes in this terminal unless `resumed` reports setups or failures,
+/// and the others are listed for their own terminals.
 pub(super) async fn run_all(
     ctx: &Context,
-    stopped: Vec<(Workspace, Saved)>,
+    stopped: Vec<(PresentSpace, Saved)>,
     mut resumed: Resumed,
 ) -> Result<i32> {
     let mut sessions = Vec::new();
-    for (workspace, mut saved) in stopped {
+    for (space, mut saved) in stopped {
         if !saved.restores_outside_wrappers() {
             let _claims = commands::claim(&mut saved.commands);
-            match commands::report(ctx, &workspace, &saved.commands) {
+            match commands::report(ctx, &space, &saved.commands) {
                 Ok(report) => resumed.commands.push(report),
                 Err(error) => {
-                    let failure = ui::failure(ctx, "resume", &workspace.name, &error);
+                    let failure = ui::failure(ctx, "resume", space.name(), &error);
                     resumed.failed.push(failure);
                 }
             }
@@ -44,44 +43,43 @@ pub(super) async fn run_all(
                 .agents
                 .into_iter()
                 .chain(saved.sessions)
-                .map(|saved| (workspace.clone(), saved)),
+                .map(|saved| (space.clone(), saved)),
         );
     }
     // An agent restored here replaces this run's report, so it takes the
     // terminal only when there is nothing else to report.
-    let alone = resumed.chats.is_empty() && resumed.set_up.is_empty() && resumed.failed.is_empty();
+    let alone = resumed.set_up.is_empty() && resumed.failed.is_empty();
     let single = sessions.len() == 1 && alone && ctx.on_terminal();
     start_sessions(ctx, sessions, single, resumed).await
 }
 
-/// Start each of the stopped agents `sessions` lists, by workspace,
-/// through the wrapper that waits for it, where it
-/// stopped or in the background; `single` resumes the only one in this
-/// terminal when none is possible. Reports them with what `output` holds
-/// already.
+/// Start each of the stopped agents `sessions` lists, by space, through the
+/// wrapper that waits for it, where it stopped or in the background;
+/// `single` resumes the only one in this terminal when none is possible.
+/// Reports them with what `output` holds already.
 pub(super) async fn start_sessions(
     ctx: &Context,
-    sessions: Vec<(Workspace, SavedSession)>,
+    sessions: Vec<(PresentSpace, SavedSession)>,
     single: bool,
     mut output: Resumed,
 ) -> Result<i32> {
     let mut listed = Vec::new();
     let mut in_wrappers = 0;
     let mut place = None;
-    for (workspace, session) in &sessions {
+    for (space, session) in &sessions {
         let id = &session.id;
-        let (reused, started) = match start_session(ctx, workspace, session, single).await {
+        let (reused, started) = match start_session(ctx, space, session, single).await {
             Ok(Started::Here) => {
                 // Boxed, since `run` calls back into this function.
                 let id = Some(id.clone());
-                let workspace = SpaceSelector::id(&workspace.id);
-                return Box::pin(super::workspace::run(ctx, workspace, id, true, None)).await;
+                let selector = SpaceSelector::id(space.id());
+                return Box::pin(super::space::run(ctx, selector, id, true, None)).await;
             }
             Ok(Started::Elsewhere { reused, place }) => (reused, place),
             Ok(Started::InWrapper) => {
                 in_wrappers += 1;
                 output.agents.push(ResumedAgent {
-                    workspace: workspace.name.clone(),
+                    workspace: space.name().clone(),
                     execution: id.clone(),
                     background: false,
                     reused: true,
@@ -89,17 +87,17 @@ pub(super) async fn start_sessions(
                 continue;
             }
             Err(error) => {
-                let failure = ui::failure(ctx, "resume", &workspace.name, &error);
+                let failure = ui::failure(ctx, "resume", space.name(), &error);
                 output.failed.push(failure);
                 continue;
             }
         };
         place = started.or(place);
         if started.is_none() {
-            listed.push((workspace, id));
+            listed.push((space, id));
         }
         output.agents.push(ResumedAgent {
-            workspace: workspace.name.clone(),
+            workspace: space.name().clone(),
             execution: id.clone(),
             background: started.is_some(),
             reused,
@@ -125,27 +123,24 @@ enum Started {
     },
 }
 
-/// Start the stopped agent `session` of `workspace` through the wrapper that
+/// Start the stopped agent `session` of `space` through the wrapper that
 /// waits for it, where it stopped or in the background; when none is
 /// possible, `single` resumes the only one in this terminal.
 async fn start_session(
     ctx: &Context,
-    workspace: &Workspace,
+    space: &PresentSpace,
     session: &SavedSession,
     single: bool,
 ) -> Result<Started> {
     if session.waits_in_wrapper {
-        queue::queue(ctx, workspace, &session.id, true).await?;
+        queue::queue(ctx, space, &session.id, true).await?;
         return Ok(Started::InWrapper);
     }
-    let settings = crate::config::settings(
-        &ctx.paths,
-        ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
-    )
-    .await?;
+    let target = ConfigTarget::Space(SpaceSelector::id(space.id()));
+    let settings = crate::config::settings(&ctx.paths, target).await?;
     let args = [
         "resume",
-        workspace.id.as_str(),
+        space.id().as_str(),
         "--execution",
         session.id.as_str(),
         "--focus",
@@ -159,7 +154,7 @@ async fn start_session(
             place: Some(places),
         });
     }
-    let place = terminal::run_in_background(ctx, &settings, workspace, &args).await?;
+    let place = super::places::run_in_background(ctx, &settings, space, &args).await?;
     if single && place.is_none() {
         return Ok(Started::Here);
     }

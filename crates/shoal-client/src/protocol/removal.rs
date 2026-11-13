@@ -38,8 +38,10 @@ pub enum UntrackedProcesses {
 pub enum RemovalMethod {
     /// The workspaces and chats `stop --all` stops.
     StopTargets,
-    StopWorkspace {
-        workspace: SpaceSelector,
+    /// Stop the agents and commands of the workspace or chat `space`,
+    /// saving them for `shoal resume`.
+    StopSpace {
+        space: SpaceSelector,
         /// The user checked that executions Shoal cannot prove ended did.
         #[serde(default)]
         acknowledge_unproven: bool,
@@ -49,9 +51,6 @@ pub enum RemovalMethod {
         /// What becomes of its untracked processes, which the answer counts.
         processes: UntrackedProcesses,
     },
-    /// Save the chat `chat` for `shoal resume` and stop its agent; a
-    /// stopped chat stays as it is.
-    StopChat { chat: SpaceSelector },
     /// Refuse now what stopping the workspace or chat `space` would refuse,
     /// so a batch checks every target before stopping any.
     CheckStop { space: SpaceSelector },

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use super::super::{ExecutionKind, Manager};
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::test_support::{ProcessGroup, manager, repository},
+    daemon::test_support::{manager, repository},
     execution::TrackedAgent,
     model::{CleanupReason, Workspace},
     state::AgentState,
@@ -155,15 +155,12 @@ async fn idle_cleanup_keeps_a_child_without_an_agent_while_its_chat_runs() {
         .await
         .unwrap();
     // Not this test's own process, whose children the other tests start.
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = manager
         .start_chat(
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -181,7 +178,7 @@ async fn idle_cleanup_keeps_a_child_without_an_agent_while_its_chat_runs() {
         kept(&manager, &child).await,
         Some(CleanupReason::ParentAgentRunning)
     );
-    manager.stop_chat(&chat.id).await.unwrap();
+    manager.end_executions(&chat.id).await;
     assert_eq!(kept(&manager, &child).await, None);
 }
 
@@ -193,7 +190,7 @@ async fn idle_cleanup_keeps_a_child_while_its_chat_becomes_a_workspace() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (chat, _process) =
+    let chat =
         crate::daemon::test_support::chat(&manager, "lead", "worker", Some(&repo), None).await;
     let child = manager
         .create_workspace_below(
@@ -210,8 +207,7 @@ async fn idle_cleanup_keeps_a_child_while_its_chat_becomes_a_workspace() {
         mode: crate::config::modes::ModeName::DEFAULT,
     };
 
-    // Its agent runs on where it ran, untracked in the workspace, until it
-    // is handed over.
+    // Its agent runs on where it ran until it is handed over.
     manager
         .create_converted_workspace(converting, "fix-login".into(), None, Default::default())
         .await
@@ -221,6 +217,8 @@ async fn idle_cleanup_keeps_a_child_while_its_chat_becomes_a_workspace() {
         kept(&manager, &child).await,
         Some(CleanupReason::ParentAgentRunning)
     );
+    // The hand-over stops it before the workspace's own agent starts.
+    manager.end_executions(&chat.id).await;
     let id = chat.id.clone();
     (manager.store)
         .write(move |tx| crate::daemon::conversions::record::relocated_chat(tx, &id, None))
@@ -241,7 +239,7 @@ async fn idle_cleanup_keeps_a_stopped_chat_while_its_coordinator_runs() {
         .create_workspace(&repo.id, "parent".into(), None, None, None)
         .await
         .unwrap();
-    let (chat, _process) =
+    let chat =
         crate::daemon::test_support::chat(&manager, "notes", "chat", Some(&repo), Some(&parent.id))
             .await;
     let started = start_agent(&manager, &parent).await;
@@ -249,7 +247,7 @@ async fn idle_cleanup_keeps_a_stopped_chat_while_its_coordinator_runs() {
     // Its own agent does its work while it runs, and the coordinator's once
     // it stopped.
     assert_eq!(chat_kept().await, Some(CleanupReason::AgentRunning));
-    manager.stop_chat(&chat.id).await.unwrap();
+    manager.end_executions(&chat.id).await;
     assert_eq!(chat_kept().await, Some(CleanupReason::ParentAgentRunning));
     finish(&manager, started).await;
     assert_eq!(chat_kept().await, None);

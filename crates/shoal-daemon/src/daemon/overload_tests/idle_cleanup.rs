@@ -131,7 +131,7 @@ async fn a_restore_of_an_agent_stopped_mid_turn_keeps_its_workspace() {
             .unwrap()
             .is_none()
     );
-    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
+    bounded(manager.stop_space(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();

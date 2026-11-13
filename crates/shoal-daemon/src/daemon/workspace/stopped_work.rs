@@ -15,18 +15,17 @@ use crate::protocol::SavedAgent;
 /// A workspace process that stopped another workspace's executions, which
 /// may resume the agents among them.
 pub(super) struct Stopper<'a> {
-    /// The ID of the process's workspace.
-    pub(super) workspace: &'a SpaceId,
+    /// The ID of the process's space.
+    pub(super) space: &'a SpaceId,
     /// The executions the stop ended.
     pub(super) executions: Vec<ExecutionId>,
 }
 
-/// What a change to the permissions given applies to: stopped agents and
-/// saved chats, which restores run under, and the workspaces whose failed
-/// setup a launch waits for, which it starts under.
+/// What a change to the permissions given applies to: the stopped agents of
+/// workspaces and chats, which restores run under, and the workspaces whose
+/// failed setup a launch waits for, which it starts under.
 pub(crate) struct PermissionTargets<'a> {
     pub agents: &'a [SavedAgent],
-    pub chats: &'a [SpaceSelector],
     pub launches: &'a [SpaceSelector],
 }
 
@@ -104,7 +103,7 @@ impl Manager {
         })
     }
 
-    /// Keep the workspace's stopped agents whose execution ended as last
+    /// Keep the space's stopped agents whose execution ended as last
     /// sessions, which hold no agent slot and nothing restores on its own,
     /// recording `stopper` on those it stopped. One a wrapper waits to
     /// restore stays, and one that cannot be kept, such as one a resume
@@ -114,9 +113,9 @@ impl Manager {
         selector: &SpaceSelector,
         stopper: Option<&Stopper<'_>>,
     ) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
-        let executions = self.workspace_executions(&workspace.id).await?;
-        let mut saved = Saved::load(&self.paths, &workspace.id)?;
+        let space = self.space(selector).await?;
+        let executions = self.workspace_executions(space.id()).await?;
+        let mut saved = Saved::load(&self.paths, space.id())?;
         saved.retain_unattended();
         for recovery::SavedSession { id, path, .. } in saved.agents {
             if executions.iter().any(|execution| execution.id == id) {
@@ -124,9 +123,9 @@ impl Manager {
             }
             let stopped_by = stopper
                 .filter(|stopper| stopper.executions.contains(&id))
-                .map(|stopper| stopper.workspace);
+                .map(|stopper| stopper.space);
             if let Err(error) =
-                recovery::keep_as_last_session(&self.paths, &workspace.id, &id, &path, stopped_by)
+                recovery::keep_as_last_session(&self.paths, space.id(), &id, &path, stopped_by)
             {
                 crate::daemon::log!("stopped agent {id} not kept as a last session: {error:#}");
             }
@@ -162,8 +161,8 @@ impl Manager {
         })
     }
 
-    /// Make `change` to the permissions each of the stopped agents, saved
-    /// chats and waiting launches `targets` names was given, once none of them is refused, for
+    /// Make `change` to the permissions each of the stopped agents and
+    /// waiting launches `targets` names was given, once none of them is refused, for
     /// the scoped process of the space `giver`, which gives only what it
     /// holds, or for the user.
     pub async fn change_stopped_permissions(
@@ -176,22 +175,13 @@ impl Manager {
         for agent in targets.agents {
             changed.push(self.changeable(agent, change, giver).await?);
         }
-        let mut saved = Vec::new();
-        for chat in targets.chats {
-            saved.push(self.changeable_chat(chat, change, giver).await?);
-        }
         let mut launches = Vec::new();
         for workspace in targets.launches {
             launches.push(self.changeable_launch(workspace, change, giver).await?);
         }
-        // The chats and the launches change together, refusing one restored,
-        // started or removed since, while the agents' claims keep their
-        // restores out.
+        // The launches change together, refusing one started or removed
+        // since, while the agents' claims keep their restores out.
         let claimed = recovery::ClaimedChange::claim(&changed)?;
-        let given = saved
-            .iter()
-            .map(|chat| (chat.id.clone(), change.applied_to(chat.narrowing)));
-        self.give_saved_chats(given.collect()).await?;
         let given = launches
             .into_iter()
             .map(|launch| (launch.id, change.applied_to(launch.narrowing)));
@@ -217,23 +207,6 @@ impl Manager {
         launch.with_context(|| format!("no agent waits for the setup of {}", workspace.name))
     }
 
-    /// The saved chat `selector` names, refusing one that is not saved and
-    /// `change` where `giver` does not hold what it gives, as
-    /// [`Manager::ensure_change_held`] refuses it.
-    async fn changeable_chat(
-        &self,
-        selector: &SpaceSelector,
-        change: &crate::config::permissions::PermissionChange,
-        giver: Option<&SpaceId>,
-    ) -> Result<crate::model::Chat> {
-        let chat = self.chat(selector).await?;
-        ensure!(chat.restore.is_some(), "chat {} is not stopped", chat.name);
-        let repository = chat.repository_id.clone();
-        let space = crate::model::PresentSpace::Chat(chat.clone());
-        (self.ensure_change_held(giver, &space, change, repository.as_ref())).await?;
-        Ok(chat)
-    }
-
     /// What the stopped `agent` saved, refusing one that saved nothing, one
     /// its waiting wrapper restores, which keeps the permissions that
     /// wrapper launched it with, and `change` where `giver` does not hold
@@ -244,21 +217,20 @@ impl Manager {
         change: &crate::config::permissions::PermissionChange,
         giver: Option<&SpaceId>,
     ) -> Result<Saved> {
-        let (workspace, execution) = (self.workspace(&agent.workspace).await?, &agent.execution);
-        let repository = Some(workspace.repository_id.clone());
-        let space = crate::model::PresentSpace::Workspace(workspace.clone());
+        let (space, execution) = (self.space(&agent.workspace).await?, &agent.execution);
+        let repository = space.repository_id().cloned();
         (self.ensure_change_held(giver, &space, change, repository.as_ref())).await?;
-        let mut saved = Saved::load(&self.paths, &workspace.id)?;
+        let mut saved = Saved::load(&self.paths, space.id())?;
         saved.retain_execution(execution, false);
         ensure!(
             !(saved.agents.is_empty() && saved.sessions.is_empty()),
             "{} has no stopped agent {execution}",
-            workspace.name
+            space.name()
         );
         ensure!(
             !saved.agents.iter().any(|agent| agent.waits_in_wrapper),
             "the agent of {} restores in the wrapper that waits for it, which keeps its permissions; resume it without --permission",
-            workspace.name
+            space.name()
         );
         Ok(saved)
     }

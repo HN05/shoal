@@ -364,7 +364,7 @@ impl Manager {
                 Reader::OnStart
             }
             PresentSpace::Workspace(_) => Reader::Nobody,
-            PresentSpace::Chat(chat) if chat.restore.is_none() => Reader::Now,
+            PresentSpace::Chat(chat) if chat.running => Reader::Now,
             PresentSpace::Chat(_) => Reader::OnStart,
         }
     }

@@ -1353,8 +1353,8 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
             ),
             (DaemonMethod::ReloadConfig.into(), true),
             (
-                RemovalMethod::StopWorkspace {
-                    workspace: SpaceSelector::id(&workspace.id),
+                RemovalMethod::StopSpace {
+                    space: SpaceSelector::id(&workspace.id),
                     acknowledge_unproven: false,
                     launches: crate::protocol::QueuedLaunches::Cancel,
                     processes: crate::protocol::UntrackedProcesses::Keep,

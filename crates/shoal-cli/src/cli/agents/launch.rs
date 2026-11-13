@@ -8,9 +8,9 @@ use super::Launch;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
-    agents::{Integration, Wake, ensure_available},
+    agents::{Integration, ensure_available},
     cli::{context::Context, terminal},
-    config::{Effective, named_commands, templates},
+    config::{Effective, named_commands},
     execution,
 };
 
@@ -109,15 +109,6 @@ async fn command(
         &[("{prompt}", OsStr::new(&prompt))],
     )
     .await
-}
-
-/// How updates reach a chat's agent with `integration`, which runs without
-/// a wrapper to prompt it: pushed when a hook of its own wakes it.
-pub(super) fn chat_delivery(integration: &dyn Integration) -> templates::Delivery {
-    match integration.wakes() {
-        Wake::Hook => templates::Delivery::Pushed,
-        Wake::Prompt | Wake::Never => templates::Delivery::Watched,
-    }
 }
 
 /// What agent `name`'s configured command receives: the arguments carrying

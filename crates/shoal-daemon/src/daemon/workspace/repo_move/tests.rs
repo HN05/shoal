@@ -119,9 +119,7 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
             repo.id.clone().into(),
             "chat-1".into(),
             "codex".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await;
     assert!(chat.is_err());
@@ -776,19 +774,17 @@ async fn a_root_move_waits_for_chats_without_a_repository_and_takes_their_tempor
         .and_then(Path::parent)
         .context("no root")?
         .to_owned();
-    let process = test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = crate::daemon::chats::NewChat {
         priority: None,
         narrowing: Default::default(),
         name: "master".into(),
         agent: "claude".into(),
         mode: "orchestrate".into(),
-        pid: process.id(),
         origin: None,
-        hands_over: false,
         parent: None,
     };
     let chat = manager.start_new_chat(None, None, new).await?;
+    let chat = manager.run_chat_agent(chat).await?;
     let error = manager
         .plan_repository_moves(None, Layout::Excluded)
         .await
@@ -796,8 +792,7 @@ async fn a_root_move_waits_for_chats_without_a_repository_and_takes_their_tempor
     assert!(format!("{error:#}").contains("master"), "{error:#}");
     assert!(manager.move_repositories(Layout::Excluded).await.is_err());
 
-    process.kill();
-    manager.stop_finished_chats().await?;
+    manager.end_executions(&chat.id).await;
     manager
         .remove_chat(&SpaceSelector::id(&chat.id), None)
         .await?;
@@ -830,19 +825,17 @@ async fn a_root_move_waits_for_the_files_of_removed_chats_without_a_repository()
         .and_then(Path::parent)
         .context("no root")?
         .to_owned();
-    let process = test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = crate::daemon::chats::NewChat {
         priority: None,
         narrowing: Default::default(),
         name: "master".into(),
         agent: "claude".into(),
         mode: "orchestrate".into(),
-        pid: process.id(),
         origin: None,
-        hands_over: false,
         parent: None,
     };
     let chat = manager.start_new_chat(None, None, new).await?;
+    let chat = manager.run_chat_agent(chat).await?;
     let report = temp.path().join("report.md");
     fs::write(&report, "Plan")?;
     manager
@@ -852,8 +845,7 @@ async fn a_root_move_waits_for_the_files_of_removed_chats_without_a_repository()
             &Attacher::User,
         )
         .await?;
-    process.kill();
-    manager.stop_finished_chats().await?;
+    manager.end_executions(&chat.id).await;
     manager
         .remove_chat(&SpaceSelector::id(&chat.id), None)
         .await?;

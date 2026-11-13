@@ -1,11 +1,11 @@
-//! Stopping what runs in a space: its agents and commands, or a chat's
-//! agent, which a stop keeps to restore, and its untracked processes.
+//! Stopping what runs in a space: its agents and commands, which a stop
+//! keeps to restore, and its untracked processes.
 use anyhow::Result;
 
 use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, request},
-    model::{PresentSpace, StoppedChat, StoppedWorkspace},
+    model::{PresentSpace, StoppedSpace},
     processes::{Selection, Stopped},
     protocol::{QueuedLaunches, RemovalMethod, UntrackedProcesses},
 };
@@ -21,29 +21,24 @@ pub async fn check(daemon: &impl Daemon, space: SpaceSelector) -> Result<()> {
     request(daemon, RemovalMethod::CheckStop { space }).await
 }
 
-/// Stop `workspace`'s agents and commands, keeping their sessions, and do
-/// with its queued launches as `launches` says and with its untracked
-/// processes as `processes` says; `acknowledge_unproven` accepts processes
-/// whose exit cannot be proven.
-pub async fn stop_workspace(
+/// Stop the agents and commands of `space`, a workspace or a chat, keeping
+/// their sessions, and do with its queued launches as `launches` says and
+/// with its untracked processes as `processes` says; `acknowledge_unproven`
+/// accepts processes whose exit cannot be proven.
+pub async fn stop_space(
     daemon: &impl Daemon,
-    workspace: SpaceSelector,
+    space: SpaceSelector,
     acknowledge_unproven: bool,
     launches: QueuedLaunches,
     processes: UntrackedProcesses,
-) -> Result<StoppedWorkspace> {
-    let method = RemovalMethod::StopWorkspace {
-        workspace,
+) -> Result<StoppedSpace> {
+    let method = RemovalMethod::StopSpace {
+        space,
         acknowledge_unproven,
         launches,
         processes,
     };
     request(daemon, method).await
-}
-
-/// Save `chat` for `shoal resume` and stop its agent, as the caller's stop.
-pub async fn stop_chat(daemon: &impl Daemon, chat: SpaceSelector) -> Result<StoppedChat> {
-    request(daemon, RemovalMethod::StopChat { chat }).await
 }
 
 /// Stop the untracked processes of `space` that `selection` selects, other

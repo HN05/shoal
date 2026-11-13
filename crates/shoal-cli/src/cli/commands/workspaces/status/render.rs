@@ -149,7 +149,7 @@ fn render_chat(chat: &Chat, palette: Palette) {
     if let Some(workspace) = &chat.workspace {
         outln!("Workspace:     {}", workspace.name);
     }
-    if chat.restore.is_none() {
+    if chat.running {
         render_agent_state(chat.agent_state);
     }
     render_sleep(chat.sleep);

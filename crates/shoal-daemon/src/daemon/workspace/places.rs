@@ -52,15 +52,12 @@ fn record_chat_place(db: &Connection, chat: &SpaceId, place: &Origin) -> Result<
     take_over(db, chat, place)
 }
 
-/// Whether a running chat or an agent of a space other than `space` is
-/// recorded at `place`, which it took over even before a record or label
-/// of the place says so; a nested command takes nothing.
+/// Whether an agent of a space other than `space` is recorded at `place`,
+/// which it took over even before a record or label of the place says so;
+/// a nested command takes nothing.
 pub(super) fn runs_elsewhere(db: &Connection, place: &Origin, space: &SpaceId) -> Result<bool> {
     let mut statement = db.prepare(
-        "SELECT origin FROM chats WHERE restore IS NULL AND id IS NOT ?1
-           AND json_extract(origin,'$.host')=?2 AND json_extract(origin,'$.place')=?3
-         UNION ALL
-         SELECT origin FROM executions WHERE space_id IS NOT ?1 AND agent IS NOT NULL
+        "SELECT origin FROM executions WHERE space_id IS NOT ?1 AND agent IS NOT NULL
            AND json_extract(origin,'$.host')=?2 AND json_extract(origin,'$.place')=?3",
     )?;
     let origins = statement.query_map(params![space, place.host, place.id()], |row| {
@@ -92,7 +89,7 @@ impl Manager {
         selector: &SpaceSelector,
         mut origin: Origin,
     ) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
+        let id = self.space(selector).await?.id().clone();
         anyhow::ensure!(
             origin.place.is_some(),
             "a {} place needs its ID to be recorded",
@@ -103,7 +100,7 @@ impl Manager {
         // lock its closes hold.
         let _ownership = self.place_ownership.lock().await;
         self.store
-            .run(move |db| insert_owned(db, &workspace.id, &origin))
+            .run(move |db| insert_owned(db, &id, &origin))
             .await
     }
 

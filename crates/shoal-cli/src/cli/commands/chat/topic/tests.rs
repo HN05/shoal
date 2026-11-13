@@ -1,4 +1,3 @@
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use clap::Parser as _;
 use std::{ffi::OsString, path::Path};
@@ -49,7 +48,6 @@ fn options(narrowing: Narrowing) -> Options {
         args: vec!["--search".into()],
         session: Some("s1".into()),
         fork: true,
-        restore: Some(SpaceId::from("c1")),
         handoff: None,
         parent: Some(SpaceSelector::from("7")),
         narrowing,
@@ -130,7 +128,6 @@ fn a_chat_in_a_workspace_reopens_there() {
         args: Vec::new(),
         session: None,
         fork: false,
-        restore: None,
         handoff: None,
         parent: None,
         narrowing: Narrowing::Requested(Default::default()),
@@ -165,7 +162,6 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
         args: Vec::new(),
         session: Some("s1".into()),
         fork: false,
-        restore: None,
         handoff: None,
         parent: None,
         narrowing: Narrowing::Recorded(Default::default()),
@@ -206,85 +202,25 @@ fn the_setup_chat_starts_again_with_config_setup_and_its_options() {
     assert!(setup.here);
     assert_eq!(setup.agent, Some(agent));
     assert_eq!(setup.name, Some("setup".into()));
-    assert_eq!(
-        (setup.session, setup.restore),
-        (options.session, options.restore)
-    );
+    assert_eq!(setup.session, options.session);
     assert_eq!(setup.args, options.args);
 }
 
 #[test]
-fn a_restored_chat_takes_the_issue_its_saved_chat_is_linked_to() {
-    let repo = Repository {
-        id: "repo".into(),
-        path: "/repos/shoal".into(),
-        source: "/repos/shoal".into(),
-        last_used: 0,
-        name: Some("shoal".into()),
-        workspaces_dir: None,
-        contribution: false,
-    };
-    let url = "https://forge.example/team/repo/issues/7";
-    let chat: Chat = serde_json::from_value(serde_json::json!({
-        "id": "c", "number": 4, "repository_id": "repo", "name": "shoal-plan-7",
-        "agent": "claude", "mode": "plan", "pid": 1, "started_at": 0,
-        "links": {"issue": url, "issue_title": "Decide", "prs": []},
+fn a_chat_that_was_a_workspace_is_told_so_in_the_place_it_opens() {
+    let repo = repository();
+    let links: crate::model::SpaceLinks = serde_json::from_value(serde_json::json!({
+        "issue": "https://forge.example/team/repo/issues/7",
+        "issue_title": "Fix the login", "prs": [],
     }))
     .unwrap();
-    let chats = [chat];
-    let restored = with_saved(
-        Topic::repository(&repo, &"plan".into()),
-        &chats,
-        &SpaceId::from("c"),
-        &repo.path,
-    );
-    let issue = restored.linked_issue.unwrap();
-    assert_eq!((issue.number, issue.url.as_str()), (7, url));
-    let other = with_saved(
-        Topic::repository(&repo, &"plan".into()),
-        &chats,
-        &SpaceId::from("d"),
-        &repo.path,
-    );
-    assert!(other.linked_issue.is_none());
-}
-
-#[test]
-fn a_restored_chat_that_was_a_workspace_is_told_so_in_the_place_it_opens() {
-    let repo = Repository {
-        id: "repo".into(),
-        path: "/repos/shoal".into(),
-        source: "/repos/shoal".into(),
-        last_used: 0,
-        name: Some("shoal".into()),
-        workspaces_dir: None,
-        contribution: false,
+    let topic = Topic {
+        linked_issue: crate::config::templates::IssueFields::linked(&links),
+        ..Topic::repository(&repo, &"chat".into())
     };
-    let saved = |converted: bool| -> Chat {
-        serde_json::from_value(serde_json::json!({
-            "id": "c", "number": 4, "repository_id": "repo", "name": "fix-login",
-            "agent": "claude", "mode": "chat", "pid": 1, "started_at": 0,
-            "restore": "resume", "converted": converted,
-            "links": {"issue": "https://forge.example/team/repo/issues/7",
-                "issue_title": "Fix the login", "prs": []},
-        }))
-        .unwrap()
-    };
-    // The topic a relaunch in a new place starts from names only the chat.
-    let relaunched = || Topic::repository(&repo, &"chat".into());
+    let plain = Topic::repository(&repo, &"chat".into());
 
-    let converted = with_saved(
-        relaunched(),
-        &[saved(true)],
-        &SpaceId::from("c"),
-        &repo.path,
-    );
-    let plain = with_saved(
-        relaunched(),
-        &[saved(false)],
-        &SpaceId::from("c"),
-        &repo.path,
-    );
+    let converted = topic.converted(&repo.path);
 
     assert!(converted.tells_resumed);
     assert!(!plain.tells_resumed && plain.subject.is_none());

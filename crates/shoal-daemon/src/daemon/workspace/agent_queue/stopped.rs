@@ -185,10 +185,10 @@ fn recorded_executions(db: &Connection) -> Result<HashSet<ExecutionId>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// Every workspace's ID.
-fn all_workspaces(db: &Connection) -> Result<Vec<SpaceId>> {
+/// Every space's ID.
+fn all_spaces(db: &Connection) -> Result<Vec<SpaceId>> {
     Ok(db
-        .prepare("SELECT id FROM workspaces")?
+        .prepare("SELECT id FROM workspaces UNION ALL SELECT id FROM chats")?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
@@ -499,15 +499,15 @@ impl Manager {
     pub(in crate::daemon::workspace) async fn pending_restore_workspaces(
         &self,
     ) -> Result<HashSet<SpaceId>> {
-        let (workspaces, queued) = self
+        let (spaces, queued) = self
             .store
-            .run(|db| Ok((all_workspaces(db)?, restoring_workspaces(db)?)))
+            .run(|db| Ok((all_spaces(db)?, restoring_workspaces(db)?)))
             .await?;
         let mut pending = queued;
         pending.extend(self.renewing_workspaces().await);
-        for workspace in workspaces {
-            if !recovery::restore_requests(&self.paths, &workspace)?.is_empty() {
-                pending.insert(workspace);
+        for space in spaces {
+            if !recovery::restore_requests(&self.paths, &space)?.is_empty() {
+                pending.insert(space);
             }
         }
         Ok(pending)

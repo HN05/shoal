@@ -14,7 +14,7 @@ fn spaces() -> Spaces {
         "state": "ready",
     }))
     .unwrap();
-    let chat = |id: &str, number: u32, name: &str, restore| Chat {
+    let chat = |id: &str, number: u32, name: &str, running| Chat {
         narrowing: Default::default(),
         mode: "chat".into(),
         number: number.into(),
@@ -23,13 +23,12 @@ fn spaces() -> Spaces {
         name: name.into(),
         agent: "claude".into(),
         workspace: None,
-        pid: 1,
         started_at: UnixTime::from_seconds(0),
         origin: None,
         tmp_dir: None,
         root_dir: None,
         session: None,
-        restore,
+        running,
         links: Default::default(),
         review: Vec::new(),
         completion: None,
@@ -42,24 +41,24 @@ fn spaces() -> Spaces {
     };
     Spaces {
         workspaces: vec![workspace],
-        chats: vec![
-            chat("c1", 1, "running", None),
-            chat("c2", 2, "talk", Some(crate::state::ChatRestore::Resume)),
-        ],
+        chats: vec![chat("c1", 1, "running", true), chat("c2", 2, "talk", false)],
     }
 }
 
 #[test]
-fn a_target_resolves_to_a_saved_or_running_chat_or_a_workspace() {
+fn a_target_resolves_to_a_running_chat_or_a_space_by_id() {
     let spaces = spaces();
     let resolved = |selector: &str| resolve(&spaces, SpaceSelector::from(selector));
     assert_eq!(
         resolved("3"),
-        Target::Workspace(SpaceSelector::id(&"w1".into()))
+        Target::Space(SpaceSelector::id(&"w1".into()))
     );
-    assert!(matches!(resolved("c2"), Target::Chat(chat) if chat.name == "talk"));
+    assert_eq!(
+        resolved("c2"),
+        Target::Space(SpaceSelector::id(&"c2".into()))
+    );
     // A selector no space answers stays for the daemon to refuse.
-    assert_eq!(resolved("missing"), Target::Workspace("missing".into()));
+    assert_eq!(resolved("missing"), Target::Space("missing".into()));
     assert!(matches!(resolved("c1"), Target::Running(chat) if chat.name == "running"));
 }
 
@@ -67,16 +66,18 @@ fn a_target_resolves_to_a_saved_or_running_chat_or_a_workspace() {
 fn a_space_named_twice_is_selected_once() {
     let selectors = ["c2", "3", "2", "w1"].map(SpaceSelector::from).to_vec();
     let selected = Selected::resolved(&spaces(), selectors);
-    assert_eq!(selected.chats.len(), 1);
     assert_eq!(
-        selected.workspaces,
-        Some(vec![SpaceSelector::id(&"w1".into())])
+        selected.spaces,
+        Some(vec![
+            SpaceSelector::id(&"c2".into()),
+            SpaceSelector::id(&"w1".into())
+        ])
     );
 }
 
 #[test]
-fn only_saved_chats_are_offered() {
-    let saved = saved_chats(&spaces());
-    assert_eq!(saved.len(), 1);
-    assert_eq!(saved[0].name, "talk");
+fn only_stopped_chats_are_offered() {
+    let stopped = stopped_chats(&spaces());
+    assert_eq!(stopped.len(), 1);
+    assert_eq!(stopped[0].name, "talk");
 }

@@ -42,8 +42,6 @@ pub enum AssignmentMethod {
     ChangeStoppedPermissions {
         agents: Vec<SavedAgent>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        chats: Vec<SpaceSelector>,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
         launches: Vec<SpaceSelector>,
         change: crate::config::permissions::PermissionChange,
     },

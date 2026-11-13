@@ -832,9 +832,7 @@ async fn a_chats_agent_starts_workspaces_below_its_chat() {
             daemon.repository.id.clone().into(),
             "planner".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -861,9 +859,7 @@ async fn a_launch_a_chat_queued_opens_its_workspace_in_the_chats_scope() {
             daemon.repository.id.clone().into(),
             "planner".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -998,9 +994,7 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
             daemon.repository.id.clone().into(),
             "planner".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();

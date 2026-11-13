@@ -260,10 +260,7 @@ async fn a_chats_file_events_name_the_chat() {
     use FileEventKind::{Added, Removed};
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
-    let process = crate::daemon::test_support::ProcessGroup::spawn(
-        std::process::Command::new("sleep").arg("600"),
-    );
-    let chat = chat(&manager, &workspace, "planning", &process).await;
+    let chat = chat(&manager, &workspace, "planning").await;
     let report = temp.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();
     manager
@@ -274,8 +271,7 @@ async fn a_chats_file_events_name_the_chat() {
         )
         .await
         .unwrap();
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
+    manager.end_executions(&chat.id).await;
     manager
         .remove_chat(&SpaceSelector::id(&chat.id), None)
         .await
@@ -309,20 +305,17 @@ async fn a_chats_file_events_name_the_chat() {
 async fn the_file_events_of_a_chat_without_a_repository_name_none() {
     use FileEventKind::{Added, Removed};
     let (temp, manager) = manager().await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let new = crate::daemon::chats::NewChat {
         priority: None,
         narrowing: Default::default(),
         name: "master".into(),
         agent: "claude".into(),
         mode: "orchestrate".into(),
-        pid: process.id(),
         origin: None,
-        hands_over: false,
         parent: None,
     };
     let chat = manager.start_new_chat(None, None, new).await.unwrap();
+    let chat = manager.run_chat_agent(chat).await.unwrap();
     let report = temp.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();
     manager
@@ -333,8 +326,7 @@ async fn the_file_events_of_a_chat_without_a_repository_name_none() {
         )
         .await
         .unwrap();
-    process.kill();
-    manager.stop_finished_chats().await.unwrap();
+    manager.end_executions(&chat.id).await;
     manager
         .remove_chat(&SpaceSelector::id(&chat.id), None)
         .await

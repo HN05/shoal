@@ -9,14 +9,12 @@ use super::*;
 fn completion_offers_chats_to_stop() {
     let fixture = Fixture::new();
     fixture.add("planned");
-    let repository = fixture.ok(&["repo", "ls"])[0].clone();
-    // The sleep stands in for the chat's agent.
-    let mut agent = Command::new("sleep").arg("600").spawn().unwrap();
-    let response = fixture.request(serde_json::json!({"start_chat":{
-        "repository": repository["id"], "name": "planning", "agent": "claude",
-        "pid": agent.id()
-    }}));
-    assert_eq!(response["type"], "chat", "{response}");
+    let (mut agent, id) = fixture.run_chat("planning", &[]);
+    let chats = fixture.ok(&["list", "--chats"]);
+    let chat = (chats.as_array().unwrap().iter())
+        .find(|chat| chat["id"] == id.as_str())
+        .unwrap()["number"]
+        .to_string();
     let state = fixture.root.path().join("state");
     let complete = |args: &[&str]| {
         let mut words = vec!["shoal", "--state-dir", state.to_str().unwrap()];
@@ -33,7 +31,6 @@ fn completion_offers_chats_to_stop() {
         String::from_utf8(output.stdout).unwrap()
     };
 
-    let chat = response["data"]["number"].to_string();
     let offered = complete(&["stop", "--leftovers", ""]);
     assert!(offered.lines().any(|line| line == chat), "{offered}");
     let offered = complete(&["stop", "--yes", ""]);
@@ -49,15 +46,8 @@ fn completion_offers_chats_to_stop() {
 fn the_stop_levels_pick_several_spaces() {
     let fixture = Fixture::new();
     let workspace = fixture.add("planned");
-    let repository = fixture.ok(&["repo", "ls"])[0].clone();
-    // The sleep stands in for the chat's agent.
-    let mut agent = Command::new("sleep").arg("600").spawn().unwrap();
-    let response = fixture.request(serde_json::json!({"start_chat":{
-        "repository": repository["id"], "name": "planning", "agent": "claude",
-        "pid": agent.id()
-    }}));
-    assert_eq!(response["type"], "chat", "{response}");
-    let chat = response["data"]["id"].as_str().unwrap();
+    let (mut agent, chat) = fixture.run_chat("planning", &[]);
+    let chat = chat.as_str();
     let choice = format!("{} {chat}", workspace["id"].as_str().unwrap());
 
     let (output, rows) = fixture.pick(&["stop", "--leftovers"], &choice, "");

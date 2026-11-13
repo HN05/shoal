@@ -21,10 +21,16 @@ use crate::support::{
 /// memory or CPU. The daemon's unit tests cover the warnings.
 pub const NO_OVERLOAD_WARNINGS: &str = "machine.overload.warning.enabled = false\n";
 
+/// A chat's agent for [`Base::run_chat`]: it runs until its wrapper stops it
+/// or exits, or [`Base::end_chat_agent`] ends it.
+const CHAT_AGENT: &str = "#!/bin/sh\ntrap 'exit 0' TERM\n\
+    while kill -0 \"$PPID\" 2>/dev/null && [ ! -e \"$HOME/exit-$SHOAL_CHAT\" ]; do sleep 1; done\n";
+
 pub struct Base {
     // Fields drop in declaration order: the commands stop while the daemon
     // still answers them, and what left their group stops before the
     // directory goes.
+    sessions: Sessions,
     pub commands: CommandGroup,
     pub daemon: DaemonGuard,
     _detached: Detached,
@@ -49,6 +55,7 @@ impl Base {
         let repo = offline_repository(root.path(), name, files);
         let daemon = DaemonGuard::start(root.path(), &mut daemon_launch(root.path()));
         let base = Self {
+            sessions: Sessions::default(),
             commands: CommandGroup::new(),
             _detached: Detached::new(root.path().join("state")),
             daemon,
@@ -110,11 +117,132 @@ impl Base {
         )
     }
 
+    /// Start the chat `name` with `shoal start --mode chat --here` in the
+    /// registered checkout, on a terminal of its own, with `args` such as
+    /// `--parent`, its agent a fake `claude` that runs until its wrapper
+    /// stops or leaves it, and return the `shoal start` process and the
+    /// chat's ID once the daemon tracks its agent.
+    pub fn run_chat(&self, name: &str, args: &[&str]) -> (std::process::Child, String) {
+        self.run_chat_with(name, args, |_| {})
+    }
+
+    /// [`Self::run_chat`] with the command `prepare` adjusts, such as with
+    /// the terminal host's variables or another checkout to start in.
+    pub fn run_chat_with(
+        &self,
+        name: &str,
+        args: &[&str],
+        prepare: impl FnOnce(&mut Command),
+    ) -> (std::process::Child, String) {
+        // Agents already running keep the script they started with.
+        support::install_test_script(self.root.path().join("bin/claude"), CHAT_AGENT);
+        // Its own session, whose controlling terminal it hands its agent.
+        let mut command = support::cli(self.root.path());
+        // SAFETY: setsid and the ioctl only change this child's session.
+        unsafe {
+            std::os::unix::process::CommandExt::pre_exec(&mut command, || {
+                if libc::setsid() < 0
+                    || libc::ioctl(libc::STDIN_FILENO, libc::TIOCSCTTY as _, 0) < 0
+                {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        command.current_dir(&self.repo).args([
+            "start", "--mode", "chat", "--here", "--agent", "claude", "--name", name,
+        ]);
+        prepare(&mut command);
+        let (master, slave) = support::pty::open();
+        let mut child = command
+            .args(args)
+            .stdin(slave.try_clone().unwrap())
+            .stdout(slave.try_clone().unwrap())
+            .stderr(slave)
+            .spawn()
+            .unwrap();
+        self.sessions.0.lock().unwrap().push(child.id());
+        let transcript = drain(master);
+        match support::wait::try_wait_for(|| self.tracked_chat(name)) {
+            Some(id) => (child, id),
+            None => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let shown = String::from_utf8_lossy(&transcript.lock().unwrap()).into_owned();
+                panic!("the chat's agent was never tracked: {shown}");
+            }
+        }
+    }
+
+    /// End the agent [`Self::run_chat`] runs in the chat `id` as if it exited
+    /// on its own, and wait until its chat no longer runs.
+    pub fn end_chat_agent(&self, id: &str) {
+        fs::write(self.root.path().join(format!("exit-{id}")), "").unwrap();
+        support::wait::wait_until("the chat's agent exited", || {
+            let chats = self.request(json!("list_chats"));
+            (chats["data"].as_array().unwrap().iter())
+                .any(|chat| chat["id"] == id && chat["running"] == false)
+        });
+    }
+
+    /// The ID of the chat `name`, once the daemon tracks its agent.
+    fn tracked_chat(&self, name: &str) -> Option<String> {
+        let chats = self.request(json!("list_chats"));
+        let chat = (chats["data"].as_array()?.iter()).find(|chat| chat["name"] == name)?;
+        let id = chat["id"].as_str()?.to_owned();
+        let agents = self.request(json!("list_agents"));
+        let tracked = (agents["data"].as_array()?.iter()).any(|agent| agent["space_id"] == id);
+        tracked.then_some(id)
+    }
+
     /// The ID of the space named `name`, which commands select it by,
     /// since a name never does.
     pub fn id(&self, name: &str) -> String {
         support::daemon_client::space_id(self.root.path(), name)
     }
+}
+
+/// The sessions of the commands [`Base::run_chat`] started, which leave the
+/// fixture's group, ended as the fixture goes.
+#[derive(Default)]
+struct Sessions(std::sync::Mutex<Vec<u32>>);
+
+impl Drop for Sessions {
+    fn drop(&mut self) {
+        for leader in self.0.lock().unwrap().drain(..) {
+            let leader = leader as libc::pid_t;
+            // A leader the test reaped may have given its ID to another
+            // process, so only an unreaped one names its session still.
+            // SAFETY: waitpid with WNOHANG only reads the child's state.
+            if unsafe { libc::waitpid(leader, std::ptr::null_mut(), libc::WNOHANG) } < 0 {
+                continue;
+            }
+            // SAFETY: kill only sends a signal.
+            unsafe { libc::kill(-leader, libc::SIGKILL) };
+        }
+    }
+}
+
+/// What a process writes to the terminal `master` reads, read in the
+/// background until it closes, so the process never blocks on a full one.
+fn drain(mut master: fs::File) -> std::sync::Arc<std::sync::Mutex<Vec<u8>>> {
+    use std::io::Read;
+    let transcript = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let kept = transcript.clone();
+    std::thread::spawn(move || {
+        let mut buffer = [0; 4096];
+        loop {
+            match master.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(read) => kept.lock().unwrap().extend_from_slice(&buffer[..read]),
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(_) => break,
+            }
+        }
+    });
+    transcript
 }
 
 /// Write `config` after [`NO_OVERLOAD_WARNINGS`] as the global config in `root`.

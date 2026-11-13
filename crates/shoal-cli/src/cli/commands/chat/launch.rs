@@ -1,9 +1,7 @@
 //! Launching a chat's agent: through the daemon, in an app that runs it
-//! detached, in a background place, beside the caller, or here in place of
-//! this process.
-use crate::client::scope_tokens::ScopeToken;
-use crate::client::space_ids::SpaceId;
-use std::{ffi::OsString, os::unix::process::CommandExt, path::Path};
+//! detached, in a background place, beside the caller, or here under the
+//! execution wrapper, as an execution of its chat.
+use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result, ensure};
 
@@ -11,7 +9,6 @@ use super::{
     ChatPlace, Options, Topic,
     agent::{chat_agent, check_model},
     handoff,
-    topic::with_saved,
 };
 use crate::client::output::chat::BackgroundChat;
 use crate::client::space_names::{SpaceName, SpaceSelector};
@@ -102,8 +99,6 @@ impl Launch {
     ) -> Result<Self> {
         let agent = chat_agent(ctx, &settings, options.agent.clone())?;
         check_model(&settings, &agent, &options.model)?;
-        let home = topic.home(&repo).path().to_owned();
-        let topic = restored(ctx, topic, options.restore.as_ref(), &home).await?;
         let name = initial_name(&topic, options.name.clone());
         let settings = crate::config::settings(&ctx.paths, repo.config()).await?;
         let chat = command::chat_launch(settings, &agent, repo, &topic, &options, name)?;
@@ -142,6 +137,7 @@ impl Launch {
             chat.home().path(),
             &chat.name,
             &relaunch,
+            false,
         )
         .await?;
         handoff.wait().await?;
@@ -232,9 +228,7 @@ impl Launch {
                 owned: crate::env::opened_chat_place(),
                 ..place
             });
-        let restores = launch.restores.as_ref();
-        let chat =
-            crate::client::chats::record(&ctx.paths, home, new, place, false, restores).await?;
+        let chat = crate::client::chats::start(&ctx.paths, home, new, place).await?;
         if crate::env::shown_chat() {
             recent::record_chat_attach(ctx, &SpaceSelector::id(&chat.id)).await;
         }
@@ -242,105 +236,139 @@ impl Launch {
         Ok(chat)
     }
 
-    /// Run the recorded `chat`'s agent with `model_args` here, labelling
-    /// this terminal as the chat's, once the chat holds its scope token; a
-    /// restored one told nothing new starts its turn when messages wait.
+    /// Run the recorded `chat`'s agent with `model_args` here under the
+    /// execution wrapper, labelling this terminal as the chat's.
     async fn run_here(self, ctx: &Context, chat: &Chat, model_args: Vec<OsString>) -> Result<i32> {
-        let ChatLaunch {
-            repository,
-            workspace,
-            settings,
-            instructions,
-            opening,
-            model,
-            args,
-            ..
-        } = self.chat;
-        // Recording a restore may leave the agent a message, such as what
-        // still blocks the chat, so what waits is read only now.
-        let opening = match opening {
-            Some(opening) => Some(opening),
-            None => waiting_prompt(ctx, self.options.restore.as_ref()).await?,
-        };
-        let home = repository.home(workspace.as_ref());
-        let directories =
-            crate::agents::chat_dir_args(&settings, &self.agent, &ctx.paths.home, chat);
-        let command = command::command(
-            &settings,
-            [model_args, directories].concat(),
-            home.path(),
-            &self.agent,
-            instructions,
-            opening,
-            args,
-        )?;
-        terminal::label_current(&ctx.paths, crate::terminal::Owner::Chat(&chat.id)).await?;
-        let token = crate::client::chats::scope(&ctx.paths, chat).await?;
+        act_in_chat_scope(ctx, chat).await?;
         handoff::report(&Ok(()));
-        let profile = settings.launch(&self.agent).environment_with(&model);
-        let git = crate::agent_git::Launch::agent_logins(&ctx.paths)?;
-        exec_agent(ctx, home.path(), chat, &token, &command, &profile, &git)
+        run_agent(ctx, chat, self.agent, self.chat, model_args, Vec::new()).await
     }
 }
 
-/// The prompt a restored chat, told nothing new, starts its first turn
-/// with when messages wait for it, as a workspace agent's wrapper wakes it:
-/// the prompt's hook delivers them. A chat's agent has no wrapper, and the
-/// hook that wakes it runs only once a turn ended.
-async fn waiting_prompt(ctx: &Context, restore: Option<&SpaceId>) -> Result<Option<String>> {
-    let Some(chat) = restore else {
-        return Ok(None);
-    };
-    let waiting = crate::client::agent_messages::undelivered(&ctx.paths, SpaceSelector::id(chat));
-    Ok((!waiting.await?.is_empty()).then(|| crate::terminal::WAKE_PROMPT.to_owned()))
+/// Make a scoped process, which starts `chat`, act in the chat's own scope
+/// before its starter, whose scope it may hold, learns that it runs and
+/// exits.
+async fn act_in_chat_scope(ctx: &Context, chat: &Chat) -> Result<()> {
+    if crate::env::is_scoped() {
+        let token = crate::client::chats::scope(&ctx.paths, chat).await?;
+        crate::env::act_in_chat_scope(token);
+    }
+    Ok(())
 }
 
-/// `topic`, for a chat that restores the saved chat `restore` in `home`, as
-/// [`with_saved`] makes it.
-async fn restored(
+/// Run the agent of the recorded `chat` as `launch` says, with
+/// `model_args`, here under the execution wrapper, as an execution of the
+/// chat, labelling this terminal as the chat's; it consumes `records`, those
+/// of the stopped agent it continues, once it runs.
+async fn run_agent(
     ctx: &Context,
-    topic: Topic,
-    restore: Option<&SpaceId>,
-    home: &Path,
-) -> Result<Topic> {
-    let Some(chat) = restore else {
-        return Ok(topic);
+    chat: &Chat,
+    agent: Agent,
+    launch: ChatLaunch,
+    model_args: Vec<OsString>,
+    records: Vec<std::path::PathBuf>,
+) -> Result<i32> {
+    let ChatLaunch {
+        repository,
+        workspace,
+        settings,
+        instructions,
+        opening,
+        model,
+        mode,
+        narrowing,
+        args,
+        ..
+    } = launch;
+    let home = repository.home(workspace.as_ref());
+    let agent_home = crate::agents::AgentHome::Chat {
+        chat,
+        home,
+        repo: repository.registered().map(crate::repository::name),
     };
-    let chats = crate::client::chats::recorded(&ctx.paths).await?;
-    Ok(with_saved(topic, &chats, chat, home))
+    let space_args = agent_home.args(&ctx.paths, &settings, &agent).await?;
+    let command = command::command(
+        &settings,
+        [model_args, space_args].concat(),
+        home.path(),
+        &agent,
+        instructions,
+        opening,
+        args,
+    )?;
+    terminal::label_current(&ctx.paths, crate::terminal::Owner::Chat(&chat.id)).await?;
+    let agent = crate::execution::TrackedAgent {
+        name: agent,
+        model,
+        mode,
+        narrowing,
+    };
+    let space = SpaceSelector::id(&chat.id);
+    match records.is_empty() {
+        true => crate::execution::run(&ctx.paths, space, command, Some(agent)).await,
+        false => crate::execution::run_recovery(&ctx.paths, space, command, agent, records).await,
+    }
+}
+
+/// Start the agent of `chat`, which a workspace became, in this terminal
+/// as its `session` there saved it: from a fork of that session, told what
+/// its space is now, with the rules of its mode and the fields of the issue
+/// the chat links; it consumes `records` once it runs.
+pub(in crate::cli::commands) async fn start_converted(
+    ctx: &Context,
+    chat: &Chat,
+    session: &crate::execution::recovery::LastSession,
+    records: Vec<std::path::PathBuf>,
+) -> Result<i32> {
+    let repo = repository_of(ctx, chat).await?;
+    let settings = crate::config::settings(&ctx.paths, repo.config()).await?;
+    let home = repo.home(None).path().to_owned();
+    let topic = match &repo {
+        ChatRepository::Registered(registered) => Topic::repository(registered, &session.mode),
+        ChatRepository::Outside(_) => Topic::outside_repositories(&session.mode),
+    };
+    let topic = Topic {
+        linked_issue: crate::config::templates::IssueFields::linked(&chat.links),
+        ..topic
+    }
+    .converted(&home);
+    let agent: Agent = session.agent.name().parse()?;
+    let options = Options {
+        agent: Some(agent.clone()),
+        place: ChatPlace::Here,
+        name: Some(chat.name.clone()),
+        model: session.model.clone(),
+        args: Vec::new(),
+        session: session.session.clone(),
+        fork: true,
+        handoff: None,
+        parent: None,
+        narrowing: super::Narrowing::Recorded(session.narrowing),
+        priority: None,
+    };
+    let launch = command::chat_launch(settings, &agent, repo, &topic, &options, chat.name.clone())?;
+    let model_args = crate::agents::model_args(&launch.settings, &agent, &launch.model)?;
+    run_agent(ctx, chat, agent, launch, model_args, records).await
+}
+
+/// The repository `chat` runs in: its registered one, or the `root_dir` a
+/// chat without one started in.
+async fn repository_of(ctx: &Context, chat: &Chat) -> Result<ChatRepository> {
+    let Some(id) = &chat.repository_id else {
+        let root_dir = match &chat.root_dir {
+            Some(root_dir) => root_dir.clone(),
+            None => super::root_dir(ctx).await?,
+        };
+        return Ok(ChatRepository::Outside(root_dir));
+    };
+    let repositories = crate::client::repositories::list(&ctx.paths).await?;
+    let repo = (repositories.into_iter())
+        .find(|repo| repo.id == *id)
+        .with_context(|| format!("the repository of chat {} is missing", chat.name))?;
+    Ok(ChatRepository::Registered(repo))
 }
 
 /// `--name`, else the topic's name.
 fn initial_name(topic: &Topic, requested: Option<SpaceName>) -> SpaceName {
     requested.unwrap_or_else(|| SpaceName::derive(&topic.name, "chat"))
-}
-
-/// Replace this process with the agent in `path`, so the terminal's signals
-/// reach it alone and the process the daemon recorded for `chat` runs it,
-/// changed by the agent's `profile` and `git` settings. Workspaces the agent
-/// opens belong to the chat.
-fn exec_agent(
-    ctx: &Context,
-    path: &Path,
-    chat: &Chat,
-    token: &ScopeToken,
-    command: &[OsString],
-    profile: &crate::ai::Environment,
-    git: &crate::agent_git::Launch,
-) -> Result<i32> {
-    let (program, args) = command
-        .split_first()
-        .context("the agent command is empty")?;
-    let mut process = std::process::Command::new(program);
-    for name in crate::env::not_chat_identity() {
-        process.env_remove(name);
-    }
-    process
-        .args(args)
-        .current_dir(path)
-        .envs(crate::env::chat_environment(chat, token, &ctx.paths));
-    git.apply(&mut process);
-    profile.apply(&mut process, &ctx.paths.home);
-    let error = process.exec();
-    Err(error).with_context(|| format!("run {}", program.to_string_lossy()))
 }

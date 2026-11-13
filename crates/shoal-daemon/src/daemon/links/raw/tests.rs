@@ -119,9 +119,7 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();

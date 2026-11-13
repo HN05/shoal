@@ -1,5 +1,4 @@
 //! Arguments of `shoal config`, `shoal update` and `shoal daemon`.
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use std::{ffi::OsString, path::PathBuf};
 
@@ -91,10 +90,6 @@ pub struct ConfigSetupArgs {
     /// Agent session the chat continues, which shoal resume passes.
     #[arg(long, hide = true)]
     pub session: Option<crate::client::agent::AgentSessionId>,
-    /// Stopped chat, by ID, that this start restores under its own name,
-    /// which shoal resume passes.
-    #[arg(long, hide = true, requires = "name")]
-    pub restore: Option<SpaceId>,
     /// Handoff of the starter that waits on this background place.
     #[arg(long, hide = true, requires = "here")]
     pub handoff: Option<PathBuf>,
@@ -112,7 +107,6 @@ impl ConfigSetupArgs {
             model: ModelArgs { model, effort },
             name,
             session,
-            restore,
             handoff,
             args,
         } = self;
@@ -123,7 +117,6 @@ impl ConfigSetupArgs {
         line.values("effort", effort);
         line.values("name", name.as_ref().map(|name| name.as_str()));
         line.values("session", session.as_ref().map(|session| session.as_str()));
-        line.values("restore", restore.as_ref().map(|restore| restore.as_str()));
         line.values("handoff", handoff);
         line.trailing("args", args);
         line.into_args()

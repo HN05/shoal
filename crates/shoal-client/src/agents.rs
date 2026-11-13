@@ -5,13 +5,12 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::AgentSessionId;
-use crate::space_ids::SpaceId;
 use crate::space_names::SpaceSelector;
 use crate::{
     config::permissions::PermissionChange,
     connection::{Daemon, request},
     model::{AgentSession, AgentStatus, PendingRestart, RunningAgent},
-    protocol::{AgentMethod, ChatMethod, ExecutionMethod, TurnEnd, WakeEnd, WokenTurn},
+    protocol::{AgentMethod, ExecutionMethod, TurnEnd, WakeEnd, WokenTurn},
     sessions::Origin,
     state::{AgentState, TurnFailure},
 };
@@ -114,32 +113,6 @@ pub async fn restart(
         },
     )
     .await
-}
-
-/// The agents of the running chats, and of those a restart stopped to start
-/// again, each listed by its chat's ID as its execution and space.
-pub async fn of_chats(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
-    request(daemon, ChatMethod::ChatAgents).await
-}
-
-/// Restart the agent of the running chat `chat` in a background place, as
-/// part of the restart `run`, or join the restart `join` already pending,
-/// making `change` to the permissions its agent was given. Returns the
-/// place the chat runs in again, when it runs in a terminal host.
-pub async fn restart_chat(
-    daemon: &impl Daemon,
-    chat: &SpaceId,
-    join: Option<PendingRestart>,
-    run: Option<String>,
-    change: Option<PermissionChange>,
-) -> Result<Option<Origin>> {
-    let method = ChatMethod::RestartChat {
-        chat: chat.clone(),
-        join,
-        run,
-        change,
-    };
-    request(daemon, method).await
 }
 
 /// The agents connected in `space`, a workspace or a running chat.

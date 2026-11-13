@@ -515,6 +515,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 162 {
         optional_queue_repositories(&db)?;
     }
+    if version >= 163 {
+        db.execute_batch(include_str!("chat_executions.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -831,12 +834,12 @@ fn new_spaces_take_the_smallest_number_no_space_holds() -> Result<()> {
     db.execute_batch(
         "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
              VALUES ('second','repo','second','/second','second','ready');
-         INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
-             VALUES ('chat','repo','chat','claude',1,'b',1);
+         INSERT INTO chats(id,repository_id,name,agent,started_at)
+             VALUES ('chat','repo','chat','claude',1);
          DELETE FROM workspaces WHERE id='second';
-         INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
-             VALUES ('reused','repo','reused','claude',1,'b',2),
-                ('next','repo','next','claude',1,'b',3);
+         INSERT INTO chats(id,repository_id,name,agent,started_at)
+             VALUES ('reused','repo','reused','claude',2),
+                ('next','repo','next','claude',3);
          UPDATE workspaces SET name='renamed' WHERE id='workspace';",
     )?;
     assert_eq!(
@@ -1013,8 +1016,8 @@ fn migration_numbers_items_within_their_space() -> Result<()> {
     );
     // A new space skips the numbers the pending proposals reserve.
     db.execute_batch(
-        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
-             VALUES ('new','repo','new','claude',1,'b',2);",
+        "INSERT INTO chats(id,repository_id,name,agent,started_at)
+             VALUES ('new','repo','new','claude',2);",
     )?;
     assert!(space_numbers(&db)?.contains(&("new".into(), 5)));
     Ok(())
@@ -1401,8 +1404,8 @@ fn executions_and_queue_restores_keep_their_workspace_as_their_space() -> Result
     // A chat's execution and restore go with the chat, as a workspace's go
     // with the workspace.
     db.execute_batch(
-        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
-            VALUES ('chat','repo','chat','claude',1,'b',1);
+        "INSERT INTO chats(id,repository_id,name,agent,started_at)
+            VALUES ('chat','repo','chat','claude',1);
          INSERT INTO executions(id,space_id,state) VALUES ('chat-execution','chat','running');
          INSERT INTO agent_queue(id,kind,repository_id,name,agent,execution_id,state,created_at,space_id)
             VALUES ('chat-restore','restore','repo','chat','claude','chat-execution','queued',1,'chat');
@@ -1993,8 +1996,8 @@ fn chats_may_have_no_repository_once_migrated_and_keep_what_references_them() ->
     )?;
     migrate(&mut db)?;
     db.execute(
-        "INSERT INTO chats(id,name,agent,pid,birth,started_at)
-            VALUES ('master','master','codex',2,'2',2)",
+        "INSERT INTO chats(id,name,agent,started_at)
+            VALUES ('master','master','codex',2)",
         [],
     )?;
     let repositories: Vec<Option<String>> = db
@@ -2087,5 +2090,62 @@ fn land_requests_become_merge_requests() -> Result<()> {
             ("port".into(), "port/web".into(), "port/web".into()),
         ]
     );
+    Ok(())
+}
+
+#[test]
+fn chats_keep_their_agents_to_restore_once_they_record_no_process() -> Result<()> {
+    let mut db = historical_database(162)?;
+    db.execute_batch(
+        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,restore,saved,stopped_by)
+             VALUES ('running','repo','running','claude',1,'b',1,NULL,0,NULL),
+                 ('automatic','repo','automatic','claude',1,'b',1,'automatic',1,NULL),
+                 ('resume','repo','resume','claude',1,'b',1,'resume',1,'running'),
+                 ('exited','repo','exited','claude',1,'b',1,'resume',0,NULL);
+         INSERT INTO space_agent_state(space_id,state,since) VALUES ('running','working',1);
+         INSERT INTO workspace_events(record) VALUES ('{\"kind\":\"chat_saved\"}');",
+    )?;
+    migrate(&mut db)?;
+    let mut statement = db.prepare(
+        "SELECT chat_id,saved,automatic,stopped_by,turn FROM upgraded_chat_agents ORDER BY chat_id",
+    )?;
+    type Row = (String, bool, bool, Option<String>, Option<String>);
+    let upgraded: Vec<Row> = statement
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let row = |chat: &str, saved, automatic, stopped_by: Option<&str>, turn: Option<&str>| {
+        let owned = |text: Option<&str>| text.map(str::to_owned);
+        (
+            chat.to_owned(),
+            saved,
+            automatic,
+            owned(stopped_by),
+            owned(turn),
+        )
+    };
+    assert_eq!(
+        upgraded,
+        [
+            row("automatic", true, true, None, None),
+            row("exited", false, false, None, None),
+            row("resume", true, false, Some("running"), None),
+            row("running", true, false, None, Some("working")),
+        ]
+    );
+    let left: i64 = db.query_row(
+        "SELECT (SELECT COUNT(*) FROM space_agent_state)
+            + (SELECT COUNT(*) FROM workspace_events WHERE record LIKE '%chat_saved%')",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(left, 0);
     Ok(())
 }

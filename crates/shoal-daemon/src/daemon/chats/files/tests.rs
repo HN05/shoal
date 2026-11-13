@@ -10,14 +10,7 @@ async fn chat_files_move_from_the_chat_name_to_its_id_and_others_go() {
         .await
         .unwrap();
     let chat = manager
-        .start_chat(
-            repo.id.clone().into(),
-            "talk".into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     let directory = manager.paths.state.join("chats");
@@ -59,16 +52,9 @@ async fn files_of_a_name_the_upgrade_cut_go_to_the_chat_it_recorded_alone() {
     let start = |name: crate::client::space_names::SpaceName| {
         let (manager, repo) = (&manager, repo.id.clone());
         async move {
-            (manager.start_chat(
-                repo.into(),
-                name,
-                "claude".into(),
-                std::process::id(),
-                None,
-                false,
-            ))
-            .await
-            .unwrap()
+            (manager.start_chat(repo.into(), name, "claude".into(), None))
+                .await
+                .unwrap()
         }
     };
     // The upgrade cut the chat's name, recording the one its files took;

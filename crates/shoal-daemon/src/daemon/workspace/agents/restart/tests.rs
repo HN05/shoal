@@ -658,7 +658,7 @@ async fn a_stop_cancels_a_restart_between_its_wrappers() {
         .stop_targets(crate::protocol::QueuedLaunches::Cancel)
         .await
         .unwrap();
-    assert!(targets.iter().any(|target| target.id == workspace.id));
+    assert!(targets.iter().any(|target| *target.id() == workspace.id));
     manager
         .cancel_stopped_restores(&workspace.id)
         .await

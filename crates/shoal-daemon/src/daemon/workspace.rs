@@ -67,7 +67,7 @@ mod xcode;
 
 pub(crate) use agent_queue::Grant;
 pub use agents::RestartWaits;
-pub(crate) use agents::{Outcome, Pause, Protection, Restart, Restarts, restarted};
+pub(crate) use agents::{Pause, Protection};
 pub(crate) use branches::NewWorktreeOptions;
 pub(crate) use copies::CopyPlace;
 pub(crate) use creation::NewWorkspace;
@@ -139,14 +139,6 @@ pub struct Manager {
     pub(crate) settle_clock: crate::daemon::agent_messages::SettleClock,
     pub(crate) usage: usage::Usage,
     pub(crate) leftovers: crate::daemon::leftovers::Leftovers,
-    /// Held shared from reading the tracked processes until those found
-    /// untracked are stopped, and exclusively to hand a chat to another
-    /// process, so a chat's new process is never found untracked: its
-    /// launcher waits for the handoff and keeps it a tracked descendant.
-    pub(crate) chat_handoffs: tokio::sync::RwLock<()>,
-    /// Held while chats are saved and their processes stopped, and to
-    /// restore or remove a stopped chat, so neither overlaps a stop.
-    pub(crate) chat_saves: tokio::sync::Mutex<()>,
     /// Held while a converted space's agent is handed over to the new place,
     /// so a stop and the relocation never both hand it over.
     pub(crate) conversion_handovers: crate::daemon::conversions::Handovers,
@@ -154,10 +146,7 @@ pub struct Manager {
     /// and while a workspace's conversion into a chat is recorded, so no
     /// agent starts in a workspace that becomes a chat.
     pub(crate) agent_admissions: tokio::sync::Mutex<()>,
-    pub(crate) chat_stops: crate::daemon::chats::Stopping,
-    /// The restarts of chats' agents.
-    pub(crate) chat_agents: crate::daemon::chats::ChatAgents,
-    /// The chats a removal holds, which no restore runs again.
+    /// The chats a removal holds, whose agent no registration runs again.
     pub(crate) chat_removals: crate::daemon::chats::Removing,
     /// The completed spaces whose completion a removal of a space below
     /// them goes by, which keep the workspaces below them meanwhile.
@@ -214,12 +203,8 @@ impl Manager {
             settle_clock: Default::default(),
             usage: Default::default(),
             leftovers: Default::default(),
-            chat_handoffs: Default::default(),
-            chat_saves: Default::default(),
             conversion_handovers: Default::default(),
             agent_admissions: Default::default(),
-            chat_stops: Default::default(),
-            chat_agents: Default::default(),
             chat_removals: Default::default(),
             completed_owners: Default::default(),
             seeds: Default::default(),

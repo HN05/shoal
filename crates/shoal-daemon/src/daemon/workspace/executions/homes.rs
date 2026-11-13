@@ -5,6 +5,7 @@
 use crate::client::execution_ids::ExecutionId;
 use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_ids::SpaceId;
+use crate::client::space_names::SpaceSelector;
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::Transaction;
 use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
@@ -89,11 +90,28 @@ impl Manager {
         Ok(home)
     }
 
+    /// The directory the agents of `space` run in, which tells their
+    /// processes apart: a workspace's worktree, or a chat's directory,
+    /// whether or not a chat could run in the worktree there now.
+    pub(crate) async fn space_directory(&self, space: &PresentSpace) -> Result<PathBuf> {
+        match space {
+            PresentSpace::Workspace(workspace) => Ok(workspace.path.clone()),
+            PresentSpace::Chat(chat) => match &chat.workspace {
+                Some(workspace) => Ok(self.workspace_by_id(&workspace.id).await?.path),
+                None => self.chat_checkout_path(chat).await,
+            },
+        }
+    }
+
     /// The directory the agent of `chat` runs in: the worktree of the
-    /// workspace it runs in, else its checkout or `root_dir`.
+    /// workspace it runs in, once a chat may run there, else its checkout
+    /// or `root_dir`.
     pub(crate) async fn chat_path(&self, chat: &Chat) -> Result<PathBuf> {
         match &chat.workspace {
-            Some(workspace) => Ok(self.workspace_by_id(&workspace.id).await?.path),
+            Some(workspace) => {
+                let selector = SpaceSelector::id(&workspace.id);
+                Ok(self.chat_workspace(&selector).await?.path)
+            }
             None => self.chat_checkout_path(chat).await,
         }
     }

@@ -27,9 +27,7 @@ async fn a_scoped_chat_lists_items_as_the_agent_account() {
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();

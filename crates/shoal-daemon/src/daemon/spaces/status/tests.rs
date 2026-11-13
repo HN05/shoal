@@ -25,9 +25,7 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -88,9 +86,7 @@ async fn status_counts_the_spaces_own_open_questions() {
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();

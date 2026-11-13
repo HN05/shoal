@@ -201,8 +201,8 @@ impl Manager {
     /// `selector` names, returning the run's URL, or `None` when the
     /// workspace runs no job.
     pub(crate) async fn cancel_job_in(&self, selector: &SpaceSelector) -> Result<Option<String>> {
-        let workspace = self.workspace(selector).await?;
-        let Some(job) = self.workspace_claim(&workspace.id).await? else {
+        let space = self.space(selector).await?;
+        let Some(job) = self.workspace_claim(space.id()).await? else {
             return Ok(None);
         };
         Ok(Some(self.cancel_job_run(&job).await?.to_string()))

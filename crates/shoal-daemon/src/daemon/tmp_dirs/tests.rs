@@ -149,14 +149,7 @@ async fn the_sweep_deletes_temporary_directories_without_a_record() {
         .await
         .unwrap();
     let chat = manager
-        .start_chat(
-            repo.id.clone().into(),
-            "talk".into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     let layout = crate::tmp_dirs::Layout::of(&repo).unwrap();

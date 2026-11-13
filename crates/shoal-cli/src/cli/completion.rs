@@ -546,9 +546,9 @@ async fn chat_candidates(paths: &CommandPaths) -> Result<Vec<CompletionCandidate
         .await?
         .iter()
         .map(|chat| {
-            let kind = match chat.restore {
-                Some(_) => STOPPED_CHAT,
-                None => "chat",
+            let kind = match chat.running {
+                false => STOPPED_CHAT,
+                true => "chat",
             };
             chat_candidate(chat, kind)
         })
@@ -559,7 +559,7 @@ async fn chat_candidates(paths: &CommandPaths) -> Result<Vec<CompletionCandidate
 fn stopped_chat_candidates(chats: Vec<Chat>) -> Vec<CompletionCandidate> {
     chats
         .iter()
-        .filter(|chat| chat.restore.is_some())
+        .filter(|chat| !chat.running)
         .map(|chat| chat_candidate(chat, STOPPED_CHAT))
         .collect()
 }

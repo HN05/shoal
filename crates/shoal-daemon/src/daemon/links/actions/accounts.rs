@@ -136,7 +136,7 @@ impl Manager {
                 Place::Workspace(Box::new(workspace))
             }
             ItemContext::Chat(selector) => {
-                let chat = self.running_chat(selector).await?;
+                let chat = self.chat(selector).await?;
                 let checkout = self.chat_own_checkout(&chat).await?;
                 Place::Chat {
                     id: chat.id,
@@ -147,7 +147,7 @@ impl Manager {
             // and only while it runs, as any chat's place.
             ItemContext::ChatIn { chat, repository } => {
                 let (chat, checkout) = self.chat_acting_in(chat, repository).await?;
-                anyhow::ensure!(chat.restore.is_none(), "no running chat {}", chat.name);
+                anyhow::ensure!(chat.running, "no running chat {}", chat.name);
                 Place::Chat {
                     id: chat.id,
                     checkout,

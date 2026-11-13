@@ -8,98 +8,84 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, context::Context, ui},
     execution::recovery::Saved,
-    model::{Chat, PresentSpace, Spaces, Workspace},
+    model::{Chat, PresentSpace, Spaces},
 };
 
 /// The space a `shoal resume` target names.
 #[derive(Debug, PartialEq)]
-#[allow(
-    clippy::large_enum_variant,
-    reason = "a lookup's result, which the selection takes apart at once"
-)]
 pub(super) enum Target {
-    /// A stopped chat, which restores at once.
-    Chat(Chat),
     /// A running chat, whose agent may continue the turn an interrupt
     /// ended.
-    Running(Chat),
-    /// A workspace by ID, or a selector no space has, which the daemon
-    /// refuses.
-    Workspace(SpaceSelector),
+    Running(Box<Chat>),
+    /// A space by ID, a workspace or a stopped chat, or a selector no space
+    /// has, which the daemon refuses.
+    Space(SpaceSelector),
 }
 
-/// The space `selector` names among `spaces`: a stopped or running chat or
-/// a workspace.
+/// The space `selector` names among `spaces`: a running chat or another
+/// space.
 pub(super) fn resolve(spaces: &Spaces, selector: SpaceSelector) -> Target {
     match spaces.find(&selector) {
-        Some(PresentSpace::Workspace(workspace)) => {
-            Target::Workspace(SpaceSelector::Id(workspace.id))
-        }
-        Some(PresentSpace::Chat(chat)) if chat.restore.is_some() => Target::Chat(chat),
-        Some(PresentSpace::Chat(chat)) => Target::Running(chat),
-        None => Target::Workspace(selector),
+        Some(PresentSpace::Chat(chat)) if chat.running => Target::Running(Box::new(chat)),
+        Some(space) => Target::Space(SpaceSelector::id(space.id())),
+        None => Target::Space(selector),
     }
 }
 
 /// The spaces a resume acts on.
 #[derive(Debug, Default)]
 pub(super) struct Selected {
-    pub chats: Vec<Chat>,
     /// The running chats named, which have nothing to resume but a turn an
     /// interrupt ended.
     pub running: Vec<Chat>,
-    /// By ID, or by a selector the daemon refuses; every workspace with
-    /// stopped work for `None`.
-    pub workspaces: Option<Vec<SpaceSelector>>,
+    /// By ID, or by a selector the daemon refuses; every space with stopped
+    /// work for `None`.
+    pub spaces: Option<Vec<SpaceSelector>>,
     /// The workspaces named whose setup failed, which resume by retrying
     /// it, once [`super::setups::take_failed`] takes them from the others.
     pub setups: Vec<FailedSetup>,
 }
 
 impl Selected {
-    /// The spaces `targets` names, each once; every stopped chat and every
-    /// workspace for `--all`; otherwise the current workspace when it has
-    /// something to resume, else those picked among the workspaces and saved
-    /// chats, or all of them when nothing is resumable anywhere.
+    /// The spaces `targets` names, each once; every space for `--all`;
+    /// otherwise the current workspace when it has something to resume,
+    /// else those picked among the workspaces and stopped chats, or all of
+    /// them when nothing is resumable anywhere.
     pub async fn load(ctx: &Context, targets: SpaceTargets) -> Result<Self> {
         let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
-        let saved = saved_chats(&spaces);
         if targets.all {
-            return Ok(Self::every(saved));
+            return Ok(Self::default());
         }
-        match ui::select_stopped_spaces(ctx, targets.space, &saved).await? {
+        let stopped = stopped_chats(&spaces);
+        match ui::select_stopped_spaces(ctx, targets.space, &stopped).await? {
             Some(selectors) => Ok(Self::resolved(&spaces, selectors)),
-            None => Ok(Self::every(saved)),
+            None => Ok(Self::default()),
         }
     }
 
-    /// The stopped work and last sessions of the selected workspaces, or of
-    /// every workspace with any, as [`saved_work`] keeps them for `discard`.
-    pub async fn stopped(&self, ctx: &Context, discard: bool) -> Result<Vec<(Workspace, Saved)>> {
-        match &self.workspaces {
+    /// The stopped work and last sessions of the selected spaces, or of
+    /// every space with any, as [`saved_work`] keeps them for `discard`.
+    pub async fn stopped(
+        &self,
+        ctx: &Context,
+        discard: bool,
+    ) -> Result<Vec<(PresentSpace, Saved)>> {
+        match &self.spaces {
             None => stopped_work(ctx, discard).await,
-            Some(workspaces) => stopped_in(ctx, workspaces, discard).await,
+            Some(spaces) => stopped_in(ctx, spaces, discard).await,
         }
     }
 
     /// The spaces `selectors` name among `spaces`, each once.
     fn resolved(spaces: &Spaces, selectors: Vec<SpaceSelector>) -> Self {
         let mut selected = Self {
-            workspaces: Some(Vec::new()),
+            spaces: Some(Vec::new()),
             ..Self::default()
         };
         for selector in selectors {
             selected.add(resolve(spaces, selector));
         }
         selected
-    }
-
-    /// The `saved` chats and every workspace.
-    fn every(saved: Vec<Chat>) -> Self {
-        Self {
-            chats: saved,
-            ..Self::default()
-        }
     }
 
     /// Refuse the running chats selected, which have nothing to resume.
@@ -113,77 +99,76 @@ impl Selected {
     /// Add `target` unless it is already selected.
     fn add(&mut self, target: Target) {
         match target {
-            Target::Chat(chat) if !self.chats.contains(&chat) => self.chats.push(chat),
-            Target::Chat(_) => {}
-            Target::Running(chat) if !self.running.contains(&chat) => self.running.push(chat),
+            Target::Running(chat) if !self.running.contains(&chat) => self.running.push(*chat),
             Target::Running(_) => {}
-            Target::Workspace(workspace) => {
-                let workspaces = self.workspaces.get_or_insert_default();
-                if !workspaces.contains(&workspace) {
-                    workspaces.push(workspace);
+            Target::Space(space) => {
+                let spaces = self.spaces.get_or_insert_default();
+                if !spaces.contains(&space) {
+                    spaces.push(space);
                 }
             }
         }
     }
 }
 
-/// The stopped chats among `spaces`.
-fn saved_chats(spaces: &Spaces) -> Vec<Chat> {
+/// The stopped chats among `spaces`, which a picker offers beside the
+/// workspaces.
+fn stopped_chats(spaces: &Spaces) -> Vec<Chat> {
     spaces
         .chats
         .iter()
-        .filter(|chat| chat.restore.is_some())
+        .filter(|chat| !chat.running)
         .cloned()
         .collect()
 }
 
-/// The stopped work and last sessions of the workspaces `selectors` name,
-/// as [`saved_work`] keeps them for `discard`, refusing one with nothing to
+/// The stopped work and last sessions of the spaces `selectors` name, as
+/// [`saved_work`] keeps them for `discard`, refusing one with nothing to
 /// resume.
 async fn stopped_in(
     ctx: &Context,
     selectors: &[SpaceSelector],
     discard: bool,
-) -> Result<Vec<(Workspace, Saved)>> {
+) -> Result<Vec<(PresentSpace, Saved)>> {
     let mut stopped = Vec::new();
     for selector in selectors {
-        let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
-            .await?
-            .workspace;
-        let saved = saved_work(ctx, &workspace, discard).await?;
+        let space = super::present_space(ctx, selector).await?;
+        let saved = saved_work(ctx, &space, discard).await?;
         ensure!(
             !saved.is_empty(),
             "{} has no stopped agents or commands to resume",
-            workspace.name
+            space.name()
         );
-        stopped.push((workspace, saved));
+        stopped.push((space, saved));
     }
     Ok(stopped)
 }
 
-/// The workspaces with stopped work or last sessions, as [`saved_work`]
-/// keeps them for `discard`. A done assignment needs no agent, so its
-/// workspace is included only to `discard`.
-async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(Workspace, Saved)>> {
+/// The spaces with stopped work or last sessions, as [`saved_work`] keeps
+/// them for `discard`. A done assignment needs no agent, so its space is
+/// included only to `discard`.
+async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(PresentSpace, Saved)>> {
+    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let all = (spaces.workspaces.into_iter().map(PresentSpace::Workspace))
+        .chain(spaces.chats.into_iter().map(PresentSpace::Chat));
     let mut stopped = Vec::new();
-    for workspace in crate::client::workspaces::list(&ctx.paths).await? {
-        if workspace.done && !discard {
+    for space in all {
+        if space.done() && !discard {
             continue;
         }
-        let saved = saved_work(ctx, &workspace, discard).await?;
+        let saved = saved_work(ctx, &space, discard).await?;
         if !saved.is_empty() {
-            stopped.push((workspace, saved));
+            stopped.push((space, saved));
         }
     }
     Ok(stopped)
 }
 
-/// `workspace`'s stopped work and last sessions: with the agents waiting in
-/// their wrappers, which a resume starts there, except to `discard`, which
-/// leaves them to their wrappers.
-async fn saved_work(ctx: &Context, workspace: &Workspace, discard: bool) -> Result<Saved> {
-    let mut saved =
-        crate::client::saved::read(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
+/// The stopped work and last sessions of `space`: with the agents waiting
+/// in their wrappers, which a resume starts there, except to `discard`,
+/// which leaves them to their wrappers.
+async fn saved_work(ctx: &Context, space: &PresentSpace, discard: bool) -> Result<Saved> {
+    let mut saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(space.id())).await?;
     if discard {
         saved.retain_unattended();
     }

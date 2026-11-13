@@ -51,7 +51,7 @@ async fn ensure_spaces(ctx: &Context, selectors: &[SpaceSelector]) -> Result<()>
     let spaces = super::resolve(ctx, selectors.to_vec(), false).await?;
     let stopped: Vec<_> = (spaces.iter())
         .filter_map(|space| match space {
-            PresentSpace::Chat(chat) if chat.restore.is_some() => Some(chat.name.as_str()),
+            PresentSpace::Chat(chat) if !chat.running => Some(chat.name.as_str()),
             _ => None,
         })
         .collect();

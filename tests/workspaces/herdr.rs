@@ -1164,22 +1164,26 @@ fn attach_shows_a_herdr_tab_and_attaches_its_session_from_outside_herdr() {
     let fixture = Fixture::new();
     install_fake_herdr(&fixture);
     let home = fixture.root.path();
-    let repository = fixture.ok(&["repo", "ls"])[0].clone();
     let socket = "/herdr/work/herdr.sock";
-    let response = fixture.request(serde_json::json!({"start_chat":{
-        "repository": repository["id"], "name": "talk", "agent": "claude",
-        "pid": std::process::id(),
-        "origin": {"host": "herdr", "group": "w1", "place": "w1:p4",
-                   "data": {"HERDR_SESSION": "work", "HERDR_SOCKET_PATH": socket}}
-    }}));
-    assert_eq!(response["type"], "chat", "{response}");
+    // The chat's agent runs in a Herdr pane.
+    let (_agent, _) = fixture.run_chat_with("talk", &[], |command| {
+        command
+            .env("HERDR_ENV", "1")
+            .env("HERDR_SESSION", "work")
+            .env("HERDR_SOCKET_PATH", socket)
+            .env("HERDR_PANE_ID", "w1:p4");
+    });
     let calls_since = |count: usize| herdr_calls(&fixture)[count..].to_vec();
 
     // Outside Herdr, the tab is focused and a client attaches its session.
+    let started = match home.join("herdr-calls").exists() {
+        true => herdr_calls(&fixture).len(),
+        false => 0,
+    };
     let (output, transcript) = fixture.interactive(&["attach", &fixture.id("talk")], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert_eq!(
-        calls_since(0),
+        calls_since(started),
         [
             vec!["tab", "focus", "w1:t4"],
             vec!["session", "list", "--json"],

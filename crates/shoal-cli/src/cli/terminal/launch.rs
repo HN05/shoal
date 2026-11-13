@@ -391,7 +391,8 @@ async fn start_in_background(
 /// Run Shoal with `args` for the chat `name` of `repository`, or of none,
 /// in `cwd`, its checkout, worktree or `root_dir`, in a new background
 /// place, of the first host that would start a queued agent, for the user
-/// to attach to. Returns how that host reports it.
+/// to attach to. A `restore` records the place as the chat's, as a
+/// workspace's restore does. Returns how that host reports it.
 pub(in crate::cli) async fn start_chat_in_background(
     ctx: &Context,
     settings: &Effective,
@@ -399,10 +400,10 @@ pub(in crate::cli) async fn start_chat_in_background(
     cwd: &Path,
     name: &str,
     args: &[OsString],
+    restore: bool,
 ) -> Result<String> {
     let origin = queued_origin()?;
     let repo = groups::Repo::of_chat(repository, cwd);
-    let argv = shoal_command(ctx, args)?;
     groups::first_queued(
         ctx,
         settings,
@@ -414,6 +415,14 @@ pub(in crate::cli) async fn start_chat_in_background(
                 return Ok(None);
             };
             let beside = Beside::opening(group);
+            let mut argv = shoal_command(ctx, args)?;
+            if restore {
+                let host_name = host.host.name().as_str();
+                argv.extend(["--opened-in".into(), host_name.into()]);
+                if host.closes_when_done {
+                    argv.extend(["--close-in".into(), host_name.into()]);
+                }
+            }
             let env = chat_place_env(ctx)?;
             open_in_background(ctx, places, beside, cwd, name, &argv, &env).await?;
             Ok(Some(format!(

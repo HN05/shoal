@@ -132,9 +132,7 @@ async fn a_failure_outlives_the_requesting_chat() {
             workspace.repository_id.clone().into(),
             "requester".into(),
             "claude".into(),
-            process.id(),
             None,
-            false,
         )
         .await
         .unwrap();

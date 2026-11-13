@@ -251,7 +251,7 @@ async fn a_message_to_one_space_says_when_its_agent_reads_it() {
     manager.queue_add(request).await.unwrap();
     let without = create("without").await.unwrap();
     let repo = manager.repository(&running.repository_id).await.unwrap();
-    let (chat, _process) =
+    let chat =
         crate::daemon::test_support::chat(&manager, "planning", "chat", Some(&repo), None).await;
     let send = |id: &SpaceId| {
         let selector = SpaceSelector::id(id);
@@ -334,9 +334,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
                 repository.clone().into(),
                 name.into(),
                 "claude".into(),
-                std::process::id(),
                 None,
-                false,
             )
             .await
             .unwrap();
@@ -497,21 +495,14 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
                 running.repository_id.clone().into(),
                 name.into(),
                 "claude".into(),
-                std::process::id(),
                 None,
-                false,
             )
             .await
             .unwrap();
     }
-    manager
-        .store
-        .run(|db| {
-            db.execute("UPDATE chats SET restore='resume' WHERE name='paused'", [])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
+    let chats = manager.chats().await.unwrap();
+    let paused = chats.iter().find(|chat| chat.name == "paused").unwrap();
+    manager.end_executions(&paused.id).await;
     let reached = manager
         .send_all_message(
             None,

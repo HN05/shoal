@@ -863,15 +863,7 @@ fn files_add_attaches_copies_without_a_message() {
 #[test]
 fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
     let fixture = Fixture::new();
-    let repository = fixture.ok(&["repo", "ls"])[0].clone();
-    // The sleep stands in for the chat's agent.
-    let mut agent = Command::new("sleep").arg("600").spawn().unwrap();
-    let response = fixture.request(serde_json::json!({"start_chat":{
-        "repository": repository["id"], "name": "planning", "agent": "claude",
-        "pid": agent.id()
-    }}));
-    assert_eq!(response["type"], "chat", "{response}");
-    let chat = response["data"]["id"].as_str().unwrap().to_owned();
+    let (mut agent, chat) = fixture.run_chat("planning", &[]);
     fs::write(fixture.repo.join("report.md"), "Plan").unwrap();
     let in_chat = |args: &[&str]| {
         let output = fixture
@@ -927,7 +919,7 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
         .unwrap();
     assert!(completed.status.success(), "{completed:?}");
     let completed = String::from_utf8(completed.stdout).unwrap();
-    let number = response["data"]["number"].to_string();
+    let number = fixture.ok(&["status", &chat])["chat"]["number"].to_string();
     assert!(completed.lines().any(|line| line == number), "{completed}");
     let (output, rows) = fixture.pick(&["files", "--print"], &chat, "");
     assert!(output.status.success(), "{output:?}");
@@ -942,11 +934,11 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
 
     // A stopped chat keeps its files; once it is removed, they stay listed
     // with when they go.
-    agent.kill().unwrap();
+    fixture.end_chat_agent(&chat);
     agent.wait().unwrap();
     let stopped = fixture.ok(&["files", &fixture.id("planning")]);
     assert!(stopped[0]["expires_at"].is_null(), "{stopped}");
-    fixture.ok(&["resume", &fixture.id("planning"), "--discard"]);
+    fixture.ok(&["rm", &chat, "--yes"]);
     let kept = fixture.ok(&["files", &chat]);
     assert_eq!(kept[0]["path"], added[0]["path"], "{kept}");
     assert!(kept[0]["expires_at"].is_i64(), "{kept}");

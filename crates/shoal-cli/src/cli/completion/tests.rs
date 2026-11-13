@@ -191,13 +191,12 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                 name: "chat".into(),
                 agent: "codex".into(),
                 workspace: None,
-                pid: 1,
+                running: true,
                 started_at: UnixTime::from_seconds(0),
                 origin: Some(Origin::created(HostName::Zmx, "chat-session".into())),
                 tmp_dir: None,
                 root_dir: None,
                 session: None,
-                restore: None,
                 links: Default::default(),
                 review: Vec::new(),
                 completion: None,
@@ -268,7 +267,7 @@ fn resume_completes_resumable_spaces() {
         target_of("space", "", "resume", Need::Any),
         Some(Target::ResumeSpaces)
     );
-    let chat = |name: &str, restore| Chat {
+    let chat = |name: &str, running| Chat {
         narrowing: Default::default(),
         mode: "chat".into(),
         number: 1.into(),
@@ -277,13 +276,12 @@ fn resume_completes_resumable_spaces() {
         name: name.into(),
         agent: "claude".into(),
         workspace: None,
-        pid: 1,
         started_at: UnixTime::from_seconds(0),
         origin: None,
         tmp_dir: None,
         root_dir: None,
         session: None,
-        restore,
+        running,
         links: Default::default(),
         review: Vec::new(),
         completion: None,
@@ -294,10 +292,7 @@ fn resume_completes_resumable_spaces() {
         children: Vec::new(),
         converted: false,
     };
-    let candidates = stopped_chat_candidates(vec![
-        chat("talk", Some(crate::state::ChatRestore::Resume)),
-        chat("running", None),
-    ]);
+    let candidates = stopped_chat_candidates(vec![chat("talk", false), chat("running", true)]);
     let offered: Vec<_> = candidates
         .iter()
         .map(|candidate| {

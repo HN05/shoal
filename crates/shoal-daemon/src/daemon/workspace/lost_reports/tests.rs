@@ -383,16 +383,8 @@ async fn a_chats_lost_report_counts_only_from_the_agent_it_runs() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    // The agent is a process this test's hooks run under.
     let chat = manager
-        .start_chat(
-            repo.id.into(),
-            "talk".into(),
-            "claude".into(),
-            std::os::unix::process::parent_id(),
-            None,
-            false,
-        )
+        .start_chat(repo.id.into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
     let working = Report::State {
@@ -408,7 +400,12 @@ async fn a_chats_lost_report_counts_only_from_the_agent_it_runs() {
             .unwrap()
             .map(|status| status.state)
     };
-    Sending::keep(&manager.paths, &chat.id, working, None)
+    let execution = |manager: Arc<Manager>, id: SpaceId| async move {
+        let executions = manager.workspace_executions(&id).await.unwrap();
+        Some(executions[0].id.clone())
+    };
+    let first = execution(manager.clone(), chat.id.clone()).await;
+    Sending::keep(&manager.paths, &chat.id, working, first)
         .unwrap()
         .failed("timed out".into());
     manager.recover_lost_reports().await;
@@ -417,25 +414,19 @@ async fn a_chats_lost_report_counts_only_from_the_agent_it_runs() {
         Some(AgentState::Working)
     );
 
-    Sending::keep(&manager.paths, &chat.id, ended_turn(), None)
+    let first = execution(manager.clone(), chat.id.clone()).await;
+    Sending::keep(&manager.paths, &chat.id, ended_turn(), first)
         .unwrap()
         .failed("refused".into());
     // A restore runs another agent.
-    let id = chat.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute("UPDATE chats SET pid=1 WHERE id=?1", [id])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
+    manager.end_executions(&chat.id).await;
+    let chat = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    manager.run_chat_agent(chat.clone()).await.unwrap();
     manager.recover_lost_reports().await;
 
-    assert_eq!(
-        current(manager.clone(), chat.id.clone()).await,
-        Some(AgentState::Working)
-    );
+    // The state ended with the agent, and the earlier agent's report does
+    // not count for the one running now.
+    assert_eq!(current(manager.clone(), chat.id.clone()).await, None);
     assert_eq!(failures(&manager).await.len(), 2);
 }
 

@@ -279,9 +279,7 @@ async fn a_chats_progress_is_its_own_and_goes_with_it() {
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();

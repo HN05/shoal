@@ -1,11 +1,10 @@
 //! What `shoal resume` and `shoal restore` print.
 use crate::execution_ids::ExecutionId;
-use crate::repository_ids::RepositoryId;
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    model::{Chat, QueueEntry, RemovedWorkspace, Workspace},
+    model::{QueueEntry, RemovedWorkspace, Workspace},
     output::{batch::Failure, outputs},
 };
 
@@ -44,18 +43,14 @@ pub struct Resumed {
     pub commands: Vec<StoppedCommands>,
     pub agents: Vec<ResumedAgent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub chats: Vec<RestoredChat>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub set_up: Vec<SetUp>,
     pub failed: Vec<Failure>,
 }
 
-/// The executions and saved chats a discard forgot.
+/// The executions a discard forgot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscardedWork {
     pub discarded: Vec<ExecutionId>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub chats: Vec<Chat>,
     pub failed: Vec<Failure>,
 }
 
@@ -66,8 +61,6 @@ pub struct DiscardedWork {
 pub struct Queued {
     pub queued: Vec<QueueEntry>,
     pub commands: Vec<StoppedCommands>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub chats: Vec<RestoredChat>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub set_up: Vec<SetUp>,
     pub failed: Vec<Failure>,
@@ -83,19 +76,6 @@ pub struct Reopened {
     /// The restores of its stopped agents, once queued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queued: Option<Queued>,
-}
-
-/// A saved chat a resume restored in the background.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RestoredChat {
-    pub chat: SpaceName,
-    pub agent: crate::agent::Agent,
-    /// Its repository's ID; none for a chat without one.
-    pub repository: Option<RepositoryId>,
-    /// Where it runs and how to reach it, as the host that runs it says;
-    /// none when an app runs it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub place: Option<String>,
 }
 
 outputs!(

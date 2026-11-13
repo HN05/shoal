@@ -115,13 +115,11 @@ pub async fn discard_stopped_work(
 pub async fn change_stopped_permissions(
     daemon: &impl Daemon,
     agents: Vec<crate::protocol::SavedAgent>,
-    chats: Vec<SpaceSelector>,
     launches: Vec<SpaceSelector>,
     change: crate::config::permissions::PermissionChange,
 ) -> Result<()> {
     let method = AssignmentMethod::ChangeStoppedPermissions {
         agents,
-        chats,
         launches,
         change,
     };

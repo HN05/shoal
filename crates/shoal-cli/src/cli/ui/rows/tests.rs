@@ -412,7 +412,7 @@ async fn repository_choices_label_unreadable_origins_by_their_recorded_source() 
 fn a_chat_in_a_workspace_shows_the_workspace() {
     let chat: Chat = serde_json::from_value(serde_json::json!({
         "id": "c", "number": 4, "repository_id": "a", "name": "worker-chat", "agent": "claude",
-        "pid": 1, "started_at": 0,
+        "running": true, "started_at": 0,
         "workspace": {"id": "w", "name": "worker", "branch": "worker"},
     }))
     .unwrap();
@@ -426,10 +426,10 @@ fn a_chat_in_a_workspace_shows_the_workspace() {
 
 #[test]
 fn a_chat_shows_its_agents_turn_state_with_its_marker() {
-    let chat = |agent_state: serde_json::Value, restore: serde_json::Value| -> Chat {
+    let chat = |agent_state: serde_json::Value, running: bool| -> Chat {
         serde_json::from_value(serde_json::json!({
             "id": "c", "number": 4, "repository_id": "a", "name": "talk", "agent": "claude",
-            "pid": 1, "started_at": 0, "agent_state": agent_state, "restore": restore,
+            "running": running, "started_at": 0, "agent_state": agent_state,
         }))
         .unwrap()
     };
@@ -437,21 +437,21 @@ fn a_chat_shows_its_agents_turn_state_with_its_marker() {
     let row =
         |chat: Chat| workspace_tree_rows(&[], &[chat], &Statuses::default(), &[], plain, None);
     let state = |state: &str| serde_json::json!({"state": state, "since": 0});
-    let running = serde_json::Value::Null;
+    let running = true;
     assert_eq!(
-        row(chat(state("working"), running.clone())),
+        row(chat(state("working"), running)),
         ["◐ 4  talk  working  claude"]
     );
     assert_eq!(
-        row(chat(state("waiting"), running.clone())),
+        row(chat(state("waiting"), running)),
         ["● 4  talk  needs input  claude"]
     );
     assert_eq!(
-        row(chat(state("idle"), running.clone())),
+        row(chat(state("idle"), running)),
         ["○ 4  talk  waiting  claude"]
     );
     assert_eq!(
-        row(chat(serde_json::Value::Null, "resume".into())),
+        row(chat(serde_json::Value::Null, false)),
         ["● 4  talk  stopped  claude"]
     );
 }
@@ -460,7 +460,7 @@ fn a_chat_shows_its_agents_turn_state_with_its_marker() {
 fn spaces_show_a_mode_other_than_their_kinds_usual_one() {
     let chat: Chat = serde_json::from_value(serde_json::json!({
         "id": "c", "number": 4, "repository_id": "a", "name": "repo-plan-7", "agent": "claude",
-        "mode": "plan", "pid": 1, "started_at": 0,
+        "mode": "plan", "running": true, "started_at": 0,
         "workspace": {"id": "w", "name": "worker", "branch": "worker"},
     }))
     .unwrap();

@@ -15,7 +15,7 @@ use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     daemon::notifications::NotificationKind,
     model::{SpaceRef, Workspace, WorkspaceRef},
-    state::{ChatRestore, WorkspaceState},
+    state::WorkspaceState,
 };
 
 /// Each space a removal of another takes first, as `space_id, parent_id`:
@@ -267,29 +267,25 @@ fn down(descend: &str) -> String {
     )
 }
 
-/// SQL true when the space in `column` has an agent: one that runs, a
-/// workspace's agent reporting its turn state, or a queued restore of
-/// either, whose agent receives what arrived once it starts.
+/// SQL true when the space in `column` has an agent: one that runs, an
+/// agent reporting its turn state, or a queued restore, whose agent
+/// receives what arrived once it starts.
 fn has_agent(column: &str) -> String {
     format!(
         "({} OR EXISTS (SELECT 1 FROM space_agent_state WHERE space_agent_state.space_id={column})
             OR EXISTS (SELECT 1 FROM agent_queue
-                WHERE agent_queue.space_id={column} AND agent_queue.kind='{}')
-            OR EXISTS (SELECT 1 FROM chats WHERE chats.id={column} AND chats.restore='{}'))",
+                WHERE agent_queue.space_id={column} AND agent_queue.kind='{}'))",
         runs_agent(column),
         crate::state::QueueKind::Restore,
-        ChatRestore::Automatic,
     )
 }
 
-/// SQL true when the agent of the space in `column` runs: a workspace's
-/// among the tracked agents bound as parameter `?2`, a chat's until the
-/// chat stops, or that of a chat that became the workspace until it is
-/// handed over to it.
+/// SQL true when the agent of the space in `column` runs: one among the
+/// tracked agents bound as parameter `?2`, or that of a chat that became
+/// the workspace until it is handed over to it.
 fn runs_agent(column: &str) -> String {
     format!(
         "({column} IN (SELECT value FROM json_each(?2))
-            OR EXISTS (SELECT 1 FROM chats WHERE chats.id={column} AND chats.restore IS NULL)
             OR EXISTS (SELECT 1 FROM space_conversions WHERE space_conversions.space_id={column}
                 AND json_extract(space_conversions.record,'$.to')='workspace'))"
     )

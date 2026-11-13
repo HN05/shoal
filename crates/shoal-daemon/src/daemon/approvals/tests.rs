@@ -426,9 +426,7 @@ async fn a_chat_withdraws_only_its_own_requests() {
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -906,7 +904,7 @@ async fn a_parent_approves_a_merge_with_its_own_merge_permission_at_its_commit()
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
+    let top = chat(&manager, "top", "chat", Some(&repo), None).await;
     let worker = working_below(&manager, &repo, "worker", &top.id, "worker").await;
     let child = working_below(&manager, &repo, "child", &worker.id, "worker").await;
     // Each request goes to the worker, which asks before it merges, so it

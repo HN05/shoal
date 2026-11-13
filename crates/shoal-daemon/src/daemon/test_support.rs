@@ -33,29 +33,41 @@ pub async fn indexed_manager() -> (tempfile::TempDir, Arc<Manager>) {
 }
 
 /// Start the chat `name` in `mode`, of `repository` or without one, below
-/// `parent`, with a sleep standing in for its agent as the returned process.
+/// `parent`, with its agent running as its execution.
 pub async fn chat(
-    manager: &Manager,
+    manager: &Arc<Manager>,
     name: &str,
     mode: impl Into<crate::config::modes::ModeName>,
     repository: Option<&crate::model::Repository>,
     parent: Option<&SpaceId>,
-) -> (crate::model::Chat, ProcessGroup) {
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+) -> crate::model::Chat {
     let new = crate::daemon::chats::NewChat {
         priority: None,
         name: name.into(),
         agent: "claude".into(),
         mode: mode.into(),
         narrowing: Default::default(),
-        pid: process.id(),
         origin: None,
-        hands_over: false,
         parent: parent.cloned(),
     };
     let repository = repository.map(|repository| repository.id.clone().into());
     let chat = manager.start_new_chat(repository, None, new).await.unwrap();
-    (chat, process)
+    manager.run_chat_agent(chat).await.unwrap()
+}
+
+/// Run a sleep as the process of the agent running in the space `id`,
+/// recorded as the child of its execution, which a stop of it signals.
+pub async fn agent_process(manager: &Manager, id: &SpaceId) -> ProcessGroup {
+    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let executions = manager.workspace_executions(id).await.unwrap();
+    let [execution] = executions.as_slice() else {
+        panic!("one execution runs the agent: {executions:?}");
+    };
+    let child = crate::process::identity::capture(process.id()).unwrap();
+    (manager.record_execution_child(execution.id.clone(), child, process.id()))
+        .await
+        .unwrap();
+    process
 }
 
 /// Create the workspace `name` of `repository` below `parent`, recording

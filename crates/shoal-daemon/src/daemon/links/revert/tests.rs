@@ -65,9 +65,7 @@ async fn a_chat_reverts_from_its_repositorys_checkout() {
             repo.id.clone().into(),
             "planning".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();

@@ -328,6 +328,17 @@ fn record_agent(db: &Connection, id: &SpaceId, kind: EventKind, agent: &AgentEve
     record_with(db, id, kind, "agent", agent)
 }
 
+/// When the agent of the space `id` last stopped or exited, as its log
+/// records; none before it did.
+pub(crate) fn agent_stopped_at(db: &Connection, id: &SpaceId) -> Result<Option<UnixTime>> {
+    Ok(db.query_row(
+        "SELECT MAX(created_at) FROM workspace_events WHERE space_id=?1
+             AND json_extract(record,'$.kind') IN (?2,?3)",
+        params![id, EventKind::AgentStopped, EventKind::AgentExited],
+        |row| row.get(0),
+    )?)
+}
+
 /// Whether the space's newest agent event is the end of `execution`'s agent.
 fn agent_ended(db: &Connection, id: &SpaceId, execution: Option<&ExecutionId>) -> Result<bool> {
     let newest: Option<(EventKind, Option<ExecutionId>)> = db

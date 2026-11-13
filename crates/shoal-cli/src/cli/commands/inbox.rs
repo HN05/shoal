@@ -259,7 +259,7 @@ fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<SpaceId>) -> Vec<
 /// running chat that recorded its work as finished, and each mark of the
 /// others.
 fn chat_items(chats: &[Chat]) -> Vec<Item> {
-    let running = || chats.iter().filter(|chat| chat.restore.is_none());
+    let running = || chats.iter().filter(|chat| chat.running);
     let waiting = running()
         .filter(|chat| ListStatus::of_chat(chat) == ListStatus::NeedsInput)
         .map(|chat| Item::ChatNeedsInput { chat: chat.clone() });

@@ -42,7 +42,6 @@ fn setup_args() -> ConfigSetupArgs {
         model: Default::default(),
         name: None,
         session: None,
-        restore: None,
         handoff: None,
         args: Vec::new(),
     }

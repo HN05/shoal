@@ -13,9 +13,7 @@ use crate::{
     client::{agent::AgentSessionId, scope_tokens::ScopeToken},
     config::{modes::ModeName, permissions::PermissionsConfig},
     daemon::approvals::{ApprovalRequest, release_decided_by},
-    process::identity::Identity,
     sessions::Origin,
-    state::ChatRestore,
 };
 
 /// A conversion whose agent still runs where the space was, until its turn
@@ -63,23 +61,15 @@ const CHAT_COLUMNS: &[&str] = &[
     "repository_id",
     "name",
     "agent",
-    "pid",
-    "birth",
     "started_at",
     "origin",
-    "starting",
     "session",
-    "restore",
-    "unique_id",
     "asks_in_chat",
-    "stopped_at",
-    "saved",
     "scope_token",
     "workspace_id",
     "number",
     "mode",
     "root_dir",
-    "stopped_by",
     "narrowing",
     "converted",
 ];
@@ -104,14 +94,10 @@ struct KeptCompletion {
     cause: String,
 }
 
-/// What a converted chat's agent ran as and with.
+/// What a converted chat's agent ran with.
 #[derive(Debug, Deserialize)]
 pub(crate) struct ChatAgent {
     pub agent: Agent,
-    pub pid: u32,
-    pub birth: String,
-    #[serde(default)]
-    pub unique_id: Option<String>,
     #[serde(default)]
     pub session: Option<AgentSessionId>,
     #[serde(default)]
@@ -133,17 +119,6 @@ impl ChatRow {
 }
 
 impl ChatAgent {
-    /// The process the agent ran as.
-    pub(crate) fn process(&self) -> Result<Identity> {
-        Ok(Identity {
-            pid: self.pid,
-            birth: self.birth.clone(),
-            unique: (self.unique_id.as_deref())
-                .map(serde_json::from_str)
-                .transpose()?,
-        })
-    }
-
     /// Where it ran in a terminal host.
     pub(crate) fn origin(&self) -> Result<Option<Origin>> {
         Ok((self.origin.as_deref())
@@ -193,44 +168,6 @@ pub(crate) fn all_pending(db: &Connection) -> Result<Vec<(SpaceId, Pending)>> {
             Ok((id, serde_json::from_str(&record)?))
         })
         .collect()
-}
-
-/// The processes the hand-overs of the conversion of the space `id` have
-/// signalled, which a hand-over that was interrupted goes on stopping.
-pub(crate) fn stopped_processes(db: &Connection, id: &SpaceId) -> Result<Vec<Identity>> {
-    let stopped: Option<String> = db
-        .query_row(
-            "SELECT json_extract(record,'$.stopped') FROM space_conversions WHERE space_id=?1",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?
-        .flatten();
-    Ok(stopped
-        .map(|stopped| serde_json::from_str(&stopped))
-        .transpose()?
-        .unwrap_or_default())
-}
-
-/// Keep `signalled` among the processes the hand-overs of the conversion of
-/// the space `id` have signalled, before a hand-over signals them.
-pub(crate) fn record_stopped(
-    tx: &Transaction<'_>,
-    id: &SpaceId,
-    signalled: &[Identity],
-) -> Result<()> {
-    let mut stopped = stopped_processes(tx, id)?;
-    for process in signalled {
-        if !stopped.contains(process) {
-            stopped.push(process.clone());
-        }
-    }
-    tx.execute(
-        "UPDATE space_conversions SET record=json_set(record,'$.stopped',json(?2))
-         WHERE space_id=?1",
-        params![id, serde_json::to_string(&stopped)?],
-    )?;
-    Ok(())
 }
 
 /// Keep `session` as the one the agent of the chat that became the
@@ -339,7 +276,8 @@ pub(crate) fn replace_chat(tx: &Transaction<'_>, id: &SpaceId) -> Result<ChatRow
     anyhow::ensure!(
         crate::daemon::store::exists(
             tx,
-            "SELECT 1 FROM chats WHERE id=?1 AND restore IS NULL",
+            "SELECT 1 FROM chats JOIN executions ON executions.space_id=chats.id
+             WHERE chats.id=?1",
             [id]
         )?,
         "the chat was stopped meanwhile; it stays a chat"
@@ -390,7 +328,11 @@ pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) ->
         [id],
     )?;
     move_agent_messages(tx, id)?;
-    forget_executions(tx, id)?;
+    // The chat's agent, which has yet to move, runs on as the chat's.
+    tx.execute(
+        "DELETE FROM executions WHERE space_id=?1 AND agent IS NULL",
+        [id],
+    )?;
     tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
     // Last, since deleting the workspace's row deletes the completion.
     if let Some(completion) = &row.space_completion {
@@ -403,15 +345,14 @@ pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) ->
 }
 
 /// The stopped chat a workspace becomes: its agent, the execution it ran
-/// as, the session it carries on and the place it ran in, the process it
-/// ran as, its mode and the permissions given to it.
+/// as, the session it carries on and the place it ran in, its mode and the
+/// permissions given to it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ConvertedChat {
     pub agent: Agent,
     pub execution: ExecutionId,
     pub session: Option<AgentSessionId>,
     pub origin: Option<Origin>,
-    pub process: Identity,
     pub mode: ModeName,
     pub narrowing: PermissionsConfig,
     /// The space whose process stopped the agent, which with the spaces
@@ -431,27 +372,20 @@ pub(crate) fn replace_workspace(
     chat: &ConvertedChat,
 ) -> Result<Vec<ApprovalRequest>> {
     tx.execute(
-        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,session,
-            restore,stopped_at,saved,unique_id,scope_token,number,mode,narrowing,converted,
-            stopped_by)
-         SELECT id,repository_id,name,?2,?3,?4,unixepoch(),?5,?6,?7,unixepoch(),1,?8,?9,
-            number,?10,?11,1,?12
+        "INSERT INTO chats(id,repository_id,name,agent,started_at,origin,session,scope_token,
+            number,mode,narrowing,converted)
+         SELECT id,repository_id,name,?2,unixepoch(),?3,?4,?5,number,?6,?7,1
          FROM workspaces WHERE id=?1",
         params![
             id,
             chat.agent,
-            chat.process.pid,
-            chat.process.birth,
             (chat.origin.as_ref())
                 .map(serde_json::to_string)
                 .transpose()?,
             chat.session,
-            ChatRestore::Resume,
-            crate::daemon::chats::unique_id(&chat.process)?,
             crate::daemon::scope::new_token(),
             chat.mode,
             crate::daemon::store::narrowing_column(&chat.narrowing)?,
-            chat.stopped_by,
         ],
     )?;
     tx.execute(

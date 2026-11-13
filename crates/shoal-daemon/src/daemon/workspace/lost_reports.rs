@@ -18,7 +18,7 @@ use crate::{
     agents::hook_reports::{self, Kept, Left, Report},
     client::{space_ids::SpaceId, space_names::SpaceSelector},
     daemon::{log, store},
-    model::{AgentStatus, PresentSpace},
+    model::AgentStatus,
     state::{AgentState, ExecutionState},
     time::UnixTime,
 };
@@ -88,14 +88,12 @@ impl ReportTimes {
 
 /// Where a left report's agent stands.
 enum Reporter {
-    /// Its execution runs, or the chat agent that made it does, or it
-    /// reported from outside both.
+    /// Its execution runs.
     Runs,
     /// Its execution's wrapper has yet to reattach after a restart, or to
     /// register the agent it runs.
     Reattaching,
-    /// Its execution or its chat's agent ended, or its report does not
-    /// read.
+    /// Its execution ended, or its report names none or does not read.
     Gone,
 }
 
@@ -168,17 +166,12 @@ impl Manager {
     }
 
     /// Record `kept` if it is the latest report of `space` from the agent
-    /// that runs there, holding the space's report order and, for a chat's
-    /// report, the chats' stops and restores, which replace a chat's agent,
-    /// until it is recorded. Its time outlasts this daemon, as a delivered
+    /// that runs there, holding the space's report order until it is
+    /// recorded. Its time outlasts this daemon, as a delivered
     /// report's does, even when a later report overtook it: a mark at its
     /// own time leaves it the latest, so a record that fails is retried.
     async fn replay(&self, space: &SpaceId, selector: &SpaceSelector, kept: Kept) -> Result<()> {
         let _order = self.report_times.order(space).await;
-        let _chats = match kept.execution {
-            None => Some(self.chat_saves.lock().await),
-            Some(_) => None,
-        };
         let runs = matches!(self.reporter(space, Some(&kept)).await?, Reporter::Runs);
         let latest = runs && self.latest_report(space, kept.at).await?;
         hook_reports::mark_delivered(&self.paths, space, &kept)?;
@@ -193,8 +186,9 @@ impl Manager {
         let Some(kept) = kept else {
             return Ok(Reporter::Gone);
         };
+        // Every agent reports from its execution.
         let Some(execution) = kept.execution.clone() else {
-            return self.chat_reporter(space, kept).await;
+            return Ok(Reporter::Gone);
         };
         let query = execution.clone();
         let found = self
@@ -210,21 +204,6 @@ impl Manager {
         Ok(match found.state {
             ExecutionState::Running if registered => Reporter::Runs,
             _ => Reporter::Reattaching,
-        })
-    }
-
-    /// Where the agent that made `kept` outside an execution stands: a
-    /// chat's runs while it is the agent the chat runs now, which a stop
-    /// and restore replace.
-    async fn chat_reporter(&self, space: &SpaceId, kept: &Kept) -> Result<Reporter> {
-        let PresentSpace::Chat(chat) = self.space_by_id(space).await? else {
-            return Ok(Reporter::Runs);
-        };
-        let current = chat.restore.is_none() && kept.ancestors.contains(&chat.pid);
-        Ok(if current {
-            Reporter::Runs
-        } else {
-            Reporter::Gone
         })
     }
 

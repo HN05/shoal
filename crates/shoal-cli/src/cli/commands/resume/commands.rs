@@ -7,7 +7,7 @@ use crate::client::output::resume::StoppedCommands;
 use crate::{
     cli::context::Context,
     execution::recovery::{self, RecoveryClaim, SavedCommand, consume},
-    model::Workspace,
+    model::PresentSpace,
 };
 
 /// Only one resume reports a command; another holding its lock skips it.
@@ -26,17 +26,17 @@ pub(super) fn claim(commands: &mut Vec<SavedCommand>) -> Vec<RecoveryClaim> {
 /// Without an agent to receive them, interrupted commands go to the user once.
 pub(super) fn report(
     ctx: &Context,
-    workspace: &Workspace,
+    space: &PresentSpace,
     commands: &[SavedCommand],
 ) -> Result<StoppedCommands> {
     let report = StoppedCommands {
-        workspace: workspace.name.clone(),
+        workspace: space.name().clone(),
         commands: commands
             .iter()
             .map(|command| command.argv.clone())
             .collect(),
     };
-    reports::stopped_commands(ctx, workspace, commands);
+    reports::stopped_commands(ctx, space, commands);
     for command in commands {
         consume(&command.path)?;
     }

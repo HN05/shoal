@@ -82,8 +82,8 @@ fn a_done_workspace_with_stopped_work_is_finished() {
 fn a_done_chat_that_is_stopped_is_finished() {
     let chat = |completion: serde_json::Value| -> Chat {
         serde_json::from_value(serde_json::json!({
-            "id": "c", "name": "talk", "agent": "claude", "pid": 1,
-            "started_at": 0, "restore": "resume", "completion": completion,
+            "id": "c", "name": "talk", "agent": "claude",
+            "started_at": 0, "completion": completion,
         }))
         .expect("a chat record")
     };

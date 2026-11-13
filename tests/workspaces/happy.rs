@@ -649,12 +649,12 @@ done
         record.exists()
     });
     let stopped = Command::new("kill")
-        .arg(started["chat"]["pid"].to_string())
+        .arg(started["pid"].to_string())
         .status()
         .unwrap();
     assert!(stopped.success());
     wait_until("the daemon to record the chat stopped", || {
-        fixture.ok(&["list", "--chats"])[0]["restore"] == "resume"
+        fixture.ok(&["list", "--chats"])[0]["running"] == false
     });
     fs::write(fixture.root.path().join("setup-release"), "").unwrap();
     let output = setup.wait_with_output().unwrap();
@@ -782,10 +782,13 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
     assert_eq!(after_temp_dirs(&claude[7..]), ["--model", "test"]);
     assert_eq!(started["prompt_file"], Value::Null);
     // The chat lasts while the session runs, not the command that started it.
-    let pid = chat_record["pid"].as_u64().unwrap();
+    let pid = started["pid"].as_u64().unwrap();
+    // Recorded before its agent registered, it runs once it did.
+    let mut running = chat_record.clone();
+    running["running"] = true.into();
     assert_eq!(
         fixture.ok(&["list", "--chats"]),
-        serde_json::json!([chat_record])
+        serde_json::json!([running])
     );
     let log = PathBuf::from(started["log"].as_str().unwrap());
     wait_until("the session's output", || {
@@ -813,13 +816,13 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
     assert!(message.contains(checkout.to_str().unwrap()), "{message}");
     assert_eq!(started["prompt_delivered"], false);
 
-    for pid in [pid, started["chat"]["pid"].as_u64().unwrap()] {
+    for pid in [pid, started["pid"].as_u64().unwrap()] {
         Command::new("kill").arg(pid.to_string()).status().unwrap();
     }
     wait_until("the chats to stop", || {
         let chats = fixture.ok(&["list", "--chats"]);
         let chats = chats.as_array().unwrap();
-        !chats.is_empty() && chats.iter().all(|chat| chat["restore"] == "resume")
+        !chats.is_empty() && chats.iter().all(|chat| chat["running"] == false)
     });
 }
 

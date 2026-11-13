@@ -71,9 +71,7 @@ async fn chat_restore_child() {
             workspace.repository_id.clone().into(),
             "talk".into(),
             "claude".into(),
-            std::process::id(),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -1027,7 +1025,7 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
     );
     wait_paused(&manager, &workspace).await;
     wait_restore_queued(&manager).await;
-    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
+    bounded(manager.stop_space(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();
@@ -1321,7 +1319,7 @@ async fn an_automatic_restore_in_a_new_wrapper_keeps_the_completion() {
     wait_started(&manager, &workspace).await;
     wait_start_handled(&manager, &workspace).await;
     assert!(manager.completion(&workspace.id).await.unwrap().is_some());
-    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
+    bounded(manager.stop_space(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(restored).await.unwrap().unwrap();

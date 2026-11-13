@@ -59,7 +59,6 @@ fn options(
         args: args.args,
         session: args.session,
         fork: false,
-        restore: args.restore,
         handoff: args.handoff,
         parent: None,
     }

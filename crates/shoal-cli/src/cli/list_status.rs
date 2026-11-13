@@ -104,15 +104,15 @@ impl ListStatus {
     pub fn of_chat(chat: &Chat) -> Self {
         let agent = chat.agent_state.map(|status| status.state);
         let blocked = chat.progress.as_ref().is_some_and(Progress::blocked);
-        match chat.restore {
-            Some(_) if chat.completion.is_some() => Self::Finished,
-            Some(_) if blocked => Self::Blocked,
-            Some(_) => Self::Stopped,
-            None if agent == Some(AgentState::Waiting) => Self::NeedsInput,
-            None if blocked => Self::Blocked,
-            None if chat.completion.is_some() => Self::Finished,
-            None if !chat.review.is_empty() => Self::Ready,
-            None => agent.map_or(Self::ProcessRunning, |state| {
+        match chat.running {
+            false if chat.completion.is_some() => Self::Finished,
+            false if blocked => Self::Blocked,
+            false => Self::Stopped,
+            true if agent == Some(AgentState::Waiting) => Self::NeedsInput,
+            true if blocked => Self::Blocked,
+            true if chat.completion.is_some() => Self::Finished,
+            true if !chat.review.is_empty() => Self::Ready,
+            true => agent.map_or(Self::ProcessRunning, |state| {
                 Self::sleeping(state, chat.sleep)
             }),
         }

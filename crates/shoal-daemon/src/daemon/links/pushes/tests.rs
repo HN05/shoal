@@ -323,7 +323,7 @@ async fn a_parent_approves_a_push_only_with_its_own_push_permission() {
     (manager.write_local_config(&repo.id, Some(config.into())))
         .await
         .unwrap();
-    let (top, _process) = chat(&manager, "top", "chat", Some(&repo), None).await;
+    let top = chat(&manager, "top", "chat", Some(&repo), None).await;
     let worker = working_below(&manager, &repo, "worker", &top.id, "worker").await;
     let child = working_below(&manager, &repo, "child", &worker.id, "worker").await;
     let caller = Caller {
