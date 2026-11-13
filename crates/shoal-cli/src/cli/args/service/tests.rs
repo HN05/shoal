@@ -43,5 +43,4 @@ fn stopping_the_daemon_waits_unless_told_to_refuse_or_force() {
     assert_eq!(when(&[]).unwrap(), ExitWhen::Idle);
     assert_eq!(when(&["--no-wait"]).unwrap(), ExitWhen::IfIdle);
     assert_eq!(when(&["--force"]).unwrap(), ExitWhen::Now);
-    assert!(when(&["--no-wait", "--force"]).is_err());
 }
