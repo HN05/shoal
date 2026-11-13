@@ -322,8 +322,7 @@ it is visible. Processes it cannot verify or read fail the stop with their PIDs,
 for you to check and stop yourself. An execution Shoal never recorded the launch
 of cannot be proven ended even then, so stop asks you to confirm it did, and
 `--yes` confirms without asking; a scoped process confirms only for the spaces
-its scope reaches, and its `--yes` stops what needs no confirmation without
-confirming anything. Stopping several workspaces does not ask: without
+its scope reaches. Stopping several workspaces does not ask: without
 `--yes`, it reports such a workspace as failed. Stopping cancels a waiting
 restore and requires explicit resume even with a `resume_command` configured;
 a stop that fails keeps the agents it stopped as stopped work.
