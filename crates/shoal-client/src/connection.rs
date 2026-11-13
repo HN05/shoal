@@ -280,12 +280,12 @@ impl DaemonWait {
         if !held_back || request.method.controls_daemon() {
             return Some(body);
         }
+        // A later daemon may hold it back too, as across two restarts.
+        let supervision = SUPERVISION.get();
+        self.held_by = supervision.and_then(|supervision| supervision.owner(paths));
         if !self.exiting {
             self.exiting = true;
-            self.held_by = SUPERVISION
-                .get()
-                .and_then(|supervision| supervision.owner(paths));
-            if let Some(supervision) = SUPERVISION.get() {
+            if let Some(supervision) = supervision {
                 supervision.waiting_for_restart();
             }
         }
