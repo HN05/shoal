@@ -1,6 +1,6 @@
 //! `shoal restart` starts an agent's session again in a new wrapper, which the
 //! agent queue starts where the agent ran.
-use super::chats::{start_test_chat, terminal_zmx};
+use super::chats::start_test_chat;
 use super::zmx::wait_zmx_sessions_ended;
 use super::*;
 

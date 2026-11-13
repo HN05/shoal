@@ -51,12 +51,13 @@ use support::{
     git::{configure_identity, git, git_with_identity, init_repo},
     install_fake_agent, install_test_script, install_test_script_with_mode, ports, prompt, pty,
     wait::{try_wait_for, try_wait_within, wait_for, wait_until},
+    zmx::{PASSTHROUGH_ZMX, terminal_zmx},
 };
 
 use fixture::{
-    Fixture, PASSTHROUGH_ZMX, READABLE_SLEEP, UNLIMITED_AGENTS, commit_file,
-    commit_resource_config, install_fake_agents, lines, link_runner_program, process_running,
-    scoped_command, scoped_hook, set_repository_toml, upstream_remote, wait_registered_execution,
+    Fixture, READABLE_SLEEP, UNLIMITED_AGENTS, commit_file, commit_resource_config,
+    install_fake_agents, lines, link_runner_program, process_running, scoped_command, scoped_hook,
+    set_repository_toml, upstream_remote, wait_registered_execution,
 };
 use serde_json::Value;
 use std::{

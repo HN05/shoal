@@ -14,6 +14,7 @@ pub mod prompt;
 pub mod pty;
 pub mod run;
 pub mod wait;
+pub mod zmx;
 
 use std::{
     ffi::OsStr,
