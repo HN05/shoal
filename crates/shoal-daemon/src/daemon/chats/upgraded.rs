@@ -1,7 +1,8 @@
 //! The agents of chats from before a chat's agent ran as an execution of
-//! the chat, which the upgrade stopped: each is saved as a workspace's
-//! stopped agent is, for `shoal resume` or, when Shoal saved it to come back
-//! on its own, for the agent queue, and one that exited keeps its session.
+//! the chat: one still running outside an execution is stopped, then each
+//! is saved as a workspace's stopped agent is, for `shoal resume` or, when
+//! Shoal saved it to come back on its own, for the agent queue, and one that
+//! exited keeps its session.
 use anyhow::{Context as _, Result};
 use rusqlite::Connection;
 
@@ -31,9 +32,9 @@ struct Upgraded {
 }
 
 impl Manager {
-    /// Save the agent of each chat the upgrade stopped, then forget what the
-    /// upgrade kept of it. One that cannot be saved stays for the next
-    /// start.
+    /// Stop and save the agent of each chat the upgrade kept, then forget
+    /// what the upgrade kept of it. One that cannot be stopped or saved
+    /// stays for the next start.
     pub(crate) async fn save_upgraded_chat_agents(&self) -> Result<()> {
         for upgraded in self.store.run(upgraded).await? {
             if let Err(error) = self.save_upgraded(&upgraded).await {
@@ -52,11 +53,13 @@ impl Manager {
     }
 
     /// Save the agent of the chat `upgraded` names under an execution of
-    /// its own, if the chat is still there.
+    /// its own, if the chat is still there, once it no longer runs outside
+    /// one, so that no resume runs a second agent on its session.
     async fn save_upgraded(&self, upgraded: &Upgraded) -> Result<()> {
         let Some(chat) = self.chat_by_id(&upgraded.chat).await? else {
             return Ok(());
         };
+        (self.stop_chat_processes(&chat).await).context("stop its agent")?;
         let execution = ExecutionId::generate();
         if !upgraded.saved {
             if self.completion(&chat.id).await?.is_none() {

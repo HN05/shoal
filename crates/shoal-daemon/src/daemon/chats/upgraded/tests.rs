@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::test_support::{chat, manager, repository};
+use crate::daemon::test_support::{chat, chat_process, ended, manager, repository};
 use crate::execution::recovery::{Saved, SavedExt};
 
 /// Record that the upgrade stopped the idle agent of `chat`, which Shoal
@@ -79,4 +79,27 @@ async fn an_upgraded_chats_agent_is_saved_as_a_stopped_agent_with_its_session() 
         .await
         .unwrap();
     assert_eq!(left, 0);
+}
+
+/// An upgraded chat's agent still running outside an execution stops before
+/// it is saved, so that no resume runs a second agent on its session.
+#[tokio::test]
+async fn an_upgraded_chats_running_agent_stops_before_it_is_saved() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let talk = chat(&manager, "talk", "chat", Some(&repo), None).await;
+    upgrade(&manager, &talk, true, false).await;
+    let agent = chat_process(&manager, &talk).await;
+
+    manager.save_upgraded_chat_agents().await.unwrap();
+
+    assert!(ended(agent));
+    assert_eq!(
+        Saved::load(&manager.paths, &talk.id).unwrap().agents.len(),
+        1
+    );
 }
