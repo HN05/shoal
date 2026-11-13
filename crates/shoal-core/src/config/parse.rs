@@ -31,6 +31,7 @@ const REMOVED: &[(&[&str], &str)] = &[
         &["machine", "forges", "*", "email"],
         "email is now user_email under [machine.forges.\"<host>\"]",
     ),
+    (&["idle_stop"], "[idle_stop] enabled is now [sleep] idle"),
     (
         &["agent", "forge_clis"],
         "[agent.forge_clis] is gone: Shoal's commands act as the agent account, so set agent_token under [machine.forges.\"<host>\"] in the global config",

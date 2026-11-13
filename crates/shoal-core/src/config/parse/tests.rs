@@ -37,12 +37,17 @@ fn keys_in_the_wrong_file_name_the_file_they_belong_in() {
 #[test]
 fn removed_settings_are_refused() {
     assert!(global("[machine.bitbucket]\ntoken_command = ['security']\n").is_err());
-    let text = "[agent.forge_clis]\nfj = '~/fj'\n";
-    assert!(global(text).is_err());
-    assert!(repository(text).is_err());
+    for text in [
+        "[agent.forge_clis]\nfj = '~/fj'\n",
+        "[idle_stop]\nenabled = true\n",
+    ] {
+        assert!(global(text).is_err());
+        assert!(repository(text).is_err());
+    }
     // Settings the packaged template once wrote name their replacement.
     for (text, replacement) in [
         ("[agents.codex]\ndefault_mode = 'cli'\n", "app.default"),
+        ("[idle_stop]\nenabled = true\n", "[sleep] idle"),
         ("[terminal.happy]\nenabled = false\n", "[agents.happy]"),
     ] {
         let error = message(global(text).unwrap_err());
