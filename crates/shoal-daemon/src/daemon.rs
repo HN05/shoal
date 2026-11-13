@@ -252,19 +252,7 @@ pub async fn run(
                 // moment, and one that waited until the daemon has exited,
                 // so the loop never waits for one.
                 let operation = server.manager.gates.try_owned_operation();
-                clients.spawn(async move {
-                    let gates = &server.manager.gates;
-                    let operation = match operation {
-                        Some(operation) => Some(operation),
-                        None => gates.operation_unless_exiting().await,
-                    };
-                    let Some(operation) = operation else {
-                        return connections::refuse_while_exiting(stream, gates.exiting()).await;
-                    };
-                    if let Err(error) = serve(stream, server, operation).await {
-                        log!("client connection: {error:#}");
-                    }
-                });
+                clients.spawn(serve_unless_exiting(stream, server, operation));
             }
         }
     };
@@ -417,6 +405,27 @@ async fn poll_item_activity(manager: Arc<Manager>) {
         if let Err(error) = blockers {
             log!("blockers: {error:#}");
         }
+    }
+}
+
+/// Serve one connection under `operation`, or under one taken once a
+/// passing attempt to quiesce lets go, or refuse it once an exit that
+/// waited holds operations off until the daemon has exited.
+async fn serve_unless_exiting(
+    stream: UnixStream,
+    server: Server,
+    operation: Option<OperationGuard>,
+) {
+    let gates = &server.manager.gates;
+    let operation = match operation {
+        Some(operation) => Some(operation),
+        None => gates.operation_unless_exiting().await,
+    };
+    let Some(operation) = operation else {
+        return connections::refuse_while_exiting(stream, gates.exiting()).await;
+    };
+    if let Err(error) = serve(stream, server, operation).await {
+        log!("client connection: {error:#}");
     }
 }
 
