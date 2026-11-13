@@ -114,3 +114,36 @@ async fn a_scope_reaches_jobs_and_launches_through_their_spaces() {
         ["below", "ci-child", "ci-main", "top"]
     );
 }
+
+/// A scoped stop of every space takes the spaces its scope reaches but its
+/// own.
+#[tokio::test]
+async fn a_scope_stops_every_space_it_reaches_but_its_own() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap();
+    let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
+    let worker = create("worker").await.unwrap();
+    let other = create("other").await.unwrap();
+    let child = workspace_below(&manager, &repo, "child", &worker.id, None).await;
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let mut spaces = Vec::new();
+    for id in [&worker.id, &other.id, &child.id, &master.id] {
+        spaces.push(manager.space_by_id(id).await.unwrap());
+    }
+    let stopped = async |caller: &Caller| {
+        let below = manager.spaces_below(Some(caller), spaces.clone()).await;
+        let mut names: Vec<String> = (below.unwrap().iter())
+            .map(|space| space.name().to_string())
+            .collect();
+        names.sort();
+        names
+    };
+    assert_eq!(stopped(&caller(&worker.id)).await, ["child"]);
+    assert_eq!(
+        stopped(&caller(&master.id)).await,
+        ["child", "other", "worker"]
+    );
+}

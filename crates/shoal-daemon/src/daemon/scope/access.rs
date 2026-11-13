@@ -240,15 +240,37 @@ impl Manager {
         mut agents: Vec<RunningAgent>,
     ) -> Result<Vec<RunningAgent>> {
         if let Some(caller) = caller {
-            let reached = self.reached_spaces(Some(caller)).await?;
-            agents.retain(|agent| {
-                agent.space_id != caller.space_id
-                    && reached
-                        .as_ref()
-                        .is_none_or(|reached| reached.contains(&agent.space_id))
-            });
+            let below = self.below_in_reach(caller).await?;
+            agents.retain(|agent| below(&agent.space_id));
         }
         Ok(agents)
+    }
+
+    /// The `spaces` `caller` may stop: those its scope reaches but its own,
+    /// or all of them for an unscoped caller.
+    pub(in crate::daemon) async fn spaces_below(
+        &self,
+        caller: Option<&Caller>,
+        mut spaces: Vec<PresentSpace>,
+    ) -> Result<Vec<PresentSpace>> {
+        if let Some(caller) = caller {
+            let below = self.below_in_reach(caller).await?;
+            spaces.retain(|space| below(space.id()));
+        }
+        Ok(spaces)
+    }
+
+    /// Whether `caller`'s scope reaches a space other than its own, as a
+    /// test of space IDs.
+    async fn below_in_reach<'a>(
+        &self,
+        caller: &'a Caller,
+    ) -> Result<impl Fn(&SpaceId) -> bool + 'a> {
+        let reached = self.reached_spaces(Some(caller)).await?;
+        Ok(move |space: &SpaceId| {
+            space != &caller.space_id
+                && (reached.as_ref()).is_none_or(|reached| reached.contains(space))
+        })
     }
 
     /// Refuse `caller` the restart of the workspace agent that runs, or ran

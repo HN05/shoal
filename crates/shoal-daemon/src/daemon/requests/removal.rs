@@ -1,7 +1,7 @@
 //! The daemon's answers to [`RemovalMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::super::{
     answer::Answer,
@@ -29,7 +29,8 @@ pub(super) async fn handle(
             return Ok(Answer::pages(listed, Body::RemovedWorkspaces));
         }
         RemovalMethod::StopTargets => {
-            Body::Spaces(manager.stop_targets(QueuedLaunches::Cancel).await?)
+            let targets = manager.stop_targets(QueuedLaunches::Cancel).await?;
+            Body::Spaces(manager.spaces_below(caller, targets).await?)
         }
         RemovalMethod::StopSpace {
             space,
@@ -184,24 +185,16 @@ impl Scoped for RemovalMethod {
                 .unheld_workspace_below(caller, workspace, REFUSAL)
                 .await
                 .map(Some),
-            RemovalMethod::StopSpace {
-                space,
-                acknowledge_unproven,
-                ..
-            } => {
-                ensure!(
-                    !*acknowledge_unproven,
-                    "only the user can confirm that an execution Shoal cannot prove ended did; ask the user to stop this space"
-                );
-                manager
-                    .workspace_below(
-                        caller,
-                        space,
-                        "scoped processes stop only the spaces below theirs",
-                    )
-                    .await
-                    .map(Some)
-            }
+            // Its answer confines the spaces to those below the caller's.
+            RemovalMethod::StopTargets => Ok(None),
+            RemovalMethod::StopSpace { space, .. } => manager
+                .workspace_below(
+                    caller,
+                    space,
+                    "scoped processes stop only the spaces below theirs",
+                )
+                .await
+                .map(Some),
             // Its own processes too: a scoped caller's shells and their
             // commands descend from its execution, which keeps them.
             RemovalMethod::StopProcesses { space, .. } => Ok(Some(space)),

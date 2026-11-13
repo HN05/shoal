@@ -513,11 +513,15 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
             .await
             .is_err()
     );
-    // Only the user can tell that an execution Shoal cannot prove ended did.
-    let mut acknowledged = stop(child.id.as_str(), true);
-    let authorized =
-        crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut acknowledged).await;
-    assert!(authorized.is_err());
+    // A scope confirms that an execution Shoal cannot prove ended did in
+    // the spaces it reaches, as the user does.
+    for (target, allowed) in [(child.id.as_str(), true), (sibling.id.as_str(), false)] {
+        let mut acknowledged = stop(target, true);
+        let authorized =
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut acknowledged)
+                .await;
+        assert_eq!(authorized.is_ok(), allowed, "{target}");
+    }
 }
 
 #[tokio::test]
