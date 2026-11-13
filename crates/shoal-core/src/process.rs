@@ -78,7 +78,11 @@ pub struct DirectoryUsers {
 
 impl DirectoryUsers {
     /// The processes using the directory besides those of `excluded`.
-    pub async fn in_directory_except(&self, root: &Path, excluded: &[u32]) -> Result<Vec<String>> {
+    pub(crate) async fn in_directory_except(
+        &self,
+        root: &Path,
+        excluded: &[u32],
+    ) -> Result<Vec<String>> {
         Ok(self
             .of(root)
             .await?
