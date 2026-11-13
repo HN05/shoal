@@ -92,6 +92,9 @@ shoal_states::open_enum! {
         HookFailed => "hook_failed",
         /// Pushing the workspace's branch failed.
         PushFailed => "push_failed",
+        /// The daemon is about to exit and holds back new work; the request
+        /// runs once the next daemon answers.
+        Exiting => "exiting",
     }
 }
 

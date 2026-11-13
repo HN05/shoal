@@ -16,6 +16,8 @@ impl Supervision for RecordedOwner {
     }
 
     fn waiting_for_update(&self) {}
+
+    fn waiting_for_restart(&self) {}
 }
 
 /// Where [`RecordedOwner`] reads the daemon that owns the state directory.
@@ -313,5 +315,45 @@ async fn a_split_request_waits_through_keepalives_until_the_daemon_goes_quiet() 
     assert!(started.elapsed() >= limit);
     assert!(format!("{error:#}").contains("sent nothing"), "{error:#}");
     daemon.await??;
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_request_an_exiting_daemon_held_back_goes_to_the_next_daemon() -> Result<()> {
+    let temp = tempfile::tempdir_in("/tmp")?;
+    let paths = Paths::for_test(temp.path());
+    paths.prepare()?;
+    let listener = UnixListener::bind(&paths.socket)?;
+    let cancel = || crate::protocol::OperationMethod::CancelOperation { id: "op".into() };
+    let asking = tokio::spawn({
+        let paths = paths.clone();
+        async move { request::<()>(&paths, cancel()).await }
+    });
+    let exiting = Body::error(ErrorCode::Exiting, "the daemon is about to exit");
+    let (mut stream, _) = listener.accept().await?;
+    let request: Request = protocol::read(&mut stream).await?;
+    protocol::write(&mut stream, &Response::new(request.id, exiting)).await?;
+    // The daemon exits and leaves no socket until the next one listens.
+    drop((stream, listener));
+    std::fs::remove_file(&paths.socket)?;
+    sleep(timing::DAEMON_WAIT_TIMEOUT * 2).await;
+    assert!(!asking.is_finished());
+    let listener = UnixListener::bind(&paths.socket)?;
+    let (mut stream, _) = listener.accept().await?;
+    let request: Request = protocol::read(&mut stream).await?;
+    protocol::write(&mut stream, &Response::new(request.id, Body::Ok)).await?;
+    asking.await??;
+
+    // A daemon control hears of the exit instead of waiting for it.
+    let answering = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await?;
+        let request: Request = protocol::read(&mut stream).await?;
+        let exiting = Body::error(ErrorCode::Exiting, "the daemon is about to exit");
+        protocol::write(&mut stream, &Response::new(request.id, exiting)).await
+    });
+    let error = call(&paths, DaemonMethod::Status).await.unwrap_err();
+    let remote = error.downcast_ref::<RemoteError>().unwrap();
+    assert_eq!(remote.code, ErrorCode::Exiting);
+    answering.await??;
     Ok(())
 }

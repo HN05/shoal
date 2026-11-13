@@ -92,8 +92,12 @@ pub trait Supervision: Send + Sync {
     fn owner(&self, paths: &Paths) -> Option<Identity>;
     /// Whether a service manager restarts the daemon of `paths`.
     fn managed(&self, paths: &Paths) -> bool;
-    /// Tell the user a request waits for the daemon's restart.
+    /// Tell the user a request waits for the daemon's restart with an
+    /// installed update.
     fn waiting_for_update(&self);
+    /// Tell the user a daemon about to exit held a request back until the
+    /// next one answers.
+    fn waiting_for_restart(&self);
 }
 
 static SUPERVISION: OnceLock<&'static dyn Supervision> = OnceLock::new();
@@ -166,14 +170,21 @@ pub async fn open_buffered(
     method: impl Into<Method>,
 ) -> Result<(BufReader<UnixStream>, Body)> {
     let request = request_to(daemon, method);
-    let mut update = UpdateWait::default();
+    let mut waiting = DaemonWait::default();
     loop {
-        let mut stream = connect(daemon.paths()).await?;
-        protocol::write(&mut stream, &request).await?;
-        let mut stream = BufReader::new(stream);
-        match reply(&mut stream, &request).await {
-            Ok(body) => return Ok((stream, body)),
-            Err(error) => update.retry(daemon.paths(), &request, error).await?,
+        let sent = async {
+            let mut stream = connect(daemon.paths()).await?;
+            protocol::write(&mut stream, &request).await?;
+            let mut stream = BufReader::new(stream);
+            let body = reply(&mut stream, &request).await?;
+            Ok((stream, body))
+        };
+        match sent.await {
+            Ok((stream, body)) => match waiting.held_back(&request, body) {
+                Some(body) => return Ok((stream, body)),
+                None => waiting.pause().await?,
+            },
+            Err(error) => waiting.retry(daemon.paths(), &request, error).await?,
         }
     }
 }
@@ -187,14 +198,28 @@ pub async fn open_split(
     limit: Duration,
 ) -> Result<(BufReader<OwnedReadHalf>, OwnedWriteHalf, Body)> {
     let request = request_to(daemon, method);
-    let mut update = UpdateWait::default();
+    let mut waiting = DaemonWait::default();
     loop {
-        let (reader, mut writer) = connect(daemon.paths()).await?.into_split();
-        protocol::write(&mut writer, &request).await?;
-        let mut reader = BufReader::new(reader);
-        match reply_kept_alive(&mut reader, &request, limit).await? {
-            Ok(body) => return Ok((reader, writer, body)),
-            Err(error) => update.retry(daemon.paths(), &request, error).await?,
+        let sent = async {
+            let (reader, mut writer) = connect(daemon.paths()).await?.into_split();
+            protocol::write(&mut writer, &request).await?;
+            let mut reader = BufReader::new(reader);
+            let body = reply_kept_alive(&mut reader, &request, limit).await?;
+            Ok((reader, writer, body))
+        };
+        // Only a reply, not the daemon's silence, is a refusal to retry.
+        let sent: Result<_> = match sent.await {
+            Ok((reader, writer, Ok(body))) => Ok((reader, writer, body)),
+            Ok((_, _, Err(error))) => Err(error),
+            Err(error) if waiting.exiting() && is_unreachable(&error) => Err(error),
+            Err(error) => return Err(error),
+        };
+        match sent {
+            Ok((reader, writer, body)) => match waiting.held_back(&request, body) {
+                Some(body) => return Ok((reader, writer, body)),
+                None => waiting.pause().await?,
+            },
+            Err(error) => waiting.retry(daemon.paths(), &request, error).await?,
         }
     }
 }
@@ -216,15 +241,49 @@ async fn reply_kept_alive(
     }
 }
 
-/// A managed daemon from before the installed update refuses requests of the
-/// newer protocol without running them, and restarts with the update once
-/// idle, so the request is sent again until the replacement answers.
+/// What a request waits for before it is sent again: a managed daemon from
+/// before the installed update refuses requests of the newer protocol
+/// without running them, and restarts with the update once idle, and a
+/// daemon about to exit holds back requests that would start work until the
+/// next one answers. Either way the request is sent again until a daemon
+/// takes it.
 #[derive(Default)]
-struct UpdateWait {
+struct DaemonWait {
     deadline: Option<Instant>,
+    /// A daemon held the request back for its exit, so the next daemon may
+    /// not listen yet.
+    exiting: bool,
 }
 
-impl UpdateWait {
+impl DaemonWait {
+    /// `body`, unless it says a daemon about to exit held `request` back,
+    /// which is then sent again, except a daemon control, which reports the
+    /// daemon that runs.
+    fn held_back(&mut self, request: &Request, body: Body) -> Option<Body> {
+        let held_back = matches!(
+            &body,
+            Body::Error {
+                code: ErrorCode::Exiting,
+                ..
+            }
+        );
+        if !held_back || request.method.controls_daemon() {
+            return Some(body);
+        }
+        if !self.exiting {
+            self.exiting = true;
+            if let Some(supervision) = SUPERVISION.get() {
+                supervision.waiting_for_restart();
+            }
+        }
+        None
+    }
+
+    /// Whether a daemon held the request back for its exit.
+    fn exiting(&self) -> bool {
+        self.exiting
+    }
+
     /// Return after a pause to send `request` again, or fail with `error`.
     async fn retry(
         &mut self,
@@ -232,6 +291,11 @@ impl UpdateWait {
         request: &Request,
         error: anyhow::Error,
     ) -> Result<()> {
+        // The next daemon listens once the one that held the request back
+        // has exited and its service manager started it again.
+        if self.exiting && is_unreachable(&error) {
+            return self.pause().await.map_err(|timeout| error.context(timeout));
+        }
         if !awaits_update(paths, &request.method, &error) {
             return Err(error);
         }
@@ -247,6 +311,20 @@ impl UpdateWait {
                 timing::UPDATE_WAIT_TIMEOUT.as_secs() / 60
             )));
         }
+        sleep(timing::UPDATE_POLL_INTERVAL).await;
+        Ok(())
+    }
+
+    /// Pause before sending a request a daemon held back for its exit
+    /// again, failing once the next daemon has not taken it in time.
+    async fn pause(&mut self) -> Result<()> {
+        let deadline =
+            *(self.deadline).get_or_insert_with(|| Instant::now() + timing::EXIT_WAIT_TIMEOUT);
+        ensure!(
+            Instant::now() < deadline,
+            "the daemon held the request back for its exit and no daemon took it within {} minutes",
+            timing::EXIT_WAIT_TIMEOUT.as_secs() / 60
+        );
         sleep(timing::UPDATE_POLL_INTERVAL).await;
         Ok(())
     }

@@ -20,4 +20,8 @@ impl Supervision for Command {
     fn waiting_for_update(&self) {
         eprintln!("Waiting for the daemon to restart with the installed update...");
     }
+
+    fn waiting_for_restart(&self) {
+        eprintln!("Waiting for the daemon to restart...");
+    }
 }

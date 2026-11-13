@@ -21,6 +21,9 @@ pub const DAEMON_POLL_INTERVAL: Duration = Duration::from_millis(100);
 /// A managed daemon restarts with an installed update once its running
 /// operations finish, which can include a long setup.
 pub const UPDATE_WAIT_TIMEOUT: Duration = Duration::from_secs(600);
+/// A request a daemon about to exit held back waits this long for the next
+/// daemon, since the exit waits for work in progress, such as a long setup.
+pub const EXIT_WAIT_TIMEOUT: Duration = Duration::from_secs(600);
 /// Each refused attempt briefly holds back the update it waits for.
 pub const UPDATE_POLL_INTERVAL: Duration = Duration::from_secs(1);
 
