@@ -286,7 +286,7 @@ pub async fn saved_summaries(paths: &CommandPaths) -> HashMap<SpaceId, SavedSumm
     let summaries = crate::client::saved::summaries(paths).await;
     let summaries = summaries.unwrap_or_default().into_iter();
     summaries
-        .map(|summary| (summary.workspace.clone(), summary))
+        .map(|summary| (summary.space.clone(), summary))
         .collect()
 }
 
@@ -683,5 +683,5 @@ fn availability_entries(
 pub async fn stopped_workspaces(paths: &CommandPaths) -> HashSet<SpaceId> {
     let summaries = saved_summaries(paths).await.into_values();
     let unfinished = summaries.filter(|summary| summary.unfinished);
-    unfinished.map(|summary| summary.workspace).collect()
+    unfinished.map(|summary| summary.space).collect()
 }

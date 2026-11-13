@@ -26,7 +26,7 @@ pub(super) async fn discard_work(
         chats: Vec::new(),
         failed: Vec::new(),
     };
-    reports::discarded(ctx, &forgotten, &[discarded.workspace.as_str()])?;
+    reports::discarded(ctx, &forgotten, &[discarded.space.as_str()])?;
     Ok(0)
 }
 

@@ -398,7 +398,7 @@ async fn inspect(
         let mut stream = BufReader::new(stream);
         let request: Request = protocol::read_buffered(&mut stream).await.unwrap();
         assert!(
-            matches!(request.method, Method::Operation(Operation::Recovery(RecoveryMethod::Saved { workspace })) if workspace == "workspace")
+            matches!(request.method, Method::Operation(Operation::Recovery(RecoveryMethod::Saved { space })) if space == "workspace")
         );
         let piece = protocol::SavedPiece(serde_json::to_string(&saved).unwrap());
         for body in [Body::SavedPieces(vec![piece]), Body::Ok] {

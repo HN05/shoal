@@ -127,7 +127,7 @@ async fn only_stopped_agents_or_commands_are_unfinished_work() {
     let summaries = manager.saved_summaries(None).await.unwrap();
     let summarized = summaries
         .iter()
-        .map(|summary| (&summary.workspace, summary.unfinished, summary.agents.len()));
+        .map(|summary| (&summary.space, summary.unfinished, summary.agents.len()));
     let (stopped_one, exited_one) = ((stopped, true, 1), (exited, false, 1));
     let mut expected = vec![stopped_one, exited_one];
     expected.sort();
@@ -171,11 +171,46 @@ async fn saved_work_larger_than_a_frame_is_read_whole() {
     let record = serde_json::json!({ "argv": argv });
     std::fs::write(state.join("long.command.json"), record.to_string()).unwrap();
 
-    let method = serde_json::json!({"saved": {"workspace": workspace.id}});
+    let method = serde_json::json!({"saved": {"space": workspace.id}});
     let pages = crate::daemon::tests::serve_pages(&manager, method).await;
     assert!(pages.len() > 1, "{}", pages.len());
     let pieces = pages.iter().flat_map(|page| page.as_array().unwrap());
     let json: String = pieces.map(|piece| piece.as_str().unwrap()).collect();
     let saved: crate::client::saved::Saved = serde_json::from_str(&json).unwrap();
     assert_eq!(saved.commands[0].argv, argv);
+}
+
+/// A chat's stopped agent is its saved work, as a workspace's is, which
+/// listings summarize and `shoal resume` reads.
+#[tokio::test]
+async fn a_chats_stopped_agent_is_its_saved_work() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (talk, _agent) = chat(&manager, "talk", "chat", Some(&repo), None).await;
+    let execution = ExecutionId::from("agent");
+    crate::execution::recovery::save_record(
+        &manager.paths,
+        &talk.id,
+        &execution,
+        &TrackedAgent::named("claude"),
+        None,
+        None,
+    )
+    .unwrap();
+
+    let saved = manager
+        .saved_work(&SpaceSelector::id(&talk.id))
+        .await
+        .unwrap();
+    assert_eq!(saved.agents.len(), 1);
+    assert_eq!(saved.agents[0].id, execution);
+    let summaries = manager.saved_summaries(None).await.unwrap();
+    let summarized: Vec<_> = (summaries.iter())
+        .map(|summary| (&summary.space, summary.unfinished))
+        .collect();
+    assert_eq!(summarized, [(&talk.id, true)]);
 }

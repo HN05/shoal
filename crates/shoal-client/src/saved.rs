@@ -17,31 +17,31 @@ use crate::{
     time::UnixTime,
 };
 
-/// What the existing workspace `workspace` saved, reassembled from the
-/// pieces of JSON the daemon sends it in.
-pub async fn read(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Saved> {
-    let pieces = pages::<SavedPiece>(daemon, RecoveryMethod::Saved { workspace }).await?;
+/// What the existing space `space` saved, reassembled from the pieces of
+/// JSON the daemon sends it in.
+pub async fn read(daemon: &impl Daemon, space: SpaceSelector) -> Result<Saved> {
+    let pieces = pages::<SavedPiece>(daemon, RecoveryMethod::Saved { space }).await?;
     let json: String = pieces.into_iter().map(|piece| piece.0).collect();
     serde_json::from_str(&json).context("the daemon sent invalid saved work")
 }
 
-/// What each workspace this caller sees saved, in brief, for those that
-/// saved anything, in one read for listings and pickers.
+/// What each space this caller sees saved, in brief, for those that saved
+/// anything, in one read for listings and pickers.
 pub async fn summaries(daemon: &impl Daemon) -> Result<Vec<SavedSummary>> {
     pages(daemon, RecoveryMethod::SavedSummaries).await
 }
 
-/// Whether a workspace this caller sees has stopped work that waits for
-/// `shoal resume`.
+/// Whether a space this caller sees has stopped work that waits for `shoal
+/// resume`.
 pub async fn waits_for_resume(daemon: &impl Daemon) -> Result<bool> {
     let summaries = summaries(daemon).await?;
     Ok(summaries.iter().any(|summary| summary.resumable))
 }
 
-/// What a workspace saved, in brief, as listings and pickers show it.
+/// What a space saved, in brief, as listings and pickers show it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SavedSummary {
-    pub workspace: SpaceId,
+    pub space: SpaceId,
     /// The agent of each stopped agent and then each last session, `None`
     /// for one whose file cannot be read.
     pub agents: Vec<Option<Agent>>,
@@ -163,9 +163,9 @@ impl Saved {
     }
 
     /// This work in brief, as the workspace `workspace` saved it.
-    pub fn summary(&self, workspace: SpaceId) -> SavedSummary {
+    pub fn summary(&self, space: SpaceId) -> SavedSummary {
         SavedSummary {
-            workspace,
+            space,
             agents: self.agent_names().map(Option::<&Agent>::cloned).collect(),
             commands: self.commands.len(),
             unfinished: self.is_unfinished(),

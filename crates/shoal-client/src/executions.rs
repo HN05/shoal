@@ -316,8 +316,8 @@ pub struct ProxyRetry {
 /// What `shoal resume --discard` forgot in a workspace.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Discarded {
-    /// The workspace's name.
-    pub workspace: SpaceName,
+    /// The name of the space that saved it.
+    pub space: SpaceName,
     /// The execution IDs of the forgotten stopped agents, last sessions and
     /// commands.
     pub executions: Vec<ExecutionId>,

@@ -56,29 +56,52 @@ impl Manager {
         })
     }
 
-    /// What the existing workspace `selector` names saved for `shoal resume`.
+    /// What the existing space `selector` names saved for `shoal resume`.
     pub(crate) async fn saved_work(&self, selector: &SpaceSelector) -> Result<Saved> {
-        let workspace = self.workspace(selector).await?;
-        Saved::load(&self.paths, &workspace.id)
+        let space = self.space(selector).await?;
+        Saved::load(&self.paths, space.id())
     }
 
-    /// What each workspace visible within `owner`'s reach, or every one,
-    /// saved, in brief, for those that saved anything. One whose state
+    /// What each workspace and chat visible within `owner`'s reach, or every
+    /// one, saved, in brief, for those that saved anything. One whose state
     /// cannot be read counts as saving nothing, so it costs only its own
-    /// workspace.
+    /// space.
     pub(crate) async fn saved_summaries(
         &self,
         owner: Option<&SpaceId>,
     ) -> Result<Vec<SavedSummary>> {
         let workspaces = self.visible_workspaces(owner).await?;
+        let mut spaces: Vec<SpaceId> = workspaces.into_iter().map(|w| w.id).collect();
+        spaces.extend(self.chats_within(owner).await?);
         let summary = |id: SpaceId| {
             let saved = Saved::load(&self.paths, &id).ok()?;
             (!saved.is_empty()).then(|| saved.summary(id))
         };
-        Ok(workspaces
-            .into_iter()
-            .filter_map(|workspace| summary(workspace.id))
-            .collect())
+        Ok(spaces.into_iter().filter_map(summary).collect())
+    }
+
+    /// The IDs of the chats within `owner`'s reach, or of every one.
+    async fn chats_within(&self, owner: Option<&SpaceId>) -> Result<Vec<SpaceId>> {
+        let reached = match owner {
+            Some(owner) => Some(self.subtree(owner).await?),
+            None => None,
+        };
+        let chats: Vec<SpaceId> = self
+            .store
+            .run(|db| {
+                Ok(db
+                    .prepare("SELECT id FROM chats")?
+                    .query_map([], |row| row.get(0))?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .await?;
+        Ok(match reached {
+            Some(reached) => chats
+                .into_iter()
+                .filter(|id| reached.contains(id))
+                .collect(),
+            None => chats,
+        })
     }
 
     /// Keep the workspace's stopped agents whose execution ended as last
@@ -111,29 +134,30 @@ impl Manager {
         Ok(())
     }
 
-    /// Forget the workspace's stopped agents, last sessions and commands, only
+    /// Forget the space's stopped agents, last sessions and commands, only
     /// the one of `execution` when given.
     pub async fn discard_stopped_work(
         &self,
         selector: &SpaceSelector,
         execution: Option<ExecutionId>,
     ) -> Result<Discarded> {
-        let workspace = self.workspace(selector).await?;
-        let mut saved = Saved::load(&self.paths, &workspace.id)?;
+        let space = self.space(selector).await?;
+        let mut saved = Saved::load(&self.paths, space.id())?;
         if let Some(execution) = &execution {
             saved.retain_execution(execution, false);
         }
         ensure!(
             !saved.is_empty(),
-            "no stopped agents or commands for this workspace"
+            "no stopped agents or commands for this {}",
+            space.kind()
         );
-        let executions = self.workspace_executions(&workspace.id).await?;
+        let executions = self.workspace_executions(space.id()).await?;
         let active = |id: &ExecutionId| executions.iter().any(|e| e.id == *id);
         let executions = recovery::discard_saved(&saved, active)?;
         // The saved sessions are files, so no stored change announces it.
         self.signals.agent_changed();
         Ok(Discarded {
-            workspace: workspace.name,
+            space: space.name().clone(),
             executions,
         })
     }

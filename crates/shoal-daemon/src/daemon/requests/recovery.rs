@@ -32,8 +32,8 @@ pub(super) async fn handle(
                 .restore_checkpoint(&workspace, checkpoint, caller)
                 .await?,
         ),
-        RecoveryMethod::Saved { workspace } => {
-            let saved = manager.saved_work(&workspace).await;
+        RecoveryMethod::Saved { space } => {
+            let saved = manager.saved_work(&space).await;
             return Ok(Answer::pages(pieces(saved), Body::SavedPieces));
         }
         RecoveryMethod::SavedSummaries => {
@@ -64,7 +64,7 @@ impl Scoped for RecoveryMethod {
             RecoveryMethod::Checkpoint { workspace, .. }
             | RecoveryMethod::Checkpoints { workspace, .. }
             | RecoveryMethod::RestoreCheckpoint { workspace, .. }
-            | RecoveryMethod::Saved { workspace } => Some(workspace),
+            | RecoveryMethod::Saved { space: workspace } => Some(workspace),
             RecoveryMethod::SavedSummaries => None,
             RecoveryMethod::Reconcile { .. } => return Err(denied()),
         })
