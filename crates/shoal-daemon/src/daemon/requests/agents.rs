@@ -125,6 +125,16 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
+        AgentMethod::ReportUpstreamLimit {
+            workspace,
+            execution,
+            limit,
+        } => {
+            manager
+                .report_upstream_limit(&workspace, execution, limit)
+                .await?;
+            Body::Ok
+        }
         AgentMethod::ReportProxyRetry {
             workspace,
             execution,
@@ -223,7 +233,9 @@ impl Scoped for AgentMethod {
                 execution: Some(_), ..
             } => bail!("workspace processes report a failed turn only for their own execution"),
             // Only the agent's wrapper, which runs its proxy, reports it.
-            AgentMethod::ReportProxyRetry { .. } | AgentMethod::ReportUpstreamReset { .. } => {
+            AgentMethod::ReportProxyRetry { .. }
+            | AgentMethod::ReportUpstreamReset { .. }
+            | AgentMethod::ReportUpstreamLimit { .. } => {
                 bail!("workspace processes cannot report what a proxy learns")
             }
             // Only the agent's wrapper reads the place the agent runs in.

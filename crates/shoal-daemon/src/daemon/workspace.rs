@@ -62,6 +62,7 @@ mod status;
 mod stopped_work;
 mod tree;
 pub(crate) mod turn_retry;
+pub(crate) mod upstream_limits;
 mod usage;
 mod xcode;
 
@@ -160,6 +161,10 @@ pub struct Manager {
     /// The retry each proxied execution's proxy waits to make.
     proxy_retries:
         std::sync::Mutex<std::collections::HashMap<ExecutionId, proxy_retries::ProxyRetry>>,
+    /// The limit each proxied execution's proxy found its upstream under,
+    /// with the time it stands until.
+    upstream_limits:
+        std::sync::Mutex<std::collections::HashMap<ExecutionId, upstream_limits::UpstreamLimit>>,
     /// The config files of worktrees the current format rejects, which the
     /// daemon ignores.
     rejected_configs: repo_configuration::RejectedConfigs,
@@ -213,6 +218,7 @@ impl Manager {
             runners: Default::default(),
             oneshot_runs: Default::default(),
             proxy_retries: Default::default(),
+            upstream_limits: Default::default(),
             rejected_configs: Default::default(),
             report_times: Default::default(),
             file_access: Default::default(),

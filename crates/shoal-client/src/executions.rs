@@ -313,6 +313,26 @@ pub struct ProxyRetry {
     pub next_at: crate::time::UnixTime,
 }
 
+states!(
+    /// What an AI tool's upstream refuses requests for.
+    ServiceLimit {
+        /// A rate or usage limit.
+        RateLimited => "rate_limited",
+        /// The account's quota or credits are spent.
+        Exhausted => "exhausted",
+    }
+);
+
+/// A limit the proxy of an agent found its tool's upstream under, which
+/// holds back that tool's queued agents while it stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpstreamLimit {
+    pub limit: ServiceLimit,
+    /// When the upstream said it lifts, such as a usage limit's reset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<crate::time::UnixTime>,
+}
+
 /// What `shoal resume --discard` forgot in a workspace.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Discarded {

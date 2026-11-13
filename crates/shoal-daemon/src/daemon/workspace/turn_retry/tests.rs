@@ -550,9 +550,9 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     assert_eq!(stored_reset(&manager, &execution).await, Some(reset));
     // A wrapper that only lost its connection may come back, and the reset
     // still holds for it; an execution that ended waits for nothing.
-    manager.forget_proxy_retry(&execution, false).await;
+    manager.forget_proxy_reports(&execution, false).await;
     assert_eq!(stored_reset(&manager, &execution).await, Some(reset));
-    manager.forget_proxy_retry(&execution, true).await;
+    manager.forget_proxy_reports(&execution, true).await;
     assert_eq!(stored_reset(&manager, &execution).await, None);
 }
 

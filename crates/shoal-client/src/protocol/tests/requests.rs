@@ -108,6 +108,7 @@ const REQUESTS: &[&str] = &[
     r#"{"report_wake_end":{"space":"fix","ended":{"signalled":{"signal":"SIGTERM"}}}}"#,
     r#"{"report_proxy_retry":{"workspace":"fix","execution":"e1","retry":{"failure":"overloaded","attempt":2,"next_at":1700000000}}}"#,
     r#"{"report_upstream_reset":{"workspace":"fix","execution":"e1","resets_at":1700000000}}"#,
+    r#"{"report_upstream_limit":{"workspace":"fix","execution":"e1","limit":{"limit":"exhausted","until":1700000000}}}"#,
     r#"{"report_attached":{"workspace":"fix","execution":"e1","attached":true}}"#,
     r#"{"await_agent_wake":{"workspace":"fix","due":true,"hooked":"e1"}}"#,
     r#"{"space_agents":{"space":"fix"}}"#,

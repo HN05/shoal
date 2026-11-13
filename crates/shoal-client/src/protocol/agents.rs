@@ -90,6 +90,15 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         resets_at: Option<crate::time::UnixTime>,
     },
+    /// The limit the upstream of `execution`'s proxy is under, which its
+    /// wrapper reports so queued agents of the same tool wait it out;
+    /// `None` once the upstream answers again.
+    ReportUpstreamLimit {
+        workspace: SpaceSelector,
+        execution: ExecutionId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        limit: Option<crate::executions::UpstreamLimit>,
+    },
     /// Whether a terminal shows the agent `execution` runs, which its
     /// wrapper reads from the place it runs in and reports again
     /// periodically, so a restarted daemon learns it too.

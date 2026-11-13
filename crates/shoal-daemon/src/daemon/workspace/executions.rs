@@ -677,7 +677,7 @@ impl Manager {
         kind: ExecutionKind,
         exit_code: Option<i32>,
     ) -> Result<bool> {
-        self.forget_proxy_retry(&id, exit_code.is_some()).await;
+        self.forget_proxy_reports(&id, exit_code.is_some()).await;
         let scan = match exit_code {
             Some(_) => {
                 // Daemon-side reservations can be registered without a

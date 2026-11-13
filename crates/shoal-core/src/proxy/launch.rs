@@ -51,9 +51,9 @@ impl Running {
     }
 
     /// Tell the daemon what the proxy learns for the agent that `execution`
-    /// runs in `workspace`: the retries it waits to make and its upstream's
-    /// resets, and, when `ends_turns`, each turn a failure it gave up on
-    /// inside a response stream ends, which the daemon may retry. Only an
+    /// runs in `workspace`: the retries it waits to make, its upstream's
+    /// resets and limits, and, when `ends_turns`, each turn a failure it gave
+    /// up on inside a response stream ends, which the daemon may retry. Only an
     /// agent that reports no failed turn itself takes such a failure for its
     /// turn's end, since a subagent's request may fail while the turn goes on.
     pub(crate) fn report_turns(
@@ -168,6 +168,7 @@ pub async fn send_relayed(paths: &CommandPaths, report: &str) -> Result<i32> {
             report,
             AgentMethod::ReportProxyRetry { .. }
                 | AgentMethod::ReportUpstreamReset { .. }
+                | AgentMethod::ReportUpstreamLimit { .. }
                 | AgentMethod::ReportTurnFailure {
                     execution: Some(_),
                     ..
@@ -182,8 +183,8 @@ pub async fn send_relayed(paths: &CommandPaths, report: &str) -> Result<i32> {
 
 /// Tell the daemon to forget what the proxy of `execution` in `workspace`
 /// reported once another replaces it or none runs: the retry it waited to
-/// make and its upstream's reset; whether the daemon took both. A report
-/// that fails leaves them to the execution's end.
+/// make and its upstream's reset and limit; whether the daemon took each.
+/// A report that fails leaves them to the execution's end.
 pub(crate) async fn forget_reports(
     paths: &CommandPaths,
     workspace: &SpaceId,
@@ -200,8 +201,17 @@ pub(crate) async fn forget_reports(
         execution: execution.to_owned(),
         resets_at: None,
     };
-    let (retry, reset) = tokio::join!(send_report(paths, retry), send_report(paths, reset));
-    retry && reset
+    let limit = AgentMethod::ReportUpstreamLimit {
+        workspace: SpaceSelector::id(workspace),
+        execution: execution.to_owned(),
+        limit: None,
+    };
+    let (retry, reset, limit) = tokio::join!(
+        send_report(paths, retry),
+        send_report(paths, reset),
+        send_report(paths, limit)
+    );
+    retry && reset && limit
 }
 
 /// Reports a proxied agent's ended turns to the daemon.
@@ -226,6 +236,8 @@ pub(super) struct Sent {
     retry: bool,
     /// When the upstream refuses requests until.
     reset: Option<UnixTime>,
+    /// The limit the upstream is under.
+    limit: Option<crate::client::executions::UpstreamLimit>,
 }
 
 impl Reporter {
@@ -240,7 +252,10 @@ impl Reporter {
                     failure,
                     attempt,
                     wait,
-                } => self.retrying(turn_failure(failure), attempt, wait).await,
+                } => {
+                    self.limited(failure, None).await;
+                    self.retrying(turn_failure(failure), attempt, wait).await;
+                }
                 // The reset goes first, so the turn's retry waits past it.
                 // A subagent's failed stream ends no turn of the agent's own.
                 Event::Failed {
@@ -253,6 +268,7 @@ impl Reporter {
                     if let Some(wait) = wait {
                         self.reset(self.after(wait)).await;
                     }
+                    self.limited(failure, wait).await;
                     if in_stream && self.ends_turns && !subagent {
                         self.turn_failed(turn_failure(failure)).await;
                     }
@@ -286,6 +302,35 @@ impl Reporter {
         if self.sent.reset.is_some() && self.reset_cleared().await {
             self.sent.reset = None;
         }
+        if self.sent.limit.is_some() && self.limit_sent(None).await {
+            self.sent.limit = None;
+        }
+    }
+
+    /// Tell the daemon the upstream is under the limit `failure` says, if
+    /// any, lifting after `wait` when the upstream said when. The same
+    /// limit is not sent again.
+    async fn limited(&mut self, failure: shoal_proxy::Failure, wait: Option<std::time::Duration>) {
+        let Some(limit) = service_limit(failure) else {
+            return;
+        };
+        let limit = crate::client::executions::UpstreamLimit {
+            limit,
+            until: wait.map(|wait| self.after(wait)),
+        };
+        if self.sent.limit != Some(limit) && self.limit_sent(Some(limit)).await {
+            self.sent.limit = Some(limit);
+        }
+    }
+
+    /// Whether the daemon took the upstream's `limit`.
+    async fn limit_sent(&self, limit: Option<crate::client::executions::UpstreamLimit>) -> bool {
+        self.send(crate::protocol::AgentMethod::ReportUpstreamLimit {
+            workspace: SpaceSelector::id(&self.workspace),
+            execution: self.execution.clone(),
+            limit,
+        })
+        .await
     }
 
     /// Whether the daemon took the clearing of the upstream's reset.
@@ -372,6 +417,17 @@ fn turn_failure(failure: shoal_proxy::Failure) -> crate::state::TurnFailure {
         Failure::Overloaded | Failure::Unreachable => TurnFailure::Overloaded,
         Failure::ServerError => TurnFailure::ServerError,
         Failure::Exhausted | Failure::Other => TurnFailure::Other,
+    }
+}
+
+/// The limit of its upstream a proxy failure shows, if any.
+fn service_limit(failure: shoal_proxy::Failure) -> Option<crate::client::executions::ServiceLimit> {
+    use crate::client::executions::ServiceLimit;
+    use shoal_proxy::Failure;
+    match failure {
+        Failure::RateLimited => Some(ServiceLimit::RateLimited),
+        Failure::Exhausted => Some(ServiceLimit::Exhausted),
+        Failure::Overloaded | Failure::ServerError | Failure::Unreachable | Failure::Other => None,
     }
 }
 

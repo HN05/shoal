@@ -42,12 +42,14 @@ impl Manager {
         self.record_upstream_reset(execution, resets_at).await
     }
 
-    /// Forget the retry `execution`'s proxy waits to make, once its wrapper
-    /// is gone, and, when `ended` reports the execution's end, its
-    /// upstream's reset. A wrapper that only lost its connection may come
-    /// back with its proxy, and the reset still holds for it.
-    pub(super) async fn forget_proxy_retry(&self, execution: &ExecutionId, ended: bool) {
+    /// Forget the retry `execution`'s proxy waits to make and the limit it
+    /// found its upstream under, once its wrapper is gone, and, when `ended`
+    /// reports the execution's end, its upstream's reset. A wrapper that
+    /// only lost its connection may come back with its proxy, and the reset
+    /// still holds for it.
+    pub(super) async fn forget_proxy_reports(&self, execution: &ExecutionId, ended: bool) {
         self.proxy_retries.lock().unwrap().remove(execution);
+        self.upstream_limits.lock().unwrap().remove(execution);
         if !ended {
             return;
         }

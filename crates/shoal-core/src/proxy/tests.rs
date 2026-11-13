@@ -149,14 +149,18 @@ fn daemon_refusing(
 async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() {
     use shoal_proxy::{Event, Failure};
     // No retry was shown, so none is taken away.
-    let failed = ["report_upstream_reset"];
+    let failed = ["report_upstream_reset", "report_upstream_limit"];
     for (ends_turns, subagent, expected) in [
         // Claude reports its turn's end itself.
         (false, false, &failed[..]),
         (
             true,
             false,
-            &["report_upstream_reset", "report_turn_failure"][..],
+            &[
+                "report_upstream_reset",
+                "report_upstream_limit",
+                "report_turn_failure",
+            ][..],
         ),
         // A Codex subagent's failure leaves its parent's turn going.
         (true, true, &failed[..]),
@@ -324,14 +328,62 @@ async fn the_reporter_sends_each_change_once_and_clears_only_what_it_reported() 
         now: || UnixTime::from_seconds(1_700_000_000),
     };
     reporter.run(events).await;
-    // The failure took the retry away, so recovery clears the reset alone.
+    // The failure took the retry away, so recovery clears the reset and
+    // limit alone.
     assert_eq!(
         *methods.lock().unwrap(),
         [
             "report_proxy_retry",
             "report_proxy_retry",
             "report_upstream_reset",
+            "report_upstream_limit",
             "report_upstream_reset",
+            "report_upstream_limit",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_rate_limit_or_spent_quota_is_reported_once_until_the_upstream_answers() {
+    use shoal_proxy::{Event, Failure};
+    let root = tempfile::tempdir().unwrap();
+    let paths = crate::paths::CommandPaths::from(crate::paths::Paths::for_test(root.path()));
+    let (_daemon, methods) = daemon_speaking(&paths, crate::protocol::VERSION);
+    let (sender, events) = tokio::sync::mpsc::unbounded_channel();
+    let retrying = |attempt| Event::Retrying {
+        failure: Failure::RateLimited,
+        attempt,
+        wait: std::time::Duration::from_secs(1),
+    };
+    let spent = Event::Failed {
+        failure: Failure::Exhausted,
+        in_stream: false,
+        wait: None,
+        subagent: false,
+    };
+    for event in [retrying(1), retrying(2), spent, Event::Recovered] {
+        sender.send(event).unwrap();
+    }
+    drop(sender);
+    let reporter = launch::Reporter {
+        paths: paths.clone(),
+        workspace: "w".into(),
+        execution: "e".into(),
+        ends_turns: false,
+        sent: Default::default(),
+        now: || UnixTime::from_seconds(1_700_000_000),
+    };
+    reporter.run(events).await;
+    // Retries of the rate limit report it once; the spent quota replaces it.
+    assert_eq!(
+        *methods.lock().unwrap(),
+        [
+            "report_upstream_limit",
+            "report_proxy_retry",
+            "report_proxy_retry",
+            "report_proxy_retry",
+            "report_upstream_limit",
+            "report_upstream_limit",
         ]
     );
 }
@@ -367,8 +419,10 @@ async fn a_report_the_daemon_did_not_take_goes_again_with_the_next_event() {
         *methods.lock().unwrap(),
         [
             "refused report_upstream_reset",
+            "report_upstream_limit",
             "report_upstream_reset",
             "report_upstream_reset",
+            "report_upstream_limit",
         ]
     );
 }
@@ -379,7 +433,7 @@ async fn a_recovery_the_daemon_took_in_part_keeps_what_it_did_not() {
     let root = tempfile::tempdir().unwrap();
     let paths = crate::paths::CommandPaths::from(crate::paths::Paths::for_test(root.path()));
     // The daemon refuses the retry's clearing but takes the reset's.
-    let (_daemon, methods) = daemon_refusing(&paths, crate::protocol::VERSION, &[2]);
+    let (_daemon, methods) = daemon_refusing(&paths, crate::protocol::VERSION, &[3]);
     let (sender, events) = tokio::sync::mpsc::unbounded_channel();
     let limited = Event::Failed {
         failure: Failure::RateLimited,
@@ -411,11 +465,14 @@ async fn a_recovery_the_daemon_took_in_part_keeps_what_it_did_not() {
         *methods.lock().unwrap(),
         [
             "report_upstream_reset",
+            "report_upstream_limit",
             "report_proxy_retry",
             "refused report_proxy_retry",
             "report_upstream_reset",
+            "report_upstream_limit",
             "report_proxy_retry",
             "report_upstream_reset",
+            "report_upstream_limit",
         ]
     );
 }
