@@ -115,7 +115,7 @@ pub(super) async fn failing_entry<T>(
     result: Result<T>,
 ) -> Result<T> {
     if let (Some(entry), Err(error)) = (entry, &result) {
-        queued_agents::fail(ctx, entry, error).await;
+        crate::queued_starts::fail(&ctx.paths, entry, error).await;
     }
     result
 }

@@ -56,7 +56,7 @@ fn add_worker(paths: &CommandPaths, host: &Configured, focused: bool) -> Result<
         paths,
         false,
         crate::workers::Worker::Add {
-            host: host.host.name(),
+            host: Some(host.host.name()),
             close_when_done: host.closes_when_done,
             focused,
         },

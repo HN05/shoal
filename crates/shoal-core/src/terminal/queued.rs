@@ -21,7 +21,7 @@ use crate::{
 
 /// Start an admitted queue entry's `plan`, the planned workspace `name`, in
 /// the background where the terminal that queued it would have.
-pub async fn start_add(
+pub(crate) async fn start_add(
     paths: &CommandPaths,
     settings: &Effective,
     plan: &mut AddPlan,
@@ -83,7 +83,7 @@ fn recorded_origin(recorded: &str) -> Result<Option<Origin>> {
 /// for the daemon's worker, which has no terminal: in that place, through
 /// the host that recorded it, when it is open and back at its prompt.
 /// Returns whether it ran.
-pub async fn rerun_where_stopped(
+pub(crate) async fn rerun_where_stopped(
     paths: &CommandPaths,
     settings: &Effective,
     stopped: Option<&Origin>,
@@ -99,7 +99,7 @@ pub async fn rerun_where_stopped(
 /// Run Shoal with `args`, which restore an agent of `workspace`, for the
 /// daemon's worker, which has no terminal: in the background of the first
 /// place a queued start from there can open.
-pub async fn restore_in_background(
+pub(crate) async fn restore_in_background(
     paths: &CommandPaths,
     settings: &Effective,
     workspace: &Workspace,

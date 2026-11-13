@@ -286,8 +286,10 @@ fn narrowing(json: &str) -> Result<crate::config::permissions::PermissionsConfig
 // Arguments of the add worker.
 #[derive(Debug, Args)]
 pub struct AddWorkerArgs {
+    /// The host whose place this worker runs in; none for an agent that
+    /// runs its own way.
     #[arg(long)]
-    pub host: HostName,
+    pub host: Option<HostName>,
     /// Close the place once the workspace is done.
     #[arg(long)]
     pub close_when_done: bool,

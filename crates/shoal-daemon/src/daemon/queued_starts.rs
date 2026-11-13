@@ -46,7 +46,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
     }
 }
 
-/// Run the CLI's queue start worker for `start`, detached from the daemon,
+/// Run the queue start worker for `start`, detached from the daemon,
 /// with the multiplexer variables of the terminal that queued it.
 #[cfg(not(test))]
 pub(crate) fn spawn_start(paths: &Paths, start: &Start) -> Result<()> {

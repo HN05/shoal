@@ -4,7 +4,7 @@
 use crate::client::queue::QueueEntryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    cli::{commands::queued_agents, context::Context},
+    cli::context::Context,
     model::{Inspection, Workspace},
     state::WorkspaceState,
 };
@@ -40,7 +40,7 @@ impl WaitingAgent {
         self.failed = true;
         if let Some(entry) = self.starting.take() {
             let error = anyhow::anyhow!("setup of {} did not complete", workspace.name);
-            queued_agents::fail(ctx, &entry, &error).await;
+            crate::queued_starts::fail(&ctx.paths, &entry, &error).await;
         }
     }
 }

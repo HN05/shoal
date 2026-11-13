@@ -1,5 +1,5 @@
-//! `shoal start` launches under `max_agents`: admission, the queued start
-//! workers, and the hold that keeps a starting launch's slot.
+//! `shoal start` launches under `max_agents`: admission, the entries the
+//! queue lists, and the hold that keeps a starting launch's slot.
 
 use anyhow::Result;
 
@@ -12,7 +12,7 @@ use crate::client::{
 };
 use crate::{
     cli::{context::Context, output::Palette, ui},
-    model::{Blocker, QueueEntry, QueueRequest, QueuedPlan, Workspace},
+    model::{Blocker, QueueEntry, QueueRequest, Workspace},
     start_plan::AddPlan,
     state::{QueueKind, QueueState},
     terminal,
@@ -113,78 +113,13 @@ pub(super) async fn attach(
     queue::attach(&ctx.paths, entry.clone(), SpaceSelector::id(&workspace.id)).await
 }
 
-/// Free a starting entry's slot after its launch failed; the daemon notifies
-/// the user with `error`.
-pub(super) async fn fail(ctx: &Context, entry: &QueueEntryId, error: &anyhow::Error) {
-    let failed = queue::fail(&ctx.paths, entry.clone(), format!("{error:#}")).await;
-    if let Err(error) = failed {
-        eprintln!("warning: cannot release the agent queue slot: {error:#}");
-    }
-}
-
 pub(super) use crate::client::queue::Hold;
-
-async fn plan(ctx: &Context, entry: &QueueEntryId) -> Result<(QueuedPlan, AddPlan)> {
-    let queued = queue::plan(&ctx.paths, entry.clone()).await?;
-    let mut plan: AddPlan = serde_json::from_str(&queued.plan)?;
-    plan.queue_entry = Some(entry.clone());
-    Ok((queued, plan))
-}
-
-/// The daemon's worker for an admitted entry: open its tab or session, or
-/// restore its stopped agent.
-pub(super) async fn start(ctx: &Context, entry: QueueEntryId) -> Result<i32> {
-    let started = async {
-        let queued = entries(ctx)
-            .await?
-            .into_iter()
-            .find(|queued| queued.id == entry)
-            .ok_or_else(|| anyhow::anyhow!("queue entry no longer exists"))?;
-        match queued.kind {
-            QueueKind::Launch => start_launch(ctx, &entry).await,
-            QueueKind::Restore => super::restore::agents::queued::start_queued(ctx, &queued).await,
-            QueueKind::Job => anyhow::bail!("the daemon starts a CI job itself"),
-        }
-    }
-    .await;
-    if let Err(error) = &started {
-        fail(ctx, &entry, error).await;
-    }
-    started.map(|()| 0)
-}
-
-/// Open the tab or session of the admitted launch `entry`.
-async fn start_launch(ctx: &Context, entry: &QueueEntryId) -> Result<()> {
-    let (queued, plan) = launch_plan(ctx, entry).await?;
-    let opens = queued.entry.opens.as_ref();
-    super::workspaces::start_queued(ctx, plan, opens, &queued.entry.name).await
-}
 
 /// Run the launch `entry`, which this process marked starting for itself,
 /// here, holding its slot until its agent takes it over.
 pub(super) async fn run_here(ctx: &Context, entry: &QueueEntryId) -> Result<i32> {
-    let (_, plan) = launch_plan(ctx, entry).await?;
+    let (_, plan) = crate::queued_starts::launch_plan(&ctx.paths, entry).await?;
     super::workspaces::execute_add(ctx, plan).await
-}
-
-/// The plan of the starting launch `entry`, building on the branch of the
-/// done blocker it waited for, refusing one that no longer opens the
-/// existing workspace it was queued for.
-async fn launch_plan(ctx: &Context, entry: &QueueEntryId) -> Result<(QueuedPlan, AddPlan)> {
-    let (queued, mut plan) = plan(ctx, entry).await?;
-    if let Some(workspace) = &queued.entry.opens {
-        let workspace =
-            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace))
-                .await?
-                .workspace;
-        anyhow::ensure!(
-            plan.opens(&workspace),
-            "the queued launch does not open workspace {}",
-            workspace.name
-        );
-    }
-    plan.creation.build_on(queued.entry.base.clone());
-    Ok((queued, plan))
 }
 
 pub(super) async fn entries(ctx: &Context) -> Result<Vec<QueueEntry>> {

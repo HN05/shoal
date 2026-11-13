@@ -15,6 +15,7 @@ use crate::{
     },
     env,
     model::Workspace,
+    sessions::HostName,
     terminal::{Host, Owner, Places, named},
 };
 
@@ -30,19 +31,30 @@ pub(in crate::cli) struct Place {
 }
 
 /// The add worker: add the workspace `args` plan in the place of the host
-/// they name that this process runs in.
+/// they name that this process runs in, or in no place without one.
 pub(in crate::cli) async fn add_worker(mut ctx: Context, args: AddWorkerArgs) -> Result<i32> {
     let plan = serde_json::from_str(&args.plan).context("invalid workspace plan")?;
-    let host = named(args.host);
-    let id = place_here(host)
-        .with_context(|| format!("{} did not name the place this worker runs in", host.name()))?;
-    ctx.place = Some(Place {
-        host,
-        id,
-        closes_when_done: args.close_when_done,
-        focused: args.focused,
-    });
+    if let Some(host) = args.host {
+        ctx.place = Some(Place::here(host, args.close_when_done, args.focused)?);
+    }
     execute_add(&ctx, plan).await
+}
+
+impl Place {
+    /// The place of `host` this process runs in, which it opened for it,
+    /// `focused` or not, closing with the workspace when `closes_when_done`.
+    fn here(host: HostName, closes_when_done: bool, focused: bool) -> Result<Self> {
+        let host = named(host);
+        let id = place_here(host).with_context(|| {
+            format!("{} did not name the place this worker runs in", host.name())
+        })?;
+        Ok(Self {
+            host,
+            id,
+            closes_when_done,
+            focused,
+        })
+    }
 }
 
 /// Tell the place this process runs in that it hosts `workspace`, whose

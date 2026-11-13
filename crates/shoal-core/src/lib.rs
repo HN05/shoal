@@ -32,6 +32,7 @@ pub mod profile;
 pub mod proxy;
 pub mod push_gate;
 pub mod queued_launches;
+pub mod queued_starts;
 pub mod refusal;
 pub mod releases;
 pub mod removal;

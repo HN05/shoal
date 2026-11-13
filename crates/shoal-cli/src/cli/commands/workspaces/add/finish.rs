@@ -177,7 +177,7 @@ pub(super) async fn add_planned(
             let error = anyhow::anyhow!(
                 "setup of {name} did not complete; retry it with `shoal setup {number}` or skip it with `shoal setup {number} --skip`"
             );
-            queued_agents::fail(ctx, entry, &error).await;
+            crate::queued_starts::fail(&ctx.paths, entry, &error).await;
         }
         return Ok(1);
     };

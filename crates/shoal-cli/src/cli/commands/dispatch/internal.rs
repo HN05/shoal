@@ -6,8 +6,8 @@ use crate::{
     cli::{
         args::internal::InternalCommand,
         commands::{
-            agent_state, approvals, chat, events, menu, messages, progress, queued_agents,
-            subagents, workspaces, worktree_hooks,
+            agent_state, approvals, chat, events, menu, messages, progress, subagents, workspaces,
+            worktree_hooks,
         },
         context::Context,
         terminal,
@@ -117,7 +117,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         InternalCommand::GitCredential { operation } => {
             crate::git_credential::answer(&ctx.paths, operation).await
         }
-        InternalCommand::QueueStart { entry } => queued_agents::start(&ctx, entry).await,
+        InternalCommand::QueueStart { entry } => crate::queued_starts::run(&ctx.paths, entry).await,
         InternalCommand::ChatStart => chat::start_resolved(&ctx).await,
         InternalCommand::Operation => crate::operations::run(&ctx.paths).await,
         InternalCommand::Launch { file } => crate::terminal::run_launch(&file),

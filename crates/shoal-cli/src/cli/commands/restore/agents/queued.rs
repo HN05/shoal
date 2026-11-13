@@ -1,16 +1,12 @@
-//! The daemon's start of a queued restore: it starts `shoal restore` for the
-//! admitted entry where the agent stopped or in a background place, and that
-//! process restores the agent there, taking over the entry's slot.
+//! A queued restore the daemon started: `shoal restore` for the admitted
+//! entry, where the agent stopped or in a background place, restores the
+//! agent there, taking over the entry's slot.
 use anyhow::{Result, ensure};
-use std::ffi::OsString;
 
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, commands::queued_agents, context::Context, terminal},
-    model::QueueEntry,
-    protocol::ConfigTarget,
     sessions::HostName,
     state::QueueState,
 };
@@ -41,39 +37,9 @@ pub async fn start_entry(
     ensure!(admitted, "the queued restore was cancelled");
     let restored = super::space::run(ctx, space.clone(), Some(execution), true, None).await;
     if let Err(error) = &restored {
-        queued_agents::fail(ctx, &entry, error).await;
+        crate::queued_starts::fail(&ctx.paths, &entry, error).await;
     }
     restored
-}
-
-/// The daemon's worker for the admitted restore `entry`: restore its stopped
-/// agent where it stopped, otherwise in the background, through
-/// [`start_entry`].
-pub(in crate::cli::commands) async fn start_queued(
-    ctx: &Context,
-    entry: &QueueEntry,
-) -> Result<()> {
-    let (Some(space), Some(execution)) = (&entry.space_id, &entry.execution) else {
-        anyhow::bail!("the queued restore names no stopped agent");
-    };
-    let space = super::present_space(ctx, &SpaceSelector::id(space)).await?;
-    let target = ConfigTarget::Space(SpaceSelector::id(space.id()));
-    let settings = crate::config::settings(&ctx.paths, target).await?;
-    let saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(space.id())).await?;
-    let stopped = saved
-        .session(execution)
-        .and_then(|session| session.origin.as_ref());
-    let args = [
-        "restore",
-        space.id().as_str(),
-        "--execution",
-        execution.as_str(),
-        "--focus",
-        "--queue-entry",
-        entry.id.as_str(),
-    ]
-    .map(OsString::from);
-    super::places::restore_queued(ctx, &settings, &space, stopped, &args).await
 }
 
 /// Record the place this restore runs in, one `host` opened in the
@@ -92,8 +58,8 @@ pub async fn close_place_when_done(ctx: &Context, host: HostName, targets: &Spac
     }
 }
 
-/// The one space a restore in a background place names, which
-/// [`start_queued`] passes by its ID.
+/// The one space a restore in a background place names, which the
+/// daemon's worker passes by its ID.
 fn background_space(targets: &SpaceTargets) -> Option<SpaceId> {
     match targets.space.as_slice() {
         [space] => Some(SpaceId::from(space.to_string())),

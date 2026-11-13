@@ -38,9 +38,14 @@ fn parse(worker: Worker<'_>, json: bool) -> InternalCommand {
 fn add_round_trips_host_close_when_done_and_focus() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
-    for (close_when_done, focused) in [(false, true), (true, false)] {
+    let cases = [
+        (Some(HostName::Herdr), false, true),
+        (Some(HostName::Herdr), true, false),
+        (None, false, false),
+    ];
+    for (place, close_when_done, focused) in cases {
         let worker = Worker::Add {
-            host: HostName::Herdr,
+            host: place,
             close_when_done,
             focused,
         };
@@ -61,7 +66,7 @@ fn add_round_trips_host_close_when_done_and_focus() {
         else {
             panic!("expected the add worker");
         };
-        assert_eq!(host, HostName::Herdr);
+        assert_eq!(host, place);
         assert_eq!(parsed, close_when_done);
         assert_eq!(parsed_focus, focused);
         assert_eq!(plan, "plan");

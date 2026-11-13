@@ -110,9 +110,10 @@ pub enum Worker<'a> {
     ChatStart,
     /// Add the workspace planned in the environment in the place `host`
     /// opened for it, `focused` when it shows the place, closing it once
-    /// the workspace is done when `close_when_done` is set.
+    /// the workspace is done when `close_when_done` is set; without a host,
+    /// in no place, for an agent that runs its own way.
     Add {
-        host: HostName,
+        host: Option<HostName>,
         close_when_done: bool,
         focused: bool,
     },
@@ -349,7 +350,10 @@ pub(crate) fn internal_command_for(
             close_when_done,
             focused,
         } => {
-            args.extend([ADD.into(), "--host".into(), host.as_str().into()]);
+            args.push(ADD.into());
+            if let Some(host) = host {
+                args.extend(["--host".into(), host.as_str().into()]);
+            }
             if close_when_done {
                 args.push("--close-when-done".into());
             }
