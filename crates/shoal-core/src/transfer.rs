@@ -398,7 +398,6 @@ fn chat_session(chat: &Chat) -> LastSession {
         copied: None,
         converted: false,
         origin: None,
-        stopped_by: None,
         stop: None,
         model: Default::default(),
         mode: chat.mode.clone(),

@@ -141,7 +141,7 @@ async fn a_stop_of_the_workspace_keeps_the_converting_agents_session() {
 
     let selector = SpaceSelector::id(&workspace.id);
     let keep = crate::protocol::QueuedLaunches::Keep;
-    (manager.stop_space_manually(&selector, false, None, keep))
+    (manager.stop_space_manually(&selector, false, keep))
         .await
         .unwrap();
 
@@ -174,7 +174,7 @@ async fn a_stop_while_the_workspace_is_set_up_stops_the_converting_agent() {
 
     let selector = SpaceSelector::id(&workspace.id);
     let keep = crate::protocol::QueuedLaunches::Keep;
-    (manager.stop_space_manually(&selector, false, None, keep))
+    (manager.stop_space_manually(&selector, false, keep))
         .await
         .unwrap();
 
@@ -192,7 +192,7 @@ async fn the_relocation_restarts_no_agent_a_stop_handed_over() {
         .await
         .unwrap();
     let keep = crate::protocol::QueuedLaunches::Keep;
-    (manager.stop_space_manually(&selector, false, None, keep))
+    (manager.stop_space_manually(&selector, false, keep))
         .await
         .unwrap();
 
@@ -224,7 +224,6 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
         copied: None,
         converted: false,
         origin: None,
-        stopped_by: None,
         stop: None,
         model: Default::default(),
         mode: ModeName::DEFAULT,
@@ -238,7 +237,6 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
-        stopped_by: None,
     };
     record_chat_conversion(&manager, &workspace, chat).await;
 
@@ -280,14 +278,13 @@ async fn record_chat_conversion(
 }
 
 #[tokio::test]
-async fn a_stop_keeps_the_chat_a_workspace_becomes_down_for_its_stopper() {
+async fn a_stop_keeps_the_chat_a_workspace_becomes_down() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let lead = crate::daemon::test_support::chat(&manager, "lead", "chat", Some(&repo), None).await;
     let workspace = manager
         .create_workspace(&repo.id, "fix-login".into(), None, None, None)
         .await
@@ -299,12 +296,11 @@ async fn a_stop_keeps_the_chat_a_workspace_becomes_down_for_its_stopper() {
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
-        stopped_by: None,
     };
     record_chat_conversion(&manager, &workspace, chat).await;
     let selector = SpaceSelector::id(&workspace.id);
     let keep = crate::protocol::QueuedLaunches::Keep;
-    (manager.stop_space_manually(&selector, false, Some(&lead.id), keep))
+    (manager.stop_space_manually(&selector, false, keep))
         .await
         .unwrap();
 
@@ -314,31 +310,7 @@ async fn a_stop_keeps_the_chat_a_workspace_becomes_down_for_its_stopper() {
     assert!(!chat.running);
     assert!(!restore_queued(&manager, &workspace.id).await);
     let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
-    let stoppers: Vec<_> = (sessions.iter())
-        .map(|last| last.stopped_by.clone())
-        .collect();
-    assert_eq!(stoppers, [Some(lead.id)]);
-}
-
-#[tokio::test]
-async fn a_coordinators_stop_of_a_converting_agent_is_its_to_resume() {
-    let (root, manager) = manager().await;
-    let (workspace, mut process, _token) = converted(root.path(), &manager).await;
-    let coordinator = crate::client::space_ids::SpaceId::generate();
-    let selector = SpaceSelector::id(&workspace.id);
-    let keep = crate::protocol::QueuedLaunches::Keep;
-
-    (manager.stop_space_manually(&selector, false, Some(&coordinator), keep))
-        .await
-        .unwrap();
-
-    process.wait().unwrap();
-    let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
-    let stoppers: Vec<_> = sessions
-        .iter()
-        .map(|last| last.stopped_by.clone())
-        .collect();
-    assert_eq!(stoppers, [Some(coordinator)]);
+    assert_eq!(sessions.len(), 1, "{sessions:?}");
 }
 
 #[tokio::test]
@@ -360,7 +332,6 @@ async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
-        stopped_by: None,
     };
     record_chat_conversion(&manager, &workspace, chat).await;
     // A stop holds the hand-overs until released.
@@ -386,7 +357,7 @@ async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
     LISTED.notified().await;
     let id = workspace.id.clone();
     (manager.store)
-        .run(move |db| crate::daemon::conversions::record::hold_chat(db, &id, None))
+        .run(move |db| crate::daemon::conversions::record::hold_chat(db, &id))
         .await
         .unwrap();
     release.send(()).unwrap();
@@ -466,7 +437,6 @@ async fn a_relocation_hands_over_the_converting_agents_its_removal_reaches() {
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
-        stopped_by: None,
     };
     record_chat_conversion(&manager, &workspace, chat).await;
 

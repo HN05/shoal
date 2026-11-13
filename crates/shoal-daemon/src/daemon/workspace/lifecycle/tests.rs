@@ -861,7 +861,6 @@ async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
         .stop_space_manually(
             &SpaceSelector::id(&workspace.id),
             true,
-            None,
             QueuedLaunches::Cancel,
         )
         .await;
@@ -878,7 +877,6 @@ async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
         .stop_space_manually(
             &SpaceSelector::id(&workspace.id),
             true,
-            None,
             QueuedLaunches::Cancel,
         )
         .await
@@ -929,7 +927,6 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
             .stop_space_manually(
                 &SpaceSelector::id(&workspace.id),
                 true,
-                None,
                 QueuedLaunches::Cancel,
             )
             .await;

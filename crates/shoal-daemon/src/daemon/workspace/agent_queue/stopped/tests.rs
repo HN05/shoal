@@ -519,14 +519,8 @@ async fn a_manual_stop_keeps_stopped_agents_as_last_sessions() {
     signal_stop(&manager, &workspace, "signalled");
     manager.dispatch_queue().await.unwrap();
     assert_eq!(queue(&manager).await.len(), 1);
-    let parent = create(&manager, &repo, "parent").await;
     manager
-        .stop_space_manually(
-            &manager.named("work").await,
-            false,
-            Some(&parent.id),
-            QueuedLaunches::Cancel,
-        )
+        .stop_space_manually(&manager.named("work").await, false, QueuedLaunches::Cancel)
         .await
         .unwrap();
     // Nothing restores it, and it holds no slot or cleanup back.
@@ -548,23 +542,6 @@ async fn a_manual_stop_keeps_stopped_agents_as_last_sessions() {
         (last.execution.as_str(), last.agent.name()),
         ("signalled", "claude")
     );
-    // A signal stopped it before this stop, so its workspace process cannot
-    // resume it.
-    assert_eq!(last.stopped_by, None);
-}
-
-#[tokio::test]
-async fn a_stop_claims_only_the_agents_nothing_stopped_before() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
-    let workspace = create(&manager, &repo, "work").await;
-    let (running, _running) = connected_agent(&manager, &workspace).await;
-    // A protection stop's agent keeps its execution while its wrapper waits.
-    let (paused, _paused) = connected_agent(&manager, &workspace).await;
-    stop(&manager, &workspace, paused.as_str(), STOPPED);
-    let unstopped = manager.unstopped_executions(&workspace.id).await.unwrap();
-    assert_eq!(unstopped, [running]);
 }
 
 #[tokio::test]
@@ -586,7 +563,6 @@ async fn a_last_session_queues_and_takes_a_slot_once_admitted() {
             moved: false,
             copied: None,
             origin: None,
-            stopped_by: None,
             stop: None,
             converted: false,
         }

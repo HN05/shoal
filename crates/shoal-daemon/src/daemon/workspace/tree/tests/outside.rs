@@ -312,11 +312,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     let (temp, manager) = manager().await;
     let repos = repositories(&temp, &manager, &["repo", "other"]).await;
     let (master, _process) = outside(&manager, "master", None).await;
-    let (below, user) = (
-        worked(&manager, &repos[0], "below", Some(&master.id)).await,
-        worked(&manager, &repos[1], "user", None).await,
-    );
-    let below_id = below.id.clone();
+    let user = worked(&manager, &repos[1], "user", None).await;
     let chat = manager
         .start_chat(
             repos[0].id.clone().into(),
@@ -395,25 +391,19 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
         (SpaceSelector::id(&master.id), repos[1].id.clone())
     );
 
-    // It resumes the agent of any space it reaches, whoever stopped it.
-    let resume = |stopper: &str| {
-        let last: crate::execution::recovery::LastSession = serde_json::from_value(
-            serde_json::json!({"execution": "e1", "agent": "claude", "stopped_by": stopper}),
-        )
-        .unwrap();
-        last.write(&manager.paths, &user.id).unwrap();
-        QueueMethod::QueueRestore {
-            workspace: SpaceSelector::id(&user.id),
-            execution: "e1".into(),
-            env: Default::default(),
-            now: false,
-        }
+    // It resumes the agent of any space it reaches.
+    let last: crate::execution::recovery::LastSession =
+        serde_json::from_value(serde_json::json!({"execution": "e1", "agent": "claude"})).unwrap();
+    last.write(&manager.paths, &user.id).unwrap();
+    let mut resume = QueueMethod::QueueRestore {
+        workspace: SpaceSelector::id(&user.id),
+        execution: "e1".into(),
+        env: Default::default(),
+        now: false,
     };
-    for stopper in [chat.id.as_str(), below_id.as_str()] {
-        crate::daemon::scope::authorize(&manager, Some(&token), &mut resume(stopper))
-            .await
-            .unwrap();
-    }
+    crate::daemon::scope::authorize(&manager, Some(&token), &mut resume)
+        .await
+        .unwrap();
 
     // What the scope keeps from every agent stays the user's.
     let mut merge = ItemMethod::ItemAction {

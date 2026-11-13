@@ -12,15 +12,6 @@ use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::{self, Saved, SavedExt as _};
 use crate::protocol::SavedAgent;
 
-/// A workspace process that stopped another workspace's executions, which
-/// their records name.
-pub(super) struct Stopper<'a> {
-    /// The ID of the process's space.
-    pub(super) space: &'a SpaceId,
-    /// The executions the stop ended.
-    pub(super) executions: Vec<ExecutionId>,
-}
-
 /// What a change to the permissions given applies to: the stopped agents of
 /// workspaces and chats, which restores run under, and the workspaces whose
 /// failed setup a launch waits for, which it starts under.
@@ -30,20 +21,6 @@ pub(crate) struct PermissionTargets<'a> {
 }
 
 impl Manager {
-    /// The executions of workspace `id` that nothing stopped yet. An agent
-    /// that already saved its recovery record was stopped before, such as
-    /// one whose wrapper waits to restore it after a protection stop.
-    pub(super) async fn unstopped_executions(&self, id: &SpaceId) -> Result<Vec<ExecutionId>> {
-        let executions = self.workspace_executions(id).await?;
-        let stopped_before =
-            |execution: &ExecutionId| recovery::record_path(&self.paths, id, execution).exists();
-        Ok(executions
-            .into_iter()
-            .map(|execution| execution.id)
-            .filter(|execution| !stopped_before(execution))
-            .collect())
-    }
-
     /// Whether a stop saved an agent of workspace `id`: one a wrapper waits
     /// to restore, stopped work or a last session, which `shoal restore`
     /// restores. A state directory that cannot be read counts as none, so
@@ -104,14 +81,12 @@ impl Manager {
     }
 
     /// Keep the space's stopped agents whose execution ended as last
-    /// sessions, which hold no agent slot and nothing restores on its own,
-    /// recording `stopper` on those it stopped. One a wrapper waits to
-    /// restore stays, and one that cannot be kept, such as one a resume
-    /// holds, stays stopped work.
+    /// sessions, which hold no agent slot and nothing restores on its own.
+    /// One a wrapper waits to restore stays, and one that cannot be kept,
+    /// such as one a resume holds, stays stopped work.
     pub(super) async fn keep_stopped_as_last_sessions(
         &self,
         selector: &SpaceSelector,
-        stopper: Option<&Stopper<'_>>,
     ) -> Result<()> {
         let space = self.space(selector).await?;
         let executions = self.workspace_executions(space.id()).await?;
@@ -121,11 +96,7 @@ impl Manager {
             if executions.iter().any(|execution| execution.id == id) {
                 continue;
             }
-            let stopped_by = stopper
-                .filter(|stopper| stopper.executions.contains(&id))
-                .map(|stopper| stopper.space);
-            if let Err(error) =
-                recovery::keep_as_last_session(&self.paths, space.id(), &id, &path, stopped_by)
+            if let Err(error) = recovery::keep_as_last_session(&self.paths, space.id(), &id, &path)
             {
                 crate::daemon::log!("stopped agent {id} not kept as a last session: {error:#}");
             }

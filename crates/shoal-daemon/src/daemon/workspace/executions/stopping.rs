@@ -1,6 +1,6 @@
 //! Stopping executions: the stop policy and requests, and the operations
 //! that stop a workspace's executions, connected or disconnected.
-use super::super::{Manager, stopped_work::Stopper};
+use super::super::Manager;
 use super::Connections;
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
@@ -222,20 +222,17 @@ struct Stopping<'a> {
     request: &'a StopRequest,
     protected: Protected,
     policy: StopPolicy,
-    keep: Keep<'a>,
+    keep: Keep,
 }
 
 /// What a stop keeps of the agents it stopped.
 #[derive(Clone, Copy)]
-enum Keep<'a> {
+enum Keep {
     /// Their recovery records, as the stop saved them.
     Records,
-    /// Last sessions, which stay down until `shoal restore`, recording the
-    /// workspace whose process stopped them when given.
-    LastSessions {
-        stopped_by: Option<&'a SpaceId>,
-        launches: QueuedLaunches,
-    },
+    /// Last sessions, which stay down until `shoal restore`, cancelling
+    /// the waiting launches as `launches` says.
+    LastSessions { launches: QueuedLaunches },
 }
 
 impl Manager {
@@ -285,17 +282,15 @@ impl Manager {
 
     /// Stop as [`Manager::stop_space`] does at the user's request, then
     /// keep the stopped agents as last sessions, which stay down until
-    /// something resumes them, recording the space `stopped_by` whose process
-    /// stopped them. With `acknowledge_unproven`, executions whose launch
-    /// identity was never recorded count as ended once nothing of them is
-    /// visible, because the caller confirmed it. Returns the waiting launches it
-    /// cancelled as `launches` says. A CI job's workspace cancels the job's
+    /// something resumes them. With `acknowledge_unproven`, executions whose
+    /// launch identity was never recorded count as ended once nothing of them
+    /// is visible, because the caller confirmed it. Returns the waiting
+    /// launches it cancelled as `launches` says. A CI job's workspace cancels the job's
     /// run on the forge instead, whose runner then stops it.
     pub async fn stop_space_manually(
         &self,
         selector: &SpaceSelector,
         acknowledge_unproven: bool,
-        stopped_by: Option<&SpaceId>,
         launches: QueuedLaunches,
     ) -> Result<StoppedSpace> {
         if let Some(run) = self.cancel_job_in(selector).await? {
@@ -309,10 +304,7 @@ impl Manager {
         } else {
             StopPolicy::RequireCompleteProof
         };
-        let keep = Keep::LastSessions {
-            stopped_by,
-            launches,
-        };
+        let keep = Keep::LastSessions { launches };
         let cancelled = self
             .stop_space_executions(
                 selector,
@@ -368,7 +360,7 @@ impl Manager {
         request: StopRequest,
         protected: Protected,
         policy: StopPolicy,
-        keep: Keep<'_>,
+        keep: Keep,
     ) -> Result<Vec<QueueEntry>> {
         let stopping = Stopping {
             request: &request,
@@ -393,15 +385,8 @@ impl Manager {
     ) -> Result<Vec<QueueEntry>> {
         // A stop that keeps the agents down until shoal restore keeps the
         // chat a conversion makes of the workspace down too.
-        let stop = match stopping.keep {
-            Keep::LastSessions { stopped_by, .. } => ConversionStop {
-                stopped_by,
-                holds: true,
-            },
-            Keep::Records => ConversionStop {
-                stopped_by: None,
-                holds: false,
-            },
+        let stop = ConversionStop {
+            holds: matches!(stopping.keep, Keep::LastSessions { .. }),
         };
         // Setup is no agent's, so a workspace still preparing after a
         // conversion has only the converting agent to stop.
@@ -443,7 +428,6 @@ impl Manager {
             policy,
             keep,
         } = stopping;
-        let unstopped = self.unstopped_executions(id).await?;
         // Before stopping, so an admission cannot start one after.
         let cancelled = match keep {
             Keep::LastSessions {
@@ -463,13 +447,8 @@ impl Manager {
         if protected == Protected::Stop {
             self.cancel_stopped_restores(id).await?;
         }
-        if let Keep::LastSessions { stopped_by, .. } = keep {
-            let stopper = stopped_by.map(|space| Stopper {
-                space,
-                executions: unstopped,
-            });
-            self.keep_stopped_as_last_sessions(&SpaceSelector::id(id), stopper.as_ref())
-                .await?;
+        if let Keep::LastSessions { .. } = keep {
+            (self.keep_stopped_as_last_sessions(&SpaceSelector::id(id))).await?;
         }
         Ok(cancelled)
     }

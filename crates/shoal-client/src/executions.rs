@@ -2,7 +2,6 @@
 //! agents Shoal stopped or that exited with a session to resume, and the
 //! retries of their failed turns.
 use crate::execution_ids::ExecutionId;
-use crate::space_ids::SpaceId;
 use crate::space_names::SpaceName;
 use std::{collections::BTreeMap, fs, io, path::Path, time::Duration};
 
@@ -127,10 +126,6 @@ pub struct Record {
     /// is now.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub converted: bool,
-    /// The space whose process asked for the stop, as for a restart that
-    /// left the agent stopped; unknown for one the user or Shoal stopped.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stopped_by: Option<SpaceId>,
     /// What the agent was doing when it stopped, as its hooks last reported
     /// it. Unknown for agents without hooks and for records saved before
     /// turns were kept.
@@ -218,11 +213,6 @@ pub struct LastSession {
         skip_serializing_if = "Option::is_none"
     )]
     pub origin: Option<Origin>,
-    /// The space whose process stopped the agent with `shoal stop`, or whose
-    /// restart left it stopped; unknown for one the user or Shoal stopped,
-    /// or that exited on its own.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stopped_by: Option<SpaceId>,
     /// Why and when Shoal stopped the agent; none for one that exited on its
     /// own.
     #[serde(default, skip_serializing_if = "Option::is_none")]

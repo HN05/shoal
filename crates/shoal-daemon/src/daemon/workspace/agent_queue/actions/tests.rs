@@ -72,23 +72,13 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
     assert!(targets(QueuedLaunches::Keep).await.is_empty());
 
     let kept = manager
-        .stop_space_manually(
-            &SpaceSelector::id(&child.id),
-            false,
-            None,
-            QueuedLaunches::Keep,
-        )
+        .stop_space_manually(&SpaceSelector::id(&child.id), false, QueuedLaunches::Keep)
         .await
         .unwrap();
     assert!(kept.cancelled.is_empty());
     assert_eq!(waiting(&manager).await, ["child", "later"]);
     let cancelled = manager
-        .stop_space_manually(
-            &SpaceSelector::id(&child.id),
-            false,
-            None,
-            QueuedLaunches::Cancel,
-        )
+        .stop_space_manually(&SpaceSelector::id(&child.id), false, QueuedLaunches::Cancel)
         .await
         .unwrap();
     let cancelled: Vec<_> = cancelled

@@ -189,7 +189,6 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
         copied: None,
         converted: false,
         origin: None,
-        stopped_by: None,
         stop: None,
     };
     kept_session.write(&manager.paths, &workspace.id).unwrap();
@@ -256,7 +255,6 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
                 copied: None,
                 converted: false,
                 origin: None,
-                stopped_by: None,
                 stop: None,
             }
         ]

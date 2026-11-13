@@ -25,8 +25,6 @@ struct Upgraded {
     saved: bool,
     /// It ran, or Shoal saved it to come back on its own.
     automatic: bool,
-    /// The space whose process stopped it.
-    stopped_by: Option<SpaceId>,
     /// What it was doing when it stopped.
     turn: Option<AgentState>,
 }
@@ -82,7 +80,6 @@ fn stopped(chat: &Chat, upgraded: &Upgraded) -> Record {
     };
     Record {
         session: chat.session.clone(),
-        stopped_by: upgraded.stopped_by.clone(),
         turn: upgraded.turn,
         ..Record::new(&agent, None, Stage::Stopped, chat.origin.clone())
     }
@@ -98,7 +95,6 @@ fn exited(chat: &Chat, execution: &ExecutionId) -> LastSession {
         copied: None,
         converted: false,
         origin: chat.origin.clone(),
-        stopped_by: None,
         stop: None,
         model: Default::default(),
         mode: chat.mode.clone(),
@@ -109,14 +105,13 @@ fn exited(chat: &Chat, execution: &ExecutionId) -> LastSession {
 /// What the upgrade kept of each chat's agent.
 fn upgraded(db: &mut Connection) -> Result<Vec<Upgraded>> {
     let mut statement =
-        db.prepare("SELECT chat_id,saved,automatic,stopped_by,turn FROM upgraded_chat_agents")?;
+        db.prepare("SELECT chat_id,saved,automatic,turn FROM upgraded_chat_agents")?;
     let rows = statement.query_map([], |row| {
         Ok(Upgraded {
             chat: row.get(0)?,
             saved: row.get(1)?,
             automatic: row.get(2)?,
-            stopped_by: row.get(3)?,
-            turn: row.get(4)?,
+            turn: row.get(3)?,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)

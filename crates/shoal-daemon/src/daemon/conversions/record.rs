@@ -217,15 +217,13 @@ pub(crate) fn record_prepared(
     Ok(())
 }
 
-/// Hold the conversion of the workspace `id` into a chat, whose agent the
-/// process of the space `stopped_by`, or the user, stopped: the chat stays
-/// stopped once the workspace becomes it.
-pub(crate) fn hold_chat(db: &Connection, id: &SpaceId, stopped_by: Option<&SpaceId>) -> Result<()> {
+/// Hold the conversion of the workspace `id` into a chat, whose agent a
+/// stop kept down: the chat stays stopped once the workspace becomes it.
+pub(crate) fn hold_chat(db: &Connection, id: &SpaceId) -> Result<()> {
     db.execute(
-        "UPDATE space_conversions
-         SET record=json_set(record,'$.held',json('true'),'$.chat.stopped_by',?2)
+        "UPDATE space_conversions SET record=json_set(record,'$.held',json('true'))
          WHERE space_id=?1 AND json_extract(record,'$.to')='chat'",
-        params![id, stopped_by],
+        [id],
     )?;
     Ok(())
 }
@@ -347,10 +345,6 @@ pub(crate) struct ConvertedChat {
     pub origin: Option<Origin>,
     pub mode: ModeName,
     pub narrowing: PermissionsConfig,
-    /// The space whose process stopped the agent, which with the spaces
-    /// above it may resume the chat; none for the user or Shoal.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stopped_by: Option<SpaceId>,
 }
 
 /// Replace the workspace `id` with the stopped chat `chat` under its ID,

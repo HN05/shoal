@@ -70,13 +70,8 @@ impl Manager {
                     .stop_space(&SpaceSelector::id(&workspace), request)
                     .await;
             }
-            self.stop_space_manually(
-                &SpaceSelector::id(&workspace),
-                false,
-                None,
-                QueuedLaunches::Keep,
-            )
-            .await?;
+            (self.stop_space_manually(&SpaceSelector::id(&workspace), false, QueuedLaunches::Keep))
+                .await?;
             Ok(())
         })
         .await;

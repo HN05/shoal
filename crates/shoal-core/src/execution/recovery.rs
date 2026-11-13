@@ -521,7 +521,6 @@ impl RecordExt for Record {
             moved: false,
             copied: None,
             converted: false,
-            stopped_by: None,
             turn: None,
             model: agent.model.clone(),
             mode: agent.mode.clone(),
@@ -539,7 +538,6 @@ impl RecordExt for Record {
             copied: self.copied,
             converted: self.converted,
             origin: self.origin,
-            stopped_by: self.stopped_by,
             stop: Some(stop),
             model: self.model,
             mode: self.mode,
@@ -588,23 +586,8 @@ pub fn save_record(
     reason: Option<&str>,
     turn: Option<AgentState>,
 ) -> Result<PathBuf> {
-    save_record_stopped_by(paths, space_id, id, agent, reason, turn, None)
-}
-
-/// Save the record as [`save_record`] does, for a stop the process of the
-/// space `stopped_by` asked for when given.
-pub fn save_record_stopped_by(
-    paths: &Paths,
-    space_id: &SpaceId,
-    id: &ExecutionId,
-    agent: &super::TrackedAgent,
-    reason: Option<&str>,
-    turn: Option<AgentState>,
-    stopped_by: Option<&SpaceId>,
-) -> Result<PathBuf> {
     let record = Record {
         turn,
-        stopped_by: stopped_by.cloned(),
         ..Record::new(agent, reason, Stage::Stopping, None)
     };
     write_record(paths, space_id, id, record)
@@ -653,7 +636,6 @@ fn write_record(
         record.waiting = record.waiting.or(saved.waiting);
         record.session = record.session.or(saved.session);
         record.turn = record.turn.or(saved.turn);
-        record.stopped_by = record.stopped_by.or(saved.stopped_by);
         if saved.stage == Some(Stage::Stopped) {
             record.stage = saved.stage;
         }
@@ -796,25 +778,18 @@ pub fn save_stopped_agents(
 }
 
 /// Keep the agent stopped as `id`, whose recovery record is at `path`, as a
-/// last session instead, which the process of space `stopped_by` stopped
-/// when given, or else the space its record names.
+/// last session instead.
 pub fn keep_as_last_session(
     paths: &Paths,
     space_id: &SpaceId,
     id: &ExecutionId,
     path: &Path,
-    stopped_by: Option<&SpaceId>,
 ) -> Result<()> {
     let _claim = claim(path)?;
     let Some(record) = Record::load(path)? else {
         return Ok(());
     };
-    let last = record.into_last_session(id.to_owned(), path);
-    LastSession {
-        stopped_by: stopped_by.cloned().or(last.stopped_by),
-        ..last
-    }
-    .write(paths, space_id)?;
+    (record.into_last_session(id.to_owned(), path)).write(paths, space_id)?;
     consume(path)
 }
 
@@ -970,7 +945,6 @@ impl LastSessionExt for LastSession {
             copied: None,
             converted: false,
             origin: None,
-            stopped_by: None,
             stop: None,
             model: agent.model.clone(),
             mode: agent.mode.clone(),

@@ -128,7 +128,6 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
         copied: None,
         converted: false,
         origin: None,
-        stopped_by: None,
         stop: None,
         model: Default::default(),
         mode: crate::config::modes::ModeName::DEFAULT,
@@ -142,7 +141,6 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
-        stopped_by: None,
     };
 
     manager
@@ -202,7 +200,6 @@ async fn a_converted_workspace_restores_beside_the_chat_it_became() {
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
-        stopped_by: None,
     };
     (manager.convert_worktree_to_chat(&workspace.id, &chat))
         .await
@@ -239,7 +236,6 @@ async fn a_conversion_of_a_workspace_whose_agent_stopped_is_not_recorded() {
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
-        stopped_by: None,
     };
     let id = workspace.id.clone();
 
@@ -274,7 +270,6 @@ async fn a_workspace_built_on_after_the_command_keeps_its_worktree() {
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
-        stopped_by: None,
     };
     // Built on once the conversion was accepted, before the agent's turn ended.
     let selector = SpaceSelector::id(&stacked.id);
@@ -314,7 +309,6 @@ async fn nothing_builds_on_a_workspace_that_becomes_a_chat() {
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
-        stopped_by: None,
     };
     let (id, pending) = (
         base.id.clone(),

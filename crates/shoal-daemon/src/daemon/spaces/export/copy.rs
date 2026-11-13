@@ -150,7 +150,6 @@ fn running_record(
         moved: false,
         copied: None,
         converted: false,
-        stopped_by: None,
         turn: None,
         model: execution.model.clone(),
         mode: execution

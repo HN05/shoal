@@ -431,28 +431,22 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
             },
         )
         .await;
-    // The parent stopped the child's agent and the child its own child's;
-    // the user stopped the other agent of each, which the parent resumes as
-    // well.
-    for (workspace, stopped_by) in [(&child, &parent), (&grandchild, &child)] {
-        for (execution, stopped_by) in [("ours", Some(stopped_by.id.clone())), ("users", None)] {
-            crate::execution::recovery::LastSession {
-                narrowing: Default::default(),
-                mode: "worker".into(),
-                model: Default::default(),
-                execution: execution.into(),
-                agent: "claude".into(),
-                session: None,
-                moved: false,
-                copied: None,
-                origin: None,
-                stopped_by,
-                stop: None,
-                converted: false,
-            }
-            .write(&manager.paths, &workspace.id)
-            .unwrap();
+    for workspace in [&child, &grandchild] {
+        crate::execution::recovery::LastSession {
+            narrowing: Default::default(),
+            mode: "worker".into(),
+            model: Default::default(),
+            execution: "stopped".into(),
+            agent: "claude".into(),
+            session: None,
+            moved: false,
+            copied: None,
+            origin: None,
+            stop: None,
+            converted: false,
         }
+        .write(&manager.paths, &workspace.id)
+        .unwrap();
     }
     let stop = |workspace: &str, acknowledge_unproven| {
         Operation::from(RemovalMethod::StopSpace {
@@ -477,17 +471,13 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
         (parent.id.as_str(), false),
         (sibling.id.as_str(), false),
     ] {
-        for mut method in [
-            stop(target, false),
-            restore(target, "ours"),
-            restore(target, "users"),
-        ] {
+        for mut method in [stop(target, false), restore(target, "stopped")] {
             let authorized =
                 crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
             assert_eq!(authorized.is_ok(), allowed, "{target}: {method:?}");
         }
         // Only the user starts a restore regardless of the limits.
-        let mut now = restore_now(target, "ours", true);
+        let mut now = restore_now(target, "stopped", true);
         let authorized =
             crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut now).await;
         assert!(authorized.is_err(), "{target}");
@@ -503,11 +493,11 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
             },
         )
         .await;
-    let mut method = restore(grandchild.id.as_str(), "ours");
+    let mut method = restore(grandchild.id.as_str(), "stopped");
     crate::daemon::scope::authorize(&manager, Some(&"child".into()), &mut method)
         .await
         .unwrap();
-    let mut method = restore(child.id.as_str(), "ours");
+    let mut method = restore(child.id.as_str(), "stopped");
     assert!(
         crate::daemon::scope::authorize(&manager, Some(&"child".into()), &mut method)
             .await

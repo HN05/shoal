@@ -453,7 +453,6 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
         moved: false,
         copied: None,
         origin: None,
-        stopped_by: None,
         stop: None,
         converted: false,
     }

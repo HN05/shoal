@@ -68,7 +68,7 @@ pub(super) async fn handle(
                 launches,
                 processes,
             };
-            Body::StoppedSpace(stop_space(manager, &space, stop, caller).await?)
+            Body::StoppedSpace(stop_space(manager, &space, stop).await?)
         }
         RemovalMethod::CheckStop { space } => {
             // A chat has no lifecycle state that refuses a stop.
@@ -170,18 +170,16 @@ struct SpaceStop {
     processes: UntrackedProcesses,
 }
 
-/// Stop the agents and commands of `space` as `caller`, then its untracked
-/// processes as `stop` says, reporting whether the stop saved work for
-/// `shoal restore`; a CI job's workspace has its run cancelled instead.
+/// Stop the agents and commands of `space`, then its untracked processes
+/// as `stop` says, reporting whether the stop saved work for `shoal
+/// restore`; a CI job's workspace has its run cancelled instead.
 async fn stop_space(
     manager: &Manager,
     space: &SpaceSelector,
     stop: SpaceStop,
-    caller: Option<&Caller>,
 ) -> Result<StoppedSpace> {
-    let stopped_by = caller.map(|caller| &caller.space_id);
     let mut stopped = manager
-        .stop_space_manually(space, stop.acknowledge_unproven, stopped_by, stop.launches)
+        .stop_space_manually(space, stop.acknowledge_unproven, stop.launches)
         .await?;
     if stopped.cancelled_run.is_some() {
         return Ok(stopped);

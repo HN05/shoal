@@ -27,10 +27,6 @@ pub struct SpaceStopped {
     pub stopped: bool,
     /// Whether agents, commands or the chat wait for `shoal restore`.
     pub saved: bool,
-    /// The chat was stopped before, and keeps the space recorded as its
-    /// stopper.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub already_stopped: bool,
     /// How many processes Shoal does not track it stopped too.
     pub other_processes: usize,
     /// The agent launches waiting to start in it that the stop removed from

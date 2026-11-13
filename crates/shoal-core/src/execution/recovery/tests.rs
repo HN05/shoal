@@ -480,7 +480,6 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
         &SpaceId::from("workspace"),
         &ExecutionId::from("execution"),
         &record,
-        None,
     )
     .unwrap();
     assert!(!record.exists());
@@ -497,7 +496,6 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
             moved: false,
             copied: None,
             origin: Some(herdr_pane("w1:p2")),
-            stopped_by: None,
             stop: Some(Stop {
                 reason: Some("its terminal closed".into()),
                 at: Some(UnixTime::from_seconds(1_800_000_000)),
@@ -539,6 +537,18 @@ fn a_pane_recorded_before_origins_is_a_herdr_place() {
     assert_eq!(serde_json::from_value::<Record>(saved).unwrap(), record);
     let unknown = serde_json::json!({"agent": "codex", "origin": {"host": "screen"}});
     assert!(serde_json::from_value::<Record>(unknown).is_err());
+}
+
+#[test]
+fn records_that_name_the_space_that_stopped_the_agent_load_without_it() {
+    let saved = serde_json::json!({"agent": "codex", "stopped_by": "lead"});
+    let record: Record = serde_json::from_value(saved).unwrap();
+    assert_eq!(record.agent, "codex");
+    assert!(serde_json::to_value(&record).unwrap()["stopped_by"].is_null());
+    let saved = serde_json::json!({"execution": "e1", "agent": "codex", "stopped_by": "lead"});
+    let last: LastSession = serde_json::from_value(saved).unwrap();
+    assert_eq!(last.execution, ExecutionId::from("e1"));
+    assert!(serde_json::to_value(&last).unwrap()["stopped_by"].is_null());
 }
 
 #[test]

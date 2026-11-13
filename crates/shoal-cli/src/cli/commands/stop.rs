@@ -66,7 +66,6 @@ async fn stop_one(ctx: &Context, space: &PresentSpace, yes: bool) -> Result<i32>
             SpaceStopped {
                 stopped: false,
                 saved: false,
-                already_stopped: false,
                 other_processes: 0,
                 cancelled: Vec::new(),
                 cancelled_run: Some(run.clone()),
@@ -99,7 +98,6 @@ async fn stop_one(ctx: &Context, space: &PresentSpace, yes: bool) -> Result<i32>
         SpaceStopped {
             stopped: true,
             saved,
-            already_stopped: false,
             other_processes: processes,
             cancelled,
             cancelled_run: None,

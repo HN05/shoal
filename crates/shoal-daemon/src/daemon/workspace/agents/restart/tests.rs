@@ -347,7 +347,7 @@ async fn a_second_request_joins_the_restart_in_progress() {
     // Registered before the agent starts again, which answers it; the
     // restart keeps the run that asked for it first.
     let second = manager
-        .request_restart(&id, Some("second".into()), true, None, None)
+        .request_restart(&id, Some("second".into()), true, None)
         .await
         .unwrap();
     let listed = manager.running_agents().await.unwrap();
@@ -421,7 +421,7 @@ async fn a_late_join_answers_as_the_restart_ended() {
     manager.join_restart(&id, None, None).await.unwrap_err();
 
     let failed = manager
-        .request_restart(&id, None, true, None, None)
+        .request_restart(&id, None, true, None)
         .await
         .unwrap();
     manager
@@ -444,7 +444,7 @@ async fn a_late_join_of_a_cancelled_restart_fails() {
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
     let cancelled = manager
-        .request_restart(&id, None, true, None, None)
+        .request_restart(&id, None, true, None)
         .await
         .unwrap();
     manager
@@ -467,7 +467,7 @@ async fn a_request_of_a_run_that_restarted_the_agent_already_leaves_it_running()
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
     let restarted = manager
-        .request_restart(&id, Some("run".into()), true, None, None)
+        .request_restart(&id, Some("run".into()), true, None)
         .await
         .unwrap();
     assert!(manager.resume_agent_execution(&id, None).await.unwrap());
@@ -485,7 +485,7 @@ async fn a_request_of_a_run_that_restarted_the_agent_already_leaves_it_running()
     // Another run restarts it again, and a late request of the first run
     // neither joins that restart nor, once it ended, starts another.
     let again = manager
-        .request_restart(&id, Some("other".into()), true, None, None)
+        .request_restart(&id, Some("other".into()), true, None)
         .await
         .unwrap();
     assert!(manager.restart_requested(&id).await);
@@ -515,7 +515,7 @@ async fn a_late_join_answers_for_the_restart_of_its_run_while_another_runs() {
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
     let first = manager
-        .request_restart(&id, Some("first".into()), true, None, None)
+        .request_restart(&id, Some("first".into()), true, None)
         .await
         .unwrap();
     assert!(manager.resume_agent_execution(&id, None).await.unwrap());
@@ -523,7 +523,7 @@ async fn a_late_join_answers_for_the_restart_of_its_run_while_another_runs() {
     first.await.unwrap().unwrap();
     // Another command restarts the agent for its own run.
     let second = manager
-        .request_restart(&id, Some("second".into()), true, None, None)
+        .request_restart(&id, Some("second".into()), true, None)
         .await
         .unwrap();
 
@@ -565,7 +565,7 @@ async fn a_join_counts_the_restart_for_the_run_that_continues() {
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
     let restarted = manager
-        .request_restart(&id, Some("b".into()), true, None, None)
+        .request_restart(&id, Some("b".into()), true, None)
         .await
         .unwrap();
     // A run continuing as `a` joins the restart `b` asked for, before or
@@ -707,37 +707,25 @@ async fn a_narrowing_restarts_an_agent_only_in_a_new_wrapper_and_only_its_own_re
     // launched it with.
     assert!(
         manager
-            .request_restart(&id, None, true, None, narrowing("push=propose"))
+            .request_restart(&id, None, true, narrowing("push=propose"))
             .await
             .is_err()
     );
     assert!(!manager.restart_requested(&id).await);
 
     let _first = manager
-        .request_restart(
-            &id,
-            Some("first".into()),
-            false,
-            None,
-            narrowing("push=propose"),
-        )
+        .request_restart(&id, Some("first".into()), false, narrowing("push=propose"))
         .await
         .unwrap();
     // Another run joins it with the same --permission, or without one, but
     // not with another.
     let other = manager
-        .request_restart(
-            &id,
-            Some("other".into()),
-            false,
-            None,
-            narrowing("push=deny"),
-        )
+        .request_restart(&id, Some("other".into()), false, narrowing("push=deny"))
         .await;
     assert!(other.is_err());
     for same in [None, narrowing("push=propose")] {
         manager
-            .request_restart(&id, Some("same".into()), false, None, same)
+            .request_restart(&id, Some("same".into()), false, same)
             .await
             .unwrap();
     }

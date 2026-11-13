@@ -77,24 +77,21 @@ impl Manager {
     /// Restart the agent of `execution`, `in_place` or in a new wrapper,
     /// returning once it runs again, with the place of the wrapper that runs
     /// it when that runs in a terminal host. `run` names the `shoal restart`
-    /// run that asks for it, which the process of the space `stopped_by`
-    /// runs when given. A new wrapper starts the agent with `change` made
-    /// to the permissions it was given, which that process must hold.
+    /// run that asks for it, which the process of the space `giver` runs
+    /// when given. A new wrapper starts the agent with `change` made to the
+    /// permissions it was given, which that process must hold.
     pub(crate) async fn restart_agent(
         &self,
         execution: &ExecutionId,
         run: Option<String>,
         in_place: bool,
-        stopped_by: Option<&SpaceId>,
+        giver: Option<&SpaceId>,
         change: Option<PermissionChange>,
     ) -> Result<Option<Origin>> {
         if let Some(change) = &change {
-            self.ensure_restart_held(execution, change, stopped_by)
-                .await?;
+            self.ensure_restart_held(execution, change, giver).await?;
         }
-        let answer = self
-            .request_restart(execution, run, in_place, stopped_by, change)
-            .await?;
+        let answer = (self.request_restart(execution, run, in_place, change)).await?;
         restarted(answer).await
     }
 
@@ -160,7 +157,6 @@ impl Manager {
         id: &ExecutionId,
         run: Option<String>,
         in_place: bool,
-        stopped_by: Option<&SpaceId>,
         change: Option<PermissionChange>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
         ensure!(
@@ -185,7 +181,7 @@ impl Manager {
                     false => (None, None),
                 };
                 let agent = agents.get_mut(&id).map(|agent| (agent, stopped, turn));
-                self.stop_for_restart(&id, agent, run, in_place, stopped_by, change)
+                self.stop_for_restart(&id, agent, run, in_place, change)
             })
             .await
     }
@@ -194,15 +190,13 @@ impl Manager {
     /// stop that stopped it if any and the turn state it reported, then stop
     /// it for a restart, `in_place` or in a new wrapper, which starts it with `change`
     /// made when given, or join the restart already in progress as
-    /// it was asked. The handoff names the space `stopped_by`, whose process
-    /// asked for the restart.
+    /// it was asked.
     fn stop_for_restart(
         &self,
         id: &ExecutionId,
         agent: Option<(&mut Agent, Option<Protection>, Option<AgentState>)>,
         run: Option<String>,
         in_place: bool,
-        stopped_by: Option<&SpaceId>,
         change: Option<PermissionChange>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
         let (agent, stopped, turn) =
@@ -226,14 +220,13 @@ impl Manager {
         agent.ensure_not_stopped(stopped.as_ref())?;
         // Save the handoff before the stop, so a wrapper that dies stopping
         // the agent leaves it for `shoal restore`.
-        let handoff = recovery::save_record_stopped_by(
+        let handoff = recovery::save_record(
             &self.paths,
             &agent.workspace_id,
             id,
             &agent.tracked(),
             Some(&Protection::restart().reason),
             turn,
-            stopped_by,
         )
         .context("save the agent's recovery record")?;
         let mut restart = Restart::unanswered(run, in_place).changing(change);

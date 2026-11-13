@@ -917,7 +917,6 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
         .stop_space_manually(
             &SpaceSelector::id(&claimed[0].workspace_id),
             false,
-            None,
             crate::protocol::QueuedLaunches::Cancel,
         )
         .await

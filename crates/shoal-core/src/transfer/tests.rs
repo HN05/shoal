@@ -256,7 +256,6 @@ fn manifest_with_sessions() -> Manifest {
         origin: Some(
             serde_json::from_value(serde_json::json!({"host": "herdr", "place": "tab"})).unwrap(),
         ),
-        stopped_by: None,
         stop: None,
         converted: false,
     };

@@ -414,7 +414,6 @@ async fn no_agent_starts_in_a_workspace_that_becomes_a_chat() {
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
-        stopped_by: None,
     };
     let pending = crate::daemon::conversions::Pending::Chat {
         chat: Box::new(chat),

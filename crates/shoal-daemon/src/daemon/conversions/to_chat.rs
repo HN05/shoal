@@ -104,7 +104,6 @@ impl Manager {
             mode,
             narrowing: recorded.narrowing,
             execution,
-            stopped_by: None,
         })
     }
 
