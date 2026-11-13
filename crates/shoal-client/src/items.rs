@@ -14,7 +14,7 @@ use crate::{
         link::{ItemKind, LinkKind, Selection},
         reference::ItemInput,
     },
-    links::{OpenOutcome, Updates, pr::Action as PrAction},
+    links::{OpenOutcome, Updates},
     model::Relation,
     protocol::{Body, ItemContext, ItemMethod},
 };
@@ -55,12 +55,6 @@ pub async fn unlink(
         item,
     };
     request(daemon, method).await
-}
-
-/// Link and watch the PR `url` as the one `space` was opened on.
-pub async fn watch_pr(daemon: &impl Daemon, space: SpaceSelector, url: ItemInput) -> Result<()> {
-    let action = PrAction::Watch { url };
-    request(daemon, ItemMethod::SetPr { space, action }).await
 }
 
 /// The next activity on the items of `space` that `selection` selects, an

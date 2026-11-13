@@ -3,8 +3,11 @@ use anyhow::Result;
 
 use crate::{
     client::{space_ids::SpaceId, space_names::SpaceSelector},
-    forge::items::reference::{ItemInput, ItemRef},
-    model::Workspace,
+    forge::items::{
+        link::LinkKind,
+        reference::{ItemInput, ItemRef},
+    },
+    model::{Relation, Workspace},
     paths::CommandPaths,
 };
 
@@ -24,7 +27,9 @@ pub async fn link(paths: &CommandPaths, workspace: Workspace, url: ItemRef) -> R
 /// Link PR `url`, a number or URL, as the one workspace `id` was opened on;
 /// whether it did, a refused link having warned.
 pub(crate) async fn link_or_warn(paths: &CommandPaths, id: &SpaceId, url: &ItemInput) -> bool {
-    let linked = crate::client::items::watch_pr(paths, SpaceSelector::id(id), url.clone()).await;
+    let space = SpaceSelector::id(id);
+    let (relation, kind) = (Relation::Assigned, LinkKind::Pr);
+    let linked = crate::client::items::link(paths, &space, relation, kind, url.clone(), None).await;
     if let Err(error) = &linked {
         eprintln!("warning: cannot link PR {url}: {error:#}");
     }
