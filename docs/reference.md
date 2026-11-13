@@ -3766,9 +3766,12 @@ start in the background there. It checks the spaces as a batch export does and
 asks once before ending them. Each space then moves on its own, after the
 spaces below it: Shoal stops its agents, saving their sessions, exports it
 while it stays here, and imports it there, and only once that import succeeds
-ends it here through the export's removal. When the export or the import
-fails, the space stays here, its stopped agents' restores are queued, and the
-report gives the other machine's error. A workspace with a space below it
+ends it here through the export's removal. When the export fails or Shoal
+there refuses the import, the space stays here, its stopped agents' restores are queued, and the
+report gives the other machine's error. When how the import ended is
+unknown, as when the connection drops, the space stays here with its agents
+stopped, since the other machine may have it, and the report names the
+`shoal restore` that continues it here. A workspace with a space below it
 that stayed is not exported and stays here. When the import succeeds but the
 space cannot end here, as for a workspace whose HEAD or unsaved files changed
 since its export or a failing `hooks.pre_remove`, it stays here too, and the

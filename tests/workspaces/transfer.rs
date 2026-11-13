@@ -438,37 +438,69 @@ fn a_failed_move_leaves_the_chat_here_and_restores_its_agent() {
     wait_zmx_sessions_ended(&home);
 }
 
+/// Wrap `fixture`'s `ssh mini` so the shell commands `before` run before
+/// each import there and `after` after it, which then exits with the
+/// import's status unless `after` exits.
+fn wrap_imports(fixture: &Fixture, before: &str, after: &str) {
+    let bin = fixture.root.path().join("bin");
+    fs::rename(bin.join("ssh"), bin.join("ssh-mini")).unwrap();
+    let ssh = bin.join("ssh-mini");
+    install_test_script(
+        bin.join("ssh"),
+        format!(
+            "#!/bin/sh\n\
+             case \"$*\" in *'move import'*) \
+             {before}\n'{ssh}' \"$@\"; status=$?\n{after}\nexit $status;; \
+             esac\n\
+             exec '{ssh}' \"$@\"\n",
+            ssh = ssh.display()
+        ),
+    );
+}
+
+/// `shoal move ssh mini` of `space` from `here`, which fails, and its
+/// report's failure.
+fn failed_move(here: &Fixture, space: &str) -> String {
+    let shoal = support::shoal_binary();
+    let id = here.id(space);
+    let moved = here.run(&["--json", "move", "ssh", "mini", &id, "--shoal", shoal]);
+    assert!(!moved.status.success(), "{moved:?}");
+    let report: Value = serde_json::from_slice(&moved.stdout).unwrap();
+    report["failed"][0].to_string()
+}
+
 #[test]
 fn a_workspace_changed_after_its_export_stays_here_too() {
     let (here, there) = two_machines(None);
     let workspace = here.add("changing");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     // The import there runs once a commit here changed the workspace.
-    let bin = here.root.path().join("bin");
-    fs::rename(bin.join("ssh"), bin.join("ssh-mini")).unwrap();
-    install_test_script(
-        bin.join("ssh"),
-        format!(
-            "#!/bin/sh\n\
-             case \"$*\" in *'move import'*) \
-             git -C '{}' -c user.name=t -c user.email=t@t commit -q --allow-empty -m newer || exit 3;; \
-             esac\n\
-             exec '{}' \"$@\"\n",
-            path.display(),
-            bin.join("ssh-mini").display()
-        ),
+    let commit = format!(
+        "git -C '{}' -c user.name=t -c user.email=t@t commit -q --allow-empty -m newer || exit 3",
+        path.display()
     );
+    wrap_imports(&here, &commit, "");
 
-    let shoal = support::shoal_binary();
-    let changing = here.id("changing");
-    let moved = here.run(&["--json", "move", "ssh", "mini", &changing, "--shoal", shoal]);
-    assert!(!moved.status.success(), "{moved:?}");
-    let report: Value = serde_json::from_slice(&moved.stdout).unwrap();
-    let failure = report["failed"][0].to_string();
-    assert!(failure.contains("exists here and on mini"), "{report}");
+    let failure = failed_move(&here, "changing");
+    assert!(failure.contains("exists here and on mini"), "{failure}");
     assert!(path.exists());
     let listed = there.ok(&["list"]);
     assert_eq!(listed[0]["name"], "changing", "{listed}");
+}
+
+#[test]
+fn a_move_whose_import_may_have_arrived_stays_here_stopped() {
+    let (here, there) = two_machines(None);
+    let workspace = here.add("dropped");
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    // The connection drops once the import there finished.
+    wrap_imports(&here, "", "exit 255");
+
+    let failure = failed_move(&here, "dropped");
+    assert!(failure.contains("may already have it"), "{failure}");
+    assert!(path.exists());
+    let listed = there.ok(&["list"]);
+    assert_eq!(listed[0]["name"], "dropped", "{listed}");
 }
 
 #[test]

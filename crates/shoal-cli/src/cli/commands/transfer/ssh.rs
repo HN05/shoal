@@ -3,7 +3,7 @@
 //! reaches Shoal there.
 use std::path::Path;
 
-use anyhow::{Context as _, Result, bail, ensure};
+use anyhow::{Context as _, Result, ensure};
 use serde_json::Value;
 
 mod copy;
@@ -115,25 +115,33 @@ impl Remote {
 
     /// Import the export in `file` there, queueing its agents' restores when
     /// it resumes them, and return what the import reported.
-    async fn import(&self, file: &Path) -> Result<Imported> {
+    async fn import(&self, file: &Path) -> Result<Imported, ImportFailure> {
         let mut args = vec!["move", "import"];
         if self.restore {
             args.push("--restore");
         }
-        let input = std::fs::File::open(file)?;
+        let input =
+            std::fs::File::open(file).map_err(|error| ImportFailure::Refused(error.into()))?;
         let output = Run::new(self.command(&args))
             .input_file(input)
             .capture()
             .await
-            .context("run ssh")?;
+            .context("run ssh")
+            .map_err(ImportFailure::Refused)?;
         if !output.status.success() {
-            bail!(
+            let failed = format!(
                 "the import on {} failed: {}",
                 self.host,
                 error_message(&output)
             );
+            return Err(match reported_error(&output) {
+                Some(_) => ImportFailure::Refused(anyhow::anyhow!(failed)),
+                None => ImportFailure::Unknown(anyhow::anyhow!(failed)),
+            });
         }
-        serde_json::from_slice(&output.stdout).context("read the import's report")
+        serde_json::from_slice(&output.stdout)
+            .context("read the import's report")
+            .map_err(ImportFailure::Unknown)
     }
 
     /// `ssh` running shoal with `args` and JSON output there, quoted for the
@@ -150,14 +158,39 @@ impl Remote {
     }
 }
 
+/// Why an import on the other machine failed.
+enum ImportFailure {
+    /// Shoal there refused it, or it never reached Shoal there, which then
+    /// has nothing of the space.
+    Refused(anyhow::Error),
+    /// It ran, but how it ended is unknown, as when the connection dropped
+    /// or its report cannot be read, so the other machine may have the space.
+    Unknown(anyhow::Error),
+}
+
+impl From<ImportFailure> for anyhow::Error {
+    fn from(failure: ImportFailure) -> Self {
+        match failure {
+            ImportFailure::Refused(error) | ImportFailure::Unknown(error) => error,
+        }
+    }
+}
+
+/// The message of the JSON error Shoal wrote to standard error when the
+/// remote command failed there; none when ssh or the remote shell failed.
+fn reported_error(output: &std::process::Output) -> Option<String> {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    stderr.lines().rev().find_map(|line| {
+        let error: Value = serde_json::from_str(line).ok()?;
+        error["error"]["message"].as_str().map(str::to_owned)
+    })
+}
+
 /// The error a failed remote command reported: the message of the JSON error
 /// Shoal writes to standard error, or what ssh or the remote shell wrote.
 fn error_message(output: &std::process::Output) -> String {
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let reported = stderr.lines().rev().find_map(|line| {
-        let error: Value = serde_json::from_str(line).ok()?;
-        error["error"]["message"].as_str().map(str::to_owned)
-    });
+    let reported = reported_error(output);
     match reported {
         Some(message) => diagnostic(message.as_bytes()),
         None if stderr.trim().is_empty() => output.status.to_string(),

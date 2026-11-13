@@ -50,7 +50,7 @@ async fn copy_one(
 ) -> Result<Imported> {
     let file = directory.file(space.id());
     export::copy::copy(ctx, SpaceSelector::id(space.id()), checkpoint, file.clone()).await?;
-    remote.import(&file).await
+    Ok(remote.import(&file).await?)
 }
 
 /// The report of copying `name` to `host`, naming the copy when the import

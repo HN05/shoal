@@ -5,9 +5,10 @@ use anyhow::{Context as _, Result};
 
 use super::{
     super::export::{self, Checked, ExportDirectory, PlannedExport},
-    Remote, arrived, summary,
+    ImportFailure, Remote, arrived, summary,
 };
 use crate::cli::commands::restore::agents::queue::{Stopped, restore_stopped, saved_executions};
+use crate::client::execution_ids::ExecutionId;
 use crate::client::output::transfer::{Imported, Moves};
 use crate::client::space_names::SpaceSelector;
 use crate::transfer::{ExportedSpace, Space};
@@ -16,6 +17,7 @@ use crate::{
     model::{CheckpointNumber, PresentSpace},
     removal::UnsavedWork,
 };
+use std::collections::BTreeSet;
 
 /// Move `spaces` to `remote` once each one can end here, asking once where
 /// ending them needs the user unless `yes`. Each space moves after those
@@ -54,15 +56,27 @@ pub(super) async fn move_spaces(
 
 /// Export the planned space, which stops its agents, and import it on
 /// `remote`, queueing its agents' restores or starting its chat there when
-/// it resumes them, then end it here. When the export or the import fails,
-/// the space stays here and the agents its export stopped restore here.
+/// it resumes them, then end it here. When the export fails or the other
+/// machine refuses the import, the space stays here and the agents its
+/// export stopped restore here; when how the import ended is unknown, they
+/// stay stopped, since the space may continue there.
 async fn move_one(ctx: &Context, remote: &Remote, planned: &PlannedExport) -> Result<Imported> {
     let saved = saved_executions(ctx, planned.id()).await?;
-    let (imported, checkpoint) = match export_and_import(ctx, remote, planned).await {
-        Ok(moved) => moved,
-        Err(error) => {
-            restore_here(ctx, planned, saved).await;
-            return Err(error.context("it stays here"));
+    let checkpoint = match export_moving(ctx, planned).await {
+        Ok(checkpoint) => checkpoint,
+        Err(error) => return Err(stays_here(ctx, planned, saved, error).await),
+    };
+    let imported = match remote.import(&planned.file()).await {
+        Ok(imported) => imported,
+        Err(ImportFailure::Refused(error)) => {
+            return Err(stays_here(ctx, planned, saved, error).await);
+        }
+        Err(ImportFailure::Unknown(error)) => {
+            return Err(error.context(format!(
+                "{} may already have it, so its agents stay stopped here; unless it arrived there, shoal restore {} continues it here",
+                remote.host,
+                planned.id()
+            )));
         }
     };
     end_moved(ctx, planned.checked(), checkpoint)
@@ -77,16 +91,16 @@ async fn move_one(ctx: &Context, remote: &Remote, planned: &PlannedExport) -> Re
     Ok(imported)
 }
 
-/// Export the planned space, leaving it here, and import it on `remote`,
-/// returning what the import reported and the checkpoint a workspace's
-/// package holds.
-async fn export_and_import(
+/// `error`, which kept the planned space here, once the agents its export
+/// stopped, those it saves beyond the `saved` before, restore here.
+async fn stays_here(
     ctx: &Context,
-    remote: &Remote,
     planned: &PlannedExport,
-) -> Result<(Imported, Option<CheckpointNumber>)> {
-    let checkpoint = export_moving(ctx, planned).await?;
-    Ok((remote.import(&planned.file()).await?, checkpoint))
+    saved: BTreeSet<ExecutionId>,
+    error: anyhow::Error,
+) -> anyhow::Error {
+    restore_here(ctx, planned, saved).await;
+    error.context("it stays here")
 }
 
 /// Stop the agents of the planned space and export it to its file, leaving
@@ -133,11 +147,7 @@ async fn end_moved(
 
 /// Queue the restores of the agents the export of the planned space
 /// stopped: those it saves now beyond the `saved` before the export.
-async fn restore_here(
-    ctx: &Context,
-    planned: &PlannedExport,
-    saved: std::collections::BTreeSet<crate::client::execution_ids::ExecutionId>,
-) {
+async fn restore_here(ctx: &Context, planned: &PlannedExport, saved: BTreeSet<ExecutionId>) {
     let stopped = match saved_executions(ctx, planned.id()).await {
         Ok(now) => now.difference(&saved).cloned().collect(),
         Err(error) => {
