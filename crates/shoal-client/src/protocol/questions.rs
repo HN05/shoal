@@ -65,7 +65,7 @@ pub enum QuestionMethod {
 impl QuestionMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
-            Self::AwaitAnswer { .. } => Lifetime::StartedRestores,
+            Self::AwaitAnswer { .. } => Lifetime::Resumed,
             _ => Lifetime::Reply,
         }
     }

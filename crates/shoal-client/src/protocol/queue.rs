@@ -85,7 +85,7 @@ pub enum QueueMethod {
 impl QueueMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
-            Self::QueueHold { .. } => Lifetime::StartedRestores,
+            Self::QueueHold { .. } => Lifetime::Resumed,
             _ => Lifetime::Reply,
         }
     }

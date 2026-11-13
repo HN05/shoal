@@ -72,7 +72,7 @@ pub enum ReviewMethod {
 impl ReviewMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
-            Self::AwaitReview { .. } => Lifetime::StartedRestores,
+            Self::AwaitReview { .. } => Lifetime::Resumed,
             _ => Lifetime::Reply,
         }
     }

@@ -106,7 +106,7 @@ impl Method {
     /// How long the request keeps its connection.
     pub fn lifetime(&self) -> Lifetime {
         match self {
-            Self::Reattach(_) => Lifetime::StartedRestores,
+            Self::Reattach(_) => Lifetime::Resumed,
             Self::Exit(_) => Lifetime::Reply,
             Self::Operation(operation) => operation.lifetime(),
         }
@@ -121,7 +121,7 @@ impl Method {
     /// Long-lived requests whose clients send them again when the daemon
     /// closes the connection unanswered, as across a restart.
     pub fn retries_when_closed(&self) -> bool {
-        self.lifetime() == Lifetime::StartedRestores
+        self.lifetime() == Lifetime::Resumed
     }
 }
 
@@ -228,5 +228,5 @@ pub enum Lifetime {
     Open,
     /// Until either side hangs up; the client sends it again when the daemon
     /// closes the connection unanswered, as across a restart.
-    StartedRestores,
+    Resumed,
 }

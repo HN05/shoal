@@ -244,7 +244,7 @@ impl AgentMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::AwaitAgentWake { .. } | Self::WaitAgentUpdates { .. } => {
-                Lifetime::StartedRestores
+                Lifetime::Resumed
             }
             _ => Lifetime::Reply,
         }
