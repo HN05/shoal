@@ -293,8 +293,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   command's error) and name the command that fixes them; repair preserves work
   and resource leases. Startup audits ownership and never deletes work, and the cleanup sweep readies a
   workspace the audit failed once its ownership verifies; the daemon clears an unknown
-  execution only when a saved agent stop and a process scan prove it ended, or
-  its processes ran in an earlier boot.
+  execution only when a saved agent stop and a process scan prove it ended,
+  its processes ran in an earlier boot, or it recorded no child and its wrapper
+  and every process of it are gone.
   Verify native PID birth identity before signaling survivors; unknown ownership
   must not authorize a kill. Explicit acknowledgement cannot bypass visible live
   processes. Verify recorded Git metadata identity before exec/removal; moved or

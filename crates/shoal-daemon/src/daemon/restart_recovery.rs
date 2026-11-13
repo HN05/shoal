@@ -4,7 +4,8 @@
 //! the execution survives, the record alone represents the agent and
 //! `shoal restore` restores it. Survivors and incomplete evidence keep the
 //! execution, are checked again, and only they notify the user. Executions
-//! of an earlier boot need no evidence.
+//! of an earlier boot need no evidence, and those that never started their
+//! command need only their wrapper gone.
 use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::RecordExt;
 use std::{collections::HashSet, sync::Arc, time::Duration};
@@ -28,12 +29,23 @@ const RETRY_INTERVAL: Duration = Duration::from_secs(30);
 const UNRESOLVED_RECHECK_INTERVAL: Duration = Duration::from_secs(30);
 
 mod earlier_boot;
+mod never_started;
+
+use never_started::Unstarted;
 
 /// An unknown execution of an agent whose stop saved a recovery record.
 struct Interrupted {
     space: PresentSpace,
     execution: Execution,
     record: Record,
+}
+
+/// The unknown executions of present spaces, by what reconciles them.
+#[derive(Default)]
+struct Unknown {
+    interrupted: Vec<Interrupted>,
+    unstarted: Vec<Unstarted>,
+    unreadable: Vec<Unreadable>,
 }
 
 /// An unknown execution whose saved recovery record cannot be read.
@@ -152,46 +164,82 @@ async fn still_unknown(manager: &Manager, waiting: Vec<Waiting>) -> Vec<Waiting>
 }
 
 impl Manager {
-    /// Forget unknown executions of an earlier boot and of stopped agents
-    /// whose processes are gone, keeping their recovery records, and notify
-    /// about the ones that remain uncertain.
+    /// Forget unknown executions of an earlier boot, of stopped agents
+    /// whose processes are gone, keeping their recovery records, and of
+    /// commands that never started, and notify about the stopped agents that
+    /// remain uncertain.
     pub(crate) async fn reconcile_interrupted_agents(&self) -> Result<Pending> {
         self.forget_earlier_boot().await?;
-        let (interrupted, unreadable) = self.interrupted_agents().await?;
+        let Unknown {
+            interrupted,
+            unstarted,
+            unreadable,
+        } = self.unknown_executions().await?;
         for unreadable in &unreadable {
             self.notify_unreadable(unreadable).await;
         }
         let mut pending = Pending::default();
-        if interrupted.is_empty() {
+        let ids: HashSet<_> = (interrupted.iter().map(|i| i.execution.id.clone()))
+            .chain(unstarted.iter().map(Unstarted::id))
+            .collect();
+        if ids.is_empty() {
             return Ok(pending);
         }
-        let ids: HashSet<_> = interrupted.iter().map(|i| i.execution.id.clone()).collect();
         let scan = process::scan(ids).await?;
         for interrupted in interrupted {
-            let inspected = match self.space_directory(&interrupted.space).await {
-                Ok(directory) => {
-                    Processes::inspect(&interrupted.execution, &directory, &scan).await
-                }
-                Err(error) => Err(error),
-            };
-            let outcome = match inspected {
-                Ok(processes) => assess(&interrupted, &processes),
-                Err(error) => Outcome::Unresolved(format!("process inspection failed: {error:#}")),
-            };
-            match outcome {
-                Outcome::Waiting => pending.waiting.extend(interrupted.waiting()),
-                Outcome::Stopped => self.forget_stopped_agent(&interrupted).await?,
-                Outcome::Unresolved(issue) => {
-                    pending.unresolved = true;
-                    self.notify_unresolved(&interrupted, &issue).await;
-                }
-            }
+            self.reconcile_interrupted(interrupted, &scan, &mut pending)
+                .await?;
+        }
+        for unstarted in unstarted {
+            self.reconcile_unstarted(unstarted, &scan, &mut pending)
+                .await?;
         }
         Ok(pending)
     }
 
-    async fn interrupted_agents(&self) -> Result<(Vec<Interrupted>, Vec<Unreadable>)> {
-        let (mut interrupted, mut unreadable) = (Vec::new(), Vec::new());
+    /// Forget the stopped agent of `interrupted` once `scan` and its process
+    /// identities prove it stopped, adding to `pending` what a later pass
+    /// decides.
+    async fn reconcile_interrupted(
+        &self,
+        interrupted: Interrupted,
+        scan: &process::Scan,
+        pending: &mut Pending,
+    ) -> Result<()> {
+        let inspected =
+            (self.inspect_unknown(&interrupted.space, &interrupted.execution, scan)).await;
+        let outcome = match inspected {
+            Ok(processes) => assess(&interrupted, &processes),
+            Err(error) => Outcome::Unresolved(format!("process inspection failed: {error:#}")),
+        };
+        match outcome {
+            Outcome::Waiting => pending.waiting.extend(interrupted.waiting()),
+            Outcome::Stopped => self.forget_stopped_agent(&interrupted).await?,
+            Outcome::Unresolved(issue) => {
+                pending.unresolved = true;
+                self.notify_unresolved(&interrupted, &issue).await;
+            }
+        }
+        Ok(())
+    }
+
+    /// The processes of `execution` in `space`, from `scan`.
+    async fn inspect_unknown(
+        &self,
+        space: &PresentSpace,
+        execution: &Execution,
+        scan: &process::Scan,
+    ) -> Result<Processes> {
+        let directory = self.space_directory(space).await?;
+        Processes::inspect(execution, &directory, scan).await
+    }
+
+    /// The unknown executions of present spaces: those with a saved
+    /// recovery record, those that never started a command, which have
+    /// neither a record nor a recorded child, and those whose record cannot
+    /// be read.
+    async fn unknown_executions(&self) -> Result<Unknown> {
+        let mut unknown = Unknown::default();
         for space in self.present_spaces().await? {
             let id = space.id().clone();
             let executions = self.store.run(move |db| store::executions(db, &id)).await?;
@@ -201,13 +249,15 @@ impl Manager {
                 }
                 let path = record_path(&self.paths, space.id(), &execution.id);
                 match Record::load(&path) {
-                    Ok(Some(record)) => interrupted.push(Interrupted {
+                    Ok(Some(record)) => unknown.interrupted.push(Interrupted {
                         space: space.clone(),
                         execution,
                         record,
                     }),
-                    Ok(None) => {}
-                    Err(error) => unreadable.push(Unreadable {
+                    Ok(None) => unknown
+                        .unstarted
+                        .extend(Unstarted::of(space.clone(), execution)),
+                    Err(error) => unknown.unreadable.push(Unreadable {
                         space: space.clone(),
                         execution: execution.id,
                         error,
@@ -215,7 +265,7 @@ impl Manager {
                 }
             }
         }
-        Ok((interrupted, unreadable))
+        Ok(unknown)
     }
 
     async fn forget_stopped_agent(&self, interrupted: &Interrupted) -> Result<()> {

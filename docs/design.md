@@ -322,7 +322,11 @@ whose wrapper, and child when recorded, ran in an earlier boot needs no
 evidence: restarting the machine ended its processes, while its recorded process
 group may name another's, so the daemon forgets it, keeping its record, or
 else the session its agent reported as a last session. The daemon records each
-execution's agent name for that.
+execution's agent name for that. An unknown execution without a record or a
+recorded child never started its command, such as a setup whose wrapper left
+first; the daemon forgets it once no process at its wrapper's PID has the
+recorded birth and none of its processes survives, and rechecks a live wrapper
+when it exits.
 Agent metadata is transient, so restart cannot select disconnected survivors.
 `shoal restart` starts each agent in a new wrapper: the daemon sends the stop
 protection sends, with the reason `restarted by shoal restart` and recovery

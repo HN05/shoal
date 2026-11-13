@@ -193,8 +193,17 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
         stop: None,
     };
     kept_session.write(&manager.paths, &workspace.id).unwrap();
+    // A recorded child keeps an execution of this boot that saved nothing.
     let wrapper = exited().await;
-    interrupted(&manager, &workspace, "this-boot", &wrapper, None, None).await;
+    interrupted(
+        &manager,
+        &workspace,
+        "this-boot",
+        &wrapper,
+        Some(&wrapper),
+        None,
+    )
+    .await;
     for id in ["unrecorded", "kept", "this-boot"] {
         fs::remove_file(record_path(&manager.paths, &workspace.id, &id.into())).unwrap();
     }
@@ -254,6 +263,61 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
     );
     assert!(blocked(&reopened).await.is_empty());
     reopened.store.shutdown().await;
+    serving.abort();
+}
+
+/// Record an execution whose wrapper never started its command: unknown,
+/// with no child and no recovery record.
+async fn unstarted(manager: &Manager, workspace: &Workspace, id: &str, wrapper: &Identity) {
+    interrupted(manager, workspace, id, wrapper, None, None).await;
+    fs::remove_file(record_path(&manager.paths, &workspace.id, &id.into())).unwrap();
+}
+
+/// `identity` as a process born just before the one now at its PID.
+fn born_earlier(identity: &Identity) -> Identity {
+    let (start, tick) = identity.birth.rsplit_once(':').unwrap();
+    let tick: u64 = tick.parse().unwrap();
+    Identity {
+        birth: format!("{start}:{}", tick - 1),
+        ..identity.clone()
+    }
+}
+
+#[tokio::test]
+async fn reconciliation_forgets_an_unstarted_execution_whose_wrapper_exited() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    unstarted(&manager, &workspace, "unstarted", &exited().await).await;
+    let pending = manager.reconcile_interrupted_agents().await.unwrap();
+    assert!(pending.waiting.is_empty() && !pending.unresolved);
+    assert!(executions(&manager, &workspace).await.is_empty());
+    assert!(blocked(&manager).await.is_empty());
+    manager.store.shutdown().await;
+    serving.abort();
+}
+
+#[tokio::test]
+async fn reconciliation_forgets_an_unstarted_execution_whose_wrapper_pid_was_reused() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let (_later, live) = sleeper();
+    unstarted(&manager, &workspace, "reused", &born_earlier(&live)).await;
+    let pending = manager.reconcile_interrupted_agents().await.unwrap();
+    assert!(pending.waiting.is_empty() && !pending.unresolved);
+    assert!(executions(&manager, &workspace).await.is_empty());
+    manager.store.shutdown().await;
+    serving.abort();
+}
+
+#[tokio::test]
+async fn reconciliation_keeps_an_unstarted_execution_while_its_wrapper_runs() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let (_alive, wrapper) = sleeper();
+    unstarted(&manager, &workspace, "alive", &wrapper).await;
+    let pending = manager.reconcile_interrupted_agents().await.unwrap();
+    assert_eq!(pending.waiting.len(), 1);
+    let kept = executions(&manager, &workspace).await;
+    assert_eq!(kept.len(), 1);
+    assert_eq!(kept[0].state, ExecutionState::Unknown);
+    manager.store.shutdown().await;
     serving.abort();
 }
 

@@ -312,7 +312,10 @@ processes it started outside its process group were still running. An
 agent whose restore needs a session picker, or whose assignment is done, waits
 for `shoal restore` instead. Other commands just end. After a reboot, Shoal
 forgets the executions of the earlier boot; an agent among them that saved
-nothing becomes a last session.
+nothing becomes a last session. An execution whose wrapper left before it
+started its command, such as a setup's under memory pressure, is forgotten once
+no process at its wrapper's PID has the wrapper's birth and nothing of it runs,
+so `shoal setup` retries the setup without `shoal stop`.
 For an execution whose wrapper is gone, `shoal stop <workspace>` stops the
 processes it verifies as the execution's and forgets the record once nothing of
 it is visible. Processes it cannot verify or read fail the stop with their PIDs,
