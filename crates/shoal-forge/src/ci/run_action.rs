@@ -133,15 +133,14 @@ impl ForgeRepo {
         Ok((!pull.fork).then(|| pull.head.to_string()))
     }
 
-    /// Cancel `run` unless it has finished, returning whether it ran.
-    pub async fn cancel_unfinished(&self, account: &Account, run: &ItemRef) -> Result<bool> {
+    /// Cancel `run` unless it has finished.
+    pub async fn cancel_unfinished(&self, account: &Account, run: &ItemRef) -> Result<()> {
         let run = self.find_run(account, run, CiAction::Cancel).await?;
-        if !run.state.unfinished() {
-            return Ok(false);
+        if run.state.unfinished() {
+            self.act_on_run(account, &run, CiAction::Cancel, false)
+                .await?;
         }
-        self.act_on_run(account, &run, CiAction::Cancel, false)
-            .await?;
-        Ok(true)
+        Ok(())
     }
 
     /// Apply `action` to `run`; `failed` reruns only its failed jobs.
