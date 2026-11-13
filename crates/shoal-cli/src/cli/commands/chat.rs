@@ -21,7 +21,7 @@ pub(super) use list::{list, listed};
 pub(super) use options::{ChatPlace, Narrowing, Options, ensure_scope_token};
 pub(super) use rename::{rename, request_name};
 pub(super) use start::{
-    Subject, root_dir, settings, start, start_in_workspace, start_outside_repositories,
-    start_resolved,
+    Subject, root_dir, settings, start, start_handed, start_in_workspace,
+    start_outside_repositories,
 };
 pub(super) use topic::{Relaunch, Topic};

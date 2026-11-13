@@ -391,6 +391,15 @@ fn queue_start_round_trips_its_entry() {
 }
 
 #[test]
+fn chat_round_trips_its_handoff() {
+    let handoff = std::path::Path::new("/tmp/shoal-chat.handoff");
+    let InternalCommand::Chat { handoff: parsed } = parse(Worker::Chat { handoff }, false) else {
+        panic!("expected the chat worker");
+    };
+    assert_eq!(parsed, handoff);
+}
+
+#[test]
 fn operation_parses_without_arguments() {
     assert!(matches!(
         parse(Worker::Operation, false),

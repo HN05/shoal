@@ -1,8 +1,8 @@
 //! New chats the daemon starts for a client, as `shoal start` starts one
 //! without a terminal: it resolves what the start leaves out under the
-//! chat's settings and checks where the chat goes, then runs the CLI's chat
-//! start worker, which opens a background place for it, and answers once
-//! the chat runs its agent.
+//! chat's settings and checks where the chat goes, then runs the chat start
+//! worker, which opens a background place for it, and answers once the chat
+//! runs its agent.
 use anyhow::{Context as _, Result, ensure};
 
 use crate::client::{
@@ -133,7 +133,7 @@ impl Manager {
     }
 }
 
-/// Run the CLI's chat start worker for the resolved `start`, detached from
+/// Run the chat start worker for the resolved `start`, detached from
 /// the daemon in the environment of the terminal it names, as the user or,
 /// with `token`, with that scope, and return the chat it reports once it
 /// runs its agent.

@@ -1,7 +1,10 @@
 //! Starting a chat where the command line asks: in a repository's
 //! checkout, in a workspace's worktree, or without a repository in
 //! `root_dir`, below the parent it names and on the issue it names.
-use std::{ffi::OsString, path::PathBuf};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context as _, Result, ensure};
 
@@ -84,12 +87,21 @@ pub(in crate::cli::commands) async fn start_outside_repositories(
     .await
 }
 
-/// The daemon's chat start worker: start the chat whose start, which the
-/// daemon resolved and checked, comes on standard input, in a background
-/// place this process opens, and report it.
-pub(in crate::cli::commands) async fn start_resolved(ctx: &Context) -> Result<i32> {
-    let resolved: ChatStart =
-        serde_json::from_reader(std::io::stdin().lock()).context("read the chat's start")?;
+/// The chat worker: start here the chat whose start, which the daemon
+/// resolved and checked, the daemon's chat start worker handed this process
+/// through the chat handoff at `handoff`, reporting there how it went. It
+/// runs in the background place that worker opened for it, or in no place
+/// for an agent that runs its own way.
+pub(in crate::cli::commands) async fn start_handed(ctx: &Context, handoff: &Path) -> Result<i32> {
+    let start = async {
+        let start = crate::chat_handoff::handed_start(handoff)?;
+        start_resolved(ctx, start).await
+    };
+    crate::chat_handoff::serve(Some(handoff), start).await
+}
+
+/// Start here the chat `resolved` describes.
+async fn start_resolved(ctx: &Context, resolved: ChatStart) -> Result<i32> {
     let ChatStart {
         repository,
         workspace,
@@ -107,7 +119,7 @@ pub(in crate::cli::commands) async fn start_resolved(ctx: &Context) -> Result<i3
     let mode = mode.context("the daemon names the chat's mode")?;
     let options = Options {
         agent,
-        place: ChatPlace::Background,
+        place: ChatPlace::Here,
         name,
         model,
         args: args.into_iter().map(OsString::from).collect(),

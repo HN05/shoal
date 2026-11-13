@@ -127,6 +127,7 @@ impl Launch {
         // records the chat, may end with the starter, so it goes along.
         let handoff = crate::chat_handoff::Handoff::create(crate::env::scope_token().as_ref())?;
         let relaunch = self.relaunch(Some(handoff.path()));
+        let relaunch = crate::terminal::shoal_command(&ctx.paths, &relaunch)?;
         let chat = &self.chat;
         let repository = chat.repository.registered();
         let place = crate::terminal::queued::start_chat(
@@ -135,7 +136,7 @@ impl Launch {
             repository,
             chat.home().path(),
             &chat.name,
-            &relaunch,
+            relaunch,
             false,
         )
         .await?;

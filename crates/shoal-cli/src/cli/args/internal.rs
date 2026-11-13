@@ -196,6 +196,10 @@ pub enum InternalCommand {
     /// input in a background place; the daemon runs it.
     #[command(name = workers::CHAT_START)]
     ChatStart,
+    /// Start, in the place this runs in, the chat whose resolved start the
+    /// chat handoff at `handoff` holds; the chat start worker runs it.
+    #[command(name = workers::CHAT)]
+    Chat { handoff: PathBuf },
     /// Add the planned workspace inside the place `host` opened for it.
     #[command(name = workers::ADD)]
     Add(AddWorkerArgs),

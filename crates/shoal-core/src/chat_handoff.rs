@@ -10,6 +10,7 @@
 //! never the place's environment, which a shell left there after the chat
 //! would keep.
 use crate::client::scope_tokens::ScopeToken;
+use crate::protocol::ChatStart;
 use std::{
     fs::File,
     path::{Path, PathBuf},
@@ -32,6 +33,9 @@ const UNSCOPED: &str = "unscoped";
 const REPORT: &str = "report";
 /// What the place reports once the chat holds its own scope token.
 const STARTED: &str = "started";
+/// The file holding the start of a chat the daemon resolved, which the
+/// place's chat worker carries out.
+const START: &str = "start";
 /// The file the place holds locked from taking the handoff until it exits.
 const PLACE: &str = "place";
 /// How long the starter waits for the place to take the handoff, a hang
@@ -66,6 +70,12 @@ impl Handoff {
     /// Where the place finds the handoff.
     pub fn path(&self) -> &Path {
         self.0.path()
+    }
+
+    /// Hand the place `start`, the chat its chat worker starts.
+    pub fn hand_start(&self, start: &ChatStart) -> Result<()> {
+        let start = serde_json::to_vec(start)?;
+        std::fs::write(self.0.path().join(START), start).context("write the chat's handoff")
     }
 
     /// Wait until the place reports, returning why the chat did not start
@@ -143,6 +153,12 @@ pub async fn serve<T>(path: Option<&Path>, start: impl Future<Output = Result<T>
     let outcome = start.await;
     report(&outcome);
     outcome
+}
+
+/// The chat start the handoff at `path` hands the place.
+pub fn handed_start(path: &Path) -> Result<ChatStart> {
+    let start = std::fs::read(path.join(START)).context("read the chat's handoff")?;
+    serde_json::from_slice(&start).context("read the chat's start")
 }
 
 /// The handoff this process received, to which it reports.

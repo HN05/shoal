@@ -7,8 +7,8 @@ use anyhow::{Context as _, Result};
 
 use super::{
     Beside, current_origin, enabled_host, groups, naming,
+    opening::start_in_background,
     opening::{chat_place_env, open_add, open_in_background, rerun_in_host, reusable_place},
-    opening::{shoal_command, start_in_background},
 };
 use crate::{
     config::Effective,
@@ -126,10 +126,10 @@ pub(crate) async fn restore_in_background(
     .context(NO_QUEUED_HOST)
 }
 
-/// Run Shoal with `args` for the chat `name` of `repository`, or of none,
-/// in `cwd`, its checkout, worktree or `root_dir`, in a new background
-/// place, of the first host that would start a queued agent, for the user
-/// to attach to. A `restore` records the place as the chat's, as a
+/// Run Shoal's `argv` for the chat `name` of `repository`, or of none, in
+/// `cwd`, its checkout, worktree or `root_dir`, in a new background place,
+/// of the first host that would start a queued agent, for the user to
+/// attach to. A `restore` records the place as the chat's, as a
 /// workspace's restore does. Returns how that host reports it.
 pub async fn start_chat(
     paths: &CommandPaths,
@@ -137,7 +137,7 @@ pub async fn start_chat(
     repository: Option<&Repository>,
     cwd: &Path,
     name: &str,
-    args: &[OsString],
+    argv: Vec<OsString>,
     restore: bool,
 ) -> Result<String> {
     let origin = queued_origin()?;
@@ -153,7 +153,7 @@ pub async fn start_chat(
                 return Ok(None);
             };
             let beside = Beside::opening(group);
-            let mut argv = shoal_command(paths, args)?;
+            let mut argv = argv.clone();
             if restore {
                 let host_name = host.host.name().as_str();
                 argv.extend(["--opened-in".into(), host_name.into()]);

@@ -118,7 +118,8 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             crate::git_credential::answer(&ctx.paths, operation).await
         }
         InternalCommand::QueueStart { entry } => crate::queued_starts::run(&ctx.paths, entry).await,
-        InternalCommand::ChatStart => chat::start_resolved(&ctx).await,
+        InternalCommand::ChatStart => crate::chat_starts::run(&ctx.paths).await,
+        InternalCommand::Chat { handoff } => chat::start_handed(&ctx, &handoff).await,
         InternalCommand::Operation => crate::operations::run(&ctx.paths).await,
         InternalCommand::Launch { file } => crate::terminal::run_launch(&file),
         InternalCommand::TakeOver {

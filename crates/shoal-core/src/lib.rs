@@ -11,6 +11,7 @@ pub mod ai;
 pub mod build;
 pub mod caches;
 pub mod chat_handoff;
+pub mod chat_starts;
 pub mod config;
 pub mod config_file;
 pub mod daemon_handoff;

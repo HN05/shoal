@@ -26,6 +26,7 @@ pub const PUSH_GATE: &str = "push-gate";
 pub const GIT_CREDENTIAL: &str = "git-credential";
 pub const QUEUE_START: &str = "queue-start";
 pub const CHAT_START: &str = "chat-start";
+pub const CHAT: &str = "chat";
 pub const OPERATION: &str = "operation";
 pub const ADD: &str = "add";
 pub const LAUNCH: &str = "launch";
@@ -108,6 +109,11 @@ pub enum Worker<'a> {
     /// Start the chat whose resolved start the daemon writes to standard
     /// input in a background place, reporting it on standard output.
     ChatStart,
+    /// Start, in the place it runs in, the chat whose resolved start the
+    /// chat handoff at `handoff` holds, reporting there.
+    Chat {
+        handoff: &'a Path,
+    },
     /// Add the workspace planned in the environment in the place `host`
     /// opened for it, `focused` when it shows the place, closing it once
     /// the workspace is done when `close_when_done` is set; without a host,
@@ -345,6 +351,7 @@ pub(crate) fn internal_command_for(
         Worker::Operation => args.push(OPERATION.into()),
         Worker::QueueStart { entry } => args.extend([QUEUE_START.into(), entry.into()]),
         Worker::ChatStart => args.push(CHAT_START.into()),
+        Worker::Chat { handoff } => args.extend([CHAT.into(), handoff.as_os_str().to_owned()]),
         Worker::Add {
             host,
             close_when_done,

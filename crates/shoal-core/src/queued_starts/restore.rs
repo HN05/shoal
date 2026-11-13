@@ -87,6 +87,7 @@ pub async fn start_chat(
         HomeRecords::Workspace(_) => None,
     };
     let name = space.name().as_str();
-    queued::start_chat(paths, settings, repository, home.path(), name, args, true).await?;
+    let argv = crate::terminal::shoal_command(paths, args)?;
+    queued::start_chat(paths, settings, repository, home.path(), name, argv, true).await?;
     Ok(())
 }
