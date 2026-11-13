@@ -26,10 +26,9 @@ its own from the first file that sets it:
 
 The global file's `[machine]` table holds the settings that describe this
 machine, and only the global file may set it. Everything outside it follows the
-repository schema in every file, so a setting copies between them. Only a
-repository file or the local config may set `setup.command` and `[setup.seed]`.
-An unknown or misplaced key fails with its line and column, and an unknown
-value of a typed option is an error.
+repository schema in every file, so a setting copies between them. An unknown
+or misplaced key fails with its line and column, and an unknown value of a
+typed option is an error.
 
 A named entry, such as `[ports.web]`, `[resources.signing]`,
 `[resource_pools.devices]`, `[demos.tui]` or `[secrets.TOKEN]`, replaces the one
@@ -578,9 +577,8 @@ copy_ignored_exclude = ["node_modules/"] # Gitignore-style patterns not to copy;
 presets = ["cargo", "bun"]               # Build tools to set up; default []
 ```
 
-`command`, only in a repository file or the local config, is one executable
-path, run without shell parsing or `PATH` lookup, relative to the worktree's
-root; it gates readiness. `copy_ignored` copies the checkout's ignored files
+`command` is one executable path, run without shell parsing or `PATH` lookup,
+relative to the worktree's root; it gates readiness. `copy_ignored` copies the checkout's ignored files
 into a new worktree before it, limited by a `.worktreeinclude` in the checkout,
 and `copy_ignored_exclude` leaves out what its patterns match.
 
@@ -599,9 +597,8 @@ command = "scripts/seed.sh"  # In the seed worktree; builds the default branch
 paths = ["target"]           # Build outputs, relative to the worktree
 ```
 
-Only a repository file or the local config sets `[setup.seed]`. `command` is an
-executable inside the seed worktree, given as a relative path; it replaces the
-presets' commands, and `paths` their outputs. See
+`command` is an executable inside the seed worktree, given as a relative path;
+it replaces the presets' commands, and `paths` their outputs. See
 [seed builds](reference.md#seed-builds).
 
 ### Hooks

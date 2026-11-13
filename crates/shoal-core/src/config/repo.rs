@@ -174,7 +174,6 @@ pub struct TerminalConfig {
 #[options(resolved = Setup)]
 pub struct SetupConfig {
     /// The tracked setup executable, which gates readiness.
-    #[option(repository_only)]
     pub command: Option<String>,
     /// Copy the main checkout's ignored files into the worktree before setup.
     #[option(default = true)]
@@ -187,7 +186,7 @@ pub struct SetupConfig {
     /// empty list turns off presets a lower layer names. Unset when no layer
     /// names presets.
     pub presets: Option<Vec<crate::config::presets::Preset>>,
-    #[option(section, repository_only)]
+    #[option(section)]
     pub seed: Seed,
 }
 

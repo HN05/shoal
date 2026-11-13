@@ -6,8 +6,7 @@
 #
 # The [machine] table describes this machine. Everything outside it follows the
 # schema of a repository's .shoal.toml (or its local config, which
-# `shoal repo config` shows), which may set any of it for that repository and
-# adds the repository's setup command and seed.
+# `shoal repo config` shows), which may set any of it for that repository.
 
 # Git identity for new worktrees (no default); may also be set per repository.
 # git_profile = "work"

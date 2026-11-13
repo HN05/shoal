@@ -8,7 +8,7 @@ use toml::{
     de::{DeTable, DeValue, Deserializer, Error, ValueDeserializer},
 };
 
-use super::{machine::Machine, options::Options, repo::RepoConfig};
+use super::{machine::Machine, repo::RepoConfig};
 
 const MACHINE: &str = "machine";
 
@@ -56,17 +56,6 @@ pub fn global(text: &str) -> Result<(Machine, RepoConfig), Error> {
     };
     let mut root = DeTable::parse(text)?;
     refuse_removed(&root).map_err(positioned)?;
-    let mut repository_only = Vec::new();
-    RepoConfig::repository_only("", &mut repository_only);
-    for key in &repository_only {
-        let path: Vec<_> = key.split('.').collect();
-        refuse(
-            &root,
-            &path,
-            &format!("{key} belongs in the repository config"),
-        )
-        .map_err(positioned)?;
-    }
     let machine = match root.get_mut().remove(MACHINE) {
         Some(value) => {
             serde::Deserialize::deserialize(ValueDeserializer::from(value)).map_err(positioned)?

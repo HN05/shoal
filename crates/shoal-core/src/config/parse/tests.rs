@@ -32,17 +32,6 @@ fn keys_in_the_wrong_file_name_the_file_they_belong_in() {
         message(repository("terminal.focus = true\n[machine]\nkeep_awake = true\n").unwrap_err());
     assert!(error.contains("line 2"), "{error}");
     assert!(error.contains("[machine]"), "{error}");
-    for (text, key) in [
-        (
-            "terminal.focus = true\nsetup.command = 'scripts/setup'\n",
-            "setup.command",
-        ),
-        ("[setup.seed]\ncommand = 'scripts/seed'\n", "setup.seed"),
-    ] {
-        let error = message(global(text).unwrap_err());
-        assert!(error.contains(key), "{error}");
-        assert!(repository(text).is_ok());
-    }
 }
 
 #[test]
