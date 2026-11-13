@@ -17,6 +17,20 @@ pub(super) fn record(db: &Connection, id: &SpaceId, url: &str, title: &str) -> R
     Ok(())
 }
 
+/// Record `title`, which the forge reports for `url`, as its title when the
+/// space assigns that PR.
+pub(in crate::daemon::links) fn refresh(
+    db: &Connection,
+    id: &SpaceId,
+    url: &str,
+    title: &str,
+) -> Result<()> {
+    if super::watched_prs(db, id)?.iter().any(|pr| pr.url() == url) {
+        record(db, id, url, title)?;
+    }
+    Ok(())
+}
+
 /// Forget the titles of the PRs `urls`, which the space no longer assigns.
 pub(super) fn forget(db: &Connection, id: &SpaceId, urls: &[ItemRef]) -> Result<()> {
     for url in urls {

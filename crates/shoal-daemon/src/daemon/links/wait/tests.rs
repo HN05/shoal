@@ -253,6 +253,63 @@ async fn background_activity_uses_its_own_baseline_and_publishes_events() {
     assert_eq!(activity.update.kind, UpdateKind::Comment);
 }
 
+/// A read of an open item that shows `title`.
+fn titled(title: &str) -> Snapshot {
+    serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
+        "state": "open", "errors": {},
+        "details": {"title": title, "body": "", "labels": [], "assignees": []}}))
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_linked_item_takes_the_title_the_forge_reports() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "titles".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id;
+    register_watch(&manager, &id, PR.as_str()).await;
+    let issue = item_url("issues/7");
+    let assigned = (id.clone(), issue.clone());
+    manager
+        .store
+        .write(move |tx| {
+            let (id, issue) = assigned;
+            tx.execute(
+                "INSERT INTO space_issue(space_id,url,title) VALUES (?1,?2,'Before')",
+                params![id, issue],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let titles = async || {
+        let links = manager.workspace_by_id(&id).await.unwrap().links;
+        (links.prs[0].title.clone(), links.issues[0].title.clone())
+    };
+
+    // The background poll's first read of a PR linked without a title gives
+    // it one, and a watch's read of a renamed one renames it.
+    let observed = vec![
+        (PR.to_string(), titled("Fix")),
+        (issue.clone(), titled("Bug")),
+    ];
+    manager
+        .record_background_activity(&id, observed)
+        .await
+        .unwrap();
+    assert_eq!(titles().await, (Some("Fix".into()), Some("Bug".into())));
+    let renamed = vec![(PR.to_string(), titled("Fix it"))];
+    manager.record_pr_activity(&id, renamed).await.unwrap();
+    assert_eq!(titles().await, (Some("Fix it".into()), Some("Bug".into())));
+}
+
 #[tokio::test]
 async fn a_failed_first_background_read_leaves_the_baseline_to_the_next() {
     let (root, manager) = manager().await;

@@ -423,6 +423,11 @@ impl Snapshot {
         self.state
     }
 
+    /// The issue's or PR's title, once a read of it has been recorded.
+    pub fn title(&self) -> Option<&str> {
+        (self.details.as_ref()).map(|details| details.title.as_str())
+    }
+
     /// The PR's head commit, `None` for an issue.
     pub fn head(&self) -> Option<&CommitId> {
         self.head.as_ref()

@@ -46,6 +46,9 @@ pub(super) fn save_cursor_record(
          ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record",
         params![id, url, serde_json::to_string(record)?],
     )?;
+    if let Some(title) = record.snapshot.title() {
+        crate::daemon::links::refresh_titles(db, id, url, title)?;
+    }
     save_pending(db, id, url, &record.pending)
 }
 

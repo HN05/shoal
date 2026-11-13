@@ -193,15 +193,29 @@ impl Manager {
                             )?;
                         }
                     }
-                    tx.execute(
-                        "INSERT INTO space_item_activity(space_id,url,record)
-                         VALUES (?1,?2,?3)
-                         ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record",
-                        params![id, url, serde_json::to_string(&snapshot)?],
-                    )?;
+                    save_observation(tx, &id, &url, &snapshot)?;
                 }
                 Ok(merged)
             })
             .await
     }
+}
+
+/// Store `snapshot` as the background poll's observation of the item at
+/// `url` for the space `id`, taking the title it shows as the item's.
+fn save_observation(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+    url: &str,
+    snapshot: &Snapshot,
+) -> Result<()> {
+    db.execute(
+        "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,?3)
+         ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record",
+        params![id, url, serde_json::to_string(snapshot)?],
+    )?;
+    if let Some(title) = snapshot.title() {
+        crate::daemon::links::refresh_titles(db, id, url, title)?;
+    }
+    Ok(())
 }

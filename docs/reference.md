@@ -4592,9 +4592,10 @@ than the current one. Numbers resolve against its origin and URLs must match it.
 an item again under its relation changes nothing but a newly known title.
 Assigned issues accumulate without duplicates in the order they were assigned;
 the first names a new branch, gives a new PR its title and starts the agent.
-Linking an issue or PR records its title, and workspace lists show the first
-assigned issue's; when the forge cannot be read, the link is recorded without
-one and a warning names the error.
+Linking an issue or PR records its title, which later reads of the item on its
+forge keep current, and workspace lists show the first assigned issue's; when
+the forge cannot be read, the link is recorded without one and a warning names
+the error.
 Assigned PRs accumulate without duplicates, and any PR of the repository can be
 assigned whatever its head branch, such as one pushed from the worktree on
 another branch. Assigned items suppress idle cleanup.
