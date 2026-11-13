@@ -518,6 +518,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 163 {
         db.execute_batch(include_str!("chat_executions.sql"))?;
     }
+    if version >= 164 {
+        db.execute_batch(include_str!("space_records.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -1414,6 +1417,46 @@ fn executions_and_queue_restores_keep_their_workspace_as_their_space() -> Result
     assert_eq!(spaces(&db)?, kept);
     db.execute("DELETE FROM workspaces WHERE id='workspace'", [])?;
     assert!(spaces(&db)?.is_empty());
+    Ok(())
+}
+
+#[test]
+fn migration_records_every_space_once_across_conversions() -> Result<()> {
+    let mut db = historical_database(163)?;
+    db.execute_batch(
+        "INSERT INTO chats(id,repository_id,name,agent,started_at)
+            VALUES ('chat','repo','chat','claude',1);
+         INSERT INTO space_progress(space_id,record,updated_at)
+            VALUES ('chat','{}',1),('workspace','{}',1);",
+    )?;
+    migrate(&mut db)?;
+    let recorded = |db: &Connection| -> Result<Vec<String>> {
+        Ok(db
+            .prepare("SELECT id FROM space_records ORDER BY id")?
+            .query_map([], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?)
+    };
+    let progress = |db: &Connection| -> Result<Vec<String>> {
+        Ok(db
+            .prepare("SELECT space_id FROM space_progress ORDER BY space_id")?
+            .query_map([], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?)
+    };
+    assert_eq!(recorded(&db)?, ["chat", "workspace"]);
+
+    // A conversion replaces the chat's row and keeps the space.
+    db.execute_batch(
+        "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+            VALUES ('chat','repo','chat','/chat','chat','ready');
+         DELETE FROM chats WHERE id='chat';",
+    )?;
+    assert_eq!(recorded(&db)?, ["chat", "workspace"]);
+    assert_eq!(progress(&db)?, ["chat", "workspace"]);
+
+    // Deleting the record removes the space with its row.
+    db.execute("DELETE FROM space_records WHERE id='chat'", [])?;
+    let rows: i64 = db.query_row("SELECT COUNT(*) FROM spaces", [], |r| r.get(0))?;
+    assert_eq!((rows, progress(&db)?), (1, vec!["workspace".to_owned()]));
     Ok(())
 }
 

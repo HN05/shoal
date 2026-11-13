@@ -300,6 +300,7 @@ pub(crate) fn replace_chat(tx: &Transaction<'_>, id: &SpaceId) -> Result<ChatRow
             SELECT scope_token,id FROM chats WHERE id=?1 AND scope_token IS NOT NULL",
         [id],
     )?;
+    forget_completion(tx, id)?;
     tx.execute("DELETE FROM chats WHERE id=?1", [id])?;
     Ok(row)
 }
@@ -334,7 +335,6 @@ pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) ->
         [id],
     )?;
     tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
-    // Last, since deleting the workspace's row deletes the completion.
     if let Some(completion) = &row.space_completion {
         tx.execute(
             "INSERT OR REPLACE INTO space_completion(space_id,record,cause) VALUES (?1,?2,?3)",
@@ -395,15 +395,22 @@ pub(crate) fn replace_workspace(
     move_agent_messages(tx, id)?;
     let released = release_decided_by(tx, id)?;
     forget_executions(tx, id)?;
+    forget_completion(tx, id)?;
     tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
     forget(tx, id)?;
     Ok(released)
 }
 
+/// Forget the completion of the space `id`, which ends with the kind it
+/// had: its record, which a conversion keeps, does not take it with it.
+fn forget_completion(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
+    tx.execute("DELETE FROM space_completion WHERE space_id=?1", [id])?;
+    Ok(())
+}
+
 /// Delete the executions of the workspace `id`, which a chat replaces, and
-/// the queue entries that restore or opened them; the triggers that delete
-/// them with a removed space leave them to a row that moves to the other
-/// table.
+/// the queue entries that restore or opened them, which its record, which a
+/// conversion keeps, does not take with it.
 fn forget_executions(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     tx.execute("DELETE FROM executions WHERE space_id=?1", [id])?;
     tx.execute("DELETE FROM agent_queue WHERE space_id=?1", [id])?;

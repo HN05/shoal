@@ -65,7 +65,7 @@ fn delete(
     workspace_files::keep_ended_chat(tx, id, expires_at)?;
     // With the record, so no request is left with a removed decider.
     let released = release_decided_by(tx, id)?;
-    tx.execute("DELETE FROM chats WHERE id=?1", [id])?;
+    tx.execute("DELETE FROM space_records WHERE id=?1", [id])?;
     Ok(Deleted {
         notification,
         released,
