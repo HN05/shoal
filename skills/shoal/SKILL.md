@@ -71,9 +71,10 @@ Run inside a space, `start` creates a child of it, or of a space its scope
 reaches that `--parent` names, in its repository, or for a master session in any registered
 one, on a branch from the default branch;
 a chat-kind mode starts a child chat in a background place and returns once the chat
-has started, and `--here` is refused. Outside any space it creates top-level
-spaces. Without a terminal, as from a tool call, agents start detached; `--here`
-runs one in the calling terminal until it exits. `--fork` starts the caller's
+has started, and refuses `--here`. Outside any space it creates top-level
+spaces. Without a terminal, as from a tool call, and from inside a space, agents
+start detached; `--here` runs one in the calling terminal until it exits, as
+the new space's own agent. `--fork` starts the caller's
 own agent from a fork of its session, so it needs only its task after `--`.
 
 `start` returns once the workspace is set up, with the workspace and the

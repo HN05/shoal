@@ -1,8 +1,8 @@
 //! Starting an addition's agent detached, as scoped callers and
-//! ones without a terminal do: the daemon starts it outside the caller, so
-//! interrupting the caller leaves it running. A scoped caller's preparation
-//! queues the agent; the user's is placed once its workspace is set up.
-//! A blocked launch queues whole.
+//! ones without a terminal do unless `--here` runs it in place: the daemon
+//! starts it outside the caller, so interrupting the caller leaves it
+//! running. A scoped caller's preparation queues the agent; the user's is
+//! placed once its workspace is set up. A blocked launch queues whole.
 use anyhow::{Context as _, Result, ensure};
 
 use super::{
@@ -26,19 +26,16 @@ use crate::{
     start_plan::AddPlan,
 };
 
-/// Whether the plan's agent starts detached: always for a scoped caller,
-/// which `--here` cannot keep in place, and for one without a terminal to
-/// start it beside, unless `--here` asks to run it in place.
-pub(super) fn starts_detached(ctx: &Context, plan: &AddPlan, options: &AddOptions) -> Result<bool> {
+/// Whether the plan's agent starts detached, unless `--here` asks to run it
+/// in place: for a scoped caller, whose own processes it must not be, and
+/// for one without a terminal to start it beside. A scoped caller's
+/// addition without an agent opens its workspace the detached way too.
+pub(super) fn starts_detached(ctx: &Context, plan: &AddPlan, options: &AddOptions) -> bool {
     let agent = plan.agent_name().is_some();
     if crate::env::is_scoped() {
-        ensure!(
-            !(agent && options.here),
-            "scoped processes start agents detached; leave out --here"
-        );
-        return Ok(true);
+        return !(agent && options.here);
     }
-    Ok(agent && !options.here && !ctx.on_terminal())
+    agent && !options.here && !ctx.on_terminal()
 }
 
 /// Open the planned workspace and start its agent detached. A scoped
@@ -56,8 +53,8 @@ pub(super) async fn add_detached(
         return add_planned(ctx, plan, target, issue, AgentStart::Here).await;
     }
     let blockers = launch_blockers(ctx, &target, issue.as_ref(), options.now, blockers).await?;
-    // A scoped caller may not reopen a recorded workspace, so its agent there
-    // queues directly; the user's is placed as a new workspace's is.
+    // A scoped caller's agent in a recorded workspace queues directly, for
+    // the daemon to start; the user's is placed as a new workspace's is.
     if plan.workspace.is_some() && crate::env::is_scoped() {
         return queue_in_existing(ctx, plan, issue.as_ref(), (options.now, blockers)).await;
     }
@@ -69,8 +66,16 @@ pub(super) async fn add_detached(
         return add_planned(ctx, plan, target, issue, start).await;
     }
     // The daemon starts a scoped caller's launch itself, in its scope.
-    if let Some(queued) =
-        admit_launch(ctx, &target, &mut plan, issue.as_ref(), false, blockers).await?
+    let caller_starts = !crate::env::is_scoped();
+    if let Some(queued) = admit_launch(
+        ctx,
+        &target,
+        &mut plan,
+        issue.as_ref(),
+        (false, blockers),
+        caller_starts,
+    )
+    .await?
     {
         return Ok(queued);
     }
@@ -85,8 +90,9 @@ pub(super) async fn add_detached(
 /// Queue the agent of the existing workspace `plan` opens, which the daemon
 /// starts detached once admitted, at once regardless of the limits when
 /// `now` and once what `blockers` names clears, and report the workspace and the
-/// entry. Nothing reopens the workspace here, so a scoped caller, which may
-/// not, starts the worker of a workspace below its own space this way.
+/// entry. Nothing reopens the workspace here; the start the daemon makes
+/// once the entry is admitted does, as a scoped caller's detached start of
+/// the worker of a workspace below its own space has it do.
 async fn queue_in_existing(
     ctx: &Context,
     plan: AddPlan,

@@ -78,7 +78,7 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
                 "list_repositories",
                 "list_workspaces",
                 "layered_config test",
-                "queue_add",
+                "queue_add now=false starts_in_caller=true",
                 "start_workspace",
             ],
             "creation reached",
@@ -134,6 +134,35 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             "{args:?}: {output:?}"
         );
     }
+}
+
+/// A scoped caller's `--here` waits for a slot, which it starts its agent
+/// in itself, as the user's does, rather than leaving it to the daemon.
+#[test]
+fn a_scoped_start_here_takes_its_own_slot_without_skipping_the_limits() {
+    let daemon = FakeDaemon::start();
+    let bin = daemon.root.path().join("bin");
+    support::install_test_script(bin.join("codex"), "#!/bin/sh\n");
+    let output = daemon
+        .command()
+        .env("SHOAL_SCOPE_TOKEN", "scope")
+        .args(["--json", "start", "test", "--branch", "new", "--here"])
+        .args(["--agent", "codex"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    assert_eq!(
+        daemon.methods(),
+        [
+            "list_repositories",
+            "list_workspaces",
+            "layered_config test",
+            "queue_add now=false starts_in_caller=true",
+            "start_workspace",
+        ],
+        "{output:?}"
+    );
 }
 
 #[test]
@@ -300,9 +329,14 @@ impl FakeDaemon {
                         "code": "operation_failed", "message": "issue number must be positive"
                     }}),
                     "list_workspaces" => json!({"type": "workspaces", "data": []}),
-                    "queue_add" => json!({"type": "queue_admission", "data": {
-                        "start": true, "entry": null, "waiting": 0
-                    }}),
+                    "queue_add" => {
+                        let queued = &request["method"]["queue_add"]["request"];
+                        let (now, caller) = (&queued["now"], &queued["starts_in_caller"]);
+                        method = format!("queue_add now={now} starts_in_caller={caller}");
+                        json!({"type": "queue_admission", "data": {
+                            "start": true, "entry": null, "waiting": 0
+                        }})
+                    }
                     _ => {
                         json!({"type": "error", "data": {"code": "operation_failed", "message": "creation reached"}})
                     }

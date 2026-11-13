@@ -46,9 +46,10 @@ pub(super) async fn named_blockers(
     Ok(blockers)
 }
 
-/// Admit the plan's agent, if any, to the agent queue: a start takes its
-/// slot and builds on the branch a done blocker left, while a queued
-/// launch is reported and returns its exit status.
+/// Admit the plan's agent, if any, to the agent queue for this process to
+/// start: a start takes its slot and builds on the branch a done blocker
+/// left, while a queued launch is reported and returns its exit status.
+/// Only the user's start skips the limits unasked.
 pub(super) async fn admit(
     ctx: &Context,
     target: &AddTarget,
@@ -61,23 +62,27 @@ pub(super) async fn admit(
     if plan.agent_name().is_none() {
         return Ok(None);
     }
-    let now = options.starts_now(
-        plan,
-        settings.get().await?.focus(&plan.mode()),
-        ctx.on_terminal(),
-    );
+    let now = match crate::env::is_scoped() {
+        true => options.now,
+        false => {
+            let focus = settings.get().await?.focus(&plan.mode());
+            options.starts_now(plan, focus, ctx.on_terminal())
+        }
+    };
     let blockers = launch_blockers(ctx, target, issue, now, blockers).await?;
-    admit_launch(ctx, target, plan, issue, now, blockers).await
+    admit_launch(ctx, target, plan, issue, (now, blockers), true).await
 }
 
-/// [`admit`] the plan's agent, which starts `now` or waits for `blockers`.
+/// [`admit`] the plan's agent, which starts `now` or waits for `blockers`,
+/// in this process once admitted when `caller_starts`, otherwise from the
+/// daemon.
 pub(super) async fn admit_launch(
     ctx: &Context,
     target: &AddTarget,
     plan: &mut AddPlan,
     issue: Option<&issues::Issue>,
-    now: bool,
-    blockers: Vec<Blocker>,
+    (now, blockers): (bool, Vec<Blocker>),
+    caller_starts: bool,
 ) -> Result<Option<i32>> {
     let Some(agent) = plan.agent_name() else {
         return Ok(None);
@@ -93,8 +98,7 @@ pub(super) async fn admit_launch(
         now,
         blockers,
         opens: reopened_workspace(ctx, target, plan).await?,
-        // The daemon starts a scoped caller's agents.
-        caller_starts: !crate::env::is_scoped(),
+        caller_starts,
     };
     match queued_agents::admit(ctx, plan, launch).await? {
         queued_agents::Admission::Start { entry, base } => {

@@ -158,7 +158,7 @@ instead of the PR delivery guidance below.
   whose directory it runs in, while agent hooks always report for the own workspace.
   Workspace allocation other than a child of their own space, removal other than of a space below their own
   the user holds nothing below, recovery and shared repository/service administration other than `config reload` stay denied. For the spaces their scope reaches but their own, scoped callers hold them, queue agents,
-  which the daemon starts detached so they never inherit the caller's scope, cancel and prioritize their queue
+  which the daemon starts detached unless `start --here` runs one in the caller's terminal, and which hold their own space's scope, never the caller's, cancel and prioritize their queue
   entries, send agent messages,
   answer questions, stop their executions and agents, confirming a stop Shoal cannot prove, restart their agents, convert them,
   queue restores of the agents, a workspace's or a chat's, whoever stopped them,
@@ -441,8 +441,8 @@ instead of the PR delivery guidance below.
   starts the agent past `max_agents`, as `--now` does; the `focus` setting does not.
   Help calls, calls without a terminal and `--here` calls run in place, except
   that a scoped caller's agent, and an agent of `start` or `restore --now` from a
-  caller without a terminal, start detached through the daemon unless `start --here` or
-  `restore --focus` keeps an unscoped caller's in place. Shell and untracked
+  caller without a terminal, start detached through the daemon unless `start --here`,
+  or for an unscoped caller `restore --focus`, keeps it in place. Shell and untracked
   desktop handoffs retain the tab.
 - Each command, flag and value has one name; flag a clap alias, including an
   old name kept after a rename. A short form is not an alias, but its letter

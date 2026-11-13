@@ -166,7 +166,7 @@ async fn start_planned(
         issue,
         blockers,
     } = planned;
-    if starts_detached(ctx, &plan, &options)? {
+    if starts_detached(ctx, &plan, &options) {
         ensure_detachable(settings, &plan, &options).await?;
         // Boxed, as are the launches below it: the start path's futures
         // nest deep enough to overflow the main thread's stack in debug

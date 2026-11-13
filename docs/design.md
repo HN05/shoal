@@ -908,7 +908,8 @@ workspace process's `start` gives a child an agent of its own through the agent
 queue, and `start --fork` gives it the parent's agent
 from a fork of its session, the one the caller's agent or else the parent's only
 agent reported last, so the parent need not restate what it learned; the daemon starts every launch in an existing
-workspace itself, detached, so the agent never inherits the caller's scope, and
+workspace itself, detached, unless `start --here` has the caller start it, and the agent
+holds its own space's scope, never the caller's, and
 scoped callers may queue only for the workspaces their scope reaches but their
 own, and cancel and prioritize the entries their scope reaches: those of such
 spaces, a CI job's through the spaces its run is for, and a new space's launch
@@ -1559,9 +1560,14 @@ would hold the call until it exits and die with an interrupt of the caller.
 An agent Happy runs leaves the call at once anyway, so such a caller hands it
 over in place. The caller places the agent once the workspace is set up, from
 its settings, and queues it itself rather than in the start request.
-`start --here` and `restore --focus` keep the in-place launch for callers outside
-Shoal, for a script that waits on the agent's exit code, while a scoped
-caller's `--here` with an agent is refused. zmx reports no exit status, so a session launch
+`start --here` keeps the in-place launch, for a script that waits on the agent's
+exit code and for a scoped caller, such as a master session's terminal, that runs
+an agent there; `restore --focus` keeps it for callers outside Shoal. A scoped
+caller's `--here` waits for a slot, since only the user's terminal starts agents
+beyond the limits, and holds its own launch's entry as the user's does. Its
+agent's execution is its own space's, with that space's scope: an agent's wrapper,
+and what it started, never count among the processes of another execution that
+started it, so the caller's stops leave the agent running. zmx reports no exit status, so a session launch
 exits 0; the daemon still records the agent's exit.
 
 Demos let the user try a change where the agent's windows are out of sight,

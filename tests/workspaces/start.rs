@@ -237,11 +237,13 @@ fn a_scoped_start_reports_an_agent_refused_after_the_childs_setup() {
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
 }
 
-/// A scoped caller's agent always starts detached, so `--here` is refused
-/// before the child exists.
+/// A scoped caller's `--here` runs the agent of the child it opens in its
+/// own terminal, as the child's own agent with the child's identity.
 #[test]
-fn a_scoped_start_refuses_to_run_its_agent_here() {
-    let fixture = Fixture::with_config(Some("[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\n"));
+fn a_scoped_start_runs_its_agent_here_as_the_childs() {
+    let agent = r#"echo "$SHOAL_WORKSPACE_ID" "$SHOAL_SCOPE_TOKEN" > agent-env"#;
+    let config = format!("[agents.waiter]\ncommand = ['sh', '-c', '{agent}']\n");
+    let fixture = Fixture::with_config(Some(&config));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
     let repo = fixture.repo.to_str().unwrap();
@@ -249,12 +251,16 @@ fn a_scoped_start_refuses_to_run_its_agent_here() {
         "start", repo, "--branch", "child", "--here", "--agent", "waiter",
     ];
     let output = scoped_command(&fixture, "parent", &start);
-    assert!(!output.status.success(), "{output:?}");
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("--here"),
-        "{output:?}"
-    );
-    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+    assert!(output.status.success(), "{output:?}");
+    let child = &fixture.ok(&["status", &fixture.id("child")])["workspace"];
+    assert_eq!(child["parent"]["id"], fixture.id("parent"), "{child}");
+    let path = std::path::Path::new(child["path"].as_str().unwrap());
+    let recorded = std::fs::read_to_string(path.join("agent-env")).unwrap();
+    let [workspace, token] = recorded.split_whitespace().collect::<Vec<_>>()[..] else {
+        panic!("{recorded:?}");
+    };
+    assert_eq!(workspace, fixture.id("child"));
+    assert!(!token.is_empty());
 }
 
 /// A scoped caller's blocked agent queues whole: the workspace opens below
