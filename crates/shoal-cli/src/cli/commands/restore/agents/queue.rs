@@ -68,6 +68,39 @@ pub(in crate::cli::commands) async fn queue_stopped(
     Ok(queue_each(ctx, queued, false).await)
 }
 
+/// Queue the restores of the agents among `stopped`, warning when that
+/// fails, since `shoal restore` still restores them.
+pub(in crate::cli::commands) async fn restore_stopped(
+    ctx: &Context,
+    stopped: &Stopped,
+) -> Option<Queued> {
+    if stopped.is_empty() {
+        return None;
+    }
+    match queue_stopped(ctx, stopped).await {
+        Ok(queued) => Some(queued),
+        Err(error) => {
+            eprintln!("warning: cannot restore the stopped agents; run shoal restore: {error:#}");
+            None
+        }
+    }
+}
+
+/// The executions whose stopped work the space `space` saves for `shoal
+/// restore`.
+pub(in crate::cli::commands) async fn saved_executions(
+    ctx: &Context,
+    space: &SpaceId,
+) -> Result<std::collections::BTreeSet<ExecutionId>> {
+    Ok(
+        crate::client::saved::read(&ctx.paths, SpaceSelector::id(space))
+            .await?
+            .execution_ids()
+            .into_iter()
+            .collect(),
+    )
+}
+
 /// The stopped agents and last sessions of the workspace `selector` names,
 /// only `execution`'s when given, refusing one without any.
 async fn stopped_agents(

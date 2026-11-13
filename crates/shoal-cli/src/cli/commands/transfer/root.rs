@@ -1,7 +1,6 @@
 //! `shoal move root`: move every repository directory into a new `root_dir`.
-use super::super::restore::agents::queue::Stopped;
+use super::super::restore::agents::queue::{Stopped, restore_stopped, saved_executions};
 use crate::cli::commands::restore::agents::reports::QueuedExt;
-use crate::client::execution_ids::ExecutionId;
 use crate::client::output::restore::Queued;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
@@ -158,17 +157,6 @@ async fn job_ended(ctx: &Context, workspace: &SpaceId) -> Result<()> {
     }
 }
 
-/// The executions whose stopped work the workspace saves for `shoal restore`.
-async fn saved_executions(ctx: &Context, workspace: &SpaceId) -> Result<BTreeSet<ExecutionId>> {
-    Ok(
-        crate::client::saved::read(&ctx.paths, SpaceSelector::id(workspace))
-            .await?
-            .execution_ids()
-            .into_iter()
-            .collect(),
-    )
-}
-
 async fn move_repositories(ctx: &Context, regular_dir: bool) -> Result<Vec<MovedRepository>> {
     ctx.progress(
         "Moving repositories",
@@ -224,21 +212,6 @@ async fn retrust(ctx: &Context, before: &Registrations) {
             .filter(|workspace| workspace.repository_id == old.id)
         {
             agents::trust_saved(ctx, workspace).await;
-        }
-    }
-}
-
-/// Queue the restores of the agents among `stopped`, warning when that
-/// fails, since `shoal restore` still restores them.
-async fn restore_stopped(ctx: &Context, stopped: &Stopped) -> Option<Queued> {
-    if stopped.is_empty() {
-        return None;
-    }
-    match super::super::restore::agents::queue::queue_stopped(ctx, stopped).await {
-        Ok(queued) => Some(queued),
-        Err(error) => {
-            eprintln!("warning: cannot restore the stopped agents; run shoal restore: {error:#}");
-            None
         }
     }
 }
