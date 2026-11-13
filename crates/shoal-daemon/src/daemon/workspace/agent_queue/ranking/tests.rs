@@ -416,6 +416,47 @@ async fn a_space_without_a_priority_set_takes_the_highest_its_issues_labels_map_
 }
 
 #[tokio::test]
+async fn a_space_with_several_issues_takes_the_highest_any_of_their_labels_maps_to() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(LABELS));
+    add(&manager, &repo, "running").await;
+    let workspace = create(&manager, &repo, "several").await;
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            for (number, label) in [(1, "urgent"), (2, "later")] {
+                let url = format!("https://forge.example/team/repo/issues/{number}");
+                db.execute(
+                    "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                    params![id, url],
+                )?;
+                db.execute(
+                    "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,
+                        json_object('details',json_object('labels',json_array(?3))))",
+                    params![id, url, label],
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager
+        .queue_add(QueueRequest {
+            workspace: Some(SpaceSelector::id(&workspace.id)),
+            ..request(&repo, "several", false)
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        waiting_priorities(&manager).await,
+        [("several".into(), Priority::URGENT)]
+    );
+}
+
+#[tokio::test]
 async fn a_repository_whose_config_does_not_resolve_maps_no_labels_and_holds_up_no_other() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;

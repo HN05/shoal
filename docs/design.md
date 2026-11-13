@@ -1671,7 +1671,7 @@ running: work close to finished before new work, and work that other work
 waits on before the work waiting. One pure rank operation over a snapshot of
 the entries, spaces and what waits on what orders admission and the listing
 alike. A space's priority, 0 to 100 and 50 unless set or mapped from its
-issue's labels, goes first, so the user decides what matters. A space's agent
+issues' labels, goes first, so the user decides what matters. A space's agent
 sets at most its own, as it gives permissions, but a label's priority is the
 repository config's, so the labels an agent edits on its issues are not capped. A queued launch
 carries its own until its space exists.
@@ -1693,7 +1693,7 @@ higher-priority work keeps coming, as the user chose. Priority and tier each flo
 waiting work to what it waits on:
 blockers, a workspace parent to its children, a child with an open question to
 its parent, a stacked workspace to its base, and a space queued for a lease to
-its holders. A chat parent passes on only a priority of its own, set or from its issue's
+its holders. A chat parent passes on only a priority of its own, set or from its issues'
 labels, or passed down to it, so an
 orchestrator's children compete with every other worker. CI jobs and reviews have no rank of their
 own beyond a job's tier: each takes the rank of the spaces it serves and goes

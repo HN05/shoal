@@ -94,7 +94,7 @@ fn space(db: &Connection, row: &Row) -> Result<Space> {
     })
 }
 
-/// A space without a priority set whose issue has labels, which may give
+/// A space without a priority set whose issues have labels, which may give
 /// it one.
 pub(super) struct Labelled {
     pub id: SpaceId,
@@ -102,9 +102,10 @@ pub(super) struct Labelled {
     pub labels: Vec<String>,
 }
 
-/// The spaces without a priority set whose issue has labels, as the
-/// background poll, or else a watch, last read them. A record that does not
-/// read leaves its space without labels rather than failing the rank.
+/// The spaces without a priority set whose issues have labels, each with
+/// the labels of all its issues, as the background poll, or else a watch,
+/// last read them. A record that does not read leaves its issue without
+/// labels rather than failing the rank.
 pub(super) fn labelled(db: &Connection) -> Result<Vec<Labelled>> {
     let rows = db
         .prepare(
@@ -123,19 +124,21 @@ pub(super) fn labelled(db: &Connection) -> Result<Vec<Labelled>> {
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    let mut labelled = Vec::new();
+    let mut labelled: Vec<Labelled> = Vec::new();
     for (id, repository, record) in rows {
         let labels = (record.as_deref())
             .and_then(|record| updates::saved_labels(record).ok())
             .unwrap_or_default();
-        if !labels.is_empty() {
-            labelled.push(Labelled {
+        match labelled.iter_mut().find(|space| space.id == id) {
+            Some(space) => space.labels.extend(labels),
+            None => labelled.push(Labelled {
                 id,
                 repository,
                 labels,
-            });
+            }),
         }
     }
+    labelled.retain(|space| !space.labels.is_empty());
     Ok(labelled)
 }
 

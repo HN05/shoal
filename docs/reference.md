@@ -2175,7 +2175,7 @@ its own space's when that is below `normal`; you and a master session set any.
 #### Queue order
 
 Waiting entries start by priority, highest first: a space's priority, from 0
-to 100, is the one set on it, else the highest its issue's labels map to under
+to 100, is the one set on it, else the highest its issues' labels map to under
 `[priority.labels]`, else 50, and a queued launch has the one it was queued
 with, or else the highest its issue's labels map to, until its space exists.
 Within a priority, [`machine.schedule`](config.md#machine) may put other work
@@ -2200,7 +2200,7 @@ were assigned it, and for a CI run its queued jobs and those of its workflow
 on the default branch; a workspace's children; the parent of a child with an
 open question; the workspace a stacked one builds on; and the spaces holding a
 lease another space queues for. A chat passes its children only a priority
-of its own, set or from its issue's labels, or passed down to it, so they compete with every other worker. A CI job ranks with the
+of its own, set or from its issues' labels, or passed down to it, so they compete with every other worker. A CI job ranks with the
 highest of the spaces its run links, taking its priority even when lower, and
 a review with the workspace it reviews. `shoal queue` shows each waiting
 entry's priority and tier, and for each it took from waiting work, that work
