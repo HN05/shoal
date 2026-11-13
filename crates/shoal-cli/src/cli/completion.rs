@@ -1,5 +1,4 @@
 //! Completion runs before the normal CLI: read-only, scoped, and time bounded.
-use crate::cli::availability::NeedExt;
 use crate::paths::PathsExt;
 use std::{
     collections::BTreeSet,

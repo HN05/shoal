@@ -6,7 +6,7 @@ use super::{
     queue_subject, statuses::place_cell, title_limit, usage_cell, workspace_mode_cell,
     workspace_status_cell, workspace_text,
 };
-use crate::cli::list_status::{ListStatus, ListStatusExt};
+use crate::cli::list_status::ListStatus;
 use crate::cli::output::{Palette, Style};
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::{SpaceId, SpaceNumber};

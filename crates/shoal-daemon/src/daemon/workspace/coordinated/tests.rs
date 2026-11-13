@@ -3,7 +3,6 @@ use std::sync::Arc;
 use super::super::{ExecutionKind, Manager};
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    client::list_status::ListStatus,
     daemon::test_support::{ProcessGroup, manager, repository},
     execution::TrackedAgent,
     model::{CleanupReason, Workspace},
@@ -70,11 +69,15 @@ async fn kept(manager: &Manager, workspace: &Workspace) -> Option<CleanupReason>
         .err()
 }
 
-/// The status a list shows `workspace`.
-async fn listed(manager: &Manager, workspace: &Workspace) -> ListStatus {
+/// Whether lists show `workspace` as its coordinator's work: it runs no
+/// agent or command of its own, and the agent above it that does its work is
+/// working.
+async fn parent_working(manager: &Manager, workspace: &Workspace) -> bool {
     let listed = manager.visible_workspaces(None).await.unwrap();
     let found = listed.iter().find(|w| w.id == workspace.id).unwrap();
-    ListStatus::of_workspace(found, false)
+    found.agent_state.is_none()
+        && !found.running
+        && found.coordinator_state == Some(AgentState::Working)
 }
 
 async fn report(manager: &Manager, workspace: &Workspace, state: AgentState) {
@@ -88,9 +91,9 @@ async fn report(manager: &Manager, workspace: &Workspace, state: AgentState) {
 async fn a_child_without_an_agent_lists_as_its_coordinators_work() {
     let (root, manager) = manager().await;
     let (parent, child) = split_child(&manager, root.path()).await;
-    assert_eq!(listed(&manager, &child).await, ListStatus::Inactive);
+    assert!(!parent_working(&manager, &child).await);
     report(&manager, &parent, AgentState::Working).await;
-    assert_eq!(listed(&manager, &child).await, ListStatus::ParentWorking);
+    assert!(parent_working(&manager, &child).await);
     // A grandchild split from it is the same agent's work.
     let grandchild = manager
         .split_workspace(
@@ -101,12 +104,9 @@ async fn a_child_without_an_agent_lists_as_its_coordinators_work() {
         )
         .await
         .unwrap();
-    assert_eq!(
-        listed(&manager, &grandchild).await,
-        ListStatus::ParentWorking
-    );
+    assert!(parent_working(&manager, &grandchild).await);
     report(&manager, &parent, AgentState::Waiting).await;
-    assert_eq!(listed(&manager, &child).await, ListStatus::Inactive);
+    assert!(!parent_working(&manager, &child).await);
 }
 
 #[tokio::test]
@@ -115,10 +115,10 @@ async fn a_child_that_had_its_own_agent_lists_as_before() {
     let (parent, child) = split_child(&manager, root.path()).await;
     report(&manager, &parent, AgentState::Working).await;
     finish(&manager, start_agent(&manager, &child).await).await;
-    assert_eq!(listed(&manager, &child).await, ListStatus::Inactive);
+    assert!(!parent_working(&manager, &child).await);
     // The daemon keeps that the child had an agent across restarts.
     let reopened: Arc<Manager> = Manager::open(manager.paths.clone()).await.unwrap();
-    assert_eq!(listed(&reopened, &child).await, ListStatus::Inactive);
+    assert!(!parent_working(&reopened, &child).await);
 }
 
 #[tokio::test]
