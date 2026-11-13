@@ -18,7 +18,7 @@ use crate::{
     daemon::{links::space::LinkSpace, notifications::NotificationKind, workspace::Manager},
     forge::{
         account::Account,
-        items::link::Selection,
+        items::link::{LinkKind, Selection},
         transport::limits::rate_limited,
         updates::{Snapshot, Update},
     },
@@ -35,19 +35,29 @@ const ITEMS_READ_AT_ONCE: usize = 4;
 impl Manager {
     /// The activity of the items of `space` that `selection` names, as
     /// [`Self::poll_item_activity`] finds it. A space without a repository
-    /// has no items of its own to look up: an unfiltered wait reads what is
-    /// queued for it and the spaces below it, and a selection is refused as
-    /// a lookup of its own items refuses it.
+    /// has no items of its own to look up, and reads what is queued for it
+    /// and the spaces below it of the selected kind.
     pub(super) async fn poll_space_activity(
         &self,
         space: &PresentSpace,
         selection: &Selection,
     ) -> Result<Vec<Update>> {
-        let unfiltered = selection.kind.is_none() && selection.input.is_none();
-        match space.repository_id() {
-            None if unfiltered => self.queued_activity(space).await,
+        match (space.repository_id(), &selection.input) {
+            (None, None) => self.queued_kind_activity(space, selection.kind).await,
             _ => self.poll_item_activity(space.id(), selection).await,
         }
+    }
+
+    /// The activity of `kind`, or of every kind, queued for `space` and the
+    /// spaces below it whose activity its agent receives, refusing a kind
+    /// none of them links as a watch of a space's own items does.
+    async fn queued_kind_activity(
+        &self,
+        space: &PresentSpace,
+        kind: Option<LinkKind>,
+    ) -> Result<Vec<Update>> {
+        self.ensure_links_kind(space.id(), kind).await?;
+        self.queued_activity(space, kind).await
     }
 
     pub(super) async fn poll_item_activity(

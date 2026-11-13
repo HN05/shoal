@@ -116,7 +116,7 @@ impl Manager {
         let children = self.delegated_spaces(&id).await?;
         let updates = match self.gates.try_lock_prs(receiving(&id, &children)) {
             Some(_gate) => {
-                self.gated_agent_updates(&space, &children, reserved)
+                self.gated_agent_updates(&space, &children, None, reserved)
                     .await?
             }
             None => Vec::new(),
@@ -135,27 +135,32 @@ impl Manager {
 
     /// The updates queued for the agent of `space` that fit one response
     /// beside `reserved` bytes of its other content: those on its own
-    /// cursor for an unfiltered watch, then those of the spaces below it it
-    /// works on. The caller holds the PR gates of the space and its
-    /// `children`.
+    /// cursor for its items of `kind`, or every kind and its branch, then
+    /// those of the spaces below it it works on. The caller holds the PR
+    /// gates of the space and its `children`.
     pub(super) async fn gated_agent_updates(
         &self,
         space: &PresentSpace,
         children: &[SpaceRef],
+        kind: Option<LinkKind>,
         reserved: usize,
     ) -> Result<Vec<Update>> {
-        let mut batch = own_batch(space.id(), self.queued_updates(space).await?);
-        batch.extend(self.delegated_pending(children, None).await?);
+        let mut batch = own_batch(space.id(), self.queued_updates(space, kind).await?);
+        batch.extend(self.delegated_pending(children, kind).await?);
         self.fit_response(batch, reserved).await
     }
 
-    /// The updates queued for the agent of `space` that fit one response,
-    /// once nothing holds the PR gates of the space and the spaces below it
-    /// whose activity it receives.
-    pub(super) async fn queued_activity(&self, space: &PresentSpace) -> Result<Vec<Update>> {
+    /// The updates of `kind`, or every kind, queued for the agent of
+    /// `space` that fit one response, once nothing holds the PR gates of
+    /// the space and the spaces below it whose activity it receives.
+    pub(super) async fn queued_activity(
+        &self,
+        space: &PresentSpace,
+        kind: Option<LinkKind>,
+    ) -> Result<Vec<Update>> {
         let children = self.delegated_spaces(space.id()).await?;
         let _gate = self.gates.lock_prs(receiving(space.id(), &children)).await;
-        self.gated_agent_updates(space, &children, 0).await
+        self.gated_agent_updates(space, &children, kind, 0).await
     }
 
     /// The updates queued on the cursors of `children`, spaces below whose
@@ -192,16 +197,21 @@ impl Manager {
         Ok(updates)
     }
 
-    /// The updates queued on the cursor of `space` for an unfiltered watch:
-    /// those of its items and its branch, when it has one.
-    pub(super) async fn queued_updates(&self, space: &PresentSpace) -> Result<Vec<Update>> {
+    /// The updates queued on the cursor of `space` for a watch of `kind`:
+    /// those of its items of that kind, or of every kind and its branch,
+    /// when it has one.
+    pub(super) async fn queued_updates(
+        &self,
+        space: &PresentSpace,
+        kind: Option<LinkKind>,
+    ) -> Result<Vec<Update>> {
         let id = space.id().clone();
         let items = self
             .store
-            .run(move |db| followed_items(db, &id, None))
+            .run(move |db| followed_items(db, &id, kind))
             .await?;
-        let branch = space
-            .worktree()
+        let branch = (space.worktree())
+            .filter(|_| kind.is_none())
             .and_then(|workspace| workspace.branch.clone());
         let keys = items
             .into_iter()

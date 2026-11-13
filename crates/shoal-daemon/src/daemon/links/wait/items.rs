@@ -77,16 +77,27 @@ impl Manager {
             .selection_items(space, selection, followed_items)
             .await?;
         if items.is_empty() && selection.input.is_none() {
-            let (id, kind) = (space.id().to_owned(), selection.kind);
-            let agents = self.tracked_agents().await;
-            ensure!(
-                self.store
-                    .run(move |db| links_kind(db, &id, kind, &agents))
-                    .await?,
-                "{NO_LINKED_ITEMS}"
-            );
+            self.ensure_links_kind(space.id(), selection.kind).await?;
         }
         Ok(items)
+    }
+
+    /// Refuse a watch of `kind` that neither the space `id` nor a space
+    /// below it whose activity its agent receives links an item of.
+    pub(super) async fn ensure_links_kind(
+        &self,
+        id: &SpaceId,
+        kind: Option<LinkKind>,
+    ) -> Result<()> {
+        let id = id.to_owned();
+        let agents = self.tracked_agents().await;
+        ensure!(
+            self.store
+                .run(move |db| links_kind(db, &id, kind, &agents))
+                .await?,
+            "{NO_LINKED_ITEMS}"
+        );
+        Ok(())
     }
 
     /// The explicitly selected item, or the space's linked items of the

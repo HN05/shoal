@@ -102,7 +102,7 @@ impl Manager {
             return Ok(false);
         };
         Ok(!self
-            .gated_agent_updates(space, &children, 0)
+            .gated_agent_updates(space, &children, None, 0)
             .await?
             .is_empty())
     }
@@ -123,7 +123,7 @@ impl Manager {
     /// the PR gates.
     async fn updates_recorded(&self, space: &PresentSpace) -> Result<bool> {
         let children = self.delegated_spaces(space.id()).await?;
-        Ok(!self.queued_updates(space).await?.is_empty()
+        Ok(!self.queued_updates(space, None).await?.is_empty()
             || !self.delegated_pending(&children, None).await?.is_empty())
     }
 

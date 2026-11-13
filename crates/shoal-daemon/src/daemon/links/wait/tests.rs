@@ -523,25 +523,71 @@ async fn a_chat_without_a_repository_waits_for_the_activity_below_it() {
     assert_eq!(woken.updates[0].workspace.as_deref(), Some("below"));
 }
 
-#[tokio::test]
-async fn a_chat_without_a_repository_refuses_a_watch_of_chosen_items() {
-    let (_root, manager) = manager().await;
-    let manager = std::sync::Arc::new(manager);
+/// A chat without a repository, as `start --mode orchestrate` starts one,
+/// with a workspace below it that has no agent and links `PR` and `ISSUE`.
+async fn chat_above_linked_workspace(manager: &Arc<Manager>, root: &std::path::Path) -> SpaceId {
+    let repo_path = repository(root, "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
     let chat =
-        crate::daemon::test_support::chat(&manager, "master", "orchestrate", None, None).await;
-    let chat = SpaceSelector::id(&chat.id);
-    let prs = Selection {
-        kind: Some(LinkKind::Pr),
+        crate::daemon::test_support::chat(manager, "master", "orchestrate", None, None).await;
+    let below = manager
+        .create_workspace_below(
+            repo.id.clone().into(),
+            "below".into(),
+            None,
+            Default::default(),
+            Some(chat.id.clone()),
+        )
+        .await
+        .unwrap();
+    register_watch(manager, &below.id, PR.as_str()).await;
+    let id = below.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                params![id, ISSUE.as_str()],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let observed = vec![
+        (PR.as_str().into(), snapshot("on the PR")),
+        (ISSUE.as_str().into(), snapshot("on the issue")),
+    ];
+    manager
+        .queue_background_updates(&below.id, observed, UnixTime::now())
+        .await
+        .unwrap();
+    chat.id
+}
+
+#[tokio::test]
+async fn a_chat_without_a_repository_watches_one_kind_below_it() {
+    let (root, manager) = manager().await;
+    let manager = Arc::new(manager);
+    let chat = chat_above_linked_workspace(&manager, root.path()).await;
+    let chat = SpaceSelector::id(&chat);
+    let watch = |kind| Selection {
+        kind: Some(kind),
         input: None,
     };
-    let pr = Selection {
-        kind: Some(LinkKind::Pr),
-        input: Some("12".parse().unwrap()),
-    };
-    for selection in [prs, pr] {
-        let watched = manager.wait_items(&chat, &selection, Some(1)).await;
-        assert!(watched.is_err(), "{selection:?}: {watched:?}");
-    }
+    let issues = (manager.wait_items(&chat, &watch(LinkKind::Issue), Some(60)))
+        .await
+        .unwrap();
+    let urls: Vec<_> = issues.updates.iter().map(|update| &update.url).collect();
+    assert_eq!(urls, [ISSUE.as_str()]);
+    assert_eq!(issues.updates[0].workspace.as_deref(), Some("below"));
+    // Nothing below links a run, so a watch of runs would wait forever.
+    let runs = manager
+        .wait_items(&chat, &watch(LinkKind::Ci), Some(60))
+        .await;
+    assert!(runs.is_err(), "{runs:?}");
 }
 
 #[tokio::test]
@@ -2426,7 +2472,7 @@ async fn sensitive_files_changed_on_both_sides_are_reported_beside_a_linked_pr()
     let polled = manager.poll_space_item_activity(&space).await;
     assert!(polled.is_err(), "the PR lookup fails");
     let queued = manager
-        .queued_updates(&PresentSpace::Workspace(linked.clone()))
+        .queued_updates(&PresentSpace::Workspace(linked.clone()), None)
         .await
         .unwrap();
     assert_eq!(queued.len(), 1);
@@ -2474,7 +2520,7 @@ async fn a_stalled_worktree_fails_the_background_branch_check_at_once() {
     let polled = manager.poll_space_item_activity(&space).await;
     assert!(polled.is_err(), "the PR lookup fails");
     let queued = manager
-        .queued_updates(&PresentSpace::Workspace(workspace.clone()))
+        .queued_updates(&PresentSpace::Workspace(workspace.clone()), None)
         .await
         .unwrap();
     let stall = queued.iter().find(|update| {
