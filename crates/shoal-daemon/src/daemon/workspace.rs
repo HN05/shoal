@@ -2,6 +2,7 @@
 //! workspace records it reads.
 use crate::client::execution_ids::ExecutionId;
 use crate::config_file::ConfigExt;
+use crate::paths::StateFiles;
 mod adoption;
 pub(crate) mod agent_queue;
 pub(crate) mod agent_state;

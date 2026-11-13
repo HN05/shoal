@@ -1,6 +1,7 @@
 //! The files a chat started detached keeps under the state directory, its
 //! session's log and first message, named after the chat's ID so its name
 //! can change freely.
+use crate::paths::StateFiles;
 use anyhow::{Context as _, Result};
 use std::{collections::HashMap, path::Path};
 

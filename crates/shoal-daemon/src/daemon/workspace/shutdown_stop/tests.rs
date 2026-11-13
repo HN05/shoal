@@ -1,4 +1,5 @@
 use crate::client::execution_ids::ExecutionId;
+use crate::paths::StateFiles;
 use std::time::Duration;
 
 use tokio::{io::BufReader, net::UnixStream};

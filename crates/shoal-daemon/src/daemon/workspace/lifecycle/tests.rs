@@ -5,6 +5,7 @@ use crate::client::assignments::Done;
 use crate::client::log::{LogEntry, LogFilter};
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
+use crate::paths::StateFiles;
 use crate::{
     daemon::{
         cleanup::{Rule, Snapshot},

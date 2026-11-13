@@ -3,6 +3,7 @@
 //! refuses it or cannot be reached, leaves its report behind for the daemon
 //! to find, so the loss shows and the state the report carried still
 //! arrives.
+use crate::paths::StateFiles;
 use std::{
     fs::{self, File},
     io::{self, Read as _},

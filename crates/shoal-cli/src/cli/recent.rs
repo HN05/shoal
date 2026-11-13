@@ -1,5 +1,6 @@
 //! The spaces each command last acted on, so `-` can name the previous one.
 use crate::client::space_ids::SpaceId;
+use crate::paths::StateFiles;
 use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, ensure};

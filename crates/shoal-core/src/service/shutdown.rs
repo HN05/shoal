@@ -3,6 +3,7 @@ use super::{
     LABEL, Platform, UNIT,
     control::{SERVICE_STOP_TIMEOUT, command, domain, stop_command},
 };
+use crate::paths::StateFiles;
 use crate::{paths::Paths, protocol::timing, tools::Tool};
 use anyhow::{Context, Result, ensure};
 use std::{fs::File, io};

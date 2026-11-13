@@ -1,4 +1,5 @@
 use crate::daemon::test_support::{manager, repository};
+use crate::paths::StateFiles;
 
 #[tokio::test]
 async fn chat_files_move_from_the_chat_name_to_its_id_and_others_go() {

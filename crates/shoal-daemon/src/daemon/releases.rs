@@ -1,4 +1,5 @@
 //! Removing the release copies execution wrappers no longer run from.
+use crate::paths::StateFiles;
 use std::time::SystemTime;
 
 use anyhow::Result;

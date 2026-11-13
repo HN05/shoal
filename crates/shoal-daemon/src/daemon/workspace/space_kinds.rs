@@ -2,6 +2,7 @@
 //! differs by kind: its agent, reserving it for removal, and its record.
 //! Cleanup and removal call only these, and ask nothing else of a space's
 //! kind than whether it has a worktree.
+use crate::paths::StateFiles;
 use anyhow::{Context as _, Result, ensure};
 
 use super::{

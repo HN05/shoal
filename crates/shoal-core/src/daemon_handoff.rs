@@ -1,4 +1,5 @@
 //! Keep ownership and queued connections across a managed daemon update.
+use crate::paths::StateFiles;
 use crate::{fsutil::descriptors::set_inherited, paths::Paths};
 use anyhow::{Context, Result, ensure};
 use std::{

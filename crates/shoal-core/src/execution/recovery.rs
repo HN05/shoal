@@ -2,6 +2,7 @@
 use crate::client::execution_ids::ExecutionId;
 use crate::client::{agent::AgentSessionId, space_ids::SpaceId};
 use crate::config::permissions::PermissionChange;
+use crate::paths::StateFiles;
 use std::{
     collections::BTreeMap,
     ffi::OsString,

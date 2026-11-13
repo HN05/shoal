@@ -1,6 +1,7 @@
 //! Agent sessions that run detached from any terminal, in an app the user
 //! continues them in, such as Happy. Shoal records and starts each session;
 //! the [`App`] says what it runs and delivers its first message.
+use crate::paths::StateFiles;
 use std::{
     ffi::OsString,
     os::unix::process::CommandExt,

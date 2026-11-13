@@ -1,6 +1,7 @@
 //! Service definition paths, rendering and ownership checks.
 use super::{LABEL, Platform, UNIT, control::SERVICE_STOP_TIMEOUT};
 use crate::client::output::daemon::Definition;
+use crate::paths::StateFiles;
 use crate::{
     fsutil::{
         self,

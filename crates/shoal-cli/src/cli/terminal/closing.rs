@@ -7,6 +7,7 @@
 //! watcher keeps tells commands run in the place that it closes with the
 //! workspace.
 use crate::client::space_ids::SpaceId;
+use crate::paths::StateFiles;
 use std::{
     cell::{Cell, RefCell},
     future::Future,

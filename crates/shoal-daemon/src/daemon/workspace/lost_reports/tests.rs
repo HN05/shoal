@@ -1,4 +1,5 @@
 use super::*;
+use crate::paths::StateFiles;
 use crate::{
     agents::hook_reports::Sending,
     client::notifications::NotificationKind,

@@ -1,4 +1,5 @@
 //! The daemon a state directory's lock names as its owner.
+use crate::paths::StateFiles;
 use std::{fs, fs::File, os::unix::fs::FileExt};
 
 use anyhow::{Context, Result};

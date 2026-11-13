@@ -18,6 +18,7 @@ use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use crate::execution::recovery::SavedExt as _;
 use crate::paths::CommandPaths;
+use crate::paths::StateFiles;
 use std::{fs, future::Future, os::unix::fs::PermissionsExt};
 
 mod agent_restart;

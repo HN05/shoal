@@ -1,5 +1,6 @@
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
+use crate::paths::StateFiles;
 use crate::{
     config::permissions::{PermissionChange, PermissionsConfig},
     daemon::test_support::{chat, manager, repository},

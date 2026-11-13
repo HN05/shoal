@@ -1,3 +1,4 @@
+use crate::paths::StateFiles;
 use std::fs;
 
 use rusqlite::params;

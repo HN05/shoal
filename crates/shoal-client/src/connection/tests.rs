@@ -2,13 +2,13 @@ use super::*;
 use crate::protocol::{ErrorCode, RemoteError};
 use tokio::net::UnixListener;
 
-/// Supervision that takes the daemon recorded in the state directory's lock
-/// for its owner, as the `shoal` command's does for a live one.
+/// Supervision that takes the daemon recorded in the state directory's
+/// owner file for its owner, as the `shoal` command's does for a live one.
 struct RecordedOwner;
 
 impl Supervision for RecordedOwner {
     fn owner(&self, paths: &Paths) -> Option<Identity> {
-        serde_json::from_slice(&std::fs::read(paths.daemon_lock()).ok()?).ok()
+        serde_json::from_slice(&std::fs::read(owner_file(paths)).ok()?).ok()
     }
 
     fn managed(&self, _paths: &Paths) -> bool {
@@ -16,6 +16,11 @@ impl Supervision for RecordedOwner {
     }
 
     fn waiting_for_update(&self) {}
+}
+
+/// Where [`RecordedOwner`] reads the daemon that owns the state directory.
+fn owner_file(paths: &Paths) -> std::path::PathBuf {
+    paths.state.join("owner")
 }
 
 async fn reply<T>(response: Response) -> Result<T>
@@ -263,7 +268,7 @@ async fn a_daemon_that_owns_the_state_directory_without_answering_is_unresponsiv
         birth: "test".into(),
         unique: None,
     };
-    std::fs::write(paths.daemon_lock(), serde_json::to_vec(&owner)?)?;
+    std::fs::write(owner_file(&paths), serde_json::to_vec(&owner)?)?;
     let error = status(&paths).await.unwrap_err();
     let unresponsive = error
         .downcast_ref::<Unresponsive>()

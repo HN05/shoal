@@ -1,6 +1,7 @@
 //! Running queued reviews: each starts at once, takes the workspace's HEAD,
 //! runs its reviewer in a detached checkout, falls back to a second
 //! reviewer once, and records what it found.
+use crate::paths::StateFiles;
 use std::{collections::HashSet, path::Path, sync::Arc};
 
 use crate::client::repository_ids::RepositoryId;

@@ -1,5 +1,6 @@
 use crate::client::assignments::Done;
 use crate::client::execution_ids::ExecutionId;
+use crate::paths::StateFiles;
 use std::time::Duration;
 
 use anyhow::Context;

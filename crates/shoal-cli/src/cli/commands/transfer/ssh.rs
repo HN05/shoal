@@ -1,6 +1,7 @@
 //! `shoal move ssh`: hand spaces to another machine's Shoal, or copies of
 //! them with `--keep`, as `shoal move export | ssh <host> shoal move import
 //! --resume` does, once `ssh` reaches Shoal there.
+use crate::paths::StateFiles;
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail, ensure};

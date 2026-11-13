@@ -1,5 +1,6 @@
 //! The `shoal` process: parses its command line, prepares the process before
 //! any thread starts and runs the command.
+use crate::paths::StateFiles;
 use futures_util::future::LocalBoxFuture;
 
 use crate::cli::{self, Cli};

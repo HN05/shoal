@@ -3,6 +3,7 @@
 //! as duplicates once the user decides.
 use crate::client::space_ids::SpaceId;
 use crate::daemon::approvals::ApprovalRequestExt;
+use crate::paths::StateFiles;
 use anyhow::{Context, Result, bail, ensure};
 use shoal_refs::{BranchName, CommitId};
 use std::{

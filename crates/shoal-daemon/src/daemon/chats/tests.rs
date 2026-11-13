@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::space_names::SpaceSelector;
+use crate::paths::StateFiles;
 use crate::{
     daemon::{
         events::{ChatEventKind, EventItem, EventKind},

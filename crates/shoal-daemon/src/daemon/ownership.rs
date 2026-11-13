@@ -1,5 +1,6 @@
 //! Exclusive ownership of a state directory: its lock, which names the
 //! daemon holding it, and listening socket.
+use crate::paths::StateFiles;
 use std::{
     fs::{self, File, OpenOptions},
     os::unix::{

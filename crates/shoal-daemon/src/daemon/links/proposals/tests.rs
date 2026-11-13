@@ -4,6 +4,7 @@ use crate::daemon::{
     approvals::proposals::PR,
     test_support::{manager, repository},
 };
+use crate::paths::StateFiles;
 
 #[tokio::test]
 async fn the_sweep_keeps_only_files_pending_proposals_attach() {
