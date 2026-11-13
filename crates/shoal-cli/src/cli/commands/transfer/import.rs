@@ -210,13 +210,12 @@ impl Package {
     /// in its repository's checkout at `place`, under its name, resuming
     /// the session its agent keeps here.
     async fn start_chat(self, ctx: &Context, place: ChatPlace) -> Result<Started> {
-        let Space::Chat(packaged) = &self.space else {
-            anyhow::bail!("the package holds a workspace, not a chat");
-        };
-        let repositories = crate::client::repositories::list(&ctx.paths).await?;
-        let repo = crate::repository::select(&repositories, self.repository.clone())
-            .await?
-            .clone();
+        // Nothing is recorded yet, so a program that moves the chat knows it
+        // is not here.
+        let start = self
+            .chat_start(ctx, place)
+            .await
+            .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
         agents::install_session_files(
             ctx,
             SessionHome::Repository(self.repository.clone()),
@@ -224,11 +223,31 @@ impl Package {
             agents::Existing::of_copy(self.copy.is_some()),
         )
         .await;
-        let settings = chat::settings(ctx, &repo).await?;
-        let topic = chat::Topic::imported(&repo, &packaged.mode, &packaged.links);
-        let options = self.chat_options(packaged, place)?;
-        let repo = crate::cli::agents::ChatRepository::Registered(repo);
+        let ChatStart {
+            repo,
+            settings,
+            topic,
+            options,
+        } = start;
         chat::launch(ctx, repo, settings, topic, options).await
+    }
+
+    /// How the packaged chat starts at `place`, in the repository the
+    /// package goes to, which this machine registers.
+    async fn chat_start(&self, ctx: &Context, place: ChatPlace) -> Result<ChatStart> {
+        let Space::Chat(packaged) = &self.space else {
+            anyhow::bail!("the package holds a workspace, not a chat");
+        };
+        let repositories = crate::client::repositories::list(&ctx.paths).await?;
+        let repo = crate::repository::select(&repositories, self.repository.clone())
+            .await?
+            .clone();
+        Ok(ChatStart {
+            settings: chat::settings(ctx, &repo).await?,
+            topic: chat::Topic::imported(&repo, &packaged.mode, &packaged.links),
+            options: self.chat_options(packaged, place)?,
+            repo: crate::cli::agents::ChatRepository::Registered(repo),
+        })
     }
 
     /// How the packaged chat starts at `place`.
@@ -257,6 +276,14 @@ impl Package {
             parent: None,
         })
     }
+}
+
+/// What an imported chat starts with.
+struct ChatStart {
+    repo: crate::cli::agents::ChatRepository,
+    settings: crate::config::Effective,
+    topic: chat::Topic,
+    options: chat::Options,
 }
 
 /// The export files `files` names, with each directory among them replaced

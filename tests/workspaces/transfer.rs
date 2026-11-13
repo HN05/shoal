@@ -276,15 +276,7 @@ fn install_ssh_to(fixture: &Fixture, other: &Fixture) {
 fn two_machines(config: Option<&str>) -> (Fixture, Fixture) {
     let here = Fixture::with_config(config);
     let there = Fixture::with_config(config);
-    git(
-        here.root.path(),
-        &["init", "-q", "--bare", "-b", "main", "origin.git"],
-    );
-    let origin = fs::canonicalize(here.root.path().join("origin.git")).unwrap();
-    let origin = format!("file://{}", origin.display());
-    git(&here.repo, &["remote", "add", "origin", &origin]);
-    git(&here.repo, &["push", "-q", "-u", "origin", "HEAD:main"]);
-    git(&here.repo, &["remote", "set-head", "origin", "main"]);
+    let origin = add_origin(&here);
     git(there.root.path(), &["clone", "-q", &origin, "clone"]);
     there.ok(&[
         "repo",
@@ -293,6 +285,21 @@ fn two_machines(config: Option<&str>) -> (Fixture, Fixture) {
     ]);
     install_ssh_to(&here, &there);
     (here, there)
+}
+
+/// Give `fixture`'s repository an origin, named by a URL as remotes
+/// usually are, which an import matches, and return that URL.
+fn add_origin(fixture: &Fixture) -> String {
+    git(
+        fixture.root.path(),
+        &["init", "-q", "--bare", "-b", "main", "origin.git"],
+    );
+    let origin = fs::canonicalize(fixture.root.path().join("origin.git")).unwrap();
+    let origin = format!("file://{}", origin.display());
+    git(&fixture.repo, &["remote", "add", "origin", &origin]);
+    git(&fixture.repo, &["push", "-q", "-u", "origin", "HEAD:main"]);
+    git(&fixture.repo, &["remote", "set-head", "origin", "main"]);
+    origin
 }
 
 /// The config of machines whose agent runs `agent.sh` in its workspace.
@@ -422,6 +429,8 @@ fn a_failed_move_leaves_the_workspace_here_and_restarts_its_agent() {
 #[test]
 fn a_failed_move_leaves_the_chat_here_and_restores_its_agent() {
     let here = super::restarts::parent_fixture();
+    // The other machine has not registered the chat's repository.
+    add_origin(&here);
     let there = Fixture::new();
     install_ssh_to(&here, &there);
     let home = here.root.path().to_owned();
