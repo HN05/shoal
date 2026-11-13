@@ -722,8 +722,9 @@ leave merging to the user instead of asking for permission to merge.
 - Commit history: how the PR splits into commits, their sizes and their messages.
 
 Label conventions: `area/` allows several affected areas; `type/` and
-`complexity/` each allow one. Reviewer request labels are combinable:
-`default` uses `REVIEW_AGENT` or Codex; reviewer requests are consumed
-at run start, while `none` persists to suppress review.
+`complexity/` each allow one, and `type/` names what the change is for.
+Reviewer request labels are combinable: `default` uses `REVIEW_AGENT` or
+Codex; reviewer requests are consumed at run start, while `none` persists to
+suppress review.
 Opening a ready PR already requests its review; do not add request labels in its
 opening classification batch.

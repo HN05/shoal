@@ -469,9 +469,11 @@ advisory and never a required check. Close an audit issue when it is fixed, or
 explain in a comment or with `audit/wontfix` why it will not be.
 Issues and PRs carry one or more `area/` labels and one `type/` and one
 `complexity/` label; `shoal repo labels` lists what each means, and
-`.forgejo/scripts/labels.py` creates the scheme. An issue states the problem or
-goal and what done looks like. One whose approach is settled is labelled
-`planned`, and agents implement it without asking; one that leaves a choice for
+`.forgejo/scripts/labels.py` creates the scheme. `type/` names what the change
+is for, wherever its code lives: work that makes the tests faster is
+`type/test`. An issue states the problem or goal and what done looks like.
+One whose approach is settled is labelled `planned`, and agents implement it
+without asking; one that leaves a choice for
 the owner is labelled `needs-plan` until `shoal start --mode plan` settles a Plan section in
 its body. Issues with neither, such as tracking and meta issues, stay out of that
 flow. A PR description follows
