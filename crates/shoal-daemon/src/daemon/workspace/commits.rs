@@ -32,11 +32,12 @@ struct Start {
     diff_ref: Option<String>,
 }
 
-/// The workspace of a CI job, recorded before its worktree is checked out,
-/// with its repository's Git gate.
+/// The workspace of a CI job, recorded before its worktree is checked out
+/// at `commit`, with its repository's Git gate.
 pub(crate) struct RecordedJobWorkspace {
     repo: Repository,
     workspace: Workspace,
+    commit: CommitId,
     git: OwnedMutexGuard<()>,
 }
 
@@ -185,6 +186,7 @@ impl Manager {
         Ok(RecordedJobWorkspace {
             repo,
             workspace,
+            commit: commit.to_owned(),
             git,
         })
     }
@@ -198,11 +200,9 @@ impl Manager {
         let RecordedJobWorkspace {
             repo,
             workspace,
+            commit,
             git,
         } = recorded;
-        let commit = (workspace.at.as_ref())
-            .map(|at| at.commit.clone())
-            .context("the job's workspace records no starting commit")?;
         let result = self
             .materialize_commit_worktree(&repo, &workspace, &commit, None)
             .await;
