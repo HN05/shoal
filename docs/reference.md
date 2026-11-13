@@ -1916,8 +1916,8 @@ the requests routed to it, with a grant; merging, PR verdicts, CI approval and
 your notifications stay with you. Every registered repository counts as its
 own: `--repo` or an issue or PR URL names the one a command acts in, and
 there it reads, opens, comments on, labels and edits issues, comments on PRs,
-lists CI runs and reruns or cancels a PR's checks, and sends forge API
-requests under its [permissions](#mode-permissions) as that repository's config resolves them, and
+lists CI runs and reruns or cancels a PR's checks, watches issues, PRs and runs,
+and sends forge API requests under its [permissions](#mode-permissions) as that repository's config resolves them, and
 its proposals go to you as that repository's; through `--space` it acts on a
 space's items as a coordinator does. It opens no PRs and links nothing. In
 a repository that is not registered it only opens an issue, named by its
@@ -4610,7 +4610,10 @@ jobs only stopped by being cancelled, each failed job's failing step where its
 log or Forgejo's step list names one, and a pointer to `shoal view ci`; its watch then ends. `watch <number-or-url>`, `watch pr <number-or-url>` and
 `watch issue <number-or-url>` select an explicit item in the workspace's repository
 without linking it or changing completion policy; explicit PR watches also accept
-PRs whose head branch is in a fork. Watches return on comments,
+PRs whose head branch is in a fork. A [chat without a repository](#master-session)
+watches what is queued for it and the spaces below it, of every kind or the one
+selected, and an explicit item in the registered repository its URL names, or for
+a number the one `--repo` names. Watches return on comments,
 reviews, edits, completed CI checks, new merge conflicts, closure, reopening, merging,
 or a merged base workspace, except for comments, review thread replies, edits, closing
 and reopening that the workspace itself made through Shoal, on its own items or those of

@@ -14,6 +14,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ItemsCommand) -
         ItemsCommand::View(args) => view::show(&ctx, args).await,
         ItemsCommand::Watch {
             items,
+            repo,
             timeout,
             handed_over,
             ..
@@ -22,12 +23,17 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ItemsCommand) -
                 timeout.is_none(),
                 "watch review waits until the review ends; --timeout bounds PR and issue watches"
             );
+            ensure!(
+                repo.is_none(),
+                "--repo names the repository of an item, not a review"
+            );
             // An earlier release reruns a review watch unchanged.
             let space = items.space.clone().or(handed_over);
             review::show::watch(&ctx, items.review_id()?, space).await
         }
         ItemsCommand::Watch {
             mut items,
+            repo,
             timeout,
             handed_over,
             resume,
@@ -37,7 +43,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ItemsCommand) -
                 "watch takes the space to watch with --space"
             );
             items.space = items.space.or(handed_over);
-            links::watch(&ctx, items, timeout, resume).await
+            links::watch(&ctx, items, repo, timeout, resume).await
         }
         ItemsCommand::Ready {
             items,

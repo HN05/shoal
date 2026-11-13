@@ -37,6 +37,10 @@ pub enum ItemsCommand {
     Watch {
         #[command(flatten)]
         items: ItemArgs,
+        /// The registered repository of the item number a chat without a
+        /// repository watches, by name, ID, path or remote URL.
+        #[arg(short = 'r', long, value_name = "REPOSITORY")]
+        repo: Option<String>,
         /// Return no updates when the wait expires (1–3600 seconds); omitted means unbounded.
         #[arg(long, value_parser = clap::value_parser!(u64).range(1..=3600))]
         timeout: Option<u64>,

@@ -5,6 +5,7 @@ use anyhow::{Result, bail, ensure};
 use super::workspaces;
 use crate::client::assignments;
 use crate::client::output::workspaces::Registered;
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
@@ -178,14 +179,42 @@ pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {
     Ok(0)
 }
 
+/// Wait for the activity of the items selected in a space, an item of the
+/// registered repository `repo` names for a chat without a repository.
 pub(super) async fn watch(
     ctx: &Context,
     items: ItemArgs,
+    repo: Option<String>,
     timeout: Option<u64>,
     resumed: bool,
 ) -> Result<i32> {
-    let (space, selected) = select(ctx, items).await?;
-    workspaces::watch_items(ctx, space, selected, timeout, resumed).await
+    let selection = items.selection()?;
+    let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
+    let (context, repository) = watch_context(ctx, &space, repo.as_deref()).await?;
+    let selection = resolve_kind(ctx, context, selection).await?;
+    workspaces::watch_items(ctx, space, selection, repository, timeout, resumed).await
+}
+
+/// Where a watch in `space` reads its items, with the registered repository
+/// `repo` names: the space, or a chat acting in that repository.
+async fn watch_context(
+    ctx: &Context,
+    space: &SpaceSelector,
+    repo: Option<&str>,
+) -> Result<(ItemContext, Option<RepositoryId>)> {
+    let context = super::items::space_context(ctx, space.clone()).await?;
+    let Some(repo) = repo else {
+        return Ok((context, None));
+    };
+    let repository = super::items::named_repository(ctx, repo).await?.id;
+    let context = match context {
+        ItemContext::Chat(chat) => ItemContext::ChatIn {
+            chat,
+            repository: repository.clone(),
+        },
+        context => context,
+    };
+    Ok((context, Some(repository)))
 }
 
 pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {

@@ -36,7 +36,9 @@ pub(in crate::cli::commands) async fn select_space_item_context(
     item: Option<&ItemInput>,
 ) -> Result<ItemContext> {
     if let Some(repo) = repo {
-        return Ok(ItemContext::Checkout(named(ctx, &repo).await?.id));
+        return Ok(ItemContext::Checkout(
+            named_repository(ctx, &repo).await?.id,
+        ));
     }
     if space.is_none()
         && in_chat_outside_repositories(ctx).await?
@@ -182,7 +184,10 @@ pub(in crate::cli::commands) async fn current_context(
 
 /// The registered repository `repo` names, a path read from the current
 /// directory.
-async fn named(ctx: &Context, repo: &str) -> Result<Repository> {
+pub(in crate::cli::commands) async fn named_repository(
+    ctx: &Context,
+    repo: &str,
+) -> Result<Repository> {
     let selector = ui::repository_selector(repo.to_owned())?;
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     Ok(repository::select(&repos, selector).await?.clone())
@@ -190,7 +195,7 @@ async fn named(ctx: &Context, repo: &str) -> Result<Repository> {
 
 /// The registered repository `repo` names, if any.
 async fn registered(ctx: &Context, repo: &str) -> Result<Option<Repository>> {
-    match named(ctx, repo).await {
+    match named_repository(ctx, repo).await {
         Ok(repo) => Ok(Some(repo)),
         Err(error) if error.is::<NotRegistered>() => Ok(None),
         Err(error) => Err(error),
