@@ -575,8 +575,19 @@ fn an_overdue_entry_ties_with_the_top_lead_and_keeps_its_tier_order() {
     entry(&mut snapshot, "finishing", restore("finishing"));
     entry(&mut snapshot, "new", launch(Some("new")));
     snapshot.entries[1].queued_at = at(NOW - RISE_AFTER.as_secs() as i64);
+    // An urgent space that work waits on leads its own priority only.
+    for (id, created) in [("urgent", 3), ("waiting", 4)] {
+        space(&mut snapshot, id, Tier::New, created);
+    }
+    prioritize(&mut snapshot, "urgent", Priority::URGENT);
+    edge(&mut snapshot, "waiting", "urgent", Dependency::Blocked);
+    entry(&mut snapshot, "urgent", restore("urgent"));
     for schedule in [Schedule::Balanced, Schedule::Speed, Schedule::Cache] {
         snapshot.schedule = schedule;
-        assert_eq!(order(&snapshot), ["finishing", "new"], "{schedule:?}");
+        assert_eq!(
+            order(&snapshot),
+            ["urgent", "finishing", "new"],
+            "{schedule:?}"
+        );
     }
 }

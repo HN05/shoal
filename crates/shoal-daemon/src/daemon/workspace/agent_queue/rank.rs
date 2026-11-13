@@ -411,15 +411,17 @@ enum Lead {
     Cache(UnixTime),
 }
 
-/// Give each overdue entry the highest lead any entry has, so that no
-/// schedule passes it over and nothing starves within its priority, while
-/// the tier still orders it among the entries it ties with.
+/// Give each overdue entry the highest lead any entry of its priority has,
+/// so that no schedule passes it over and nothing starves within its
+/// priority, while the tier still orders it among the entries it ties with.
 fn lead_overdue(placed: &mut [Placed]) {
-    let Some(top) = placed.iter().map(|placed| placed.lead).max() else {
-        return;
-    };
+    let mut top: HashMap<Priority, Lead> = HashMap::new();
+    for placed in placed.iter() {
+        let lead = top.entry(placed.rank.priority).or_default();
+        *lead = (*lead).max(placed.lead);
+    }
     for placed in placed.iter_mut().filter(|placed| placed.overdue) {
-        placed.lead = top;
+        placed.lead = top[&placed.rank.priority];
     }
 }
 
