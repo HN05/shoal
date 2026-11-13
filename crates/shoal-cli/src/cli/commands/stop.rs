@@ -152,6 +152,31 @@ pub(super) async fn stop(
     launches: QueuedLaunches,
     processes: UntrackedProcesses,
 ) -> Result<StoppedSpace> {
+    let confirm = |unproven: &RemoteError| {
+        if !yes {
+            let action = format!(
+                "{}; check that nothing of it still runs. Treat it as stopped",
+                unproven.message
+            );
+            ensure!(ui::confirm(ctx, &action, "--yes")?, "stop canceled");
+        }
+        Ok(true)
+    };
+    stop_confirming(ctx, space, launches, processes, confirm).await
+}
+
+/// Stop `space` as [`stop`] does, and once the daemon refuses the stop as
+/// unproven, repeat it acknowledging that when `confirm` accepts the
+/// refusal, or else fail with it. A stop the daemon can prove, which scoped
+/// callers may make, so never carries the acknowledgement only the user may
+/// give.
+pub(super) async fn stop_confirming(
+    ctx: &Context,
+    space: &SpaceSelector,
+    launches: QueuedLaunches,
+    processes: UntrackedProcesses,
+    confirm: impl FnOnce(&RemoteError) -> Result<bool>,
+) -> Result<StoppedSpace> {
     let request_stop = |acknowledge_unproven| {
         crate::client::stopping::stop_space(
             &ctx.paths,
@@ -161,7 +186,7 @@ pub(super) async fn stop(
             processes,
         )
     };
-    let error = match request_stop(yes).await {
+    let error = match request_stop(false).await {
         Ok(cancelled) => return Ok(cancelled),
         Err(error) => error,
     };
@@ -171,11 +196,9 @@ pub(super) async fn stop(
     else {
         return Err(error);
     };
-    let action = format!(
-        "{}; check that nothing of it still runs. Treat it as stopped",
-        unproven.message
-    );
-    ensure!(ui::confirm(ctx, &action, "--yes")?, "stop canceled");
+    if !confirm(unproven)? {
+        return Err(error);
+    }
     request_stop(true).await
 }
 

@@ -451,6 +451,19 @@ fn a_parent_forgets_only_the_stopped_work_of_its_children() {
     assert!(records[..2].iter().all(|record| record.exists()));
 }
 
+/// `--yes` acknowledges only a stop the daemon cannot prove, which only the
+/// user may, so a parent's `--yes` stops a child whose stop it proves.
+#[test]
+fn a_parents_stop_with_yes_acknowledges_nothing_the_daemon_proves() {
+    let fixture = Fixture::new();
+    fixture.add("parent");
+    let split = scoped_command(&fixture, "parent", &["split", "child"]);
+    assert!(split.status.success(), "{split:?}");
+    let child = fixture.id("child");
+    let output = scoped_command(&fixture, "parent", &["stop", &child, "--yes"]);
+    assert!(output.status.success(), "{output:?}");
+}
+
 /// A parent's stop of its child stops the workspaces below it too, and the
 /// parent resumes what it stopped, which the daemon starts outside the
 /// parent; what the user stopped stays the user's to resume.

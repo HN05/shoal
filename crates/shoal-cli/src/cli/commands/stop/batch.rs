@@ -12,6 +12,7 @@ use crate::{
 
 use super::{
     cancelled_run_message, continue_hint, other_processes, other_processes_stop, removed_launches,
+    stop_confirming,
 };
 
 /// Stop every settled workspace and every chat with a running execution or
@@ -102,12 +103,12 @@ pub(super) async fn stop_each(
 /// waiting to start in it, then its untracked processes; a CI job's
 /// workspace has its run cancelled instead.
 async fn stop(ctx: &Context, space: &PresentSpace, acknowledge_unproven: bool) -> Result<Stop> {
-    let stopped = crate::client::stopping::stop_space(
-        &ctx.paths,
-        SpaceSelector::id(space.id()),
-        acknowledge_unproven,
+    let stopped = stop_confirming(
+        ctx,
+        &SpaceSelector::id(space.id()),
         QueuedLaunches::Cancel,
         other_processes_stop(),
+        |_| Ok(acknowledge_unproven),
     )
     .await?;
     if let Some(run) = stopped.cancelled_run {
