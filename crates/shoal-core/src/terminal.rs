@@ -7,12 +7,15 @@
 //! asks; a `default_host` value of its name makes it the host for terminals
 //! no host serves.
 mod environment;
+pub mod groups;
 mod herdr;
 mod here;
 mod host;
 pub mod hosts;
 mod naming;
+mod opening;
 mod prompts;
+pub mod queued;
 mod rex;
 mod sessions;
 mod tmux;
@@ -33,7 +36,11 @@ pub use hosts::{
     Beside, Configured, Options, background_place, current, enabled_host, hosts, installed_hosts,
     keeps_agents_in_sessions, named, names_places,
 };
-pub use naming::PlaceName;
+pub use naming::{PlaceName, name_plan, place_name};
+pub use opening::{
+    chat_place_env, open_add, place_env, rerun_in_host, shoal_command, show_opened,
+    start_in_background,
+};
 pub(crate) use prompts::{PromptSession, agents_can_be_prompted};
 pub use prompts::{WAKE_PROMPT, send_keys, submit_prompt};
 pub(crate) use sessions::{Attachment, OwnerKind};

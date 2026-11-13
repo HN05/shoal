@@ -130,8 +130,8 @@ impl Launch {
         let relaunch = self.relaunch(Some(handoff.path()));
         let chat = &self.chat;
         let repository = chat.repository.registered();
-        let place = terminal::start_chat_in_background(
-            ctx,
+        let place = crate::terminal::queued::start_chat(
+            &ctx.paths,
             &chat.settings,
             repository,
             chat.home().path(),

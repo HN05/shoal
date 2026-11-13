@@ -60,5 +60,5 @@ pub(in crate::cli) async fn start_queued(
     if own_way {
         return super::execute_add(ctx, plan).await.map(drop);
     }
-    terminal::start_queued(ctx, &settings, &mut plan, name).await
+    crate::terminal::queued::start_add(&ctx.paths, &settings, &mut plan, name).await
 }

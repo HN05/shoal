@@ -20,7 +20,6 @@ pub(in crate::cli::commands) use branch::owning_workspace;
 pub(in crate::cli::commands) use existing::start_worker;
 pub(in crate::cli) use finish::execute_add;
 pub(in crate::cli) use handoff::start_queued;
-pub(in crate::cli) use plan::item_context;
 use std::ffi::OsString;
 
 use anyhow::{Result, ensure};

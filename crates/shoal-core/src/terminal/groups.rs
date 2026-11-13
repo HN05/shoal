@@ -7,9 +7,9 @@ use std::path::Path;
 use anyhow::{Context as _, Result};
 
 use crate::{
-    cli::context::Context,
     config::Effective,
     model::Repository,
+    paths::CommandPaths,
     sessions::Origin,
     terminal::{Configured, Places},
 };
@@ -17,7 +17,7 @@ use crate::{
 /// The repository whose name a configured group's name takes, looked up
 /// only once a name is needed, or for a chat without one, the `root_dir`
 /// it runs in, whose directory name the group takes.
-pub(super) enum Repo<'a> {
+pub enum Repo<'a> {
     Selected(crate::repository::Selector),
     Id(&'a str),
     Known(&'a Repository),
@@ -26,23 +26,21 @@ pub(super) enum Repo<'a> {
 
 impl<'a> Repo<'a> {
     /// The repository of a chat, or the `root_dir` of a chat without one.
-    pub(super) fn of_chat(repository: Option<&'a Repository>, root: &'a Path) -> Self {
+    pub fn of_chat(repository: Option<&'a Repository>, root: &'a Path) -> Self {
         match repository {
             Some(repository) => Self::Known(repository),
             None => Self::Root(root),
         }
     }
 
-    async fn name(&self, ctx: &Context) -> Result<String> {
+    async fn name(&self, paths: &CommandPaths) -> Result<String> {
         let repos = match self {
             Self::Known(repo) => return Ok(crate::repository::name(repo).to_owned()),
             Self::Root(root) => {
                 let name = root.file_name().unwrap_or(root.as_os_str());
                 return Ok(name.to_string_lossy().into_owned());
             }
-            Self::Selected(_) | Self::Id(_) => {
-                crate::client::repositories::list(&ctx.paths).await?
-            }
+            Self::Selected(_) | Self::Id(_) => crate::client::repositories::list(paths).await?,
         };
         let repo = match self {
             Self::Selected(selector) => crate::repository::select(&repos, selector.clone()).await?,
@@ -58,7 +56,7 @@ impl<'a> Repo<'a> {
 /// The group `host`'s config names for `repo`, on the server of `near` or
 /// this machine's; `None` for a host without configured groups.
 async fn configured(
-    ctx: &Context,
+    paths: &CommandPaths,
     host: &Configured,
     near: Option<&Origin>,
     repo: &Repo<'_>,
@@ -68,7 +66,7 @@ async fn configured(
         return Ok(None);
     };
     let label =
-        crate::config::placeholders::render(template, &[("{repo}", &repo.name(ctx).await?)]);
+        crate::config::placeholders::render(template, &[("{repo}", &repo.name(paths).await?)]);
     match host.host.places() {
         Some(places) => places.group(near, &label, cwd).await,
         None => Ok(None),
@@ -77,15 +75,15 @@ async fn configured(
 
 /// The place a start beside this terminal joins in `host`: the one `host`
 /// serves, otherwise its configured group.
-pub(super) async fn beside(
-    ctx: &Context,
+pub async fn beside(
+    paths: &CommandPaths,
     host: &Configured,
     repo: &Repo<'_>,
     cwd: &Path,
 ) -> Result<Option<Origin>> {
     match host.host.places().and_then(Places::origin) {
         Some(origin) => Ok(Some(origin)),
-        None => configured(ctx, host, None, repo, cwd).await,
+        None => configured(paths, host, None, repo, cwd).await,
     }
 }
 
@@ -93,8 +91,8 @@ pub(super) async fn beside(
 /// trying the next one while they fail or `start` passes them over with
 /// `None`. Returns the last failure when none started it, and `None` when
 /// every host was passed over.
-pub(super) async fn first_queued<T>(
-    ctx: &Context,
+pub async fn first_queued<T>(
+    paths: &CommandPaths,
     settings: &Effective,
     origin: Option<&Origin>,
     repo: &Repo<'_>,
@@ -107,7 +105,7 @@ pub(super) async fn first_queued<T>(
         let group = match &fallback.group {
             Group::Origin(origin) => Some((*origin).clone()),
             Group::Configured(near) => {
-                match configured(ctx, &fallback.host, *near, repo, cwd).await {
+                match configured(paths, &fallback.host, *near, repo, cwd).await {
                     Ok(group) => group,
                     Err(error) => {
                         failure = Some(error);
@@ -134,7 +132,7 @@ pub(super) async fn first_queued<T>(
 }
 
 /// The first host a queued start from `origin` tries, unless none can.
-pub(super) fn first_queued_host(
+pub(crate) fn first_queued_host(
     settings: &Effective,
     origin: Option<&Origin>,
 ) -> Option<Configured> {

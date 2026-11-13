@@ -1,7 +1,7 @@
 //! The place a host opened for an addition: the add worker that runs there,
 //! and how the place hosts the workspace it adds.
 use crate::client::space_names::SpaceSelector;
-use std::{ffi::OsString, path::Path};
+use std::path::Path;
 
 use anyhow::{Context as _, Result};
 
@@ -15,7 +15,7 @@ use crate::{
     },
     env,
     model::Workspace,
-    terminal::{Configured, Host, Owner, Places, named},
+    terminal::{Host, Owner, Places, named},
 };
 
 /// The place a host opened for this process to add a workspace in, hosting
@@ -27,25 +27,6 @@ pub(in crate::cli) struct Place {
     closes_when_done: bool,
     /// Whether the host opened the place focused, showing it.
     focused: bool,
-}
-
-/// The worker that adds the workspace `plan` describes in the place `host`
-/// opened for it, `focused` or not, closing the place with the workspace
-/// when config says so. The plan reaches it in the place's environment.
-pub(super) fn add_worker_argv(
-    ctx: &Context,
-    host: &Configured,
-    focused: bool,
-) -> Result<Vec<OsString>> {
-    crate::workers::internal_command(
-        &ctx.paths,
-        false,
-        crate::workers::Worker::Add {
-            host: host.host.name(),
-            close_when_done: host.closes_when_done,
-            focused,
-        },
-    )
 }
 
 /// The add worker: add the workspace `args` plan in the place of the host

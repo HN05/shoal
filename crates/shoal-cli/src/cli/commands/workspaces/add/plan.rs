@@ -15,8 +15,6 @@ use crate::{
         context::Context,
     },
     env, git,
-    model::Repository,
-    protocol::ItemContext,
     start_plan::{AddPlan, Creation, ResolvedAddAgent},
     terminal::PlaceName,
 };
@@ -160,21 +158,6 @@ pub(super) fn start_as(
     plan.prompt.clone_from(&options.prompt);
     plan.parent.clone_from(&options.parent);
     plan.fork.clone_from(&options.fork);
-}
-
-/// Where `plan` reads from the forge: the existing workspace it launches in,
-/// else the chat that planned it, else where a command reads from the forge
-/// of its repository `repo`.
-pub(in crate::cli) async fn item_context(
-    ctx: &Context,
-    plan: &AddPlan,
-    repo: &Repository,
-) -> Result<ItemContext> {
-    Ok(match (&plan.workspace, &plan.chat) {
-        (Some(workspace), _) => ItemContext::Workspace(SpaceSelector::id(workspace)),
-        (None, Some(chat)) => ItemContext::Chat(SpaceSelector::id(chat)),
-        (None, None) => issues::read_context(ctx, repo).await?,
-    })
 }
 
 /// Refuse what creation would refuse in the given repository, branch and

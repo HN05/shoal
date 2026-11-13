@@ -21,7 +21,6 @@ use crate::{
         agents,
         commands::{issues, queued_agents},
         context::Context,
-        terminal,
     },
     config::Effective,
     model::Blocker,
@@ -143,7 +142,7 @@ pub(super) async fn ensure_detachable(
     if !crate::env::is_scoped() && runs_its_own_way(settings, plan) {
         return Ok(());
     }
-    terminal::ensure_background(settings)
+    crate::terminal::queued::ensure_background(settings)
 }
 
 /// Whether the plan's agent runs its own way under the checkout's

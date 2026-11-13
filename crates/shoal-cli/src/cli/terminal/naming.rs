@@ -4,104 +4,15 @@
 //! apply the label they are given, and a place takes a space's new label
 //! only while it still shows the one Shoal gave it, since another is the
 //! user's.
-use anyhow::{Context as _, Result};
 use tokio::sync::OnceCell;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
-    cli::{
-        commands::{
-            issues::{self, Issue},
-            workspaces::item_context,
-        },
-        context::Context,
-    },
+    cli::context::Context,
     config::Effective,
     model::Workspace,
-    protocol::ItemContext,
     sessions::{HostName, Origin},
-    start_plan::AddPlan,
-    terminal::{Configured, Host, Options, PlaceName, Places, names_places},
+    terminal::{Configured, Options, PlaceName, Places, place_name},
 };
-
-/// Give `plan`'s place the host's name `template`, if any. Without `issue`,
-/// a plan that names one only by URL looks it up.
-pub(super) async fn name_plan(
-    ctx: &Context,
-    template: Option<String>,
-    plan: &mut AddPlan,
-    issue: Option<&Issue>,
-) -> Result<()> {
-    let Some(template) = template else {
-        return Ok(());
-    };
-    if let Some(name) = &mut plan.place_name {
-        *name = name.templated(Some(template));
-        return Ok(());
-    }
-    let repos = crate::client::repositories::list(&ctx.paths).await?;
-    let repo = crate::repository::select(&repos, &plan.repository).await?;
-    // A queued start has only the issue's URL; the template may name it.
-    let found = match (issue, plan.issue()) {
-        (None, Some(url)) => {
-            let context = item_context(ctx, plan, repo).await?;
-            Some(issues::load(ctx, context, url.clone()).await?)
-        }
-        _ => None,
-    };
-    let issue = issue.or(found.as_ref()).map(Issue::place_issue);
-    plan.place_name = Some(PlaceName::new(Some(template), repo, issue));
-    Ok(())
-}
-
-/// The label of the place `host` opens for `workspace`: its name, or its
-/// name `template` filled in, or the workspace's directory name when the
-/// host shows no names and names its places after it. A failed lookup
-/// falls back to the name.
-pub(super) async fn workspace_label(
-    ctx: &Context,
-    template: Option<String>,
-    host: &dyn Host,
-    workspace: &Workspace,
-) -> String {
-    if !names_places(host) {
-        return workspace.directory_name().to_owned();
-    }
-    if template.is_none() {
-        return workspace.name.to_string();
-    }
-    match place_name(ctx, workspace).await {
-        Ok(name) => name
-            .templated(template)
-            .render(workspace.branch_or_name(), &workspace.name),
-        Err(error) => {
-            eprintln!("warning: cannot name the {} place: {error:#}", host.name());
-            workspace.name.to_string()
-        }
-    }
-}
-
-/// The name of the places hosting `workspace`, without a host's template:
-/// its repository and issue looked up.
-async fn place_name(ctx: &Context, workspace: &Workspace) -> Result<PlaceName> {
-    let repositories = crate::client::repositories::list(&ctx.paths).await?;
-    let repo = repositories
-        .iter()
-        .find(|repo| repo.id == workspace.repository_id)
-        .context("repository is no longer registered")?;
-    let issue = match &workspace.links.issue {
-        Some(url) => {
-            let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
-            Some(issues::load(ctx, context, url.clone()).await?)
-        }
-        None => None,
-    };
-    Ok(PlaceName::new(
-        None,
-        repo,
-        issue.as_ref().map(Issue::place_issue),
-    ))
-}
 
 /// What a space's places on one host show: `new` from now on, in place of
 /// `expected`, the label Shoal gave them before.
@@ -163,7 +74,7 @@ impl<'a> Renamed<'a> {
     /// The workspace's place name, looked up once; a failed lookup warns.
     async fn name(&self) -> Option<&PlaceName> {
         let looked_up = self.name.get_or_init(async || {
-            place_name(self.ctx, self.workspace)
+            place_name(&self.ctx.paths, self.workspace)
                 .await
                 .inspect_err(|error| {
                     eprintln!(

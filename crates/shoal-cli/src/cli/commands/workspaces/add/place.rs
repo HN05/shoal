@@ -94,7 +94,7 @@ async fn place(ctx: &Context, workspace: &Workspace, launch: QueuedLaunch) -> Re
     if agents::runs_its_own_way(&agent, &settings) {
         return admit_here(ctx, workspace, launch).await;
     }
-    terminal::ensure_background(&settings)?;
+    crate::terminal::queued::ensure_background(&settings)?;
     let entry = queued_launches::queue_in_workspace(&ctx.paths, workspace, launch, None).await?;
     Ok(Placement::Queued(Box::new(entry)))
 }

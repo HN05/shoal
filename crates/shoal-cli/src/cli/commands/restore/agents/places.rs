@@ -45,12 +45,13 @@ pub(super) async fn restore_queued(
     stopped: Option<&Origin>,
     args: &[OsString],
 ) -> Result<()> {
-    if terminal::rerun_queued_where_stopped(ctx, settings, stopped, args).await? {
+    let paths = &ctx.paths;
+    if crate::terminal::queued::rerun_where_stopped(paths, settings, stopped, args).await? {
         return Ok(());
     }
     match space {
         PresentSpace::Workspace(workspace) => {
-            terminal::restore_queued_in_background(ctx, settings, workspace, args).await
+            crate::terminal::queued::restore_in_background(paths, settings, workspace, args).await
         }
         PresentSpace::Chat(_) => start_chat(ctx, settings, space, args).await,
     }
@@ -71,8 +72,8 @@ async fn start_chat(
         HomeRecords::Workspace(_) => None,
     };
     let name = space.name().as_str();
-    let start = terminal::start_chat_in_background(
-        ctx,
+    let start = crate::terminal::queued::start_chat(
+        &ctx.paths,
         settings,
         repository,
         home.path(),

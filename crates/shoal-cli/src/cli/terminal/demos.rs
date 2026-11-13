@@ -2,14 +2,13 @@
 //! terminal host.
 use anyhow::{Context as _, Result};
 
-use super::{groups, launch::place_env};
 use crate::{
     cli::context::Context,
     config::Effective,
     demos::Launch,
     model::Workspace,
     sessions::Origin,
-    terminal::{Demo, DemoWorker, Host, current_origin, named, names_places},
+    terminal::{Demo, DemoWorker, Host, current_origin, groups, named, names_places, place_env},
 };
 
 /// Start a demo of `workspace` in the first host that runs queued starts and
@@ -25,9 +24,9 @@ pub(in crate::cli) async fn start_demo(
 ) -> Result<Origin> {
     let origin = current_origin();
     let repo = groups::Repo::Id(workspace.repository_id.as_str());
-    let env = place_env(ctx)?;
+    let env = place_env(&ctx.paths)?;
     groups::first_queued(
-        ctx,
+        &ctx.paths,
         settings,
         origin.as_ref(),
         &repo,

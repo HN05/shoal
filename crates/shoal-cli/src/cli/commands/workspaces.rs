@@ -23,7 +23,7 @@ mod watch;
 pub(super) use add::{
     AddOptions, AgentLaunch, StartsAsChat, add, check_target, link, owning_workspace, start_worker,
 };
-pub(in crate::cli) use add::{execute_add, item_context, start_queued};
+pub(in crate::cli) use add::{execute_add, start_queued};
 pub(super) use adopt::adopt;
 pub(super) use cd::cd;
 pub(super) use changes::{conflicts, diff};

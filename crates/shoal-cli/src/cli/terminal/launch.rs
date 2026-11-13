@@ -1,19 +1,14 @@
 //! Starting Shoal work beside this terminal: additions, restores, tracked
-//! agents and chats, focused or in the background, and the starts the
-//! daemon runs later for a terminal that queued them.
+//! agents and chats, focused or in the background.
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, ensure};
 
-use super::{
-    add_place::add_worker_argv,
-    groups, naming,
-    sessions::{left_open, report_detach},
-};
+use super::sessions::{left_open, report_detach};
 use crate::{
     cli::{commands::issues::Issue, context::Context, recent},
     config::{Effective, modes::ModeName},
@@ -23,8 +18,8 @@ use crate::{
     sessions::Origin,
     start_plan::AddPlan,
     terminal::{
-        Attaches, Beside, Configured, Host, Owner, Places, Start, current, current_origin,
-        enabled_host, names_places,
+        Attaches, Configured, Owner, Places, Start, chat_place_env, current, groups, name_plan,
+        open_add, place_env, rerun_in_host, shoal_command, show_opened, start_in_background,
     },
 };
 
@@ -50,218 +45,26 @@ pub(in crate::cli) async fn start_add(
     let host = beside(ctx, settings);
     let requested = focus.then_some(Placement::Focus);
     let placement = Placement::of(settings, &plan.mode(), requested, !plan.runs_unattended());
-    naming::name_plan(ctx, host.options.name_template.clone(), plan, issue).await?;
+    let issue = issue.map(Issue::place_issue);
+    name_plan(&ctx.paths, host.options.name_template.clone(), plan, issue).await?;
     let Some(places) = host.places() else {
         return Ok(false);
     };
-    let cwd = std::env::current_dir()?;
-    let repo = groups::Repo::Selected(plan.repository.clone());
-    let origin = groups::beside(ctx, &host, &repo, &cwd).await?;
-    let beside = host.beside(origin.as_ref());
-    let started = run_add(ctx, &host, places, beside, plan, name, placement).await?;
-    if started && placement == Placement::Background && !ctx.json {
-        outln!("Started {name} {}", places.background_place(name));
-    }
-    Ok(started)
-}
-
-/// Start an admitted queue entry's `plan` in the background where the
-/// terminal that queued it would have; the daemon's worker has no terminal.
-pub(in crate::cli) async fn start_queued(
-    ctx: &Context,
-    settings: &Effective,
-    plan: &mut AddPlan,
-    name: &str,
-) -> Result<()> {
-    let origin = queued_origin()?;
-    let cwd = std::env::current_dir()?;
-    let repo = groups::Repo::Selected(plan.repository.clone());
-    groups::first_queued(
-        ctx,
-        settings,
-        origin.as_ref(),
-        &repo,
-        &cwd,
-        async |host, group| {
-            let Some(places) = host.places() else {
-                return Ok(None);
-            };
-            naming::name_plan(ctx, host.options.name_template.clone(), plan, None).await?;
-            let beside = Beside::opening(group);
-            run_add(ctx, host, places, beside, plan, name, Placement::Background).await?;
-            Ok(Some(()))
-        },
-    )
-    .await?
-    .context(NO_QUEUED_HOST)
-}
-
-const NO_QUEUED_HOST: &str = "no terminal host can start queued agents";
-
-/// Have `host` run the add worker for `plan`, the planned workspace `name`,
-/// in a new place of its `places` `beside` as `placement` asks,
-/// returning whether it left this process. A focused start stays here where
-/// the host keeps agents in sessions this terminal attaches to, so its agent
-/// starts in one. The worker reads the plan from the place's environment,
-/// and a place that keeps a shell gets the directive through which the
-/// worker has it enter the workspace.
-async fn run_add(
-    ctx: &Context,
-    host: &Configured,
-    places: &dyn Places,
-    beside: Beside<'_>,
-    plan: &AddPlan,
-    name: &str,
-    placement: Placement,
-) -> Result<bool> {
-    if placement == Placement::Focus && host.host.attaches().is_some() {
+    // A focused start stays here where the host keeps agents in sessions
+    // this terminal attaches to, so its agent starts in one.
+    let focus = placement == Placement::Focus;
+    if focus && host.host.attaches().is_some() {
         return Ok(false);
     }
-    let worker = add_worker_argv(ctx, host, placement == Placement::Focus)?;
-    let directive = places
-        .places_keep_shells()
-        .then(ShellDirective::create)
-        .transpose()?;
-    let start = Start {
-        state: &ctx.paths.state,
-        origin: beside.origin,
-        cwd: &std::env::current_dir()?,
-        label: &add_label(host.host, plan, name),
-        focus: placement == Placement::Focus,
-        split: beside.split,
-        argv: &worker,
-        env: &add_env(ctx, plan, directive.as_ref())?,
-    };
-    let place = places.open(&start).await?;
-    if let Some(directive) = directive {
-        directive.hand_over()?;
-    }
-    if start.focus {
-        show_opened(host, places, &place, start.label).await?;
+    let cwd = std::env::current_dir()?;
+    let repo = groups::Repo::Selected(plan.repository.clone());
+    let origin = groups::beside(&ctx.paths, &host, &repo, &cwd).await?;
+    let beside = host.beside(origin.as_ref());
+    open_add(&ctx.paths, &host, places, beside, plan, name, focus).await?;
+    if !focus && !ctx.json {
+        outln!("Started {name} {}", places.background_place(name));
     }
     Ok(true)
-}
-
-/// Show `place`, which `host` opened focused, in this terminal when the
-/// host does not serve it; a terminal it serves shows its focused place.
-async fn show_opened(
-    host: &Configured,
-    places: &dyn Places,
-    place: &Origin,
-    name: &str,
-) -> Result<()> {
-    if host.serves() {
-        return Ok(());
-    }
-    places.show(place, name).await
-}
-
-/// What the place `host` opens for `plan` is called: the plan's label where
-/// the host shows names, otherwise the planned workspace `name`.
-fn add_label(host: &dyn Host, plan: &AddPlan, name: &str) -> String {
-    if names_places(host) {
-        plan.label()
-    } else {
-        name.to_owned()
-    }
-}
-
-/// The variables of the place that adds `plan`: a new place's, the plan,
-/// and the `directive` of a place that keeps a shell.
-fn add_env(
-    ctx: &Context,
-    plan: &AddPlan,
-    directive: Option<&ShellDirective>,
-) -> Result<Vec<(&'static str, String)>> {
-    let mut env = place_env(ctx)?;
-    env.push((env::ADD_PLAN, serde_json::to_string(plan)?));
-    if let Some(directive) = directive {
-        env.push((env::SHELL_DIRECTIVE, directive.path()));
-    }
-    Ok(env)
-}
-
-/// The file in which the add worker leaves the workspace for the shell of
-/// its place to enter. Shoal removes it until the place runs its worker;
-/// then the shell removes it at its next prompt, or the watcher when it
-/// closes the place.
-struct ShellDirective(tempfile::TempPath);
-
-impl ShellDirective {
-    fn create() -> Result<Self> {
-        let file = tempfile::Builder::new()
-            .prefix("shoal-cd.")
-            .tempfile()
-            .context("create the place's shell directive")?;
-        Ok(Self(file.into_temp_path()))
-    }
-
-    fn path(&self) -> String {
-        self.0.display().to_string()
-    }
-
-    fn hand_over(self) -> Result<()> {
-        self.0.keep().context("keep the place's shell directive")?;
-        Ok(())
-    }
-}
-
-/// The variables a command in a new place needs from this process: its
-/// output setting, which agents there inherit, and its home and config
-/// location, whatever the environment the host starts places in.
-pub(super) fn place_env(ctx: &Context) -> Result<Vec<(&'static str, String)>> {
-    let config = crate::config::Config::path(&ctx.paths);
-    let config_home = config
-        .parent()
-        .and_then(Path::parent)
-        .context("config has no parent")?;
-    Ok(vec![
-        (env::OUTPUT, env::output_setting().1),
-        ("HOME", ctx.paths.home.display().to_string()),
-        ("XDG_CONFIG_HOME", config_home.display().to_string()),
-    ])
-}
-
-/// The variables a chat in a place Shoal opens for it needs: those of
-/// [`place_env`], and the mark that tells the chat the place is its own, which
-/// it records so its removal closes the place.
-fn chat_place_env(ctx: &Context) -> Result<Vec<(&'static str, String)>> {
-    let mut env = place_env(ctx)?;
-    env.push((env::OPENED_CHAT_PLACE, "1".to_owned()));
-    Ok(env)
-}
-
-/// This executable with `args`, as a place runs it.
-fn shoal_command(ctx: &Context, args: &[OsString]) -> Result<Vec<OsString>> {
-    let mut argv = crate::workers::shoal_argv(&ctx.paths)?;
-    argv.extend_from_slice(args);
-    Ok(argv)
-}
-
-/// Refuse a background start that the daemon's worker could not run from
-/// this terminal under `settings`: one no host takes, or whose first host a
-/// queued start from here would try is not installed.
-pub(in crate::cli) fn ensure_background(settings: &Effective) -> Result<()> {
-    groups::first_queued_host(settings, current_origin().as_ref())
-        .context(NO_QUEUED_HOST)?
-        .host
-        .ensure_installed()
-}
-
-/// The place a start the daemon runs for this worker comes from: the one
-/// recorded with it, or for a start recorded before origins, the place its
-/// host's variables name.
-fn queued_origin() -> Result<Option<Origin>> {
-    match std::env::var(env::ORIGIN) {
-        Ok(origin) => recorded_origin(&origin),
-        Err(_) => Ok(current_origin()),
-    }
-}
-
-/// The origin a queued start recorded: a place, or none for a start from
-/// no terminal.
-fn recorded_origin(recorded: &str) -> Result<Option<Origin>> {
-    serde_json::from_str(recorded).context("invalid queued start origin")
 }
 
 /// Run Shoal with `args` where an agent stopped, in `stopped`, when that
@@ -274,85 +77,11 @@ pub(in crate::cli) async fn rerun_where_stopped(
     args: &[OsString],
 ) -> Result<Option<&'static str>> {
     let host = beside(ctx, settings).host;
-    let reused = rerun_in_host(ctx, host, stopped, args).await?;
+    let reused = rerun_in_host(&ctx.paths, host, stopped, args).await?;
     Ok(host
         .places()
         .filter(|_| reused)
         .map(Places::background_places))
-}
-
-/// Restore an agent in `stopped`, its earlier place, when that is in `host`
-/// and idle.
-async fn rerun_in_host(
-    ctx: &Context,
-    host: &dyn Host,
-    stopped: Option<&Origin>,
-    args: &[OsString],
-) -> Result<bool> {
-    let Some(places) = host.places() else {
-        return Ok(false);
-    };
-    let Some(place) = reusable_place(stopped).filter(|place| place.host == host.name()) else {
-        return Ok(false);
-    };
-    let argv = shoal_command(ctx, args)?;
-    places
-        .run_in_place(&ctx.paths.state, place, &argv, &place_env(ctx)?)
-        .await
-}
-
-/// `stopped`, where an agent stopped, unless that is where this process
-/// runs, which is never reused.
-fn reusable_place(stopped: Option<&Origin>) -> Option<&Origin> {
-    let here = current_origin().and_then(|origin| origin.place);
-    stopped.filter(|origin| origin.place.is_some() && origin.place != here)
-}
-
-/// Run Shoal with `args`, which restore an agent that stopped in `stopped`,
-/// for the daemon's worker, which has no terminal: in that place, through
-/// the host that recorded it, when it is open and back at its prompt.
-/// Returns whether it ran.
-pub(in crate::cli) async fn rerun_queued_where_stopped(
-    ctx: &Context,
-    settings: &Effective,
-    stopped: Option<&Origin>,
-    args: &[OsString],
-) -> Result<bool> {
-    let Some(host) = reusable_place(stopped).and_then(|place| enabled_host(settings, place.host))
-    else {
-        return Ok(false);
-    };
-    rerun_in_host(ctx, host, stopped, args).await
-}
-
-/// Run Shoal with `args`, which restore an agent of `workspace`, for the
-/// daemon's worker, which has no terminal: in the background of the first
-/// place a queued start from there can open.
-pub(in crate::cli) async fn restore_queued_in_background(
-    ctx: &Context,
-    settings: &Effective,
-    workspace: &Workspace,
-    args: &[OsString],
-) -> Result<()> {
-    let origin = queued_origin()?;
-    let repo = groups::Repo::Id(workspace.repository_id.as_str());
-    groups::first_queued(
-        ctx,
-        settings,
-        origin.as_ref(),
-        &repo,
-        &workspace.path,
-        async |host, group| {
-            let Some(places) = host.places() else {
-                return Ok(None);
-            };
-            start_in_background(ctx, host, places, Beside::opening(group), workspace, args)
-                .await
-                .map(Some)
-        },
-    )
-    .await?
-    .context(NO_QUEUED_HOST)
 }
 
 /// Run Shoal with `args` for `workspace` in the background, returning what
@@ -368,105 +97,10 @@ pub(in crate::cli) async fn run_in_background(
         return Ok(None);
     };
     let repo = groups::Repo::Id(workspace.repository_id.as_str());
-    let origin = groups::beside(ctx, &host, &repo, &workspace.path).await?;
+    let origin = groups::beside(&ctx.paths, &host, &repo, &workspace.path).await?;
     let beside = host.beside(origin.as_ref());
-    start_in_background(ctx, &host, places, beside, workspace, args).await?;
+    start_in_background(&ctx.paths, &host, places, beside, workspace, args).await?;
     Ok(Some(places.background_places()))
-}
-
-/// Run Shoal with `args`, a restore of `workspace`, in a new background
-/// place of `host`'s `places` `beside`, telling the restore to close
-/// the place with the workspace when config says so.
-async fn start_in_background(
-    ctx: &Context,
-    host: &Configured,
-    places: &dyn Places,
-    beside: Beside<'_>,
-    workspace: &Workspace,
-    args: &[OsString],
-) -> Result<()> {
-    let template = host.options.name_template.clone();
-    let label = naming::workspace_label(ctx, template, host.host, workspace).await;
-    let name = host.host.name().as_str();
-    // The restore records its place before anything can run there.
-    let mut argv = shoal_command(ctx, args)?;
-    argv.extend(["--opened-in".into(), name.into()]);
-    if host.closes_when_done {
-        argv.extend(["--close-in".into(), name.into()]);
-    }
-    let env = place_env(ctx)?;
-    open_in_background(ctx, places, beside, &workspace.path, &label, &argv, &env).await
-}
-
-/// Run Shoal with `args` for the chat `name` of `repository`, or of none,
-/// in `cwd`, its checkout, worktree or `root_dir`, in a new background
-/// place, of the first host that would start a queued agent, for the user
-/// to attach to. A `restore` records the place as the chat's, as a
-/// workspace's restore does. Returns how that host reports it.
-pub(in crate::cli) async fn start_chat_in_background(
-    ctx: &Context,
-    settings: &Effective,
-    repository: Option<&Repository>,
-    cwd: &Path,
-    name: &str,
-    args: &[OsString],
-    restore: bool,
-) -> Result<String> {
-    let origin = queued_origin()?;
-    let repo = groups::Repo::of_chat(repository, cwd);
-    groups::first_queued(
-        ctx,
-        settings,
-        origin.as_ref(),
-        &repo,
-        cwd,
-        async |host, group| {
-            let Some(places) = host.places() else {
-                return Ok(None);
-            };
-            let beside = Beside::opening(group);
-            let mut argv = shoal_command(ctx, args)?;
-            if restore {
-                let host_name = host.host.name().as_str();
-                argv.extend(["--opened-in".into(), host_name.into()]);
-                if host.closes_when_done {
-                    argv.extend(["--close-in".into(), host_name.into()]);
-                }
-            }
-            let env = chat_place_env(ctx)?;
-            open_in_background(ctx, places, beside, cwd, name, &argv, &env).await?;
-            Ok(Some(format!(
-                "Started {name} {}",
-                places.background_place(name)
-            )))
-        },
-    )
-    .await?
-    .context(NO_QUEUED_HOST)
-}
-
-/// Run `argv` at `cwd` with `env` in a new background place of `places`
-/// `beside`, called `label`.
-async fn open_in_background(
-    ctx: &Context,
-    places: &dyn Places,
-    beside: Beside<'_>,
-    cwd: &Path,
-    label: &str,
-    argv: &[OsString],
-    env: &[(&str, String)],
-) -> Result<()> {
-    let start = Start {
-        state: &ctx.paths.state,
-        origin: beside.origin,
-        cwd,
-        label,
-        focus: false,
-        split: beside.split,
-        argv,
-        env,
-    };
-    places.open(&start).await.map(drop)
 }
 
 /// Where a tracked agent launched from this terminal runs apart from this
@@ -507,10 +141,10 @@ pub(in crate::cli) async fn run_agent(
         return Ok(None);
     };
     let repo = groups::Repo::Id(workspace.repository_id.as_str());
-    let origin = groups::beside(ctx, &current, &repo, &workspace.path).await?;
+    let origin = groups::beside(&ctx.paths, &current, &repo, &workspace.path).await?;
     let beside = current.beside(origin.as_ref());
     let worker = agent_worker(ctx, &current, workspace, agent, records, command)?;
-    let mut env = place_env(ctx)?;
+    let mut env = place_env(&ctx.paths)?;
     if let Some(entry) = env::queue_entry() {
         env.push((env::QUEUE_ENTRY, entry.to_string()));
     }
@@ -601,11 +235,11 @@ pub(in crate::cli) async fn start_chat(
         return Ok(ChatStarted::Here);
     };
     let repo = groups::Repo::of_chat(repository, cwd);
-    let origin = groups::beside(ctx, &host, &repo, cwd).await?;
+    let origin = groups::beside(&ctx.paths, &host, &repo, cwd).await?;
     let beside = host.beside(origin.as_ref());
     let focus = placement == Placement::Focus;
     let attaches = host.host.attaches().filter(|_| focus);
-    let mut env = chat_place_env(ctx)?;
+    let mut env = chat_place_env(&ctx.paths)?;
     // A chat registers only once the place runs it, so the chat itself
     // records the place it is shown in for `attach -`.
     if focus && attaches.is_none() {
@@ -618,7 +252,7 @@ pub(in crate::cli) async fn start_chat(
         label: name,
         focus,
         split: beside.split,
-        argv: &shoal_command(ctx, args)?,
+        argv: &shoal_command(&ctx.paths, args)?,
         env: &env,
     };
     if let Some(attaches) = attaches {
