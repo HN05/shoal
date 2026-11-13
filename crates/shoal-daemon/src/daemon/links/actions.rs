@@ -563,11 +563,11 @@ impl Manager {
         }
     }
 
-    /// Record an item the workspace just created as opened and, with `link`,
-    /// assign it. A removal that starts after the caller's check leaves it
-    /// unrecorded or unlinked with a warning, so nothing fails once the item
-    /// exists and a retry cannot create a duplicate. Returns whether it was
-    /// linked, and the warning.
+    /// Assign an item the workspace just created with `link`, and record it
+    /// as opened without, or when assigning it fails. A removal that starts
+    /// after the caller's check leaves it unrecorded with a warning, so
+    /// nothing fails once the item exists and a retry cannot create a
+    /// duplicate. Returns whether it was assigned, and the warning.
     pub(super) async fn keep_created(
         &self,
         space: &SpaceId,
@@ -575,17 +575,38 @@ impl Manager {
         item: &Item,
         link: bool,
     ) -> Result<(bool, Option<String>)> {
-        let (id, url, title) = (space.to_owned(), item.url.clone(), item.title.clone());
-        let recorded = self
-            .store
-            .write(move |tx| record_opened(tx, &id, kind, url.url(), &title))
-            .await
-            .with_context(|| format!("{} was opened, but recording it failed", item.url))?;
-        if !recorded || !link {
-            return Ok((false, (!recorded).then(|| removal_warning(&item.url))));
+        self.journal_created(space, kind, item).await?;
+        let failure = match link {
+            true => match self.assign_created(space, kind, item).await {
+                Ok(()) => return Ok((true, None)),
+                Err(error) => Some(error),
+            },
+            false => None,
+        };
+        if !self.record_created(space, kind, item).await? {
+            return Ok((false, Some(removal_warning(&item.url))));
         }
+        match failure {
+            Some(error) => {
+                Err(error.context(format!("{} was opened, but linking it failed", item.url)))
+            }
+            None => Ok((false, None)),
+        }
+    }
+
+    /// Journal that the space created `item`.
+    async fn journal_created(&self, space: &SpaceId, kind: ItemKind, item: &Item) -> Result<()> {
+        let (id, url) = (space.to_owned(), item.url.clone());
+        self.store
+            .write(move |tx| events::record_item(tx, &id, kind, url.url(), "open"))
+            .await
+            .with_context(|| format!("{} was opened, but recording it failed", item.url))
+    }
+
+    /// Assign `item`, which the space just created.
+    async fn assign_created(&self, space: &SpaceId, kind: ItemKind, item: &Item) -> Result<()> {
         let url = item.url.clone();
-        let linked = match kind {
+        match kind {
             ItemKind::Issue => {
                 let title = Some(item.title.clone());
                 self.set_issue_gated(&SpaceSelector::id(space), &url.into(), title)
@@ -597,31 +618,24 @@ impl Manager {
                 self.set_pr_gated(&SpaceSelector::id(space), watch, check)
                     .await
             }
-        };
-        match linked {
-            Ok(()) => Ok((true, None)),
-            Err(_) if !self.accepts_links(space).await? => {
-                Ok((false, Some(removal_warning(&item.url))))
-            }
-            Err(error) => {
-                Err(error.context(format!("{} was opened, but linking it failed", item.url)))
-            }
         }
     }
 
-    /// Whether the workspace still exists and takes link changes.
-    async fn accepts_links(&self, id: &SpaceId) -> Result<bool> {
-        let id = id.to_owned();
+    /// Record `item`, which the space just created, as opened, returning
+    /// whether it was recorded: a removal that started after the caller's
+    /// check takes no link changes, and the item exists either way.
+    async fn record_created(&self, space: &SpaceId, kind: ItemKind, item: &Item) -> Result<bool> {
+        let (id, url, title) = (space.to_owned(), item.url.clone(), item.title.clone());
         self.store
-            .run(move |db| super::accepts_links(db, &id))
+            .write(move |tx| record_opened(tx, &id, kind, url.url(), &title))
             .await
+            .with_context(|| format!("{} was opened, but recording it failed", item.url))
     }
 }
 
-/// Record an item the workspace created as opened, with the event of its
-/// creation, in one transaction, returning whether it was recorded: a
-/// removal that started after the caller's check takes no link changes, and
-/// the item exists either way.
+/// Record an item the workspace created as opened in one transaction,
+/// returning whether it was recorded, which a removal that started after the
+/// caller's check prevents.
 fn record_opened(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
@@ -629,7 +643,6 @@ fn record_opened(
     url: &str,
     title: &str,
 ) -> Result<bool> {
-    events::record_item(tx, id, kind, url, "open")?;
     let recorded = super::accepts_links(tx, id)?;
     if recorded {
         super::record(tx, id, Relation::Opened, kind, url, Some(title))?;
