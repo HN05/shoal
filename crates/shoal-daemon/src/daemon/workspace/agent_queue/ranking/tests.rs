@@ -467,3 +467,40 @@ async fn a_launch_given_no_priority_ranks_with_the_highest_its_issues_labels_map
         ]
     );
 }
+
+#[tokio::test]
+async fn a_queued_restore_reads_when_its_agents_prompt_cache_expires() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let workspace = create(&manager, &repo, "stopped").await;
+    let (id, repository) = (workspace.id.clone(), repo.id.clone());
+    let entries = manager
+        .store
+        .read(move |tx| {
+            tx.execute(
+                "INSERT INTO executions(id,space_id,state,agent) VALUES ('agent',?1,?2,'claude')",
+                params![id, crate::state::ExecutionState::Unknown],
+            )?;
+            tx.execute(
+                "INSERT INTO space_agent_state(space_id,state,execution_id,since,prompt_cache_expires_at)
+                 VALUES (?1,'idle','agent',1,500)",
+                [&id],
+            )?;
+            tx.execute(
+                "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,space_id,execution_id)
+                 VALUES ('restore','restore',?1,'stopped','claude',?2,1,?3,'agent')",
+                params![repository, QueueState::Queued, id],
+            )?;
+            entries::waiting(tx, &Default::default(), &[])
+        })
+        .await
+        .unwrap();
+    let caches: Vec<_> = entries
+        .iter()
+        .map(|entry| entry.prompt_cache_until)
+        .collect();
+    assert_eq!(
+        caches,
+        [Some(crate::client::time::UnixTime::from_seconds(500))]
+    );
+}
