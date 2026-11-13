@@ -30,3 +30,5 @@ pub use cli::entry::{RunDaemon, run};
 mod helper_tests {
     shoal_core::helper_tests!();
 }
+#[cfg(test)]
+shoal_core::forget_runner_repository!();

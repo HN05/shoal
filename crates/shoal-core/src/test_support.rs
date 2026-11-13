@@ -434,6 +434,30 @@ macro_rules! helper_tests {
     };
 }
 
+/// Forget the repository variables a Git hook or `git rebase --exec` running
+/// this test binary exports, before `main`: the code under test starts Git,
+/// and scripts that run Git, which would otherwise work in that repository
+/// instead of the fixtures'. Each crate whose tests start such processes
+/// expands it at its root.
+#[macro_export]
+macro_rules! forget_runner_repository {
+    () => {
+        #[used]
+        #[cfg_attr(target_os = "linux", unsafe(link_section = ".init_array"))]
+        #[cfg_attr(
+            target_vendor = "apple",
+            unsafe(link_section = "__DATA,__mod_init_func")
+        )]
+        static FORGET_RUNNER_REPOSITORY: extern "C" fn() = {
+            extern "C" fn forget() {
+                // SAFETY: constructors run before `main` starts any thread.
+                unsafe { $crate::git::forget_inherited_repository() };
+            }
+            forget
+        };
+    };
+}
+
 /// This test binary's `marked_child` helper, which waits 30 seconds, for a
 /// test to give its environment before [`spawn_marked_child`] starts it.
 /// It carries no Shoal identity but the one the test gives it.

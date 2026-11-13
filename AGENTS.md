@@ -351,8 +351,10 @@ binary's memory keeps no tests apart: tests that must not overlap take a lock
 other processes see, such as a file lock, and join a test group with
 `max-threads = 1` in `.config/nextest.toml`. Test in temporary state
 directories and repositories, without the launching environment's Shoal
-variables or configuration locations; never install persistent OS services or
-modify real user workspaces as a side effect of tests.
+variables, configuration locations or Git repository variables, which a test
+binary that starts Git forgets with `forget_runner_repository!` at its root;
+never install persistent OS services or modify real user workspaces as a side
+effect of tests.
 Run development builds only with a temporary `--state-dir`: the user's daemon
 serves every running agent, so never stop, restart or reinstall it, and a debug
 build refuses the user's state directory, and writes to the user's config

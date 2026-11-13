@@ -68,3 +68,5 @@ pub const WORKER_STACK: usize = 8 << 20;
 mod helper_tests {
     crate::helper_tests!();
 }
+#[cfg(test)]
+crate::forget_runner_repository!();

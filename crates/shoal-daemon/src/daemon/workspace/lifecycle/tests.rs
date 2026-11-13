@@ -1575,3 +1575,58 @@ async fn removal_retains_a_kept_worktree_git_disowned() {
             .is_some()
     );
 }
+
+/// A workspace's life from creation to removal, with a removal hook that runs
+/// Git, which [`a_runners_repository_variables_reach_no_git_of_the_tests`]
+/// runs as the tests of a runner in another repository.
+#[tokio::test]
+#[ignore = "helper the runner repository test starts"]
+async fn workspace_life_with_git_in_a_hook() {
+    let (_root, manager, workspace) = fixture_with_removal_hook("git branch hooked").await;
+    manager
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+}
+
+/// A Git hook or `git rebase --exec` running the tests exports `GIT_DIR` and
+/// its relatives, which neither the daemon's Git nor what it starts follows.
+#[test]
+fn a_runners_repository_variables_reach_no_git_of_the_tests() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let runner = repository(root.path(), "runner");
+    let git_dir = runner.join(".git");
+    let state = || {
+        [
+            &["for-each-ref"][..],
+            &["worktree", "list", "--porcelain"],
+            &["ls-files", "--stage"],
+            &["config", "--local", "--list"],
+        ]
+        .map(|args| git(&runner, args))
+    };
+    let before = state();
+    let program = std::env::current_exe().unwrap();
+    let output = crate::test_support::unmarked(program.to_str().unwrap())
+        .args([
+            "--exact",
+            "daemon::workspace::lifecycle::tests::workspace_life_with_git_in_a_hook",
+            "--ignored",
+        ])
+        .env("GIT_DIR", &git_dir)
+        .env("GIT_WORK_TREE", &runner)
+        .env("GIT_INDEX_FILE", git_dir.join("index"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+    assert_eq!(state(), before);
+}
