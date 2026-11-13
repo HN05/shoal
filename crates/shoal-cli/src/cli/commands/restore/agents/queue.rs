@@ -89,31 +89,30 @@ async fn stopped_agents(
 }
 
 /// The stopped agents and last sessions of every space this process's
-/// scope reaches but its own, leaving out those whose assignment is done,
-/// which need no agent.
+/// scope reaches but its own that wait in no wrapper, as restore `--all`
+/// finds them.
 async fn stopped_in_reach(ctx: &Context) -> Result<Vec<(PresentSpace, Saved)>> {
-    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
-    let mut stopped = Vec::new();
-    for space in crate::cli::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces) {
-        if space.done() {
-            continue;
-        }
-        let saved = unattended(ctx, &space).await?;
-        if !(saved.agents.is_empty() && saved.sessions.is_empty()) {
-            stopped.push((space, saved));
-        }
+    let mut stopped = super::saved::stopped(ctx, &Selected::default(), false).await?;
+    for (_, saved) in &mut stopped {
+        keep_unattended(saved);
     }
+    stopped.retain(|(_, saved)| !(saved.agents.is_empty() && saved.sessions.is_empty()));
     Ok(stopped)
 }
 
 /// The stopped agents and last sessions of `space` that wait in no wrapper,
-/// which a scoped process queues; its stopped commands go to the restored
-/// agents.
+/// which a scoped process queues.
 async fn unattended(ctx: &Context, space: &PresentSpace) -> Result<Saved> {
     let mut saved = saved(ctx, space).await?;
+    keep_unattended(&mut saved);
+    Ok(saved)
+}
+
+/// Keep what `saved` holds of agents and last sessions that wait in no
+/// wrapper; its stopped commands go to the restored agents.
+fn keep_unattended(saved: &mut Saved) {
     saved.retain_unattended();
     saved.commands.clear();
-    Ok(saved)
 }
 
 /// Restore `workspace`'s stopped agents, only `execution`'s when given, as
