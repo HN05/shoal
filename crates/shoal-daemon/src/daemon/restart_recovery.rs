@@ -236,8 +236,8 @@ impl Manager {
 
     /// The unknown executions of present spaces: those with a saved
     /// recovery record, those that never started a command, which have
-    /// neither a record nor a recorded child, and those whose record cannot
-    /// be read.
+    /// neither a record nor a recorded child or process group, and those
+    /// whose record cannot be read.
     async fn unknown_executions(&self) -> Result<Unknown> {
         let mut unknown = Unknown::default();
         for space in self.present_spaces().await? {

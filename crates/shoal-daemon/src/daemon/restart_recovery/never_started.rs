@@ -1,6 +1,6 @@
 //! Executions that never started their command, such as a setup whose
 //! wrapper left before it launched it: unknown, with no recovery record and
-//! no recorded child. Once the wrapper is provably gone, its PID free or
+//! neither a child nor a process group recorded. Once the wrapper is provably gone, its PID free or
 //! taken by a process of another birth, and no process of the execution
 //! survives, nothing of it runs, so the daemon forgets it.
 use anyhow::Result;
@@ -36,10 +36,12 @@ enum Outcome {
 }
 
 impl Unstarted {
-    /// `execution` of `space` when it never started its command: no child
-    /// is recorded, and a wrapper is, which proves whether it ended.
+    /// `execution` of `space` when it never started its command: neither a
+    /// child nor its process group is recorded, which a command whose child
+    /// exited before its identity was read leaves, and a wrapper is, which
+    /// proves whether it ended.
     pub(super) fn of(space: PresentSpace, execution: Execution) -> Option<Self> {
-        if execution.child.is_some() {
+        if execution.child.is_some() || execution.group_id.is_some() {
             return None;
         }
         Some(Self {

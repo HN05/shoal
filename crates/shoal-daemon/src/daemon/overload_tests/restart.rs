@@ -286,10 +286,25 @@ fn born_earlier(identity: &Identity) -> Identity {
 #[tokio::test]
 async fn reconciliation_forgets_an_unstarted_execution_whose_wrapper_exited() {
     let (_root, manager, workspace, serving) = fixture().await;
-    unstarted(&manager, &workspace, "unstarted", &exited().await).await;
+    let wrapper = exited().await;
+    unstarted(&manager, &workspace, "unstarted", &wrapper).await;
+    // A process group shows that its command started, though its child
+    // exited before its identity was read.
+    unstarted(&manager, &workspace, "started", &wrapper).await;
+    manager
+        .store
+        .run(|db| {
+            db.execute("UPDATE executions SET group_id=1 WHERE id='started'", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
     let pending = manager.reconcile_interrupted_agents().await.unwrap();
     assert!(pending.waiting.is_empty() && !pending.unresolved);
-    assert!(executions(&manager, &workspace).await.is_empty());
+    let kept: Vec<_> = (executions(&manager, &workspace).await.into_iter())
+        .map(|execution| execution.id)
+        .collect();
+    assert_eq!(kept, ["started"]);
     assert!(blocked(&manager).await.is_empty());
     manager.store.shutdown().await;
     serving.abort();
