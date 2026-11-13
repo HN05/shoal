@@ -6,8 +6,8 @@ use crate::{
     cli::{
         args::internal::InternalCommand,
         commands::{
-            agent_state, approvals, chat, events, menu, messages, progress, push_gate,
-            queued_agents, subagents, workspaces, worktree_hooks,
+            agent_state, approvals, chat, events, menu, messages, progress, queued_agents,
+            subagents, workspaces, worktree_hooks,
         },
         context::Context,
         terminal,
@@ -111,7 +111,9 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             tool,
             args,
         } => crate::secrets::run_tool(&ctx.paths, &launchers, &tool, args).await,
-        InternalCommand::PushGate { remote, url } => push_gate::run(&ctx, remote, url).await,
+        InternalCommand::PushGate { remote, url } => {
+            crate::push_gate::serve(&ctx.paths, remote, url).await
+        }
         InternalCommand::GitCredential { operation } => {
             crate::git_credential::answer(&ctx.paths, operation).await
         }

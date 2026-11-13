@@ -12,23 +12,21 @@ use std::io::{BufRead as _, Write as _};
 use anyhow::{Context as _, Result, bail};
 
 use crate::{
-    cli::{
-        context::Context,
-        ui::{self, Fallback, NoCurrentWorkspace},
-    },
     client::{
         approvals::{self, PushSpecification},
         links::PushOutcome,
         space_names::SpaceSelector,
     },
     git,
+    model::Workspace,
+    paths::CommandPaths,
     tools::Tool,
 };
 
 /// Answer Git for a push to `remote`, by name or URL, whose real URL is
 /// `url`. Git waits for each reply before it writes again, so reading and
 /// writing block.
-pub(super) async fn run(ctx: &Context, remote: String, url: String) -> Result<i32> {
+pub async fn serve(paths: &CommandPaths, remote: String, url: String) -> Result<i32> {
     let mut lines = std::io::stdin().lock().lines();
     let mut stdout = std::io::stdout().lock();
     let mut session = Session {
@@ -39,7 +37,7 @@ pub(super) async fn run(ctx: &Context, remote: String, url: String) -> Result<i3
         pushes: Vec::new(),
     };
     while let Some(line) = lines.next().transpose()? {
-        let Some(reply) = session.answer(ctx, &line).await? else {
+        let Some(reply) = session.answer(paths, &line).await? else {
             return Ok(0);
         };
         stdout.write_all(reply.as_bytes())?;
@@ -63,12 +61,12 @@ struct Session {
 
 impl Session {
     /// The reply to one line from Git, or `None` once Git is done.
-    async fn answer(&mut self, ctx: &Context, line: &str) -> Result<Option<String>> {
+    async fn answer(&mut self, paths: &CommandPaths, line: &str) -> Result<Option<String>> {
         Ok(Some(match line {
             "capabilities" => "push\noption\n\n".to_owned(),
             "list" | "list for-push" => self.list().await?,
             "" if self.pushes.is_empty() => return Ok(None),
-            "" => self.push(ctx).await,
+            "" => self.push(paths).await,
             _ => {
                 if let Some(option) = line.strip_prefix("option ") {
                     self.option(option).to_owned()
@@ -121,15 +119,15 @@ impl Session {
     }
 
     /// Push or hold back each ref of the batch and report each one's status.
-    async fn push(&mut self, ctx: &Context) -> String {
+    async fn push(&mut self, paths: &CommandPaths) -> String {
         let refspecs = std::mem::take(&mut self.pushes);
         let mut direct = Vec::new();
         let mut reply = String::new();
-        let workspace = workspace(ctx).await;
+        let workspace = workspace(paths).await;
         for refspec in refspecs {
             let destination = destination(&refspec).to_owned();
             let outcome = match &workspace {
-                Ok(workspace) => self.request(ctx, workspace, &refspec).await,
+                Ok(workspace) => self.request(paths, workspace, &refspec).await,
                 Err(error) => Err(anyhow::anyhow!("{error:#}")),
             };
             match outcome {
@@ -158,12 +156,12 @@ impl Session {
     /// `workspace`.
     async fn request(
         &self,
-        ctx: &Context,
+        paths: &CommandPaths,
         workspace: &SpaceSelector,
         refspec: &str,
     ) -> Result<PushOutcome> {
         let push = self.specification(refspec).await?;
-        approvals::request_push(&ctx.paths, workspace.clone(), push).await
+        approvals::request_push(paths, workspace.clone(), push).await
     }
 
     /// What pushing `refspec` changes on the remote: the object its source
@@ -285,14 +283,20 @@ fn one_line(message: &str) -> String {
 }
 
 /// The workspace the push comes from: the one Git runs in, else the
-/// caller's own.
-async fn workspace(ctx: &Context) -> Result<SpaceSelector> {
-    match ui::choose_workspace(ctx, None, Fallback::CurrentDirectoryOnly).await {
-        Err(error) if error.downcast_ref::<NoCurrentWorkspace>().is_some() => {
-            ui::choose_workspace(ctx, None, Fallback::OwnWorkspace).await
-        }
-        chosen => chosen,
-    }
+/// caller's own, which a workspace's scope lists first.
+async fn workspace(paths: &CommandPaths) -> Result<SpaceSelector> {
+    let workspaces = crate::client::workspaces::list(paths).await?;
+    let cwd = crate::fsutil::current_dir::current_directory()?;
+    let current = cwd.and_then(|cwd| Workspace::innermost(&workspaces, &cwd));
+    let own = || {
+        crate::env::workspace_scoped()
+            .then(|| workspaces.first())
+            .flatten()
+    };
+    let workspace = current
+        .or_else(own)
+        .context("the push comes from no workspace")?;
+    Ok(SpaceSelector::id(&workspace.id))
 }
 
 /// Git without the rewrites, so it reaches the real remote.
@@ -302,7 +306,7 @@ fn git(args: &[String]) -> tokio::process::Command {
         .args(args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped());
-    crate::push_gate::strip(&mut command);
+    super::strip(&mut command);
     command
 }
 

@@ -4,12 +4,16 @@
 //! workspace repository's remotes to the `shoal::` transport, so Git hands
 //! every push to them to Shoal's remote helper, which asks the daemon before
 //! it pushes. Fetches keep their URLs.
+mod helper;
+
 use crate::paths::PathsExt;
 use std::{ffi::OsStr, os::unix::fs::PermissionsExt, path::Path};
 
 use anyhow::{Context, Result};
 
 use crate::{env, git, paths::Paths};
+
+pub use helper::serve;
 
 /// The transport the rewritten URLs name: Git runs `git-remote-shoal` for
 /// a URL that starts with `shoal::`.
