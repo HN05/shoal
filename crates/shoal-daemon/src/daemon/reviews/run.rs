@@ -30,7 +30,7 @@ use crate::{
 };
 
 /// Start every queued review, now and whenever one is queued; each then
-/// waits in the agent queue for a slot.
+/// waits in the agent queue for admission.
 pub(crate) async fn run(manager: Arc<Manager>) {
     let mut running = JoinSet::new();
     let mut started = HashSet::new();
@@ -132,7 +132,7 @@ impl Manager {
         }
     }
 
-    /// Run queued review `id` once it has an agent slot, which protection
+    /// Run queued review `id` once the agent queue admits it, which protection
     /// stops by sending `cancel`; a review whose run it stopped asks for one
     /// that waits for healthy readings.
     async fn review_once(
@@ -176,7 +176,7 @@ impl Manager {
         Ok(review.filter(|review| review.state == ReviewState::Queued))
     }
 
-    /// Wait for review `id`'s agent slot in its workspace's repository, which
+    /// Wait for review `id`'s admission in its workspace's repository, which
     /// protection takes back by sending `cancel`; none once `cancelled`, as a
     /// cancel or the workspace's removal recorded the review's end.
     async fn await_slot(
@@ -504,7 +504,7 @@ impl Manager {
 
     /// Hold what `run`, which could not be removed, may still use until the
     /// daemon restarts: its checkout of the repository and, when its
-    /// processes may still run, its tracking and an agent slot there.
+    /// processes may still run, its tracking and its admission there.
     async fn hold_unreconciled_run(&self, run: Unreconciled) {
         let Unreconciled { id, left_running } = run;
         let files = self.run_files(id);
@@ -561,7 +561,7 @@ struct Unreconciled {
     left_running: bool,
 }
 
-/// Remove review `id`'s run and give back its checkout and slot. A run whose
+/// Remove review `id`'s run and give back its checkout and admission. A run whose
 /// reviewer `left_running` processes keeps all three, as does a run that
 /// could not be removed its checkout, until a restarted daemon removes them.
 async fn release_run(

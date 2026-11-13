@@ -1,6 +1,6 @@
 //! What the daemon keeps in memory about the agent queue: who holds starting
 //! entries, which stopped agents wait for their restore, which one-shot runs
-//! wait for or hold a slot, what held back waiting entries at the last
+//! wait for or hold their admission, what held back waiting entries at the last
 //! admission pass, and what wakes the dispatcher.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
@@ -42,8 +42,8 @@ struct OneShots {
     runs: BTreeMap<u64, OneShot>,
 }
 
-/// A one-shot run's request for a slot in `repository`, for the work it
-/// serves.
+/// A one-shot run's request for admission in `repository`, for the work it
+/// serves; it holds no agent slot, but its memory counts.
 struct OneShot {
     repository: RepositoryId,
     serving: Option<Serving>,
@@ -51,7 +51,7 @@ struct OneShot {
     /// Whether protection stopped its earlier run, so it waits for healthy
     /// readings as a stopped agent's restore does.
     after_stop: bool,
-    /// When admission gave it a slot, which it holds until it ends.
+    /// When admission let it start, which it holds until it ends.
     admitted: watch::Sender<Option<Instant>>,
     /// Stops the run for protection, until it is used or the run cannot be
     /// stopped.
@@ -65,7 +65,7 @@ pub(crate) enum OneShotStop {
     All,
 }
 
-/// A one-shot request waiting for a slot.
+/// A one-shot request waiting for admission.
 pub(crate) struct WaitingOneShot {
     /// Its queue ID, which no stored entry has.
     pub id: QueueEntryId,
@@ -171,9 +171,10 @@ impl AgentQueue {
             .flatten()
     }
 
-    /// Ask for a slot in `repository` for a one-shot run, such as a review,
-    /// of the work it is `serving`, which waits in the queue at the rank of
-    /// that space; the request and the slot end with the returned value.
+    /// Ask for admission in `repository` for a one-shot run, such as a
+    /// review, of the work it is `serving`, which waits in the queue at the
+    /// rank of that space; the request and the admission end with the
+    /// returned value.
     /// Protection calls `stop` to stop the run; a run it stopped asks again
     /// `after_stop`.
     pub(crate) fn request_oneshot(
@@ -217,7 +218,7 @@ impl AgentQueue {
         }
     }
 
-    /// Hold a slot in `repository` until the daemon restarts, for a run a
+    /// Hold an admission in `repository` until the daemon restarts, for a run a
     /// stopped daemon left whose processes could not be proven stopped.
     pub(crate) fn hold_oneshot(&self, repository: &RepositoryId) {
         let slot = self.request(repository, None, false, || {});
@@ -266,8 +267,8 @@ impl AgentQueue {
         stoppable.len()
     }
 
-    /// The repository of each one-shot run holding a slot, with how long it
-    /// has held it.
+    /// The repository of each admitted one-shot run, with how long it has
+    /// run.
     pub(crate) fn admitted_oneshots(&self) -> Vec<(RepositoryId, std::time::Duration)> {
         self.oneshots
             .lock()
@@ -283,7 +284,7 @@ impl AgentQueue {
             .collect()
     }
 
-    /// Give the one-shot request with queue ID `id` its slot; false when
+    /// Admit the one-shot request with queue ID `id`; false when
     /// `id` names no one-shot request.
     pub(crate) fn admit_oneshot(&self, id: &QueueEntryId) -> bool {
         let Some(number) = id
@@ -326,7 +327,7 @@ impl AgentQueue {
     }
 }
 
-/// A one-shot run's place in the queue, then its slot, while it lives.
+/// A one-shot run's place in the queue, then its admission, while it lives.
 pub(crate) struct OneShotSlot<'a> {
     queue: &'a AgentQueue,
     number: u64,
@@ -334,13 +335,13 @@ pub(crate) struct OneShotSlot<'a> {
 }
 
 impl OneShotSlot<'_> {
-    /// Wait until admission gives the run its slot.
+    /// Wait until admission lets the run start.
     pub(crate) async fn admitted(&mut self) {
         // The sender lives as long as this request.
         let _ = self.admitted.wait_for(Option::is_some).await;
     }
 
-    /// Keep the slot of a run whose processes may still be running until the
+    /// Keep the admission of a run whose processes may still be running until the
     /// daemon restarts. Protection no longer picks it, as nothing stops it.
     pub(crate) fn keep(self) {
         if let Some(run) = self
