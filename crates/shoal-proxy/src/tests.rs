@@ -824,6 +824,27 @@ async fn a_spent_quota_ends_the_turn_at_once_in_either_form() {
 }
 
 #[tokio::test]
+async fn the_first_answer_after_a_spent_quota_is_a_recovery() {
+    let upstream = FakeUpstream::start(|received| match received.len() {
+        1 => reply(429, r#"{"error":{"code":"insufficient_quota"}}"#),
+        _ => reply(200, "done"),
+    })
+    .await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    send(addr, Request::post("/responses"), "{}").await;
+    assert!(matches!(
+        drain(&mut events)[..],
+        [Event::Failed {
+            failure: Failure::Exhausted,
+            ..
+        }]
+    ));
+    // Its owner learns the quota is no longer spent.
+    send(addr, Request::post("/responses"), "{}").await;
+    assert_eq!(drain(&mut events), [Event::Recovered]);
+}
+
+#[tokio::test]
 async fn a_subagents_failure_says_it_was_a_subagents() {
     let upstream = FakeUpstream::start(|_| {
         reply(

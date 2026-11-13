@@ -96,7 +96,8 @@ pub(crate) enum Bound {
 
 /// The upstream's current outage, which every request shares: once a
 /// request gave up on it, requests fail at once instead of each waiting it
-/// out again.
+/// out again. A spent quota is one too, though no request waits on it, so
+/// the next answer reports that it ended.
 pub(crate) struct Outage {
     policy: Policy,
     clock: Arc<dyn Clock>,
@@ -112,6 +113,8 @@ enum State {
     Down(Duration),
     /// A request gave up on the outage.
     GivenUp,
+    /// A request found the quota spent, which no retry waits out.
+    Spent,
 }
 
 impl Outage {
@@ -137,7 +140,7 @@ impl Outage {
         let mut state = self.state.lock().unwrap();
         let now = self.clock.now();
         let started = match *state {
-            State::Up => now,
+            State::Up | State::Spent => now,
             State::Down(started) => started,
             State::GivenUp => return None,
         };
@@ -159,7 +162,7 @@ impl Outage {
     /// while it answers, the budget that is left while it is down.
     pub(crate) fn bound(&self) -> Bound {
         match *self.state.lock().unwrap() {
-            State::Up => Bound::Unbounded,
+            State::Up | State::Spent => Bound::Unbounded,
             State::Down(started) => {
                 let elapsed = self.clock.now().saturating_sub(started);
                 Bound::Within(self.policy.budget.saturating_sub(elapsed))
@@ -171,6 +174,15 @@ impl Outage {
     /// Whether a request gave up on the outage, so retries stop too.
     pub(crate) fn given_up(&self) -> bool {
         matches!(*self.state.lock().unwrap(), State::GivenUp)
+    }
+
+    /// A request found the quota spent: unless requests are already
+    /// failing, the next answer ends that.
+    pub(crate) fn spent(&self) {
+        let mut state = self.state.lock().unwrap();
+        if matches!(*state, State::Up) {
+            *state = State::Spent;
+        }
     }
 
     /// A request succeeded, so the next failure starts a new outage;

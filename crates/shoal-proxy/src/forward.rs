@@ -227,6 +227,9 @@ impl Forwarder {
     /// agent hears as the upstream's HTTP failure: that one ends no turn
     /// the proxy knows of. A spent quota still ends the turn.
     fn give_up(&self, failed: Failed, request: &Buffered) -> Response<Body> {
+        if failed.failure == Failure::Exhausted {
+            self.outage.spent();
+        }
         let other = failed.failure == Failure::Other;
         if other && !failed.in_stream {
             return failed.response;

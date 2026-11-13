@@ -39,7 +39,8 @@ pub enum Event {
         subagent: bool,
     },
     /// The upstream answered again: a request the proxy retried succeeded,
-    /// or the first one after it gave up on an outage.
+    /// or the first one after it gave up on an outage or found the quota
+    /// spent.
     Recovered,
 }
 
