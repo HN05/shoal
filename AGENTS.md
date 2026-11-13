@@ -306,9 +306,12 @@ for delivering a PR, under Committing near the end, decide when work is done.
   explicit workspace paths must not overlap state, checkouts, or other ownership.
   URL clones live as `.checkout` and move only with their repository directory into
   a new root; refuse roots inside state, checkouts or repository directories.
-- The state directory holds only the daemon's own state, never files agents or
-  the user work with: temporary directories, attached files and copies of work
-  live in a repository directory, or in `root_dir` for chats without a repository.
+- The state directory holds only what Shoal keeps to run and to record its runs:
+  only Shoal writes, changes or deletes anything there, and it never gives the
+  user or an agent a file there to work with, though it may name its own logs
+  there for reading. A file the user, an agent or a reviewer works with lives in
+  the directory of the repository it belongs to, or in `root_dir` when it
+  belongs to none, in a directory marked as Shoal's.
 - A space's name is a free-text label that may repeat; it never selects a space
   and nothing is built from it. Accept literal Git branch names and derive a
   portable worktree directory name separately, suffixed while another workspace

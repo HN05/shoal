@@ -341,6 +341,12 @@ instead of the PR delivery guidance below.
   checkouts, workspaces, and other repository directories; never delete their parents.
   Resolve existing symlinks and lexical `..` before checking and creating repository
   roots or explicit workspace paths, including when trailing components are missing.
+- The state directory holds only what Shoal keeps to run and to record its runs:
+  only Shoal writes, changes or deletes anything there, and it never gives the
+  user or an agent a file there to work with, though it may name its own logs
+  there for reading. Flag a file the user, an agent or a reviewer works with
+  that does not live in the directory of the repository it belongs to, or in
+  `root_dir` when it belongs to none, in a directory marked as Shoal's.
 - A repository directory moves only whole into a new root while nothing uses it:
   reserve its workspaces and record the move first, switch records only once the
   directory arrived, and let recovery finish a completed move or roll back an
