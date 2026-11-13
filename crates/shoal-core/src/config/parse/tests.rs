@@ -49,3 +49,14 @@ fn removed_settings_are_refused() {
         assert!(error.contains(replacement), "{error}");
     }
 }
+
+#[test]
+fn renamed_forge_logins_are_refused_at_any_host() {
+    let text = "[machine.forges.\"a.example\"]\nuser_token = 'a'\n\
+                [machine.forges.\"b.example\"]\ntype = 'bitbucket'\nemail = 'me@example.com'\n";
+    let error = message(global(text).unwrap_err());
+    assert!(error.contains("line 5"), "{error}");
+    assert!(error.contains("user_email"), "{error}");
+    let error = message(global("[machine.forges.\"a.example\"]\ntoken = 'a'\n").unwrap_err());
+    assert!(error.contains("user_token"), "{error}");
+}

@@ -2895,7 +2895,7 @@ async fn the_background_poll_reads_spaces_together() {
     crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::Forgejo);
     crate::daemon::test_support::configure(
         &manager,
-        &format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\ntoken = \"user\"\n"),
+        &format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n"),
     )
     .await;
     let mut workspaces = Vec::new();

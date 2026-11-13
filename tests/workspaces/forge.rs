@@ -2044,8 +2044,8 @@ fn chained_base_prs_retarget_the_prs_stacked_on_them_past_every_merged_branch() 
 fn restack_on_merge(github: bool, lower_prs: &[(u64, &str, &str)], upper_base: &str) {
     // Both forges read and PATCH the PR through their API with the token.
     let mut fixture = Fixture::with_config(Some(
-        "machine.forges.\"github.com\".token = \"secret123\"\n\
-             machine.forges.\"forge.example\".token = \"secret123\"\n\
+        "machine.forges.\"github.com\".user_token = \"secret123\"\n\
+             machine.forges.\"forge.example\".user_token = \"secret123\"\n\
              [cleanup.auto]\nenabled=false\n",
     ));
     let lower = fixture.add("lower");

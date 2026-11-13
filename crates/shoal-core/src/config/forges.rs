@@ -28,12 +28,12 @@ pub struct Forge {
     #[serde(rename = "type")]
     pub kind: Option<ForgeKind>,
     /// The user's token for the host.
-    pub token: Option<Value>,
+    pub user_token: Option<Value>,
     /// The agent account's token for the host.
     pub agent_token: Option<Value>,
     /// The account a token belongs to, where the forge signs it in with
     /// the account's email.
-    pub email: Option<String>,
+    pub user_email: Option<String>,
     pub agent_email: Option<String>,
 }
 
@@ -159,7 +159,7 @@ impl Forges {
 impl Forge {
     fn credentials(&self, whose: Whose) -> (Option<&Value>, &Option<String>) {
         match whose {
-            Whose::User => (self.token.as_ref(), &self.email),
+            Whose::User => (self.user_token.as_ref(), &self.user_email),
             Whose::Agent => (self.agent_token.as_ref(), &self.agent_email),
         }
     }
@@ -200,8 +200,8 @@ impl Whose {
     /// to set, and that the daemon reads the global config only on reload.
     pub fn missing(self) -> Missing {
         let tokens = match self {
-            Self::User => "token",
-            Self::Agent => "agent_token, or your own token,",
+            Self::User => "user_token",
+            Self::Agent => "agent_token, or your own user_token,",
         };
         Box::new(move |host| {
             format!(
@@ -212,14 +212,14 @@ impl Whose {
 
     fn token_key(self) -> &'static str {
         match self {
-            Self::User => "token",
+            Self::User => "user_token",
             Self::Agent => "agent_token",
         }
     }
 
     fn email_key(self) -> &'static str {
         match self {
-            Self::User => "email",
+            Self::User => "user_email",
             Self::Agent => "agent_email",
         }
     }

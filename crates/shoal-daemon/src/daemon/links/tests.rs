@@ -265,7 +265,7 @@ async fn an_issue_linked_without_its_title_gets_the_forges() {
     let (root, manager) = manager().await;
     crate::daemon::test_support::configure(
         &manager,
-        &format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\ntoken = \"user\"\n"),
+        &format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n"),
     )
     .await;
     let path = repository(root.path(), "repo");

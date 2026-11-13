@@ -122,7 +122,7 @@ async fn fixture(jobs: Vec<Value>, pull_head: Option<&'static str>, settings: &s
     configure(
         &manager,
         &format!(
-            "[cleanup]\ngrace_minutes = 0\n[machine]\nmax_jobs = 2\n[machine.forges.\"{}\"]\ntype = \"forgejo\"\ntoken = \"user\"\n[runner]\nenabled = true\n{settings}",
+            "[cleanup]\ngrace_minutes = 0\n[machine]\nmax_jobs = 2\n[machine.forges.\"{}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n[runner]\nenabled = true\n{settings}",
             server.host
         ),
     )
@@ -311,7 +311,7 @@ pub(super) async fn github_fixture() -> GitHubFixture {
     configure(
         &manager,
         &format!(
-            "[cleanup]\ngrace_minutes = 0\n[machine]\nmax_jobs = 2\n[machine.forges.\"{}\"]\ntype = \"github\"\ntoken = \"user\"\n[runner]\nenabled = true\n",
+            "[cleanup]\ngrace_minutes = 0\n[machine]\nmax_jobs = 2\n[machine.forges.\"{}\"]\ntype = \"github\"\nuser_token = \"user\"\n[runner]\nenabled = true\n",
             server.host
         ),
     )

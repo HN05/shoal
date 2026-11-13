@@ -45,7 +45,7 @@ fn runner_program(root: &Path) -> std::ffi::OsString {
 
 fn settings(host: &str, enabled: bool) -> String {
     format!(
-        "[cleanup]\ngrace_minutes = 0\n[machine.forges.\"{host}\"]\ntype = \"forgejo\"\ntoken = \"user\"\n[runner]\nenabled = {enabled}\n"
+        "[cleanup]\ngrace_minutes = 0\n[machine.forges.\"{host}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n[runner]\nenabled = {enabled}\n"
     )
 }
 
@@ -139,7 +139,7 @@ async fn registration_fetches_a_token_from_a_command_once() {
     configure(
         &manager,
         &format!(
-            "[machine.forges.\"{}\"]\ntype = \"forgejo\"\ntoken = {{ cmd = [\"sh\", \"-c\", {command:?}] }}\n[runner]\nenabled = true\n",
+            "[machine.forges.\"{}\"]\ntype = \"forgejo\"\nuser_token = {{ cmd = [\"sh\", \"-c\", {command:?}] }}\n[runner]\nenabled = true\n",
             server.host
         ),
     )
@@ -207,7 +207,7 @@ async fn a_github_repository_keeps_no_runner_of_its_own() {
     *manager.runners.path.lock().unwrap() = Some(bin);
     let github = |enabled: bool| {
         format!(
-            "[machine.forges.\"{}\"]\ntype = \"github\"\ntoken = \"user\"\n[runner]\nenabled = {enabled}\n",
+            "[machine.forges.\"{}\"]\ntype = \"github\"\nuser_token = \"user\"\n[runner]\nenabled = {enabled}\n",
             server.host
         )
     };

@@ -139,7 +139,7 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
     configure(
         &manager,
         &format!(
-            "[machine.forges.\"{host}\"]\ntype = \"github\"\ntoken = \"user\"\nagent_token = \"agent\"\n"
+            "[machine.forges.\"{host}\"]\ntype = \"github\"\nuser_token = \"user\"\nagent_token = \"agent\"\n"
         ),
     )
     .await;

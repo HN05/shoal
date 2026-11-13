@@ -12,11 +12,20 @@ use super::{machine::Machine, repo::RepoConfig};
 
 const MACHINE: &str = "machine";
 
-/// Settings Shoal no longer reads, each refused with what replaces it.
+/// Settings Shoal no longer reads, each refused with what replaces it; `*`
+/// stands for any key.
 const REMOVED: &[(&[&str], &str)] = &[
     (
         &["machine", "bitbucket"],
-        "[machine.bitbucket] moved: set token and email under [machine.forges.\"bitbucket.org\"]",
+        "[machine.bitbucket] moved: set user_token and user_email under [machine.forges.\"bitbucket.org\"]",
+    ),
+    (
+        &["machine", "forges", "*", "token"],
+        "token is now user_token under [machine.forges.\"<host>\"]",
+    ),
+    (
+        &["machine", "forges", "*", "email"],
+        "email is now user_email under [machine.forges.\"<host>\"]",
     ),
     (
         &["agent", "forge_clis"],
@@ -97,23 +106,38 @@ fn refuse_mode_repositories(root: &Spanned<DeTable<'_>>) -> Result<(), Error> {
     Ok(())
 }
 
-/// Fail with `message` at the value `path` names, when `root` sets it.
+/// Fail with `message` at the first value `path` names, when `root` sets
+/// one.
 fn refuse(root: &Spanned<DeTable<'_>>, path: &[&str], message: &str) -> Result<(), Error> {
-    if !contains(root.get_ref(), path) {
+    let Some(found) = find(root.get_ref(), path) else {
         return Ok(());
+    };
+    let path: Vec<_> = found.iter().map(String::as_str).collect();
+    Refusal {
+        path: &path,
+        message,
     }
-    Refusal { path, message }.deserialize(Deserializer::from(root.clone()))
+    .deserialize(Deserializer::from(root.clone()))
 }
 
-fn contains(table: &DeTable<'_>, path: &[&str]) -> bool {
+/// The keys of the first value of `table` that `path` names, where `*`
+/// stands for any key.
+fn find(table: &DeTable<'_>, path: &[&str]) -> Option<Vec<String>> {
     let Some((first, rest)) = path.split_first() else {
-        return true;
+        return Some(Vec::new());
     };
-    match table.get(*first).map(|value| value.get_ref()) {
-        Some(_) if rest.is_empty() => true,
-        Some(DeValue::Table(table)) => contains(table, rest),
-        _ => false,
-    }
+    table
+        .iter()
+        .filter(|(key, _)| *first == "*" || key.get_ref() == first)
+        .find_map(|(key, value)| {
+            let mut found = match value.get_ref() {
+                _ if rest.is_empty() => Vec::new(),
+                DeValue::Table(table) => find(table, rest)?,
+                _ => return None,
+            };
+            found.insert(0, key.get_ref().to_string());
+            Some(found)
+        })
 }
 
 /// Walks to the value at `path` and fails there, so the error carries that

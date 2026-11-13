@@ -254,7 +254,7 @@ async fn a_confirmed_merge_keeps_the_pr_whose_warning_it_read() {
     crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::Forgejo);
     crate::daemon::test_support::configure(
         &manager,
-        &format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\ntoken = \"user\"\n"),
+        &format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n"),
     )
     .await;
     let checkout = manager.repository(&workspace.repository_id).await.unwrap();

@@ -40,7 +40,7 @@ impl std::ops::Deref for Fixture {
 
 /// The user's and the agent account's tokens on the scripted forge.
 const AGENT_TOKEN: &str = "[machine.forges.\"{forge}\"]\ntype = \"{type}\"\n\
-    token = \"usertoken\"\nagent_token = \"agenttoken\"\n";
+    user_token = \"usertoken\"\nagent_token = \"agenttoken\"\n";
 
 impl Fixture {
     /// `config` names the forge's host as `{forge}` and its type as `{type}`;
@@ -60,7 +60,7 @@ impl Fixture {
         let table = format!("[machine.forges.\"{host}\"]");
         if !config.contains(&table) {
             config.push_str(&format!(
-                "\n{table}\ntype = \"{kind}\"\ntoken = \"usertoken\"\n"
+                "\n{table}\ntype = \"{kind}\"\nuser_token = \"usertoken\"\n"
             ));
         }
         let (web, origin) = match forge {
@@ -644,9 +644,9 @@ fn apps_read_forge_items_through_the_daemon() {
     // Without an agent token, the user's app reads the logs with the user's
     // token it already fetched for the view.
     fs::remove_file(fixture.root.path().join("token-runs")).unwrap();
-    let command = format!("token = {{ cmd = [{:?}] }}", script.to_str().unwrap());
+    let command = format!("user_token = {{ cmd = [{:?}] }}", script.to_str().unwrap());
     let user_only = config.replace(
-        "token = \"usertoken\"\nagent_token = \"agenttoken\"",
+        "user_token = \"usertoken\"\nagent_token = \"agenttoken\"",
         &command,
     );
     assert_ne!(user_only, config);
@@ -674,7 +674,7 @@ fn label_pr(fixture: &Fixture) -> Value {
 #[test]
 fn unknown_hosts_are_asked_once_which_forge_they_serve() {
     // The host's token goes to each forge's endpoint on the host, never elsewhere.
-    let config = "[machine.forges.\"ghe.invalid\"]\ntoken = \"enterprise\"\n";
+    let config = "[machine.forges.\"ghe.invalid\"]\nuser_token = \"enterprise\"\n";
     let fixture = Fixture::new(Forge::GitHub, config);
     git(
         &fixture.repo,
@@ -762,7 +762,7 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
 fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
     let fixture = Fixture::new(
         Forge::GitHub,
-        "[machine.forges.\"GHE.invalid\"]\ntype = \"github\"\ntoken = \"usertoken\"\n\
+        "[machine.forges.\"GHE.invalid\"]\ntype = \"github\"\nuser_token = \"usertoken\"\n\
          [machine.forges.\"gitlab.invalid\"]\ntype = \"github\"\n",
     );
     git(
@@ -5471,7 +5471,7 @@ fn a_chats_change_without_a_token_names_the_missing_one() {
             assert!(!output.status.success(), "{output:?}");
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(
-                stderr.contains("set agent_token, or your own token, under [machine.forges.")
+                stderr.contains("set agent_token, or your own user_token, under [machine.forges.")
                     && stderr.contains("shoal config reload"),
                 "{stderr}"
             );
@@ -6513,7 +6513,7 @@ fn agents_open_issues_directly_on_another_forge_when_allowed() {
     let fixture = Fixture::new(
         Forge::Forgejo,
         "[permissions]\nissue_other_repositories = 'direct'\n\
-         [machine.forges.\"github.com\"]\ntoken = \"usertoken\"\n",
+         [machine.forges.\"github.com\"]\nuser_token = \"usertoken\"\n",
     );
     fixture.respond(json!({
         "POST repos/them/tool/issues": {"status": 201, "body": {"number": 5}},

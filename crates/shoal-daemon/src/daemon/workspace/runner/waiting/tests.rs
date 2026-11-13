@@ -79,7 +79,7 @@ async fn waiting_jobs_join_the_queue_linked_to_their_workspace_until_the_forge_d
     configure(
         &manager,
         &format!(
-            "[machine.forges.\"{}\"]\ntype = \"forgejo\"\ntoken = \"user\"\n[runner]\nenabled = true\n",
+            "[machine.forges.\"{}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n[runner]\nenabled = true\n",
             server.host
         ),
     )
@@ -272,7 +272,7 @@ async fn a_waiting_job_serves_the_workspace_that_links_its_pr_after_it_queued() 
     configure(
         &manager,
         &format!(
-            "[machine.forges.\"{}\"]\ntype = \"forgejo\"\ntoken = \"user\"\n[runner]\nenabled = true\n",
+            "[machine.forges.\"{}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n[runner]\nenabled = true\n",
             server.host
         ),
     )

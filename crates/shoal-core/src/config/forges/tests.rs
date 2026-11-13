@@ -21,7 +21,7 @@ fn hosts_pin_a_known_type_case_insensitively() {
 fn git_finds_an_agent_token_whether_or_not_either_side_names_https_default_port() {
     let forges: Forges = toml::from_str(
         "[\"Git.example.com\"]\nagent_token = \"a\"\n[\"code.example.com:443\"]\nagent_token = \"b\"\n\
-         [\"user.example.com\"]\ntoken = \"c\"\n",
+         [\"user.example.com\"]\nuser_token = \"c\"\n",
     )
     .unwrap();
 
@@ -42,12 +42,12 @@ fn tokens_take_the_shared_value_forms_and_emails_only_on_bitbucket() {
     let forges: Forges = toml::from_str(
         r#"
 ["git.example.com"]
-token = { cmd = ["security", "find-generic-password", "-w"] }
+user_token = { cmd = ["security", "find-generic-password", "-w"] }
 agent_token = { env = "AGENT_TOKEN" }
 
 ["bitbucket.org"]
-token = "written"
-email = "me@example.com"
+user_token = "written"
+user_email = "me@example.com"
 "#,
     )
     .unwrap();
@@ -58,18 +58,19 @@ email = "me@example.com"
     assert!(!format!("{forges:?}").contains("written"));
     let user = forges.identity(Whose::User);
     assert!(!user.contains("\"written\""), "{user}");
-    let changed: Forges =
-        toml::from_str("[\"bitbucket.org\"]\ntoken = \"other\"\nemail = \"me@example.com\"\n")
-            .unwrap();
+    let changed: Forges = toml::from_str(
+        "[\"bitbucket.org\"]\nuser_token = \"other\"\nuser_email = \"me@example.com\"\n",
+    )
+    .unwrap();
     let identity = changed.identity(Whose::User);
     assert!(identity.starts_with("bitbucket.org written "), "{identity}");
     assert!(!user.contains(&identity), "{user}");
 
     for text in [
-        "[\"git.example.com\"]\ntoken = \"t\"\nemail = \"me@example.com\"\n",
+        "[\"git.example.com\"]\nuser_token = \"t\"\nuser_email = \"me@example.com\"\n",
         "[\"bitbucket.org\"]\nagent_email = \"me@example.com\"\n",
-        "[\"bitbucket.org\"]\ntoken = \"t\"\nemail = \"me\"\n",
-        "[\"git.example.com\"]\ntoken = { cmd = [] }\n",
+        "[\"bitbucket.org\"]\nuser_token = \"t\"\nuser_email = \"me\"\n",
+        "[\"git.example.com\"]\nuser_token = { cmd = [] }\n",
     ] {
         let forges: Forges = toml::from_str(text).unwrap();
         assert!(forges.validate().is_err(), "{text}");

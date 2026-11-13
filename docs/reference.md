@@ -2148,7 +2148,7 @@ blocked on this)`.
 
 Issue and PR changes Shoal makes for a workspace or a chat use the agent
 account: the host's [`agent_token`](config.md#forges), with `agent_email` for
-a Bitbucket API token. Without an `agent_token`, changes use your token, as the agent would;
+a Bitbucket API token. Without an `agent_token`, changes use your `user_token`, as the agent would;
 without either, Shoal refuses the change and names the token to set instead of
 sending it unsigned.
 Forge reads follow the same rule: processes inside a workspace and a chat's
@@ -3325,7 +3325,7 @@ Removing the repository deletes `.caches`.
 ### Runner
 
 While [`runner.enabled`](config.md#runner) is on for a registered repository, the daemon runs its
-CI jobs with your own login, the `token` of its [forge host](#forges), which
+CI jobs with your own login, the `user_token` of its [forge host](#forges), which
 must be allowed to administer the repository's Actions. On Forgejo it registers
 a runner for the repository and keeps the runner's UUID and token in its state;
 turning the setting off, or removing the repository, deletes the runner on the
@@ -3835,7 +3835,7 @@ answers as another forge. A host that answers as none of them fails until you
 set its [`type`](config.md#forges), which also stops Shoal asking it.
 
 Shoal sends every request to the forge's API with curl, signed in with the
-host's [`token`](config.md#forges): GitHub.com at `api.github.com`, a
+host's [`user_token`](config.md#forges): GitHub.com at `api.github.com`, a
 GitHub Enterprise Server under `/api/v3`, GitLab under `/api/v4`, Forgejo and
 Gitea under `/api/v1`, and Bitbucket Cloud at `api.bitbucket.org`. It runs no
 forge CLI. Changes Shoal makes

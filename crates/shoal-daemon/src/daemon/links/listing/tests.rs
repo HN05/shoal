@@ -47,7 +47,7 @@ async fn a_scoped_chat_lists_items_as_the_agent_account() {
     configure(
         &manager,
         &format!(
-            "[machine.forges.\"{host}\"]\ntype = \"github\"\ntoken = \"user\"\nagent_token = \"agent\"\n"
+            "[machine.forges.\"{host}\"]\ntype = \"github\"\nuser_token = \"user\"\nagent_token = \"agent\"\n"
         ),
     )
     .await;

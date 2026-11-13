@@ -11,8 +11,8 @@ async fn only_scoped_callers_get_the_agent_token_of_a_host_with_one() {
     let (_root, manager) = manager().await;
     configure(
         &manager,
-        "[machine.forges.\"git.example.com\"]\ntype = \"forgejo\"\ntoken = \"user\"\nagent_token = \"agent\"\n\
-         [machine.forges.\"code.example.com\"]\ntype = \"gitlab\"\ntoken = \"user\"\n",
+        "[machine.forges.\"git.example.com\"]\ntype = \"forgejo\"\nuser_token = \"user\"\nagent_token = \"agent\"\n\
+         [machine.forges.\"code.example.com\"]\ntype = \"gitlab\"\nuser_token = \"user\"\n",
     )
     .await;
     let caller = Caller {

@@ -172,18 +172,18 @@ extensions. The top-level `git_profile` selects one for new worktrees and
 ```toml
 [machine.forges."git.example.com"]
 type = "forgejo"   # "github", "gitlab", "forgejo" (also Gitea) or "bitbucket"
-token = { cmd = ["security", "find-generic-password", "-s", "forgejo", "-w"] }
+user_token = { cmd = ["security", "find-generic-password", "-s", "forgejo", "-w"] }
 agent_token = { cmd = ["op", "read", "op://dev/agent/token"] }
 
 [machine.forges."bitbucket.org"]
-token = { cmd = ["security", "find-generic-password", "-s", "bitbucket", "-w"] }
-email = "you@example.com"   # An Atlassian API token's account; omit for an access token
+user_token = { cmd = ["security", "find-generic-password", "-s", "bitbucket", "-w"] }
+user_email = "you@example.com"   # An Atlassian API token's account; omit for an access token
 ```
 
 `type` sets the API a host serves, which Shoal otherwise asks any host other
-than `github.com`, `gitlab.com` and `bitbucket.org` once. `token` is your login
-on the host, and `agent_token` the [agent account](reference.md#agent-accounts)'s;
-`email` and `agent_email` apply only to Bitbucket. A `{ cmd }` runs at most once
+than `github.com`, `gitlab.com` and `bitbucket.org` once. `user_token` is your
+login on the host, and `agent_token` the [agent account](reference.md#agent-accounts)'s;
+`user_email` and `agent_email` apply only to Bitbucket. A `{ cmd }` runs at most once
 per operation that needs the token and for at most a minute, and its output is
 never stored; an `{ env }` reads the daemon's environment for its own requests.
 Without a token only public repositories are readable. See

@@ -59,13 +59,13 @@ root_dir = "~/shoal"
 # See docs/config.md#forges.
 # [machine.forges."git.example.com"]
 # type = "forgejo"
-# token = { cmd = ["security", "find-generic-password", "-s", "forgejo", "-w"] }
+# user_token = { cmd = ["security", "find-generic-password", "-s", "forgejo", "-w"] }
 # agent_token = { cmd = ["op", "read", "op://dev/agent/token"] }
 
 # Bitbucket Cloud also takes the email of an Atlassian API token's account.
 # [machine.forges."bitbucket.org"]
-# token = { cmd = ["security", "find-generic-password", "-s", "bitbucket", "-w"] }
-# email = "you@example.com"
+# user_token = { cmd = ["security", "find-generic-password", "-s", "bitbucket", "-w"] }
+# user_email = "you@example.com"
 
 # Where shoal skill install adds <skill>/SKILL.md for an AI tool, and the
 # proxy under machine.proxies its tracked agents reach their API through.

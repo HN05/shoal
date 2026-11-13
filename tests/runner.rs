@@ -104,7 +104,7 @@ fn the_runner_runs_a_waiting_job_in_its_own_workspace_and_deletes_itself_when_tu
     fs::write(
         &config,
         format!(
-            "[cleanup]\ngrace_minutes = 0\n[machine]\nmax_jobs = 1\n[machine.forges.\"{}\"]\ntype = \"forgejo\"\ntoken = \"user\"\n",
+            "[cleanup]\ngrace_minutes = 0\n[machine]\nmax_jobs = 1\n[machine.forges.\"{}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n",
             server.host
         ),
     )
