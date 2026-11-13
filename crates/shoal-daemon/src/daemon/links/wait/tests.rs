@@ -524,6 +524,27 @@ async fn a_chat_without_a_repository_waits_for_the_activity_below_it() {
 }
 
 #[tokio::test]
+async fn a_chat_without_a_repository_refuses_a_watch_of_chosen_items() {
+    let (_root, manager) = manager().await;
+    let manager = std::sync::Arc::new(manager);
+    let chat =
+        crate::daemon::test_support::chat(&manager, "master", "orchestrate", None, None).await;
+    let chat = SpaceSelector::id(&chat.id);
+    let prs = Selection {
+        kind: Some(LinkKind::Pr),
+        input: None,
+    };
+    let pr = Selection {
+        kind: Some(LinkKind::Pr),
+        input: Some("12".parse().unwrap()),
+    };
+    for selection in [prs, pr] {
+        let watched = manager.wait_items(&chat, &selection, Some(1)).await;
+        assert!(watched.is_err(), "{selection:?}: {watched:?}");
+    }
+}
+
+#[tokio::test]
 async fn hook_delivery_does_not_wait_for_the_pr_gate() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
