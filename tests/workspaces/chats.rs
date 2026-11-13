@@ -1999,6 +1999,9 @@ fn a_chat_on_an_issue_is_assigned_the_issue() {
 fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     let fixture = Fixture::new();
     install_fake_agents(&fixture, &["claude", "happy"]);
+    // The background place runs the chat's shell here, whose login profile
+    // would put the runner's own agents first on its PATH.
+    install_test_script(fixture.root.path().join("bin/zmx"), terminal_zmx());
     let repo = fixture.repo.to_str().unwrap();
     // Without a default agent a picker offers the installed agents that can run.
     let (output, rows) = fixture.pick(&["start", repo, "--mode", "chat"], "0", "\n");
