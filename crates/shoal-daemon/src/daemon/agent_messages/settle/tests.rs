@@ -3,6 +3,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{manager, repository};
 use crate::daemon::workspace_files::Attacher;
 use crate::forge::items::link::Selection;
+use crate::model::Workspace;
 use crate::time::UnixTime;
 
 fn sent_at(times: &[i64]) -> Vec<AgentMessage> {

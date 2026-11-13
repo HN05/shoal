@@ -123,7 +123,7 @@ async fn only_disk_warnings_wake_an_idle_agent() {
         .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
-    let wakes = || async { manager.unread_agent_messages(&busy).await.unwrap().wakes };
+    let wakes = || async { manager.unread_messages(&workspace.id).await.unwrap().wakes };
     let settings = Overload::default();
     let mut warnings = Warnings::default();
     let now = Instant::now();

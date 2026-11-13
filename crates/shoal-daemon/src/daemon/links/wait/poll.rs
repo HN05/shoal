@@ -22,6 +22,7 @@ use crate::{
         transport::limits::rate_limited,
         updates::{Snapshot, Update},
     },
+    model::PresentSpace,
     time::UnixTime,
 };
 
@@ -32,6 +33,21 @@ pub(super) const POLL_INTERVAL: Duration = Duration::from_secs(30);
 const ITEMS_READ_AT_ONCE: usize = 4;
 
 impl Manager {
+    /// The activity of the items of `space` that `selection` names, as
+    /// [`Self::poll_item_activity`] finds it. A space without a repository
+    /// has no items of its own to look up, and reads what is queued for it
+    /// and the spaces below it.
+    pub(super) async fn poll_space_activity(
+        &self,
+        space: &PresentSpace,
+        selection: &Selection,
+    ) -> Result<Vec<Update>> {
+        match space.repository_id() {
+            Some(_) => self.poll_item_activity(space.id(), selection).await,
+            None => self.queued_activity(space).await,
+        }
+    }
+
     pub(super) async fn poll_item_activity(
         &self,
         id: &SpaceId,

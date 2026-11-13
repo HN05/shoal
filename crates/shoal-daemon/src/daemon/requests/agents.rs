@@ -202,7 +202,7 @@ pub(super) async fn handle(
             Body::GitCredential(manager.agent_git_credential(caller, &host).await?)
         }
         AgentMethod::AgentUpdates { space } => {
-            Body::PrUpdates(manager.space_updates(&space).await?)
+            Body::PrUpdates(manager.agent_updates(&space).await?)
         }
         AgentMethod::MarkAgentMessagesDelivered { space, ids } => {
             manager.mark_agent_messages_delivered(&space, ids).await?;

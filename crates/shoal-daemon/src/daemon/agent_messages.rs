@@ -194,13 +194,14 @@ impl Manager {
     /// The unread messages of the space `selector` names, oldest first.
     /// They stay unread until delivered.
     pub async fn agent_messages(&self, selector: &SpaceSelector) -> Result<Vec<AgentMessage>> {
-        Ok(self.unread_agent_messages(selector).await?.messages)
+        let space = self.space(selector).await?;
+        Ok(self.unread_messages(space.id()).await?.messages)
     }
 
-    /// The unread messages of the space `selector` names, oldest first, and
-    /// whether one of them wakes an idle agent.
-    pub(crate) async fn unread_agent_messages(&self, selector: &SpaceSelector) -> Result<Unread> {
-        let id = self.space(selector).await?.id().clone();
+    /// The unread messages of the space `id`, oldest first, and whether one
+    /// of them wakes an idle agent.
+    pub(crate) async fn unread_messages(&self, id: &SpaceId) -> Result<Unread> {
+        let id = id.to_owned();
         self.store.read(move |db| store::unread(db, &id)).await
     }
 

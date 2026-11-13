@@ -8,7 +8,6 @@ pub mod approvals;
 mod auto_update;
 pub(crate) mod blockers;
 pub(crate) mod caches;
-pub mod chat_messages;
 mod chats;
 pub(crate) mod checkout_sync;
 pub mod cleanup;

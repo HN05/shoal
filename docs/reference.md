@@ -5261,8 +5261,8 @@ or chat holds at most 50 unread messages of 25,600 bytes in total. Scoped comman
 messages and send messages only to the agents of the [workspaces below their own](#child-workspaces). Removing a workspace or chat gives you the
 notifications that its unread messages about the spaces below it stand for, and
 deletes its messages.
-The hooks, `shoal watch` and the prompt that wakes Codex hold a workspace's
-unread messages until none has arrived for [`[messages] settle_seconds`](config.md#messages), and at
+The hooks, `shoal watch` and the prompt that wakes Codex hold a workspace's or
+chat's unread messages until none has arrived for [`[messages] settle_seconds`](config.md#messages), and at
 most six times as long after the first, so a run of them, such as several
 approval decisions, reaches the agent in one delivery; `shoal messages` shows
 them at once, and 0 delivers each message as it arrives.

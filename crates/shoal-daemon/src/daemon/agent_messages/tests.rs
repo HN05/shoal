@@ -130,13 +130,7 @@ async fn a_message_for_the_next_turn_wakes_only_once_queued_to_wake() {
     let queue = |delivery| {
         manager.queue_agent_message_delivered(&workspace.id, "Memory is high".into(), delivery)
     };
-    let wakes = || async {
-        manager
-            .unread_agent_messages(&SpaceSelector::id(&workspace.id))
-            .await
-            .unwrap()
-            .wakes
-    };
+    let wakes = || async { manager.unread_messages(&workspace.id).await.unwrap().wakes };
     // Work running in the workspace does not make it wake.
     let _command = manager
         .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
@@ -781,3 +775,5 @@ async fn attachments_must_be_files() {
             .is_empty()
     );
 }
+
+mod coordination;

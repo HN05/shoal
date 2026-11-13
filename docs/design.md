@@ -2073,7 +2073,7 @@ because agents forget or misuse watches: built-in agent launches register a hook
 that delivers both after each tool call and prompt, the only point where a
 working agent accepts new context, except a subagent's tool call, whose context
 the agent never sees, and replaces a running watch so nothing is
-delivered twice. A workspace's messages reach its agent once they settle: a run
+delivered twice. A space's messages reach its agent once they settle: a run
 queued in quick succession, such as the user deciding several approvals, would
 otherwise cost a wake or a hook output each, so deliveries hold unread messages
 until none has arrived for a configured window, bounded so a steady stream still
@@ -2508,10 +2508,9 @@ cleanup. Removing the workspace removes its chats first through the chat
 removal path, so a workspace one of them opened that cannot go keeps the chat,
 which keeps the workspace. Nothing moves a session between directories: a chat
 about another workspace is a new chat.
-Having no workspace, a chat keeps its messages in the queue a workspace's share,
-which the same hooks deliver, including the user's request to rename it; a
-removed space, of either kind, gives the user the notifications its unread
-messages stand for.
+A chat's messages, including the user's request to rename it, wait and reach
+its agent as a workspace's do; a removed space, of either kind, gives the user
+the notifications its unread messages stand for.
 A chat passes a question up by asking the user, who attends it. The approval
 requests of the spaces below it come to it when it is the nearest space above
 them with an agent, and it approves them by its own permissions or grants, as

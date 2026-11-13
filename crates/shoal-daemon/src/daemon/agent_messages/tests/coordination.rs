@@ -180,7 +180,7 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
     let manager = std::sync::Arc::new(manager);
     let waiting = tokio::spawn({
         let (manager, chat) = (manager.clone(), chat.id.clone());
-        async move { manager.wait_chat_messages(&chat).await }
+        async move { manager.wait_space_updates(&SpaceSelector::id(&chat)).await }
     });
     manager
         .send_message(
@@ -213,14 +213,14 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
     // messages to the delivery.
     let waiting = tokio::spawn({
         let (manager, chat) = (manager.clone(), chat.id.clone());
-        async move { manager.wait_chat_messages(&chat).await }
+        async move { manager.wait_space_updates(&SpaceSelector::id(&chat)).await }
     });
     while !manager.waits.is_waiting(&chat.id) {
         tokio::task::yield_now().await;
     }
     assert!(
         manager
-            .chat_updates(&chat.id)
+            .agent_updates(&SpaceSelector::id(&chat.id))
             .await
             .unwrap()
             .messages
@@ -236,7 +236,10 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
         )
         .await
         .unwrap();
-    let delivered = manager.chat_updates(&chat.id).await.unwrap();
+    let delivered = manager
+        .agent_updates(&SpaceSelector::id(&chat.id))
+        .await
+        .unwrap();
     assert_eq!(
         delivered.messages[0].message,
         format!("{} worker: next", worker.number)
@@ -250,7 +253,7 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
     let manager = std::sync::Arc::new(manager);
     let waiting = tokio::spawn({
         let (manager, chat) = (manager.clone(), chat.id.clone());
-        async move { manager.wait_chat_messages(&chat).await }
+        async move { manager.wait_space_updates(&SpaceSelector::id(&chat)).await }
     });
     manager
         .send_space_message(

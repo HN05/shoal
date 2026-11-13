@@ -11,12 +11,12 @@ use super::{
 };
 use crate::{
     client::{space_ids::SpaceId, space_names::SpaceSelector},
-    daemon::{agent_messages::AgentMessage, links::space::LinkSpace, workspace::Manager},
+    daemon::{agent_messages::AgentMessage, workspace::Manager},
     forge::{
         items::link::{LinkKind, Selection},
         updates::Update,
     },
-    model::{PresentSpace, SpaceRef, Workspace},
+    model::{PresentSpace, SpaceRef},
 };
 
 impl Manager {
@@ -37,42 +37,37 @@ impl Manager {
             "explicit items need a kind"
         );
         let deadline = watch_deadline(seconds);
-        let workspace = match self.link_space(selector).await? {
-            LinkSpace::Workspace(workspace) => *workspace,
-            LinkSpace::Chat { chat, .. } => {
-                return self.wait_chat_items(&chat.id, selection, deadline).await;
-            }
-        };
-        let wait = self.waits.start(&workspace.id);
+        let space = self.space(selector).await?;
+        // The space's hooks deliver what a watch would, so the newest of them
+        // takes it.
+        let wait = self.waits.start(space.id());
         // Subscribe before reading, so a message queued in between still wakes.
         let mut queued = self.signals.watch_messages();
         let mut background = self.signals.watch_item_updates();
-        let unread = self
-            .unread_agent_messages(&SpaceSelector::id(&workspace.id))
-            .await?;
+        let unread = self.unread_messages(space.id()).await?;
         let mut messages = unread.messages;
         if !unread.wakes {
             // A cancelled poll leaves its deliveries pending for the newer wait.
             tokio::select! {
                 updates = wait_for_updates(deadline, &mut background, || {
-                    self.poll_item_activity(&workspace.id, selection)
+                    self.poll_space_activity(&space, selection)
                 }) => {
                     let updates = updates?;
                     // Including settled ones queued while the wait ran. A
                     // newer delivery may take them and the updates meanwhile.
-                    let unread = self.deliverable_messages(&workspace).await?;
+                    let unread = self.deliverable_messages(&space).await?;
                     if !wait.is_current() {
                         return Ok(Updates::superseded());
                     }
                     return with_unread_messages(updates, unread);
                 }
-                next = self.next_agent_messages(&workspace.id, &mut queued) => messages = next?,
+                next = self.next_agent_messages(space.id(), &mut queued) => messages = next?,
                 () = wait.superseded.notified() => return Ok(Updates::superseded()),
             }
         }
         // Messages still settling at the deadline wait for a later delivery.
         let messages = tokio::select! {
-            settled = self.settled_messages(&workspace, messages) => settled?,
+            settled = self.settled_messages(&space, messages) => settled?,
             () = wait.superseded.notified() => return Ok(Updates::superseded()),
             () = until(deadline) => return Ok(Updates::timed_out()),
         };
@@ -83,64 +78,45 @@ impl Manager {
         Ok(Updates::messages(messages))
     }
 
-    /// [`Self::agent_updates`] of the workspace, or [`Self::chat_updates`] of
-    /// the running chat, `selector` names.
-    pub async fn space_updates(&self, selector: &SpaceSelector) -> Result<Updates> {
-        match self.space(selector).await? {
-            PresentSpace::Workspace(workspace) => {
-                self.agent_updates(&SpaceSelector::id(&workspace.id)).await
-            }
-            PresentSpace::Chat(chat) => self.chat_updates(&chat.id).await,
-        }
-    }
-
-    /// The next messages or item activity of the agent of the workspace or
-    /// running chat `selector` names, unless a newer wait or delivery takes
-    /// them first: a workspace's as an unfiltered [`Self::wait_items`]
-    /// without a deadline finds them, a chat's as
-    /// [`Self::wait_chat_messages`] does. The wake hook's wait, so the daemon
-    /// logs how one ends without updates.
+    /// The next messages or item activity of the agent of the space
+    /// `selector` names, as an unfiltered [`Self::wait_items`] without a
+    /// deadline finds them, unless a newer wait or delivery takes them
+    /// first. The wake hook's wait, so the daemon logs how one ends without
+    /// updates.
     pub async fn wait_space_updates(&self, selector: &SpaceSelector) -> Result<Updates> {
         let space = self.space(selector).await?;
         let log = WakeWaitLog::start(space.name());
-        let updates = match space {
-            PresentSpace::Workspace(workspace) => {
-                (self.wait_items(
-                    &SpaceSelector::id(&workspace.id),
-                    &Selection::default(),
-                    None,
-                ))
-                .await
-            }
-            PresentSpace::Chat(chat) => self.wait_chat_messages(&chat.id).await,
-        };
+        let selector = SpaceSelector::id(space.id());
+        let updates = self
+            .wait_items(&selector, &Selection::default(), None)
+            .await;
         log.answered(&updates);
         updates
     }
 
-    /// What the workspace's agent has not received: its settled messages and
-    /// the updates queued on its cursor, without waiting or polling the forge.
-    /// Delivery replaces a running watch, which would otherwise deliver the
-    /// same updates again. Cleanup and item changes hold a workspace's PR
-    /// gate across its forge requests and its removal, longer than an agent
-    /// waits for its hook, so while one runs the updates wait for a later
-    /// delivery.
+    /// What the agent of the space `selector` names has not received: its
+    /// settled messages, its leftovers and the updates queued on its
+    /// cursor, without waiting or polling the forge. Delivery replaces a
+    /// running watch, which would otherwise deliver the same updates again.
+    /// Cleanup and item changes hold a space's PR gate across their forge
+    /// requests and its removal, longer than an agent waits for its hook,
+    /// so while one runs the updates wait for a later delivery.
     pub async fn agent_updates(&self, selector: &SpaceSelector) -> Result<Updates> {
-        let workspace = self.workspace(selector).await?;
-        let workspace_id = workspace.id.clone();
-        let delivery = self.waits.start(&workspace.id);
-        let messages = self.deliverable_messages(&workspace).await?;
+        let space = self.space(selector).await?;
+        let id = space.id().clone();
+        let delivery = self.waits.start(&id);
+        let messages = self.deliverable_messages(&space).await?;
         // The messages, then the leftovers, share the response with the
         // updates.
         let messages_size = serde_json::to_vec(&messages)?.len();
         let leftovers = self
             .leftovers
-            .undelivered(&workspace_id, RESPONSE_LIMIT.saturating_sub(messages_size))?;
+            .undelivered(&id, RESPONSE_LIMIT.saturating_sub(messages_size))?;
         let reserved = messages_size + serde_json::to_vec(&leftovers)?.len();
-        let children = self.delegated_spaces(&workspace.id).await?;
-        let updates = match self.gates.try_lock_prs(receiving(&workspace.id, &children)) {
+        let children = self.delegated_spaces(&id).await?;
+        let updates = match self.gates.try_lock_prs(receiving(&id, &children)) {
             Some(_gate) => {
-                self.gated_agent_updates(workspace, &children, reserved)
+                self.gated_agent_updates(&space, &children, reserved)
                     .await?
             }
             None => Vec::new(),
@@ -157,20 +133,29 @@ impl Manager {
         })
     }
 
-    /// The updates queued for the workspace's agent that fit one response
-    /// beside `reserved` bytes of its other content: those on its own cursor
-    /// for an unfiltered watch, then those of the spaces below it it works
-    /// on. The caller holds the PR gates of the workspace and its `children`.
+    /// The updates queued for the agent of `space` that fit one response
+    /// beside `reserved` bytes of its other content: those on its own
+    /// cursor for an unfiltered watch, then those of the spaces below it it
+    /// works on. The caller holds the PR gates of the space and its
+    /// `children`.
     pub(super) async fn gated_agent_updates(
         &self,
-        workspace: Workspace,
+        space: &PresentSpace,
         children: &[SpaceRef],
         reserved: usize,
     ) -> Result<Vec<Update>> {
-        let id = workspace.id.clone();
-        let mut batch = own_batch(&id, self.queued_updates(workspace).await?);
+        let mut batch = own_batch(space.id(), self.queued_updates(space).await?);
         batch.extend(self.delegated_pending(children, None).await?);
         self.fit_response(batch, reserved).await
+    }
+
+    /// The updates queued for the agent of `space` that fit one response,
+    /// once nothing holds the PR gates of the space and the spaces below it
+    /// whose activity it receives.
+    pub(super) async fn queued_activity(&self, space: &PresentSpace) -> Result<Vec<Update>> {
+        let children = self.delegated_spaces(space.id()).await?;
+        let _gate = self.gates.lock_prs(receiving(space.id(), &children)).await;
+        self.gated_agent_updates(space, &children, 0).await
     }
 
     /// The updates queued on the cursors of `children`, spaces below whose
@@ -207,72 +192,25 @@ impl Manager {
         Ok(updates)
     }
 
-    /// The updates queued on the workspace's cursor for an unfiltered watch.
-    pub(super) async fn queued_updates(&self, workspace: Workspace) -> Result<Vec<Update>> {
-        let id = workspace.id.clone();
+    /// The updates queued on the cursor of `space` for an unfiltered watch:
+    /// those of its items and its branch, when it has one.
+    pub(super) async fn queued_updates(&self, space: &PresentSpace) -> Result<Vec<Update>> {
+        let id = space.id().clone();
         let items = self
             .store
             .run(move |db| followed_items(db, &id, None))
             .await?;
+        let branch = space
+            .worktree()
+            .and_then(|workspace| workspace.branch.clone());
         let keys = items
             .into_iter()
             .map(|url| url.to_string())
-            .chain(workspace.branch.map(String::from))
+            .chain(branch.map(String::from))
             .collect::<Vec<_>>();
-        self.pending_activity(&workspace.id, &keys).await
+        self.pending_activity(space.id(), &keys).await
     }
 
-    /// [`Self::wait_items`] for the chat `id`: the activity of its items, or
-    /// its next messages, which arrive as the user's messages to a chat do,
-    /// without settling. It shares its delivery with the chat's hooks, so
-    /// the newest of them receives what is pending.
-    async fn wait_chat_items(
-        &self,
-        id: &SpaceId,
-        selection: &Selection,
-        deadline: Option<tokio::time::Instant>,
-    ) -> Result<Updates> {
-        // The chat's hooks deliver what a watch would, so the newest of them
-        // takes it.
-        let wait = self.waits.start(id);
-        // Subscribe before reading, so a message queued in between still wakes.
-        let mut queued = self.signals.watch_messages();
-        let mut background = self.signals.watch_item_updates();
-        let messages = self.agent_messages(&SpaceSelector::id(id)).await?;
-        let updates = if messages.is_empty() {
-            tokio::select! {
-                updates = wait_for_updates(deadline, &mut background, || {
-                    self.poll_item_activity(id, selection)
-                }) => updates?,
-                messages = self.next_chat_messages(id, &mut queued) => {
-                    Updates::messages(messages?)
-                }
-                () = wait.superseded.notified() => return Ok(Updates::superseded()),
-            }
-        } else {
-            Updates::messages(messages)
-        };
-        // A newer wait or hook delivery reads the same unacknowledged items.
-        if !wait.is_current() {
-            return Ok(Updates::superseded());
-        }
-        Ok(updates)
-    }
-
-    /// The chat's messages once it has any.
-    async fn next_chat_messages(
-        &self,
-        id: &SpaceId,
-        queued: &mut tokio::sync::watch::Receiver<u64>,
-    ) -> Result<Vec<AgentMessage>> {
-        loop {
-            queued.changed().await?;
-            let messages = self.agent_messages(&SpaceSelector::id(id)).await?;
-            if !messages.is_empty() {
-                return Ok(messages);
-            }
-        }
-    }
     /// The unread messages once one that wakes an idle agent is queued.
     pub(super) async fn next_agent_messages(
         &self,
@@ -281,35 +219,11 @@ impl Manager {
     ) -> Result<Vec<AgentMessage>> {
         loop {
             queued.changed().await?;
-            let unread = self.unread_agent_messages(&SpaceSelector::id(id)).await?;
+            let unread = self.unread_messages(id).await?;
             if unread.wakes {
                 return Ok(unread.messages);
             }
         }
-    }
-
-    /// The updates queued on the chat's cursor, then those of the spaces
-    /// below it whose activity it receives, that fit one response beside
-    /// `reserved` bytes of its other content, or `None` while an item change
-    /// holds one of their PR gates, when they wait for a later delivery.
-    pub(crate) async fn queued_chat_updates(
-        &self,
-        chat: &SpaceId,
-        reserved: usize,
-    ) -> Result<Option<Vec<Update>>> {
-        let children = self.delegated_spaces(chat).await?;
-        let Some(_gate) = self.gates.try_lock_prs(receiving(chat, &children)) else {
-            return Ok(None);
-        };
-        let id = chat.to_owned();
-        let keys: Vec<String> = (self.store.run(move |db| followed_items(db, &id, None)))
-            .await?
-            .into_iter()
-            .map(|url| url.to_string())
-            .collect();
-        let mut batch = own_batch(chat, self.pending_activity(chat, &keys).await?);
-        batch.extend(self.delegated_pending(&children, None).await?);
-        Ok(Some(self.fit_response(batch, reserved).await?))
     }
 }
 

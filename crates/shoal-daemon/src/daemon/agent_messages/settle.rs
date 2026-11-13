@@ -7,8 +7,7 @@ use std::time::Duration;
 use anyhow::Result;
 
 use super::AgentMessage;
-use crate::client::space_names::SpaceSelector;
-use crate::{daemon::workspace::Manager, model::Workspace, time::UnixTime};
+use crate::{daemon::workspace::Manager, model::PresentSpace, time::UnixTime};
 
 mod clock;
 pub(crate) use clock::SettleClock;
@@ -32,57 +31,53 @@ pub(crate) fn held_until(
 }
 
 impl Manager {
-    /// How long the workspace's unread `messages` wait for more to arrive;
+    /// How long the unread `messages` of `space` wait for more to arrive;
     /// `None` once they have settled.
     pub(crate) async fn message_hold(
         &self,
-        workspace: &Workspace,
+        space: &PresentSpace,
         messages: &[AgentMessage],
     ) -> Result<Option<Duration>> {
         if messages.is_empty() {
             return Ok(None);
         }
         let now = self.settle_clock.now();
-        let settle = self.settle_window(workspace).await;
+        let settle = self.settle_window(space).await;
         Ok(held_until(messages, settle, now).map(|until| until.duration_since(now)))
     }
 
-    /// The workspace's unread messages once they have settled, waiting for
+    /// The unread messages of `space` once they have settled, waiting for
     /// them to.
     pub(crate) async fn settled_messages(
         &self,
-        workspace: &Workspace,
+        space: &PresentSpace,
         mut messages: Vec<AgentMessage>,
     ) -> Result<Vec<AgentMessage>> {
-        while let Some(hold) = self.message_hold(workspace, &messages).await? {
+        while let Some(hold) = self.message_hold(space, &messages).await? {
             self.settle_clock.sleep(hold).await;
-            messages = self
-                .agent_messages(&SpaceSelector::id(&workspace.id))
-                .await?;
+            messages = self.unread_messages(space.id()).await?.messages;
         }
         Ok(messages)
     }
 
-    /// The workspace's unread messages that have settled: all of them, or
+    /// The unread messages of `space` that have settled: all of them, or
     /// none while they wait for more.
     pub(crate) async fn deliverable_messages(
         &self,
-        workspace: &Workspace,
+        space: &PresentSpace,
     ) -> Result<Vec<AgentMessage>> {
-        let messages = self
-            .agent_messages(&SpaceSelector::id(&workspace.id))
-            .await?;
-        if self.message_hold(workspace, &messages).await?.is_some() {
+        let messages = self.unread_messages(space.id()).await?.messages;
+        if self.message_hold(space, &messages).await?.is_some() {
             return Ok(Vec::new());
         }
         Ok(messages)
     }
 
-    /// The workspace's settle window. A configuration that does not resolve
+    /// The settle window of `space`. A configuration that does not resolve
     /// holds nothing, since messages are how the user reaches the agent to
     /// fix it.
-    async fn settle_window(&self, workspace: &Workspace) -> Duration {
-        match self.workspace_settings(workspace).await {
+    async fn settle_window(&self, space: &PresentSpace) -> Duration {
+        match self.present_space_settings(space).await {
             Ok(settings) => Duration::from_secs(settings.messages.settle_seconds),
             Err(error) => {
                 crate::daemon::log!("agent messages delivered unsettled: {error:#}");

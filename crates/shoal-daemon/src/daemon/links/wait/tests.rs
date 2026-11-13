@@ -1,3 +1,4 @@
+use crate::model::PresentSpace;
 use shoal_refs::BranchName;
 use std::{
     sync::{Arc, LazyLock},
@@ -368,7 +369,7 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
     // The chat's wake hook waits for the activity the poll queues.
     let waiting = tokio::spawn({
         let (manager, chat) = (manager.clone(), chat.id.clone());
-        async move { manager.wait_chat_messages(&chat).await }
+        async move { manager.wait_space_updates(&SpaceSelector::id(&chat)).await }
     });
     manager
         .queue_background_updates(
@@ -383,7 +384,10 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
     // A watch in the chat yields to its hook's delivery, which hands over
     // the same update once acknowledged.
     let watch = manager.waits.start(&chat.id);
-    let delivered = manager.chat_updates(&chat.id).await.unwrap();
+    let delivered = manager
+        .agent_updates(&SpaceSelector::id(&chat.id))
+        .await
+        .unwrap();
     watch.superseded.notified().await;
     assert!(!watch.is_current());
     assert_eq!(delivered.updates, woken.updates);
@@ -396,7 +400,7 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
         .unwrap();
     assert!(
         manager
-            .chat_updates(&chat.id)
+            .agent_updates(&SpaceSelector::id(&chat.id))
             .await
             .unwrap()
             .updates
@@ -440,7 +444,10 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
         )
         .await
         .unwrap();
-    let delivered = manager.chat_updates(&chat.id).await.unwrap();
+    let delivered = manager
+        .agent_updates(&SpaceSelector::id(&chat.id))
+        .await
+        .unwrap();
     assert_eq!(delivered.updates.len(), 1);
     assert_eq!(delivered.updates[0].workspace.as_deref(), Some("worker"));
     let deliveries = vec![delivered.updates[0].delivery.clone()];
@@ -467,7 +474,7 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
         .unwrap();
     assert!(
         manager
-            .chat_updates(&chat.id)
+            .agent_updates(&SpaceSelector::id(&chat.id))
             .await
             .unwrap()
             .updates
@@ -476,50 +483,44 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
 }
 
 #[tokio::test]
-async fn a_chats_wait_takes_activity_an_item_change_held_back() {
+async fn a_chat_without_a_repository_waits_for_the_activity_below_it() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
         .register_repository(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let chat = manager
-        .start_chat(
+    let manager = std::sync::Arc::new(manager);
+    let chat =
+        crate::daemon::test_support::chat(&manager, "master", "orchestrate", None, None).await;
+    let below = manager
+        .create_workspace_below(
             repo.id.clone().into(),
-            "planning".into(),
-            "claude".into(),
+            "below".into(),
             None,
+            Default::default(),
+            Some(chat.id.clone()),
         )
         .await
         .unwrap();
-    register_watch(&manager, &chat.id, PR.as_str()).await;
-    let manager = std::sync::Arc::new(manager);
-    // Activity queues, signalling before the wait starts, and then an item
-    // change holds the chat's PR gate, so the wait finds nothing it may
-    // take yet and no signal is left to wake it.
+    register_watch(&manager, &below.id, PR.as_str()).await;
+    // Without items of its own to look up, the chat's wake hook waits for
+    // what is queued for the workspace below it, which has no agent.
+    let waiting = tokio::spawn({
+        let (manager, chat) = (manager.clone(), chat.id.clone());
+        async move { manager.wait_space_updates(&SpaceSelector::id(&chat)).await }
+    });
     manager
         .queue_background_updates(
-            &chat.id,
+            &below.id,
             vec![(PR.as_str().into(), snapshot("first"))],
             crate::time::UnixTime::now(),
         )
         .await
         .unwrap();
-    let gate = manager.gates.lock_prs([&chat.id]).await;
-    let waiting = tokio::spawn({
-        let (manager, chat) = (manager.clone(), chat.id.clone());
-        async move { manager.wait_chat_messages(&chat).await }
-    });
-    // The change ends without a signal once the wait found the gate held;
-    // the wait looks again by itself.
-    manager.gates.pr_contention.notified().await;
-    drop(gate);
-    let woken = tokio::time::timeout(std::time::Duration::from_secs(10), waiting)
-        .await
-        .expect("the wait slept past the released gate")
-        .unwrap()
-        .unwrap();
+    let woken = waiting.await.unwrap().unwrap();
     assert_eq!(woken.updates[0].kind, UpdateKind::Comment);
+    assert_eq!(woken.updates[0].workspace.as_deref(), Some("below"));
 }
 
 #[tokio::test]
@@ -1193,7 +1194,7 @@ async fn a_hooked_agent_is_due_a_wake_once_no_wait_has_run_for_a_while() {
     let due = async || {
         manager
             .agent_wake_due(
-                &workspace,
+                &PresentSpace::Workspace(workspace.clone()),
                 Some(&ExecutionId::from("e1")),
                 true,
                 WakePhase::Arming,
@@ -2403,7 +2404,10 @@ async fn sensitive_files_changed_on_both_sides_are_reported_beside_a_linked_pr()
         .unwrap();
     let polled = manager.poll_space_item_activity(&space).await;
     assert!(polled.is_err(), "the PR lookup fails");
-    let queued = manager.queued_updates(linked.clone()).await.unwrap();
+    let queued = manager
+        .queued_updates(&PresentSpace::Workspace(linked.clone()))
+        .await
+        .unwrap();
     assert_eq!(queued.len(), 1);
     assert_eq!(
         Some(queued[0].url.as_str()),
@@ -2448,7 +2452,10 @@ async fn a_stalled_worktree_fails_the_background_branch_check_at_once() {
         .unwrap();
     let polled = manager.poll_space_item_activity(&space).await;
     assert!(polled.is_err(), "the PR lookup fails");
-    let queued = manager.queued_updates(workspace.clone()).await.unwrap();
+    let queued = manager
+        .queued_updates(&PresentSpace::Workspace(workspace.clone()))
+        .await
+        .unwrap();
     let stall = queued.iter().find(|update| {
         Some(update.url.as_str()) == workspace.branch.as_ref().map(BranchName::as_str)
     });
@@ -2811,9 +2818,10 @@ async fn a_held_gate_delays_a_wake_but_keeps_an_issued_one_due() {
         .await
         .unwrap();
     let held = manager.gates.lock_prs([&workspace.id]).await;
+    let space = PresentSpace::Workspace(workspace);
     assert!(
         !manager
-            .wake_updates_due(workspace.clone(), WakePhase::Arming)
+            .wake_updates_due(&space, WakePhase::Arming)
             .await
             .unwrap()
     );
@@ -2821,14 +2829,14 @@ async fn a_held_gate_delays_a_wake_but_keeps_an_issued_one_due() {
     // look finished with the updates it was prompted for.
     assert!(
         manager
-            .wake_updates_due(workspace.clone(), WakePhase::Prompted)
+            .wake_updates_due(&space, WakePhase::Prompted)
             .await
             .unwrap()
     );
     drop(held);
     assert!(
         manager
-            .wake_updates_due(workspace, WakePhase::Arming)
+            .wake_updates_due(&space, WakePhase::Arming)
             .await
             .unwrap()
     );
