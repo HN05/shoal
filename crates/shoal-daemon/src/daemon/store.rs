@@ -600,6 +600,19 @@ pub fn execution_agent(db: &Connection, id: &ExecutionId) -> Result<Option<crate
         .flatten())
 }
 
+/// The wrappers of the recorded executions that run an agent.
+pub fn agent_wrappers(db: &Connection) -> Result<Vec<crate::process::identity::Identity>> {
+    let mut statement = db.prepare(
+        "SELECT wrapper FROM executions WHERE agent IS NOT NULL AND wrapper IS NOT NULL",
+    )?;
+    let wrappers = statement.query_map([], |row| json_column(row, "wrapper"))?;
+    Ok(wrappers
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect())
+}
+
 /// A recorded execution that runs an agent.
 pub struct AgentExecution {
     pub agent: crate::agent::Agent,

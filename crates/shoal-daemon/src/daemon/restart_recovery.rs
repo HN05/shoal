@@ -231,7 +231,8 @@ impl Manager {
         scan: &process::Scan,
     ) -> Result<Processes> {
         let directory = self.space_directory(space).await?;
-        Processes::inspect(execution, &directory, scan).await
+        let agents = self.agent_wrappers().await?;
+        Processes::inspect(execution, &directory, scan, &agents).await
     }
 
     /// The unknown executions of present spaces: those with a saved

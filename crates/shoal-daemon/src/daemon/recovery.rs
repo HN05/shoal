@@ -314,10 +314,12 @@ impl Manager {
         ids: &HashSet<ExecutionId>,
     ) -> Result<ExecutionReport> {
         let connected = self.executions.is_connected(&execution.id).await;
-        let mut processes = Processes::inspect(execution, &workspace.path, scan).await?;
+        let agents = self.agent_wrappers().await?;
+        let mut processes = Processes::inspect(execution, &workspace.path, scan, &agents).await?;
         if options.stop && !connected {
+            let inventory = (scan, ids, agents.as_slice());
             processes =
-                stop_survivors(execution, &workspace.path, processes, report, scan, ids).await?;
+                stop_survivors(execution, &workspace.path, processes, report, inventory).await?;
         }
         let mut notes = execution_notes(connected, &processes);
         let mut cleared = false;
@@ -382,14 +384,19 @@ enum Clearance {
     DirectoryInUse(Vec<String>),
 }
 
-/// Stop the recorded survivors of a disconnected execution and inspect again.
+/// Stop the recorded survivors of a disconnected execution and inspect again,
+/// rescanning the executions `ids` into `scan`, where the executions whose
+/// wrappers are `agents` own their agents.
 async fn stop_survivors(
     execution: &crate::model::Execution,
     workspace: &std::path::Path,
     processes: Processes,
     report: &mut Report,
-    scan: &mut process::Scan,
-    ids: &HashSet<ExecutionId>,
+    (scan, ids, agents): (
+        &mut process::Scan,
+        &HashSet<ExecutionId>,
+        &[process::Identity],
+    ),
 ) -> Result<Processes> {
     if processes.stop().await? {
         report.changes.push(format!(
@@ -400,7 +407,7 @@ async fn stop_survivors(
     // A surviving process can fork while stopping. Rescan rather than
     // assuming that signaling the original list completed the job.
     *scan = process::scan(ids.clone()).await?;
-    Processes::inspect(execution, workspace, scan).await
+    Processes::inspect(execution, workspace, scan, agents).await
 }
 
 /// Whether `options` ask for repair and the evidence proves the execution

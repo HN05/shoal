@@ -134,11 +134,54 @@ async fn children_of_an_orphaned_group_member_are_owned_with_a_live_leader() -> 
         Some(&identity),
         Some(identity.pid),
         Some(&ExecutionId::from("execution")),
+        &[],
     )
     .await?;
     signal(&child, libc::SIGKILL)?;
     leader.stdin.take().context("stdin")?.shutdown().await?;
     assert!(owned.contains(&child));
+    Ok(())
+}
+
+/// Another execution's wrapper that a live leader started, as a scoped
+/// caller starts an agent in its terminal, with the agent it runs.
+#[tokio::test]
+async fn a_foreign_wrapper_and_its_agent_are_not_the_leaders() -> Result<()> {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+    let script = r#"sh -c 'sleep 30; :' & echo $!; read _"#;
+    let mut leader = tokio::process::Command::new("sh")
+        .args(["-c", script])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .process_group(0)
+        .kill_on_drop(true)
+        .spawn()?;
+    let identity = capture(leader.id().context("leader PID")?)?.context("leader")?;
+    let mut stdout = tokio::io::BufReader::new(leader.stdout.take().context("stdout")?);
+    let mut line = String::new();
+    stdout.read_line(&mut line).await?;
+    let wrapper = capture(line.trim().parse()?)?.context("foreign wrapper")?;
+    let agent = loop {
+        let rows = list_same_user()?;
+        let child = rows.iter().find(|(_, _, parent)| *parent == wrapper.pid);
+        if let Some((pid, _, _)) = child {
+            break capture(*pid)?.context("foreign agent")?;
+        }
+        tokio::task::yield_now().await;
+    };
+    let execution = ExecutionId::from("execution");
+    let (owned, _) = related(
+        Some(&identity),
+        Some(identity.pid),
+        Some(&execution),
+        std::slice::from_ref(&wrapper),
+    )
+    .await?;
+    signal(&agent, libc::SIGKILL)?;
+    leader.stdin.take().context("stdin")?.shutdown().await?;
+    assert!(owned.contains(&identity));
+    assert!(!owned.contains(&wrapper));
+    assert!(!owned.contains(&agent));
     Ok(())
 }
 
@@ -191,6 +234,7 @@ async fn an_exited_commands_background_job_is_owned_through_its_lineage() -> Res
         Some(&identity),
         Some(identity.pid),
         Some(&ExecutionId::from("execution")),
+        &[],
     )
     .await?;
     signal(&job, libc::SIGKILL)?;

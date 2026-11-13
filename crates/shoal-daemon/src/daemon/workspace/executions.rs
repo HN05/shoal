@@ -908,7 +908,14 @@ impl Manager {
     ) -> Result<Processes> {
         let space = self.space(&SpaceSelector::id(&execution.space_id)).await?;
         let directory = self.space_directory(&space).await?;
-        Processes::inspect(execution, &directory, scan).await
+        let agents = self.agent_wrappers().await?;
+        Processes::inspect(execution, &directory, scan, &agents).await
+    }
+
+    /// The wrappers of the executions that run agents, each of which owns
+    /// its agent wherever the process that started it runs.
+    pub(crate) async fn agent_wrappers(&self) -> Result<Vec<process::Identity>> {
+        self.store.read(|db| store::agent_wrappers(db)).await
     }
 
     /// Delete an execution record whose processes the caller proved stopped.

@@ -17,26 +17,35 @@ pub struct Processes {
 impl Processes {
     /// Reuse a marker scan across executions, but recheck wrapper/child identity
     /// and ancestry each time. After signaling, callers must obtain a fresh scan.
-    /// `workspace` is the directory of the execution's workspace.
+    /// `workspace` is the directory of the execution's workspace. The other
+    /// executions among those whose `agent_wrappers` these are run agents of
+    /// their own, wherever the process that started them runs, so neither
+    /// their wrappers nor what those started belong to `execution`.
     pub async fn inspect(
         execution: &Execution,
         workspace: &Path,
         scan: &process::Scan,
+        agent_wrappers: &[process::Identity],
     ) -> Result<Self> {
         let wrapper = match &execution.wrapper {
             Some(wrapper) if process::alive(wrapper)? => Some(wrapper.clone()),
             _ => None,
         };
+        let foreign: Vec<_> = (agent_wrappers.iter())
+            .filter(|other| execution.wrapper.as_ref() != Some(other))
+            .cloned()
+            .collect();
         let mut owned: Vec<_> = scan
             .processes
             .iter()
-            .filter(|p| p.owner == execution.id)
+            .filter(|p| p.owner == execution.id && !foreign.contains(&p.identity))
             .map(|p| p.identity.clone())
             .collect();
         let (related, group_candidates) = process::related(
             execution.child.as_ref(),
             execution.group_id,
             Some(&execution.id),
+            &foreign,
         )
         .await?;
         owned.extend(related);

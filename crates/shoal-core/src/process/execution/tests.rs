@@ -31,7 +31,7 @@ async fn unreadable_evidence_blocks_only_while_the_same_process_is_alive() {
         unreadable: vec![process::Unattributed::alone(identity)],
         ..Default::default()
     };
-    let live = Processes::inspect(&execution, workspace.path(), &scan)
+    let live = Processes::inspect(&execution, workspace.path(), &scan, &[])
         .await
         .unwrap();
     assert_eq!(live.unreadable.len(), 1);
@@ -41,7 +41,7 @@ async fn unreadable_evidence_blocks_only_while_the_same_process_is_alive() {
     assert!(issue.contains(&format!("kill {pid}")), "{issue}");
     child.kill().await.unwrap();
     child.wait().await.unwrap();
-    let exited = Processes::inspect(&execution, workspace.path(), &scan)
+    let exited = Processes::inspect(&execution, workspace.path(), &scan, &[])
         .await
         .unwrap();
     assert!(exited.unreadable.is_empty());
@@ -80,7 +80,7 @@ async fn unreadable_evidence_outside_the_workspace_does_not_block() -> anyhow::R
         unreadable: vec![process::Unattributed::alone(identity)],
         ..Default::default()
     };
-    let inspected = Processes::inspect(&execution, workspace.path(), &scan).await;
+    let inspected = Processes::inspect(&execution, workspace.path(), &scan, &[]).await;
     child.kill().await?;
     child.wait().await?;
     let inspected = inspected?;
@@ -119,7 +119,7 @@ async fn unreadable_evidence_settles_once_it_shows_no_marker() -> anyhow::Result
         unreadable: vec![process::Unattributed::alone(identity)],
         ..Default::default()
     };
-    let settled = Processes::inspect(&execution, workspace.path(), &scan).await;
+    let settled = Processes::inspect(&execution, workspace.path(), &scan, &[]).await;
     child.kill().await?;
     child.wait().await?;
     assert!(settled?.unreadable.is_empty());
@@ -169,8 +169,8 @@ async fn unreadable_evidence_blocks_after_its_head_exits_unless_the_head_is_olde
         scan(head(identity.birth.clone())),
         scan(head(format!("{prefix}:0"))),
     );
-    let exited_head = Processes::inspect(&execution, workspace.path(), &exited_head).await;
-    let older_head = Processes::inspect(&execution, workspace.path(), &older_head).await;
+    let exited_head = Processes::inspect(&execution, workspace.path(), &exited_head, &[]).await;
+    let older_head = Processes::inspect(&execution, workspace.path(), &older_head, &[]).await;
     child.kill().await?;
     child.wait().await?;
     assert_eq!(exited_head?.unreadable, std::slice::from_ref(&identity));

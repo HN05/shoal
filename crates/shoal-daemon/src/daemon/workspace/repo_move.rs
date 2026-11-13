@@ -266,7 +266,8 @@ impl Manager {
         }
         let executions = self.repository_executions(id).await?;
         let workspaces = self.repository_workspaces(id).await?;
-        execution_processes(&executions, &workspaces).await
+        let agents = self.agent_wrappers().await?;
+        execution_processes(&executions, &workspaces, &agents).await
     }
 
     /// Refuse a directory holding Shoal's state or another repository's
@@ -648,10 +649,11 @@ fn outside(repo: &Repository, root: &Path) -> bool {
 /// The processes of `executions`, running in `workspaces`, which stopping
 /// them ends: those a stop would signal, their wrappers and the processes
 /// that started the wrappers, such as a terminal session that closes with
-/// them.
+/// them. The executions whose wrappers are `agents` own their agents.
 async fn execution_processes(
     executions: &[Execution],
     workspaces: &[Workspace],
+    agents: &[process::identity::Identity],
 ) -> Result<Vec<u32>> {
     let ids = executions.iter().map(|e| e.id.clone()).collect();
     let scan = process::identity::scan(ids).await?;
@@ -662,7 +664,8 @@ async fn execution_processes(
             .find(|workspace| workspace.id == execution.space_id)
             .context("an execution's workspace is missing")?;
         let processes =
-            process::execution::Processes::inspect(execution, &workspace.path, &scan).await?;
+            process::execution::Processes::inspect(execution, &workspace.path, &scan, agents)
+                .await?;
         pids.extend(processes.owned.iter().map(|process| process.pid));
         if let Some(wrapper) = &processes.wrapper {
             pids.push(wrapper.pid);

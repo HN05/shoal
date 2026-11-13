@@ -284,7 +284,8 @@ impl Manager {
             return Ok(true);
         }
         let scan = identity::scan(HashSet::from([id.to_owned()])).await?;
-        let processes = Processes::inspect(&execution, &workspace.path, &scan).await?;
+        let agents = self.agent_wrappers().await?;
+        let processes = Processes::inspect(&execution, &workspace.path, &scan, &agents).await?;
         if processes.wrapper.is_some() || !processes.visibility_complete() {
             return Ok(true);
         }

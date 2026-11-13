@@ -373,11 +373,13 @@ pub async fn started_by(identities: &[Identity], wrappers: &[Identity]) -> Resul
 /// descending from it through live parents, except those below a process
 /// whose own environment lacks the marker of `execution`, such as a demo the
 /// command started. Without that proof, group members are candidates only and
-/// must not be killed.
+/// must not be killed. Neither is ever one of the `foreign` processes, the
+/// wrappers of other executions, nor anything they started.
 pub async fn related(
     child: Option<&Identity>,
     group: Option<u32>,
     execution: Option<&ExecutionId>,
+    foreign: &[Identity],
 ) -> Result<(Vec<Identity>, Vec<Identity>)> {
     let Some(group) = group else {
         return Ok((vec![], vec![]));
@@ -393,6 +395,8 @@ pub async fn related(
         pids.insert(child.unwrap().pid);
         pids = descendants(pids, &rows);
     }
+    let foreign_tree = descendants(live_pids(foreign)?, &rows);
+    pids.retain(|pid| !foreign_tree.contains(pid));
     let identities = pids
         .into_iter()
         .map(capture)
@@ -406,10 +410,11 @@ pub async fn related(
     let Some(root) = child.and_then(Identity::lineage_root) else {
         return Ok((vec![], identities));
     };
-    let execution = execution.cloned();
-    let lineage = tokio::task::spawn_blocking(move || descended_from(root, &rows, execution))
-        .await
-        .context("process lineage worker failed")??;
+    let (execution, foreign) = (execution.cloned(), foreign.to_vec());
+    let lineage =
+        tokio::task::spawn_blocking(move || descended_from(root, &rows, execution, &foreign))
+            .await
+            .context("process lineage worker failed")??;
     let candidates = identities
         .into_iter()
         .filter(|identity| !lineage.contains(identity))
@@ -459,23 +464,36 @@ fn descendants(mut pids: HashSet<u32>, rows: &[(u32, u32, u32)]) -> HashSet<u32>
 
 /// The live processes whose parent unique IDs lead to the process with
 /// unique ID `root`, which may have exited, short of those that left
-/// `execution`.
+/// `execution` and the `foreign` ones.
 fn descended_from(
     root: u64,
     rows: &[(u32, u32, u32)],
     execution: Option<ExecutionId>,
+    foreign: &[Identity],
 ) -> Result<Vec<Identity>> {
     let mut lineages = Vec::new();
     for (pid, _, _) in rows {
         lineages.extend(lineage(*pid)?);
     }
-    let Some(execution) = execution else {
-        return lineage_descendants(root, lineages, |_| Ok(false));
-    };
     let deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
     lineage_descendants(root, lineages, |identity| {
-        left_execution(identity, &execution, deadline)
+        Ok(foreign.contains(identity)
+            || match &execution {
+                Some(execution) => left_execution(identity, execution, deadline)?,
+                None => false,
+            })
     })
+}
+
+/// The PIDs of the live processes among `identities`.
+fn live_pids(identities: &[Identity]) -> Result<HashSet<u32>> {
+    let mut pids = HashSet::new();
+    for identity in identities {
+        if alive(identity)? {
+            pids.insert(identity.pid);
+        }
+    }
+    Ok(pids)
 }
 
 /// A parent's unique ID is lower than its children's, since the kernel
