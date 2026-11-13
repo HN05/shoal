@@ -73,9 +73,9 @@ async fn move_one(ctx: &Context, remote: &Remote, planned: &PlannedExport) -> Re
         }
         Err(ImportFailure::Unknown(error)) => {
             return Err(error.context(format!(
-                "{} may already have it, so its agents stay stopped here; unless it arrived there, shoal restore {} continues it here",
-                remote.host,
-                planned.id()
+                "{host} may already have it, so its agents stay stopped here; if it arrived there, shoal rm {id} removes it here, and otherwise shoal restore {id} continues it here",
+                host = remote.host,
+                id = planned.id()
             )));
         }
     };

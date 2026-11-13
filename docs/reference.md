@@ -3772,8 +3772,9 @@ ends it here through the export's removal. When the export fails, `ssh` cannot
 run, or the import fails with `not_imported`, the space stays here, its stopped agents' restores are queued, and the report gives the other
 machine's error. When the import fails otherwise, as when setup there fails or
 the connection fails or drops, the space stays here with its agents stopped, since the
-other machine may have it, and the report names the `shoal restore` that
-continues it here. A workspace with a space below it
+other machine may have it, and the report names the `shoal rm` that removes
+it here once it arrived there and the `shoal restore` that continues it here
+otherwise. A workspace with a space below it
 that stayed is not exported and stays here. When the import succeeds but the
 space cannot end here, as for a workspace whose HEAD or unsaved files changed
 since its export or a failing `hooks.pre_remove`, it stays here too, and the
