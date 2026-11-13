@@ -446,7 +446,12 @@ fn starting_commit(row: &Row<'_>) -> rusqlite::Result<Option<crate::model::Start
 
 /// Read canonical links while keeping malformed legacy PR records out of list output.
 pub fn space_links(db: &Connection, space_id: &SpaceId) -> rusqlite::Result<SpaceLinks> {
-    let issues = assigned_issues(db, space_id)?;
+    let issues = (assigned_issues(db, space_id)?.into_iter())
+        .map(|issue| LinkedItem {
+            url: issue.url,
+            title: issue.title,
+        })
+        .collect();
     let prs = db
         .query_row(
             "SELECT record FROM pr_cleanup WHERE space_id=?1",
@@ -471,13 +476,24 @@ pub fn space_links(db: &Connection, space_id: &SpaceId) -> rusqlite::Result<Spac
     })
 }
 
+/// An issue assigned to a space, as its row records it.
+pub(crate) struct AssignedIssue {
+    pub(crate) url: ItemRef,
+    pub(crate) title: Option<String>,
+    pub(crate) error: Option<String>,
+}
+
 /// The space's assigned issues in the order they were assigned.
-fn assigned_issues(db: &Connection, space_id: &SpaceId) -> rusqlite::Result<Vec<LinkedItem>> {
-    db.prepare("SELECT url,title FROM space_issue WHERE space_id=?1 ORDER BY rowid")?
+pub(crate) fn assigned_issues(
+    db: &Connection,
+    space_id: &SpaceId,
+) -> rusqlite::Result<Vec<AssignedIssue>> {
+    db.prepare("SELECT url,title,error FROM space_issue WHERE space_id=?1 ORDER BY rowid")?
         .query_map([space_id], |row| {
-            Ok(LinkedItem {
+            Ok(AssignedIssue {
                 url: row.get(0)?,
                 title: row.get(1)?,
+                error: row.get(2)?,
             })
         })?
         .collect()

@@ -11,6 +11,7 @@ pub(crate) use crate::client::links::issue::Registration;
 use crate::{
     daemon::{
         events::{self, EventKind},
+        store,
         workspace::Manager,
     },
     forge::{
@@ -36,15 +37,13 @@ impl Manager {
         let id = id.to_owned();
         self.store
             .read(move |tx| {
-                Ok(tx
-                    .prepare("SELECT url,error FROM space_issue WHERE space_id=?1 ORDER BY rowid")?
-                    .query_map([id], |row| {
-                        Ok(Registration {
-                            url: row.get(0)?,
-                            error: row.get(1)?,
-                        })
-                    })?
-                    .collect::<rusqlite::Result<_>>()?)
+                let issues = store::assigned_issues(tx, &id)?.into_iter();
+                Ok(issues
+                    .map(|issue| Registration {
+                        url: issue.url,
+                        error: issue.error,
+                    })
+                    .collect())
             })
             .await
     }
@@ -164,7 +163,7 @@ impl Manager {
 /// linked.
 fn assign(db: &Connection, id: &SpaceId, url: &str, title: Option<&str>) -> Result<()> {
     super::ensure_accepts_links(db, id)?;
-    let assigned = assigned_issues(db, id)?
+    let assigned = assigned_urls(db, id)?
         .iter()
         .any(|issue| issue.url() == url);
     db.execute(
@@ -190,7 +189,7 @@ fn assign(db: &Connection, id: &SpaceId, url: &str, title: Option<&str>) -> Resu
 /// else every assigned issue, along with what their links kept.
 fn unlink(db: &Connection, id: &SpaceId, selected: Option<&str>) -> Result<()> {
     super::ensure_accepts_links(db, id)?;
-    let mut removed = assigned_issues(db, id)?;
+    let mut removed = assigned_urls(db, id)?;
     if let Some(url) = selected {
         removed.retain(|issue| issue.url() == url);
         ensure!(
@@ -209,11 +208,9 @@ fn unlink(db: &Connection, id: &SpaceId, selected: Option<&str>) -> Result<()> {
 }
 
 /// The URLs of the space's assigned issues in the order they were assigned.
-pub(crate) fn assigned_issues(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
-    Ok(db
-        .prepare("SELECT url FROM space_issue WHERE space_id=?1 ORDER BY rowid")?
-        .query_map([id], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?)
+pub(crate) fn assigned_urls(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
+    let issues = store::assigned_issues(db, id)?.into_iter();
+    Ok(issues.map(|issue| issue.url).collect())
 }
 
 #[cfg(test)]

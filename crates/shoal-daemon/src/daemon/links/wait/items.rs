@@ -317,7 +317,7 @@ pub(crate) fn linked_items(
         }
     }
     if kind != Some(ItemKind::Pr) {
-        items.extend(crate::daemon::links::issue::assigned_issues(db, id)?);
+        items.extend(crate::daemon::links::issue::assigned_urls(db, id)?);
     }
     Ok(items)
 }
