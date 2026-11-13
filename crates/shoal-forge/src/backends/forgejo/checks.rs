@@ -62,15 +62,17 @@ impl Checks for Forgejo {
                     CiAction::Rerun => ("rerun", Some(head)),
                     CiAction::Cancel => ("cancel", None),
                 };
-                let run = actions::run_id_for(repo, account, run_number, on_head).await?;
+                let run = (actions::run_id_for(repo, account, run_number, on_head).await)
+                    .map_err(actions::rerun_error)?;
                 Ok(format!("actions/runs/{run}/{endpoint}"))
             }
             Operation::RerunForgejoJob {
                 run_number,
                 job_index,
             } => {
-                let job =
-                    actions::failed_job_id(repo, account, head, run_number, job_index).await?;
+                let job = (actions::failed_job_id(repo, account, head, run_number, job_index)
+                    .await)
+                    .map_err(actions::rerun_error)?;
                 Ok(format!("actions/jobs/{job}/rerun"))
             }
         }

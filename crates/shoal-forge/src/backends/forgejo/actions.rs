@@ -206,6 +206,35 @@ pub(crate) async fn run_id_for(
     run_id(&runs, number, head)
 }
 
+/// A check's run that ran on an older commit than the PR's head.
+#[derive(Debug)]
+pub(crate) struct OlderRun {
+    number: RunNumber,
+}
+
+impl std::fmt::Display for OlderRun {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the check's run {} ran on an older commit than the PR's head",
+            self.number
+        )
+    }
+}
+
+impl std::error::Error for OlderRun {}
+
+/// Why a check's rerun failed, saying what checks the head instead when
+/// its run ran on an older commit.
+pub(crate) fn rerun_error(error: anyhow::Error) -> anyhow::Error {
+    match error.downcast_ref::<OlderRun>() {
+        Some(older) => anyhow::anyhow!(
+            "{older}, which only a new run on the head checks; push a commit to start one"
+        ),
+        None => error,
+    }
+}
+
 /// The state of a run or job from its status.
 pub(crate) fn state(status: &Value) -> Result<JobState> {
     Ok(match status.as_str() {
@@ -320,11 +349,9 @@ pub(crate) async fn job_log(repo: &ForgeRepo, account: &Account, endpoint: &str)
 
 fn run_id(runs: &Value, number: RunNumber, head: Option<&str>) -> Result<RunId> {
     let run = numbered_run(runs, number)?;
-    ensure!(
-        head.is_none_or(|head| super::runs::commit_of(run).as_deref() == Some(head)),
-        "the check's run {number} ran on an older commit than the PR's head, which only a \
-         new run on the head checks; push a commit to start one"
-    );
+    if head.is_some_and(|head| super::runs::commit_of(run).as_deref() != Some(head)) {
+        return Err(OlderRun { number }.into());
+    }
     run["id"]
         .as_u64()
         .filter(|id| *id > 0)

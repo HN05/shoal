@@ -37,7 +37,12 @@ fn web_job_locations_are_repository_bound_and_use_indices() {
         run_id(&runs, RunNumber::new(2765), Some("head")).unwrap(),
         RunId::new(9331)
     );
-    assert!(run_id(&runs, RunNumber::new(2765), Some("other")).is_err());
+    let older = run_id(&runs, RunNumber::new(2765), Some("other")).unwrap_err();
+    assert!(older.is::<OlderRun>());
+    assert!(
+        !rerun_error(older).is::<OlderRun>(),
+        "a rerun says what to do"
+    );
     // A run of an older commit can still hold the head's check.
     assert_eq!(
         run_id(&runs, RunNumber::new(2765), None).unwrap(),
