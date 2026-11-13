@@ -18,7 +18,7 @@ use crate::{
 /// there is none and the agent is settled.
 pub(super) async fn start(ctx: &Context, mut args: ConfigSetupArgs) -> Result<i32> {
     let handoff = args.handoff.take();
-    chat::handoff::serve(handoff.as_deref(), setup(ctx, args)).await
+    crate::chat_handoff::serve(handoff.as_deref(), setup(ctx, args)).await
 }
 
 /// Start the setup chat `args` ask for.

@@ -4,7 +4,6 @@
 //! A chat is no workspace's agent, so it is not a tracked execution; the
 //! daemon records it while its agent runs.
 //! Every start makes a new chat, focused as its mode says.
-pub(super) mod handoff;
 mod issue;
 pub(super) mod removal;
 mod rename;

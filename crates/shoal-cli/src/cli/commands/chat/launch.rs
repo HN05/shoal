@@ -8,7 +8,6 @@ use anyhow::{Context as _, Result, ensure};
 use super::{
     ChatPlace, Options, Topic,
     agent::{chat_agent, check_model},
-    handoff,
 };
 use crate::client::output::chat::BackgroundChat;
 use crate::client::space_names::{SpaceName, SpaceSelector};
@@ -126,7 +125,7 @@ impl Launch {
         // Opening the place does not start the chat, so the start waits for
         // its report. A scoped starter's scope token, with which the place
         // records the chat, may end with the starter, so it goes along.
-        let handoff = handoff::Handoff::create(crate::env::scope_token().as_ref())?;
+        let handoff = crate::chat_handoff::Handoff::create(crate::env::scope_token().as_ref())?;
         let relaunch = self.relaunch(Some(handoff.path()));
         let chat = &self.chat;
         let repository = chat.repository.registered();
@@ -172,10 +171,10 @@ impl Launch {
         let waits_for_user = command::waits_for_user(chat, &self.options);
         let placement = terminal::Placement::of(&chat.settings, &chat.mode, None, waits_for_user);
         let handoff = match placement {
-            terminal::Placement::Background => Some(handoff::Handoff::create(None)?),
+            terminal::Placement::Background => Some(crate::chat_handoff::Handoff::create(None)?),
             terminal::Placement::Focus => None,
         };
-        let relaunch = self.relaunch(handoff.as_ref().map(handoff::Handoff::path));
+        let relaunch = self.relaunch(handoff.as_ref().map(crate::chat_handoff::Handoff::path));
         let started = terminal::start_chat(
             ctx,
             &chat.settings,
@@ -240,7 +239,7 @@ impl Launch {
     /// execution wrapper, labelling this terminal as the chat's.
     async fn run_here(self, ctx: &Context, chat: &Chat, model_args: Vec<OsString>) -> Result<i32> {
         act_in_chat_scope(ctx, chat).await?;
-        handoff::report(&Ok(()));
+        crate::chat_handoff::report(&Ok(()));
         run_agent(ctx, chat, self.agent, self.chat, model_args, Vec::new()).await
     }
 }

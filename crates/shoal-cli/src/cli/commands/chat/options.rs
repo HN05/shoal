@@ -8,7 +8,6 @@ use std::{
 
 use anyhow::{Result, ensure};
 
-use super::handoff;
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::client::{agent::AgentSessionId, priority::Priority};
 use crate::{
@@ -205,7 +204,7 @@ impl Options {
         ensure_scope_token(ctx)?;
         let scoped = crate::env::is_scoped();
         ensure!(
-            !scoped || self.place != ChatPlace::Here || handoff::awaited(),
+            !scoped || self.place != ChatPlace::Here || crate::chat_handoff::awaited(),
             "scoped processes start chats in a background place; leave out --here"
         );
         let place = self.place.for_starter(scoped, ctx.on_terminal());

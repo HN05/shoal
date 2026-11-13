@@ -42,7 +42,7 @@ const POLL: Duration = Duration::from_millis(100);
 
 /// The directory the starter hands the place its scope token in and waits
 /// on for the place's report; it goes with the starter.
-pub(super) struct Handoff(tempfile::TempDir);
+pub struct Handoff(tempfile::TempDir);
 
 impl Handoff {
     /// A handoff, of the scope token `token` when the starter has one, which
@@ -136,10 +136,7 @@ fn place(path: &Path) -> Result<Place> {
 /// take the handoff before `start` checks this process's scope, which it may
 /// still inherit from the starter's processes, and report how `start` went,
 /// so that no failure leaves the starter waiting.
-pub(in crate::cli::commands) async fn serve<T>(
-    path: Option<&Path>,
-    start: impl Future<Output = Result<T>>,
-) -> Result<T> {
+pub async fn serve<T>(path: Option<&Path>, start: impl Future<Output = Result<T>>) -> Result<T> {
     if let Some(path) = path {
         receive(path)?;
     }
@@ -204,13 +201,13 @@ fn take_scope(path: &Path) -> Result<Option<ScopeToken>> {
 }
 
 /// Whether this process is the place a starter waits on.
-pub(super) fn awaited() -> bool {
+pub fn awaited() -> bool {
     RECEIVED.get().is_some()
 }
 
 /// Report to the starter that waits on this place that the chat started,
 /// or why it did not; only the first report counts.
-pub(in crate::cli::commands) fn report<T>(outcome: &Result<T>) {
+pub fn report<T>(outcome: &Result<T>) {
     static REPORTED: AtomicBool = AtomicBool::new(false);
     let Some(directory) = RECEIVED.get() else {
         return;

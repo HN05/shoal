@@ -30,7 +30,7 @@ use crate::{
 
 pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
     let handoff = args.handoff.take();
-    chat::handoff::serve(handoff.as_deref(), start(ctx, args)).await
+    crate::chat_handoff::serve(handoff.as_deref(), start(ctx, args)).await
 }
 
 /// Start what `args` ask for.
