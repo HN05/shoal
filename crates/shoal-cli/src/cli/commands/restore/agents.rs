@@ -206,12 +206,12 @@ async fn present_space(ctx: &Context, selector: &SpaceSelector) -> Result<Presen
 
 mod commands;
 mod discard;
-pub(super) mod permission_change;
+pub(in crate::cli::commands) mod permission_change;
 mod picker;
 mod places;
-pub(super) mod queue;
-pub(super) mod queued;
-pub(super) mod reports;
+pub(in crate::cli::commands) mod queue;
+pub(in crate::cli::commands) mod queued;
+pub(in crate::cli::commands) mod reports;
 mod sessions;
 mod setups;
 mod space;

@@ -35,7 +35,7 @@ pub(super) async fn check(
             space.name()
         );
         let repository = space.repository_id().map(|id| id.as_str().into());
-        super::super::permissions::ensure_held(ctx, repository, &change.set).await?;
+        crate::cli::commands::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
     for setup in selected
         .setups
@@ -43,7 +43,7 @@ pub(super) async fn check(
         .filter(|setup| setup.launch.is_some())
     {
         let repository = Some(setup.workspace.repository_id.as_str().into());
-        super::super::permissions::ensure_held(ctx, repository, &change.set).await?;
+        crate::cli::commands::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
     Ok(())
 }

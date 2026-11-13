@@ -1,7 +1,7 @@
 //! `shoal move import`: continue spaces from the packages `shoal move
 //! export` wrote: open workspaces again and start chats that resume their
 //! sessions.
-use crate::cli::commands::restore::ReopenedExt;
+use crate::cli::commands::restore::reopen::ReopenedExt;
 use crate::transfer::ManifestExt;
 use crate::transfer::PackagedWorkspaceExt;
 use std::{
@@ -70,8 +70,13 @@ pub(super) async fn import(
         return match package.space {
             Space::Workspace(_) => {
                 let restored = package.open_workspace(ctx).await?;
-                super::super::restore::finish_reopen(ctx, restored, "Imported", options.resume)
-                    .await
+                super::super::restore::reopen::finish_reopen(
+                    ctx,
+                    restored,
+                    "Imported",
+                    options.resume,
+                )
+                .await
             }
             // A chat starts on this terminal, unless it is to start in the
             // background or there is none to start it on.
@@ -344,7 +349,7 @@ async fn import_workspace(
 /// Open the workspace `package` holds and set it up.
 async fn open_and_prepare(ctx: &Context, package: Package) -> Result<Reopened> {
     let restored = package.open_workspace(ctx).await?;
-    super::super::restore::prepare_reopened(ctx, restored)
+    super::super::restore::reopen::prepare_reopened(ctx, restored)
         .await?
         .context("its setup did not finish")
 }

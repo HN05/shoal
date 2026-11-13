@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::cli::{
     args::sessions::SessionsCommand,
-    commands::{demo, queue, restart, resume, sessions},
+    commands::{demo, queue, restart, restore::agents as resume, sessions},
     context::Context,
 };
 use crate::config::permissions::PermissionChange;

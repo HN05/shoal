@@ -53,8 +53,8 @@ mod repo_setup;
 mod repositories;
 mod resources;
 mod restart;
-mod restore;
-pub(crate) mod resume;
+pub(crate) mod restore;
+
 mod review;
 mod secrets;
 mod service;
