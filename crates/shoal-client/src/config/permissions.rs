@@ -53,29 +53,130 @@ states!(
     }
 );
 
-/// What a scoped agent may do at once, after approval, or not at all, as
-/// one layer writes it; resolving the config fills what no layer sets.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Options)]
-#[serde(default, deny_unknown_fields)]
-#[options(resolved = Self)]
-pub struct PermissionsConfig {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub issue_open: Option<Opening>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pr_open: Option<Opening>,
+/// Every permission key, once: its field, its [`PermissionKey`] variant, the
+/// name config gives it and its type of value. It defines
+/// [`PermissionsConfig`], [`PermissionKey`] and [`Permissions`] and what
+/// reads or narrows them key by key.
+macro_rules! permission_keys {
+    ($($(#[$doc:meta])* $field:ident: $key:ident => $name:literal, $value:ty;)+) => {
+        /// What a scoped agent may do at once, after approval, or not at all, as
+        /// one layer writes it; resolving the config fills what no layer sets.
+        #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Options)]
+        #[serde(default, deny_unknown_fields)]
+        #[options(resolved = Self)]
+        pub struct PermissionsConfig {
+            $(
+                $(#[$doc])*
+                #[serde(skip_serializing_if = "Option::is_none")]
+                pub $field: Option<$value>,
+            )+
+        }
+
+        states!(
+            /// A permission, by the key config names it with.
+            PermissionKey: Variants {
+                $($key => $name,)+
+            }
+        );
+
+        /// A space's effective permissions.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+        pub struct Permissions {
+            $(pub $field: Permission<$value>,)+
+        }
+
+        impl PermissionsConfig {
+            /// The value this narrowing sets for `key`, as config names it.
+            pub fn get(&self, key: PermissionKey) -> Option<&'static str> {
+                match key {
+                    $(PermissionKey::$key => self.$field.map(<$value>::as_str),)+
+                }
+            }
+
+            /// Refuse a key these permissions set wider than the giver's own
+            /// permission for it, `held`, since a scoped caller gives only what it
+            /// holds itself.
+            pub fn ensure_held(&self, held: &Permissions) -> Result<()> {
+                $(within(PermissionKey::$key, self.$field, held.$field)?;)+
+                Ok(())
+            }
+
+            /// These permissions without the value they set for `key`.
+            fn without(mut self, key: PermissionKey) -> Self {
+                match key {
+                    $(PermissionKey::$key => self.$field = None,)+
+                }
+                self
+            }
+        }
+
+        impl Permissions {
+            /// These permissions with each key `given` sets, as given.
+            pub fn given(self, given: &PermissionsConfig) -> Self {
+                Self {
+                    $($field: self.$field.given(given.$field),)+
+                }
+            }
+
+            /// These permissions of a space below one with `parent`, none wider
+            /// than the parent's.
+            pub fn below(self, parent: &Self) -> Self {
+                Self {
+                    $($field: self.$field.below(parent.$field),)+
+                }
+            }
+
+            /// The value of each key.
+            pub fn values(&self) -> PermissionsConfig {
+                PermissionsConfig {
+                    $($field: Some(self.$field.value),)+
+                }
+            }
+
+            /// The value of `key`, as config names it, and where it comes from.
+            pub fn get(&self, key: PermissionKey) -> (&'static str, PermissionSource) {
+                match key {
+                    $(PermissionKey::$key => (self.$field.value.as_str(), self.$field.from),)+
+                }
+            }
+
+            /// The permissions `layered` gives, as a mode's.
+            pub fn of_mode(layered: PermissionsConfig) -> Self {
+                Self {
+                    $($field: Permission::of_mode(layered.$field),)+
+                }
+            }
+        }
+    };
+}
+
+permission_keys! {
+    issue_open: IssueOpen => "issue_open", Opening;
+    pr_open: PrOpen => "pr_open", Opening;
     /// Opening an issue in another repository than the space's.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub issue_other_repositories: Option<OtherRepositories>,
+    issue_other_repositories: IssueOtherRepositories => "issue_other_repositories", OtherRepositories;
     /// Merging a branch with `shoal merge`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub merge: Option<Opening>,
+    merge: Merge => "merge", Opening;
     /// Pushing to the workspace repository's remotes, with `shoal pr open`
     /// or plain `git push`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub push: Option<Pushes>,
+    push: Push => "push", Pushes;
     /// Forge API requests through `shoal forge api` that are not reads.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub api_writes: Option<ApiWrites>,
+    api_writes: ApiWrites => "api_writes", ApiWrites;
+}
+
+/// Refuse `value` of `key` where it is wider than `held`.
+fn within<T: Ord + Copy + std::fmt::Display>(
+    key: PermissionKey,
+    value: Option<T>,
+    held: Permission<T>,
+) -> Result<()> {
+    match value {
+        Some(value) if value > held.value => bail!(
+            "--permission {key}={value} gives more than the giver holds: {}; a space gives only what it holds",
+            held.cited(key.as_str())
+        ),
+        _ => Ok(()),
+    }
 }
 
 impl PermissionsConfig {
@@ -117,20 +218,6 @@ impl PermissionsConfig {
         *self == Self::default()
     }
 
-    /// The value this narrowing sets for `key`, as config names it.
-    pub fn get(&self, key: PermissionKey) -> Option<&'static str> {
-        match key {
-            PermissionKey::IssueOpen => self.issue_open.map(Opening::as_str),
-            PermissionKey::PrOpen => self.pr_open.map(Opening::as_str),
-            PermissionKey::IssueOtherRepositories => {
-                (self.issue_other_repositories).map(OtherRepositories::as_str)
-            }
-            PermissionKey::Merge => self.merge.map(Opening::as_str),
-            PermissionKey::Push => self.push.map(Pushes::as_str),
-            PermissionKey::ApiWrites => self.api_writes.map(ApiWrites::as_str),
-        }
-    }
-
     /// The `--permission KEY=VALUE` assignments that give this narrowing.
     pub fn assignments(&self) -> Vec<String> {
         (PermissionKey::ALL.iter())
@@ -150,53 +237,11 @@ impl PermissionsConfig {
             .collect()
     }
 
-    /// Refuse a key these permissions set wider than the giver's own
-    /// permission for it, `held`, since a scoped caller gives only what it
-    /// holds itself.
-    pub fn ensure_held(&self, held: &Permissions) -> Result<()> {
-        fn within<T: Ord + Copy + std::fmt::Display>(
-            key: PermissionKey,
-            value: Option<T>,
-            held: Permission<T>,
-        ) -> Result<()> {
-            match value {
-                Some(value) if value > held.value => bail!(
-                    "--permission {key}={value} gives more than the giver holds: {}; a space gives only what it holds",
-                    held.cited(key.as_str())
-                ),
-                _ => Ok(()),
-            }
-        }
-        within(PermissionKey::IssueOpen, self.issue_open, held.issue_open)?;
-        within(PermissionKey::PrOpen, self.pr_open, held.pr_open)?;
-        within(
-            PermissionKey::IssueOtherRepositories,
-            self.issue_other_repositories,
-            held.issue_other_repositories,
-        )?;
-        within(PermissionKey::Merge, self.merge, held.merge)?;
-        within(PermissionKey::Push, self.push, held.push)?;
-        within(PermissionKey::ApiWrites, self.api_writes, held.api_writes)
-    }
-
     /// These permissions with only the values they set for `keys`.
     fn only(self, keys: &[PermissionKey]) -> Self {
         (PermissionKey::ALL.iter())
             .filter(|key| !keys.contains(key))
             .fold(self, |only, &key| only.without(key))
-    }
-
-    /// These permissions without the value they set for `key`.
-    fn without(mut self, key: PermissionKey) -> Self {
-        match key {
-            PermissionKey::IssueOpen => self.issue_open = None,
-            PermissionKey::PrOpen => self.pr_open = None,
-            PermissionKey::IssueOtherRepositories => self.issue_other_repositories = None,
-            PermissionKey::Merge => self.merge = None,
-            PermissionKey::Push => self.push = None,
-            PermissionKey::ApiWrites => self.api_writes = None,
-        }
-        self
     }
 }
 
@@ -301,18 +346,6 @@ impl PermissionChange {
 pub const MODE_VALUE: &str = "mode";
 
 states!(
-    /// A permission, by the key config names it with.
-    PermissionKey: Variants {
-        IssueOpen => "issue_open",
-        PrOpen => "pr_open",
-        IssueOtherRepositories => "issue_other_repositories",
-        Merge => "merge",
-        Push => "push",
-        ApiWrites => "api_writes",
-    }
-);
-
-states!(
     /// Where a space's permission comes from.
     PermissionSource {
         /// Its agent's mode, with `[permissions]` and the key's default.
@@ -382,77 +415,7 @@ fn cite(key: &str, value: &dyn std::fmt::Display, from: PermissionSource) -> Str
     format!("the space's {key} permission is \"{value}\", from {from}")
 }
 
-/// A space's effective permissions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Permissions {
-    pub issue_open: Permission<Opening>,
-    pub pr_open: Permission<Opening>,
-    pub issue_other_repositories: Permission<OtherRepositories>,
-    pub merge: Permission<Opening>,
-    pub push: Permission<Pushes>,
-    pub api_writes: Permission<ApiWrites>,
-}
-
 impl Permissions {
-    /// These permissions with each key `given` sets, as given.
-    pub fn given(self, given: &PermissionsConfig) -> Self {
-        Self {
-            issue_open: self.issue_open.given(given.issue_open),
-            pr_open: self.pr_open.given(given.pr_open),
-            issue_other_repositories: (self.issue_other_repositories)
-                .given(given.issue_other_repositories),
-            merge: self.merge.given(given.merge),
-            push: self.push.given(given.push),
-            api_writes: self.api_writes.given(given.api_writes),
-        }
-    }
-
-    /// These permissions of a space below one with `parent`, none wider
-    /// than the parent's.
-    pub fn below(self, parent: &Self) -> Self {
-        Self {
-            issue_open: self.issue_open.below(parent.issue_open),
-            pr_open: self.pr_open.below(parent.pr_open),
-            issue_other_repositories: (self.issue_other_repositories)
-                .below(parent.issue_other_repositories),
-            merge: self.merge.below(parent.merge),
-            push: self.push.below(parent.push),
-            api_writes: self.api_writes.below(parent.api_writes),
-        }
-    }
-
-    /// The value of each key.
-    pub fn values(&self) -> PermissionsConfig {
-        PermissionsConfig {
-            issue_open: Some(self.issue_open.value),
-            pr_open: Some(self.pr_open.value),
-            issue_other_repositories: Some(self.issue_other_repositories.value),
-            merge: Some(self.merge.value),
-            push: Some(self.push.value),
-            api_writes: Some(self.api_writes.value),
-        }
-    }
-
-    /// The value of `key`, as config names it, and where it comes from.
-    pub fn get(&self, key: PermissionKey) -> (&'static str, PermissionSource) {
-        fn of<T: Copy>(
-            permission: Permission<T>,
-            name: fn(T) -> &'static str,
-        ) -> (&'static str, PermissionSource) {
-            (name(permission.value), permission.from)
-        }
-        match key {
-            PermissionKey::IssueOpen => of(self.issue_open, Opening::as_str),
-            PermissionKey::PrOpen => of(self.pr_open, Opening::as_str),
-            PermissionKey::IssueOtherRepositories => {
-                of(self.issue_other_repositories, OtherRepositories::as_str)
-            }
-            PermissionKey::Merge => of(self.merge, Opening::as_str),
-            PermissionKey::Push => of(self.push, Pushes::as_str),
-            PermissionKey::ApiWrites => of(self.api_writes, ApiWrites::as_str),
-        }
-    }
-
     /// Each key with its value and where it comes from, in config order.
     pub fn entries(&self) -> impl Iterator<Item = (PermissionKey, &'static str, PermissionSource)> {
         (PermissionKey::ALL.iter()).map(|&key| {
@@ -468,18 +431,6 @@ impl Permissions {
             let (value, from) = self.get(key);
             (value != Opening::Direct.as_str()).then(|| cite(key.as_str(), &value, from))
         })
-    }
-
-    /// The permissions `layered` gives, as a mode's.
-    pub fn of_mode(layered: PermissionsConfig) -> Self {
-        Self {
-            issue_open: Permission::of_mode(layered.issue_open),
-            pr_open: Permission::of_mode(layered.pr_open),
-            issue_other_repositories: Permission::of_mode(layered.issue_other_repositories),
-            merge: Permission::of_mode(layered.merge),
-            push: Permission::of_mode(layered.push),
-            api_writes: Permission::of_mode(layered.api_writes),
-        }
     }
 }
 
