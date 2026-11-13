@@ -15,13 +15,20 @@ use super::{install_test_script, isolated_test, manager, repository};
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{Server, connections, serve, store, workspace::Manager};
 
-/// A hang guard, not a deadline for process scans on a shared CI host. Its
-/// panic names the caller, so a hang shows which exchange never finished.
+/// How long an exchange may take before the tests take it for hung. A host
+/// whose disk stalls, as under memory pressure, can hold one of the Git
+/// writes a stopped agent's checkpoint makes for minutes; this outlasts that
+/// and the daemon's own deadlines for an exchange, so a slow one ends on its
+/// own terms, and stays below the time nextest stops a test after in CI.
+const HANG_GUARD: Duration = Duration::from_secs(300);
+
+/// A hang guard, not a deadline for process scans or Git on a loaded host.
+/// Its panic names the caller, so a hang shows which exchange never finished.
 #[track_caller]
 pub(crate) fn bounded<T>(future: impl Future<Output = T>) -> impl Future<Output = T> {
     let caller = std::panic::Location::caller();
     async move {
-        timeout(Duration::from_secs(60), future)
+        timeout(HANG_GUARD, future)
             .await
             .unwrap_or_else(|_| panic!("overload exchange at {caller} timed out"))
     }
