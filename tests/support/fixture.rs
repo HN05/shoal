@@ -120,7 +120,8 @@ impl Base {
     /// Start the chat `name` with `shoal start --mode chat --here` in the
     /// registered checkout, on a terminal of its own, with `args` such as
     /// `--parent`, its agent a fake `claude` that runs until its wrapper
-    /// stops or leaves it, and return the `shoal start` process and the
+    /// stops or leaves it, in a session of a fake `zmx` unless the test
+    /// installed its own, and return the `shoal start` process and the
     /// chat's ID once the daemon tracks its agent.
     pub fn run_chat(&self, name: &str, args: &[&str]) -> (std::process::Child, String) {
         self.run_chat_with(name, args, |_| {})
@@ -136,6 +137,12 @@ impl Base {
     ) -> (std::process::Child, String) {
         // Agents already running keep the script they started with.
         support::install_test_script(self.root.path().join("bin/claude"), CHAT_AGENT);
+        // A launch from a terminal runs in a session of the default host,
+        // zmx, which the runner need not have; a test's own zmx stays.
+        let zmx = self.root.path().join("bin/zmx");
+        if !zmx.exists() {
+            support::install_test_script(zmx, support::zmx::terminal_zmx());
+        }
         // Its own session, whose controlling terminal it hands its agent.
         let mut command = support::cli(self.root.path());
         // SAFETY: setsid and the ioctl only change this child's session.
