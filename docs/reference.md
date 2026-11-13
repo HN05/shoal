@@ -963,7 +963,7 @@ no setup runs. The checkout's files are read-only whatever the reviewer's
 settings allow, and Shoal adds no trust entry for it; it is removed when the
 review ends. A checkout that cannot be removed stays until `shoal daemon restart`,
 and the repository cannot be moved until then; one whose reviewer's processes
-cannot be proven stopped also keeps counting toward the memory agents start in. The daemon reads the workspace's configuration only once its
+cannot be proven stopped also keeps counting toward the memory and disk that starts need. The daemon reads the workspace's configuration only once its
 worktree verifies as the workspace's. A queued review takes the
 workspace's HEAD when it starts. A workspace has at most one queued or running
 review: running the command again returns the queued one, and is refused while one

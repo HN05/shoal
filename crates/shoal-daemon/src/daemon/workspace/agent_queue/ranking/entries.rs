@@ -1,5 +1,5 @@
 //! The waiting entries as ranking sees them: the queue's waiting rows and
-//! the one-shot runs waiting for a slot, in the order they arrived.
+//! the one-shot runs waiting for admission, in the order they arrived.
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};

@@ -63,7 +63,7 @@ impl Manager {
 }
 
 /// What ranking reads now, with the spaces each waiting job serves now by
-/// its entry's ID in `jobs`, the `oneshots` waiting for a slot, the spaces
+/// its entry's ID in `jobs`, the `oneshots` waiting for admission, the spaces
 /// waiting for the `leases` they queue for and the machine's `schedule`.
 fn snapshot(
     tx: &Transaction<'_>,
