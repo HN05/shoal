@@ -61,7 +61,7 @@ impl Runs for Forgejo {
             url: format!("{}/actions/runs/{number}", repo.repository_url()),
             branch: text(&value["prettyref"]),
             workflow: text(&value["workflow_id"]),
-            commit: text(&value["commit_sha"]).map(CommitId::from),
+            commit: commit_of(value).map(CommitId::from),
             pull: pull_of(value),
             state: actions::state(&value["status"])?,
             succeeded: value["status"] == "success",
@@ -142,12 +142,25 @@ impl Runs for Forgejo {
 
 /// The PR a run ran for, which only a PR event's payload names.
 pub(super) fn pull_of(run: &Value) -> Option<PullNumber> {
-    if !run["event"].as_str()?.starts_with("pull_request") {
-        return None;
-    }
-    let payload: Value = serde_json::from_str(run["event_payload"].as_str()?).ok()?;
+    let payload = pull_payload(run)?;
     payload["pull_request"]["number"]
         .as_u64()
         .or_else(|| payload["number"].as_u64())
         .map(PullNumber::new)
+}
+
+/// The commit a run ran on. A PR run's is the head its payload names,
+/// where Forgejo posts its statuses: its `commit_sha` can name an earlier
+/// head when the PR's branch is force-pushed.
+pub(super) fn commit_of(run: &Value) -> Option<String> {
+    let head = pull_payload(run).and_then(|payload| text(&payload["pull_request"]["head"]["sha"]));
+    head.or_else(|| text(&run["commit_sha"]))
+}
+
+/// The event payload of a run a PR event started.
+fn pull_payload(run: &Value) -> Option<Value> {
+    if !run["event"].as_str()?.starts_with("pull_request") {
+        return None;
+    }
+    serde_json::from_str(run["event_payload"].as_str()?).ok()
 }

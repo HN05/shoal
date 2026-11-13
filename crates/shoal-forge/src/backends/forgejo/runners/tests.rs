@@ -49,9 +49,10 @@ fn job() -> WaitingJob {
 
 #[test]
 fn a_run_names_the_pr_or_branch_whose_ref_serves_its_commit() {
+    // A force push can leave commit_sha on the PR's earlier head.
     let pull = run(
         "pull_request",
-        json!({"number": 12, "pull_request": {"number": 12}}),
+        json!({"number": 12, "pull_request": {"number": 12, "head": {"sha": "def456"}}}),
     );
     let read = job_run(&repo(), &pull).unwrap();
     assert_eq!(
@@ -59,7 +60,7 @@ fn a_run_names_the_pr_or_branch_whose_ref_serves_its_commit() {
         "https://forge.example/team/repo/actions/runs/15252"
     );
     assert_eq!(read.workflow.as_deref(), Some("ci.yml"));
-    assert_eq!(read.commit, "abc123");
+    assert_eq!(read.commit, "def456");
     assert_eq!(
         read.trigger,
         Trigger::Pull {
@@ -71,6 +72,7 @@ fn a_run_names_the_pr_or_branch_whose_ref_serves_its_commit() {
     let push = job_run(&repo(), &run("push", json!({"ref": "refs/heads/main"}))).unwrap();
     assert_eq!(push.trigger, Trigger::Branch("main".into()));
     assert_eq!(push.reference.as_deref(), Some("refs/heads/main"));
+    assert_eq!(push.commit, "abc123");
     let dispatch = run("workflow_dispatch", json!({"ref": "refs/heads/topic"}));
     let dispatch = job_run(&repo(), &dispatch).unwrap();
     assert_eq!(dispatch.trigger, Trigger::Branch("topic".into()));

@@ -321,7 +321,7 @@ pub(crate) async fn job_log(repo: &ForgeRepo, account: &Account, endpoint: &str)
 fn run_id(runs: &Value, number: RunNumber, head: Option<&str>) -> Result<RunId> {
     let run = numbered_run(runs, number)?;
     ensure!(
-        head.is_none_or(|head| run["commit_sha"] == head),
+        head.is_none_or(|head| super::runs::commit_of(run).as_deref() == Some(head)),
         "the check's run {number} ran on an older commit than the PR's head, which only a \
          new run on the head checks; push a commit to start one"
     );

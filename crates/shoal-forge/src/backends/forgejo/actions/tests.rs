@@ -43,6 +43,17 @@ fn web_job_locations_are_repository_bound_and_use_indices() {
         run_id(&runs, RunNumber::new(2765), None).unwrap(),
         RunId::new(9331)
     );
+    // A force push can leave a PR run's commit_sha on the earlier head.
+    let payload = json!({"pull_request": {"number": 8, "head": {"sha": "head"}}});
+    let runs = json!({"workflow_runs": [{
+        "id": 9331, "index_in_repo": 2765, "commit_sha": "earlier",
+        "event": "pull_request", "event_payload": payload.to_string(),
+    }]});
+    assert_eq!(
+        run_id(&runs, RunNumber::new(2765), Some("head")).unwrap(),
+        RunId::new(9331)
+    );
+    assert!(run_id(&runs, RunNumber::new(2765), Some("earlier")).is_err());
     let jobs = json!([{"id": 18344, "run_id": 9331, "status": "success"}, {"id": 18345, "run_id": 9331, "status": "failure", "task_id": 9850}]);
     assert_eq!(
         job_id(&jobs, 1, RunId::new(9331)).unwrap(),
