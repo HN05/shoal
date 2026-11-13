@@ -104,7 +104,9 @@ impl Manager {
                     continue;
                 }
                 let path = recovery::record_path(&self.paths, workspace, &execution);
-                if let Some(record) = Record::load(&path)? {
+                // An unreadable record counts as heavy, as before weights,
+                // rather than failing every admission pass.
+                if let Some(record) = Record::load(&path).ok().flatten() {
                     stopped.push((execution, repository.clone(), Some(record.mode)));
                 }
             }

@@ -70,22 +70,22 @@ async fn a_stopped_light_agent_waiting_for_its_restore_holds_no_slot() {
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config("[modes.triage]\nweight = 'light'\n"));
     let workspace = create(&manager, &repo, "stopped").await;
-    // Stopped agents keep only their saved records, each with its mode.
-    for (execution, mode) in [("heavy", "worker"), ("light", "triage")] {
+    // Stopped agents keep only their saved records, each with its mode; one
+    // that does not read counts as heavy.
+    let saved = |mode| serde_json::json!({"agent": "claude", "mode": mode}).to_string();
+    for (execution, record) in [
+        ("heavy", saved("worker")),
+        ("light", saved("triage")),
+        ("unreadable", "{".into()),
+    ] {
         let execution = ExecutionId::from(execution);
-        let record = record_path(&manager.paths, &workspace.id, &execution);
-        std::fs::create_dir_all(record.parent().unwrap()).unwrap();
-        let saved = serde_json::json!({"agent": "claude", "mode": mode});
-        std::fs::write(&record, saved.to_string()).unwrap();
+        let path = record_path(&manager.paths, &workspace.id, &execution);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, record).unwrap();
     }
-    assert_eq!(
-        manager
-            .occupied_slots(&HashSet::new(), &manager.light().await.unwrap())
-            .await
-            .unwrap()
-            .len(),
-        1
-    );
     let light = manager.light().await.unwrap();
-    assert!(light.execution(&"light".into()) && !light.execution(&"heavy".into()));
+    let heavy = ["heavy", "unreadable"].map(|id| !light.execution(&id.into()));
+    assert!(light.execution(&"light".into()) && heavy == [true, true]);
+    let slots = manager.occupied_slots(&HashSet::new(), &light).await;
+    assert_eq!(slots.unwrap().len(), 2);
 }
