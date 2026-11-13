@@ -183,13 +183,12 @@ impl Manager {
 }
 
 /// Whether the space `id` watches an open PR or has a request waiting for
-/// a decision, its own or, for a chat, one it decides.
+/// a decision, its own or one it decides.
 fn watches_or_asks(db: &Connection, id: &SpaceId) -> Result<bool> {
     if watches_open_pr(db, id)? {
         return Ok(true);
     }
-    let chat = crate::daemon::links::space::is_chat(db, id)?;
-    Ok(crate::daemon::approvals::pending_count(db, id, chat)? > 0)
+    Ok(crate::daemon::approvals::pending_count(db, id)? > 0)
 }
 
 #[cfg(test)]
