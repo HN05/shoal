@@ -55,6 +55,13 @@ that uses it, or `{ cmd = [...] }`, an argument array run without input whose
 output is the value. Paths that start with `~/` name a path under the home
 directory.
 
+Any option's value may instead be `{ same_as = "<key>" }`, naming another key
+of the same table, such as `end = { same_as = "start" }` under `[ports]`. The
+option takes that key's value after every layer, unless a higher layer sets the
+option itself. Both keys take the same type, and the other key must have a
+value; a cycle, a key without a value or a value of another type is an error
+naming both keys. A key in another table cannot be named.
+
 ## Machine
 
 ```toml

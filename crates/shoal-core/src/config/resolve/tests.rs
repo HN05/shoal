@@ -46,7 +46,7 @@ fn stack(global: &str, worktree: &str, saved: &str) -> Stack {
         local_config: parse(saved).unwrap(),
         ..Default::default()
     };
-    Stack::new(&global, &layers)
+    Stack::new(&global, &layers).unwrap()
 }
 
 #[test]
@@ -249,6 +249,7 @@ fn a_template_reports_the_file_of_the_layer_it_came_from() {
     global.template_files = file("/global/rules/worker.md");
     let report = |layers: &ConfigLayers| {
         Stack::new(&global, layers)
+            .unwrap()
             .report()
             .unwrap()
             .into_iter()

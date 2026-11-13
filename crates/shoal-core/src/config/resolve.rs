@@ -13,6 +13,7 @@ use crate::config::{
     modes,
     options::{self, Entry, Merge, Options},
     repo::{ConfigLayer as Layer, ConfigLayers, RepoConfig, Settings},
+    same_as,
 };
 
 /// Settings after every layer, with each AI tool resolved from them and
@@ -60,7 +61,7 @@ pub struct Stack {
 }
 
 impl Stack {
-    pub fn new(global: &Config, repository: &ConfigLayers) -> Self {
+    pub fn new(global: &Config, repository: &ConfigLayers) -> Result<Self> {
         Self::over(
             global.repository_layer(),
             global.template_files.clone(),
@@ -69,24 +70,34 @@ impl Stack {
     }
 
     /// The stack of `global`, the global config's repository layer with its
-    /// templates read from `global_files`, under `repository`'s layers.
-    pub fn over(global: RepoConfig, global_files: modes::Files, repository: &ConfigLayers) -> Self {
-        let mut warnings = Vec::new();
-        let mut normalize = |config: RepoConfig, layer: Layer| {
-            warnings.extend(
-                config
-                    .normalize()
-                    .into_iter()
-                    .map(|warning| format!("{layer}: {warning}")),
-            );
-            (config, layer)
-        };
-        let layers = [
-            normalize(RepoConfig::built_in(), Layer::BuiltInDefault),
-            normalize(global, Layer::GlobalConfig),
-            normalize(repository.worktree_file.clone(), Layer::WorktreeFile),
-            normalize(repository.local_config.clone(), Layer::LocalConfig),
+    /// templates read from `global_files`, under `repository`'s layers, with
+    /// each key a `same_as` reference names holding its target's value;
+    /// fails for a reference that cannot be followed.
+    pub fn over(
+        global: RepoConfig,
+        global_files: modes::Files,
+        repository: &ConfigLayers,
+    ) -> Result<Self> {
+        let mut configs = [
+            RepoConfig::built_in(),
+            global,
+            repository.worktree_file.clone(),
+            repository.local_config.clone(),
         ];
+        follow_references(&mut configs)?;
+        let [built_in, global, worktree_file, local_config] = configs;
+        let layers = [
+            (built_in, Layer::BuiltInDefault),
+            (global, Layer::GlobalConfig),
+            (worktree_file, Layer::WorktreeFile),
+            (local_config, Layer::LocalConfig),
+        ];
+        let warnings = layers
+            .iter()
+            .flat_map(|(config, layer)| {
+                (config.normalize().into_iter()).map(move |warning| format!("{layer}: {warning}"))
+            })
+            .collect();
         let template_files = [
             (global_files, Layer::GlobalConfig),
             (
@@ -95,24 +106,23 @@ impl Stack {
             ),
             (repository.local_template_files.clone(), Layer::LocalConfig),
         ];
-        Self {
+        Ok(Self {
             layers,
             template_files,
             warnings,
-        }
+        })
     }
 
     /// The settings in effect; fails when the layers combine into an invalid
     /// setting, such as a repository `ports.start` above the global `ports.end`.
     pub fn resolve(self) -> Result<Settings> {
-        let [(mut base, _), (global, _), (mut repository, _), (saved, _)] = self.layers;
-        repository.merge(saved, Merge::SameLevel);
+        let configs = self.layers.map(|(config, _)| config);
+        let (mut base, repository) = levels(&configs);
         // Each layer is valid alone; the repository's layered names must agree
         // too. A repository name that shadows a global one is allocation's
         // concern, so a conflict there never blocks the workspace's settings.
         crate::resources::definitions(&repository.resources, &repository.resource_pools)
             .context("layered repository config")?;
-        base.merge(global, Merge::SameLevel);
         base.merge(repository, Merge::RepositoryOverGlobal);
         let settings = base.resolve("")?;
         settings.ports.validate()?;
@@ -164,6 +174,41 @@ impl Stack {
             .map(|(config, layer)| (config, *layer))
             .collect()
     }
+}
+
+/// Give each key a `same_as` reference of `layers`, the built-in default,
+/// global config, worktree file and local config, names its target's final
+/// value.
+fn follow_references(layers: &mut [RepoConfig]) -> Result<()> {
+    same_as::follow(
+        layers,
+        |config| &config.same_as,
+        |layers| Ok(serde_json::to_value(merged(layers))?),
+        "",
+    )
+}
+
+/// `layers`, the built-in default, global config, worktree file and local
+/// config, combined as written.
+fn merged(layers: &[RepoConfig]) -> RepoConfig {
+    let (mut base, repository) = levels(layers);
+    base.merge(repository, Merge::RepositoryOverGlobal);
+    base
+}
+
+/// The global level of `layers`, the built-in default and global config
+/// merged, and the repository level, the worktree file and local config.
+fn levels(layers: &[RepoConfig]) -> (RepoConfig, RepoConfig) {
+    let level = |layers: &[RepoConfig]| {
+        let mut layers = layers.iter().cloned();
+        let mut merged = layers.next().unwrap_or_default();
+        for layer in layers {
+            merged.merge(layer, Merge::SameLevel);
+        }
+        merged
+    };
+    let (global, repository) = layers.split_at(2);
+    (level(global), level(repository))
 }
 
 #[cfg(any(test, feature = "test-support"))]

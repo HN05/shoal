@@ -34,7 +34,7 @@ use crate::{
 pub(super) async fn list(ctx: &Context, workspace: Option<SpaceSelector>) -> Result<i32> {
     let global = Config::load(&ctx.paths)?;
     let layers = listing_layers(ctx, workspace).await?;
-    let definitions = Stack::new(&global, &layers).named(|config| &config.commands);
+    let definitions = Stack::new(&global, &layers)?.named(|config| &config.commands);
     let definitions: Vec<_> = definitions
         .into_iter()
         .map(|(name, (argv, layer))| CommandDefinition { name, argv, layer })

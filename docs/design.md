@@ -60,7 +60,9 @@ the `shoal-client` library, which holds the requests and responses with the
 types they carry, the connection the CLI makes, and the client-side logic the
 CLI shares with apps. Config files are parsed and resolved in `shoal-core`: the
 protocol carries a target's repository layers as JSON the caller reads, and
-the daemon resolves what a launch needs. The CLI and the daemon are the `shoal-cli` and
+the daemon resolves what a launch needs. A layer's `same_as` references travel
+in it, taken out of its file before its options are read and followed once
+every layer is merged, so an option takes another's final value. The CLI and the daemon are the `shoal-cli` and
 `shoal-daemon` crates, which depend on it and on `shoal-core`, the code they
 share, but not on each other; the binary-only `shoal` package joins them.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, and changing

@@ -184,7 +184,7 @@ async fn target(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<Config
 /// global file read now.
 async fn report(paths: &CommandPaths, target: ConfigTarget) -> Result<(Vec<Entry>, Vec<String>)> {
     let layers = crate::client::workspaces::config_layers(paths, target).await?;
-    let stack = Stack::new(&Config::load_with_templates(paths)?, &layers);
+    let stack = Stack::new(&Config::load_with_templates(paths)?, &layers)?;
     let mut warnings = stack.warnings().to_vec();
     warnings.extend(
         (layers.rejected_worktree_file.iter())

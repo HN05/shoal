@@ -101,6 +101,13 @@ pub struct RepoConfig {
     pub permissions: crate::config::permissions::PermissionsConfig,
     #[option(section)]
     pub runner: RunnerConfig,
+    /// The options of this layer that take another's value.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::config::same_as::References::is_empty"
+    )]
+    #[option(references)]
+    pub same_as: crate::config::same_as::References,
 }
 
 states!(

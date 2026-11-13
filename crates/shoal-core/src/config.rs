@@ -16,6 +16,7 @@ pub mod presets;
 pub mod proxies;
 pub mod repo;
 pub mod resolve;
+pub mod same_as;
 pub mod templates;
 #[cfg(test)]
 mod tests;
@@ -236,7 +237,7 @@ impl Config {
     /// Every AI tool as this machine's config describes it, without a
     /// repository's layers.
     pub fn tools(&self) -> Result<crate::ai::Tools> {
-        let settings = resolve::Stack::new(self, &ConfigLayers::default()).resolve()?;
+        let settings = resolve::Stack::new(self, &ConfigLayers::default())?.resolve()?;
         Ok(crate::ai::tools(&agents::describe(
             &settings.agents,
             &self.machine.agents,
@@ -330,7 +331,7 @@ impl Config {
         files: modes::Files,
         layers: &ConfigLayers,
     ) -> Result<Effective> {
-        let settings = resolve::Stack::over(global, files, layers).resolve()?;
+        let settings = resolve::Stack::over(global, files, layers)?.resolve()?;
         let agents = agents::describe(&settings.agents, &self.machine.agents);
         crate::ai::validate(&agents)?;
         let tools = crate::ai::tools(&agents);

@@ -643,7 +643,8 @@ fn repository_candidates(
 /// repository's own agents count as agents too.
 fn layered_settings(global: &Config, layers: &ConfigLayers) -> Settings {
     let commands: Commands = Stack::new(global, layers)
-        .named(|config| &config.commands)
+        .map(|stack| stack.named(|config| &config.commands))
+        .unwrap_or_default()
         .into_iter()
         .map(|(name, (argv, _))| (name, argv))
         .collect();

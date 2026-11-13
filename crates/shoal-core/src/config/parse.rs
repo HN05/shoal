@@ -8,9 +8,13 @@ use toml::{
     de::{DeTable, DeValue, Deserializer, Error, ValueDeserializer},
 };
 
-use super::{machine::Machine, repo::RepoConfig};
+use super::{machine::Machine, repo::RepoConfig, same_as::References};
 
 const MACHINE: &str = "machine";
+
+/// The key a file's root may not set, since its layer keeps the file's
+/// references there.
+const SAME_AS: &str = "same_as";
 
 /// Settings Shoal no longer reads, each refused with what replaces it; `*`
 /// stands for any key.
@@ -64,31 +68,50 @@ pub fn global(text: &str) -> Result<(Machine, RepoConfig), Error> {
         error
     };
     let mut root = DeTable::parse(text)?;
-    refuse_removed(&root).map_err(positioned)?;
+    refuse_removed(&root)
+        .and_then(|()| refuse_root_same_as(&root))
+        .map_err(positioned)?;
     let machine = match root.get_mut().remove(MACHINE) {
         Some(value) => {
             serde::Deserialize::deserialize(ValueDeserializer::from(value)).map_err(positioned)?
         }
         None => Machine::default(),
     };
-    let repository =
+    let same_as = References::take(root.get_mut());
+    let repository: RepoConfig =
         serde::Deserialize::deserialize(Deserializer::from(root)).map_err(positioned)?;
-    Ok((machine, repository))
+    Ok((
+        machine,
+        RepoConfig {
+            same_as,
+            ..repository
+        },
+    ))
 }
 
 pub fn repository(text: &str) -> Result<RepoConfig, Error> {
-    let root = DeTable::parse(text)?;
+    let positioned = |mut error: Error| {
+        error.set_input(Some(text));
+        error
+    };
+    let mut root = DeTable::parse(text)?;
     refuse(&root, &[MACHINE], "[machine] belongs in the global config")
         .and_then(|()| refuse_mode_repositories(&root))
         .and_then(|()| refuse_removed(&root))
-        .map_err(|mut error| {
-            error.set_input(Some(text));
-            error
-        })?;
-    serde::Deserialize::deserialize(Deserializer::from(root)).map_err(|mut error: Error| {
-        error.set_input(Some(text));
-        error
+        .and_then(|()| refuse_root_same_as(&root))
+        .map_err(positioned)?;
+    let same_as = References::take(root.get_mut());
+    let repository: RepoConfig =
+        serde::Deserialize::deserialize(Deserializer::from(root)).map_err(positioned)?;
+    Ok(RepoConfig {
+        same_as,
+        ..repository
     })
+}
+
+/// Refuse `same_as` as a key of the root, which names no option.
+fn refuse_root_same_as(root: &Spanned<DeTable<'_>>) -> Result<(), Error> {
+    refuse(root, &[SAME_AS], "same_as is not an option")
 }
 
 /// Refuse a mode's `repository` in a repository config: a mode that starts a

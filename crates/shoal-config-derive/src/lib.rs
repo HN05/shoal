@@ -17,6 +17,8 @@
 //!   merge field by field with the same-named entry below them
 //! - `list`: a list an empty value leaves to the layer below
 //! - `template`: an `Option<String>` a repository value is appended to
+//! - `references`: the layer's `same_as` references, which layering follows
+//!   before it merges; no option, so the resolved struct leaves it out
 //! - `default = expr`: the built-in value; an `Option<T>` resolves to `T`
 //! - `resolve = path` or `resolve = path -> Type`: converts the merged value,
 //!   given with the merged struct it belongs to, into the resolved one
@@ -82,6 +84,13 @@ impl Declaration {
         })
     }
 
+    /// The fields that are options, which the resolved struct declares.
+    fn options(&self) -> impl Iterator<Item = &Field> {
+        self.fields
+            .iter()
+            .filter(|field| field.kind != Kind::References)
+    }
+
     fn resolved_type(&self) -> Tokens {
         match &self.resolved {
             Some(name) => quote!(#name),
@@ -94,7 +103,7 @@ impl Declaration {
         let Some(name) = &self.resolved else {
             return quote!();
         };
-        let fields = self.fields.iter().map(Field::resolved_declaration);
+        let fields = self.options().map(Field::resolved_declaration);
         let visibility = &self.visibility;
         let doc = format!("[`{}`] after every layer.", self.written);
         quote! {
@@ -115,7 +124,7 @@ impl Declaration {
         let merges = fields.iter().map(Field::merge);
         let bindings = fields.iter().map(|field| &field.ident);
         let conversions = fields.iter().filter_map(Field::conversion);
-        let values = fields.iter().map(Field::resolved_value);
+        let values = self.options().map(Field::resolved_value);
         let entries = fields.iter().map(Field::entries);
         quote! {
             #[allow(unused_variables)]
@@ -182,6 +191,7 @@ enum Kind {
     NamedSections,
     List,
     Template,
+    References,
 }
 
 /// The field's TOML key, which provenance reports.
@@ -232,6 +242,7 @@ impl Field {
                     ("named_sections", Kind::NamedSections),
                     ("list", Kind::List),
                     ("template", Kind::Template),
+                    ("references", Kind::References),
                 ]
                 .into_iter()
                 .find(|(name, _)| meta.path.is_ident(name));
@@ -254,7 +265,7 @@ impl Field {
                 } else {
                     return Err(meta.error(
                         "expected section, named, named_sections, list, template, \
-                         default or resolve",
+                         references, default or resolve",
                     ));
                 }
                 Ok(())
@@ -289,8 +300,10 @@ impl Field {
 
     /// Whether the resolved value has another type than the written one.
     fn changes_type(&self) -> bool {
-        matches!(self.kind, Kind::Section | Kind::NamedSections)
-            || self.unwraps_default()
+        matches!(
+            self.kind,
+            Kind::Section | Kind::NamedSections | Kind::References
+        ) || self.unwraps_default()
             || matches!(self.resolve, Some((_, Some(_))))
     }
 
@@ -359,6 +372,7 @@ impl Field {
             Kind::Template => {
                 quote!(crate::config::options::template(&mut self.#ident, #ident, __layering);)
             }
+            Kind::References => quote!(),
         }
     }
 
@@ -419,6 +433,7 @@ impl Field {
             Kind::Template => {
                 quote!(crate::config::options::template_entry(#key, #sources, entries)?;)
             }
+            Kind::References => quote!(),
         }
     }
 }
