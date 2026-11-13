@@ -549,3 +549,19 @@ fn cache_restores_agents_with_a_warm_prompt_cache_first_the_latest_to_expire_fir
         ["warmest", "warm", "finishing", "expired"]
     );
 }
+
+#[test]
+fn a_schedule_passes_over_no_entry_that_waited_as_long_as_rises_a_tier() {
+    let mut snapshot = snapshot();
+    for (id, created) in [("awaited", 1), ("waiting", 2), ("alone", 3)] {
+        space(&mut snapshot, id, Tier::Started, created);
+    }
+    edge(&mut snapshot, "waiting", "awaited", Dependency::Blocked);
+    for id in ["awaited", "alone"] {
+        entry(&mut snapshot, id, restore(id));
+    }
+    snapshot.schedule = Schedule::Speed;
+    assert_eq!(order(&snapshot), ["awaited", "alone"]);
+    snapshot.entries[1].queued_at = at(NOW - RISE_AFTER.as_secs() as i64);
+    assert_eq!(order(&snapshot), ["alone", "awaited"]);
+}

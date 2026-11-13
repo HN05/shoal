@@ -405,6 +405,9 @@ enum Lead {
     None,
     Chain(usize),
     Cache(UnixTime),
+    /// It has waited as long as rises a tier, so no schedule passes it over
+    /// any longer, and nothing starves within its priority.
+    Overdue,
 }
 
 /// The chains of work waiting on each node, which only `speed` reads.
@@ -418,8 +421,10 @@ fn schedule_chains(snapshot: &Snapshot) -> HashMap<Node, usize> {
 /// What `entry` leads with under the snapshot's schedule, from the `chains`
 /// of work waiting on each node.
 fn lead(entry: &Entry, chains: &HashMap<Node, usize>, snapshot: &Snapshot) -> Lead {
+    let overdue = snapshot.now.duration_since(entry.queued_at) >= RISE_AFTER;
     match snapshot.schedule {
         Schedule::Balanced => Lead::None,
+        _ if overdue => Lead::Overdue,
         Schedule::Speed => Lead::Chain(chain_behind(entry, chains)),
         Schedule::Cache => match (&entry.work, entry.prompt_cache_until) {
             (Work::Restore { .. }, Some(until)) if until > snapshot.now => Lead::Cache(until),

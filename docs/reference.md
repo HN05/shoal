@@ -2109,7 +2109,8 @@ Within a priority, [`machine.schedule`](config.md#machine) may put other work
 first: under `speed`, the work with the longest chain of work waiting on it,
 counted through the waits below; under `cache`, restores of agents whose prompt
 cache, as their hooks last reported it, has not expired, the latest to expire
-first. Then, and under the default `balanced`, they start by tier, highest first:
+first. Neither passes over an entry that has waited an hour. Then, and under
+the default `balanced`, they start by tier, highest first:
 `finishing`, the agents of a
 space with an open PR it opened or was assigned or with a ready mark, and CI
 jobs on PRs and on the default branch; `started`, restores of agents that have
