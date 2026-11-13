@@ -137,7 +137,7 @@ impl Manager {
             chat.name
         );
         ensure!(
-            !self.chat_removals.reserved(&chat.id),
+            !self.space_removals.reserved(&chat.id),
             "chat {} is being removed",
             chat.name
         );

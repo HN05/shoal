@@ -36,7 +36,7 @@ pub(super) enum Home {
         /// Its temporary directory, created when missing.
         tmp_dir: Option<PathBuf>,
         /// The removals under way, which its registration must not race.
-        removing: chats::Removing,
+        removing: crate::daemon::spaces::Removing,
     },
 }
 
@@ -82,7 +82,7 @@ impl Manager {
                     chat,
                     path,
                     tmp_dir,
-                    removing: self.chat_removals.clone(),
+                    removing: self.space_removals.clone(),
                 }
             }
         };

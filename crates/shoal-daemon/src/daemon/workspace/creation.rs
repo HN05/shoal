@@ -322,7 +322,7 @@ impl Manager {
             Some(git_dir) => off_runtime::run(move || identity::marked_owner(&git_dir)).await?,
             None => None,
         };
-        let removing = self.chat_removals.clone();
+        let removing = self.space_removals.clone();
         self.store
             .write(move |tx| {
                 let replaced = match &placement {

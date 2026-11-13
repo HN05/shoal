@@ -1,7 +1,8 @@
-//! The chats a removal has reserved: from before it removes the spaces below
-//! a chat until it deletes the chat or gives up, nothing restores the chat
-//! and its agent asks no new question, so a removal that took its
-//! workspaces is not left with a chat something keeps.
+//! The spaces a removal has reserved: from before it removes the spaces
+//! below a space until it deletes the space or gives up, nothing restores its
+//! agent, opens a space below it or records its agent's new question, so a
+//! removal that took the spaces below is not left with a space something
+//! keeps.
 use crate::client::space_ids::SpaceId;
 use std::{
     collections::HashSet,
@@ -10,18 +11,18 @@ use std::{
 
 use anyhow::{Result, ensure};
 
-/// The IDs of the chats being removed, shared with the store's thread, which
-/// reads them in the transaction that records a question.
+/// The IDs of the spaces being removed, shared with the store's thread, which
+/// reads them in the transactions that record what a reserved space refuses.
 #[derive(Clone, Default)]
 pub(crate) struct Removing(Arc<Mutex<HashSet<SpaceId>>>);
 
 impl Removing {
-    /// Reserve the chat `id` for a removal until the returned reservation
+    /// Reserve the space `id` for a removal until the returned reservation
     /// drops, refusing one another removal holds.
     pub(crate) fn reserve(&self, id: &SpaceId) -> Result<Reservation<'_>> {
         ensure!(
             self.lock().insert(id.to_owned()),
-            "another removal holds the space"
+            "the space is already being removed; it will disappear shortly"
         );
         Ok(Reservation {
             removing: self,
@@ -29,7 +30,7 @@ impl Removing {
         })
     }
 
-    /// Whether a removal holds the chat `id`.
+    /// Whether a removal holds the space `id`.
     pub(crate) fn reserved(&self, id: &SpaceId) -> bool {
         self.lock().contains(id)
     }
@@ -39,7 +40,7 @@ impl Removing {
     }
 }
 
-/// A chat a removal holds, until it drops.
+/// A space a removal holds, until it drops.
 pub(crate) struct Reservation<'a> {
     removing: &'a Removing,
     id: SpaceId,

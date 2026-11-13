@@ -230,7 +230,7 @@ impl Manager {
             children: Vec::new(),
             converted: false,
         };
-        let below = parent.map(|parent| (parent, self.chat_removals.clone()));
+        let below = parent.map(|parent| (parent, self.space_removals.clone()));
         let chat = self
             .store
             .write(move |tx| {
@@ -488,7 +488,7 @@ struct ChatHome<'a> {
 fn insert(
     tx: &rusqlite::Transaction<'_>,
     mut chat: Chat,
-    parent: Option<(SpaceId, Removing)>,
+    parent: Option<(SpaceId, super::spaces::Removing)>,
 ) -> Result<Chat> {
     let workspace = chat.workspace.as_ref().map(|workspace| &workspace.id);
     ensure_place_free(tx, chat.repository_id.as_ref(), workspace)?;
@@ -692,10 +692,7 @@ mod done;
 mod files;
 pub(crate) mod launches;
 mod removal;
-mod removing;
 mod upgraded;
-
-pub(crate) use removing::{Removing, Reservation};
 
 #[cfg(test)]
 mod tests;

@@ -6,7 +6,7 @@ use crate::client::{execution_ids::ExecutionId, space_ids::SpaceId};
 use crate::paths::StateFiles;
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::params;
-use std::collections::HashSet;
+use std::{borrow::Cow, collections::HashSet};
 
 use super::{
     Manager, StopRequest,
@@ -15,9 +15,9 @@ use super::{
     reservation::RemovalRules,
 };
 use crate::{
-    daemon::{chats, events},
+    daemon::{events, spaces},
     fsutil::off_runtime,
-    model::PresentSpace,
+    model::{PresentSpace, Workspace},
     removal::IdleRestore,
     state::{QueueKind, QueueState, WorkspaceState},
     time::UnixTime,
@@ -49,21 +49,24 @@ pub(crate) struct SpaceAgent {
 pub(crate) struct SpaceReservation<'a> {
     /// The space as recorded once reserved.
     pub(crate) space: PresentSpace,
-    held: Held<'a>,
+    _removal: spaces::Reservation<'a>,
+    worktree: Option<WorktreeReservation>,
 }
 
-enum Held<'a> {
-    /// The workspace's lifecycle state, which the reservation replaced, and
-    /// the removal under way, which fails it if the removal ends early.
-    Workspace(WorkspaceState, Underway),
-    Chat(#[allow(dead_code, reason = "held until it drops")] chats::Reservation<'a>),
+/// A worktree a removal holds, through its workspace's lifecycle state,
+/// which startup recovery reads.
+struct WorktreeReservation {
+    /// The lifecycle state the reservation replaced.
+    replaced: WorkspaceState,
+    /// The removal under way, which fails it if the removal ends early.
+    underway: Underway,
 }
 
 impl SpaceReservation<'_> {
     /// Give up the reservation once its removal deleted the space's record.
     pub(crate) fn finish(self) {
-        if let Held::Workspace(_, underway) = &self.held {
-            underway.finish();
+        if let Some(worktree) = &self.worktree {
+            worktree.underway.finish();
         }
     }
 }
@@ -159,62 +162,70 @@ impl Manager {
         self.stop_executions(space.id(), policy, request).await
     }
 
-    /// Reserve the space `id` for `removal`. A manual removal also takes a
-    /// workspace whose setup never started, as when the command creating it
-    /// was interrupted; it waits for that creation to end, then takes the
-    /// repository's Git gate, under which setup starts, and reads the
-    /// workspace again, which creation has since finished recording.
+    /// Reserve the space `id` for `removal`, then its worktree, where it has
+    /// one.
     pub(in crate::daemon::workspace) async fn reserve_space(
         &self,
-        id: &crate::client::space_ids::SpaceId,
+        id: &SpaceId,
         removal: Removal<'_>,
     ) -> Result<SpaceReservation<'_>> {
+        // Reserved first, so no agent of it registers and nothing opens
+        // below it while the removal goes on.
+        let reservation = self.space_removals.reserve(id)?;
         let space = (self.find_space(id).await?).with_context(|| format!("no space {id}"))?;
-        match space {
-            PresentSpace::Workspace(mut workspace) => {
-                let manual = matches!(removal, Removal::Manual { .. });
-                let awaiting_setup = manual && workspace.state == WorkspaceState::Preparing;
-                let _created = if awaiting_setup {
-                    (self.gates)
-                        .wait_for_creation(&workspace.repository_id, &workspace.id)
-                        .await;
-                    let created = self.gates.lock_git(&workspace.repository_id).await;
-                    workspace = self.workspace_by_id(&workspace.id).await?;
-                    Some(created)
-                } else {
-                    None
-                };
-                let rules = RemovalRules {
-                    allow_pending_rename: !off_runtime::try_exists(&workspace.path).await?,
-                    awaiting_setup: manual && workspace.state == WorkspaceState::Preparing,
-                    refuse_holds: removal.refuses_holds(),
-                };
-                let replaced = self
-                    .reserve_lifecycle_for_removal(&workspace.id, rules)
-                    .await?;
-                let underway = Underway::new(self.store.clone(), workspace.id.clone());
-                Ok(SpaceReservation {
-                    space: PresentSpace::Workspace(workspace),
-                    held: Held::Workspace(replaced, underway),
-                })
-            }
-            PresentSpace::Chat(chat) => {
-                // Reserved first, so no agent of it registers while the
-                // removal goes on.
-                let reservation = self.chat_removals.reserve(&chat.id)?;
-                let chat =
-                    (self.chat_by_id(&chat.id).await?).context("the chat was removed meanwhile")?;
-                Ok(SpaceReservation {
-                    space: PresentSpace::Chat(chat),
-                    held: Held::Chat(reservation),
-                })
-            }
-        }
+        let worktree = match space.worktree() {
+            Some(workspace) => Some(self.reserve_worktree(workspace, removal).await?),
+            None => None,
+        };
+        // Read again, as the reservations keep it from here on.
+        let space = (self.find_space(id).await?).context("the space was removed meanwhile")?;
+        Ok(SpaceReservation {
+            space,
+            _removal: reservation,
+            worktree,
+        })
+    }
+
+    /// Reserve the worktree of `workspace` for `removal` through its
+    /// lifecycle state. A manual removal also takes a workspace whose setup
+    /// never started, as when the command creating it was interrupted; it
+    /// waits for that creation to end, then takes the repository's Git gate,
+    /// under which setup starts, and reads the workspace again, which
+    /// creation has since finished recording.
+    async fn reserve_worktree(
+        &self,
+        workspace: &Workspace,
+        removal: Removal<'_>,
+    ) -> Result<WorktreeReservation> {
+        let manual = matches!(removal, Removal::Manual { .. });
+        let mut workspace = Cow::Borrowed(workspace);
+        let _created = if manual && workspace.state == WorkspaceState::Preparing {
+            (self.gates)
+                .wait_for_creation(&workspace.repository_id, &workspace.id)
+                .await;
+            let created = self.gates.lock_git(&workspace.repository_id).await;
+            workspace = Cow::Owned(self.workspace_by_id(&workspace.id).await?);
+            Some(created)
+        } else {
+            None
+        };
+        let rules = RemovalRules {
+            allow_pending_rename: !off_runtime::try_exists(&workspace.path).await?,
+            awaiting_setup: manual && workspace.state == WorkspaceState::Preparing,
+            refuse_holds: removal.refuses_holds(),
+        };
+        let replaced = self
+            .reserve_lifecycle_for_removal(&workspace.id, rules)
+            .await?;
+        Ok(WorktreeReservation {
+            replaced,
+            underway: Underway::new(self.store.clone(), workspace.id.clone()),
+        })
     }
 
     /// Give up `reservation` after its removal failed with `error`, for
-    /// `cause`, which the space's journal records: a workspace returns to the
-    /// state it had, or to failed once its worktree can no longer be ready.
+    /// `cause`, which the space's journal records: a worktree returns to the
+    /// lifecycle state it had, or to failed once it can no longer be ready.
     pub(crate) async fn release_space(
         &self,
         reservation: SpaceReservation<'_>,
@@ -222,19 +233,18 @@ impl Manager {
         cause: events::EventCause,
         error: &anyhow::Error,
     ) -> Result<()> {
-        match reservation.held {
-            Held::Workspace(replaced, underway) => {
-                let state = if unready {
-                    WorkspaceState::Failed
-                } else {
-                    replaced
-                };
-                (self.retain_workspace(reservation.space.id(), state, cause, error)).await?;
-                underway.finish();
-                Ok(())
-            }
-            Held::Chat(_) => (self.record_retained(reservation.space.id(), cause, error)).await,
-        }
+        let id = reservation.space.id();
+        let Some(worktree) = reservation.worktree else {
+            return self.record_retained(id, cause, error).await;
+        };
+        let state = if unready {
+            WorkspaceState::Failed
+        } else {
+            worktree.replaced
+        };
+        (self.retain_workspace(id, state, cause, error)).await?;
+        worktree.underway.finish();
+        Ok(())
     }
 
     /// Delete the record of `space`, which `cause` removed, and give the user

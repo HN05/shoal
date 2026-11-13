@@ -1204,7 +1204,7 @@ async fn a_space_a_removal_holds_refuses_the_launches_it_queues() {
         .queue_add_as(launch("below-workspace"), Some(&caller))
         .await;
     assert!(refused.is_err());
-    let _reservation = manager.chat_removals.reserve(&chat.id).unwrap();
+    let _reservation = manager.space_removals.reserve(&chat.id).unwrap();
     let caller = queued_by(&chat.id);
     let refused = manager
         .queue_add_as(launch("below-chat"), Some(&caller))

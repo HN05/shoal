@@ -559,7 +559,7 @@ async fn a_chat_being_removed_takes_no_new_space() {
         .unwrap();
     // A creation that reaches its record after the removal began is refused,
     // rather than leaving a space below the chat that the removal missed.
-    let _removal = manager.chat_removals.reserve(&chat.id).unwrap();
+    let _removal = manager.space_removals.reserve(&chat.id).unwrap();
     manager
         .create_workspace_below(
             repo.id.clone().into(),

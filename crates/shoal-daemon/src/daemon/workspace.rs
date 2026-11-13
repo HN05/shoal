@@ -147,11 +147,11 @@ pub struct Manager {
     /// and while a workspace's conversion into a chat is recorded, so no
     /// agent starts in a workspace that becomes a chat.
     pub(crate) agent_admissions: tokio::sync::Mutex<()>,
-    /// The chats a removal holds, whose agent no registration runs again.
-    pub(crate) chat_removals: crate::daemon::chats::Removing,
+    /// The spaces a removal holds, whose agent no registration runs again.
+    pub(crate) space_removals: crate::daemon::spaces::Removing,
     /// The completed spaces whose completion a removal of a space below
     /// them goes by, which keep the workspaces below them meanwhile.
-    pub(crate) completed_owners: crate::daemon::chats::Removing,
+    pub(crate) completed_owners: crate::daemon::spaces::Removing,
     pub(crate) seeds: super::seed::Seeds,
     pub(crate) forge_memories: crate::daemon::links::ForgeMemories,
     pub(crate) reviews: crate::daemon::reviews::Reviews,
@@ -210,7 +210,7 @@ impl Manager {
             leftovers: Default::default(),
             conversion_handovers: Default::default(),
             agent_admissions: Default::default(),
-            chat_removals: Default::default(),
+            space_removals: Default::default(),
             completed_owners: Default::default(),
             seeds: Default::default(),
             forge_memories: Default::default(),

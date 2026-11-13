@@ -480,7 +480,7 @@ fn record(
     space: &PresentSpace,
     asking: &Asking,
     asker: &Asker,
-    removing: &crate::daemon::chats::Removing,
+    removing: &crate::daemon::spaces::Removing,
 ) -> Result<Recorded> {
     let Asking { ask, files } = asking;
     // A space reserved for removal takes no question its cleanup checks have
@@ -646,7 +646,7 @@ impl Manager {
         asking: Asking,
         asker: Asker,
     ) -> Result<Option<Question>> {
-        let removing = self.chat_removals.clone();
+        let removing = self.space_removals.clone();
         let recorded = self
             .store
             .write(move |tx| record(tx, &space, &asking, &asker, &removing))

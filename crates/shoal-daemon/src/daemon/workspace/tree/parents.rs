@@ -8,7 +8,7 @@ use rusqlite::params;
 use super::super::{Manager, NewWorkspace};
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::{chats::Removing, scope::Caller, spaces, store},
+    daemon::{scope::Caller, spaces, spaces::Removing, store},
     model::{OpenedWorkspace, SpaceKind, Workspace},
 };
 
@@ -18,7 +18,7 @@ impl Manager {
     /// split from another stays below it.
     pub async fn assign_parent(&self, workspace: &SpaceId, parent: Option<SpaceId>) -> Result<()> {
         let workspace = workspace.to_owned();
-        let held = [self.chat_removals.clone(), self.completed_owners.clone()];
+        let held = [self.space_removals.clone(), self.completed_owners.clone()];
         self.store
             .write(move |tx| assign(tx, &workspace, parent.as_ref(), &held))
             .await

@@ -100,7 +100,7 @@ impl Manager {
             scope,
         };
         let now = launch.request.now;
-        let removing = self.chat_removals.clone();
+        let removing = self.space_removals.clone();
         self.store
             .write(move |tx| insert_launch(tx, &launch, &removing))
             .await?;

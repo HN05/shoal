@@ -156,6 +156,8 @@ mod export;
 mod find;
 pub(crate) mod priority;
 pub(crate) mod removal_notices;
+mod removing;
+pub(crate) use removing::{Removing, Reservation};
 mod selection;
 pub(crate) use selection::selected;
 mod sessions;

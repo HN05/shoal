@@ -167,7 +167,7 @@ fn planned_branch(plan: &str) -> Option<String> {
 pub(super) fn insert_launch(
     tx: &rusqlite::Transaction<'_>,
     launch: &Launch,
-    removing: &crate::daemon::chats::Removing,
+    removing: &crate::daemon::spaces::Removing,
 ) -> Result<()> {
     ensure!(
         !crate::daemon::store::repository_removing(tx, &launch.repository)?,
@@ -241,16 +241,15 @@ pub(super) fn insert_launch(
     Ok(())
 }
 
-/// Refuse the space `id` a launch's scope names once it is gone, or while a
-/// removal holds it: a workspace that is not ready, or a chat `removing`
-/// holds.
+/// Refuse the space `id` a launch's scope names once it is gone, while
+/// `removing` holds it, or while its worktree is not ready.
 fn require_queuing_space(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
-    removing: &crate::daemon::chats::Removing,
+    removing: &crate::daemon::spaces::Removing,
 ) -> Result<()> {
+    ensure!(!removing.reserved(id), "a removal holds the space");
     if crate::daemon::links::space::is_chat(tx, id)? {
-        ensure!(!removing.reserved(id), "a removal holds the chat");
         return Ok(());
     }
     crate::daemon::store::require_ready(tx, id)
