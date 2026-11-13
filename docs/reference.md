@@ -528,12 +528,24 @@ notification and tries again only once agents have no work or the config reloads
 An agent Shoal stopped on its own and brings back on its own is asleep: it
 comes back through the [agent queue](#agent-queue) once what it waits for
 arrives. Overload and disk protection, idle stops, a blocked space, a signal
-that ended its session and `shoal sleep` put an agent to sleep. An agent that `shoal
+that ended its session, queued work that needs room and `shoal sleep` put an
+agent to sleep. An agent that `shoal
 stop` stopped, or that quit on its own, is stopped instead, and stays down
 until `shoal restore`. `shoal list` shows an asleep agent's space as `asleep`,
 the [inbox](#inbox) lists it, and `shoal status` adds an `Asleep` line with
 why it sleeps, what wakes it, and `shoal attach` and `shoal queue start`, which
 wake it now; `--json` gives `asleep` with `reason` and `wakes_when`.
+
+While an entry in the [agent queue](#agent-queue) waits for a slot or memory,
+each [cleanup sweep](#automatic-cleanup) makes room for it: for each such
+entry in queue order, it puts to sleep the lowest-ranked idle agent whose
+priority is no higher than the entry's, of the entry's repository when that
+repository's `agent.max_running` holds it, once that costs no prompt cache, as
+for [`shoal sleep`](#idle-wakes). Only an agent something will wake sleeps for
+this: one whose space watches an open PR, is blocked, or has an open question
+or a request waiting for a decision. Light agents and those the user attends
+keep running, and an agent woken from its sleep works its turn before it can
+sleep again.
 
 An idle agent keeps its memory while it waits for its next update. Each
 [cleanup sweep](#automatic-cleanup) stops the [idle](#agent-state) agents of

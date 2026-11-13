@@ -1,5 +1,6 @@
 //! Ranking the queue: the snapshot the rank reads, from the store and from
-//! what the daemon keeps in memory, and the waiting entries in rank order.
+//! what the daemon keeps in memory, the waiting entries in rank order, and
+//! spaces in the order their agents would start.
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -21,6 +22,17 @@ impl Manager {
     /// The waiting entries, one-shot runs among them, in the order they
     /// start, each with its rank.
     pub(super) async fn ranked_queue(&self) -> Result<Vec<Ranked>> {
+        Ok(rank::rank(&self.ranking_snapshot().await?))
+    }
+
+    /// The spaces `ids` in the order their agents would start, first
+    /// first, each with its priority, as the queue ranks its entries.
+    pub(crate) async fn ranked_spaces(&self, ids: &[SpaceId]) -> Result<Vec<(SpaceId, Priority)>> {
+        Ok(rank::spaces_in_order(&self.ranking_snapshot().await?, ids))
+    }
+
+    /// What ranking reads now.
+    async fn ranking_snapshot(&self) -> Result<Snapshot> {
         let jobs = self.waiting_job_spaces().await?;
         let oneshots = self.agent_queue.waiting_oneshots();
         let leases = self.queues.waiters();
@@ -35,7 +47,7 @@ impl Manager {
             .await?;
         let priorities = self.label_priorities(labelled).await;
         spaces::prioritize(&mut snapshot.spaces, priorities);
-        Ok(rank::rank(&snapshot))
+        Ok(snapshot)
     }
 
     /// The priority each of the `labelled` spaces takes from its issue's

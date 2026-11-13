@@ -28,4 +28,4 @@ pub(crate) use wake::Grant;
 pub(crate) use worker::HasAgent;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

@@ -591,3 +591,33 @@ fn an_overdue_entry_ties_with_the_top_lead_and_keeps_its_tier_order() {
         );
     }
 }
+
+#[test]
+fn spaces_order_as_their_agents_would_start_with_what_waits_on_them() {
+    let mut snapshot = snapshot();
+    space(&mut snapshot, "new", Tier::New, 1);
+    space(&mut snapshot, "finishing", Tier::Finishing, 2);
+    space(&mut snapshot, "low", Tier::Finishing, 3);
+    space(&mut snapshot, "blocker", Tier::New, 4);
+    space(&mut snapshot, "waiting", Tier::Finishing, 5);
+    prioritize(&mut snapshot, "low", Priority::LOW);
+    // Finishing work waits on the blocker, which ranks with it.
+    edge(&mut snapshot, "waiting", "blocker", Dependency::Blocked);
+    let ids: Vec<SpaceId> = ["new", "low", "blocker", "finishing"]
+        .into_iter()
+        .map(Into::into)
+        .collect();
+    let ordered: Vec<(String, Priority)> = spaces_in_order(&snapshot, &ids)
+        .into_iter()
+        .map(|(id, priority)| (id.to_string(), priority))
+        .collect();
+    assert_eq!(
+        ordered,
+        [
+            ("finishing".into(), Priority::NORMAL),
+            ("blocker".into(), Priority::NORMAL),
+            ("new".into(), Priority::NORMAL),
+            ("low".into(), Priority::LOW),
+        ]
+    );
+}

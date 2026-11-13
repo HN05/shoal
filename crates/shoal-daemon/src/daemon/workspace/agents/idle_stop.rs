@@ -1,9 +1,10 @@
 //! Put idle agents to sleep, saving each as protection does, so that an
-//! update restores it: to free memory and after `shoal sleep`, and whose
-//! space is blocked, so that its restore waits until nothing blocks the
-//! space. Only an agent whose prompt cache has expired sleeps to free
-//! memory, and one that `shoal sleep` puts to sleep only once that costs
-//! nothing; a blocked one sleeps once its turn ends.
+//! update restores it: to free memory, after `shoal sleep`, and to make room
+//! for queued work, and whose space is blocked, so that its restore waits
+//! until nothing blocks the space. Only an agent whose prompt cache has
+//! expired sleeps to free memory, and one that `shoal sleep` or queued work
+//! puts to sleep only once that costs nothing; a blocked one sleeps once its
+//! turn ends.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
@@ -39,8 +40,8 @@ impl Manager {
     /// prompt cache has expired in a done workspace whose cleanup is held,
     /// which could otherwise run until the workspace goes, or in any
     /// workspace whose `[sleep] idle` is enabled; each whose space sleeps
-    /// after `shoal sleep` once that costs nothing. A failure in one
-    /// workspace does not skip the others.
+    /// after `shoal sleep` once that costs nothing; and those that make room
+    /// for queued work. A failure in one workspace does not skip the others.
     pub(crate) async fn stop_idle_agents(&self) -> Result<()> {
         // The process scan that tells agents with work in flight waits until
         // some agent would stop.
@@ -57,6 +58,10 @@ impl Manager {
                 Ok(None) => {}
                 Err(error) => failed.push(&candidate.workspace_id, &candidate.workspace, &error),
             }
+        }
+        match self.make_room(&candidates, &chosen, now).await {
+            Ok(room) => chosen.extend(room),
+            Err(error) => crate::daemon::log!("no room made for queued work: {error:#}"),
         }
         if !chosen.is_empty() {
             let turns = self.agent_turns().await?;

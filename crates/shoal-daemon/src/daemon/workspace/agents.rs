@@ -33,6 +33,7 @@ mod chat_questions;
 mod forks;
 mod idle_stop;
 mod interrupts;
+mod make_room;
 mod restart;
 mod sleep_cost;
 mod stops;
@@ -62,6 +63,9 @@ pub(crate) trait ProtectionExt {
     /// An idle agent whose space sleeps after `shoal sleep`, which Shoal
     /// puts to sleep once that costs nothing.
     fn slept() -> Self;
+
+    /// An idle agent Shoal puts to sleep to make room for queued work.
+    fn making_room() -> Self;
 
     /// An idle stop for `reason`, whose restore waits for an update. Wrappers
     /// handle it as any protection stop they restore.
@@ -120,6 +124,10 @@ impl ProtectionExt for Protection {
         Self::idle(SLEPT_REASON)
     }
 
+    fn making_room() -> Self {
+        Self::idle(ROOM_REASON)
+    }
+
     fn idle(reason: &str) -> Self {
         Self {
             reason: reason.into(),
@@ -139,6 +147,7 @@ impl ProtectionExt for Protection {
             IDLE_HELD_REASON,
             IDLE_EXPIRED_REASON,
             SLEPT_REASON,
+            ROOM_REASON,
             BLOCKED_REASON,
         ]
         .contains(&self.reason.as_str())
@@ -168,6 +177,9 @@ const IDLE_EXPIRED_REASON: &str = "idle with its prompt cache expired";
 
 /// The stop reason of an idle agent whose space sleeps after `shoal sleep`.
 const SLEPT_REASON: &str = "shoal sleep";
+
+/// The stop reason of an idle agent put to sleep for queued work.
+const ROOM_REASON: &str = "making room for queued work";
 
 /// The stop reason of an agent whose turn ended while its space is blocked,
 /// which its recovery record keeps.

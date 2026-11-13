@@ -151,6 +151,28 @@ pub(crate) fn rank(snapshot: &Snapshot) -> Vec<Ranked> {
         .collect()
 }
 
+/// The spaces `ids` in the order their agents would start, first first,
+/// each with its priority: at its own rank raised by the work that waits on
+/// it, as entries rank.
+pub(crate) fn spaces_in_order(snapshot: &Snapshot, ids: &[SpaceId]) -> Vec<(SpaceId, Priority)> {
+    let mut standing = own_standing(snapshot);
+    inherit(&mut standing, snapshot);
+    let mut ranked: Vec<(SpaceId, QueueRank)> = (ids.iter())
+        .map(|id| {
+            let held = standing.get(&Node::Space(id.clone())).cloned();
+            (
+                id.clone(),
+                held.unwrap_or_else(|| own(Priority::default(), Tier::New)),
+            )
+        })
+        .collect();
+    let space = |id: &SpaceId| snapshot.spaces.get(id);
+    ranked.sort_by(|a, b| first_space((&a.1, space(&a.0)), (&b.1, space(&b.0))));
+    (ranked.into_iter())
+        .map(|(id, rank)| (id, rank.priority))
+        .collect()
+}
+
 /// Each node's rank, with the work it inherited each part from.
 type Standing = HashMap<Node, QueueRank>;
 

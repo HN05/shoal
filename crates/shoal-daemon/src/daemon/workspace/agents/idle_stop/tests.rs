@@ -1,6 +1,7 @@
 use super::*;
 use crate::client::assignments::Done;
 use crate::client::execution_ids::ExecutionId;
+use crate::client::priority::Priority;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace::agents::ProtectionExt;
@@ -626,4 +627,70 @@ async fn under_the_speed_schedule_a_sleeping_agent_sleeps_at_once() {
     cache_expires_in(&manager, &workspace, 600).await;
     manager.stop_idle_agents().await.unwrap();
     assert!(*execution.stop.borrow());
+}
+
+/// Ask a question in `workspace`, which wakes its agent once answered.
+async fn ask(manager: &Manager, workspace: &Workspace) {
+    let ask = crate::client::questions::Ask {
+        question: "Which database?".into(),
+        recommendation: "SQLite".into(),
+        reason: None,
+        choices: Vec::new(),
+    };
+    manager
+        .ask_question(
+            &SpaceSelector::id(&workspace.id),
+            ask,
+            Vec::new(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn an_agent_something_will_wake_sleeps_to_make_room_for_queued_work() {
+    let (root, manager) = manager().await;
+    manager.publish_config(crate::test_support::global_config(
+        "[machine]\nmax_agents = 3\n[machine.overload.disk]\nenabled = false",
+    ));
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let mut agents = Vec::new();
+    for name in ["asks", "urgent", "idle"] {
+        let (workspace, execution) = agent(&manager, &repo.id, name, UNFINISHED).await;
+        cache_expires_in(&manager, &workspace, 0).await;
+        agents.push((workspace, execution));
+    }
+    let [(asks, asking), (urgent, ranked_higher), (_, nothing_wakes)] = &agents[..] else {
+        unreachable!()
+    };
+    ask(&manager, asks).await;
+    ask(&manager, urgent).await;
+    manager
+        .set_priority(None, &SpaceSelector::id(&urgent.id), Priority::URGENT)
+        .await
+        .unwrap();
+    // Without queued work, nothing sleeps for room.
+    manager.stop_idle_agents().await.unwrap();
+    assert!(!*asking.stop.borrow());
+
+    let launch = manager
+        .queue_add(crate::daemon::workspace::agent_queue::tests::request(
+            &repo, "later", false,
+        ))
+        .await
+        .unwrap();
+    assert!(!launch.start);
+    manager.dispatch_queue().await.unwrap();
+    manager.stop_idle_agents().await.unwrap();
+    assert_eq!(
+        stop_reason(&manager, asking).await,
+        Some(Protection::making_room().reason)
+    );
+    assert!(!*ranked_higher.stop.borrow(), "a higher priority keeps it");
+    assert!(!*nothing_wakes.stop.borrow(), "nothing would wake it");
 }

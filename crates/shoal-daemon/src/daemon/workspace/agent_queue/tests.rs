@@ -45,7 +45,7 @@ pub(super) fn limit_globally(manager: &Manager, limit: u32) {
     )));
 }
 
-pub(super) fn request(repository: &Repository, name: &str, now: bool) -> QueueRequest {
+pub(crate) fn request(repository: &Repository, name: &str, now: bool) -> QueueRequest {
     QueueRequest {
         issue_labels: Vec::new(),
         priority: None,
