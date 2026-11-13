@@ -121,7 +121,7 @@ impl Manager {
         self.ensure_not_converting(&chat.id, &chat.name).await?;
         ensure!(
             chat.running,
-            "chat {} is stopped; resume it before converting it",
+            "chat {} is stopped; restore it before converting it",
             chat.name
         );
         if let Some(workspace) = &chat.workspace {

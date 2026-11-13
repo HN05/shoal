@@ -70,7 +70,7 @@ impl Manager {
         let pending = self.store.run(move |db| super::pending(db, &id)).await?;
         match pending {
             Some(super::Pending::Chat { .. }) => bail!(
-                "workspace {} becomes a chat once its agent's turn ends; resume the agent in the chat then",
+                "workspace {} becomes a chat once its agent's turn ends; restore the agent in the chat then",
                 workspace.name
             ),
             Some(super::Pending::Workspace { .. }) => bail!(

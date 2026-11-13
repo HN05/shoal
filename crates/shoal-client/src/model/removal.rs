@@ -54,11 +54,11 @@ pub struct RemovedWorkspace {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<StartingCommit>,
     pub links: SpaceLinks,
-    /// Agents stopped by the removal or before it, which `shoal resume`
+    /// Agents stopped by the removal or before it, which `shoal restore`
     /// continues once the workspace is restored.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub agents: Vec<crate::executions::StoppedAgent>,
-    /// The last sessions of agents, which `shoal resume` continues once the
+    /// The last sessions of agents, which `shoal restore` continues once the
     /// workspace is restored.
     #[serde(
         default,

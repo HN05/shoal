@@ -45,7 +45,7 @@ async fn an_upgraded_chats_agent_is_saved_as_a_stopped_agent_with_its_session() 
     manager.save_upgraded_chat_agents().await.unwrap();
 
     let saved = |chat: &Chat| Saved::load(&manager.paths, &chat.id).unwrap();
-    // Saved for `shoal resume`, with the session and turn it had.
+    // Saved for `shoal restore`, with the session and turn it had.
     let [agent] = saved(&chats[0]).agents.try_into().unwrap();
     let record = Record::load(&agent.path).unwrap().unwrap();
     assert_eq!(record.session, Some("resumed-session".into()));

@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 use super::reports;
-use crate::client::output::resume::StoppedCommands;
+use crate::client::output::restore::StoppedCommands;
 use crate::{
     cli::context::Context,
     execution::recovery::{self, RecoveryClaim, SavedCommand, consume},

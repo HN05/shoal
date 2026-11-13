@@ -451,7 +451,7 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
             .await
             .unwrap()
     );
-    // `shoal resume` restores it now, telling it what still blocks it.
+    // `shoal restore` restores it now, telling it what still blocks it.
     let entries = manager.queue_entries().await.unwrap();
     assert_eq!(entries[0].blockers, ["https://github.com/team/app/pull/8"]);
     manager

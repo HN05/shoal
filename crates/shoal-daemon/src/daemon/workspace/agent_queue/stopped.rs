@@ -1,9 +1,9 @@
 //! Restores of stopped agents and last sessions that the daemon starts, as
-//! it starts launches in existing workspaces: `shoal resume` queues them, and
+//! it starts launches in existing workspaces: `shoal restore` queues them, and
 //! so does a signal that ended an agent's session, through a request beside
 //! its record. Each is admitted like a launch and leaves the queue once its
 //! agent registers, or while waiting once what it restores is gone, as after
-//! `shoal resume --now` or `--forget`. A restart's restore starts at once, in
+//! `shoal restore --now` or `--forget`. A restart's restore starts at once, in
 //! the slot its agent kept.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
@@ -54,7 +54,7 @@ struct Restore {
     agent: crate::agent::Agent,
     execution: ExecutionId,
     env: String,
-    /// Shoal queued it on its own rather than `shoal resume`, so an agent
+    /// Shoal queued it on its own rather than `shoal restore`, so an agent
     /// stopped between turns waits for an update.
     automatic: bool,
     /// Queued, or starting at once.
@@ -381,7 +381,7 @@ impl Manager {
     /// before the agent started, as one whose binary an upgrade removed may.
     /// Shoal queues it on its own, so an agent stopped between turns waits
     /// for an update, and starts it where the agent ran. Returns whether it
-    /// is queued; otherwise its record stays for `shoal resume`.
+    /// is queued; otherwise its record stays for `shoal restore`.
     pub(crate) async fn queue_failed_restore(
         &self,
         space: &PresentSpace,
@@ -416,7 +416,7 @@ impl Manager {
     }
 
     /// Queue the restores that stopped agents request once their execution
-    /// has ended. A done space's agent waits until `shoal resume` names its
+    /// has ended. A done space's agent waits until `shoal restore` names its
     /// space.
     pub(super) async fn queue_requested_restores(&self) -> Result<()> {
         let (spaces, recorded) = self
@@ -456,7 +456,7 @@ impl Manager {
     }
 
     /// Forget the waiting restores whose stopped agent's record is gone, as
-    /// after `shoal resume --now` or `--forget`.
+    /// after `shoal restore --now` or `--forget`.
     pub(super) async fn forget_resolved_restores(&self) -> Result<()> {
         let waiting = self.store.run(|db| waiting_restores(db)).await?;
         let resolved = resolved_restores(&self.paths, waiting);
@@ -470,7 +470,7 @@ impl Manager {
 
     /// Cancel the restores of `workspace_id`'s stopped agents, requested,
     /// waiting or admitted, and the restarts that would start one in a new
-    /// wrapper, which stay stopped until `shoal resume`. The queue gate keeps
+    /// wrapper, which stay stopped until `shoal restore`. The queue gate keeps
     /// dispatch from queueing a request meanwhile, and a restart from
     /// recording its restore, and a restore whose agent already registered
     /// has left the queue.

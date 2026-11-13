@@ -159,7 +159,7 @@ fn a_restored_workspace_saves_the_removed_ones_stopped_agents() {
     let agents = stopped_agents(&paths, &SpaceId::from("removed")).unwrap();
     assert_eq!(agents.len(), 1);
     assert_eq!(agents[0].execution, "execution");
-    // The wrapper has exited, so the restored workspace waits for `shoal resume`.
+    // The wrapper has exited, so the restored workspace waits for `shoal restore`.
     assert_eq!(agents[0].record.waiting, None);
     save_stopped_agents(&paths, &SpaceId::from("restored"), &agents).unwrap();
     let mut saved = Saved::load(&paths, &SpaceId::from("restored")).unwrap();

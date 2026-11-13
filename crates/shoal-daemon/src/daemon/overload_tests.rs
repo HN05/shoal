@@ -904,7 +904,7 @@ async fn overload_without_recovery_stops_commands_outside_the_agent_group() {
     );
     bounded(launched).await.unwrap().unwrap();
     assert!(!crate::process::identity::alive(&background).unwrap());
-    // The execution ended proven, so `shoal resume` can select its record.
+    // The execution ended proven, so `shoal restore` can select its record.
     assert!(
         manager
             .inspect_workspace(&SpaceSelector::id(&workspace.id))
@@ -1337,7 +1337,7 @@ async fn only_execution(manager: &Manager, workspace: &crate::model::Workspace) 
 }
 
 /// The agent saved at `SHOAL_TEST_RECORD`, restored in a new wrapper as
-/// `shoal resume` restores it, taking over the queue entry
+/// `shoal restore` restores it, taking over the queue entry
 /// `SHOAL_TEST_QUEUE_ENTRY` names, if any, as a restart's new wrapper does.
 #[tokio::test]
 #[ignore = "isolated restoring wrapper launched by overload tests"]

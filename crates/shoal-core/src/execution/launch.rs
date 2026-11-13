@@ -82,7 +82,7 @@ impl TrackedLaunch {
             let ran = started.elapsed();
             // A failure after the run, such as a restored agent's proxy that
             // cannot start, still reports the execution's end; a restore record
-            // it did not consume stays for `shoal resume`.
+            // it did not consume stays for `shoal restore`.
             let next = match outcome {
                 Ok(outcome) => {
                     self.after_run(paths, mode, outcome, &mut restarts, ran)
@@ -197,7 +197,7 @@ impl TrackedLaunch {
         Ok(Some(code))
     }
 
-    /// Pause the agent, or keep a stopped command for `shoal resume`; true
+    /// Pause the agent, or keep a stopped command for `shoal restore`; true
     /// when the daemon restored the agent to run again.
     async fn resolve_pause(
         &mut self,

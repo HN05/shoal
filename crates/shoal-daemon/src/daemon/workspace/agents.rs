@@ -264,7 +264,7 @@ impl Manager {
             .is_file()
             {
                 format!(
-                    "restore with shoal resume {} --execution {execution_id}",
+                    "restore with shoal restore {} --execution {execution_id}",
                     space.number()
                 )
             } else {
@@ -303,7 +303,7 @@ impl Manager {
 
     /// Forget a finished agent's reported session, first keeping it as one of
     /// the last sessions of the space `space_id` when the agent `exited` on
-    /// its own before the assignment finished, for `shoal resume` to continue.
+    /// its own before the assignment finished, for `shoal restore` to continue.
     pub(crate) async fn end_agent_session(
         &self,
         space_id: &SpaceId,
@@ -1106,7 +1106,7 @@ impl Manager {
     }
 
     /// Stop the `stopped` agent, whose stop the store could not record, as
-    /// `shoal stop` does, saving its session for `shoal resume` instead of
+    /// `shoal stop` does, saving its session for `shoal restore` instead of
     /// an automatic restore.
     async fn stop_unrecorded(
         &self,
@@ -1176,7 +1176,7 @@ impl Manager {
 
     /// Whether `shoal done` finished the workspace's assignment, which leaves
     /// an agent `protection` stopped nothing to do, so its restore waits for
-    /// `shoal resume`.
+    /// `shoal restore`.
     pub(crate) async fn done_cancels_restore(
         &self,
         workspace_id: &SpaceId,
@@ -1208,7 +1208,7 @@ impl Manager {
         {
             "automatic recovery disabled by machine.overload.recovery.enabled".into()
         } else if done {
-            "no automatic restore, since the workspace is marked done; shoal resume withdraws the completion".into()
+            "no automatic restore, since the workspace is marked done; shoal restore withdraws the completion".into()
         } else {
             format!(
                 "automatic session restore waits until {}",
@@ -1219,7 +1219,7 @@ impl Manager {
             workspace,
             workspace_id,
             NotificationKind::AgentStopped,
-            format!("Stopping {name}: {}; {recovery}; after the wrapper exits, restore with shoal resume {workspace_id} --execution {id}{}; workspace and resource leases retained", protection.reason, if agent.handoff_saved || !agent.recorded { "" } else { "; recovery handoff could not be saved; run shoal stop if the wrapper exits" }),
+            format!("Stopping {name}: {}; {recovery}; after the wrapper exits, restore with shoal restore {workspace_id} --execution {id}{}; workspace and resource leases retained", protection.reason, if agent.handoff_saved || !agent.recorded { "" } else { "; recovery handoff could not be saved; run shoal stop if the wrapper exits" }),
         )
         .await;
     }

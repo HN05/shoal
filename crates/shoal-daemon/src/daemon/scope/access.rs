@@ -161,7 +161,7 @@ impl Manager {
             .workspace_below(
                 caller,
                 space,
-                "scoped processes resume agents only in the spaces below their own",
+                "scoped processes restore agents only in the spaces below their own",
             )
             .await?;
         let id = self.space(space).await?.id().clone();
@@ -172,7 +172,7 @@ impl Manager {
         };
         ensure!(
             ours,
-            "scoped processes resume only the agents that they or the spaces below them stopped, with shoal stop or a restart; ask the user to resume this one"
+            "scoped processes restore only the agents that they or the spaces below them stopped, with shoal stop or a restart; ask the user to restore this one"
         );
         Ok(space)
     }
@@ -184,7 +184,7 @@ impl Manager {
         caller: &Caller,
         workspace: &'a mut SpaceSelector,
     ) -> Result<&'a mut SpaceSelector> {
-        const REFUSAL: &str = "scoped processes resume only the workspaces below their own space";
+        const REFUSAL: &str = "scoped processes restore only the workspaces below their own space";
         let workspace = self.workspace_below(caller, workspace, REFUSAL).await?;
         let id = self.workspace(workspace).await?.id;
         ensure!(self.reaches(caller, &id).await?, REFUSAL);

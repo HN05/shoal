@@ -216,7 +216,7 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
         .join("requested.restore-request.json");
     std::fs::write(&request, "{}").unwrap();
     assert!(!waits_for_resume(&paths, &open, &none).unwrap());
-    // A done workspace's request waits for `shoal resume` to name it.
+    // A done workspace's request waits for `shoal restore` to name it.
     let mut done = open.clone();
     if let PresentSpace::Workspace(workspace) = &mut done {
         workspace.done = true;
@@ -237,18 +237,18 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
 }
 
 #[test]
-fn done_workspaces_are_named_since_resume_all_skips_them() {
+fn done_workspaces_are_named_since_restore_all_skips_them() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let (open, done) = (
         workspace(root.path(), "open", false),
         workspace(root.path(), "finished", true),
     );
     let (open_only, done_only) = (continuation(&[&open]), continuation(&[&done]));
-    assert!(open_only.contains("--all") && !open_only.contains("resume 7"));
-    assert!(done_only.contains("resume 7") && !done_only.contains("--all"));
+    assert!(open_only.contains("--all") && !open_only.contains("restore 7"));
+    assert!(done_only.contains("restore 7") && !done_only.contains("--all"));
     let both = continuation(&[&open, &done]);
     assert!(
-        both.contains("--all") && both.contains("resume 7"),
+        both.contains("--all") && both.contains("restore 7"),
         "{both}"
     );
 }

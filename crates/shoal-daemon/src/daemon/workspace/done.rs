@@ -53,7 +53,7 @@ impl Manager {
         Ok(completion)
     }
 
-    /// `shoal resume` restores a stopped agent of the workspace, which says
+    /// `shoal restore` restores a stopped agent of the workspace, which says
     /// its work is not finished: withdraw a standing completion, so a
     /// protection stop restores the agent.
     pub(crate) async fn reopen_for_resume(&self, workspace_id: &SpaceId) {
@@ -131,7 +131,7 @@ impl Manager {
         let closed = persisted.closed;
         self.forget_last_sessions(&workspace.id);
         // A done assignment needs no agent; only naming the workspace in
-        // `shoal resume` restores it now.
+        // `shoal restore` restores it now.
         if let Err(error) = self.cancel_stopped_restores(&workspace.id).await {
             crate::daemon::log!("agent queue: {error:#}");
         }

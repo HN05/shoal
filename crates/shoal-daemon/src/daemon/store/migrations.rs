@@ -850,12 +850,12 @@ pub(super) const PROMPT_CACHE_EXPIRY: &str =
     "ALTER TABLE workspace_agent_state ADD COLUMN prompt_cache_expires_at INTEGER;";
 
 /// Restores Shoal queued on its own, as after a signal stop, rather than
-/// `shoal resume`: one of an agent stopped between turns waits for an update.
+/// `shoal restore`: one of an agent stopped between turns waits for an update.
 pub(super) const AUTOMATIC_RESTORES: &str = "ALTER TABLE agent_queue
     ADD COLUMN automatic INTEGER NOT NULL DEFAULT 0 CHECK(automatic IN (0,1));";
 
 /// The restores waiting wrappers carry out are Shoal's own too, until
-/// `shoal resume` asks for one.
+/// `shoal restore` asks for one.
 pub(super) const AUTOMATIC_WRAPPER_RESTORES: &str =
     "UPDATE agent_queue SET automatic=1 WHERE kind='restore' AND env IS NULL;";
 

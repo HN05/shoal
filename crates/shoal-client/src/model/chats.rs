@@ -58,7 +58,7 @@ pub struct Chat {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<AgentSessionId>,
     /// Whether its agent runs: an execution of it is recorded. A stopped
-    /// chat keeps what its agent's stop saved for `shoal resume`, as a
+    /// chat keeps what its agent's stop saved for `shoal restore`, as a
     /// workspace does.
     #[serde(default)]
     pub running: bool,

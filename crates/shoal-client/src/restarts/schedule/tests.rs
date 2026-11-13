@@ -173,7 +173,7 @@ async fn a_failed_restart_names_the_resume_and_keeps_the_daemons_error() {
     let space = crate::model::PresentSpace::Workspace(workspace.clone());
     let error = with_restore(&paths, &space, refused.into()).await;
     server.await.unwrap();
-    assert!(format!("{error:#}").contains(&format!("shoal resume {}", workspace.number)));
+    assert!(format!("{error:#}").contains(&format!("shoal restore {}", workspace.number)));
     let remote = error.downcast_ref::<RemoteError>().unwrap();
     assert_eq!(remote.code, ErrorCode::ScopeDenied);
 }

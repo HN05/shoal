@@ -401,7 +401,7 @@ pub struct Exiting {
 }
 
 impl Exiting {
-    /// Whether the daemon left stopped work for `shoal resume`, once its
+    /// Whether the daemon left stopped work for `shoal restore`, once its
     /// work has ended; `None` when it does not say, as a daemon of an
     /// earlier release does not.
     pub async fn stopped_work(mut self) -> Option<bool> {

@@ -138,7 +138,7 @@ struct SpaceStop {
 
 /// Stop the agents and commands of `space` as `caller`, then its untracked
 /// processes as `stop` says, reporting whether the stop saved work for
-/// `shoal resume`; a CI job's workspace has its run cancelled instead.
+/// `shoal restore`; a CI job's workspace has its run cancelled instead.
 async fn stop_space(
     manager: &Manager,
     space: &SpaceSelector,

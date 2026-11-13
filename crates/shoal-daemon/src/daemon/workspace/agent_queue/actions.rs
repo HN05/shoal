@@ -143,7 +143,7 @@ impl Manager {
     }
 
     /// Cancel the waiting entry `selector` names. A cancelled restore leaves
-    /// its agent stopped for `shoal resume`; a waiting wrapper is stopped as
+    /// its agent stopped for `shoal restore`; a waiting wrapper is stopped as
     /// `shoal stop` stops it.
     pub async fn queue_remove(
         &self,

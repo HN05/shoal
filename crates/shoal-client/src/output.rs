@@ -23,7 +23,7 @@ pub mod leases;
 pub mod messages;
 pub mod overviews;
 pub mod repositories;
-pub mod resume;
+pub mod restore;
 pub mod shell;
 pub mod skill;
 pub mod split;

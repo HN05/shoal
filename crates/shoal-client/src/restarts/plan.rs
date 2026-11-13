@@ -180,7 +180,7 @@ pub(super) fn stopped_reason(space: &str, running: &RunningAgent) -> Option<Stri
 
 /// Why `running` cannot restart in place, if it cannot.
 pub(super) fn skip_reason(space: &PresentSpace, running: &RunningAgent) -> Option<String> {
-    let manual = format!("use shoal stop {0} and shoal resume {0}", space.number());
+    let manual = format!("use shoal stop {0} and shoal restore {0}", space.number());
     match &running.agent {
         None => Some(format!(
             "execution {} is disconnected; {manual}",

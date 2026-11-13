@@ -90,14 +90,14 @@ fn pids<'a>(processes: impl IntoIterator<Item = &'a Identity>) -> String {
 }
 
 /// Why the daemon stops executions, which their wrappers show, and what the
-/// stop saves for `shoal resume`.
+/// stop saves for `shoal restore`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StopRequest {
     pub reason: String,
     pub save: Save,
 }
 
-/// What a stop saves for `shoal resume`.
+/// What a stop saves for `shoal restore`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Save {
     Nothing,
@@ -130,7 +130,7 @@ impl StopRequest {
     }
 
     /// The stop of an agent protection stops for `reason` that the store
-    /// could not record, which saves its session for `shoal resume`.
+    /// could not record, which saves its session for `shoal restore`.
     pub(crate) fn unrecorded(reason: &str) -> Self {
         Self {
             reason: format!("{reason}; its stop could not be recorded"),
@@ -220,7 +220,7 @@ struct Stopping<'a> {
 enum Keep<'a> {
     /// Their recovery records, as the stop saved them.
     Records,
-    /// Last sessions, which stay down until `shoal resume`, recording the
+    /// Last sessions, which stay down until `shoal restore`, recording the
     /// workspace whose process stopped them when given.
     LastSessions {
         stopped_by: Option<&'a SpaceId>,
@@ -381,7 +381,7 @@ impl Manager {
         workspace: Workspace,
         stopping: Stopping<'_>,
     ) -> Result<Vec<QueueEntry>> {
-        // A stop that keeps the agents down until shoal resume keeps the
+        // A stop that keeps the agents down until shoal restore keeps the
         // chat a conversion makes of the workspace down too.
         let stop = match stopping.keep {
             Keep::LastSessions { stopped_by, .. } => ConversionStop {

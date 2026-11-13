@@ -83,7 +83,7 @@ fn orchestrate_starts_a_chat_without_a_repository_in_root_dir() {
     let chats = fixture.ok(&["list", "--chats"]);
     assert_eq!(chats[0]["running"], false, "{chats}");
 
-    // Resumed, it runs there again under its name.
+    // StartedRestores, it runs there again under its name.
     let resumed = run_agent(&fixture, &["restore", &fixture.id("master"), "--focus"]);
     assert_eq!(resumed.chats[0]["id"], id);
     assert_eq!(resumed.directory, root);

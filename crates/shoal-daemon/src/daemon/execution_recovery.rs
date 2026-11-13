@@ -297,7 +297,7 @@ async fn tell_restore_waits(notices: Option<&mut OwnedWriteHalf>, issue: String)
 }
 
 /// A protection stop without automatic recovery still ends what the agent left
-/// running outside its process group, so `shoal resume` can restore it.
+/// running outside its process group, so `shoal restore` can restore it.
 pub(super) async fn stop_survivors(
     manager: &Manager,
     execution_id: &ExecutionId,

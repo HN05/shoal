@@ -1,4 +1,4 @@
-//! Exclusive claims on saved records, so only one `shoal resume` restores,
+//! Exclusive claims on saved records, so only one `shoal restore` restores,
 //! reports or forgets each.
 use super::{
     LastSession, LastSessionExt as _, Record, RecordExt as _, Saved, SavedSession, consume,
@@ -29,7 +29,7 @@ pub fn claim(path: &std::path::Path) -> Result<RecoveryClaim> {
             return Ok(claim);
         }
     }
-    anyhow::bail!("this recovery record is already being resumed")
+    anyhow::bail!("this recovery record is already being restored")
 }
 
 /// Lock `file`, opened at `path`, unless another claim holds it. `None` when
@@ -38,7 +38,7 @@ pub fn claim(path: &std::path::Path) -> Result<RecoveryClaim> {
 fn lock_current(file: std::fs::File, path: &std::path::Path) -> Result<Option<RecoveryClaim>> {
     use std::os::unix::fs::MetadataExt as _;
     fs2::FileExt::try_lock_exclusive(&file)
-        .context("this recovery record is already being resumed")?;
+        .context("this recovery record is already being restored")?;
     let current = match std::fs::metadata(path) {
         Ok(current) => current,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {

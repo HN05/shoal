@@ -159,7 +159,7 @@ async fn restart_forgets_a_stopped_agent_whose_wrapper_exited_and_keeps_its_reco
 
 /// Restarting the machine ended every process of an earlier boot, though
 /// their recorded process group IDs may name processes of this one. An
-/// agent that saved no record leaves its session for `shoal resume`.
+/// agent that saved no record leaves its session for `shoal restore`.
 #[tokio::test]
 async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_saved() {
     use crate::execution::recovery::{LastSession, save_session};

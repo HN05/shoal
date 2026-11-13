@@ -169,7 +169,7 @@ async fn saved_work_larger_than_a_frame_is_read_whole() {
 }
 
 /// A chat's stopped agent is its saved work, as a workspace's is, which
-/// listings summarize and `shoal resume` reads.
+/// listings summarize and `shoal restore` reads.
 #[tokio::test]
 async fn a_chats_stopped_agent_is_its_saved_work() {
     let (root, manager) = manager().await;

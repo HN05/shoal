@@ -30,7 +30,7 @@ pub struct RunningAgent {
     /// until it reports again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<crate::state::AgentState>,
-    /// Whether an interrupt ended its last turn, which `shoal resume`
+    /// Whether an interrupt ended its last turn, which `shoal restore`
     /// continues.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub interrupted: bool,

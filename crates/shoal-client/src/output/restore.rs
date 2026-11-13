@@ -1,4 +1,4 @@
-//! What `shoal resume` and `shoal restore` print.
+//! What `shoal restore` prints.
 use crate::execution_ids::ExecutionId;
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
@@ -17,9 +17,9 @@ pub struct StoppedCommands {
     pub commands: Vec<Vec<String>>,
 }
 
-/// A stopped agent a resume started.
+/// A stopped agent a restore started.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResumedAgent {
+pub struct RestoredAgent {
     pub workspace: SpaceName,
     pub execution: ExecutionId,
     /// Whether it started in the background rather than where it stopped.
@@ -28,7 +28,7 @@ pub struct ResumedAgent {
     pub reused: bool,
 }
 
-/// A workspace whose failed setup a resume retried and finished.
+/// A workspace whose failed setup a restore retried and finished.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetUp {
     pub workspace: Workspace,
@@ -38,11 +38,11 @@ pub struct SetUp {
     pub launch: Option<QueueEntry>,
 }
 
-/// What a resume of several spaces did.
+/// What a restore that started agents at once did.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Resumed {
+pub struct StartedRestores {
     pub commands: Vec<StoppedCommands>,
-    pub agents: Vec<ResumedAgent>,
+    pub agents: Vec<RestoredAgent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub set_up: Vec<SetUp>,
     /// The removed workspaces it opened again.
@@ -61,7 +61,7 @@ pub struct ForgottenWork {
     pub failed: Vec<Failure>,
 }
 
-/// The restores a resume queued, the commands it reported, the saved chats
+/// The restores a restore queued, the commands it reported, the saved chats
 /// it restored at once, the workspaces it set up and the spaces it failed
 /// for.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -108,7 +108,7 @@ pub struct Restorable {
 outputs!(
     StoppedCommands,
     SetUp,
-    Resumed,
+    StartedRestores,
     ForgottenWork,
     Queued,
     Reopened,

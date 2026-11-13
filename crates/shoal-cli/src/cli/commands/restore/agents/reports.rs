@@ -5,8 +5,8 @@ use std::fmt::Display;
 
 use crate::cli::commands::restore::reopen::ReopenedExt;
 use crate::client::execution_ids::ExecutionId;
-use crate::client::output::resume::{
-    ForgottenWork, Queued, Reopened, Resumed, SetUp, StoppedCommands,
+use crate::client::output::restore::{
+    ForgottenWork, Queued, Reopened, SetUp, StartedRestores, StoppedCommands,
 };
 use crate::{
     cli::context::Context, execution::recovery::SavedCommand, model::PresentSpace,
@@ -22,7 +22,7 @@ pub(super) fn nothing(ctx: &Context, reopened: Vec<Reopened>, started: bool) -> 
     }
     let message = "No stopped agents, commands or chats";
     match started {
-        true => ctx.emit(message, Resumed::default()),
+        true => ctx.emit(message, StartedRestores::default()),
         false => ctx.emit(message, Queued::default()),
     }
 }
@@ -98,7 +98,7 @@ fn summary(count: usize, starting: bool) -> String {
 /// `place`, and the `listed` ones the user starts in terminals of their own.
 pub(super) fn started(
     ctx: &Context,
-    output: &Resumed,
+    output: &StartedRestores,
     in_wrappers: usize,
     place: Option<&str>,
     listed: &[(&PresentSpace, &ExecutionId)],

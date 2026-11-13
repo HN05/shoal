@@ -51,7 +51,7 @@ fn runs_daemon_binary(candidate: &Path, daemon: Option<FileIdentity>) -> bool {
 pub(super) const PREPARATION_LIMIT: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// `prepare`, unless it takes longer than [`PREPARATION_LIMIT`]; the agent
-/// then stays stopped for `shoal resume`.
+/// then stays stopped for `shoal restore`.
 pub(super) async fn within_preparation_limit<T>(
     prepare: impl std::future::Future<Output = Result<T>>,
 ) -> Result<T> {
@@ -59,7 +59,7 @@ pub(super) async fn within_preparation_limit<T>(
         .await
         .map_err(|_| {
             anyhow::anyhow!(
-                "preparing the agent took longer than {}s; restore it with shoal resume",
+                "preparing the agent took longer than {}s; restore it with shoal restore",
                 PREPARATION_LIMIT.as_secs()
             )
         })?
@@ -70,7 +70,7 @@ pub(super) async fn within_preparation_limit<T>(
 pub(super) fn ensure_restorable(recovery: &super::recovery::Recovery) -> Result<()> {
     ensure!(
         recovery.automatic && !recovery.command.is_empty(),
-        "{} has no command to resume its session; configure its [agents.<name>] resume_command, then restore it with shoal resume",
+        "{} has no command to resume its session; configure its [agents.<name>] resume_command, then restore it with shoal restore",
         recovery.agent
     );
     Ok(())

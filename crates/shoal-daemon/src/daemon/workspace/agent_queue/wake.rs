@@ -1,7 +1,7 @@
 //! What wakes a queued restore: sustained healthy readings for an agent
 //! protection stopped mid-turn, an update for one stopped between turns,
 //! which has nothing to do until then, and for one stopped because its
-//! space is blocked, nothing blocking the space, unless `shoal resume`
+//! space is blocked, nothing blocking the space, unless `shoal restore`
 //! asked for it.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
@@ -161,7 +161,7 @@ impl Manager {
     }
 
     /// What the queued restore of `execution` in `workspace_id`, which a
-    /// waiting wrapper carries out, waits for: a slot once `shoal resume`
+    /// waiting wrapper carries out, waits for: a slot once `shoal restore`
     /// asked for it, no longer `automatic`,
     /// otherwise what its recovery record says. Whether an update is due is
     /// read as `due` says, and free disk space must have

@@ -439,7 +439,7 @@ async fn a_restore_whose_agent_never_starts_expires_and_says_so() {
     assert!(notifications.iter().any(|notification| {
         notification.kind == crate::daemon::notifications::NotificationKind::QueueFailed
     }));
-    // The agent stays stopped for `shoal resume`.
+    // The agent stays stopped for `shoal restore`.
     assert!(record_path(&manager.paths, &workspace.id, &ExecutionId::from("agent")).exists());
 }
 

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    output::{batch::Failure, chat::BackgroundChat, outputs, resume::Reopened},
+    output::{batch::Failure, chat::BackgroundChat, outputs, restore::Reopened},
     removal::RemovalResult,
     transfer::Manifest,
 };

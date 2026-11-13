@@ -25,7 +25,7 @@ pub struct SpaceStopped {
     /// Whether its processes stopped; false for a CI job's workspace, whose
     /// run the forge was asked to cancel instead.
     pub stopped: bool,
-    /// Whether agents, commands or the chat wait for `shoal resume`.
+    /// Whether agents, commands or the chat wait for `shoal restore`.
     pub saved: bool,
     /// The chat was stopped before, and keeps the space recorded as its
     /// stopper.

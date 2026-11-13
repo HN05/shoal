@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use super::super::targets::Selected;
 use super::{commands, permission_change, reports, stale};
-use crate::client::output::resume::Queued;
+use crate::client::output::restore::Queued;
 use crate::client::saved::{Queuing, Restore};
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;

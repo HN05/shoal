@@ -99,7 +99,7 @@ pub struct Record {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stage: Option<Stage>,
     /// Where the agent ran, as its terminal host records it, so `shoal
-    /// resume --all` can restore it there.
+    /// restore --all` can restore it there.
     #[serde(
         default,
         alias = "place",
@@ -178,18 +178,18 @@ pub struct Stop {
 }
 
 /// An agent stopped in a removed workspace, which `shoal restore` saves
-/// again for `shoal resume`.
+/// again for `shoal restore`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoppedAgent {
     pub execution: ExecutionId,
     pub record: Record,
-    /// When its record was saved, which `shoal resume` shows as its stop
+    /// When its record was saved, which `shoal restore` shows as its stop
     /// time.
     pub stopped_at: crate::time::UnixTime,
 }
 
 /// An agent that exited on its own before its assignment was done, which
-/// `shoal resume` continues. Unlike stopped work, it uses no agent slot, never
+/// `shoal restore` continues. Unlike stopped work, it uses no agent slot, never
 /// delays cleanup and nothing restores it on its own. A workspace keeps one
 /// per agent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -333,7 +333,7 @@ pub struct UpstreamLimit {
     pub until: Option<crate::time::UnixTime>,
 }
 
-/// What `shoal resume --forget` forgot in a workspace.
+/// What `shoal restore --forget` forgot in a workspace.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Forgotten {
     /// The name of the space that saved it.

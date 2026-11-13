@@ -201,7 +201,7 @@ async fn daemon_stop_stops_work_as_stop_all_does() {
         ),
         "{control:?}"
     );
-    // Agents stay down until `shoal resume`.
+    // Agents stay down until `shoal restore`.
     assert!(!running.queued_restore().await);
     let saved = recovery::Saved::load(&running.manager.paths, &running.workspace.id).unwrap();
     assert!(saved.agents.is_empty(), "{:?}", saved.agents);

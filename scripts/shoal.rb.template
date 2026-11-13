@@ -41,7 +41,7 @@ class Shoal < Formula
         brew install neurosnap/tap/zmx
       Sessions an older zmx started are unreachable after an upgrade, so
       stop their agents with `shoal stop` before upgrading zmx and resume
-      them after with `shoal resume`.
+      them after with `shoal restore`.
     EOS
   end
 

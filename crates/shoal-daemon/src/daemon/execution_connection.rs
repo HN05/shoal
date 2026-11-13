@@ -67,7 +67,7 @@ struct Connected {
     /// The daemon resumed the stopped agent, whose restored child has not
     /// started.
     resuming: bool,
-    /// The wrapper took over no agent queue entry, so `shoal resume` started
+    /// The wrapper took over no agent queue entry, so `shoal restore` started
     /// it rather than the daemon, and the agent it restores works on the
     /// assignment again.
     unqueued: bool,
@@ -357,7 +357,7 @@ async fn relay(
                         manager.forget_last_sessions(space.id());
                     } else if !resumed_here && *unqueued {
                         // A restore the agent queue starts withdrew it when queued
-                        // if `shoal resume` asked for it.
+                        // if `shoal restore` asked for it.
                         manager.reopen_for_resume(space.id()).await;
                     }
                     manager.agent_started(execution_id).await;
@@ -577,7 +577,7 @@ fn prepare_restart() -> PreparedStop {
     }
 }
 
-/// Pause a command whose stop request saves it for `shoal resume`, and stop
+/// Pause a command whose stop request saves it for `shoal restore`, and stop
 /// anything else.
 fn requested_stop(request: Option<StopRequest>, stopping: Stopping<'_>) -> Control {
     match request {

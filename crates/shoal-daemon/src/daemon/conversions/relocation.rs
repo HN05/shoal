@@ -28,7 +28,7 @@ use crate::{
 pub(crate) struct ConversionStop<'a> {
     /// The space whose process stops them; none for the user or Shoal.
     pub stopped_by: Option<&'a SpaceId>,
-    /// Whether the stop keeps them down until `shoal resume`, which keeps the
+    /// Whether the stop keeps them down until `shoal restore`, which keeps the
     /// chat a conversion makes of the workspace stopped too.
     pub holds: bool,
 }
@@ -178,7 +178,7 @@ impl Manager {
 
     /// Stop the agent of the chat that became the workspace `id`, whose row
     /// was `chat`, as a stop of the workspace's agents does, keeping its
-    /// session as `execution` for `shoal resume` in `mode`, since the
+    /// session as `execution` for `shoal restore` in `mode`, since the
     /// workspace's post-setup hook failed with `failure`, and tell the user.
     /// A hand-over that fails leaves the conversion pending, to try again.
     async fn stop_after_failed_hook(
@@ -196,7 +196,7 @@ impl Manager {
         let workspace = self.workspace_by_id(id).await?;
         let (name, number) = (workspace.name, workspace.number);
         let message = format!(
-            "The post-setup hook of {name} failed: {failure}; its agent stopped instead of restarting there, and shoal resume {number} continues it once the hook is repaired"
+            "The post-setup hook of {name} failed: {failure}; its agent stopped instead of restarting there, and shoal restore {number} continues it once the hook is repaired"
         );
         let about = About::space(&name, id);
         (self.notify_about(about, NotificationKind::RecoveryBlocked, message)).await;
@@ -219,7 +219,7 @@ impl Manager {
             log!("agent of {id} not handed over yet: {error:#}");
             return Ok(());
         }
-        resume_workspace(&self.paths, id, origin.as_ref()).await
+        restore_workspace(&self.paths, id, origin.as_ref()).await
     }
 
     /// Settle the conversion of the workspace `id` ahead of a stop of its
@@ -227,7 +227,7 @@ impl Manager {
     /// them down holds a conversion into a chat, and the agent of a chat that
     /// became the workspace, which the stop finds nowhere else, is handed
     /// over to it, once its session is kept as the workspace's last session,
-    /// which `shoal resume` continues. Whether it had such an agent.
+    /// which `shoal restore` continues. Whether it had such an agent.
     pub(crate) async fn stop_converting_agent(
         &self,
         id: &SpaceId,
@@ -290,7 +290,7 @@ impl Manager {
 
     /// Keep the chat that the workspace `id` becomes stopped, as a stop of
     /// its agent by the process of the space `stopped_by`, or by the user,
-    /// keeps that agent down until `shoal resume`.
+    /// keeps that agent down until `shoal restore`.
     async fn hold_converting_chat(&self, id: &SpaceId, stopped_by: Option<&SpaceId>) -> Result<()> {
         let (id, stopped_by) = (id.to_owned(), stopped_by.cloned());
         (self.store)
@@ -344,7 +344,7 @@ impl Manager {
     /// the chat's agent in the repository's checkout through the agent
     /// queue, continuing the session the agent reported last, whether it
     /// still runs or exited, told what the space is now, unless a stop
-    /// `held` it, which leaves the chat for `shoal resume`.
+    /// `held` it, which leaves the chat for `shoal restore`.
     async fn relocate_to_chat(&self, id: &SpaceId, chat: ConvertedChat, held: bool) -> Result<()> {
         let chat = ConvertedChat {
             session: self.latest_session(id, &chat),
@@ -419,15 +419,15 @@ impl Manager {
         };
         let message = match pending {
             Pending::Workspace { .. } => format!(
-                "The agent of {name} did not restart in its new worktree: {error:#}; continue it with shoal resume {number}"
+                "The agent of {name} did not restart in its new worktree: {error:#}; continue it with shoal restore {number}"
             ),
             Pending::Chat { .. } if self.chat_by_id(id).await.is_ok_and(|chat| chat.is_some()) => {
                 format!(
-                    "{name} became a chat, whose agent did not restart: {error:#}; continue it with shoal resume {number}"
+                    "{name} became a chat, whose agent did not restart: {error:#}; continue it with shoal restore {number}"
                 )
             }
             Pending::Chat { .. } => format!(
-                "{name} did not become a chat: {error:#}; it stays a workspace, whose stopped agent shoal resume {number} continues"
+                "{name} did not become a chat: {error:#}; it stays a workspace, whose stopped agent shoal restore {number} continues"
             ),
         };
         self.notify_about(
@@ -439,10 +439,10 @@ impl Manager {
     }
 }
 
-/// Continue the last session of the workspace `id` as `shoal resume` does,
+/// Continue the last session of the workspace `id` as `shoal restore` does,
 /// where its agent ran at `origin` or in a background place.
 #[cfg(not(test))]
-async fn resume_workspace(
+async fn restore_workspace(
     paths: &crate::paths::Paths,
     id: &SpaceId,
     origin: Option<&Origin>,
@@ -451,7 +451,7 @@ async fn resume_workspace(
     use std::process::Stdio;
 
     let mut argv = crate::workers::shoal_argv(paths)?;
-    argv.extend(["resume".into(), id.to_string().into()]);
+    argv.extend(["restore".into(), id.to_string().into()]);
     let env = crate::terminal::detached_start_environment(origin);
     let output = crate::workers::detached_command(&argv)
         .envs(&env)
@@ -461,7 +461,7 @@ async fn resume_workspace(
         .stderr(Stdio::piped())
         .output()
         .await
-        .context("run shoal resume")?;
+        .context("run shoal restore")?;
     anyhow::ensure!(
         output.status.success(),
         "{}",
@@ -472,7 +472,7 @@ async fn resume_workspace(
 
 /// Tests record the workspaces resumed instead of running this binary.
 #[cfg(test)]
-async fn resume_workspace(
+async fn restore_workspace(
     _paths: &crate::paths::Paths,
     id: &SpaceId,
     _origin: Option<&Origin>,

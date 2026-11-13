@@ -111,9 +111,9 @@ async fn with_restore(
     error: anyhow::Error,
 ) -> anyhow::Error {
     let saved = saved::read(daemon, SpaceSelector::id(space.id())).await;
-    match saved.is_ok_and(|saved| saved.is_resumable()) {
+    match saved.is_ok_and(|saved| saved.is_restorable()) {
         true => error.context(format!(
-            "the agent stays stopped; restore it with shoal resume {}",
+            "the agent stays stopped; restore it with shoal restore {}",
             space.number()
         )),
         false => error,

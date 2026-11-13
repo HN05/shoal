@@ -1,4 +1,4 @@
-//! What a workspace saved for `shoal resume` when its agents and commands
+//! What a workspace saved for `shoal restore` when its agents and commands
 //! stopped, which the daemon reads from its state, and how a resume
 //! restores it.
 use crate::execution_ids::ExecutionId;
@@ -35,7 +35,7 @@ pub async fn summaries(daemon: &impl Daemon) -> Result<Vec<SavedSummary>> {
 /// resume`.
 pub async fn waits_for_resume(daemon: &impl Daemon) -> Result<bool> {
     let summaries = summaries(daemon).await?;
-    Ok(summaries.iter().any(|summary| summary.resumable))
+    Ok(summaries.iter().any(|summary| summary.restorable))
 }
 
 /// What a space saved, in brief, as listings and pickers show it.
@@ -50,8 +50,8 @@ pub struct SavedSummary {
     /// It saved stopped agents or commands, which are unfinished work; last
     /// sessions alone are not.
     pub unfinished: bool,
-    /// Its stopped work waits for `shoal resume`.
-    pub resumable: bool,
+    /// Its stopped work waits for `shoal restore`.
+    pub restorable: bool,
 }
 
 /// What `shoal stop` or overload protection saved for one workspace.
@@ -169,7 +169,7 @@ impl Saved {
             agents: self.agent_names().map(Option::<&Agent>::cloned).collect(),
             commands: self.commands.len(),
             unfinished: self.is_unfinished(),
-            resumable: self.is_resumable(),
+            restorable: self.is_restorable(),
         }
     }
 
@@ -190,9 +190,9 @@ impl Saved {
         !(self.agents.is_empty() && self.commands.is_empty())
     }
 
-    /// Whether stopped work waits for `shoal resume`, which an agent whose
+    /// Whether stopped work waits for `shoal restore`, which an agent whose
     /// wrapper still waits to restore it does not.
-    pub fn is_resumable(&self) -> bool {
+    pub fn is_restorable(&self) -> bool {
         !self.commands.is_empty() || self.agents.iter().any(|agent| !agent.waits_in_wrapper)
     }
 

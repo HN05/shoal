@@ -504,7 +504,7 @@ impl Manager {
 
     /// Forget restores whose wrapper has been gone for the grace period, such
     /// as one that never reattached after a daemon restart. Its recovery
-    /// record stays for `shoal resume`. A restore the daemon starts has no
+    /// record stays for `shoal restore`. A restore the daemon starts has no
     /// wrapper.
     async fn expire_orphaned_restores(&self) -> Result<()> {
         let connected = self.executions.connection_ids().await;

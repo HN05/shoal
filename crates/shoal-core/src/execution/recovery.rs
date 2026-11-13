@@ -462,7 +462,7 @@ pub fn save_stopped(
     save_restorable(paths, space_id, id, record, restorer)
 }
 
-/// What brings a stopped agent back besides `shoal resume`.
+/// What brings a stopped agent back besides `shoal restore`.
 #[derive(Debug)]
 pub(crate) enum Restorer {
     /// Nothing: it stays stopped until the user resumes it.
@@ -760,7 +760,7 @@ pub fn saves_agent(paths: &Paths, space_id: &SpaceId) -> Result<bool> {
 
 /// The workspace's stopped agents, for its removal record. Their wrappers have
 /// exited, so none waits to restore them, and the restored workspace waits
-/// for `shoal resume` to restore them.
+/// for `shoal restore` to restore them.
 pub fn stopped_agents(paths: &Paths, space_id: &SpaceId) -> Result<Vec<StoppedAgent>> {
     let mut agents = Vec::new();
     for SavedSession {
@@ -1050,7 +1050,7 @@ fn name_unnamed_session(paths: &Paths, space_id: &SpaceId) -> Result<()> {
     }
 }
 
-/// A command `shoal stop` interrupted, reported by `shoal resume` instead of
+/// A command `shoal stop` interrupted, reported by `shoal restore` instead of
 /// being rerun: replaying an arbitrary command is not known to be safe.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct CommandRecord {
@@ -1311,7 +1311,7 @@ fn waits(record: &Record) -> bool {
     (record.waiting.as_ref()).is_some_and(|wrapper| identity::alive(wrapper).unwrap_or(false))
 }
 
-/// Whether any workspace has stopped work that waits for `shoal resume`;
+/// Whether any workspace has stopped work that waits for `shoal restore`;
 /// readable while the daemon is down.
 pub fn any_pending(paths: &Paths) -> bool {
     let Ok(entries) = std::fs::read_dir(paths.state.join("workspaces")) else {
@@ -1320,7 +1320,7 @@ pub fn any_pending(paths: &Paths) -> bool {
     entries.flatten().any(|entry| {
         entry.file_name().to_str().is_some_and(|id| {
             let saved = Saved::load(paths, &SpaceId::from(id.to_owned()));
-            saved.is_ok_and(|saved| saved.is_resumable())
+            saved.is_ok_and(|saved| saved.is_restorable())
         })
     })
 }
@@ -1356,7 +1356,7 @@ pub fn pending_except(
     Ok(false)
 }
 
-/// The executions of stopped agents that wait for `shoal resume` in the space.
+/// The executions of stopped agents that wait for `shoal restore` in the space.
 pub fn agent_records(paths: &Paths, space_id: &SpaceId) -> Result<Vec<ExecutionId>> {
     let entries = match std::fs::read_dir(paths.space_state(space_id)) {
         Ok(entries) => entries,

@@ -15,7 +15,7 @@ use anyhow::{Context as _, Result, ensure};
 use crate::client::agent::AgentSessionId;
 use crate::client::output::chat::BackgroundChat;
 use crate::client::output::{
-    resume::Reopened,
+    restore::Reopened,
     transfer::{ImportFailure, Imported, Imports},
 };
 use crate::{

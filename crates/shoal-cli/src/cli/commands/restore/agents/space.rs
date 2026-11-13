@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use super::{commands, permission_change, picker, queue, reports, sessions, stale};
 use crate::client::execution_ids::ExecutionId;
-use crate::client::output::resume::Resumed;
+use crate::client::output::restore::StartedRestores;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::RecordExt;
 use crate::{
@@ -67,7 +67,8 @@ pub(super) async fn run(
     permission_change::apply_one(ctx, &space, &selected_id, change).await?;
     if !here {
         let session = (space, picked);
-        return sessions::start_sessions(ctx, vec![session], true, Resumed::default()).await;
+        return sessions::start_sessions(ctx, vec![session], true, StartedRestores::default())
+            .await;
     }
     // The restore claims the commands it reports, which a restore started
     // elsewhere claims for itself.
@@ -113,7 +114,8 @@ pub(super) async fn continue_last_session(
     permission_change::apply_one(ctx, space, &picked.id, change).await?;
     if !here {
         let session = (space.clone(), picked);
-        return sessions::start_sessions(ctx, vec![session], true, Resumed::default()).await;
+        return sessions::start_sessions(ctx, vec![session], true, StartedRestores::default())
+            .await;
     }
     let (_claim, last) = claim_last_session(&picked.path)?;
     let mut commands = saved.commands;

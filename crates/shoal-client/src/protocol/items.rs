@@ -285,7 +285,7 @@ pub enum ItemContext {
 impl ItemMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
-            Self::PrWait { .. } | Self::WatchItems { .. } => Lifetime::Resumed,
+            Self::PrWait { .. } | Self::WatchItems { .. } => Lifetime::StartedRestores,
             _ => Lifetime::Reply,
         }
     }

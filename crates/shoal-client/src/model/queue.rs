@@ -187,7 +187,7 @@ impl QueueEntry {
 
 /// What stopping a workspace did: the agent launches waiting to start in it
 /// that it removed from the queue, how many untracked processes it stopped
-/// and whether it saved work for `shoal resume`, or for a CI job's workspace
+/// and whether it saved work for `shoal restore`, or for a CI job's workspace
 /// the run it asked the forge to cancel, whose runner then stops the job.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StoppedSpace {

@@ -5,7 +5,7 @@ use anyhow::Result;
 use std::ffi::OsString;
 
 use super::{commands, queue, reports};
-use crate::client::output::resume::{Resumed, ResumedAgent};
+use crate::client::output::restore::{RestoredAgent, StartedRestores};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, terminal, ui},
@@ -24,7 +24,7 @@ use crate::{
 pub(super) async fn run_all(
     ctx: &Context,
     stopped: Vec<(PresentSpace, Saved)>,
-    mut resumed: Resumed,
+    mut resumed: StartedRestores,
 ) -> Result<i32> {
     let mut sessions = Vec::new();
     for (space, mut saved) in stopped {
@@ -61,7 +61,7 @@ pub(super) async fn start_sessions(
     ctx: &Context,
     sessions: Vec<(PresentSpace, SavedSession)>,
     single: bool,
-    mut output: Resumed,
+    mut output: StartedRestores,
 ) -> Result<i32> {
     let mut listed = Vec::new();
     let mut in_wrappers = 0;
@@ -78,7 +78,7 @@ pub(super) async fn start_sessions(
             Ok(Started::Elsewhere { reused, place }) => (reused, place),
             Ok(Started::InWrapper) => {
                 in_wrappers += 1;
-                output.agents.push(ResumedAgent {
+                output.agents.push(RestoredAgent {
                     workspace: space.name().clone(),
                     execution: id.clone(),
                     background: false,
@@ -96,7 +96,7 @@ pub(super) async fn start_sessions(
         if started.is_none() {
             listed.push((space, id));
         }
-        output.agents.push(ResumedAgent {
+        output.agents.push(RestoredAgent {
             workspace: space.name().clone(),
             execution: id.clone(),
             background: started.is_some(),

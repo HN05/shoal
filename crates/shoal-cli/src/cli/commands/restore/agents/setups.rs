@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result};
 
 use super::super::targets::Selected;
 use super::permission_change;
-use crate::client::output::{batch::Failure, resume::SetUp};
+use crate::client::output::{batch::Failure, restore::SetUp};
 use crate::{
     cli::{
         commands::{queued_agents, workspaces},

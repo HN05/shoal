@@ -30,7 +30,7 @@ pub enum RecoveryMethod {
         workspace: SpaceSelector,
         checkpoint: CheckpointNumber,
     },
-    /// What an existing space saved for `shoal resume`.
+    /// What an existing space saved for `shoal restore`.
     Saved { space: SpaceSelector },
     /// What each visible space that saved anything saved, in brief.
     SavedSummaries,

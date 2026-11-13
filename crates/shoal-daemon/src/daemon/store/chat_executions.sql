@@ -1,6 +1,6 @@
 -- A chat's agent runs as an execution of the chat, so the chat no longer
 -- records the process it ran in. Each chat whose agent ran or Shoal saved
--- is kept here until the daemon saves its agent for `shoal resume`, or
+-- is kept here until the daemon saves its agent for `shoal restore`, or
 -- queues its restore when it ran or was saved to come back on its own; one
 -- whose agent exited keeps its session as a workspace's does.
 CREATE TABLE upgraded_chat_agents (

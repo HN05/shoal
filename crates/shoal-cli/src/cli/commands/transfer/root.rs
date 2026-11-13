@@ -2,7 +2,7 @@
 use super::super::restore::agents::queue::Stopped;
 use crate::cli::commands::restore::agents::reports::QueuedExt;
 use crate::client::execution_ids::ExecutionId;
-use crate::client::output::resume::Queued;
+use crate::client::output::restore::Queued;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::config_file::ConfigExt;

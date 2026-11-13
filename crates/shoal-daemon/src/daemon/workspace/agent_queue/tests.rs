@@ -616,7 +616,7 @@ pub(super) async fn queue(manager: &Manager) -> Vec<(String, QueueKind, QueueSta
         .collect()
 }
 
-/// Forget a stopped agent as `shoal resume --forget` does once its wrapper ended.
+/// Forget a stopped agent as `shoal restore --forget` does once its wrapper ended.
 async fn forget(manager: &Manager, workspace: &crate::model::Workspace, execution: &ExecutionId) {
     // No marked process belongs to the agent. A host scan would also count
     // every same-user process whose environment it cannot read, such as
@@ -857,7 +857,7 @@ async fn restart_keeps_restores_in_order_without_starting_one_twice() {
         ]
     );
     // The second wrapper never reattaches; its restore expires and leaves
-    // the recovery record to `shoal resume`.
+    // the recovery record to `shoal restore`.
     let past = crate::time::UnixTime::now() - START_GRACE - Duration::from_secs(1);
     restarted
         .store

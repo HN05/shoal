@@ -36,7 +36,7 @@ fn a_last_session_alone_continues_at_once_and_stopped_agents_queue() {
 }
 
 #[test]
-fn an_agent_its_wrapper_restores_is_not_resumable_work() {
+fn an_agent_its_wrapper_restores_is_not_restorable_work() {
     let mut saved = Saved {
         agents: vec![SavedSession {
             waits_in_wrapper: true,
@@ -44,7 +44,7 @@ fn an_agent_its_wrapper_restores_is_not_resumable_work() {
         }],
         ..Saved::default()
     };
-    assert!(saved.is_unfinished() && !saved.is_resumable());
+    assert!(saved.is_unfinished() && !saved.is_restorable());
     assert!(!saved.restores_outside_wrappers());
     saved.sessions.push(session("last"));
     assert!(saved.restores_outside_wrappers());

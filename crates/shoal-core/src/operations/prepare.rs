@@ -176,7 +176,7 @@ async fn leave_waiting(
     let (name, number) = (&workspace.name, workspace.number);
     match queued.await {
         Ok(entry) => eprintln!(
-            "{} waits for the setup of {name}; `shoal resume {number}` retries it",
+            "{} waits for the setup of {name}; `shoal restore {number}` retries it",
             entry.agent
         ),
         Err(error) => {

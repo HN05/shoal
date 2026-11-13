@@ -7,7 +7,7 @@ use anyhow::Result;
 
 use super::agents::queue::Stopped;
 use super::checkpoints::branch_label;
-use crate::client::output::resume::{Queued, Reopened};
+use crate::client::output::restore::{Queued, Reopened};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{

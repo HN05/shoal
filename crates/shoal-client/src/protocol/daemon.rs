@@ -29,6 +29,6 @@ pub enum Exit {
 /// answer to the request once its work has ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Exited {
-    /// Stopped work waits for `shoal resume`.
+    /// Stopped work waits for `shoal restore`.
     pub stopped_work: bool,
 }

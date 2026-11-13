@@ -4,7 +4,7 @@
 //! at once, a workspace whose setup failed retries it before the agent
 //! waiting for it starts, and `--forget` forgets the stopped work instead.
 use crate::client::execution_ids::ExecutionId;
-use crate::client::output::resume::{Queued, Reopened, Resumed};
+use crate::client::output::restore::{Queued, Reopened, StartedRestores};
 use crate::client::saved::Queuing;
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -193,7 +193,7 @@ async fn restore_each(
     let restored = set_up(ctx, &selected, reopened, now).await;
     match queuing {
         Queuing::Here { now: true } => {
-            let restored = Resumed {
+            let restored = StartedRestores {
                 set_up: restored.set_up,
                 reopened: restored.reopened,
                 failed: restored.failed,

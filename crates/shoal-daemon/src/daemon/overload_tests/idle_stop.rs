@@ -93,7 +93,7 @@ async fn an_update_restores_an_idle_agent_stopped_in_a_held_done_workspace() {
     serving.abort();
 }
 
-/// `shoal resume` of the agent says the work is not finished, so its
+/// `shoal restore` of the agent says the work is not finished, so its
 /// restore in the waiting wrapper withdraws the completion.
 #[tokio::test]
 async fn resuming_an_idle_agent_of_a_held_done_workspace_withdraws_the_completion() {

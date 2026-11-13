@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// The waiting launches that open the workspace `?1`, which wait for its
-/// failed setup, as `shoal resume` finds them among the queue's entries.
+/// failed setup, as `shoal restore` finds them among the queue's entries.
 const AWAITING_SETUP: &str =
     "FROM agent_queue WHERE kind=?2 AND state=?3 AND opens_workspace_id=?1";
 

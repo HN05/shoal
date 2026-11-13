@@ -9,7 +9,7 @@ use crate::{daemon::workspace::Manager, execution::recovery, model::Workspace};
 impl Manager {
     /// Refuse a launch in `workspace` while it has an agent of its own: a
     /// running one, one in the agent queue, or a stopped one awaiting
-    /// `shoal resume`. A last session, whose agent exited on its own, does
+    /// `shoal restore`. A last session, whose agent exited on its own, does
     /// not count, since the new agent replaces it, nor does a start whose
     /// setup failed, whose place the agent left waiting takes. Requires the
     /// queue gate, which keeps another launch out until this one is
@@ -38,7 +38,7 @@ impl Manager {
         }
         if !recovery::agent_records(&self.paths, &workspace.id)?.is_empty() {
             bail!(HasAgent(format!(
-                "workspace {space} has a stopped agent; resume it with `shoal resume {space}` or forget it with `shoal resume --forget {space}`"
+                "workspace {space} has a stopped agent; restore it with `shoal restore {space}` or forget it with `shoal restore --forget {space}`"
             )));
         }
         Ok(())

@@ -3236,7 +3236,7 @@ fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
     fixture.ok(&["stop", &fixture.id("detached")]);
 }
 
-/// Without a terminal, as from another agent's tool call, `shoal resume
+/// Without a terminal, as from another agent's tool call, `shoal restore
 /// --now` has the daemon start each restore at once, whatever the limit,
 /// instead of naming commands to run them here, and so does resuming a last
 /// session by itself.

@@ -102,7 +102,7 @@ pub enum Control {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         removed: bool,
     },
-    /// Stop and save what `shoal resume` restores. Older wrappers ignore the
+    /// Stop and save what `shoal restore` restores. Older wrappers ignore the
     /// reason.
     Pause {
         #[serde(default, skip_serializing_if = "Option::is_none")]

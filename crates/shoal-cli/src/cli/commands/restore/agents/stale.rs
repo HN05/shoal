@@ -30,7 +30,7 @@ pub(super) async fn reconcile(
     };
     ensure!(
         execution.state != ExecutionState::Running || execution.stopped.is_some(),
-        "selected execution is active; stop it before resuming"
+        "selected execution is active; stop it before restoring"
     );
     if execution.state != ExecutionState::Unknown {
         return Ok(());

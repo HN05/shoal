@@ -421,7 +421,7 @@ fn emptying_notice(
 
 /// Stop every running agent through protection, so it restores once free
 /// space recovers, then the remaining executions but CI jobs' as `shoal stop`
-/// does, saving what `shoal resume` restores. Executions started while space
+/// does, saving what `shoal restore` restores. Executions started while space
 /// stays this low stop on the next check.
 async fn stop_executions(
     manager: &Manager,
@@ -459,7 +459,7 @@ async fn stop_executions(
                 (
                     NotificationKind::AgentStopped,
                     format!(
-                        "Stopped tracked commands: {low}; free disk space, then shoal resume {} lists them",
+                        "Stopped tracked commands: {low}; free disk space, then shoal restore {} lists them",
                         workspace.number
                     ),
                 )

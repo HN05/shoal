@@ -1,6 +1,6 @@
 //! Executions whose processes ran in an earlier boot have ended, since a
 //! restart of the machine ends every process. The daemon forgets them,
-//! keeping the recovery records they saved for `shoal resume`, and the session
+//! keeping the recovery records they saved for `shoal restore`, and the session
 //! of an agent that saved none as one of its workspace's last sessions.
 use crate::process::identity::IdentityExt;
 use anyhow::Result;
@@ -32,7 +32,7 @@ impl Manager {
     }
 
     /// Keep the session of an agent that ended without saving a recovery
-    /// record as `shoal resume` continues one that exited on its own.
+    /// record as `shoal restore` continues one that exited on its own.
     async fn keep_unsaved_session(&self, execution: &Execution) -> Result<()> {
         // Its record, or the last session an interrupted pass kept, which
         // keeping it again would replace once its reported session is gone.

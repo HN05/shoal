@@ -151,13 +151,13 @@ impl Manager {
             &removed.agents,
         ) {
             warnings.push(format!(
-                "cannot save stopped agents for shoal resume: {error:#}"
+                "cannot save stopped agents for shoal restore: {error:#}"
             ));
         }
         for last in &removed.last_sessions {
             if let Err(error) = last.write(&self.paths, &opened.workspace.id) {
                 warnings.push(format!(
-                    "cannot save the last {} session for shoal resume: {error:#}",
+                    "cannot save the last {} session for shoal restore: {error:#}",
                     last.agent
                 ));
             }
