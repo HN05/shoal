@@ -7,7 +7,6 @@ use super::{
     branch_report::{BranchReport, branch_report, watches_branch},
     cursor::{all_pending, cursor_record, pending_updates, save_cursor_record, save_pending},
     items::{NO_LINKED_ITEMS, followed_items, links_kind},
-    waits::ActiveWaits,
 };
 use crate::{
     client::{space_ids::SpaceId, space_names::SpaceSelector},
@@ -66,7 +65,7 @@ impl Manager {
         // One transaction removes exactly the acknowledged deliveries, so
         // whatever a poll or a split queues meanwhile stays pending. A chat's
         // watch shares its delivery with the chat's hooks.
-        let waits = [self.item_waits.clone(), self.chat_waits.clone()];
+        let waits = self.waits.clone();
         let agents = self.tracked_agents().await;
         self.store
             // Not `write`: the commit happens inside `with_unwatched`, so no
@@ -81,8 +80,7 @@ impl Manager {
                 // these spaces, or in one receiving their activity above them,
                 // whatever its kind, started after it and must report their
                 // updates as well.
-                let [workspaces, chats] = &waits;
-                ActiveWaits::with_unwatched([workspaces, chats], &delivered, |unwatched| {
+                waits.with_unwatched(&delivered, |unwatched| {
                     acknowledge_deliveries(&tx, unwatched, &deliveries)?;
                     Ok(tx.commit()?)
                 })

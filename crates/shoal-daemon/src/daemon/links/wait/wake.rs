@@ -7,7 +7,7 @@ use anyhow::Result;
 use super::{delivery::receiving, poll::POLL_INTERVAL};
 use crate::{
     client::{execution_ids::ExecutionId, space_ids::SpaceId, space_names::SpaceSelector},
-    daemon::{links::wait::waits::ActiveWaits, workspace::Manager},
+    daemon::workspace::Manager,
     model::{AgentStatus, PresentSpace, Workspace},
     time::UnixTime,
 };
@@ -67,7 +67,7 @@ impl Manager {
     ) -> Result<()> {
         let phase = WakePhase::waiting_for(due);
         // Subscribe before reading, so a change in between still wakes.
-        let mut messages = self.signals.watch_agent_messages();
+        let mut messages = self.signals.watch_messages();
         let mut queued = self.signals.watch_item_updates();
         let mut changed = self.signals.watch_agents();
         loop {
@@ -106,7 +106,7 @@ impl Manager {
     ) -> Result<()> {
         let phase = WakePhase::waiting_for(due);
         // Subscribe before reading, so a change in between still wakes.
-        let mut messages = self.signals.watch_chat_messages();
+        let mut messages = self.signals.watch_messages();
         let mut queued = self.signals.watch_item_updates();
         let mut changed = self.signals.watch_agents();
         loop {
@@ -132,7 +132,7 @@ impl Manager {
         hooked: Option<&ExecutionId>,
         phase: WakePhase,
     ) -> Result<bool> {
-        if !self.wakeable(id, hooked, &self.chat_waits).await? {
+        if !self.wakeable(id, hooked).await? {
             return Ok(false);
         }
         self.chat_updates_waiting(id, phase == WakePhase::Prompted)
@@ -242,24 +242,15 @@ impl Manager {
         messages_due: bool,
         phase: WakePhase,
     ) -> Result<bool> {
-        if !self
-            .wakeable(&workspace.id, hooked, &self.item_waits)
-            .await?
-        {
+        if !self.wakeable(&workspace.id, hooked).await? {
             return Ok(false);
         }
         Ok(messages_due || self.wake_updates_due(workspace.clone(), phase).await?)
     }
 
     /// Whether the agent of the space `id` is idle and the hook of the
-    /// agent the `hooked` execution runs cannot wake it, the hook's waits
-    /// running in `waits`.
-    async fn wakeable(
-        &self,
-        id: &SpaceId,
-        hooked: Option<&ExecutionId>,
-        waits: &ActiveWaits,
-    ) -> Result<bool> {
+    /// agent the `hooked` execution runs cannot wake it.
+    async fn wakeable(&self, id: &SpaceId, hooked: Option<&ExecutionId>) -> Result<bool> {
         let space = id.clone();
         let state = self
             .store
@@ -270,7 +261,7 @@ impl Manager {
             return Ok(false);
         };
         Ok(match hooked {
-            Some(execution) => self.hook_cannot_wake(id, execution, &idle, waits).await,
+            Some(execution) => self.hook_cannot_wake(id, execution, &idle).await,
             None => true,
         })
     }
@@ -278,7 +269,7 @@ impl Manager {
     /// Whether the hook that wakes the agent `execution` runs in the
     /// space `id`, `idle` as its status says, cannot: an interrupt ended
     /// its last turn, after which the hook does not run, or the agent has
-    /// idled and no wait of `waits` for the space's updates has run for
+    /// idled and no wait for the space's updates has run for
     /// [`UNWATCHED_WAKE_DELAY`], so the hook has ended or cannot wait. A turn
     /// that ran that long without a delivery leaves no wait behind it either,
     /// so the hook starting as it ends gets the delay too.
@@ -287,11 +278,10 @@ impl Manager {
         id: &SpaceId,
         execution: &ExecutionId,
         idle: &AgentStatus,
-        waits: &ActiveWaits,
     ) -> bool {
         self.turn_interrupted(execution).await
             || (idled_for(idle, UNWATCHED_WAKE_DELAY)
-                && waits.unwatched_for(id, UNWATCHED_WAKE_DELAY))
+                && self.waits.unwatched_for(id, UNWATCHED_WAKE_DELAY))
     }
 }
 

@@ -746,7 +746,7 @@ impl Manager {
             .write(move |tx| record_answer(tx, number, &answer, shown.as_ref()))
             .await?;
         // The answer waits in the inbox of the space's agent.
-        self.space_message_queued();
+        self.signals.message_queued();
         self.signals.question_changed();
         Ok(question)
     }

@@ -116,8 +116,7 @@ pub struct Manager {
     /// closed, or its ownership moves to another workspace.
     pub(crate) place_ownership: tokio::sync::Mutex<()>,
     pub(crate) gates: gates::Gates,
-    pub(crate) item_waits: crate::daemon::links::wait::ActiveWaits,
-    pub(crate) chat_waits: crate::daemon::links::wait::ActiveWaits,
+    pub(crate) waits: crate::daemon::links::wait::ActiveWaits,
     pub(super) cleanup_health: super::cleanup::CleanupHealth,
     /// The spaces automatic cleanup removed since Shoal's log recorded it.
     pub(crate) cleanup_removals: super::cleanup::Removed,
@@ -181,8 +180,7 @@ impl Manager {
         super::forge_hosts::learn_forge_pins(&Default::default(), &config.machine.forges);
         Ok(Arc::new(Self {
             config_state: config_state::ConfigState::new(config),
-            item_waits: Default::default(),
-            chat_waits: Default::default(),
+            waits: Default::default(),
             cleanup_health: Default::default(),
             cleanup_removals: Default::default(),
             syncs: Default::default(),

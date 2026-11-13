@@ -95,8 +95,8 @@ impl Attached {
 /// space `id` in the caller's transaction, as
 /// [`Manager::queue_space_message`] queues one, for a caller that decides
 /// in the same transaction whether to send it: its ID, or `None` when an
-/// identical message is unread. The caller wakes the space's waits with
-/// [`Manager::space_message_queued`] after committing.
+/// identical message is unread. The caller wakes the waits for messages
+/// after committing.
 pub(crate) fn queue_shoal_message(
     tx: &Transaction<'_>,
     id: &SpaceId,
@@ -186,16 +186,9 @@ impl Manager {
             })
             .await?;
         if queued {
-            self.space_message_queued();
+            self.signals.message_queued();
         }
         Ok(())
-    }
-
-    /// Wake the waits for spaces' messages, after the transaction that
-    /// queued one commits.
-    pub(crate) fn space_message_queued(&self) {
-        self.signals.agent_message_queued();
-        self.signals.chat_message_queued();
     }
 
     /// The unread messages of the space `selector` names, oldest first.

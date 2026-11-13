@@ -7,8 +7,7 @@ use tokio::sync::{Notify, futures::Notified, watch};
 pub(crate) struct Signals {
     /// The newest recorded notification ID.
     notifications: watch::Sender<i64>,
-    agent_messages: Counter,
-    chat_messages: Counter,
+    messages: Counter,
     questions: Counter,
     item_updates: Counter,
     agents: Counter,
@@ -28,22 +27,13 @@ impl Signals {
         self.notifications.subscribe()
     }
 
-    /// Wake watches waiting for agent messages.
-    pub(crate) fn agent_message_queued(&self) {
-        self.agent_messages.advance();
+    /// Wake the waits for a space's messages.
+    pub(crate) fn message_queued(&self) {
+        self.messages.advance();
     }
 
-    pub(crate) fn watch_agent_messages(&self) -> watch::Receiver<u64> {
-        self.agent_messages.subscribe()
-    }
-
-    /// Wake chats waiting for messages.
-    pub(crate) fn chat_message_queued(&self) {
-        self.chat_messages.advance();
-    }
-
-    pub(crate) fn watch_chat_messages(&self) -> watch::Receiver<u64> {
-        self.chat_messages.subscribe()
+    pub(crate) fn watch_messages(&self) -> watch::Receiver<u64> {
+        self.messages.subscribe()
     }
 
     /// Wake waits for an answer once a question is answered or closed.

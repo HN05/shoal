@@ -34,7 +34,7 @@ async fn workspace(
 async fn messages_wait_until_delivered_and_repeats_collapse() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager, "receiver").await;
-    let changed = manager.signals.watch_agent_messages();
+    let changed = manager.signals.watch_messages();
     for _ in 0..2 {
         manager
             .send_space_message(
@@ -144,7 +144,7 @@ async fn a_message_for_the_next_turn_wakes_only_once_queued_to_wake() {
         .unwrap();
     queue(Delivery::NextTurn).await.unwrap();
     assert!(!wakes().await);
-    let mut changed = manager.signals.watch_agent_messages();
+    let mut changed = manager.signals.watch_messages();
     changed.borrow_and_update();
     queue(Delivery::NextTurn).await.unwrap();
     assert!(!changed.has_changed().unwrap());

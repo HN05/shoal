@@ -452,7 +452,7 @@ impl Manager {
             log!("turn retry for {workspace} not delivered: {error:#}");
         }
         if delivered.queued {
-            self.space_message_queued();
+            self.signals.message_queued();
         }
         Ok(delivered.next)
     }

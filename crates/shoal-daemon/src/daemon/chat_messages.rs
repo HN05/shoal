@@ -20,7 +20,7 @@ impl Manager {
     /// Delivery replaces a running wait, which would otherwise deliver them
     /// again.
     pub async fn chat_updates(&self, chat: &SpaceId) -> Result<Updates> {
-        let delivery = self.chat_waits.start(chat);
+        let delivery = self.waits.start(chat);
         let messages = self.agent_messages(&SpaceSelector::id(chat)).await?;
         // The messages, then the leftovers, share the response with the
         // updates.
@@ -42,9 +42,9 @@ impl Manager {
     /// The chat's next messages or item activity, once it has any, unless a
     /// newer wait or delivery takes them first.
     pub async fn wait_chat_messages(&self, chat: &SpaceId) -> Result<Updates> {
-        let wait = self.chat_waits.start(chat);
+        let wait = self.waits.start(chat);
         // Subscribe before reading, so what is queued in between still wakes.
-        let mut queued = self.signals.watch_chat_messages();
+        let mut queued = self.signals.watch_messages();
         let mut background = self.signals.watch_item_updates();
         loop {
             let messages = self.agent_messages(&SpaceSelector::id(chat)).await?;

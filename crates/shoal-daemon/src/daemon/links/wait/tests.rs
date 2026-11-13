@@ -159,7 +159,7 @@ async fn agent_messages_end_a_watch_before_item_activity() {
             .is_err()
     );
 
-    let mut queued = manager.signals.watch_agent_messages();
+    let mut queued = manager.signals.watch_messages();
     let waiting = {
         let manager = manager.clone();
         let id = workspace.id.clone();
@@ -316,7 +316,7 @@ async fn background_activity_queues_for_the_agents_hooks() {
         .await
         .unwrap();
     // Handing them to the agent's hook replaces the running watch.
-    let watch = manager.item_waits.start(&workspace.id);
+    let watch = manager.waits.start(&workspace.id);
     let delivered = manager
         .agent_updates(&SpaceSelector::id(&workspace.id))
         .await
@@ -382,7 +382,7 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
     assert_eq!(woken.updates[0].kind, UpdateKind::Comment);
     // A watch in the chat yields to its hook's delivery, which hands over
     // the same update once acknowledged.
-    let watch = manager.chat_waits.start(&chat.id);
+    let watch = manager.waits.start(&chat.id);
     let delivered = manager.chat_updates(&chat.id).await.unwrap();
     watch.superseded.notified().await;
     assert!(!watch.is_current());
@@ -446,7 +446,7 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
     let deliveries = vec![delivered.updates[0].delivery.clone()];
     let pending = || async { manager.pending_pr_activity(&worker.id).await.unwrap().len() };
     // A newer watch in the workspace below keeps what the chat acknowledges.
-    let worker_wait = manager.item_waits.start(&worker.id);
+    let worker_wait = manager.waits.start(&worker.id);
     manager
         .acknowledge_pr_updates(&SpaceSelector::id(&chat.id), deliveries.clone())
         .await
@@ -454,7 +454,7 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
     assert_eq!(pending().await, 1);
     drop(worker_wait);
     // And a newer wait in the chat keeps what the workspace acknowledges.
-    let chat_wait = manager.chat_waits.start(&chat.id);
+    let chat_wait = manager.waits.start(&chat.id);
     manager
         .acknowledge_pr_updates(&SpaceSelector::id(&worker.id), deliveries.clone())
         .await
@@ -840,7 +840,7 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
         .map(|update| update.delivery.clone())
         .collect::<Vec<_>>();
     // A newer watch in the parent receives the child's updates as well.
-    let parent_wait = manager.item_waits.start(&parent.id);
+    let parent_wait = manager.waits.start(&parent.id);
     manager
         .acknowledge_pr_updates(&SpaceSelector::id(&parent.id), deliveries.clone())
         .await
@@ -855,7 +855,7 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
     );
     drop(parent_wait);
     // A watch in the child starts before the parent acknowledges.
-    let child_wait = manager.item_waits.start(&child.id);
+    let child_wait = manager.waits.start(&child.id);
     manager
         .acknowledge_pr_updates(&SpaceSelector::id(&parent.id), deliveries.clone())
         .await
@@ -874,7 +874,7 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
     drop(child_wait);
     // A watch in the child itself, acknowledged while a newer parent
     // watch runs, leaves the parent's watch the child's updates.
-    let parent_wait = manager.item_waits.start(&parent.id);
+    let parent_wait = manager.waits.start(&parent.id);
     manager
         .acknowledge_pr_updates(&SpaceSelector::id(&child.id), deliveries.clone())
         .await
@@ -1222,7 +1222,7 @@ async fn a_hooked_agent_is_due_a_wake_once_no_wait_has_run_for_a_while() {
         .await
         .unwrap();
     assert!(due().await);
-    let running = manager.item_waits.start(&workspace.id);
+    let running = manager.waits.start(&workspace.id);
     tokio::time::advance(UNWATCHED_WAKE_DELAY).await;
     assert!(!due().await);
     drop(running);
@@ -2063,7 +2063,7 @@ async fn acknowledgement_keeps_queued_updates_and_those_a_newer_wait_needs() {
         .run(move |db| queue_update(db, &id, update))
         .await
         .unwrap();
-    let newer = manager.item_waits.start(&workspace.id);
+    let newer = manager.waits.start(&workspace.id);
     manager
         .acknowledge_pr_updates(
             &SpaceSelector::id(&workspace.id),

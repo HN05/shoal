@@ -215,7 +215,7 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
         let (manager, chat) = (manager.clone(), chat.id.clone());
         async move { manager.wait_chat_messages(&chat).await }
     });
-    while !manager.chat_waits.is_waiting(&chat.id) {
+    while !manager.waits.is_waiting(&chat.id) {
         tokio::task::yield_now().await;
     }
     assert!(

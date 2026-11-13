@@ -43,9 +43,9 @@ impl Manager {
                 return self.wait_chat_items(&chat.id, selection, deadline).await;
             }
         };
-        let wait = self.item_waits.start(&workspace.id);
+        let wait = self.waits.start(&workspace.id);
         // Subscribe before reading, so a message queued in between still wakes.
-        let mut queued = self.signals.watch_agent_messages();
+        let mut queued = self.signals.watch_messages();
         let mut background = self.signals.watch_item_updates();
         let unread = self
             .unread_agent_messages(&SpaceSelector::id(&workspace.id))
@@ -128,7 +128,7 @@ impl Manager {
     pub async fn agent_updates(&self, selector: &SpaceSelector) -> Result<Updates> {
         let workspace = self.workspace(selector).await?;
         let workspace_id = workspace.id.clone();
-        let delivery = self.item_waits.start(&workspace.id);
+        let delivery = self.waits.start(&workspace.id);
         let messages = self.deliverable_messages(&workspace).await?;
         // The messages, then the leftovers, share the response with the
         // updates.
@@ -234,9 +234,9 @@ impl Manager {
     ) -> Result<Updates> {
         // The chat's hooks deliver what a watch would, so the newest of them
         // takes it.
-        let wait = self.chat_waits.start(id);
+        let wait = self.waits.start(id);
         // Subscribe before reading, so a message queued in between still wakes.
-        let mut queued = self.signals.watch_chat_messages();
+        let mut queued = self.signals.watch_messages();
         let mut background = self.signals.watch_item_updates();
         let messages = self.agent_messages(&SpaceSelector::id(id)).await?;
         let updates = if messages.is_empty() {

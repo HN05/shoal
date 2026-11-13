@@ -87,7 +87,7 @@ impl Manager {
             })
             .await?;
         if queued.is_some() {
-            self.space_message_queued();
+            self.signals.message_queued();
         }
         woken.0.insert(id.to_owned(), now);
         Ok(())

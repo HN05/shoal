@@ -1,5 +1,5 @@
-//! The registry of running waits, one per workspace or chat, in which a
-//! newer wait supersedes an older one.
+//! The registry of running waits, one per space, in which a newer wait
+//! supersedes an older one.
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -66,25 +66,19 @@ impl ActiveWaits {
         let ended = self.ended.lock().expect("active waits lock");
         ended.get(key).copied().unwrap_or(self.since).elapsed() >= delay
     }
-}
 
-impl ActiveWaits {
     /// Run `operation` with the space at the end of each of `paths` that no
-    /// wait of `registries`, the workspaces' then the chats', runs in
-    /// anywhere along its path, since a wait there receives its updates too,
-    /// whatever the kind of the space it runs in; no wait can start in
-    /// either while it runs. Every caller locks them in that order.
+    /// wait runs in anywhere along its path, since a wait there receives its
+    /// updates too; no wait can start while it runs.
     pub(super) fn with_unwatched(
-        [workspaces, chats]: [&Self; 2],
+        &self,
         paths: &[Vec<SpaceId>],
         operation: impl FnOnce(&[SpaceId]) -> Result<()>,
     ) -> Result<()> {
-        let workspaces = workspaces.running.lock().expect("active waits lock");
-        let chats = chats.running.lock().expect("active waits lock");
-        let waiting = |space: &SpaceId| workspaces.contains_key(space) || chats.contains_key(space);
+        let running = self.running.lock().expect("active waits lock");
         let unwatched = paths
             .iter()
-            .filter(|path| !path.iter().any(waiting))
+            .filter(|path| !path.iter().any(|space| running.contains_key(space)))
             .filter_map(|path| path.last().cloned())
             .collect::<Vec<_>>();
         operation(&unwatched)
