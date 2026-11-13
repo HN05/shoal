@@ -105,7 +105,7 @@ impl Manager {
     /// The session files kept for `workspace` that its restore's caller did
     /// not put in place, for its removal record. An unreadable list is not
     /// worth keeping the workspace for.
-    pub(super) async fn unplaced_sessions(&self, workspace: &Workspace) -> Vec<SessionFile> {
+    pub(crate) async fn unplaced_sessions(&self, workspace: &Workspace) -> Vec<SessionFile> {
         let Ok(repo) = self.repository(&workspace.repository_id).await else {
             return Vec::new();
         };

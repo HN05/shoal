@@ -1,6 +1,7 @@
 //! Packages of spaces for `shoal move`: the daemon removes a space here,
-//! stopping a chat's agent first, or copies one that keeps running, and
-//! writes what continues it on another machine.
+//! stopping a chat's agent first, copies one that keeps running, or stops
+//! one's agents for a move that ends it once imported, and writes what
+//! continues it on another machine.
 use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
 use crate::transfer::ManifestExt;
@@ -24,6 +25,7 @@ use crate::{
 };
 
 mod copy;
+mod moving;
 
 /// A space prepared for its package, ended here or copied: its repository,
 /// the package without its session files, the removal that ended a

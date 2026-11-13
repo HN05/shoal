@@ -11,11 +11,12 @@ use crate::{
     transfer::{ExportedSpace, Import, Space},
 };
 
+mod moving;
 mod transfer;
 
 /// A manager with a chat `name` about a registered repository, whose
 /// agent's process this test reaps once a signal ends it.
-async fn chat(name: &str) -> (tempfile::TempDir, Arc<Manager>, u32) {
+pub(super) async fn chat(name: &str) -> (tempfile::TempDir, Arc<Manager>, u32) {
     chat_running(name, "exec sleep 6021").await
 }
 

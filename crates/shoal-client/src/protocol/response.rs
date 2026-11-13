@@ -260,6 +260,7 @@ response_bodies! {
     RemovalResult(RemovalResult),
     StoppedProcesses(crate::processes::Stopped),
     ExportedSpace(crate::transfer::ExportedSpace),
+    EndedSpace(Option<RemovalResult>),
     DiffBase(DiffBase),
     Conflicts(ConflictCheck),
     MergeWarning(Option<crate::model::MergeWarning>),

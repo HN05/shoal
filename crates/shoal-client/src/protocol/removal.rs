@@ -101,6 +101,23 @@ pub enum RemovalMethod {
         unsaved: UnsavedWork,
         file: std::path::PathBuf,
     },
+    /// Stop the agents of the workspace or chat `space`, saving their
+    /// sessions, and write it for another Shoal to the new file `file`
+    /// without ending it here, as `shoal move ssh` does before its import
+    /// there.
+    ExportMovingSpace {
+        space: SpaceSelector,
+        file: std::path::PathBuf,
+    },
+    /// End `space` here once another Shoal imported its move, deleting only
+    /// the `unsaved` work the caller saw: a workspace only while it still
+    /// has what its exported checkpoint `checkpoint` keeps.
+    EndMovedSpace {
+        space: SpaceSelector,
+        unsaved: UnsavedWork,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        checkpoint: Option<crate::model::CheckpointNumber>,
+    },
     /// Record a workspace another Shoal exported as removed here, with its
     /// checkpoint fetched from `bundle`, and open it again; a `copy` as a
     /// new workspace on a branch of its own. The daemon keeps the agents'

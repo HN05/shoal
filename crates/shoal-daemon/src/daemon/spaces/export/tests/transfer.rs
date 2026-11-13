@@ -18,7 +18,7 @@ use crate::{
     transfer::*,
 };
 
-async fn exporter() -> (
+pub(super) async fn exporter() -> (
     tempfile::TempDir,
     Arc<Manager>,
     Repository,
@@ -52,7 +52,7 @@ async fn exporter() -> (
 }
 
 /// Another Shoal with its own clone of `origin`.
-async fn importer(origin: &Path) -> (tempfile::TempDir, Arc<Manager>, Repository) {
+pub(super) async fn importer(origin: &Path) -> (tempfile::TempDir, Arc<Manager>, Repository) {
     let (root, manager) = manager().await;
     git(
         root.path(),
@@ -98,7 +98,7 @@ async fn export_removed(manager: &Manager, workspace: &SpaceId) -> Vec<u8> {
     fs::read(file).unwrap()
 }
 
-async fn import(
+pub(super) async fn import(
     manager: &Manager,
     repo: &Repository,
     file: &[u8],
@@ -144,7 +144,7 @@ async fn import_record(
 }
 
 /// The workspace `manifest` packages.
-fn packaged_workspace(manifest: &Manifest) -> &PackagedWorkspace {
+pub(super) fn packaged_workspace(manifest: &Manifest) -> &PackagedWorkspace {
     match &manifest.space {
         Space::Workspace(packaged) => packaged,
         Space::Chat(_) => panic!("a chat package: {manifest:?}"),

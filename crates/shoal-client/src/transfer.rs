@@ -172,6 +172,33 @@ pub async fn export(
     .await
 }
 
+/// Stop the agents of `space`, saving their sessions, and package it into
+/// `file` for a move, leaving it here until [`end_moved`] ends it.
+pub async fn export_moving(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    file: PathBuf,
+) -> Result<ExportedSpace> {
+    request(daemon, RemovalMethod::ExportMovingSpace { space, file }).await
+}
+
+/// End `space`, which another Shoal imported, deleting only the `unsaved`
+/// work the caller saw: a workspace only while it still has what its
+/// exported `checkpoint` keeps. Returns a workspace's removal.
+pub async fn end_moved(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    unsaved: UnsavedWork,
+    checkpoint: Option<CheckpointNumber>,
+) -> Result<Option<RemovalResult>> {
+    let method = RemovalMethod::EndMovedSpace {
+        space,
+        unsaved,
+        checkpoint,
+    };
+    request(daemon, method).await
+}
+
 /// Package a copy of `space` into `file`, leaving it running: a workspace
 /// at its checkpoint `checkpoint`, or at a new one.
 pub async fn copy(

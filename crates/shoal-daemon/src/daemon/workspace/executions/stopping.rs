@@ -138,6 +138,16 @@ impl StopRequest {
         }
     }
 
+    /// The stop of a space's agents before `shoal move ssh` exports it,
+    /// which saves their sessions for the import on the other machine, or
+    /// for their restores here when that import fails.
+    pub(crate) fn moving() -> Self {
+        Self {
+            reason: "its space moves to another machine".into(),
+            save: Save::Everything,
+        }
+    }
+
     pub fn repair() -> Self {
         Self {
             reason: "stopped to repair the workspace".into(),

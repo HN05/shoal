@@ -137,6 +137,23 @@ impl Manager {
         })
     }
 
+    /// Whether `workspace` still has the branch, HEAD and unsaved files
+    /// `checkpoint` keeps.
+    pub(crate) async fn unchanged_since(
+        &self,
+        workspace: &Workspace,
+        checkpoint: &Checkpoint,
+    ) -> Result<bool> {
+        // A repository move holds this gate; the workspace may have moved.
+        let (_repo, _git) = self.lock_repository(&workspace.repository_id).await?;
+        let workspace = self.workspace_by_id(&workspace.id).await?;
+        self.verify_worktree(&workspace).await?;
+        let now = self
+            .snapshot(&workspace, CheckpointCause::Manual, None)
+            .await?;
+        keeps_same(&workspace.path, checkpoint, &now).await
+    }
+
     /// Point the commit's ref at it, then record the snapshot under the
     /// workspace's next number, so a record never outlives a missing ref; a
     /// ref left by a failed record goes with the next expiry pass, which the

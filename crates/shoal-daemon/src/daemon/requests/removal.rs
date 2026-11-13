@@ -27,6 +27,8 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::StartRemoval { .. }
         | RemovalMethod::RestoreWorkspace { .. }
         | RemovalMethod::ExportSpace { .. }
+        | RemovalMethod::ExportMovingSpace { .. }
+        | RemovalMethod::EndMovedSpace { .. }
         | RemovalMethod::ImportWorkspace { .. } => true,
         RemovalMethod::Cleanup { dry_run, .. } => !dry_run,
         RemovalMethod::StopTargets
@@ -131,6 +133,14 @@ pub(super) async fn handle(
                 .export_space(&space, unsaved, InspectionPolicy::GitOnly, file)
                 .await?,
         ),
+        RemovalMethod::ExportMovingSpace { space, file } => {
+            Body::ExportedSpace(manager.export_moving_space(&space, file).await?)
+        }
+        RemovalMethod::EndMovedSpace {
+            space,
+            unsaved,
+            checkpoint,
+        } => Body::EndedSpace(manager.end_moved_space(&space, unsaved, checkpoint).await?),
         RemovalMethod::ImportWorkspace {
             repository,
             bundle,
