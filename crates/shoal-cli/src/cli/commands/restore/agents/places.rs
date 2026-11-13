@@ -45,19 +45,14 @@ pub(super) async fn restore_queued(
     stopped: Option<&Origin>,
     args: &[OsString],
 ) -> Result<()> {
+    if terminal::rerun_queued_where_stopped(ctx, settings, stopped, args).await? {
+        return Ok(());
+    }
     match space {
         PresentSpace::Workspace(workspace) => {
-            terminal::restore_queued(ctx, settings, workspace, stopped, args).await
+            terminal::restore_queued_in_background(ctx, settings, workspace, args).await
         }
-        PresentSpace::Chat(_) => {
-            if terminal::rerun_where_stopped(ctx, settings, stopped, args)
-                .await?
-                .is_some()
-            {
-                return Ok(());
-            }
-            start_chat(ctx, settings, space, args).await
-        }
+        PresentSpace::Chat(_) => start_chat(ctx, settings, space, args).await,
     }
 }
 

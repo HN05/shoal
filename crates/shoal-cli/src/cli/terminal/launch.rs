@@ -308,22 +308,32 @@ fn reusable_place(stopped: Option<&Origin>) -> Option<&Origin> {
     stopped.filter(|origin| origin.place.is_some() && origin.place != here)
 }
 
-/// Run Shoal with `args`, which restore an agent of `workspace` that stopped
-/// in `stopped`, for the daemon's worker, which has no terminal: where the
-/// agent stopped when that place is back at its prompt, otherwise in the
-/// background of the first place a queued start from there can open.
-pub(in crate::cli) async fn restore_queued(
+/// Run Shoal with `args`, which restore an agent that stopped in `stopped`,
+/// for the daemon's worker, which has no terminal: in that place, through
+/// the host that recorded it, when it is open and back at its prompt.
+/// Returns whether it ran.
+pub(in crate::cli) async fn rerun_queued_where_stopped(
+    ctx: &Context,
+    settings: &Effective,
+    stopped: Option<&Origin>,
+    args: &[OsString],
+) -> Result<bool> {
+    let Some(host) = reusable_place(stopped).and_then(|place| enabled_host(settings, place.host))
+    else {
+        return Ok(false);
+    };
+    rerun_in_host(ctx, host, stopped, args).await
+}
+
+/// Run Shoal with `args`, which restore an agent of `workspace`, for the
+/// daemon's worker, which has no terminal: in the background of the first
+/// place a queued start from there can open.
+pub(in crate::cli) async fn restore_queued_in_background(
     ctx: &Context,
     settings: &Effective,
     workspace: &Workspace,
-    stopped: Option<&Origin>,
     args: &[OsString],
 ) -> Result<()> {
-    if let Some(host) = reusable_place(stopped).and_then(|place| enabled_host(settings, place.host))
-        && rerun_in_host(ctx, host, stopped, args).await?
-    {
-        return Ok(());
-    }
     let origin = queued_origin()?;
     let repo = groups::Repo::Id(workspace.repository_id.as_str());
     groups::first_queued(

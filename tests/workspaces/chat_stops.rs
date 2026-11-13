@@ -1,6 +1,7 @@
 //! `shoal stop` of chats: it saves them for `shoal restore`, for the user or
 //! a parent's agent, and takes the chats below a stopped space.
 use super::chats::start_test_chat;
+use super::herdr::{herdr_calls, install_fake_herdr};
 use super::restarts::{Parent, parent_fixture};
 use super::zmx::wait_zmx_sessions_ended;
 use super::*;
@@ -11,7 +12,7 @@ use super::*;
 fn the_user_stops_a_chat_and_resumes_it() {
     let fixture = parent_fixture();
     let home = fixture.root.path().to_owned();
-    run_chat_until_stopped(&fixture, "talk", None, || {
+    run_chat_until_stopped(&fixture, "talk", None, &[], || {
         let stopped = fixture.ok(&["stop", &fixture.id("talk")]);
         assert_eq!(stopped["stopped"], true, "{stopped}");
     });
@@ -22,6 +23,48 @@ fn the_user_stops_a_chat_and_resumes_it() {
     wait_until("chat restored", || home.join("chat-restored").exists());
     fixture.ok(&["rm", &talk, "--yes"]);
     wait_zmx_sessions_ended(&home);
+}
+
+/// The daemon starts a chat's queued restore where its agent stopped when
+/// that Herdr pane is back at its prompt, as it does a workspace's.
+#[test]
+fn a_queued_chat_restore_reruns_in_its_idle_pane() {
+    let fixture = parent_fixture();
+    install_fake_herdr(&fixture);
+    let pane = [
+        ("HERDR_ENV", "1"),
+        ("HERDR_WORKSPACE_ID", "w1"),
+        ("HERDR_TAB_ID", "w1:t5"),
+        ("HERDR_PANE_ID", "w1:p5"),
+    ];
+    run_chat_until_stopped(&fixture, "talk", None, &pane, || {
+        fixture.ok(&["stop", &fixture.id("talk")]);
+    });
+    fs::write(fixture.root.path().join("idle-panes"), "w1:p5\n").unwrap();
+
+    let talk = fixture.id("talk");
+    fixture.ok(&["restore", &talk]);
+    let reran = || {
+        let calls = fixture.root.path().join("herdr-calls");
+        let calls = if calls.exists() {
+            herdr_calls(&fixture)
+        } else {
+            Vec::new()
+        };
+        calls
+            .into_iter()
+            .find(|call| call[..3] == ["pane", "run", "w1:p5"])
+    };
+    wait_until("the restore in the stopped pane", || reran().is_some());
+    let run = reran().unwrap();
+    let restore = format!(" restore {talk} --execution ");
+    assert!(run[3].contains(&restore), "{run:?}");
+    assert!(run[3].contains(" --queue-entry "), "{run:?}");
+    let calls = herdr_calls(&fixture);
+    assert!(
+        calls.iter().all(|call| call[..2] != ["tab", "create"]),
+        "{calls:?}"
+    );
 }
 
 /// A workspace's agent stops a chat below its own and resumes it, and is
@@ -125,7 +168,7 @@ fn stops_and_resumes_the_chats_below(fixture: &Fixture, parent: &Parent) {
     }
     assert!(chat_runs(fixture, "other"));
 
-    run_chat_until_stopped(fixture, "talk", Some(parent.name()), || {
+    run_chat_until_stopped(fixture, "talk", Some(parent.name()), &[], || {
         let stopped = parent.ok(fixture, &["stop", &fixture.id("talk")]);
         assert_eq!(stopped["stopped"], true, "{stopped}");
     });
@@ -145,11 +188,13 @@ fn stops_and_resumes_the_chats_below(fixture: &Fixture, parent: &Parent) {
 }
 
 /// Start the chat `name` with `shoal start --mode chat --here`, below `parent`
-/// when given, and run `stop` once its agent runs, which must end it.
+/// when given, in a terminal with the environment `env`, and run `stop` once
+/// its agent runs, which must end it.
 fn run_chat_until_stopped(
     fixture: &Fixture,
     name: &str,
     parent: Option<&str>,
+    env: &[(&str, &str)],
     stop: impl FnOnce(),
 ) {
     let started = fixture.root.path().join("chat-started");
@@ -161,8 +206,12 @@ fn run_chat_until_stopped(
     args.extend(parent.iter().flat_map(|parent| ["--parent", parent]));
     std::thread::scope(|scope| {
         let chat = scope.spawn(|| {
-            fixture
-                .interactive_command(fixture.command().current_dir(&fixture.repo).args(&args), "")
+            let mut command = fixture.command();
+            command
+                .current_dir(&fixture.repo)
+                .args(&args)
+                .envs(env.iter().copied());
+            fixture.interactive_command(&mut command, "")
         });
         wait_until("chat started", || started.exists());
         stop();
