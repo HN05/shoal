@@ -211,7 +211,11 @@ pub async fn open_split(
         let sent: Result<_> = match sent.await {
             Ok((reader, writer, Ok(body))) => Ok((reader, writer, body)),
             Ok((_, _, Err(error))) => Err(error),
-            Err(error) if waiting.exiting() && is_unreachable(&error) => Err(error),
+            Err(error)
+                if waiting.exiting() && (is_unreachable(&error) || stream_closed(&error)) =>
+            {
+                Err(error)
+            }
             Err(error) => return Err(error),
         };
         match sent {
@@ -292,8 +296,10 @@ impl DaemonWait {
         error: anyhow::Error,
     ) -> Result<()> {
         // The next daemon listens once the one that held the request back
-        // has exited and its service manager started it again.
-        if self.exiting && is_unreachable(&error) {
+        // has exited and its service manager started it again. Until then
+        // the exiting daemon may take the connection without answering;
+        // having held the request back, it runs none, so it is not replayed.
+        if self.exiting && (is_unreachable(&error) || stream_closed(&error)) {
             return self.pause().await.map_err(|timeout| error.context(timeout));
         }
         if !awaits_update(paths, &request.method, &error) {

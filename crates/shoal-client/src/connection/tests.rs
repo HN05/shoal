@@ -333,8 +333,12 @@ async fn a_request_an_exiting_daemon_held_back_goes_to_the_next_daemon() -> Resu
     let (mut stream, _) = listener.accept().await?;
     let request: Request = protocol::read(&mut stream).await?;
     protocol::write(&mut stream, &Response::new(request.id, exiting)).await?;
-    // The daemon exits and leaves no socket until the next one listens.
-    drop((stream, listener));
+    // While it exits, the daemon still takes connections it never answers.
+    drop(stream);
+    let (unanswered, _) = listener.accept().await?;
+    drop(unanswered);
+    // Then it leaves no socket until the next one listens.
+    drop(listener);
     std::fs::remove_file(&paths.socket)?;
     sleep(timing::DAEMON_WAIT_TIMEOUT * 2).await;
     assert!(!asking.is_finished());
