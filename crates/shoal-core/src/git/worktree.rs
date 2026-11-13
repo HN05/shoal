@@ -170,11 +170,19 @@ pub(crate) async fn disowned(path: &Path, admin_dir: &Path) -> Result<bool> {
     })
 }
 
-/// Whether the directory at `path` is what a `worktree add` whose checkout
-/// failed left there when it could not delete every file: its `.git` link
-/// names an admin directory Git deleted.
-pub(crate) async fn left_by_failed_add(path: &Path) -> Result<bool> {
-    Ok(vanished_admin_dir(path).await?.is_some())
+/// Whether the directory at `path` is what a `worktree add` of `repo` whose
+/// checkout failed left there when it could not delete every file: its
+/// `.git` link names an admin directory among `repo`'s worktrees that Git
+/// deleted.
+pub(crate) async fn left_by_failed_add(path: &Path, repo: &Path) -> Result<bool> {
+    let Some(named) = vanished_admin_dir(path).await? else {
+        return Ok(false);
+    };
+    let worktrees = super::common_dir(repo).await?.join("worktrees");
+    Ok(match named.parent() {
+        Some(parent) => resolved(parent).await == resolved(&worktrees).await,
+        None => false,
+    })
 }
 
 /// The admin directory the `.git` link of the directory at `path` names,

@@ -1672,12 +1672,9 @@ async fn removal_deletes_what_a_failed_checkout_left() {
     );
 }
 
-/// Without its `.git` link nothing proves the directory is the one the
-/// checkout made.
-#[tokio::test]
-async fn removal_retains_a_failed_checkouts_directory_without_its_git_link() {
-    let (_root, manager, workspace) = failed_checkout().await;
-    fs::remove_file(workspace.path.join(".git")).unwrap();
+/// Removal of what a failed checkout left that it cannot prove is the
+/// workspace's: it stays, and the error names it for the user to delete.
+async fn retains_unproven(manager: &Manager, workspace: &Workspace) {
     let error = manager
         .remove_workspace(
             &SpaceSelector::id(&workspace.id),
@@ -1697,4 +1694,28 @@ async fn removal_retains_a_failed_checkouts_directory_without_its_git_link() {
             .unwrap()
             .is_some()
     );
+}
+
+/// Without its `.git` link nothing proves the directory is the one the
+/// checkout made.
+#[tokio::test]
+async fn removal_retains_a_failed_checkouts_directory_without_its_git_link() {
+    let (_root, manager, workspace) = failed_checkout().await;
+    fs::remove_file(workspace.path.join(".git")).unwrap();
+    retains_unproven(&manager, &workspace).await;
+}
+
+/// Only an admin directory of the workspace's own repository is one its
+/// checkout made.
+#[tokio::test]
+async fn removal_retains_a_failed_checkouts_directory_linked_to_another_repository() {
+    let (root, manager, workspace) = failed_checkout().await;
+    let other = repository(root.path(), "other");
+    let admin_dir = other.join(".git/worktrees/scratch");
+    fs::write(
+        workspace.path.join(".git"),
+        format!("gitdir: {}\n", admin_dir.display()),
+    )
+    .unwrap();
+    retains_unproven(&manager, &workspace).await;
 }

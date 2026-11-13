@@ -161,7 +161,8 @@ impl Manager {
     /// checkout made. What a workspace that recorded no admin directory
     /// holds at its path otherwise is the user's to delete.
     pub(crate) async fn verify_removed_worktree(&self, workspace: &Workspace) -> Result<()> {
-        if crate::removal::disowned(workspace).await? {
+        let repo = self.repository(&workspace.repository_id).await?;
+        if crate::removal::disowned(workspace, &repo.path).await? {
             return Ok(());
         }
         let verified = self.verify_worktree(workspace).await;

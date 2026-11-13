@@ -481,7 +481,7 @@ impl Manager {
         let record = self.save_restore_record(workspace, removal).await?;
         ensure_checkpoint_keeps_files(check, removal, record.as_ref())?;
         let (files, branch) = removal_options(check, removal);
-        let registration = match removal::disowned(workspace).await? {
+        let registration = match removal::disowned(workspace, repo).await? {
             true => Registration::Disowned,
             false => Registration::Listed,
         };

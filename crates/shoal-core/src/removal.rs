@@ -7,6 +7,7 @@ pub use crate::client::removal::{
     BranchOutcome, NOTHING, RemovalCheck, RemovalResult, UnsavedWork,
 };
 use crate::{fsutil::off_runtime, git, model::Workspace, process};
+use std::path::Path;
 
 #[cfg(test)]
 mod tests;
@@ -108,13 +109,14 @@ pub enum InspectionPolicy {
 }
 
 /// Gather state for a removal decision without deciding whether removal is
-/// safe. `running_commands` leaves out the `idle_restores`.
+/// safe. `running_commands` leaves out the `idle_restores`; `repo` is the
+/// checkout of the workspace's repository.
 pub async fn inspect(
     workspace: Workspace,
     running_commands: usize,
     idle_restores: Vec<IdleRestore>,
     policy: InspectionPolicy,
-    default_branch: Option<&str>,
+    (repo, default_branch): (&Path, Option<&str>),
 ) -> Result<Inspection> {
     let mut inspection = Inspection {
         check: RemovalCheck {
@@ -141,7 +143,7 @@ pub async fn inspect(
     if !off_runtime::exists(&inspection.workspace.path).await? {
         return Ok(inspection);
     }
-    inspect_git(&mut inspection.check, default_branch).await?;
+    inspect_git(&mut inspection.check, repo, default_branch).await?;
     if policy == InspectionPolicy::IncludeDirectoryProcesses {
         inspection
             .load_directory_processes(&process::DirectoryUsers::default())
@@ -154,9 +156,13 @@ pub async fn inspect(
 /// Nothing in a disposable workspace is worth keeping, so nothing is
 /// inspected for unsaved work; which branch it is on, which removal may
 /// delete, still is, unless Git disowned it.
-async fn inspect_git(check: &mut RemovalCheck, default_branch: Option<&str>) -> Result<()> {
+async fn inspect_git(
+    check: &mut RemovalCheck,
+    repo: &Path,
+    default_branch: Option<&str>,
+) -> Result<()> {
     if check.workspace.disposable {
-        if !disowned(&check.workspace).await? {
+        if !disowned(&check.workspace, repo).await? {
             check.branch = git::checked_out_branch(&check.workspace.path).await?;
         }
         return Ok(());
@@ -195,14 +201,15 @@ async fn inspect_git(check: &mut RemovalCheck, default_branch: Option<&str>) -> 
 /// it holds: as a removal Git could not finish leaves it, or, when its
 /// checkout never succeeded and so recorded no admin directory, as a
 /// checkout that failed leaves it. Nothing was at a workspace's path when
-/// Shoal recorded it, so a `.git` link there is Git's for this workspace.
-pub async fn disowned(workspace: &Workspace) -> Result<bool> {
+/// Shoal recorded it, so a `.git` link there naming an admin directory of
+/// its repository, checked out at `repo`, is Git's for this workspace.
+pub async fn disowned(workspace: &Workspace, repo: &Path) -> Result<bool> {
     if !workspace.disposable {
         return Ok(false);
     }
     match &workspace.git_dir {
         Some(admin_dir) => git::worktree::disowned(&workspace.path, admin_dir).await,
-        None => git::worktree::left_by_failed_add(&workspace.path).await,
+        None => git::worktree::left_by_failed_add(&workspace.path, repo).await,
     }
 }
 

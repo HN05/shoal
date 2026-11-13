@@ -89,7 +89,7 @@ impl Manager {
             executions.running,
             executions.idle,
             policy,
-            default_branch.as_ref().map(BranchName::as_str),
+            (&repo.path, default_branch.as_ref().map(BranchName::as_str)),
         )
         .await
     }
