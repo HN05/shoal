@@ -206,6 +206,20 @@ exit 1
 }
 
 #[test]
+fn shoal_git_works_where_it_is_told_not_where_the_caller_works() {
+    let clone = clone_command("source", Path::new("/clone"), None);
+    for command in [command(Path::new("/repo")), clone] {
+        let removed: Vec<_> = (command.as_std().get_envs())
+            .filter(|(_, value)| value.is_none())
+            .map(|(name, _)| name.to_owned())
+            .collect();
+        for name in REPOSITORY_ENV {
+            assert!(removed.iter().any(|removed| removed == name), "{name}");
+        }
+    }
+}
+
+#[test]
 fn parses_porcelain_worktree_records() {
     let listing = "worktree /repo\0HEAD abc\0branch refs/heads/main\0\0\
             worktree /repo/.wt/feature\0HEAD def\0branch refs/heads/feature\0locked reason\0prunable gitdir file points to non-existent location\0\0\

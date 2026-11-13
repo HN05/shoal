@@ -214,7 +214,48 @@ pub async fn pushed_commit(
 pub(crate) fn command(repo: &Path) -> Command {
     let mut command = Command::new(Tool::Git.program());
     command.arg("--no-optional-locks").arg("-C").arg(repo);
+    without_inherited_repository(&mut command);
     command
+}
+
+/// The variables that point Git at a repository or its parts, which a Git
+/// hook or `git rebase --exec` exports for the repository it runs in: those
+/// Git clears itself to work in another repository (`git rev-parse
+/// --local-env-vars`), except command-scope configuration, which Shoal's Git
+/// keeps.
+const REPOSITORY_ENV: [&str; 12] = [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE",
+    "GIT_COMMON_DIR",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_GRAFT_FILE",
+    "GIT_SHALLOW_FILE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_PREFIX",
+];
+
+/// Git that works in the repository its arguments name, never in one the
+/// caller's [`REPOSITORY_ENV`] names.
+fn without_inherited_repository(command: &mut Command) {
+    for name in REPOSITORY_ENV {
+        command.env_remove(name);
+    }
+}
+
+/// Forget the [`REPOSITORY_ENV`] this process inherited, so that nothing it
+/// starts, Git or a script that runs Git, works in the caller's repository.
+///
+/// # Safety
+/// Call before any other thread exists.
+pub unsafe fn forget_inherited_repository() {
+    for name in REPOSITORY_ENV {
+        // SAFETY: the caller guarantees no other thread reads the environment.
+        unsafe { std::env::remove_var(name) };
+    }
 }
 
 /// Git for daemon-driven ref updates with repository hooks, Git credential
@@ -410,6 +451,7 @@ pub async fn clone(source: &str, destination: &Path, fork: Option<&str>) -> Resu
 /// The command [`clone`] runs.
 fn clone_command(source: &str, destination: &Path, fork: Option<&str>) -> Command {
     let mut command = Command::new(Tool::Git.program());
+    without_inherited_repository(&mut command);
     command.arg("clone");
     if let Some(url) = fork {
         for setting in [
