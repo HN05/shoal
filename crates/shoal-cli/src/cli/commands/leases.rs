@@ -173,6 +173,7 @@ async fn select_held(
         _ => {}
     }
     let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.clone()).await?;
+    let id = inspection.workspace.id.clone();
     let ports = inspection
         .ports
         .into_iter()
@@ -198,7 +199,7 @@ async fn select_held(
     let requests = crate::client::approvals::list(&ctx.paths, Some(workspace.clone()))
         .await?
         .into_iter()
-        .filter(|request| request.active)
+        .filter(|request| request.space_id == id && request.active)
         .filter_map(requested);
     let mut selected = Vec::new();
     for held in ports.chain(simulators).chain(resources).chain(requests) {

@@ -97,7 +97,7 @@ fn list_decided(db: &Connection, id: &SpaceId) -> Result<Vec<ApprovalRequest>> {
 /// made or proposed, and those routed to it to decide.
 pub(crate) fn pending_count(db: &Connection, id: &SpaceId) -> Result<usize> {
     let pending = |request: &&ApprovalRequest| request.status == DecisionStatus::Pending;
-    Ok(list(db, Some(id))?.iter().filter(pending).count())
+    Ok(list_of_space(db, Some(id))?.iter().filter(pending).count())
 }
 
 /// Give the pending requests the space `id` decides back to the user, as
@@ -142,9 +142,22 @@ fn by_number(db: &Connection, number: ItemNumber) -> Result<Option<ApprovalReque
     lookup(db, BY_NUMBER, params![number.space, number.item])
 }
 
+/// Every request, or those `owner` made, including the issues it proposed
+/// for its repository.
+pub fn list(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<ApprovalRequest>> {
+    db.prepare(&format!(
+        "{COLUMNS} WHERE ?1 IS NULL OR workspace_id=?1
+            OR {REPOSITORY_OWNED}
+        ORDER BY rowid"
+    ))?
+    .query_map([owner], record_row)?
+    .map(|row| decode_record(row?))
+    .collect()
+}
+
 /// Every request, or those the space `space` made, proposed or decides, in
-/// the order they were made.
-pub fn list(db: &Connection, space: Option<&SpaceId>) -> Result<Vec<ApprovalRequest>> {
+/// the order they were made: what the space lists.
+fn list_of_space(db: &Connection, space: Option<&SpaceId>) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
         "{COLUMNS} WHERE ?1 IS NULL OR workspace_id=?1
             OR {REPOSITORY_OWNED} OR {DECIDED_BY}
@@ -482,7 +495,9 @@ impl Manager {
             Some(selector) => Some(self.space(selector).await?.id().clone()),
             None => None,
         };
-        self.store.run(move |db| list(db, space.as_ref())).await
+        self.store
+            .run(move |db| list_of_space(db, space.as_ref()))
+            .await
     }
 
     /// The request stored under `key`, whatever number it has.
