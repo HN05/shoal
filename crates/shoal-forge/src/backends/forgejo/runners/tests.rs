@@ -80,6 +80,16 @@ fn a_run_names_the_pr_or_branch_whose_ref_serves_its_commit() {
         ("abc123", Trigger::Other, None),
         "a run on the base branch's commit is no run of the PR's head"
     );
+    let mut comment = run(
+        "pull_request_comment",
+        json!({"pull_request": {"number": 12, "head": {"sha": "def456"}}}),
+    );
+    comment["trigger_event"] = json!("issue_comment");
+    let comment = job_run(&repo(), &comment).unwrap();
+    assert_eq!(
+        (comment.commit.as_str(), comment.trigger),
+        ("abc123", Trigger::Other)
+    );
 
     let push = job_run(&repo(), &run("push", json!({"ref": "refs/heads/main"}))).unwrap();
     assert_eq!(push.trigger, Trigger::Branch("main".into()));

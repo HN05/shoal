@@ -130,9 +130,8 @@ fn job_run(repo: &ForgeRepo, value: &Value) -> Result<JobRun> {
     let pushed = payload["ref"]
         .as_str()
         .filter(|reference| reference.starts_with("refs/"));
-    let (trigger, reference) = match (value["event"].as_str(), pushed) {
-        // A run on the base branch's commit is no run of the PR's head.
-        (Some("pull_request"), _) if !super::runs::at_base(value) => {
+    let (trigger, reference) = match (super::runs::on_pull_head(value), pushed) {
+        (true, _) => {
             let number = super::runs::pull_of(value).context("the PR run names no PR")?;
             let reference = format!("refs/pull/{number}/head");
             (Trigger::Pull { number }, Some(reference))
