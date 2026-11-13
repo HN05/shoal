@@ -1630,3 +1630,71 @@ fn a_runners_repository_variables_reach_no_git_of_the_tests() {
     assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
     assert_eq!(state(), before);
 }
+
+/// A disposable workspace as a `worktree add` whose checkout failed leaves
+/// it when Git cannot delete every file: `failed`, without the admin
+/// directory its `.git` names, which it never recorded.
+async fn failed_checkout() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
+    let (root, manager, workspace) = disowned_workspace(true).await;
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE workspaces SET state=?2,git_dir=NULL,git_dir_id=NULL WHERE id=?1",
+                rusqlite::params![id, WorkspaceState::Failed],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    (root, manager, workspace)
+}
+
+#[tokio::test]
+async fn removal_deletes_what_a_failed_checkout_left() {
+    let (_root, manager, workspace) = failed_checkout().await;
+    manager
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert!(!workspace.path.exists());
+    assert!(
+        manager
+            .find_workspace(&workspace.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
+/// Without its `.git` link nothing proves the directory is the one the
+/// checkout made.
+#[tokio::test]
+async fn removal_retains_a_failed_checkouts_directory_without_its_git_link() {
+    let (_root, manager, workspace) = failed_checkout().await;
+    fs::remove_file(workspace.path.join(".git")).unwrap();
+    let error = manager
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap_err();
+    // The error names the directory for the user to delete.
+    let path = workspace.path.to_str().unwrap();
+    assert!(format!("{error:#}").contains(path), "{error:#}");
+    assert!(workspace.path.exists());
+    assert!(
+        manager
+            .find_workspace(&workspace.id)
+            .await
+            .unwrap()
+            .is_some()
+    );
+}

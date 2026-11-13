@@ -164,18 +164,34 @@ async fn restore_link(path: &Path, text: String) -> Result<()> {
 /// leaves it when it cannot delete every file, while the worktree's
 /// directory stays with a `.git` link still naming it.
 pub(crate) async fn disowned(path: &Path, admin_dir: &Path) -> Result<bool> {
-    if !off_runtime::is_dir(path).await? || off_runtime::try_exists(admin_dir).await? {
-        return Ok(false);
+    Ok(match vanished_admin_dir(path).await? {
+        Some(named) => resolved(&named).await == resolved(admin_dir).await,
+        None => false,
+    })
+}
+
+/// Whether the directory at `path` is what a `worktree add` whose checkout
+/// failed left there when it could not delete every file: its `.git` link
+/// names an admin directory Git deleted.
+pub(crate) async fn left_by_failed_add(path: &Path) -> Result<bool> {
+    Ok(vanished_admin_dir(path).await?.is_some())
+}
+
+/// The admin directory the `.git` link of the directory at `path` names,
+/// when the directory stays while that admin directory is gone.
+async fn vanished_admin_dir(path: &Path) -> Result<Option<PathBuf>> {
+    if !off_runtime::is_dir(path).await? {
+        return Ok(None);
     }
     let linked = {
         let path = path.to_owned();
         off_runtime::run(move || linked_admin_dir(&path)).await
     };
     match linked {
-        Ok(Some(named)) => Ok(resolved(&named).await == resolved(admin_dir).await),
+        Ok(Some(named)) if !off_runtime::try_exists(&named).await? => Ok(Some(named)),
         // No link, a `.git` directory or a link that cannot be read proves
         // nothing about whose directory it is.
-        Ok(None) | Err(_) => Ok(false),
+        Ok(_) | Err(_) => Ok(None),
     }
 }
 

@@ -190,13 +190,19 @@ async fn inspect_git(check: &mut RemovalCheck, default_branch: Option<&str>) -> 
     Ok(())
 }
 
-/// Whether Git disowned the worktree of `workspace`, as a removal it
-/// could not finish leaves it, and the workspace is disposable, so that
-/// removal deletes what is left without Git, whatever it holds.
+/// Whether Git disowned the worktree of `workspace`, and the workspace is
+/// disposable, so that removal deletes what is left without Git, whatever
+/// it holds: as a removal Git could not finish leaves it, or, when its
+/// checkout never succeeded and so recorded no admin directory, as a
+/// checkout that failed leaves it. Nothing was at a workspace's path when
+/// Shoal recorded it, so a `.git` link there is Git's for this workspace.
 pub async fn disowned(workspace: &Workspace) -> Result<bool> {
-    match (&workspace.git_dir, workspace.disposable) {
-        (Some(admin_dir), true) => git::worktree::disowned(&workspace.path, admin_dir).await,
-        _ => Ok(false),
+    if !workspace.disposable {
+        return Ok(false);
+    }
+    match &workspace.git_dir {
+        Some(admin_dir) => git::worktree::disowned(&workspace.path, admin_dir).await,
+        None => git::worktree::left_by_failed_add(&workspace.path).await,
     }
 }
 

@@ -3069,8 +3069,9 @@ executions, saving an existing worktree's agent sessions but no commands, run
 removal hooks, remove owned simulators, take a checkpoint unless the workspace is disposable, remove the worktree, and release leases with the record. Failures retain what is
 needed to retry. Git forgets a worktree once it starts deleting its files, so
 removal deletes what Git could not, and a later removal deletes what such a
-failure left of a disposable workspace without Git; any other workspace's stays,
-since Git can no longer read its work. Workspaces are cheap to remove because removal is reversible,
+failure, or a checkout that failed, left of a disposable workspace without Git,
+proven its own by the `.git` link naming the admin directory Git made for it;
+any other workspace's stays, since Git can no longer read its work. Workspaces are cheap to remove because removal is reversible,
 except that of a disposable workspace, which holds nothing worth keeping.
 A checkpoint is a commit of HEAD plus the unsaved files Git does not ignore, built
 with a temporary index and kept under `refs/shoal/checkpoints/<commit>`, with a

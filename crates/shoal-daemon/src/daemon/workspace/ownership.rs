@@ -157,12 +157,24 @@ impl Manager {
 
     /// Verify the worktree a removal deletes as [`Self::verify_worktree`]
     /// does, except one Git disowned, whose admin directory is gone and
-    /// whose `.git` link still names the recorded one.
+    /// whose `.git` link still names the recorded one, or the one its failed
+    /// checkout made. What a workspace that recorded no admin directory
+    /// holds at its path otherwise is the user's to delete.
     pub(crate) async fn verify_removed_worktree(&self, workspace: &Workspace) -> Result<()> {
         if crate::removal::disowned(workspace).await? {
             return Ok(());
         }
-        self.verify_worktree(workspace).await
+        let verified = self.verify_worktree(workspace).await;
+        if workspace.git_dir.is_some() {
+            return verified;
+        }
+        verified.with_context(|| {
+            format!(
+                "nothing proves {} is the worktree of {}, which never recorded one; delete it if nothing there is needed, then run shoal rm again",
+                workspace.path.display(),
+                workspace.name
+            )
+        })
     }
 
     async fn verify_worktree_identity(&self, workspace: &Workspace) -> Result<()> {
