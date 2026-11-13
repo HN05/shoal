@@ -140,19 +140,23 @@ async fn link_text(path: &Path) -> Result<Option<String>> {
 /// may have deleted it, so that a deletion cut short again leaves the proof
 /// that the directory is the worktree Git disowned.
 async fn finish_deletion(path: &Path, link: Option<String>) -> Result<()> {
-    let restored = path.join(".git");
+    if let Some(text) = link {
+        restore_link(path, text).await?;
+    }
+    delete_disowned(path).await
+}
+
+/// Write the `.git` link of the worktree at `path` back with `text`
+/// unless it is there, or the directory is gone.
+async fn restore_link(path: &Path, text: String) -> Result<()> {
+    let link = path.join(".git");
     off_runtime::run(move || {
-        if let Some(text) = link
-            && restored.parent().is_some_and(Path::is_dir)
-            && !restored.try_exists()?
-        {
-            std::fs::write(&restored, text)
-                .with_context(|| format!("restore {}", restored.display()))?;
+        if link.parent().is_some_and(Path::is_dir) && !link.try_exists()? {
+            std::fs::write(&link, text).with_context(|| format!("restore {}", link.display()))?;
         }
         Ok(())
     })
-    .await?;
-    delete_disowned(path).await
+    .await
 }
 
 /// Whether Git disowned the linked worktree at `path`, whose admin
