@@ -22,6 +22,11 @@ use super::{
 /// queue and its agent.
 pub(super) async fn stop_all(ctx: &Context) -> Result<i32> {
     let running = crate::client::stopping::targets(&ctx.paths).await?;
+    // A scoped process that cleared its token gets every space from the
+    // daemon, its own among them.
+    if crate::env::inherits_scope(&ctx.paths.state) {
+        super::ensure_below(&running)?;
+    }
     if running.is_empty() {
         ctx.emit(
             "No running agents or commands",

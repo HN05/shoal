@@ -436,6 +436,21 @@ fn a_parent_forgets_only_the_stopped_work_of_its_children() {
         .output()
         .unwrap();
     assert!(!output.status.success(), "{output:?}");
+    let output = fixture
+        .command()
+        .args([
+            "run",
+            "--workspace",
+            &fixture.id("parent"),
+            "--",
+            "sh",
+            "-c",
+        ])
+        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" stop --all; exit $?"#)
+        .arg(support::shoal_binary())
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
     assert!(records.iter().all(|record| record.exists()));
     // Every space below it is the parent's, whoever stopped its agent.
     let output = scoped_command(&fixture, "parent", &["restore", "--all", "--forget"]);
