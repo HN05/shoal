@@ -1104,7 +1104,7 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
 }
 
 #[tokio::test]
-async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_slot() {
+async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_admission() {
     let fixture = fixture(&[], "").await;
     let manager = &fixture.manager;
     let repository = fixture.workspace.repository_id.clone();
@@ -1218,17 +1218,9 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
         .unwrap();
     tokio::spawn(run(manager.clone()));
     tokio::spawn(crate::daemon::queued_starts::run(manager.clone()));
-    // The only slot is taken, so the review waits for it.
-    let mut held = (manager.agent_queue).request_oneshot(
-        &repo.id,
-        crate::daemon::workspace::agent_queue::Serving {
-            space: workspace.id.clone(),
-            queued_after: 0,
-        },
-        false,
-        || {},
-    );
-    held.admitted().await;
+    // No admission pass runs while the test holds the gate, so the review
+    // waits for one.
+    let gate = manager.agent_queue.lock_admission().await;
     let mut ended = manager.reviews.ended.subscribe();
     let target = ReviewTarget::Pr {
         url: "https://forge.example/team/repo/pulls/8".parse().unwrap(),
@@ -1245,7 +1237,7 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
         )
         .await
         .unwrap();
-    // The review read the workspace and waits for the slot.
+    // The review read the workspace and waits for admission.
     while manager.agent_queue.waiting_oneshots().is_empty() {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
@@ -1267,7 +1259,8 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
         })
         .await
         .unwrap();
-    drop(held);
+    drop(gate);
+    manager.agent_queue.wake();
     ended.changed().await.unwrap();
     let review = manager.await_review(queued.id).await.unwrap();
     assert_eq!(review.head, Some(moved.as_str().into()), "{review:?}");
