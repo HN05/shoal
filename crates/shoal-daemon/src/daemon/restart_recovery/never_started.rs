@@ -37,9 +37,9 @@ enum Outcome {
 
 impl Unstarted {
     /// `execution` of `space` when it never started its command: neither a
-    /// child nor its process group is recorded, which a command whose child
-    /// exited before its identity was read leaves, and a wrapper is, which
-    /// proves whether it ended.
+    /// child nor a process group is recorded, since a command whose child
+    /// exited before its identity was read still leaves its group, and a
+    /// wrapper is, which proves whether it ended.
     pub(super) fn of(space: PresentSpace, execution: Execution) -> Option<Self> {
         if execution.child.is_some() || execution.group_id.is_some() {
             return None;
