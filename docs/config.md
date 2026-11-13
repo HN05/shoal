@@ -27,10 +27,9 @@ its own from the first file that sets it:
 The global file's `[machine]` table holds the settings that describe this
 machine, and only the global file may set it. Everything outside it follows the
 repository schema in every file, so a setting copies between them. Only a
-repository file or the local config may set `setup.command` and `[setup.seed]`;
-`[secrets]` belongs to the global or local config, and a worktree file that
-sets it is rejected. An unknown or misplaced key fails with its line and
-column, and an unknown value of a typed option is an error.
+repository file or the local config may set `setup.command` and `[setup.seed]`.
+An unknown or misplaced key fails with its line and column, and an unknown
+value of a typed option is an error.
 
 A named entry, such as `[ports.web]`, `[resources.signing]`,
 `[resource_pools.devices]`, `[demos.tui]` or `[secrets.TOKEN]`, replaces the one
@@ -464,9 +463,8 @@ is an argument array whose standard output, less one trailing line break, is
 the value. Without `tools`, the value joins every tracked agent's environment;
 with `tools`, only runs of those programs receive it. Only a tool-scoped secret
 takes `requires_approval` and `approval_lifetime`, as a
-[protected resource](#approvals) does. Set it in the global or local config;
-Shoal stores the commands, never the values. See
-[agent secrets](reference.md#agent-secrets).
+[protected resource](#approvals) does. Shoal stores the commands, never the
+values. See [agent secrets](reference.md#agent-secrets).
 
 ### Idle stops
 

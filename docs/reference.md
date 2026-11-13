@@ -2174,8 +2174,7 @@ the agent's [`push` permission](#approval-for-agent-pushes) at launch is
 ### Agent secrets
 
 [`[secrets]`](config.md#secrets) gives tracked agents values that commands fetch
-from your secret store; a worktree file that sets it is rejected, because secret
-sources belong to the machine.
+from your secret store.
 
 Commands run without input. Without
 `tools`, agent launches run the command before the agent starts and add the
@@ -2855,8 +2854,8 @@ A repository's local config is `.shoal/config.toml` in its own directory, beside
 its workspaces and `.checkout` (`~/shoal/my-project/.shoal/config.toml`), for a
 repository that won't accept `.shoal.toml` or settings only you want. It is
 outside every Git tree, so nothing ignores it and `git clean` never touches it.
-It takes the options of a [repository file](config.md#files-and-layers), plus
-`[secrets]`, with untracked scripts beside it.
+It takes the options of a [repository file](config.md#files-and-layers), with
+untracked scripts beside it.
 
 Shoal reads the file in place on every request, so an edit applies to every
 workspace at once without a restart; an invalid file fails each command until

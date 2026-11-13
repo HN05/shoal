@@ -391,16 +391,7 @@ pub fn load(workspace_dir: &Path) -> Result<(RepoConfig, modes::Files)> {
         Some(path) => {
             let text =
                 fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-            let config =
-                parse(&text).with_context(|| Rejected(format!("parse {}", path.display())))?;
-            if !config.secrets.is_empty() {
-                return Err(Rejected(format!(
-                    "{}: [secrets] belongs in the global or local config",
-                    path.display()
-                ))
-                .into());
-            }
-            config
+            parse(&text).with_context(|| Rejected(format!("parse {}", path.display())))?
         }
         None => RepoConfig::default(),
     };

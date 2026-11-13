@@ -155,7 +155,26 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
         "unset"
     );
 
-    // The local config can replace a secret; a failing command
+    // The worktree file replaces the global config's secret, as it does any
+    // named entry.
+    let tracked = fs::read_to_string(worktree.join(".shoal.toml")).unwrap();
+    fs::write(
+        worktree.join(".shoal.toml"),
+        format!("{tracked}[secrets.AGENT_TOKEN]\ncommand = ['printf', 'tracked secret']\n"),
+    )
+    .unwrap();
+    let output = fixture.run(&[
+        "start",
+        "--in",
+        &fixture.id("secrets"),
+        "--here",
+        "--agent",
+        "claude",
+    ]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"tracked secret|AGENT_TOKEN\n");
+
+    // The local config replaces the worktree file's; a failing command
     // stops the launch.
     let saved = fixture.root.path().join("saved.toml");
     fs::write(&saved, "[secrets.AGENT_TOKEN]\ncommand = ['false']\n").unwrap();
@@ -170,19 +189,6 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     ]);
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
-
-    // Secret sources describe this machine, so a tracked file naming one is
-    // rejected and its secret is never used.
-    fs::write(
-        worktree.join(".shoal.toml"),
-        "[secrets.OTHER]\ncommand = ['true']\n",
-    )
-    .unwrap();
-    let output = fixture.run(&["config", "show", &fixture.id("secrets")]);
-    assert!(output.status.success());
-    assert!(!String::from_utf8(output.stdout).unwrap().contains("OTHER"));
-    let warning = String::from_utf8(output.stderr).unwrap();
-    assert!(warning.contains("[secrets] belongs"), "{warning}");
 }
 
 #[test]

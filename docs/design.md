@@ -23,11 +23,11 @@ adapters retain their tool-specific setup. Shoal does not switch the user's or
 daemon's login. `[secrets]` names
 user commands that fetch values in the CLI, for an agent's environment at launch
 or, for listed tools, through private PATH launchers each time the tool runs;
-the daemon and state never hold the values, hooks drop them, and tracked
-worktree files cannot name them. A tool secret may require approval: the
-launcher fetches it only after the daemon confirms a workspace grant bound to
-its command and tools, and fails instead of waiting. Environment secrets cannot
-require approval, since they are fetched before the agent can ask. A setting
+the daemon and state never hold the values, and hooks drop them. A tool secret
+may require approval: the launcher fetches it only after the daemon confirms a
+workspace grant bound to its command and tools, and fails instead of waiting.
+Environment secrets cannot require approval, since they are fetched before the
+agent can ask. A setting
 that takes its value from outside the config, such as a proxy's upstream key,
 shares one form: as written, `{ env }` from the agent's environment, or `{ cmd }`
 run like a secret's command when the agent starts, and Shoal prints no written

@@ -195,7 +195,7 @@ fn additional_hooks_validate_and_layer_paths() {
 }
 
 #[test]
-fn the_local_config_names_scripts_beside_it_and_may_hold_secrets() {
+fn the_local_config_names_scripts_beside_it() {
     let repository = tempfile::tempdir().unwrap();
     assert!(
         load_local(repository.path())
@@ -219,7 +219,7 @@ fn the_local_config_names_scripts_beside_it_and_may_hold_secrets() {
     fs::write(
         local_config_path(repository.path()),
         "[setup]\ncommand = 'setup.sh'\n[hooks]\npost_setup = '/abs/attach'\n\
-         [secrets.TOKEN]\ncommand = ['token']\n[setup.seed]\ncommand = 'scripts/seed'\n",
+         [setup.seed]\ncommand = 'scripts/seed'\n",
     )
     .unwrap();
     fs::create_dir_all(directory.join("modes")).unwrap();
@@ -228,7 +228,6 @@ fn the_local_config_names_scripts_beside_it_and_may_hold_secrets() {
     let expected = directory.join("setup.sh");
     assert_eq!(config.setup.command.as_deref(), expected.to_str());
     assert_eq!(config.hooks.post_setup.as_deref(), Some("/abs/attach"));
-    assert!(config.secrets.contains_key("TOKEN"));
     // The seed runs in the worktree, so its path stays relative to it.
     assert_eq!(config.setup.seed.command.as_deref(), Some("scripts/seed"));
     assert_eq!(
