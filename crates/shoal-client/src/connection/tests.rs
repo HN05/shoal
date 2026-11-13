@@ -1,5 +1,5 @@
 use super::*;
-use crate::protocol::{ErrorCode, RemoteError, WorkSpace};
+use crate::protocol::{ErrorCode, RemoteError, WorkPlace};
 use tokio::net::UnixListener;
 
 /// Supervision that takes the daemon recorded in the state directory's
@@ -425,7 +425,7 @@ async fn an_exit_that_waits_reports_the_work_until_the_daemon_agrees() -> Result
 
 #[tokio::test]
 async fn an_exit_that_does_not_wait_reports_the_work_that_keeps_the_daemon() -> Result<()> {
-    let workspace = WorkSpace {
+    let workspace = WorkPlace {
         id: "workspace".into(),
         number: 3.into(),
         name: "api".parse().unwrap(),

@@ -46,17 +46,17 @@ pub enum Work {
     /// A workspace in a state its exit would interrupt, such as preparing
     /// or removing.
     Workspace {
-        workspace: WorkSpace,
+        workspace: WorkPlace,
         state: WorkspaceState,
     },
     /// An operation's worker, such as a PR's push or a merge.
     Operation {
-        workspace: WorkSpace,
+        workspace: WorkPlace,
         operation: OperationKind,
     },
     /// A command in the workspace whose wrapper stops with the daemon, such
     /// as `shoal setup`.
-    Command { workspace: WorkSpace },
+    Command { workspace: WorkPlace },
     /// Requests and background passes, such as a cleanup sweep or a sync of
     /// a checkout, when nothing else runs.
     Other,
@@ -72,7 +72,7 @@ impl Work {
 
 /// The workspace a piece of [`Work`] works in.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WorkSpace {
+pub struct WorkPlace {
     pub id: SpaceId,
     pub number: SpaceNumber,
     pub name: SpaceName,

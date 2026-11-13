@@ -1,6 +1,6 @@
 //! How `shoal daemon stop` and `restart` name the work in progress that the
 //! daemon's exit would cut off.
-use crate::protocol::{Work, WorkSpace, operations::OperationKind};
+use crate::protocol::{Work, WorkPlace, operations::OperationKind};
 
 /// Each piece of `work` named, as `3 api (removing), 5 docs (merging)`.
 pub(super) fn names(work: &[Work]) -> String {
@@ -20,7 +20,7 @@ fn name(work: &Work) -> String {
     }
 }
 
-fn in_workspace(workspace: &WorkSpace, doing: &str) -> String {
+fn in_workspace(workspace: &WorkPlace, doing: &str) -> String {
     format!("{} {} ({doing})", workspace.number, workspace.name)
 }
 

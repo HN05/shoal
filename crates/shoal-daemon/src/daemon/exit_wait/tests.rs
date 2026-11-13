@@ -6,7 +6,7 @@ use crate::daemon::operations::fake;
 use crate::daemon::test_support::{manager, repository};
 use crate::model::{Repository, Workspace};
 use crate::protocol::operations::{OperationKind, OperationSpec, Preparation};
-use crate::protocol::{ErrorCode, Work, WorkSpace};
+use crate::protocol::{ErrorCode, Work, WorkPlace};
 use crate::state::WorkspaceState;
 use futures_util::FutureExt;
 use std::sync::Arc;
@@ -56,8 +56,8 @@ async fn workspace(manager: &Manager, repository: &Repository, name: &str) -> Wo
         .unwrap()
 }
 
-fn work_space(workspace: &Workspace) -> WorkSpace {
-    WorkSpace {
+fn work_place(workspace: &Workspace) -> WorkPlace {
+    WorkPlace {
         id: workspace.id.clone(),
         number: workspace.number,
         name: workspace.name.clone(),
@@ -90,15 +90,15 @@ async fn an_exit_names_each_workspace_it_would_cut_off_once() {
         work,
         [
             Work::Workspace {
-                workspace: work_space(&removing),
+                workspace: work_place(&removing),
                 state,
             },
             Work::Operation {
-                workspace: work_space(&merging),
+                workspace: work_place(&merging),
                 operation: OperationKind::Prepare,
             },
             Work::Command {
-                workspace: work_space(&setting_up),
+                workspace: work_place(&setting_up),
             },
         ]
     );
@@ -171,7 +171,7 @@ async fn an_exit_that_does_not_wait_refuses_named_work_and_holds_nothing_back() 
     executions.mark_unattachable(&ExecutionId::from("setup"), &setting_up.id);
     let (mut client, wait) = waiting(&manager, ExitWhen::IfIdle);
     let blocked = [Work::Command {
-        workspace: work_space(&setting_up),
+        workspace: work_place(&setting_up),
     }];
     assert_eq!(waits(&mut client).await, blocked);
     let (_stream, quiet) = wait.await.unwrap();

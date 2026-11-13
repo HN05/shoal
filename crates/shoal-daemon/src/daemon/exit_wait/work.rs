@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::client::space_ids::SpaceId;
 use crate::daemon::workspace::Manager;
-use crate::protocol::{Work, WorkSpace};
+use crate::protocol::{Work, WorkPlace};
 use crate::state::WorkspaceState;
 
 impl Manager {
@@ -59,11 +59,11 @@ fn working_in(work: &Work) -> Option<&SpaceId> {
 }
 
 /// Every workspace with its state, by number.
-fn workspaces(tx: &rusqlite::Transaction<'_>) -> Result<Vec<(WorkSpace, WorkspaceState)>> {
+fn workspaces(tx: &rusqlite::Transaction<'_>) -> Result<Vec<(WorkPlace, WorkspaceState)>> {
     let mut statement =
         tx.prepare("SELECT id, number, name, state FROM workspaces ORDER BY number")?;
     let rows = statement.query_map([], |row| {
-        let workspace = WorkSpace {
+        let workspace = WorkPlace {
             id: row.get("id")?,
             number: row.get("number")?,
             name: row.get("name")?,
