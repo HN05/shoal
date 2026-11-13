@@ -370,6 +370,7 @@ rules = ["work", "worker"]
 instructions = "Fix the findings of the latest review."
 focus = true             # Over terminal.focus for its launches; unset follows it
 idle_wake_minutes = 60   # Unset or 0 never wakes its agent
+weight = "heavy"         # "light": no agent slot; default "heavy", "light" for chat modes
 
 [modes.review-fixer.permissions]
 push = "propose"
@@ -385,7 +386,9 @@ rules the agent's system text carries, in order; `instructions` follow the
 agent's subject in its first message. `focus` decides whether its launches take
 the terminal; set it for a mode whose agent needs your input to start, such as
 one without instructions. `idle_wake_minutes` is how long its agent may stay
-idle before Shoal wakes it. `permissions` takes the keys of
+idle before Shoal wakes it. A `light` mode's agents start at once, hold no
+[agent slot](reference.md#agent-queue) and are never stopped for load; the
+built-in modes that start chats are light. `permissions` takes the keys of
 [`[permissions]`](#permissions). `[rules.<name>]` sets a rule's `text`, which
 any mode can list; a mode naming a rule no layer defines is refused.
 

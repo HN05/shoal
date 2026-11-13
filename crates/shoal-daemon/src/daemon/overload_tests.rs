@@ -1472,3 +1472,34 @@ fn restored<'a>(
         session,
     }
 }
+
+/// Load never stops a light agent; the same agent in a heavy mode stops.
+#[tokio::test]
+async fn load_never_stops_a_light_agent() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let settings = "[cleanup]\ngrace_minutes = 0";
+    configure_fixture(
+        &manager,
+        &format!("{settings}\n[modes.worker]\nweight = 'light'"),
+    )
+    .await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    assert!(
+        !manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    configure_fixture(&manager, settings).await;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    wait_paused(&manager, &workspace).await;
+    wait_restore_queued(&manager).await;
+    let epoch = manager.overload_recovery.epoch();
+    manager.overload_recovery.publish(Some(epoch));
+    assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
+    serving.abort();
+}

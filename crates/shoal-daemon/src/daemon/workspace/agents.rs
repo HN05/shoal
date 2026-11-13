@@ -973,6 +973,11 @@ impl Manager {
         select: Select,
         turns: &HashMap<ExecutionId, Turn>,
     ) -> Vec<(ExecutionId, Option<Turn>)> {
+        // Without the modes every agent counts as heavy, as before weights.
+        let light = self.light().await.unwrap_or_else(|error| {
+            log!("agent weights unavailable to protection: {error:#}");
+            Default::default()
+        });
         self.executions
             .with_agents(|agents| {
                 let running =
@@ -985,7 +990,10 @@ impl Manager {
                             attached: agent.attached == Some(true),
                         });
                 let selected: Vec<ExecutionId> = match select {
-                    Select::One => first_to_stop(running, turns).into_iter().cloned().collect(),
+                    Select::One => {
+                        let heavy = running.filter(|agent| !light.execution(agent.id));
+                        first_to_stop(heavy, turns).into_iter().cloned().collect()
+                    }
                     Select::All => running.map(|agent| agent.id.clone()).collect(),
                 };
                 selected
@@ -1169,7 +1177,7 @@ const PROTECTION_CHOICES: usize = 3;
 
 #[derive(Clone, Copy)]
 enum Select {
-    /// The agent [`first_to_stop`] picks.
+    /// The heavy agent [`first_to_stop`] picks, for load.
     One,
     All,
 }
