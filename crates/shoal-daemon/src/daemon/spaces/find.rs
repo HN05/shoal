@@ -78,7 +78,7 @@ impl Manager {
             let repository = url.repository();
             let found = url.number().get() == number
                 && wanted.as_ref().is_none_or(|wanted| wanted == repository);
-            if found && !matches.iter().any(|(matched, _)| *matched == id) {
+            if found {
                 matches.push((id, repository.clone()));
             }
         }

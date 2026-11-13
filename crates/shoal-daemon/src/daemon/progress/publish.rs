@@ -129,14 +129,8 @@ fn publishing_pulls(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
         .filter(|item| item.kind() == ItemKind::Pr.into())
         .map(|item| item.url);
     let marked = crate::daemon::workspace::review::list(db, id)?;
-    let mut urls: Vec<ItemRef> = Vec::new();
-    for url in assigned.chain(opened) {
-        let ready = marked.iter().any(|mark| mark.url.as_ref() == Some(&url));
-        if !ready && !urls.contains(&url) {
-            urls.push(url);
-        }
-    }
-    Ok(urls)
+    let ready = |url: &ItemRef| marked.iter().any(|mark| mark.url.as_ref() == Some(url));
+    Ok(assigned.chain(opened).filter(|url| !ready(url)).collect())
 }
 
 impl Manager {

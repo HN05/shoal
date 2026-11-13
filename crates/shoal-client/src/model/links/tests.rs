@@ -30,32 +30,6 @@ fn selected_numbers_name_one_kind() {
 }
 
 #[test]
-fn linked_items_list_each_url_once_with_its_title() {
-    let item = |url: &str, title: Option<&str>| LinkedItem {
-        url: url.parse().unwrap(),
-        title: title.map(Into::into),
-    };
-    let links = SpaceLinks {
-        issue: Some("https://forge/o/r/issues/1".parse().unwrap()),
-        issue_title: None,
-        prs: vec!["https://forge/o/r/pulls/2".parse().unwrap()],
-        opened: vec![
-            item("https://forge/o/r/pulls/2", Some("Fix it")),
-            item("https://forge/o/r/issues/3", None),
-        ],
-        related: vec![item("https://forge/o/r/issues/1", Some("Broken"))],
-    };
-    assert_eq!(
-        links.items(),
-        [
-            item("https://forge/o/r/issues/1", Some("Broken")),
-            item("https://forge/o/r/pulls/2", Some("Fix it")),
-            item("https://forge/o/r/issues/3", None),
-        ]
-    );
-}
-
-#[test]
 fn linked_items_know_their_repository() {
     let item = |url: &str| LinkedItem {
         url: url.parse().unwrap(),

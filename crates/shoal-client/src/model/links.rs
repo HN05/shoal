@@ -66,17 +66,11 @@ impl SpaceLinks {
             .collect()
     }
 
-    /// Each linked item once, the first relation's title kept unless a later
-    /// one names it.
+    /// Each linked item, the assigned ones first.
     pub fn items(&self) -> Vec<LinkedItem> {
-        let mut items: Vec<LinkedItem> = Vec::new();
-        for (_, item) in self.relations() {
-            match items.iter_mut().find(|known| known.url == item.url) {
-                Some(known) => known.title = known.title.take().or(item.title),
-                None => items.push(item),
-            }
-        }
-        items
+        (self.relations().into_iter())
+            .map(|(_, item)| item)
+            .collect()
     }
 }
 

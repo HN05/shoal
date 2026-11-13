@@ -400,7 +400,8 @@ pub(crate) fn drop_recorded(
     Ok(())
 }
 
-/// Remove recorded items, returning how many were removed.
+/// Remove recorded items with what their links kept, returning how many
+/// were removed.
 fn remove(
     db: &Connection,
     id: &SpaceId,
@@ -421,29 +422,9 @@ fn remove(
     for (kind, url) in &removed {
         events::record_link(db, id, EventKind::Unlinked, relation, *kind, url)?;
     }
-    forget_unlinked_runs(db, id, &removed)?;
-    Ok(removed.len())
-}
-
-/// Drop the replay cursors of the runs among `removed` that no relation
-/// links any more, so linking one again watches it afresh.
-fn forget_unlinked_runs(
-    db: &Connection,
-    id: &SpaceId,
-    removed: &[(LinkKind, String)],
-) -> Result<()> {
-    let mut unlinked = Vec::new();
-    for (kind, url) in removed {
-        let linked: bool = db.query_row(
-            "SELECT EXISTS(SELECT 1 FROM space_items WHERE space_id=?1 AND url=?2)",
-            rusqlite::params![id, url],
-            |row| row.get(0),
-        )?;
-        if *kind == LinkKind::Ci && !linked {
-            unlinked.push(url.clone());
-        }
-    }
-    forget_activity(db, id, &unlinked)
+    let urls: Vec<String> = removed.into_iter().map(|(_, url)| url).collect();
+    forget_activity(db, id, &urls)?;
+    Ok(urls.len())
 }
 
 /// Drop what assigned items kept while linked, their replay cursors and review

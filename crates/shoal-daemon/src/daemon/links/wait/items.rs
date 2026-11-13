@@ -211,7 +211,7 @@ pub(super) fn polled_items(db: &rusqlite::Connection, id: &SpaceId) -> Result<Ve
 }
 
 /// The items `shoal view` shows for `kind`, or every kind: every linked
-/// item once, the assigned issue and PRs first.
+/// item, the assigned issue and PRs first.
 fn shown_items(
     db: &rusqlite::Connection,
     id: &SpaceId,
@@ -245,22 +245,15 @@ fn with_runs(
     Ok(items)
 }
 
-/// Every run the workspace links, oldest first, once.
+/// Every run the workspace links, oldest first.
 fn linked_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
-    let urls = db
+    Ok(db
         .prepare(
             "SELECT url FROM space_items WHERE space_id=?1 AND kind=?2
              ORDER BY created_at, rowid",
         )?
         .query_map(params![id, LinkKind::Ci], |row| row.get::<_, ItemRef>(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    let mut runs = Vec::new();
-    for url in urls {
-        if !runs.contains(&url) {
-            runs.push(url);
-        }
-    }
-    Ok(runs)
+        .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 /// The workspace's linked runs, except those whose finish the workspace's
