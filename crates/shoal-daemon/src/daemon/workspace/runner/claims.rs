@@ -164,7 +164,8 @@ impl Manager {
             NotificationKind::RunnerFailed,
             format!(
                 "CI run {run} is for a PR that moved to a newer head, and cancelling it \
-                 failed, so it may hold the PR's checks: {error:#}"
+                 failed: {error:#}. It may hold the PR's checks; cancel it with \
+                 shoal ci cancel {run}"
             ),
         )
         .await;
