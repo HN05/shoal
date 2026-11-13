@@ -22,13 +22,15 @@ instead of the PR delivery guidance below.
   compatibility promise beyond the exact version match. The CLI and apps share
   that crate's connection and client-side logic; the CLI sends each daemon
   request through a named client operation and never builds one itself.
-  `shoal-client` depends on no Shoal crate but `shoal-forge`, `shoal-refs`,
-  `shoal-states`, `shoal-subprocess`, `shoal-time` and `shoal-config-derive`.
+  Parsing and resolving config live in `shoal-core`; the protocol carries a
+  target's repository layers without reading them. `shoal-client` depends on
+  no Shoal crate but `shoal-forge`, `shoal-refs`, `shoal-states`, `shoal-time`
+  and `shoal-config-derive`.
 - The CLI (`crates/shoal-cli`) and the daemon (`crates/shoal-daemon`) depend
   on neither each other; the `shoal` package's `main` joins them. Code they
   share lives in `crates/shoal-core`, which names neither and depends on no
-  Shoal crate but `shoal-client`, `shoal-forge`, `shoal-proxy`, `shoal-refs`,
-  `shoal-states` and `shoal-subprocess`. Flag an item there made `pub` that no
+  Shoal crate but `shoal-client`, `shoal-config-derive`, `shoal-forge`,
+  `shoal-proxy`, `shoal-refs`, `shoal-states` and `shoal-subprocess`. Flag an item there made `pub` that no
   other Shoal crate uses, and test fixtures outside its `test-support` feature that other
   crates' tests need.
 - `crates/shoal-cli` serves only the CLI: flag code there that the daemon, the
@@ -675,7 +677,7 @@ configured command for another agent, plus proven child
   changes user-level files outside the state directory checks
   `build::changes_user_files`, which debug builds fail unless
   `SHOAL_DEV_USER_FILES=1`. Code writes the global config and the files beside
-  it through `config_file`, and tests outside `shoal-client` through
+  it through `config_file`, and tests through
   `test_support`, which refuse the user's own config directory in a debug
   build and always in unit tests.
 - Tests run in temporary state directories and repositories without the launching

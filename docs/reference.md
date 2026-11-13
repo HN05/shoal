@@ -596,10 +596,8 @@ the daemon runs for a request, such as the setup and post-setup hook of a
 workspace `StartWorkspace` creates: its steps and its processes' output lines as
 they come, then its result or a typed failure such as `setup_failed` or
 `hook_failed`. It also holds the logic
-the CLI applies on its side: which workspaces a command would act on, list
-status labels, the AI tools Shoal can launch, where a space's agent sessions
-keep their files on this machine, reading and validating configuration, and in
-`views` what `shoal view` reads; `output` holds the types every command prints
+the CLI applies on its side: where a space's agent sessions keep their files
+on this machine, and in `views` what `shoal view` reads; `output` holds the types every command prints
 with `--json`.
 Without a scope token the caller is the user; with one, it is
 that workspace's agent, under the rules of its `shoal` commands. The library

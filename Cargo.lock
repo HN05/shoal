@@ -1304,7 +1304,6 @@ dependencies = [
  "base64",
  "clap",
  "futures-util",
- "libc",
  "rusqlite",
  "serde",
  "serde_json",
@@ -1312,12 +1311,10 @@ dependencies = [
  "shoal-forge",
  "shoal-refs",
  "shoal-states",
- "shoal-subprocess",
  "shoal-time",
  "tempfile",
  "tokio",
  "toml",
- "toml_edit",
  "uuid",
 ]
 

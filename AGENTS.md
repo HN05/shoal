@@ -99,8 +99,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   connection and client-side logic: the CLI sends each daemon request through
   a named operation of the client module for its subject and never builds one
   itself. What the CLI alone needs, such as parsing, prompting and printing,
-  stays in `shoal-cli`, and `shoal-client` depends on no Shoal crate but
-  `shoal-forge`, `shoal-refs`, `shoal-states`, `shoal-subprocess`,
+  stays in `shoal-cli`, and parsing and resolving config, which the protocol
+  carries without reading, lives in `shoal-core`. `shoal-client` depends on
+  no Shoal crate but `shoal-forge`, `shoal-refs`, `shoal-states`,
   `shoal-time` and `shoal-config-derive`.
 - `crates/shoal-time` holds the wall-clock timestamp type,
   `crates/shoal-refs` the commit and branch name types, and
@@ -112,8 +113,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   CLI and passes it the daemon for `shoal daemon run`. Code both use, directly
   or through code they call, lives in `crates/shoal-core`, in a top-level
   module named for what it does; it names neither the CLI nor the daemon and
-  depends on no Shoal crate but `shoal-client`, `shoal-forge`, `shoal-proxy`,
-  `shoal-refs`, `shoal-states` and `shoal-subprocess`. Its items are `pub`
+  depends on no Shoal crate but `shoal-client`, `shoal-config-derive`,
+  `shoal-forge`, `shoal-proxy`, `shoal-refs`, `shoal-states` and
+  `shoal-subprocess`. Its items are `pub`
   only where another Shoal crate uses them, and fixtures the other crates'
   tests share sit behind its `test-support` feature.
 - `crates/shoal-cli` serves only the CLI. Code that the daemon, the execution
@@ -355,8 +357,8 @@ Run development builds only with a temporary `--state-dir`: the user's daemon
 serves every running agent, so never stop, restart or reinstall it, and a debug
 build refuses the user's state directory, and writes to the user's config
 directory, unless `SHOAL_DEV_USER_FILES=1`. Code writes the global config and
-the files beside it through `config_file`, and tests outside `shoal-client`
-through `test_support`, which refuse that directory in unit tests whatever
+the files beside it through `config_file`, and tests through
+`test_support`, which refuse that directory in unit tests whatever
 they inherit. Code that
 changes user-level files outside the state directory checks
 `build::changes_user_files`, so debug builds leave them to the installed Shoal.

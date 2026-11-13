@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_support::write_beside_global_config;
 
 const TEMPLATE: &str = include_str!("../../configs/default.toml");
 
@@ -487,11 +488,12 @@ fn only_a_mode_that_sets_idle_wake_minutes_wakes_its_idle_agents() {
 fn a_global_mode_may_name_a_rule_only_its_file_defines() {
     let home = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(home.path());
-    let file = Config::path(&paths);
-    let rules = file.parent().unwrap().join("rules");
-    std::fs::create_dir_all(&rules).unwrap();
-    std::fs::write(&file, "[modes.triage]\nrules = ['triage']\n").unwrap();
-    std::fs::write(rules.join("triage.md"), "Label it.").unwrap();
+    write_beside_global_config(
+        &paths,
+        "config.toml",
+        "[modes.triage]\nrules = ['triage']\n",
+    );
+    write_beside_global_config(&paths, "rules/triage.md", "Label it.");
     // The file's text stays out of the config `config set` writes back.
     let written = Config::load(&paths).unwrap();
     assert!(!written.repository.rules.contains_key("triage"));
@@ -502,6 +504,7 @@ fn a_global_mode_may_name_a_rule_only_its_file_defines() {
         .resolve(&Default::default())
         .unwrap();
     assert_eq!(settings.rules["triage"].text, "Label it.");
+    let rules = Config::path(&paths).parent().unwrap().join("rules");
     std::fs::remove_file(rules.join("triage.md")).unwrap();
     assert!(Config::load(&paths).is_err());
 }
@@ -510,15 +513,11 @@ fn a_global_mode_may_name_a_rule_only_its_file_defines() {
 fn a_snapshot_resolves_with_the_template_files_beside_its_file() {
     let home = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(home.path());
-    let file = Config::path(&paths);
-    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-    std::fs::write(&file, "[review]\nagent = 'codex'\n").unwrap();
+    write_beside_global_config(&paths, "config.toml", "[review]\nagent = 'codex'\n");
     let snapshot = Config::load(&paths).unwrap();
     // Edits after the snapshot reach only the template files.
-    std::fs::write(&file, "[review]\nagent = 'claude'\n").unwrap();
-    let rules = file.parent().unwrap().join("rules");
-    std::fs::create_dir(&rules).unwrap();
-    std::fs::write(rules.join("review.md"), "Follow the brief.").unwrap();
+    write_beside_global_config(&paths, "config.toml", "[review]\nagent = 'claude'\n");
+    write_beside_global_config(&paths, "rules/review.md", "Follow the brief.");
     let settings = snapshot
         .resolve_with_template_files(&Default::default(), &paths)
         .unwrap();
@@ -555,11 +554,8 @@ fn no_config_layer_or_file_defines_the_setup_mode() {
         assert!(Config::parse(config, &paths).is_err(), "{config}");
         assert!(crate::config::repo::parse(config).is_err(), "{config}");
     }
-    let file = Config::path(&paths);
-    let modes = file.parent().unwrap().join("modes");
-    std::fs::create_dir_all(&modes).unwrap();
-    std::fs::write(&file, "").unwrap();
-    std::fs::write(modes.join("setup.md"), "Write anything.").unwrap();
+    write_beside_global_config(&paths, "config.toml", "");
+    write_beside_global_config(&paths, "modes/setup.md", "Write anything.");
     let error = Config::load(&paths).unwrap_err();
     assert!(format!("{error:#}").contains("setup.md"), "{error:#}");
 }

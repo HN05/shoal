@@ -58,7 +58,9 @@ would not fit with an error saying so.
 The protocol is the one protocol for the CLI and for apps. Apps use it through
 the `shoal-client` library, which holds the requests and responses with the
 types they carry, the connection the CLI makes, and the client-side logic the
-CLI shares with apps. The CLI and the daemon are the `shoal-cli` and
+CLI shares with apps. Config files are parsed and resolved in `shoal-core`: the
+protocol carries a target's repository layers as JSON the caller reads, and
+the daemon resolves what a launch needs. The CLI and the daemon are the `shoal-cli` and
 `shoal-daemon` crates, which depend on it and on `shoal-core`, the code they
 share, but not on each other; the binary-only `shoal` package joins them.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, and changing
