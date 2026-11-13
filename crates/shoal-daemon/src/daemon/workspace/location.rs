@@ -3,7 +3,12 @@ use super::{
     Manager,
     paths::{canonical_with_missing_tail, contains_protected_directory},
 };
-use crate::{daemon::store, git, model::Repository};
+use crate::{
+    daemon::store,
+    git,
+    model::Repository,
+    shoal_dirs::{Contents, ShoalDir},
+};
 use anyhow::{Result, ensure};
 use std::{
     fs,
@@ -104,10 +109,9 @@ impl Manager {
                             &path,
                             crate::caches::Layout::new(directory, &other.id).root(),
                         )
-                        && !overlaps(
-                            &path,
-                            crate::tmp_dirs::Layout::new(directory, &other.id).root(),
-                        )
+                        && !Contents::ALL.into_iter().any(|contents| {
+                            overlaps(&path, ShoalDir::new(directory, &other.id, contents).root())
+                        })
                         && !overlaps(
                             &path,
                             super::imported_sessions::Layout::new(directory, &other.id).root(),

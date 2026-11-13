@@ -44,6 +44,7 @@ pub mod secrets;
 pub mod service;
 pub mod sessions;
 pub mod shell;
+pub mod shoal_dirs;
 pub mod start_plan;
 pub mod terminal;
 #[cfg(any(test, feature = "test-support"))]

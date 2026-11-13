@@ -17,6 +17,7 @@ use crate::{
     config::repo::Cache,
     fsutil::marked_dirs::{create_marked_dir, is_marked_dir},
     model::Repository,
+    shoal_dirs::remove_dir,
 };
 
 /// Holds the caches, apart from the owner marker.
@@ -171,15 +172,6 @@ pub fn directories(
     caches: &BTreeMap<String, Cache>,
 ) -> Result<BTreeMap<String, PathBuf>> {
     Layout::of(repo).map_or_else(|| Ok(BTreeMap::new()), |layout| layout.prepare(caches))
-}
-
-pub(crate) fn remove_dir(directory: &Path) -> Result<()> {
-    match fs::remove_dir_all(directory) {
-        Err(error) if error.kind() != ErrorKind::NotFound => {
-            Err(error).with_context(|| format!("delete {}", directory.display()))
-        }
-        _ => Ok(()),
-    }
 }
 
 #[cfg(test)]

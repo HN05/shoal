@@ -81,18 +81,3 @@ fn only_a_created_directory_is_an_existing_one() {
         None
     );
 }
-
-#[test]
-fn a_directory_another_daemon_marked_stays_its_own() {
-    let root = tempfile::tempdir().unwrap();
-    let first = Layout::outside_repositories(root.path(), Path::new("/first/state"));
-    first.prepare(&SpaceId::from("master")).unwrap();
-    let second = Layout::outside_repositories(root.path(), Path::new("/second/state"));
-    let error = second
-        .prepare(&SpaceId::from("other"))
-        .unwrap_err()
-        .to_string();
-    assert!(error.contains("/first/state"), "{error}");
-    assert!(!error.contains("move it away"), "{error}");
-    assert!(root.path().join(".tmp/master").is_dir());
-}

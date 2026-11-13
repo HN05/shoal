@@ -2,7 +2,6 @@
 //! beside the workspaces, in a directory its agents are given as a working
 //! directory, so they read the files where any sandbox lets them. The chats
 //! without a repository keep theirs in `root_dir`, where they run.
-use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::{
     io::ErrorKind,
@@ -15,48 +14,39 @@ use super::NewFile;
 use crate::{
     daemon::file_copies::{incomplete_copies, keep_copies},
     forge::items::attach::Attachment,
-    fsutil::marked_dirs::{check_marked_dir, create_marked_dir, is_marked_dir},
     model::Repository,
+    shoal_dirs::{Contents, ShoalDir, remove_dir},
 };
 
 /// The directory below a repository's attached files that keeps what
 /// workspaces handed back, which no workspace ID names.
 const RESULTS: &str = "results";
 
-/// The directory of one repository's attached files.
+/// The directory of one repository's attached files, or of those of the
+/// chats without a repository.
 #[derive(Debug, Clone)]
 pub(crate) struct Layout {
-    root: PathBuf,
-    owner: String,
+    dir: ShoalDir,
 }
 
 impl Layout {
-    pub(crate) fn new(workspaces_dir: &Path, repository_id: &RepositoryId) -> Self {
-        Self::marked(workspaces_dir, repository_id.to_string())
-    }
-
-    /// The attached files in `directory`, marked as `owner`'s.
-    fn marked(directory: &Path, owner: String) -> Self {
-        Self {
-            root: directory.join(".attachments"),
-            owner,
-        }
-    }
-
     /// The repository's attached files; registrations from before the
     /// repository directory layout have none.
     pub(crate) fn of(repo: &Repository) -> Option<Self> {
-        repo.workspaces_dir
-            .as_deref()
-            .map(|directory| Self::new(directory, &repo.id))
+        ShoalDir::of(repo, Contents::Attachments).map(|dir| Self { dir })
     }
 
     /// The attached files of the chats without a repository, in
     /// `root_dir`, marked as those of the daemon whose state directory is
-    /// `state`, which no repository ID names: a daemon sharing `root_dir`
-    /// neither uses nor sweeps them.
+    /// `state`.
     pub(crate) fn outside_repositories(root_dir: &Path, state: &Path) -> Self {
-        Self::marked(root_dir, state.display().to_string())
+        Self {
+            dir: ShoalDir::outside_repositories(root_dir, state, Contents::Attachments),
+        }
+    }
+
+    fn root(&self) -> &Path {
+        self.dir.root()
     }
 
     /// Copies of `files`, attached to `message` for the workspace
@@ -68,7 +58,12 @@ impl Layout {
         message: &str,
         files: &[NewFile],
     ) -> Result<Kept> {
-        self.keep_in(&self.root.join(workspace_id), workspace_id, message, files)
+        self.keep_in(
+            &self.root().join(workspace_id),
+            workspace_id,
+            message,
+            files,
+        )
     }
 
     /// Copies of the files `files` that the workspace `workspace_id` hands
@@ -80,7 +75,7 @@ impl Layout {
         message: &str,
         files: &[NewFile],
     ) -> Result<Kept> {
-        let directory = self.root.join(RESULTS).join(workspace_id);
+        let directory = self.root().join(RESULTS).join(workspace_id);
         self.keep_in(&directory, workspace_id, message, files)
     }
 
@@ -96,13 +91,7 @@ impl Layout {
             super::check_path(&file.path)?;
             file.check()?;
         }
-        create_marked_dir(&self.root, &self.owner)
-            .with_context(|| format!("create {}", self.root.display()))?;
-        ensure!(
-            is_marked_dir(&self.root, &self.owner),
-            "{} is not a directory Shoal created for attached files; move it away",
-            self.root.display()
-        );
+        self.dir.create()?;
         std::fs::create_dir_all(directory)
             .with_context(|| format!("create {}", directory.display()))?;
         ensure!(
@@ -147,11 +136,7 @@ impl Layout {
     /// once the path is inside this repository's attached files, which Shoal
     /// created, and stays there through any symbolic link.
     pub(crate) fn delete_copy(&self, path: &Path) -> Result<()> {
-        ensure!(
-            is_marked_dir(&self.root, &self.owner),
-            "{} is not a directory Shoal created for attached files",
-            self.root.display()
-        );
+        self.dir.ensure_own()?;
         let shown = path.display();
         ensure!(
             self.contains(path),
@@ -177,8 +162,10 @@ impl Layout {
     /// one per file within it. A hidden message directory holds copies still
     /// being made; the files themselves may have any name.
     pub(crate) fn workspace_copies(&self, workspace_id: &SpaceId) -> Result<Vec<PathBuf>> {
-        let ours = check_marked_dir(&self.root, &self.owner)
-            .with_context(|| format!("read {}", self.root.display()))?;
+        let ours = self
+            .dir
+            .check_own()
+            .with_context(|| format!("read {}", self.root().display()))?;
         if !ours {
             return Ok(Vec::new());
         }
@@ -187,7 +174,7 @@ impl Layout {
                 .is_some_and(|name| name.to_string_lossy().starts_with('.'))
         };
         let mut copies = Vec::new();
-        for message in entries(&self.root.join(workspace_id))? {
+        for message in entries(&self.root().join(workspace_id))? {
             if !message.is_dir() || staging(&message) {
                 continue;
             }
@@ -203,10 +190,10 @@ impl Layout {
 
     /// Delete the files attached for the workspace `workspace_id`.
     pub(crate) fn remove_workspace(&self, workspace_id: &SpaceId) -> Result<()> {
-        if !is_marked_dir(&self.root, &self.owner) {
+        if !self.dir.is_own() {
             return Ok(());
         }
-        remove_dir(&self.root.join(workspace_id))
+        remove_dir(&self.root().join(workspace_id))
     }
 
     /// The directories that may hold the files kept for the workspace or
@@ -214,15 +201,15 @@ impl Layout {
     /// workspace handed back.
     pub(crate) fn kept(&self, space_id: &SpaceId) -> [PathBuf; 2] {
         [
-            self.root.join(space_id),
-            self.root.join(RESULTS).join(space_id),
+            self.root().join(space_id),
+            self.root().join(RESULTS).join(space_id),
         ]
     }
 
     /// Delete the files kept for the space `space_id` after it
     /// is gone.
     pub(crate) fn remove_kept(&self, space_id: &SpaceId) -> Result<()> {
-        if !is_marked_dir(&self.root, &self.owner) {
+        if !self.dir.is_own() {
             return Ok(());
         }
         for directory in self.kept(space_id) {
@@ -240,7 +227,7 @@ impl Layout {
     /// directory stays there through any symbolic link; a directory that is
     /// gone holds nothing to delete.
     fn contains(&self, path: &Path) -> bool {
-        path.starts_with(&self.root)
+        path.starts_with(self.root())
             && path
                 .parent()
                 .is_some_and(|parent| match parent.canonicalize() {
@@ -252,7 +239,7 @@ impl Layout {
     /// Whether the existing `directory` resolves inside this repository's
     /// attached files through any symbolic link.
     fn resolves_inside(&self, directory: &Path) -> bool {
-        match (directory.canonicalize(), self.root.canonicalize()) {
+        match (directory.canonicalize(), self.root().canonicalize()) {
             (Ok(directory), Ok(root)) => directory.starts_with(root),
             _ => false,
         }
@@ -261,10 +248,7 @@ impl Layout {
     /// Delete the directory with every attached file, when the repository
     /// goes.
     pub(crate) fn remove(&self) -> Result<()> {
-        if !is_marked_dir(&self.root, &self.owner) {
-            return Ok(());
-        }
-        remove_dir(&self.root)
+        self.dir.remove()
     }
 }
 
@@ -325,13 +309,4 @@ fn entries(directory: &Path) -> Result<Vec<PathBuf>> {
         .map(|entry| Ok(entry?.path()))
         .collect::<std::io::Result<_>>()
         .with_context(|| format!("read {}", directory.display()))
-}
-
-fn remove_dir(directory: &Path) -> Result<()> {
-    match std::fs::remove_dir_all(directory) {
-        Err(error) if error.kind() != ErrorKind::NotFound => {
-            Err(error).with_context(|| format!("delete {}", directory.display()))
-        }
-        _ => Ok(()),
-    }
 }
