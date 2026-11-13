@@ -849,7 +849,7 @@ its job where the forge tells that apart, the CI runs on an open PR's head that
 reviewer's latest approval or change request. A failed lookup reports its error
 on that item without failing the command. Status counts the space's open
 [questions](#questions) in `open_questions`, the approval requests that wait for a
-decision, a workspace's own or those a chat decides, in `pending_approvals`, its
+decision, the space's own and those it decides, in `pending_approvals`, its
 [attached files](#attached-files) in `attached_files` and its unread notifications in
 `unread_notifications`. When a step
 of the daemon's automatic cleanup fails in the workspace, status says so in
@@ -5711,9 +5711,8 @@ still need a reason and the usual audit before mutations.
 
 Agents use the normal acquire command with `--reason`. `shoal approvals` shows
 these requests, merge requests from a scoped `shoal merge`,
-[proposed issues and PRs](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals --space <workspace>` filters
-by workspace, and `--space <chat>` lists the issues a chat proposed and the
-requests it decides. Scoped callers can inspect requests in their workspace tree. On a terminal,
+[proposed issues and PRs](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals --space <space>` lists
+the requests a space made or proposed and those it decides. Scoped callers can inspect requests in their workspace tree. On a terminal,
 `shoal approvals` opens a picker; selecting a pending request or naming its
 [number](#questions), such as `shoal approvals 3.2`, shows its recorded settings and prompts for `y` to approve or `n` to deny,
 case-insensitively; any other input cancels. In the list, Ctrl-A approves

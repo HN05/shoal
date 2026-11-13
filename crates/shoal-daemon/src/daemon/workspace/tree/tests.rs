@@ -1392,6 +1392,27 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         .unwrap();
     // The direct parent decides, whether or not it holds a grant.
     assert_eq!(routed.decider.as_ref(), Some(&parent.id));
+    // The deciding workspace lists and counts the request beside its own;
+    // the root lists only its grant.
+    let listed = |workspace: &Workspace| {
+        let id = workspace.id.clone();
+        let manager = &manager;
+        async move {
+            let requests = manager
+                .approval_requests(Some(&SpaceSelector::id(&id)))
+                .await
+                .unwrap();
+            let pending = manager
+                .store
+                .run(move |db| crate::daemon::approvals::pending_count(db, &id))
+                .await
+                .unwrap();
+            let numbers: Vec<_> = requests.iter().map(|request| request.number).collect();
+            (numbers, pending)
+        }
+    };
+    assert_eq!(listed(&parent).await, (vec![requested.number], 1));
+    assert_eq!(listed(&root).await, (vec![granted.number], 0));
     let messages = |workspace: &Workspace| {
         let id = workspace.id.clone();
         let manager = &manager;

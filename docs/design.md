@@ -893,7 +893,8 @@ grant for it, and a hold on its child, and otherwise denies or passes the
 request up; the user
 decides at the top, and a chat whose agent stops or a
 deciding space that is removed hands the user what it had not decided, since
-neither can decide any more.
+neither can decide any more. A space lists the requests it decides beside its
+own, whatever its kind, since it must find them to decide them.
 When a subagent works in the child's directory instead of an `--agent`, the
 child has no agent of its own, so its activity reaches the parent, and the
 subagent reports to the parent directly, supervision Shoal need not relay. Shoal does not track those subagents: their hooks report under

@@ -12,8 +12,8 @@ use crate::{
 pub struct ApprovalsArgs {
     /// Request number, such as 3.2; omit to choose a request.
     pub number: Option<ItemNumber>,
-    /// List requests and grants for this space; a chat's are the requests
-    /// it decides.
+    /// List the requests and grants this space made or proposed, and the
+    /// requests it decides.
     #[arg(short = 's', long, conflicts_with_all = ["number", "approval_action"])]
     pub space: Option<SpaceSelector>,
     /// Approve the recorded settings, or open a proposed issue or PR.

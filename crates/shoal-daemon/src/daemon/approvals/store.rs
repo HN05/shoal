@@ -45,6 +45,11 @@ pub(super) const CANDIDATES: &str =
 const REPOSITORY_OWNED: &str = "(workspace_id IS NULL
     AND CASE WHEN json_valid(record) THEN json_extract(record, '$.space_id') END=?1)";
 
+/// Whether the space `?1` decides a request routed to it; a malformed
+/// record of another space's history stays out of the selection.
+const DECIDED_BY: &str =
+    "CASE WHEN json_valid(record) THEN json_extract(record, '$.decider') END=?1";
+
 /// A stored request's key, record, active flag, number and whether its
 /// space is gone.
 pub(super) type RecordRow = (String, String, bool, ItemNumber, bool);
@@ -80,41 +85,19 @@ pub(super) fn by_key(db: &Connection, key: &str) -> Result<Option<ApprovalReques
     lookup(db, BY_KEY, [key])
 }
 
-/// The requests routed to the space `id`, in the order they were made; a
-/// malformed record of another space's history stays out of the selection.
+/// The requests routed to the space `id`, in the order they were made.
 fn list_decided(db: &Connection, id: &SpaceId) -> Result<Vec<ApprovalRequest>> {
-    db.prepare(&format!(
-        "{COLUMNS} WHERE CASE WHEN json_valid(record) THEN json_extract(record, '$.decider') END=?1
-            ORDER BY rowid"
-    ))?
-    .query_map([id], record_row)?
-    .map(|row| decode_record(row?))
-    .collect()
+    db.prepare(&format!("{COLUMNS} WHERE {DECIDED_BY} ORDER BY rowid"))?
+        .query_map([id], record_row)?
+        .map(|row| decode_record(row?))
+        .collect()
 }
 
-/// The issues the chat `id` proposed and the requests routed to it to
-/// decide, in the order they were made. A chat proposes nothing else, and
-/// its issue proposals belong to its repository.
-pub(super) fn list_of_chat(db: &Connection, id: &SpaceId) -> Result<Vec<ApprovalRequest>> {
-    db.prepare(&format!(
-        "{COLUMNS} WHERE {REPOSITORY_OWNED}
-            OR CASE WHEN json_valid(record) THEN json_extract(record, '$.decider') END=?1
-            ORDER BY rowid"
-    ))?
-    .query_map([id], record_row)?
-    .map(|row| decode_record(row?))
-    .collect()
-}
-
-/// How many requests of the space `id` wait for a decision: those a
-/// workspace made, or those a `chat` made or decides.
-pub(crate) fn pending_count(db: &Connection, id: &SpaceId, chat: bool) -> Result<usize> {
-    let requests = match chat {
-        true => list_of_chat(db, id)?,
-        false => list(db, Some(id))?,
-    };
+/// How many requests of the space `id` wait for a decision: those it
+/// made or proposed, and those routed to it to decide.
+pub(crate) fn pending_count(db: &Connection, id: &SpaceId) -> Result<usize> {
     let pending = |request: &&ApprovalRequest| request.status == DecisionStatus::Pending;
-    Ok(requests.iter().filter(pending).count())
+    Ok(list(db, Some(id))?.iter().filter(pending).count())
 }
 
 /// Give the pending requests the space `id` decides back to the user, as
@@ -159,15 +142,15 @@ fn by_number(db: &Connection, number: ItemNumber) -> Result<Option<ApprovalReque
     lookup(db, BY_NUMBER, params![number.space, number.item])
 }
 
-/// Every request, or those `owner` made, including the issues it proposed
-/// for its repository.
-pub fn list(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<ApprovalRequest>> {
+/// Every request, or those the space `space` made, proposed or decides, in
+/// the order they were made.
+pub fn list(db: &Connection, space: Option<&SpaceId>) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
         "{COLUMNS} WHERE ?1 IS NULL OR workspace_id=?1
-            OR {REPOSITORY_OWNED}
+            OR {REPOSITORY_OWNED} OR {DECIDED_BY}
         ORDER BY rowid"
     ))?
-    .query_map([owner], record_row)?
+    .query_map([space], record_row)?
     .map(|row| decode_record(row?))
     .collect()
 }
@@ -489,19 +472,17 @@ impl Manager {
         self.store.write(move |tx| retire(tx, &request)).await
     }
 
-    /// Every request, or those of the workspace `selector` names, or those
-    /// the chat it names made or decides.
+    /// Every request, or those the space `selector` names made, proposed or
+    /// decides.
     pub async fn approval_requests(
         &self,
         selector: Option<&SpaceSelector>,
     ) -> Result<Vec<ApprovalRequest>> {
-        if let Some(selector) = selector
-            && let PresentSpace::Chat(chat) = self.space(selector).await?
-        {
-            return self.store.run(move |db| list_of_chat(db, &chat.id)).await;
-        }
-        let owner = self.workspace_filter(selector).await?;
-        self.store.run(move |db| list(db, owner.as_ref())).await
+        let space = match selector {
+            Some(selector) => Some(self.space(selector).await?.id().clone()),
+            None => None,
+        };
+        self.store.run(move |db| list(db, space.as_ref())).await
     }
 
     /// The request stored under `key`, whatever number it has.

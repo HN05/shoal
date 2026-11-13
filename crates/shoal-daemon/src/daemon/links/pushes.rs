@@ -157,7 +157,9 @@ impl Manager {
             .await?;
         requests
             .iter()
-            .filter(|request| request.status == DecisionStatus::Pending)
+            .filter(|request| {
+                request.space_id == workspace.id && request.status == DecisionStatus::Pending
+            })
             .try_for_each(|request| self.ensure_not_pushing(request))
     }
 

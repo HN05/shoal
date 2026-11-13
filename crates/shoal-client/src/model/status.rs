@@ -72,8 +72,8 @@ pub struct Attention {
     /// Questions its agents asked that wait for an answer.
     #[serde(default)]
     pub open_questions: usize,
-    /// Approval requests that wait for a decision: those a workspace made,
-    /// or those a chat decides.
+    /// Approval requests that wait for a decision: those the space made or
+    /// proposed, and those it decides.
     #[serde(default)]
     pub pending_approvals: usize,
     /// Files attached to it, including those its completion handed back.

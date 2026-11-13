@@ -90,13 +90,12 @@ impl Manager {
     async fn attention(&self, space: &SpaceDetail) -> Result<Attention> {
         let unread_notifications = self.unread_space_notifications(space.id()).await?;
         let id = space.id().to_owned();
-        let chat = space.worktree().is_none();
         self.store
             .run(move |db| {
                 Ok(Attention {
                     unread_notifications,
                     open_questions: questions::open_count(db, &id)?,
-                    pending_approvals: approvals::pending_count(db, &id, chat)?,
+                    pending_approvals: approvals::pending_count(db, &id)?,
                     attached_files: workspace_files::count(db, &id)?,
                 })
             })
