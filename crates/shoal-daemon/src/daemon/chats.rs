@@ -692,7 +692,7 @@ fn forget_unstarted(tx: &rusqlite::Transaction<'_>, id: &SpaceId, error: &str) -
         [id],
     )?;
     if unstarted {
-        let cause = events::EventCause::Manual;
+        let cause = events::EventCause::StartFailed;
         events::record(tx, id, events::EventKind::Removed, cause, Some(error))?;
         tx.execute("DELETE FROM space_records WHERE id=?1", [id])?;
     }

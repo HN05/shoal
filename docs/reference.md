@@ -5082,8 +5082,9 @@ its device deleted, add `simulator` with the lease's `name` and the device's
 Causes are `manual`, `idle`, `issue`, `pr` (including a base workspace's merged
 PRs), `completion`, `missing_directory`, `disk_space`, `merged` for
 [merged cleanup](#merged-workspaces), `removed` for a base workspace's removal,
-`parent` for the removal of the space above, or `parent_completion` for an
-ancestor's `done` with cleanup, and null when inapplicable; `error` describes
+`parent` for the removal of the space above, `parent_completion` for an
+ancestor's `done` with cleanup, or `start_failed` for a chat that could not
+start, and null when inapplicable; `error` describes
 setup or cleanup failures. Branch changes are observed during daemon sweeps;
 detached HEAD has a null branch, and the recorded workspace branch remains
 unchanged.

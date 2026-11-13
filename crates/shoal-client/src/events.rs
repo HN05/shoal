@@ -222,6 +222,8 @@ states!(EventCause {
     Parent => "parent",
     /// An ancestor of the workspace finished its assignment with cleanup.
     ParentCompletion => "parent_completion",
+    /// The space could not start, so Shoal forgot it at once.
+    StartFailed => "start_failed",
 });
 
 /// An event of a space, a workspace or a chat.

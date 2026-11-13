@@ -218,6 +218,7 @@ fn cause(cause: EventCause) -> String {
         EventCause::Removed => "base removed",
         EventCause::Parent => "parent removed",
         EventCause::ParentCompletion => "parent done",
+        EventCause::StartFailed => "start failed",
     }
     .to_owned()
 }
