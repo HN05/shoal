@@ -1,6 +1,7 @@
 //! `shoal review run`: queue a review of a workspace's changes or a PR, or
 //! run the configured `review` command.
 use crate::client::space_ids::SpaceId;
+use shoal_refs::BranchName;
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result, bail, ensure};
@@ -262,12 +263,12 @@ async fn pull_request(
         .into_iter()
         .find(|workspace| {
             workspace.repository_id == repo.id
-                && workspace.branch.as_deref() == Some(pull.head.as_str())
+                && workspace.branch.as_ref().map(BranchName::as_str) == Some(pull.head.as_str())
         });
     let workspace = match owner {
         Some(workspace) => {
-            fetch_pull_branch(&repo.path, "base", pull.base.as_str()).await?;
-            update_to_head(ctx, &repo.path, &workspace, pull.head.as_str()).await?;
+            fetch_pull_branch(&repo.path, "base", &pull.base).await?;
+            update_to_head(ctx, &repo.path, &workspace, &pull.head).await?;
             let workspace =
                 crate::opened_pull::link(&ctx.paths, workspace, pull.url.clone()).await?;
             eprintln!(
@@ -277,7 +278,7 @@ async fn pull_request(
             workspace.id
         }
         None => {
-            let tracking = fetch_pull_branch(&repo.path, "base", pull.base.as_str()).await?;
+            let tracking = fetch_pull_branch(&repo.path, "base", &pull.base).await?;
             let creation = crate::start_plan::Creation {
                 existing: Some(git::remote_ref("origin", pull.head.as_str())),
                 base: Some(tracking),
@@ -312,7 +313,8 @@ async fn pull_request(
                 .into_iter()
                 .find(|workspace| {
                     workspace.repository_id == repo.id
-                        && workspace.branch.as_deref() == Some(pull.head.as_str())
+                        && workspace.branch.as_ref().map(BranchName::as_str)
+                            == Some(pull.head.as_str())
                 })
                 .context("the opened PR workspace is missing")?
                 .id
@@ -373,13 +375,13 @@ async fn update_to_head(
     ctx: &Context,
     repo: &Path,
     workspace: &Workspace,
-    head: &str,
+    head: &BranchName,
 ) -> Result<()> {
     let tracking = fetch_pull_branch(repo, "head", head).await?;
     let updated = crate::client::workspaces::fast_forward(
         &ctx.paths,
         SpaceSelector::id(&workspace.id),
-        head.to_owned(),
+        head.to_string(),
     )
     .await?;
     if updated {
@@ -392,12 +394,12 @@ async fn update_to_head(
 pub(in crate::cli::commands) async fn fetch_pull_branch(
     path: &Path,
     role: &str,
-    branch: &str,
+    branch: &BranchName,
 ) -> Result<String> {
-    git::check_branch_name(None, branch)
+    git::check_branch_name(None, branch.as_str())
         .await
         .with_context(|| format!("PR {role} {branch:?} is not a branch name"))?;
-    git::fetch::review_branch(path, &branch.into())
+    git::fetch::review_branch(path, branch)
         .await
         .with_context(|| format!("could not fetch the PR {role} {branch}"))
 }

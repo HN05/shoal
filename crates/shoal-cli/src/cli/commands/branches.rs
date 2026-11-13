@@ -108,7 +108,7 @@ pub(super) fn lines(kept: &[KeptBranch]) -> Vec<String> {
             .unwrap_or(0)
     };
     let repository_width = width(|branch| &branch.repository);
-    let branch_width = width(|branch| &branch.branch);
+    let branch_width = width(|branch| branch.branch.as_str());
     kept.iter()
         .map(|branch| {
             let commits = match branch.unpushed_commits {

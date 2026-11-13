@@ -34,6 +34,7 @@ use crate::{
     },
     state::WorkspaceState,
 };
+use shoal_refs::BranchName;
 
 use super::{HANG, TestDaemon};
 
@@ -122,7 +123,10 @@ async fn removal_refuses_unsaved_work_unless_the_app_confirms_it() {
     let check: RemovalCheck = connection::request(&app, check).await.unwrap();
     let confirmed = remove(UnsavedWork::confirming(&check));
     let removal: RemovalResult = connection::request(&app, confirmed).await.unwrap();
-    assert_eq!(removal.branch.as_deref(), Some("dirty"));
+    assert_eq!(
+        removal.branch.as_ref().map(BranchName::as_str),
+        Some("dirty")
+    );
 }
 
 #[tokio::test]
@@ -137,7 +141,7 @@ async fn done_renames_and_links_go_through_the_protocol() {
         sender_chat: None,
     };
     let completion: Completion = connection::request(&app, done).await.unwrap();
-    assert!(!completion.head.is_empty());
+    assert!(!completion.head.as_str().is_empty());
     assert!(inspect(&app, workspace.id.as_str()).await.unwrap().done);
     let rename = |branch: &str| WorkspaceMethod::RenameWorkspace {
         workspace: SpaceSelector::id(&workspace.id),

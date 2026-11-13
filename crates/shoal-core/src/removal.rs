@@ -1,6 +1,7 @@
 //! Inspecting what removing a workspace would discard.
 use crate::client::execution_ids::ExecutionId;
 use anyhow::Result;
+use shoal_refs::BranchName;
 
 pub use crate::client::removal::{
     BranchOutcome, NOTHING, RemovalCheck, RemovalResult, UnsavedWork,
@@ -155,7 +156,7 @@ pub async fn inspect(
 /// delete, still is.
 async fn inspect_git(check: &mut RemovalCheck, default_branch: Option<&str>) -> Result<()> {
     if check.workspace.disposable {
-        check.branch = (git::checked_out_branch(&check.workspace.path).await?).map(String::from);
+        check.branch = git::checked_out_branch(&check.workspace.path).await?;
         return Ok(());
     }
     let path = &check.workspace.path;
@@ -167,8 +168,8 @@ async fn inspect_git(check: &mut RemovalCheck, default_branch: Option<&str>) -> 
     let changed = !git::status::porcelain(path).await?.is_empty();
     check.starting_files = changed && holds_starting_files(&check.workspace).await?;
     check.dirty = changed && !check.starting_files;
-    check.branch = branch.map(String::from);
-    check.head = Some(commit.into());
+    check.branch = branch;
+    check.head = Some(commit);
     // The default branch may be absent locally (workspaces created from another ref).
     let default_refs = match default_branch {
         Some(name) => git::status::default_refs(path, &name.into()).await?,
@@ -202,7 +203,7 @@ pub async fn holds_starting_files(workspace: &Workspace) -> Result<bool> {
     Ok(
         git::resolve_commit(path, "HEAD", git::run).await? == copied.head
             && git::checkpoint::index_tree(path).await? == copied.index
-            && git::checkpoint::matches(path, &copied.commit).await?,
+            && git::checkpoint::matches(path, copied.commit.as_str()).await?,
     )
 }
 
@@ -232,7 +233,7 @@ async fn only_starting_commits(workspace: &Workspace, kept: &[&str]) -> Result<b
         return Ok(false);
     };
     let mut kept = kept.to_vec();
-    kept.push(&copied.head);
+    kept.push(copied.head.as_str());
     Ok(git::status::unretained_commits(&workspace.path, "HEAD", &kept).await? == 0)
 }
 
@@ -256,11 +257,11 @@ async fn start_branch_retains_head(
 /// otherwise the local branch its recorded base names; never its own.
 fn start_branch(workspace: &Workspace) -> Option<&str> {
     let branch = match &workspace.base_workspace {
-        Some(base) => base.branch.as_deref()?,
+        Some(base) => base.branch.as_ref().map(BranchName::as_str)?,
         None => workspace
             .base_ref
             .as_deref()?
             .strip_prefix(git::LOCAL_REFS)?,
     };
-    (workspace.branch.as_deref() != Some(branch)).then_some(branch)
+    (workspace.branch.as_ref().map(BranchName::as_str) != Some(branch)).then_some(branch)
 }

@@ -4,6 +4,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
+use shoal_refs::CommitId;
 
 pub(crate) use crate::client::links::pr::{Action, Registration, RegistrationKind};
 use crate::{
@@ -409,7 +410,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         kind: &mut RegistrationKind,
-        head: &str,
+        head: &CommitId,
     ) -> Result<bool> {
         match kind {
             RegistrationKind::Acknowledgement { head: acknowledged } => {
@@ -434,7 +435,7 @@ impl Manager {
                     return Ok(false);
                 }
                 ensure!(
-                    completion.head == head,
+                    completion.head == *head,
                     "HEAD changed after the assignment was marked done; retaining workspace"
                 );
                 // The latch prevents repeated forge queries.
@@ -448,7 +449,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         urls: &[ItemRef],
-        head: &str,
+        head: &CommitId,
     ) -> Result<bool> {
         let mut contains_head = false;
         for url in urls {
@@ -552,7 +553,7 @@ fn store_registration(
 /// The workspace's HEAD: its branch's commit, checking it is still on the
 /// branch, or for a workspace at a commit its detached HEAD, checking it is
 /// still detached.
-pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {
+pub(crate) async fn current_head(workspace: &Workspace) -> Result<CommitId> {
     let (head, branch) = git::head_and_branch(&workspace.path)
         .await
         .context("cannot check the workspace's branch")?;
@@ -566,7 +567,7 @@ pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {
             "workspace is at a commit but its worktree is on a branch"
         ),
     }
-    Ok(head.into())
+    Ok(head)
 }
 
 /// Look up each watched PR concurrently from the workspace's origin

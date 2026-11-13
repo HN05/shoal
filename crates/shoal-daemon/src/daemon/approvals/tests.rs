@@ -880,7 +880,7 @@ async fn decisions_bind_settings_and_release_obeys_configured_lifetime() {
 fn merge_request(workspace: &crate::model::Workspace) -> ApprovalRequest {
     let head = crate::test_support::git(&workspace.path, &["rev-parse", "HEAD"]);
     let merge = MergeSpecification {
-        branch: workspace.branch.clone().unwrap().into(),
+        branch: workspace.branch.clone().unwrap(),
         head: head.trim().into(),
         push: None,
         unpushed: None,

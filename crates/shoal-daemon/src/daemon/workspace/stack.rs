@@ -1,6 +1,7 @@
 //! Base workspaces: the workspace whose branch a stacked workspace builds on.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
+use shoal_refs::BranchName;
 use std::path::Path;
 
 use crate::client::space_names::SpaceSelector;
@@ -118,7 +119,7 @@ fn base_workspace(
         ensure_base(db, repository_id, &id, selector)?;
         return Ok(id);
     }
-    Ok(owner(db, repository_id, selector)?
+    Ok(owner(db, repository_id, &selector.into())?
         .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown workspace: {selector}")))?)
 }
 
@@ -199,7 +200,7 @@ pub(super) async fn base_branch(repo: &Path, base: &str) -> Result<Option<String
 pub(super) fn owner(
     db: &Connection,
     repository_id: &RepositoryId,
-    branch: &str,
+    branch: &BranchName,
 ) -> Result<Option<SpaceId>> {
     Ok(db
         .query_row(

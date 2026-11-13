@@ -11,6 +11,7 @@ use crate::{
     model::{HoldPlacer, Repository},
     state::ChatRestore,
 };
+use shoal_refs::BranchName;
 
 async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
     let path = repository(root, "repo");
@@ -233,7 +234,10 @@ async fn a_converted_workspace_restores_beside_the_chat_it_became() {
     // Names repeat, so it keeps its name beside the chat that has it too.
     let reopened = restored.opened.workspace;
     assert_eq!(reopened.name, workspace.name);
-    assert_eq!(reopened.branch.as_deref(), Some("fix-login"));
+    assert_eq!(
+        reopened.branch.as_ref().map(BranchName::as_str),
+        Some("fix-login")
+    );
     assert!(reopened.path.join("notes.txt").exists());
     assert!(manager.chat_by_id(&workspace.id).await.unwrap().is_some());
 }

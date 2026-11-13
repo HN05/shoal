@@ -17,6 +17,7 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
+use shoal_refs::BranchName;
 use tokio::sync::OwnedMutexGuard;
 
 /// Where a new workspace goes, its Git profile, and what it leaves out.
@@ -111,10 +112,15 @@ impl Manager {
             (None, Some(selector)) => match self.open_target(&repo, selector, options).await? {
                 branches::OpenTarget::Reopen(workspace) => {
                     return self
-                        .check_reopen(&workspace, workspace.branch.as_deref())
+                        .check_reopen(
+                            &workspace,
+                            workspace.branch.as_ref().map(BranchName::as_str),
+                        )
                         .await;
                 }
-                branches::OpenTarget::Create(branch) => (Some(branch.name.clone()), Some(branch)),
+                branches::OpenTarget::Create(branch) => {
+                    (Some(branch.name.to_string()), Some(branch))
+                }
             },
             (None, None) => (None, None),
         };
@@ -140,7 +146,7 @@ impl Manager {
         &self,
         repo: &crate::model::Repository,
         name: String,
-        branch: String,
+        branch: BranchName,
         source: WorkspaceSource,
         new: NewWorkspace<'_>,
         git: OwnedMutexGuard<()>,
@@ -326,7 +332,7 @@ impl Manager {
                 store::ensure_branch_available(
                     tx,
                     &record.repository_id,
-                    record.branch.as_deref(),
+                    record.branch.as_ref().map(BranchName::as_str),
                     replaced,
                 )?;
                 store::ensure_path_unrecorded(tx, &record.path)?;
@@ -351,7 +357,7 @@ impl Manager {
                         "Git worktree is already owned by {}; restore its recorded path", workspace.name);
                 }
                 let base_workspace = match &base_branch {
-                    Some(branch) => stack::owner(tx, &record.repository_id, branch)?,
+                    Some(branch) => stack::owner(tx, &record.repository_id, &branch.as_str().into())?,
                     None => None,
                 };
                 // Recorded first, so the workspace's creation names it.
@@ -421,9 +427,7 @@ impl Manager {
         git::worktree::add(
             &repo.path,
             &workspace.path,
-            &workspace
-                .require_branch("creating a branch worktree")?
-                .into(),
+            workspace.require_branch("creating a branch worktree")?,
             matches!(&source, WorkspaceSource::New { .. }).then_some(commit.as_str()),
         )
         .await?;
@@ -481,7 +485,7 @@ impl Manager {
     async fn existing_branch_base(
         &self,
         repo: &Repository,
-        branch: &str,
+        branch: &BranchName,
         base: Option<&str>,
     ) -> Result<String> {
         match base {
@@ -666,23 +670,24 @@ async fn check_local_base(repo: &crate::model::Repository, base: &str) -> Result
 }
 
 /// Existing worktrees use a live local default ref, or their opening commit.
-pub(super) async fn existing_base(repo: &crate::model::Repository, branch: &str) -> Result<String> {
+pub(super) async fn existing_base(
+    repo: &crate::model::Repository,
+    branch: &BranchName,
+) -> Result<String> {
     if let Ok(name) =
         crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await
     {
         let default = git::local_ref(&name);
-        if name != branch && git::ref_exists(&repo.path, &default, git::isolated_command).await? {
+        if name != *branch && git::ref_exists(&repo.path, &default, git::isolated_command).await? {
             return Ok(default);
         }
     }
-    Ok(git::verify_revision(
-        &repo.path,
-        &git::local_ref(&branch.into()),
-        git::run_isolated,
+    Ok(
+        git::verify_revision(&repo.path, &git::local_ref(branch), git::run_isolated)
+            .await?
+            .trim()
+            .to_owned(),
     )
-    .await?
-    .trim()
-    .to_owned())
 }
 
 #[cfg(test)]

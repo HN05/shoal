@@ -83,7 +83,10 @@ const STATUS: &[&str] = &["status", "--porcelain", "--untracked-files=all"];
 async fn a_copy_takes_the_files_and_diff_base_of_its_source() {
     let f = Fixture::new().await;
     let copy = f.copy(None, CopyPlace::Branch(None)).await.unwrap();
-    assert_eq!(copy.branch.as_deref(), Some("topic-copy"));
+    assert_eq!(
+        copy.branch.as_ref().map(BranchName::as_str),
+        Some("topic-copy")
+    );
     assert_eq!(copy.state, WorkspaceState::Ready);
     assert_eq!(git(&copy.path, STATUS), git(&f.source.path, STATUS));
     assert_eq!(
@@ -119,7 +122,10 @@ async fn a_copy_s_name_stays_its_requested_one() {
     git(path, &["branch", "named"]);
     let copy = f.copy(None, CopyPlace::Branch(None)).await.unwrap();
     assert_eq!(
-        (copy.name.as_str(), copy.branch.as_deref()),
+        (
+            copy.name.as_str(),
+            copy.branch.as_ref().map(BranchName::as_str)
+        ),
         ("topic-copy", Some("topic-copy-2"))
     );
     // The branch's suffix leaves the directory, which is free, unsuffixed.
@@ -129,7 +135,10 @@ async fn a_copy_s_name_stays_its_requested_one() {
         .await
         .unwrap();
     assert_eq!(
-        (named.name.as_str(), named.branch.as_deref()),
+        (
+            named.name.as_str(),
+            named.branch.as_ref().map(BranchName::as_str)
+        ),
         ("named", Some("named-2"))
     );
 }
@@ -153,7 +162,7 @@ async fn a_copy_on_a_typed_branch_is_refused_rather_than_suffixed() {
     };
     typed("taken").await.unwrap_err();
     let copy = typed("fresh").await.unwrap();
-    assert_eq!(copy.branch.as_deref(), Some("fresh"));
+    assert_eq!(copy.branch.as_ref().map(BranchName::as_str), Some("fresh"));
 }
 
 #[tokio::test]
@@ -185,7 +194,10 @@ async fn a_copy_takes_the_suffix_its_branch_takes_on_a_parent_component() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(copy.branch.as_deref(), Some("fix-2/thing-copy"));
+    assert_eq!(
+        copy.branch.as_ref().map(BranchName::as_str),
+        Some("fix-2/thing-copy")
+    );
 }
 
 #[tokio::test]
@@ -503,5 +515,8 @@ async fn a_copy_of_a_renamed_workspace_at_a_commit_branches_from_its_commit() {
     .unwrap();
 
     let head = git(&detached.path, &["rev-parse", "--short=7", "HEAD"]);
-    assert_eq!(copy.branch, Some(format!("{}-copy", head.trim())));
+    assert_eq!(
+        copy.branch,
+        (Some(format!("{}-copy", head.trim()))).map(BranchName::from)
+    );
 }

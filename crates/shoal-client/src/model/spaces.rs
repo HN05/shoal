@@ -4,6 +4,7 @@ use crate::repository_ids::RepositoryId;
 use crate::space_ids::{SpaceId, SpaceNumber};
 use crate::space_names::{SpaceName, SpaceSelector};
 use serde::{Deserialize, Serialize};
+use shoal_refs::BranchName;
 
 /// Another space a record refers to, with its current name, and its branch
 /// when it is a workspace.
@@ -13,7 +14,7 @@ pub struct SpaceRef {
     pub name: SpaceName,
     pub kind: SpaceKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub branch: Option<String>,
+    pub branch: Option<BranchName>,
 }
 
 shoal_states::states!(

@@ -105,7 +105,7 @@ async fn open_prs_show_the_progress_until_marked_ready() {
     let head = crate::daemon::links::pr::current_head(&workspace)
         .await
         .unwrap();
-    let pull = FakePull::start(&manager, &head, "Closes #3\n").await;
+    let pull = FakePull::start(&manager, head.as_str(), "Closes #3\n").await;
     git(
         &workspace.path,
         &["remote", "add", "origin", &pull.remote()],

@@ -2,6 +2,7 @@
 //! continues them in, such as Happy. Shoal records and starts each session;
 //! the [`App`] says what it runs and delivers its first message.
 use crate::paths::StateFiles;
+use shoal_refs::BranchName;
 use std::{
     ffi::OsString,
     os::unix::process::CommandExt,
@@ -60,7 +61,7 @@ pub(super) async fn start(
     let session = Session {
         paths: &ctx.paths,
         directory: &workspace.path,
-        branch: workspace.branch.as_deref(),
+        branch: workspace.branch.as_ref().map(BranchName::as_str),
         files: &files,
         prompt,
         args,

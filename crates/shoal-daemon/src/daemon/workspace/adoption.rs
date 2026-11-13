@@ -5,6 +5,7 @@ use crate::client::space_names::SpaceName;
 use crate::daemon::log;
 use crate::{fsutil::off_runtime, git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
+use shoal_refs::{BranchName, CommitId};
 use std::path::{Path, PathBuf};
 
 impl Manager {
@@ -35,14 +36,15 @@ impl Manager {
         if copy {
             return self.copy_and_adopt(&repo, &path, branch).await;
         }
-        self.adopt_linked_worktree(&repo, path, branch).await
+        self.adopt_linked_worktree(&repo, path, &branch.into())
+            .await
     }
 
     async fn adopt_linked_worktree(
         &self,
         repo: &crate::model::Repository,
         path: PathBuf,
-        branch: &str,
+        branch: &BranchName,
     ) -> Result<Workspace> {
         if let Some(workspace) = self
             .list_workspaces()
@@ -51,10 +53,11 @@ impl Manager {
             .find(|w| w.path == path)
         {
             ensure!(
-                workspace.repository_id == repo.id && workspace.branch.as_deref() == Some(branch),
+                workspace.repository_id == repo.id
+                    && workspace.branch.as_ref().map(BranchName::as_str) == Some(branch.as_str()),
                 "worktree no longer matches its recorded repository or branch"
             );
-            self.reopen_owned_workspace(&workspace, Some(branch))
+            self.reopen_owned_workspace(&workspace, Some(branch.as_str()))
                 .await?;
             return Ok(workspace);
         }
@@ -63,15 +66,15 @@ impl Manager {
         let base = existing_base(repo, branch).await?;
         let (commit, reference) = recorded_base(repo, &base).await?;
         let workspace = Workspace {
-            base_commit: Some(commit),
+            base_commit: Some(commit.into()),
             base_ref: reference,
             git_dir: Some(git_dir.clone()),
             git_dir_id: Some(identity),
             ..Workspace::new_record(
                 repo.id.clone(),
-                SpaceName::derive(branch, "workspace"),
+                SpaceName::derive(branch.as_str(), "workspace"),
                 path,
-                Some(branch.into()),
+                Some(branch.clone()),
                 WorkspaceState::Ready,
             )
         };
@@ -155,7 +158,7 @@ impl Manager {
         git::worktree::add(
             &repo.path,
             &workspace.path,
-            &workspace.require_branch("copying a worktree")?.into(),
+            workspace.require_branch("copying a worktree")?,
             Some(commit.as_str()),
         )
         .await
@@ -198,7 +201,7 @@ impl Manager {
         let (commit, reference) = recorded_base(repo, &base).await?;
         let git_dir = git::git_dir(&workspace.path).await?;
         let identity = git_dir_identity(&git_dir).await?;
-        self.record_copy_ready(workspace, git_dir, identity, commit, reference)
+        self.record_copy_ready(workspace, git_dir, identity, commit.into(), reference)
             .await
     }
 
@@ -208,7 +211,7 @@ impl Manager {
         workspace: &Workspace,
         git_dir: PathBuf,
         identity: String,
-        commit: String,
+        commit: CommitId,
         reference: Option<String>,
     ) -> Result<()> {
         let id = workspace.id.clone();

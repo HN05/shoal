@@ -158,7 +158,10 @@ async fn check_branch_removal(branch: BranchRemoval, outcome: BranchOutcome, kep
         .await
         .unwrap();
     assert!(!workspace.exists());
-    assert_eq!(removed.branch.as_deref(), Some("moved"));
+    assert_eq!(
+        removed.branch.as_ref().map(BranchName::as_str),
+        Some("moved")
+    );
     assert_eq!(removed.branch_outcome, outcome);
     assert_eq!(has_branch(&repo, "moved").await, kept);
     assert!(has_branch(&repo, "topic").await);
@@ -253,7 +256,10 @@ async fn a_deleted_worktree_is_unregistered() {
     let removed = remove(&repo, &workspace, FileRemoval::Force, BranchRemoval::Keep)
         .await
         .unwrap();
-    assert_eq!(removed.branch.as_deref(), Some("topic"));
+    assert_eq!(
+        removed.branch.as_ref().map(BranchName::as_str),
+        Some("topic")
+    );
     let listed = git(&repo, &["worktree", "list", "--porcelain"]).await;
     assert!(!listed.contains("topic"), "{listed}");
 }

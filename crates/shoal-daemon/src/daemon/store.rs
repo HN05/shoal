@@ -437,7 +437,10 @@ fn starting_commit(row: &Row<'_>) -> rusqlite::Result<Option<crate::model::Start
         })?),
         None => None,
     };
-    Ok(Some(crate::model::StartingCommit { commit, made_for }))
+    Ok(Some(crate::model::StartingCommit {
+        commit: commit.into(),
+        made_for,
+    }))
 }
 
 /// Read canonical links while keeping malformed legacy PR records out of list output.

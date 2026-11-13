@@ -4,6 +4,7 @@ use crate::execution_ids::ExecutionId;
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
 use crate::space_names::SpaceName;
+use shoal_refs::{BranchName, CommitId};
 use std::{fmt, path::PathBuf, str::FromStr};
 
 use anyhow::{Context, Result};
@@ -242,7 +243,7 @@ pub struct EventDetails {
     /// Null for a chat.
     pub path: Option<PathBuf>,
     /// Observed branch for branch changes; null for a detached HEAD.
-    pub branch: Option<String>,
+    pub branch: Option<BranchName>,
     pub cause: Option<EventCause>,
     pub error: Option<String>,
     /// The ref a workspace started from, such as `refs/heads/main`, on its
@@ -371,7 +372,7 @@ pub struct ReviewEvent {
     /// The linked issue or PR; both are null for a workspace mark.
     pub kind: Option<crate::forge::items::link::ItemKind>,
     pub url: Option<String>,
-    pub head: String,
+    pub head: CommitId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

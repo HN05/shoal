@@ -5,6 +5,7 @@
 //! the real URL with Git, and reports the others as held for approval or
 //! refused.
 //! Standard output carries only the protocol.
+use shoal_refs::CommitId;
 use std::collections::BTreeMap;
 
 use std::io::{BufRead as _, Write as _};
@@ -195,7 +196,7 @@ impl Session {
             remote: self.remote.clone(),
             url: self.one_of_several_urls().await,
             destination: destination.to_owned(),
-            commit,
+            commit: commit.map(CommitId::from),
             replaces,
             agent: None,
         })

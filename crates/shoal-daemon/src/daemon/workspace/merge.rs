@@ -132,7 +132,7 @@ impl Manager {
         self.verify_worktree(&workspace).await?;
         let default =
             crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
-        let branch = BranchName::from(workspace.require_branch("merging")?);
+        let branch = workspace.require_branch("merging")?.clone();
         ensure!(
             branch != default,
             "workspace {} is on the default branch {default}; nothing to merge",
@@ -143,10 +143,10 @@ impl Manager {
             .with_context(|| format!("workspace {} is not ready to merge", workspace.name))?;
         let source =
             git::resolve_commit(&workspace.path, &git::local_ref(&branch), git_run).await?;
-        self.ensure_unmanaged_checkout(&repo, default.as_str(), "merge")
+        self.ensure_unmanaged_checkout(&repo, &default, "merge")
             .await?;
         let push = match push {
-            true => Some(push_target(&repo, default.as_str()).await?),
+            true => Some(push_target(&repo, &default).await?),
             false => None,
         };
         Ok(MergeSource {
@@ -184,7 +184,7 @@ impl Manager {
                 format!("{default} has no upstream; merging on its local state"),
             ));
         }
-        self.refresh_branch(repo, default.as_str(), UpstreamPolicy::Required)
+        self.refresh_branch(repo, default, UpstreamPolicy::Required)
             .await
             .with_context(|| format!("could not refresh {default} before merging"))
     }
@@ -232,7 +232,7 @@ impl Manager {
     async fn ensure_unmanaged_checkout(
         &self,
         repo: &Repository,
-        default: &str,
+        default: &BranchName,
         command: &str,
     ) -> Result<()> {
         if let Some(checkout) = self.managed_checkout(repo, default).await? {
@@ -244,8 +244,12 @@ impl Manager {
     }
 
     /// The managed workspace that has `branch` checked out, if any.
-    async fn managed_checkout(&self, repo: &Repository, branch: &str) -> Result<Option<String>> {
-        let Some(checkout) = git::checkout_of(&repo.path, &branch.into(), git::run).await? else {
+    async fn managed_checkout(
+        &self,
+        repo: &Repository,
+        branch: &BranchName,
+    ) -> Result<Option<String>> {
+        let Some(checkout) = git::checkout_of(&repo.path, branch, git::run).await? else {
             return Ok(None);
         };
         let Ok(path) = std::fs::canonicalize(&checkout.path) else {
@@ -350,8 +354,8 @@ async fn local_commit(repo: &Repository, branch: &BranchName) -> Result<CommitId
 }
 
 /// The upstream a merge pushes `default` to, refused when it has none.
-async fn push_target(repo: &Repository, default: &str) -> Result<MergePush> {
-    let (remote, reference) = upstream(repo, &git::local_ref(&default.into()))
+async fn push_target(repo: &Repository, default: &BranchName) -> Result<MergePush> {
+    let (remote, reference) = upstream(repo, &git::local_ref(default))
         .await?
         .with_context(|| format!("{default} has no upstream to push to"))?;
     Ok(MergePush { remote, reference })

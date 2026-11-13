@@ -17,7 +17,7 @@ use crate::{
 #[derive(Default)]
 pub(super) struct Pulls {
     /// The forge's head of each PR that can be marked.
-    pub(super) heads: HashMap<ItemRef, String>,
+    pub(super) heads: HashMap<ItemRef, CommitId>,
     pub(super) skipped: Vec<SkippedPr>,
 }
 
@@ -56,7 +56,7 @@ impl Manager {
                 Some(reason) => pulls.skipped.push(SkippedPr { url, reason }),
                 None => {
                     let head = pull.head_sha.context("PR has no head commit")?;
-                    pulls.heads.insert(url, head.into());
+                    pulls.heads.insert(url, head);
                 }
             }
         }

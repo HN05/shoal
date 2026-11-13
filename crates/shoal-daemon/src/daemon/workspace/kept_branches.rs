@@ -21,8 +21,8 @@ use crate::{
 #[derive(Debug, Clone)]
 struct Record {
     repository_id: RepositoryId,
-    branch: String,
-    head: String,
+    branch: BranchName,
+    head: CommitId,
     kept_at: UnixTime,
 }
 
@@ -62,7 +62,7 @@ impl Manager {
         let Some(branch) = outcome
             .branch
             .clone()
-            .filter(|branch| workspace.branch.as_ref() == Some(branch))
+            .filter(|branch| workspace.branch.as_ref() == Some(&branch.as_str().into()))
             .filter(|_| !outcome.branch_outcome.is_deleted())
         else {
             return Ok(());
@@ -81,8 +81,8 @@ impl Manager {
         };
         self.save_kept_branch(Record {
             repository_id: repo.id,
-            branch,
-            head: head.into(),
+            branch: branch.into(),
+            head,
             kept_at: UnixTime::now(),
         })
         .await
@@ -127,8 +127,7 @@ impl Manager {
             .await?
         {
             if status == (Status::Kept { unkept_commits: 0 }) {
-                let (name, head) = (record.branch.as_str().into(), record.head.as_str().into());
-                git::branch::delete_at(&repo.path, &name, &head).await?;
+                git::branch::delete_at(&repo.path, &record.branch, &record.head).await?;
                 self.forget_kept_branch(&record).await?;
                 log!(
                     "deleted kept branch {}: a remote or the default branch has its commits",
@@ -228,8 +227,7 @@ impl Manager {
         let mut deleted = Vec::new();
         for (repo, record, unkept_commits) in chosen {
             let branch = kept_branch(&repo, record.clone(), unkept_commits).await?;
-            let (name, head) = (record.branch.as_str().into(), record.head.as_str().into());
-            git::branch::delete_at(&repo.path, &name, &head).await?;
+            git::branch::delete_at(&repo.path, &record.branch, &record.head).await?;
             self.forget_kept_branch(&record).await?;
             deleted.push(branch);
         }
@@ -314,7 +312,7 @@ impl Manager {
     }
 
     /// The branches of the repository's workspaces.
-    async fn workspace_branches(&self, repository_id: &RepositoryId) -> Result<Vec<String>> {
+    async fn workspace_branches(&self, repository_id: &RepositoryId) -> Result<Vec<BranchName>> {
         Ok(self
             .list_workspaces()
             .await?
@@ -329,13 +327,13 @@ async fn kept_status(
     repo: &Path,
     record: &Record,
     default: Option<&str>,
-    workspaces: &[String],
+    workspaces: &[BranchName],
     evidence: Evidence<'_>,
 ) -> Result<Status> {
     if default == Some(record.branch.as_str()) || workspaces.contains(&record.branch) {
         return Ok(Status::Released);
     }
-    let branch = BranchName::from(record.branch.as_str());
+    let branch = record.branch.clone();
     let commit = git::status::local_branch_commit(repo, &branch).await?;
     if commit.as_ref().map(CommitId::as_str) != Some(record.head.as_str())
         || git::branch::is_symbolic(repo, &branch).await?
@@ -349,18 +347,20 @@ async fn kept_status(
     }
     let unkept_commits = match (default, evidence) {
         (Some(default), Evidence::Advertised(heads)) => {
-            git::status::unkept_commits_by(repo, &record.head, &default.into(), heads).await?
+            git::status::unkept_commits_by(repo, record.head.as_str(), &default.into(), heads)
+                .await?
         }
         (Some(default), Evidence::TrackingRefs) => {
-            git::status::unkept_commits(repo, &record.head, &default.into()).await?
+            git::status::unkept_commits(repo, record.head.as_str(), &default.into()).await?
         }
-        (None, _) => git::status::unretained_commits(repo, &record.head, &[]).await?,
+        (None, _) => git::status::unretained_commits(repo, record.head.as_str(), &[]).await?,
     };
     Ok(Status::Kept { unkept_commits })
 }
 
 async fn kept_branch(repo: &Repository, record: Record, unkept_commits: u64) -> Result<KeptBranch> {
-    let (committed_at, subject) = git::branch::commit_summary(&repo.path, &record.head).await?;
+    let (committed_at, subject) =
+        git::branch::commit_summary(&repo.path, record.head.as_str()).await?;
     Ok(KeptBranch {
         repository_id: record.repository_id,
         repository: repo

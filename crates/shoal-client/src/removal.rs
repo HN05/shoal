@@ -3,6 +3,7 @@
 use crate::space_ids::SpaceId;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use shoal_refs::{BranchName, CommitId};
 
 use crate::space_names::SpaceSelector;
 use crate::{
@@ -40,10 +41,10 @@ pub struct RemovalCheck {
     /// default branch, so removing the worktree could lose them; zero when the
     /// default branch already has HEAD's changes.
     pub unpushed_commits: u64,
-    pub branch: Option<String>,
+    pub branch: Option<BranchName>,
     /// HEAD's commit.
     #[serde(default)]
-    pub head: Option<String>,
+    pub head: Option<CommitId>,
     /// The local default branch or its remote-tracking branch records HEAD's
     /// tree or has its changes, merged, squashed or rebased.
     pub matches_default_branch: bool,
@@ -80,7 +81,7 @@ pub enum UnsavedWork {
     /// only ones it may take; without them it takes whatever is below.
     Confirmed {
         files: bool,
-        detached_head: Option<String>,
+        detached_head: Option<CommitId>,
         #[serde(default)]
         files_restorable: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -200,7 +201,7 @@ impl BranchOutcome {
 #[derive(Debug, Clone, Deserialize)]
 pub struct RemovalResult {
     pub removed: bool,
-    pub branch: Option<String>,
+    pub branch: Option<BranchName>,
     pub branch_outcome: BranchOutcome,
     /// Removal succeeded, but its best-effort post hook failed.
     pub hook_error: Option<String>,
@@ -217,7 +218,7 @@ impl Serialize for RemovalResult {
         #[derive(Serialize)]
         struct Response<'a> {
             removed: bool,
-            branch: &'a Option<String>,
+            branch: &'a Option<BranchName>,
             branch_deleted: bool,
             branch_outcome: &'a BranchOutcome,
             hook_error: &'a Option<String>,

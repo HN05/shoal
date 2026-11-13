@@ -1,5 +1,6 @@
 //! Fork-point resolution for `shoal diff`.
 use anyhow::{Context, Result, ensure};
+use shoal_refs::CommitId;
 
 use super::Manager;
 use crate::client::space_names::SpaceSelector;
@@ -28,7 +29,8 @@ impl Manager {
         } else {
             let base = workspace
                 .base_commit
-                .as_deref()
+                .as_ref()
+                .map(CommitId::as_str)
                 .context("workspace base is unknown")?;
             git::diff::merge_base(&workspace.path, base).await?
         };

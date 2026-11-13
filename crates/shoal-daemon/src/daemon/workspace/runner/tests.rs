@@ -1199,7 +1199,7 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
         .create_job_workspace(
             &fixture.repository,
             (entry.name.as_str(), SpaceName::derive(&job.job.name, "ci")),
-            &job.run.commit,
+            &job.run.commit.as_str().into(),
             job.run.reference.as_deref(),
         )
         .await

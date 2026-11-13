@@ -1,5 +1,6 @@
 //! What an addition creates: the [`AddPlan`] a terminal host or the agent
 //! queue's worker carries out, built from the command's arguments.
+use shoal_refs::BranchName;
 use std::ffi::OsString;
 
 use anyhow::Result;
@@ -130,7 +131,8 @@ pub(super) async fn reopened_workspace(
     Ok(workspaces
         .into_iter()
         .find(|workspace| {
-            workspace.repository_id == repo.id && workspace.branch.as_deref() == Some(&branch)
+            workspace.repository_id == repo.id
+                && workspace.branch.as_ref().map(BranchName::as_str) == Some(&branch)
         })
         .map(|workspace| workspace.id))
 }

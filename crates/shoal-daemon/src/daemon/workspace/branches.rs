@@ -5,7 +5,7 @@ use crate::git::existing_branch::BranchExt;
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
-use shoal_refs::BranchName;
+use shoal_refs::{BranchName, CommitId};
 
 use super::Manager;
 use crate::{
@@ -75,9 +75,9 @@ enum Refresh {
 
 /// A local branch about to follow its upstream.
 struct Following {
-    branch: String,
+    branch: BranchName,
     local_ref: String,
-    previous_commit: String,
+    previous_commit: CommitId,
     remote: String,
     /// The upstream branch's ref on `remote`.
     reference: String,
@@ -86,13 +86,13 @@ struct Following {
 }
 
 impl Following {
-    fn pulled(self, repo: &Repository, commit: String) -> PulledBranch {
+    fn pulled(self, repo: &Repository, commit: CommitId) -> PulledBranch {
         PulledBranch {
-            branch: self.branch.into(),
+            branch: self.branch,
             repository_id: repo.id.clone(),
             updated: commit != self.previous_commit,
-            previous_commit: self.previous_commit.into(),
-            commit: commit.into(),
+            previous_commit: self.previous_commit,
+            commit,
             skipped: None,
         }
     }
@@ -108,16 +108,20 @@ pub(super) enum UpstreamPolicy {
 impl Manager {
     /// The requested branch name, or the nearest free `-2`, `-3`, ... variant.
     /// Called while holding the repository's Git gate, through worktree creation.
-    pub(super) async fn available_branch(&self, repo: &Repository, name: &str) -> Result<String> {
-        Ok(allocate_branch(name, &self.branches_taken(repo).await?).into())
+    pub(super) async fn available_branch(
+        &self,
+        repo: &Repository,
+        name: &str,
+    ) -> Result<BranchName> {
+        Ok(allocate_branch(name, &self.branches_taken(repo).await?))
     }
 
     /// The nearest free `-2`, `-3`, ... variant of branch `name`, for a
     /// copy of the work on it, whether or not `name` exists here.
-    pub(super) async fn copy_branch(&self, repo: &Repository, name: &str) -> Result<String> {
+    pub(super) async fn copy_branch(&self, repo: &Repository, name: &str) -> Result<BranchName> {
         let mut taken = self.branches_taken(repo).await?;
         taken.push(name.into());
-        Ok(allocate_branch(name, &taken).into())
+        Ok(allocate_branch(name, &taken))
     }
 
     /// The branch names a new branch of `repo` must not take.
@@ -129,8 +133,7 @@ impl Manager {
                 .await?
                 .into_iter()
                 .filter(|workspace| workspace.repository_id == repo.id)
-                .filter_map(|workspace| workspace.branch)
-                .map(BranchName::from),
+                .filter_map(|workspace| workspace.branch),
         );
         Ok(taken)
     }
@@ -168,9 +171,9 @@ impl Manager {
     pub(crate) async fn fast_forward_default(
         &self,
         repo: &Repository,
-        default: &str,
+        default: &BranchName,
     ) -> Result<SyncedRepository> {
-        let remote = upstream(repo, &git::local_ref(&default.into()))
+        let remote = upstream(repo, &git::local_ref(default))
             .await?
             .map(|(remote, _)| remote);
         let default_branch = self
@@ -225,7 +228,7 @@ impl Manager {
     pub(super) async fn refresh_branch(
         &self,
         repo: &Repository,
-        branch: &str,
+        branch: &BranchName,
         policy: UpstreamPolicy,
     ) -> Result<PulledBranch> {
         let following = match self.prepare_refresh(repo, branch, policy).await? {
@@ -236,7 +239,7 @@ impl Manager {
         let commit = fetch::with_temporary_ref(&repo.path, "pull", git_run, async |fetched| {
             let commit =
                 fetch::fetch_commit(&repo.path, remote, reference, fetched, git_run).await?;
-            self.advance(repo, &following, commit.as_str()).await
+            self.advance(repo, &following, &commit).await
         })
         .await?;
         Ok(following.pulled(repo, commit))
@@ -248,7 +251,7 @@ impl Manager {
     async fn follow_fetched_upstream(
         &self,
         repo: &Repository,
-        branch: &str,
+        branch: &BranchName,
     ) -> Result<PulledBranch> {
         let following = match self
             .prepare_refresh(repo, branch, UpstreamPolicy::AllowLocalOnly)
@@ -267,11 +270,11 @@ impl Manager {
     async fn prepare_refresh(
         &self,
         repo: &Repository,
-        branch: &str,
+        branch: &BranchName,
         policy: UpstreamPolicy,
     ) -> Result<Refresh> {
-        let name = BranchName::from(branch);
-        let local_ref = git::local_ref(&name);
+        let name = branch;
+        let local_ref = git::local_ref(name);
         let previous_commit = git::verify_revision(&repo.path, &local_ref, git_run)
             .await
             .with_context(|| format!("repository has no local {branch} branch"))?
@@ -284,7 +287,7 @@ impl Manager {
         {
             return Ok(Refresh::Unchanged(PulledBranch::unchanged(
                 repo,
-                &name,
+                name,
                 previous_commit.into(),
                 format!(
                     "{branch} has no upstream and the repository has no remotes; nothing to refresh"
@@ -296,7 +299,7 @@ impl Manager {
                 "{branch} has no branch upstream; configure it with git branch --set-upstream-to=<remote>/{branch} {branch}"
             )
         })?;
-        let checkout = git::checkout_of(&repo.path, &name, git::run)
+        let checkout = git::checkout_of(&repo.path, name, git::run)
             .await?
             .map(|tree| tree.path);
         if let Some(checkout) = &checkout {
@@ -305,12 +308,12 @@ impl Manager {
                 self.managed_workspace_at(&path).await?.is_none(),
                 "{branch} is checked out in a managed workspace; switch that workspace back to its own branch first"
             );
-            clean_branch(checkout, &name).await?;
+            clean_branch(checkout, name).await?;
         }
         Ok(Refresh::Follow(Following {
             branch: branch.to_owned(),
             local_ref,
-            previous_commit,
+            previous_commit: previous_commit.into(),
             remote,
             reference,
             checkout,
@@ -323,8 +326,8 @@ impl Manager {
         &self,
         repo: &Repository,
         following: &Following,
-        commit: &str,
-    ) -> Result<String> {
+        commit: &CommitId,
+    ) -> Result<CommitId> {
         let Following {
             branch,
             local_ref,
@@ -337,20 +340,33 @@ impl Manager {
             "{branch} changed during fetch; retry"
         );
         // An already-ahead branch stays untouched.
-        if git::is_ancestor(&repo.path, commit, previous_commit, git::isolated_command).await? {
+        if git::is_ancestor(
+            &repo.path,
+            commit.as_str(),
+            previous_commit.as_str(),
+            git::isolated_command,
+        )
+        .await?
+        {
             return Ok(previous_commit.clone());
         }
         ensure!(
-            git::is_ancestor(&repo.path, previous_commit, commit, git::isolated_command).await?,
+            git::is_ancestor(
+                &repo.path,
+                previous_commit.as_str(),
+                commit.as_str(),
+                git::isolated_command
+            )
+            .await?,
             "{branch} and its upstream have diverged; resolve this manually before refreshing"
         );
         if let Some(checkout) = checkout {
-            clean_branch(checkout, &branch.as_str().into()).await?;
-            git::branch::fast_forward(checkout, commit).await?;
+            clean_branch(checkout, branch).await?;
+            git::branch::fast_forward(checkout, commit.as_str()).await?;
         } else {
-            git::fast_forward_local(&repo.path, commit, local_ref).await?;
+            git::fast_forward_local(&repo.path, commit.as_str(), local_ref).await?;
         }
-        Ok(commit.to_owned())
+        Ok(commit.clone())
     }
 
     /// Query advertised remote heads, including branches never fetched locally.
@@ -412,8 +428,11 @@ impl Manager {
         };
         let branch = match self.open_target(&repo, selector, options).await? {
             OpenTarget::Reopen(workspace) => {
-                self.reopen_owned_workspace(&workspace, workspace.branch.as_deref())
-                    .await?;
+                self.reopen_owned_workspace(
+                    &workspace,
+                    workspace.branch.as_ref().map(BranchName::as_str),
+                )
+                .await?;
                 return Ok(OpenedWorkspace {
                     workspace: *workspace,
                     reused: true,
@@ -421,12 +440,11 @@ impl Manager {
             }
             OpenTarget::Create(branch) => branch,
         };
-        let name = branch.name.clone();
         let workspace = self
             .create_branch_workspace(
                 &repo,
-                name.clone(),
-                name,
+                branch.name.to_string(),
+                branch.name.clone(),
                 super::creation::WorkspaceSource::Existing {
                     branch,
                     base,
@@ -457,7 +475,7 @@ impl Manager {
             .into_iter()
             .find(|w| w.repository_id == repo.id && w.branch.as_ref() == Some(&branch.name))
         else {
-            ensure_not_checked_out(&repo.path, &branch.name.as_str().into()).await?;
+            ensure_not_checked_out(&repo.path, &branch.name).await?;
             return Ok(OpenTarget::Create(branch));
         };
         check_reopen_options(&workspace, options).await?;
@@ -502,18 +520,18 @@ impl Manager {
     async fn validate_existing_branch(&self, repo: &Repository, branch: &Branch) -> Result<()> {
         let name = &branch.name;
         ensure!(
-            !git::branch::is_reserved_name(name),
+            !git::branch::is_reserved_name(name.as_str()),
             "branch name is ambiguous as a Git revision: {name}"
         );
-        git::check_branch_name(Some(&repo.path), name).await?;
+        git::check_branch_name(Some(&repo.path), name.as_str()).await?;
         if let Some(remote) = &branch.remote {
-            let local = BranchName::from(name.as_str());
+            let local = name.clone();
             let local_exists =
                 git::ref_exists(&repo.path, &git::local_ref(&local), git::isolated_command).await?;
             if local_exists {
                 let upstream = git::existing_branch::upstream_ref(&repo.path, &local).await?;
                 ensure!(
-                    upstream.trim() == git::remote_ref(remote, name),
+                    upstream.trim() == git::remote_ref(remote, name.as_str()),
                     "local branch {name} already exists and does not track {remote}/{name}; select the local branch explicitly"
                 );
             }
@@ -527,7 +545,7 @@ impl Manager {
         branch: &Branch,
     ) -> Result<()> {
         if let Some(remote) = &branch.remote {
-            let name = BranchName::from(branch.name.as_str());
+            let name = branch.name.clone();
             let tracking = fetch::materialize_branch(&repo.path, remote, &name).await?;
             let local = git::local_ref(&name);
             if git::ref_exists(&repo.path, &local, git::isolated_command).await? {
@@ -543,9 +561,9 @@ impl Manager {
 
 /// The commit the branch's remote-tracking branch holds, as the last fetch
 /// left it.
-async fn fetched_upstream_commit(repo: &Repository, following: &Following) -> Result<String> {
-    let branch = following.branch.as_str();
-    let tracking = git::existing_branch::upstream_ref(&repo.path, &branch.into()).await?;
+async fn fetched_upstream_commit(repo: &Repository, following: &Following) -> Result<CommitId> {
+    let branch = &following.branch;
+    let tracking = git::existing_branch::upstream_ref(&repo.path, branch).await?;
     let tracking = tracking.trim();
     ensure!(
         !tracking.is_empty(),
@@ -554,7 +572,6 @@ async fn fetched_upstream_commit(repo: &Repository, following: &Following) -> Re
     );
     git::resolve_commit(&repo.path, tracking, git_run)
         .await
-        .map(String::from)
         .with_context(|| format!("{branch}'s remote-tracking branch {tracking} was never fetched"))
 }
 

@@ -8,7 +8,7 @@ use std::{
 use super::SeedSlot;
 
 /// The build of a seed: the commit and the settings it was built with.
-pub(super) type Build = (String, String);
+pub(super) type Build = (shoal_refs::CommitId, String);
 
 #[derive(Default)]
 pub(crate) struct Seeds {

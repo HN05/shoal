@@ -71,8 +71,11 @@ impl Manager {
         let (_repo, _guard) = self.lock_repository(&workspace.repository_id).await?;
         // The workspace may have gone while waiting for the repository.
         let workspace = self.workspace_by_id(&workspace.id).await?;
-        self.reopen_owned_workspace(&workspace, workspace.branch.as_deref())
-            .await?;
+        self.reopen_owned_workspace(
+            &workspace,
+            workspace.branch.as_ref().map(BranchName::as_str),
+        )
+        .await?;
         Ok(crate::model::OpenedWorkspace {
             workspace,
             reused: true,
@@ -302,7 +305,7 @@ impl Manager {
         off_runtime::run(move || {
             Ok(trees
                 .into_iter()
-                .find(|tree| tree.is_branch(&branch.as_str().into()) && tree.path.is_dir())
+                .find(|tree| tree.is_branch(&branch) && tree.path.is_dir())
                 .map(|tree| tree.path))
         })
         .await

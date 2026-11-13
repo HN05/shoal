@@ -8,7 +8,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail, ensure};
-use shoal_refs::BranchName;
+use shoal_refs::{BranchName, CommitId};
 use tokio::{process::Command, sync::watch};
 
 use crate::{
@@ -136,7 +136,7 @@ impl Manager {
             return self.discard_seed(repo, &layout).await;
         };
         let tip = git::seed::branch_commit(&repo.path, &plan.branch).await?;
-        let build = (String::from(tip), plan.settings()?);
+        let build = (tip, plan.settings()?);
         let current = Snapshot::open(&layout)?
             .is_some_and(|snapshot| (snapshot.commit, snapshot.settings) == build);
         // Checked first: seeing any other build, a current one included,
@@ -177,7 +177,7 @@ impl Manager {
         repo: &Repository,
         layout: &Layout,
         plan: &Plan,
-        build: &(String, String),
+        build: &(CommitId, String),
     ) -> Result<()> {
         let tip = &build.0;
         let slot = self.seeds.slot(&repo.id);
@@ -215,7 +215,7 @@ impl Manager {
         repo: &Repository,
         layout: &Layout,
         plan: &Plan,
-        build: &(String, String),
+        build: &(CommitId, String),
     ) -> Result<()> {
         let staged = Snapshot::stage(layout, &plan.paths).await?;
         self.install_snapshot(repo, layout, staged, build).await?;
@@ -231,7 +231,7 @@ impl Manager {
         repo: &Repository,
         layout: &Layout,
         staged: Staged,
-        (tip, settings): &(String, String),
+        (tip, settings): &(CommitId, String),
     ) -> Result<()> {
         let slot = self.seeds.slot(&repo.id);
         let _snapshot = slot.snapshot.write().await;
@@ -243,7 +243,7 @@ impl Manager {
             "the seed worktree moved during its build"
         );
         let files = git::seed::unmodified_files(&worktree).await?;
-        staged.install(layout, tip.to_owned(), settings.to_owned(), files)
+        staged.install(layout, tip.to_owned().into(), settings.to_owned(), files)
     }
 
     /// Give each repository's current snapshot a spare clone of its outputs,
@@ -360,7 +360,8 @@ impl Manager {
         if outputs.is_empty() {
             return Ok(());
         }
-        let changed = git::seed::changed_between(worktree, &snapshot.commit, "HEAD").await?;
+        let changed =
+            git::seed::changed_between(worktree, snapshot.commit.as_str(), "HEAD").await?;
         snapshot.restore_times(worktree, &changed)
     }
 
@@ -451,14 +452,14 @@ impl Manager {
     }
 }
 
-async fn check_out_seed(repo: &Repository, layout: &Layout, tip: &str) -> Result<()> {
+async fn check_out_seed(repo: &Repository, layout: &Layout, tip: &CommitId) -> Result<()> {
     layout.claim()?;
     let worktree = layout.worktree();
     if worktree.symlink_metadata().is_ok() {
         ensure_seed_worktree(repo, layout).await?;
-        return git::seed::check_out(&worktree, tip).await;
+        return git::seed::check_out(&worktree, tip.as_str()).await;
     }
-    git::seed::add_worktree(&repo.path, &worktree, tip, &layout.lock_reason()).await?;
+    git::seed::add_worktree(&repo.path, &worktree, tip.as_str(), &layout.lock_reason()).await?;
     identity::mark_owner(&git::git_dir(&worktree).await?, &layout.worktree_owner())
 }
 

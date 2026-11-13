@@ -1,6 +1,7 @@
 use crate::client::space_ids::SpaceId;
 use crate::paths::StateFiles;
 use crate::time::UnixTime;
+use shoal_refs::BranchName;
 use std::sync::Arc;
 
 use super::*;
@@ -449,7 +450,12 @@ async fn a_replaced_checkout_is_not_reviewed() {
             "add",
             "-q",
             path,
-            fixture.workspace.branch.as_deref().unwrap(),
+            fixture
+                .workspace
+                .branch
+                .as_ref()
+                .map(BranchName::as_str)
+                .unwrap(),
         ],
     );
     let review = fixture.review().await;

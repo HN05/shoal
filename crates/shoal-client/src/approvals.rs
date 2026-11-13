@@ -422,10 +422,10 @@ pub struct IssueSpecification {
     pub link: bool,
     /// The proposing workspace's branch; `None` for one at a commit and for
     /// a chat.
-    pub branch: Option<String>,
+    pub branch: Option<BranchName>,
     /// The proposing workspace's commit; `None` for a chat.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub commit: Option<String>,
+    pub commit: Option<CommitId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<crate::agent::Agent>,
     /// Findings of proposals the user marked as duplicates of this one,
@@ -454,7 +454,7 @@ pub struct Finding {
 #[serde(deny_unknown_fields)]
 pub struct PullSpecification {
     pub pull: NewPull,
-    pub commit: String,
+    pub commit: CommitId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<crate::agent::Agent>,
     /// What is left to do to the PR once approval posted it, such as its
@@ -483,7 +483,7 @@ pub struct PushSpecification {
     pub destination: String,
     /// The object it pushes; none deletes the ref.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub commit: Option<String>,
+    pub commit: Option<CommitId>,
     /// For a forced push or a deletion, the commit the remote ref had when
     /// it was requested, which it must still have, or empty when the ref
     /// must not exist; a push without one only fast-forwards.

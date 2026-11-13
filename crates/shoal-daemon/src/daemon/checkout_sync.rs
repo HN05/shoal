@@ -208,7 +208,8 @@ impl Manager {
         let synced = async {
             // A move may have finished while the fetch ran.
             let repo = self.repository(repository_id).await?;
-            self.fast_forward_default(&repo, &default).await
+            self.fast_forward_default(&repo, &default.as_str().into())
+                .await
         };
         Synced::Fetched(synced.await)
     }

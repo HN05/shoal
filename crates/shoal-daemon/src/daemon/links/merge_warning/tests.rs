@@ -104,7 +104,7 @@ async fn a_branch_merge_ignores_a_check_against_a_base_workspaces_branch() {
         .check_conflicts(&SpaceSelector::id(&workspace.id), None)
         .await
         .unwrap();
-    assert_eq!(Some(check.target), base.branch);
+    assert_eq!(Some(check.target), base.branch.map(String::from));
     assert_eq!(check.changed_on_both_sides, ["version"]);
     assert!(
         manager

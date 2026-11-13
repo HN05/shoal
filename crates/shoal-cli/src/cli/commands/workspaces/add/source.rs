@@ -1,7 +1,6 @@
 //! What an interactive addition starts from: a new or existing branch, an issue or a PR.
 use crate::git::existing_branch::BranchExt;
 use anyhow::{Result, ensure};
-use shoal_refs::BranchName;
 
 use super::target::AddTarget;
 use crate::{
@@ -180,12 +179,13 @@ async fn issue_creation(
         }
     }
     if let Some(branch) = associated {
-        creation.existing = Some(branch);
+        creation.existing = Some(branch.into());
         return Ok(creation);
     }
-    let local = BranchName::from(name.as_str());
+    let local = name.clone();
     if let Some(workspace) = workspaces.into_iter().find(|workspace| {
-        workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&name)
+        workspace.repository_id == repo.id
+            && workspace.branch.as_ref() == Some(&name.as_str().into())
     }) {
         ensure!(
             workspace.state == WorkspaceState::Ready,
@@ -193,8 +193,14 @@ async fn issue_creation(
             workspace.name,
             workspace.state
         );
-    } else if git::ref_exists(&repo.path, &git::local_ref(&local), git::isolated_command).await? {
-        git::existing_branch::ensure_not_checked_out(&repo.path, &local).await?;
+    } else if git::ref_exists(
+        &repo.path,
+        &git::local_ref(&local.as_str().into()),
+        git::isolated_command,
+    )
+    .await?
+    {
+        git::existing_branch::ensure_not_checked_out(&repo.path, &local.as_str().into()).await?;
     } else {
         creation.branch = Some(name);
         return Ok(creation);

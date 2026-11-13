@@ -22,13 +22,16 @@ async fn existing_base_falls_back_only_when_the_default_ref_is_missing() {
         .await
         .unwrap();
     assert_eq!(
-        existing_base(&repo, "topic").await.unwrap(),
+        existing_base(&repo, &"topic".into()).await.unwrap(),
         "refs/heads/main"
     );
     let main = path.join(".git/refs/heads/main");
     fs::write(&main, "garbage\n").unwrap();
-    assert!(existing_base(&repo, "topic").await.is_err());
+    assert!(existing_base(&repo, &"topic".into()).await.is_err());
     fs::remove_file(&main).unwrap();
-    assert_eq!(existing_base(&repo, "topic").await.unwrap(), topic.trim());
+    assert_eq!(
+        existing_base(&repo, &"topic".into()).await.unwrap(),
+        topic.trim()
+    );
     manager.store.shutdown().await;
 }

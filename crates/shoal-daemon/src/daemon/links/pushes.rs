@@ -55,10 +55,10 @@ impl Manager {
         let pushed = git::pushed_commit(
             &workspace.path,
             &push.remote,
-            &workspace.require_branch("pushing")?.into(),
+            workspace.require_branch("pushing")?,
         )
         .await?;
-        if pushed.as_ref().map(CommitId::as_str) == push.commit.as_deref() {
+        if pushed.as_ref().map(CommitId::as_str) == push.commit.as_ref().map(CommitId::as_str) {
             return Ok(false);
         }
         if pushes.value == Pushes::Deny {
@@ -333,7 +333,7 @@ async fn branch_push(
     workspace: &Workspace,
     agent: Option<crate::agent::Agent>,
 ) -> Result<PushSpecification> {
-    let branch = BranchName::from(workspace.require_branch("pushing")?);
+    let branch = workspace.require_branch("pushing")?.clone();
     Ok(PushSpecification {
         remote: git::push_remote(&workspace.path, &branch).await?,
         url: None,
@@ -350,7 +350,7 @@ async fn push_current(workspace: &Workspace, request: &ApprovalRequest) -> Resul
     let Some(push) = request.pending_push() else {
         return Ok(false);
     };
-    let Some(branch) = workspace.branch.as_deref() else {
+    let Some(branch) = workspace.branch.as_ref().map(BranchName::as_str) else {
         return Ok(false);
     };
     if let Some(pull) = request.proposed_pull()
@@ -370,7 +370,12 @@ async fn push_current(workspace: &Workspace, request: &ApprovalRequest) -> Resul
 /// upstream, as `git push --set-upstream` would have, when it has none.
 /// Failure only logs; the push is done.
 async fn track_pushed_branch(workspace: &Workspace, push: &PushSpecification) {
-    let Some(branch) = workspace.branch.as_deref().map(BranchName::from) else {
+    let Some(branch) = workspace
+        .branch
+        .as_ref()
+        .map(BranchName::as_str)
+        .map(BranchName::from)
+    else {
         return;
     };
     if push.commit.is_none() || push.destination != git::local_ref(&branch) {

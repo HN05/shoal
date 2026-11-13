@@ -4,6 +4,7 @@
 //! completes.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
+use shoal_refs::BranchName;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
@@ -75,7 +76,7 @@ impl LinkSpace {
     /// works on none.
     pub(crate) fn branch(&self) -> Option<&str> {
         self.workspace()
-            .and_then(|workspace| workspace.branch.as_deref())
+            .and_then(|workspace| workspace.branch.as_ref().map(BranchName::as_str))
     }
 
     /// Whether the space recorded its work as done, which ends the activity

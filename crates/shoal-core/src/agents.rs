@@ -17,6 +17,7 @@ pub mod hooks;
 mod proxy;
 pub mod trust;
 
+use shoal_refs::BranchName;
 use std::{ffi::OsString, path::Path};
 
 use anyhow::Result;
@@ -282,7 +283,7 @@ impl<'a> From<&'a Workspace> for AgentWorkspace<'a> {
     fn from(workspace: &'a Workspace) -> Self {
         Self {
             name: &workspace.name,
-            branch: workspace.branch.as_deref(),
+            branch: workspace.branch.as_ref().map(BranchName::as_str),
         }
     }
 }

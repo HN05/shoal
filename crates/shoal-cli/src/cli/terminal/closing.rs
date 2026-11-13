@@ -86,10 +86,11 @@ fn spawn_detached(ctx: &Context, argv: &[std::ffi::OsString]) -> std::io::Result
 async fn kept_completion(ctx: &Context, workspace: &SpaceId) -> Result<Option<String>> {
     let inspection =
         crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace)).await?;
-    Ok(inspection
+    Ok((inspection
         .completion
         .filter(|completion| !completion.cleanup)
         .map(|completion| completion.head))
+    .map(String::from))
 }
 
 /// The watcher: close `place` of the host named `host` once its workspace
@@ -422,7 +423,7 @@ async fn workspace_lifecycle(ctx: &Context, workspace: &SpaceId) -> Result<Lifec
             workspace: record,
             ..
         }) if !completion.cleanup => Ok(Lifecycle::Kept {
-            head: completion.head,
+            head: completion.head.into(),
             running: !executions.is_empty(),
             stopped: (crate::client::saved::read(&ctx.paths, SpaceSelector::id(workspace)).await?)
                 .is_unfinished(),

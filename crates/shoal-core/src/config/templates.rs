@@ -321,7 +321,14 @@ impl Fields {
                 delivery,
             } => vec![
                 ("{workspace}", workspace.directory_name().to_owned()),
-                ("{branch}", workspace.branch.clone().unwrap_or_default()),
+                (
+                    "{branch}",
+                    workspace
+                        .branch
+                        .clone()
+                        .map(String::from)
+                        .unwrap_or_default(),
+                ),
                 ("{path}", workspace.path.to_string_lossy().into_owned()),
                 ("{updates}", delivery.description().to_owned()),
             ],
@@ -341,7 +348,14 @@ impl Fields {
                         // What selects the workspace, which its directory's
                         // name does not.
                         ("{workspace_number}", workspace.number.to_string()),
-                        ("{branch}", workspace.branch.clone().unwrap_or_default()),
+                        (
+                            "{branch}",
+                            workspace
+                                .branch
+                                .clone()
+                                .map(String::from)
+                                .unwrap_or_default(),
+                        ),
                         ("{head}", head_label(workspace)),
                     ]);
                 }

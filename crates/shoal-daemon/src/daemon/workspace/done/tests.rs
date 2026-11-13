@@ -10,6 +10,7 @@ use crate::{
     },
     model::CleanupReason,
 };
+use shoal_refs::BranchName;
 use std::{fs, sync::Arc};
 
 #[tokio::test]
@@ -832,7 +833,10 @@ async fn completion_cleans_up_commits_the_start_branch_took_unchanged() {
     let (_root, manager, base, workspace) = stacked_fixture().await;
     fs::write(base.path.join("base-work"), "base").unwrap();
     commit(&base.path, "base-work");
-    cherry_pick(&base.path, workspace.branch.as_deref().unwrap());
+    cherry_pick(
+        &base.path,
+        workspace.branch.as_ref().map(BranchName::as_str).unwrap(),
+    );
     // The idle rule counts the commits as kept as well.
     assert!(
         manager
@@ -977,7 +981,7 @@ async fn stacked_fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace, Works
         .create_workspace(
             &base.repository_id,
             "part".into(),
-            base.branch.clone(),
+            base.branch.clone().map(String::from),
             None,
             None,
         )

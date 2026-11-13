@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
-use shoal_refs::BranchName;
+use shoal_refs::{BranchName, CommitId};
 
 use super::{Manager, NewWorkspace, creation::Configured, restore::RestoredFiles};
 use crate::client::space_names::SpaceName;
@@ -39,13 +39,13 @@ struct Source {
     workspace_id: SpaceId,
     repository_id: RepositoryId,
     name: String,
-    branch: Option<String>,
+    branch: Option<BranchName>,
     base_ref: Option<String>,
-    base_commit: Option<String>,
+    base_commit: Option<CommitId>,
     /// The branch of the workspace it builds on, which the copy builds on
     /// too.
-    base_branch: Option<String>,
-    head: String,
+    base_branch: Option<BranchName>,
+    head: CommitId,
     files: SourceFiles,
 }
 
@@ -55,7 +55,7 @@ enum SourceFiles {
     /// A checkpoint's, by its number and the commit that keeps its files.
     Checkpoint {
         number: CheckpointNumber,
-        commit: String,
+        commit: CommitId,
     },
 }
 
@@ -64,8 +64,12 @@ impl Source {
     /// for a workspace at a commit its short HEAD, with `-copy` added;
     /// nothing is built from the copied workspace's name.
     fn copy_name(&self) -> String {
-        let short = &self.head[..self.head.len().min(7)];
-        format!("{}-copy", self.branch.as_deref().unwrap_or(short))
+        let head = self.head.as_str();
+        let short = &head[..head.len().min(7)];
+        format!(
+            "{}-copy",
+            self.branch.as_ref().map_or(short, BranchName::as_str)
+        )
     }
 
     /// The copied workspace's checkpoint the copy starts from.
@@ -149,7 +153,7 @@ impl Manager {
         );
         let head = git::resolve_commit(path, "HEAD", git::run_isolated).await?;
         let files = SourceFiles::Worktree(workspace.path.clone());
-        Ok(live_source(workspace, head.into(), files))
+        Ok(live_source(workspace, head, files))
     }
 
     /// Checkpoint `number` of the existing `workspace`.
@@ -163,9 +167,9 @@ impl Manager {
             .await?;
         let files = SourceFiles::Checkpoint {
             number,
-            commit: checkpoint.commit.into(),
+            commit: checkpoint.commit,
         };
-        Ok(live_source(workspace, checkpoint.head.into(), files))
+        Ok(live_source(workspace, checkpoint.head, files))
     }
 
     /// Checkpoint `number` of the removed workspace `selector` names, with
@@ -186,14 +190,14 @@ impl Manager {
             workspace_id: removed.workspace_id,
             repository_id: removed.repository_id,
             name: removed.name.into(),
-            branch: checkpoint.branch.map(String::from),
+            branch: checkpoint.branch,
             base_ref: removed.base_ref,
             base_commit: removed.base_commit,
-            base_branch,
-            head: checkpoint.head.into(),
+            base_branch: base_branch.map(BranchName::from),
+            head: checkpoint.head,
             files: SourceFiles::Checkpoint {
                 number,
-                commit: checkpoint.commit.into(),
+                commit: checkpoint.commit,
             },
         })
     }
@@ -264,7 +268,7 @@ impl Manager {
             made_for: None,
         });
         let record = Workspace {
-            base_commit: (source.base_commit.clone()).or_else(|| Some(source.head.clone())),
+            base_commit: ((source.base_commit.clone()).or_else(|| Some(source.head.clone()))),
             base_ref: source.base_ref.clone(),
             at,
             setup_skipped: new.options.skip_setup,
@@ -278,8 +282,13 @@ impl Manager {
             )
         };
         let base_branch = branch.and(source.base_branch.clone());
-        self.insert_workspace(record, base_branch, new.parent.clone(), chosen)
-            .await
+        self.insert_workspace(
+            record,
+            base_branch.map(String::from),
+            new.parent.clone(),
+            chosen,
+        )
+        .await
     }
 
     /// Create the copy's worktree with its source's files.
@@ -334,16 +343,20 @@ impl Manager {
         repo: &Repository,
         workspace: &Workspace,
         source: &std::path::Path,
-        head: &str,
+        head: &CommitId,
         git_profile: Option<&str>,
     ) -> Result<Configured> {
         let path = &workspace.path;
-        let branch = workspace.branch.as_deref().map(BranchName::from);
-        git::copy::add_worktree(&repo.path, path, branch.as_ref(), head).await?;
+        let branch = workspace
+            .branch
+            .as_ref()
+            .map(BranchName::as_str)
+            .map(BranchName::from);
+        git::copy::add_worktree(&repo.path, path, branch.as_ref(), head.as_str()).await?;
         // Recorded before the files are cloned, so a restart can verify and
         // remove the worktree.
         self.record_worktree_identity(workspace).await?;
-        git::copy::fill(source, path, &head.into()).await?;
+        git::copy::fill(source, path, head).await?;
         let config = self.config();
         if let Some(name) = git_profile {
             crate::git_profile::apply(path, config.machine.git_profiles.profile(name)?).await?;
@@ -367,10 +380,12 @@ impl Manager {
         match &workspace.branch {
             Some(branch) => {
                 let head = Some(files.head.as_str());
-                git::worktree::add(&repo.path, &workspace.path, &branch.as_str().into(), head)
+                git::worktree::add(&repo.path, &workspace.path, branch, head).await?
+            }
+            None => {
+                git::detached::add_workspace(&repo.path, &workspace.path, files.head.as_str())
                     .await?
             }
-            None => git::detached::add_workspace(&repo.path, &workspace.path, &files.head).await?,
         }
         self.configure_worktree(workspace, Some(files), git_profile)
             .await
@@ -401,7 +416,7 @@ impl Manager {
 }
 
 /// `workspace` as a copy starts from it at `head` with `files`.
-fn live_source(workspace: Workspace, head: String, files: SourceFiles) -> Source {
+fn live_source(workspace: Workspace, head: CommitId, files: SourceFiles) -> Source {
     Source {
         workspace_id: workspace.id,
         repository_id: workspace.repository_id,
@@ -409,7 +424,7 @@ fn live_source(workspace: Workspace, head: String, files: SourceFiles) -> Source
         branch: workspace.branch,
         base_ref: workspace.base_ref,
         base_commit: workspace.base_commit,
-        base_branch: workspace.base_workspace.and_then(|base| base.branch),
+        base_branch: (workspace.base_workspace.and_then(|base| base.branch)),
         head,
         files,
     }

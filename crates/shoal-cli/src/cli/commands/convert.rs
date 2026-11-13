@@ -2,6 +2,7 @@
 //! or a workspace a chat. The space stays the same, and its agent restarts
 //! in the new place once its turn ends.
 use anyhow::{Context as _, Result};
+use shoal_refs::BranchName;
 
 use super::issues::Issue;
 use crate::client::output::convert::Converted;
@@ -81,7 +82,11 @@ pub(super) async fn to_chat(
     let text = format!(
         "{} becomes a chat in the repository's checkout once its agent's turn ends; its branch {} stays",
         Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-        workspace.branch.as_deref().unwrap_or("-"),
+        workspace
+            .branch
+            .as_ref()
+            .map(BranchName::as_str)
+            .unwrap_or("-"),
     );
     report(ctx, &text, SpaceKind::Chat, workspace)
 }

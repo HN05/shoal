@@ -11,6 +11,7 @@ use crate::{
     model::{QueueEntry, QueueRequest, Repository},
     removal::{InspectionPolicy, UnsavedWork},
 };
+use shoal_refs::BranchName;
 
 /// Queue `name` blocked by `blockers` in a repository without agent limits.
 async fn add_blocked(
@@ -91,7 +92,10 @@ async fn launches_start_on_a_blocker_once_it_is_done_at_its_head() {
     manager.dispatch_queue().await.unwrap();
     assert!(started(&ui.id));
     let ui = entry(&manager, &ui.id).await;
-    assert_eq!(ui.base.as_deref(), Some(api.branch.as_deref().unwrap()));
+    assert_eq!(
+        ui.base.as_deref(),
+        Some(api.branch.as_ref().map(BranchName::as_str).unwrap())
+    );
     assert!(ui.blockers.is_empty());
 }
 
@@ -221,7 +225,7 @@ async fn issue_blockers_wait_for_closure_or_a_done_workspace_linking_them() {
     assert!(started(&launch.id));
     assert_eq!(
         entry(&manager, &launch.id).await.base.as_deref(),
-        Some(fix.branch.as_deref().unwrap())
+        Some(fix.branch.as_ref().map(BranchName::as_str).unwrap())
     );
 }
 
@@ -239,7 +243,13 @@ async fn done_blockers_build_on_the_one_that_contains_the_others() {
         commit(&workspace.path, &workspace.name);
     }
     let upper = manager
-        .create_workspace(&repo.id, "upper".into(), lower.branch.clone(), None, None)
+        .create_workspace(
+            &repo.id,
+            "upper".into(),
+            lower.branch.clone().map(String::from),
+            None,
+            None,
+        )
         .await
         .unwrap();
     std::fs::write(upper.path.join("upper"), "work\n").unwrap();
@@ -278,7 +288,7 @@ async fn done_blockers_build_on_the_one_that_contains_the_others() {
     assert!(stacked.start);
     assert_eq!(
         stacked.entry.unwrap().base.as_deref(),
-        Some(upper.branch.as_deref().unwrap())
+        Some(upper.branch.as_ref().map(BranchName::as_str).unwrap())
     );
     manager.dispatch_queue().await.unwrap();
     // Separate branches wait until all but one have merged and gone.

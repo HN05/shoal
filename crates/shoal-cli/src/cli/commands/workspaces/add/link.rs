@@ -1,5 +1,6 @@
 //! Starting a workspace from a pasted issue, PR or branch link, or an issue
 //! number.
+use shoal_refs::BranchName;
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result, ensure};
@@ -191,14 +192,15 @@ pub(in crate::cli::commands) async fn pull_creation(
         .iter()
         .any(|workspace| {
             workspace.repository_id == repo.id
-                && workspace.branch.as_deref() == Some(pull.head.as_str())
+                && workspace.branch.as_ref().map(BranchName::as_str) == Some(pull.head.as_str())
         });
     if owned {
         creation.existing = Some(pull.head.into());
     } else {
         if creation.base.is_none() {
             let base = pull.base.as_str();
-            creation.base = Some(review::fetch_pull_branch(&repo.path, "base", base).await?);
+            creation.base =
+                Some(review::fetch_pull_branch(&repo.path, "base", &base.into()).await?);
         }
         creation.existing = Some(git::remote_ref("origin", pull.head.as_str()));
     }
@@ -223,7 +225,7 @@ pub(in crate::cli::commands) async fn fork_head(
         .head_commit
         .clone()
         .with_context(|| format!("PR #{} reports no head commit", pull.number))?;
-    let base = review::fetch_pull_branch(&repo.path, "base", pull.base.as_str()).await?;
+    let base = review::fetch_pull_branch(&repo.path, "base", &pull.base).await?;
     Ok(PullHead {
         number: pull.number,
         reference,

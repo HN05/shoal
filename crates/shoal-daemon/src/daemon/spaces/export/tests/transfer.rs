@@ -1,6 +1,7 @@
 use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::RecordExt;
 use crate::execution::recovery::SavedExt as _;
+use shoal_refs::BranchName;
 use std::{fs, path::Path, sync::Arc};
 
 use crate::client::agent::AgentSessionId;
@@ -198,7 +199,15 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
     assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
     let path = &restored.opened.workspace.path;
     assert!(path.starts_with(target_repo.path.parent().unwrap()));
-    assert_eq!(restored.opened.workspace.branch.as_deref(), Some("topic"));
+    assert_eq!(
+        restored
+            .opened
+            .workspace
+            .branch
+            .as_ref()
+            .map(BranchName::as_str),
+        Some("topic")
+    );
     assert_eq!(git(path, &["rev-parse", "HEAD"]), head);
     assert_eq!(git(path, &["status", "--porcelain"]), status);
     assert_eq!(fs::read_to_string(path.join("scratch")).unwrap(), "notes\n");
@@ -482,7 +491,10 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
 
     let copy = &restored.opened.workspace;
     assert_ne!(copy.id, workspace.id);
-    assert_eq!(copy.branch.as_deref(), Some("topic-2"));
+    assert_eq!(
+        copy.branch.as_ref().map(BranchName::as_str),
+        Some("topic-2")
+    );
     assert_eq!(git(&copy.path, &["rev-parse", "HEAD"]), head);
     assert_eq!(
         fs::read_to_string(copy.path.join("scratch")).unwrap(),

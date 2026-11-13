@@ -1,3 +1,4 @@
+use shoal_refs::BranchName;
 use std::{fs, path::Path};
 
 use crate::client::space_names::SpaceSelector;
@@ -81,7 +82,10 @@ async fn conflicts_compare_committed_head_with_the_default_or_named_branch() {
         .check_conflicts(&SpaceSelector::id(&workspace.id), None)
         .await
         .unwrap();
-    assert_eq!(Some(&check.target), base.branch.as_ref());
+    assert_eq!(
+        Some(check.target.as_str()),
+        base.branch.as_ref().map(BranchName::as_str)
+    );
     assert_eq!(
         check.target_commit,
         git(&base.path, &["rev-parse", "HEAD"]).trim()

@@ -57,7 +57,7 @@ impl Manager {
         // The rebase cutoff is HEAD, so commits the merge left out would be
         // dropped from every stacked branch.
         let head = self.check_access(&base.path, current_head(base)).await?;
-        if !merged.iter().any(|commit| *commit == head) {
+        if !merged.contains(&head) {
             return Ok(Some(anyhow::anyhow!(
                 "the merged PRs do not contain the base workspace's HEAD"
             )));
@@ -110,7 +110,7 @@ impl Manager {
         base: &Workspace,
         merged_heads: &[BranchName],
         target: &BranchName,
-        head: &str,
+        head: &CommitId,
     ) -> Result<()> {
         let workspace = self.workspace_by_id(&stacked.id).await?;
         self.verify_checked(&workspace).await?;
@@ -152,7 +152,7 @@ impl Manager {
         &self,
         pr: StackedPr<'_>,
         base: &Workspace,
-        head: &str,
+        head: &CommitId,
         target: &BranchName,
     ) -> Result<Option<Retarget>> {
         let StackedPr {
@@ -196,13 +196,13 @@ impl Manager {
     }
 
     /// The rebase cutoff in the update is the base HEAD read before restacking.
-    async fn ensure_base_unchanged(&self, base: &Workspace, head: &str) -> Result<()> {
+    async fn ensure_base_unchanged(&self, base: &Workspace, head: &CommitId) -> Result<()> {
         let current = async {
             self.verify_worktree(base).await?;
             current_head(base).await
         };
         anyhow::ensure!(
-            self.check_access(&base.path, current).await? == head,
+            self.check_access(&base.path, current).await? == *head,
             "the base workspace's HEAD changed while restacking; retrying next sweep"
         );
         Ok(())
@@ -241,7 +241,7 @@ fn base_merged_update(
     url: &ItemRef,
     base: &Workspace,
     target: &BranchName,
-    head: &str,
+    head: &CommitId,
     retargeted: Option<Retarget>,
 ) -> Update {
     let retargeted = match retargeted {

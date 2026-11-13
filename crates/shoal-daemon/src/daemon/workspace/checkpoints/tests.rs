@@ -488,6 +488,6 @@ async fn a_starting_checkpoint_outlives_its_expiry_while_its_workspace_exists() 
     assert_eq!(copied.starting_checkpoint, start.number);
     assert_eq!(
         (copied.head, copied.commit),
-        (start.head.to_string(), start.commit.to_string())
+        (start.head.clone(), start.commit.clone())
     );
 }

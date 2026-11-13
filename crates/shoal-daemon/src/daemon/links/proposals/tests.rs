@@ -198,7 +198,7 @@ pub(crate) async fn store_issue_proposal(manager: &Manager, space: &LinkSpace) -
         },
         repository: None,
         link: false,
-        branch: space.branch().map(str::to_owned),
+        branch: space.branch().map(str::to_owned).map(BranchName::from),
         commit: space.workspace().map(|_| "head".into()),
         agent: None,
         duplicates: Vec::new(),

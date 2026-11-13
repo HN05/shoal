@@ -2,6 +2,7 @@
 //! `--branch` a workspace already has: the agent of an existing workspace,
 //! started as a new workspace's is, with no space created. The workspace
 //! keeps its place in the tree, its name and links.
+use shoal_refs::BranchName;
 use std::ffi::OsString;
 
 use anyhow::{Result, ensure};
@@ -91,7 +92,11 @@ pub(super) async fn start_on_branch(
         anyhow::bail!(
             "{flag} applies to a new workspace, and workspace {} already has branch {}; the start goes into it as --in does",
             workspace.number,
-            workspace.branch.as_deref().unwrap_or_default()
+            workspace
+                .branch
+                .as_ref()
+                .map(BranchName::as_str)
+                .unwrap_or_default()
         );
     }
     let selector = SpaceSelector::id(&workspace.id);
@@ -137,7 +142,7 @@ fn worker_plan(
     AddPlan {
         repository: (&workspace.repository_id).into(),
         creation: Creation {
-            existing: workspace.branch.clone(),
+            existing: workspace.branch.clone().map(String::from),
             options: CreationOptions {
                 name: Some(workspace.name.clone()),
                 ..Default::default()

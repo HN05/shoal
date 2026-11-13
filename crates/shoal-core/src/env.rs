@@ -3,6 +3,7 @@
 use crate::client::scope_tokens::ScopeToken;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use anyhow::{Result, bail};
+use shoal_refs::BranchName;
 use std::{
     collections::BTreeMap,
     ffi::{OsStr, OsString},
@@ -53,7 +54,7 @@ pub fn render_configured_environment(
     let mut fields = workspace_fields(
         workspace.directory_name(),
         &workspace.path,
-        workspace.branch.as_deref(),
+        workspace.branch.as_ref().map(BranchName::as_str),
         repository_name,
     );
     let mut port_values = Vec::new();

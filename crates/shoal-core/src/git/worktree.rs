@@ -63,7 +63,7 @@ pub async fn remove(
     };
     Ok(RemovalResult {
         removed: true,
-        branch: checked_out.map(String::from),
+        branch: checked_out,
         branch_outcome,
         hook_error: None,
         children: Vec::new(),

@@ -11,6 +11,7 @@ use crate::{
     },
     protocol::{self, Body, Response, WorkspaceMethod},
 };
+use shoal_refs::BranchName;
 use std::{sync::Arc, time::Duration};
 use tokio::{io::BufReader, net::UnixStream, task::JoinHandle};
 
@@ -182,7 +183,8 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
             .await
             .unwrap()
             .branch
-            .as_deref(),
+            .as_ref()
+            .map(BranchName::as_str),
         Some("worker")
     );
     let events = manager.workspace_events(None, 100).await.unwrap();
@@ -190,7 +192,7 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
         .iter()
         .filter_map(|e| match e {
             EventItem::Event(e) if e.details.kind == EventKind::BranchChanged => {
-                Some(e.details.branch.as_deref())
+                Some(e.details.branch.as_ref().map(BranchName::as_str))
             }
             _ => None,
         })

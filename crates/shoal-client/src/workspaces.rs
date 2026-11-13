@@ -209,7 +209,10 @@ pub async fn fast_forward(
 ) -> Result<bool> {
     request(
         daemon,
-        WorkspaceMethod::FastForwardWorkspace { workspace, branch },
+        WorkspaceMethod::FastForwardWorkspace {
+            workspace,
+            branch: branch.into(),
+        },
     )
     .await
 }

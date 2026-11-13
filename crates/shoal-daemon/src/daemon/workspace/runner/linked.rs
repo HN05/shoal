@@ -5,6 +5,7 @@
 //! spaces a job is for links it again first.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
+use shoal_refs::BranchName;
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -136,9 +137,9 @@ impl Spaces {
             Trigger::Pull { number } => {
                 own.find(|workspace| links_pull(forge, &workspace.links, *number))
             }
-            Trigger::Branch(branch) => {
-                own.find(|workspace| workspace.branch.as_deref() == Some(branch.as_str()))
-            }
+            Trigger::Branch(branch) => own.find(|workspace| {
+                workspace.branch.as_ref().map(BranchName::as_str) == Some(branch.as_str())
+            }),
             Trigger::Other => None,
         }
         .map(|workspace| workspace.id.clone())

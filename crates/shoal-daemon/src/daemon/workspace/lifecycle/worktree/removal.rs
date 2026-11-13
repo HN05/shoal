@@ -20,6 +20,7 @@ use crate::{
     },
 };
 use anyhow::{Result, bail, ensure};
+use shoal_refs::BranchName;
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -62,7 +63,7 @@ impl WorktreeRemoval {
     ) -> RemovalResult {
         RemovalResult {
             removed: self.removed,
-            branch: self.branch,
+            branch: self.branch.map(BranchName::from),
             branch_outcome: self.branch_outcome,
             hook_error: self.hook_error,
             children,
@@ -74,7 +75,7 @@ impl From<RemovalResult> for WorktreeRemoval {
     fn from(result: RemovalResult) -> Self {
         Self {
             removed: result.removed,
-            branch: result.branch,
+            branch: result.branch.map(String::from),
             branch_outcome: result.branch_outcome,
             hook_error: result.hook_error,
         }
@@ -506,7 +507,7 @@ impl Manager {
         } else {
             Ok(WorktreeRemoval {
                 removed: true,
-                branch: workspace.branch.clone(),
+                branch: workspace.branch.clone().map(String::from),
                 branch_outcome: BranchOutcome::Retained,
                 hook_error: None,
             })
@@ -569,7 +570,7 @@ pub(in crate::daemon::workspace) fn removal_options(
         && check
             .default_branch
             .as_deref()
-            .is_some_and(|default| check.branch.as_deref() != Some(default))
+            .is_some_and(|default| check.branch.as_ref().map(BranchName::as_str) != Some(default))
     {
         BranchRemoval::Delete
     } else {

@@ -2,13 +2,14 @@
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
+use shoal_refs::BranchName;
 
 use super::Manager;
 use crate::{git, model::Workspace};
 
 /// The branch a workspace takes once Git has renamed it; its name stays.
 pub(super) struct RenameIntent {
-    pub branch: String,
+    pub branch: BranchName,
 }
 
 impl RenameIntent {
@@ -54,7 +55,7 @@ impl Manager {
     ) -> Result<()> {
         let id = workspace.id.clone();
         let repository_id = workspace.repository_id.clone();
-        let old_base = git::local_ref(&workspace.require_branch("renaming a branch")?.into());
+        let old_base = git::local_ref(workspace.require_branch("renaming a branch")?);
         self.store
             .write(move |tx| {
                 tx.execute(
@@ -63,11 +64,7 @@ impl Manager {
                 )?;
                 tx.execute(
                     "UPDATE workspaces SET base_ref=?3 WHERE repository_id=?1 AND base_ref=?2",
-                    params![
-                        repository_id,
-                        old_base,
-                        git::local_ref(&intent.branch.as_str().into())
-                    ],
+                    params![repository_id, old_base, git::local_ref(&intent.branch)],
                 )?;
                 release(tx, &id)?;
                 Ok(())

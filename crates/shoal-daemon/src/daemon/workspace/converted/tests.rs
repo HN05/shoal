@@ -9,6 +9,7 @@ use crate::{
     },
     model::Repository,
 };
+use shoal_refs::BranchName;
 use std::path::Path;
 
 async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
@@ -64,7 +65,10 @@ async fn a_chat_becomes_a_workspace_under_its_id_number_name_and_parent() {
         (&workspace.id, workspace.number, &workspace.name),
         (&talk.id, talk.number, &talk.name)
     );
-    assert_eq!(workspace.branch.as_deref(), Some("fix-login"));
+    assert_eq!(
+        workspace.branch.as_ref().map(BranchName::as_str),
+        Some("fix-login")
+    );
     assert!(
         workspace.path.ends_with("fix-login"),
         "{:?}",
@@ -220,7 +224,10 @@ async fn a_remote_branch_named_with_its_remote_opens_as_that_branch() {
         .await
         .unwrap();
 
-    assert_eq!(workspace.branch.as_deref(), Some("topic"));
+    assert_eq!(
+        workspace.branch.as_ref().map(BranchName::as_str),
+        Some("topic")
+    );
 }
 
 #[tokio::test]
@@ -263,7 +270,10 @@ async fn a_new_branch_whose_namespace_a_branch_blocks_is_allocated_as_any() {
         .await
         .unwrap();
 
-    assert_eq!(workspace.branch.as_deref(), Some("feature-2/login"));
+    assert_eq!(
+        workspace.branch.as_ref().map(BranchName::as_str),
+        Some("feature-2/login")
+    );
 }
 
 #[tokio::test]

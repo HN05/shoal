@@ -14,8 +14,8 @@ pub trait BranchExt {
 impl BranchExt for Branch {
     fn selector(&self) -> String {
         match &self.remote {
-            Some(remote) => git::remote_ref(remote, &self.name),
-            None => git::local_ref(&BranchName::from(self.name.as_str())),
+            Some(remote) => git::remote_ref(remote, self.name.as_str()),
+            None => git::local_ref(&self.name.clone()),
         }
     }
 }

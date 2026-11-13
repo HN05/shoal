@@ -86,7 +86,7 @@ async fn only_scoped_pushes_wait_where_the_repository_asks() {
     assert_eq!(request.name, "refs/heads/worker");
     let subject = request.subject();
     assert!(
-        subject.contains(push.commit.as_deref().unwrap()),
+        subject.contains(push.commit.as_ref().map(CommitId::as_str).unwrap()),
         "{subject}"
     );
     // Pushing the same again names the same request.
@@ -142,7 +142,7 @@ async fn a_pr_proposal_that_pushes_takes_the_place_of_its_push_request() {
     );
     let pull = NewPull {
         title: "Fix".into(),
-        head: workspace.branch.clone().unwrap().into(),
+        head: workspace.branch.clone().unwrap(),
         ..NewPull::default()
     };
     let commit = push.commit.clone().unwrap();
@@ -160,7 +160,7 @@ async fn a_pr_proposal_that_pushes_takes_the_place_of_its_push_request() {
     assert_eq!(pull.name, PR);
     let subject = pull.subject();
     assert!(
-        subject.contains("Fix") && subject.contains(&commit),
+        subject.contains("Fix") && subject.contains(commit.as_str()),
         "{subject}"
     );
     let retired = manager

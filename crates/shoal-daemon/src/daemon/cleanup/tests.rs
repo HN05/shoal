@@ -4,6 +4,7 @@ use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{notifications::NotificationKind, workspace_files::Attacher};
 use crate::model::PresentSpace;
+use shoal_refs::BranchName;
 
 #[test]
 fn changed_signals_restart_timer_and_expiry_returns_its_snapshot() {
@@ -561,7 +562,10 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
             &[
                 "for-each-ref",
                 "--format=%(refname)",
-                &format!("refs/heads/{}", workspace.branch.as_deref().unwrap())
+                &format!(
+                    "refs/heads/{}",
+                    workspace.branch.as_ref().map(BranchName::as_str).unwrap()
+                )
             ],
         )
         .await

@@ -4,11 +4,11 @@
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
+use shoal_refs::{BranchName, CommitId};
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
-use shoal_refs::BranchName;
 
 use super::Manager;
 use crate::client::space_names::SpaceName;
@@ -97,8 +97,10 @@ impl Manager {
         let Some(base) = &workspace.base_commit else {
             return Ok(false);
         };
-        Ok(git::status::commits_since(&workspace.path, base).await? > 0
-            && self.archives_unsaved_files(workspace).await?)
+        Ok(
+            git::status::commits_since(&workspace.path, base.as_str()).await? > 0
+                && self.archives_unsaved_files(workspace).await?,
+        )
     }
 
     /// Restorable workspaces, newest first; expired ones are gone even before
@@ -125,8 +127,8 @@ impl Manager {
         let removed = self.claim_removed_workspace(selector).await?;
         let checkpoint = &removed.checkpoint;
         let files = (checkpoint.commit != checkpoint.head).then(|| RestoredFiles {
-            head: checkpoint.head.to_string(),
-            snapshot: checkpoint.commit.to_string(),
+            head: checkpoint.head.to_string().into(),
+            snapshot: checkpoint.commit.to_string().into(),
         });
         let opened = match removed.at.clone() {
             Some(at) => OpenedWorkspace {
@@ -188,7 +190,7 @@ impl Manager {
             ..Default::default()
         };
         let opened = self
-            .open_branch_restoring(&removed.repository_id, &branch, base, new, files)
+            .open_branch_restoring(&removed.repository_id, branch.as_str(), base, new, files)
             .await?;
         // The branch check released the repository gate, so another request
         // may have opened the branch meanwhile; that workspace got no files.
@@ -220,7 +222,7 @@ impl Manager {
             "the export's checkpoint belongs to another workspace"
         );
         if let Some(commit) = prerequisite {
-            self.fetch_missing(&repo, commit).await?;
+            self.fetch_missing(&repo, &commit.into()).await?;
         }
         let removed = self.imported_record(&repo, removed).await?;
         let removed = {
@@ -241,8 +243,8 @@ impl Manager {
 
     /// Fetch the default branch when the repository lacks `commit`, which
     /// the export builds on.
-    async fn fetch_missing(&self, repo: &Repository, commit: &str) -> Result<()> {
-        if git::has_commit(&repo.path, commit).await? {
+    async fn fetch_missing(&self, repo: &Repository, commit: &CommitId) -> Result<()> {
+        if git::has_commit(&repo.path, commit.as_str()).await? {
             return Ok(());
         }
         self.fetch_default_branch(&repo.id)
@@ -290,14 +292,9 @@ impl Manager {
         let name = match &checkpoint.branch {
             Some(branch) => {
                 let branch = self.copy_branch(repo, branch.as_str()).await?;
-                git::branch::create(
-                    &repo.path,
-                    &branch.as_str().into(),
-                    checkpoint.head.as_str(),
-                )
-                .await?;
+                git::branch::create(&repo.path, &branch, checkpoint.head.as_str()).await?;
                 checkpoint.branch = Some(branch.as_str().into());
-                SpaceName::derive(&branch, "workspace")
+                SpaceName::derive(branch.as_str(), "workspace")
             }
             None => removed.name,
         };
@@ -404,23 +401,22 @@ impl Manager {
 
     /// The branch to open: one at the removed HEAD, or at a later commit when
     /// nothing unsaved has to be applied, created at HEAD when it was deleted.
-    async fn restore_branch(&self, removed: &RemovedWorkspace) -> Result<String> {
+    async fn restore_branch(&self, removed: &RemovedWorkspace) -> Result<BranchName> {
         let (repo, _guard) = self.lock_repository(&removed.repository_id).await?;
         let checkpoint = &removed.checkpoint;
         // A detached HEAD reopens on a branch named after its short commit,
         // since nothing is built from the workspace's name.
         let head = checkpoint.head.as_str();
-        let branch = (checkpoint.branch.clone().map(String::from))
-            .unwrap_or_else(|| head[..head.len().min(7)].to_owned());
+        let branch = (checkpoint.branch.clone())
+            .unwrap_or_else(|| BranchName::from(&head[..head.len().min(7)]));
         if let Some(workspace) = self.list_workspaces().await?.into_iter().find(|workspace| {
             workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&branch)
         }) {
             bail!("workspace {} already uses branch {branch}", workspace.name);
         }
-        let name = BranchName::from(branch.as_str());
-        let local = git::local_ref(&name);
+        let local = git::local_ref(&branch);
         if !git::ref_exists(&repo.path, &local, git::isolated_command).await? {
-            git::branch::create(&repo.path, &name, head).await?;
+            git::branch::create(&repo.path, &branch, head).await?;
             return Ok(branch);
         }
         let tip = git::verify_revision(
@@ -463,14 +459,14 @@ impl Manager {
         )
         .await
         .is_ok();
-        Ok(exists.then(|| commit.clone()))
+        Ok((exists.then(|| commit.clone())).map(String::from))
     }
 }
 
 /// The unsaved files of a removal's checkpoint, written into the new worktree.
 pub(super) struct RestoredFiles {
-    pub head: String,
-    pub snapshot: String,
+    pub head: CommitId,
+    pub snapshot: CommitId,
 }
 
 /// Write a removal checkpoint's files into a new worktree still at the removed
@@ -482,7 +478,7 @@ pub(super) async fn write_files(worktree: &Path, files: &RestoredFiles) -> Resul
         "the branch moved during the restore; apply the unsaved files with git cherry-pick --no-commit {}",
         files.snapshot
     );
-    git::checkpoint::apply(worktree, &files.snapshot).await
+    git::checkpoint::apply(worktree, files.snapshot.as_str()).await
 }
 
 /// Persist a removal record, replacing one an earlier attempt left.

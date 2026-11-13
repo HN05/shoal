@@ -5,6 +5,7 @@ use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::forge::numbers::PullNumber;
 use anyhow::{Context, Result};
+use shoal_refs::CommitId;
 
 use super::{Manager, creation::Configured, restore::RestoredFiles};
 use crate::client::space_names::SpaceName;
@@ -149,7 +150,7 @@ impl Manager {
         &self,
         repository_id: &RepositoryId,
         (directory, name): (&str, SpaceName),
-        commit: &str,
+        commit: &CommitId,
         reference: Option<&str>,
     ) -> Result<Workspace> {
         let (repo, git) = self.lock_repository(repository_id).await?;
@@ -214,7 +215,7 @@ impl Manager {
             .reserve_lifecycle(&workspace.id, WorkspaceState::Updating)
             .await?;
         let result = self
-            .replace_pull_head(repo, workspace, &at.commit, head)
+            .replace_pull_head(repo, workspace, at.commit.as_str(), head)
             .await;
         self.set_state(&workspace.id, reserved, workspace.error.clone())
             .await?;
@@ -245,7 +246,7 @@ impl Manager {
             head.number
         );
         let fetched = pull_head(repo, head).await?;
-        git::detached::move_to(&workspace.path, &fetched.at.commit).await?;
+        git::detached::move_to(&workspace.path, fetched.at.commit.as_str()).await?;
         self.record_starting_commit(&workspace.id, fetched.at.commit)
             .await
     }
@@ -257,7 +258,7 @@ impl Manager {
     pub(crate) async fn move_job_workspace(
         &self,
         id: &SpaceId,
-        commit: &str,
+        commit: &CommitId,
         reference: Option<&str>,
     ) -> Result<()> {
         let workspace = self.workspace_by_id(id).await?;
@@ -279,22 +280,22 @@ impl Manager {
         &self,
         repo: &Repository,
         workspace: &Workspace,
-        commit: &str,
+        commit: &CommitId,
         reference: Option<&str>,
     ) -> Result<()> {
         self.verify_worktree(workspace).await?;
-        if crate::daemon::links::pr::current_head(workspace).await? == commit {
+        if crate::daemon::links::pr::current_head(workspace).await? == *commit {
             return Ok(());
         }
         fetch_job_commit(repo, commit, reference).await?;
-        git::detached::move_to(&workspace.path, commit).await?;
+        git::detached::move_to(&workspace.path, commit.as_str()).await?;
         self.record_starting_commit(&workspace.id, commit.to_owned())
             .await
     }
 
     /// Record `commit` as where the workspace `id` started, which is also
     /// what its diff compares with.
-    async fn record_starting_commit(&self, id: &SpaceId, commit: String) -> Result<()> {
+    async fn record_starting_commit(&self, id: &SpaceId, commit: CommitId) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -352,7 +353,7 @@ impl Manager {
             .await?;
         let head = removed.checkpoint.head.as_str();
         let result = self
-            .materialize_commit_worktree(&repo, &workspace, head, files.as_ref())
+            .materialize_commit_worktree(&repo, &workspace, &head.into(), files.as_ref())
             .await;
         self.settle_creation(&repo, &workspace, result, git).await
     }
@@ -388,10 +389,10 @@ impl Manager {
         &self,
         repo: &Repository,
         workspace: &Workspace,
-        head: &str,
+        head: &CommitId,
         files: Option<&RestoredFiles>,
     ) -> Result<Configured> {
-        git::detached::add_workspace(&repo.path, &workspace.path, head).await?;
+        git::detached::add_workspace(&repo.path, &workspace.path, head.as_str()).await?;
         self.configure_worktree(workspace, files, None).await
     }
 
@@ -422,11 +423,7 @@ impl Manager {
             }
         };
         let reference = git::symbolic_revision(&repo.path, &revision, git::run_isolated).await?;
-        Ok(named_start(
-            commit.into(),
-            base,
-            reference.trim_end_matches('\n'),
-        ))
+        Ok(named_start(commit, base, reference.trim_end_matches('\n')))
     }
 }
 
@@ -446,7 +443,11 @@ async fn surviving_ref(repo: &Repository, reference: Option<&str>) -> Result<Opt
 /// Fetch `commit` into `repo` unless it has it: with the ref `reference`
 /// `origin` serves it under, which may have moved past it since, and else
 /// by itself.
-async fn fetch_job_commit(repo: &Repository, commit: &str, reference: Option<&str>) -> Result<()> {
+async fn fetch_job_commit(
+    repo: &Repository,
+    commit: &CommitId,
+    reference: Option<&str>,
+) -> Result<()> {
     let present = async || {
         git::resolve_commit(
             &repo.path,
@@ -465,7 +466,7 @@ async fn fetch_job_commit(repo: &Repository, commit: &str, reference: Option<&st
             return Ok(());
         }
     }
-    git::fetch::reference(&repo.path, "origin", commit)
+    git::fetch::reference(&repo.path, "origin", commit.as_str())
         .await
         .with_context(|| format!("the job's commit {commit} is not on origin"))?;
     Ok(())
@@ -482,7 +483,7 @@ async fn pull_head(repo: &Repository, head: &PullHead) -> Result<Start> {
     );
     Ok(Start {
         at: StartingCommit {
-            commit: fetched.into(),
+            commit: fetched,
             made_for: Some(MadeFor::Pr(head.number)),
         },
         directory: format!("pr-{}", head.number),
@@ -497,8 +498,8 @@ async fn pull_head(repo: &Repository, head: &PullHead) -> Result<Start> {
 /// commit, such as `main at 84d4405`, in a directory such as
 /// `main-84d4405`; a bare commit is made for nothing and named by its short
 /// commit.
-fn named_start(commit: String, base: Option<&str>, reference: &str) -> Start {
-    let short = commit[..commit.len().min(7)].to_owned();
+fn named_start(commit: CommitId, base: Option<&str>, reference: &str) -> Start {
+    let short = commit.as_str()[..commit.as_str().len().min(7)].to_owned();
     let branch = reference.strip_prefix(git::LOCAL_REFS).or_else(|| {
         reference
             .strip_prefix("refs/remotes/")

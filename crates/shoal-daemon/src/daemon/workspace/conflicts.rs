@@ -1,6 +1,7 @@
 //! Merge conflict checks for `shoal conflicts` and workspace watches.
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result};
+use shoal_refs::CommitId;
 
 use super::Manager;
 use crate::client::space_names::SpaceSelector;
@@ -97,11 +98,7 @@ impl Manager {
         self.record_changed_on_both_sides(&check).await?;
         if check.conflicts
             && self
-                .conflicts_settled(
-                    &workspace,
-                    check.head.as_str(),
-                    check.target_commit.as_str(),
-                )
+                .conflicts_settled(&workspace, &check.head, &check.target_commit)
                 .await?
         {
             check.conflicts = false;
@@ -116,14 +113,15 @@ impl Manager {
     async fn conflicts_settled(
         &self,
         workspace: &Workspace,
-        head: &str,
-        target_commit: &str,
+        head: &CommitId,
+        target_commit: &CommitId,
     ) -> Result<bool> {
         let integrated = self
             .completion(&workspace.id)
             .await?
-            .is_some_and(|completion| completion.integrated && completion.head == head);
-        Ok(integrated || git::status::merged_into(&workspace.path, head, target_commit).await?)
+            .is_some_and(|completion| completion.integrated && completion.head == *head);
+        let (head_rev, target_rev) = (head.as_str(), target_commit.as_str());
+        Ok(integrated || git::status::merged_into(&workspace.path, head_rev, target_rev).await?)
     }
 
     /// The repository's sensitive paths that `head` and `target_commit` both
@@ -131,12 +129,13 @@ impl Manager {
     async fn sensitive_changes(
         &self,
         workspace: &Workspace,
-        head: &str,
-        target_commit: &str,
+        head: &CommitId,
+        target_commit: &CommitId,
     ) -> Result<Vec<String>> {
         let settings = self.workspace_settings(workspace).await?;
         let sensitive = &settings.conflicts.sensitive;
-        let files = changed_on_both_sides(&workspace.path, head, target_commit, sensitive).await?;
+        let (head_rev, target_rev) = (head.as_str(), target_commit.as_str());
+        let files = changed_on_both_sides(&workspace.path, head_rev, target_rev, sensitive).await?;
         if files.is_empty()
             || self
                 .conflicts_settled(workspace, head, target_commit)
@@ -168,7 +167,7 @@ impl Manager {
         let (head_rev, target_rev) = (head.as_str(), target_commit.as_str());
         let files = merge_conflicts(&workspace.path, head_rev, target_rev).await?;
         let changed_on_both_sides = self
-            .sensitive_changes(workspace, head_rev, target_rev)
+            .sensitive_changes(workspace, &head, &target_commit)
             .await?;
         Ok(ConflictCheck {
             workspace_id: workspace.id.clone(),
@@ -187,7 +186,7 @@ impl Manager {
             .as_ref()
             .and_then(|base| base.branch.clone())
         {
-            return Ok(branch);
+            return Ok(branch.into());
         }
         let repo = self.repository(&workspace.repository_id).await?;
         git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)

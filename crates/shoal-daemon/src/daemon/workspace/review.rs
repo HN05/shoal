@@ -4,6 +4,7 @@
 use crate::client::space_ids::SpaceId;
 use crate::config::hooks::HookCommand;
 use crate::forge::items::reference::ItemRef;
+use shoal_refs::CommitId;
 use std::{collections::BTreeMap, ffi::OsString, path::Path, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
@@ -129,7 +130,8 @@ impl Manager {
         let kind = marked_kind(&selection)?;
         let explicit = marked_item(self.explicit_item(&workspace.path, &selection).await?);
         let space = LinkSpace::from(workspace.clone());
-        let pulls = (self.markable_pulls(&space, kind, explicit.as_ref(), Some(&head))).await?;
+        let pulls =
+            (self.markable_pulls(&space, kind, explicit.as_ref(), Some(head.as_str()))).await?;
         let mut ready = (self.record_marks(&workspace.id, kind, explicit, head, pulls)).await?;
         let undrafted = match settings.pr.undraft_on_ready {
             true => self.set_draft(&space, &pr_urls(&ready.marks), false).await,
@@ -178,7 +180,7 @@ impl Manager {
         let (head, _) = crate::git::head_and_branch(&checkout.path)
             .await
             .context("cannot read the checkout's HEAD")?;
-        let mut ready = (self.record_marks(space.id(), kind, explicit, head.into(), pulls)).await?;
+        let mut ready = (self.record_marks(space.id(), kind, explicit, head, pulls)).await?;
         let undrafted = match settings.pr.undraft_on_ready {
             true => self.set_draft(space, &pr_urls(&ready.marks), false).await,
             false => Ok(()),
@@ -242,7 +244,7 @@ impl Manager {
         id: &SpaceId,
         kind: Option<ItemKind>,
         explicit: Option<ItemRef>,
-        head: String,
+        head: CommitId,
         pulls: Pulls,
     ) -> Result<ReadyMarks> {
         let id = id.to_owned();
@@ -402,10 +404,11 @@ impl Manager {
         if self.file_access.stalled(&workspace.path).is_some() {
             return None;
         }
-        tokio::time::timeout_at(deadline, current_head(workspace))
+        (tokio::time::timeout_at(deadline, current_head(workspace))
             .await
             .ok()?
-            .ok()
+            .ok())
+        .map(String::from)
     }
 }
 

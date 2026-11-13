@@ -71,7 +71,7 @@ async fn remembered(manager: &Manager, repo: &Repository) -> Vec<String> {
         .await
         .unwrap()
         .into_iter()
-        .map(|kept| kept.branch)
+        .map(|kept| kept.branch.into())
         .collect()
 }
 
@@ -234,10 +234,10 @@ async fn deletion_checks_every_branch_before_deleting_any() {
     let target = |branch: &str| BranchTarget {
         repository_id: repo.id.clone(),
         branch: branch.into(),
-        head: heads.get(branch).cloned().unwrap_or_default(),
+        head: heads.get(branch).cloned().unwrap_or_default().into(),
     };
     let listed_earlier = BranchTarget {
-        head: heads["first"].clone() + "0",
+        head: (heads["first"].clone() + "0").into(),
         ..target("second")
     };
     let elsewhere = root.path().join("elsewhere");

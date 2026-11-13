@@ -4,6 +4,7 @@ use super::Manager;
 use crate::client::space_names::SpaceSelector;
 use crate::{git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
+use shoal_refs::BranchName;
 
 impl Manager {
     /// Fast-forward the workspace recorded on `branch` to the fetched
@@ -14,7 +15,7 @@ impl Manager {
     pub async fn fast_forward_workspace(
         &self,
         selector: &SpaceSelector,
-        branch: &str,
+        branch: &BranchName,
     ) -> Result<bool> {
         let id = self.workspace(selector).await?.id;
         let reserved = self
@@ -32,7 +33,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         state: WorkspaceState,
-        branch: &str,
+        branch: &BranchName,
     ) -> Result<bool> {
         ensure!(
             state == WorkspaceState::Ready,
@@ -46,8 +47,9 @@ impl Manager {
             workspace.name,
         );
         let _git = self.gates.lock_git(&workspace.repository_id).await;
-        self.verify_checkout(workspace, Some(branch)).await?;
-        let (path, target) = (&workspace.path, git::remote_ref("origin", branch));
+        self.verify_checkout(workspace, Some(branch.as_str()))
+            .await?;
+        let (path, target) = (&workspace.path, git::remote_ref("origin", branch.as_str()));
         if git::is_ancestor(path, &target, "HEAD", git::isolated_command).await? {
             return Ok(false);
         }

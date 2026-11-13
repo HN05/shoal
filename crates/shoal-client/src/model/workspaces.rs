@@ -7,6 +7,7 @@ use crate::space_ids::{SpaceId, SpaceNumber};
 use crate::space_names::SpaceName;
 use crate::state::{AgentState, WorkspaceState};
 use serde::{Deserialize, Serialize};
+use shoal_refs::{BranchName, CommitId};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,7 +31,7 @@ pub struct Workspace {
     pub narrowing: crate::config::permissions::PermissionsConfig,
     pub path: PathBuf,
     /// Its branch; `None` for a workspace at a commit, which `at` describes.
-    pub branch: Option<String>,
+    pub branch: Option<BranchName>,
     /// Where a workspace without a branch was created.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<StartingCommit>,
@@ -39,7 +40,7 @@ pub struct Workspace {
     pub copied_from: Option<CopiedFrom>,
     pub state: WorkspaceState,
     pub error: Option<String>,
-    pub base_commit: Option<String>,
+    pub base_commit: Option<CommitId>,
     pub base_ref: Option<String>,
     /// Git's per-worktree admin directory and its filesystem identity, used
     /// to verify the worktree was not moved or replaced.
@@ -116,18 +117,24 @@ pub struct WorkspaceUsage {
 /// The commit a workspace without a branch started at, and what named it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StartingCommit {
-    pub commit: String,
+    pub commit: CommitId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub made_for: Option<MadeFor>,
 }
 
 impl StartingCommit {
+    /// The first 7 characters of the commit, as names and labels show it.
+    fn short(&self) -> &str {
+        let commit = self.commit.as_str();
+        &commit[..commit.len().min(7)]
+    }
+
     /// What a directory for a workspace started here is named after,
     /// whatever the workspace's name: the ref it was made for with the
     /// short commit, such as `main-84d4405`, a PR's number, such as `pr-7`,
     /// or the short commit alone.
     pub fn directory_seed(&self) -> String {
-        let short = &self.commit[..self.commit.len().min(7)];
+        let short = self.short();
         match &self.made_for {
             Some(MadeFor::Ref(reference)) => format!("{reference}-{short}"),
             Some(MadeFor::Pr(number)) => format!("pr-{number}"),
@@ -138,7 +145,7 @@ impl StartingCommit {
     /// The commit as `3f2a9c1`, or `3f2a9c1 (v1.4.0)` with what it was made
     /// for.
     pub fn label(&self) -> String {
-        let short = &self.commit[..self.commit.len().min(7)];
+        let short = self.short();
         match &self.made_for {
             Some(made_for) => format!("{short} ({made_for})"),
             None => short.to_owned(),
@@ -159,8 +166,8 @@ pub struct CopiedFrom {
     /// The number of the copy's own checkpoint of what it started with.
     pub starting_checkpoint: CheckpointNumber,
     /// That checkpoint's HEAD, and the commit that keeps its files.
-    pub head: String,
-    pub commit: String,
+    pub head: CommitId,
+    pub commit: CommitId,
     /// The tree of the index it started with, which the checkpoint does not
     /// keep.
     #[serde(default)]
@@ -199,7 +206,7 @@ impl std::fmt::Display for MadeFor {
 pub struct WorkspaceRef {
     pub id: SpaceId,
     pub name: SpaceName,
-    pub branch: Option<String>,
+    pub branch: Option<BranchName>,
 }
 
 impl Workspace {
@@ -207,7 +214,7 @@ impl Workspace {
         repository_id: RepositoryId,
         name: SpaceName,
         path: PathBuf,
-        branch: Option<String>,
+        branch: Option<BranchName>,
         state: WorkspaceState,
     ) -> Self {
         Self {
@@ -250,16 +257,16 @@ impl Workspace {
 
     /// Its branch, refusing a workspace at a commit for `action`, which
     /// needs one.
-    pub fn require_branch(&self, action: &str) -> anyhow::Result<&str> {
+    pub fn require_branch(&self, action: &str) -> anyhow::Result<&BranchName> {
         self.branch
-            .as_deref()
+            .as_ref()
             .ok_or_else(|| no_branch(&self.name, action))
     }
 
     /// What names its work where a branch would: its branch, or the name
     /// of a workspace at a commit.
     pub fn branch_or_name(&self) -> &str {
-        self.branch.as_deref().unwrap_or(&self.name)
+        self.branch.as_ref().map_or(&self.name, BranchName::as_str)
     }
 
     /// Its number with its name, as text that names it does.
@@ -310,7 +317,7 @@ pub struct RenamedWorkspace {
 /// A branch a new workspace can take, local or on a remote.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Branch {
-    pub name: String,
+    pub name: BranchName,
     pub remote: Option<String>,
 }
 

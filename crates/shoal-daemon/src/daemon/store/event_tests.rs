@@ -537,7 +537,7 @@ fn renames_questions_and_children_reach_their_spaces_logs() -> Result<()> {
                 EventKind::Renamed => Some(format!(
                     "{} {}",
                     event.name,
-                    event.branch.unwrap_or_default()
+                    event.branch.map(String::from).unwrap_or_default()
                 )),
                 EventKind::QuestionAsked | EventKind::QuestionAnswered => event
                     .question

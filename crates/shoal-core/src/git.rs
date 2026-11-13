@@ -328,7 +328,11 @@ pub fn approved_push_command(push: &crate::client::approvals::PushSpecification)
     if let Some(replaces) = &push.replaces {
         command.push(format!("--force-with-lease={}:{replaces}", push.destination).into());
     }
-    let source = push.commit.as_deref().unwrap_or_default();
+    let source = push
+        .commit
+        .as_ref()
+        .map(CommitId::as_str)
+        .unwrap_or_default();
     command.extend([
         "--".into(),
         OsString::from(push.target()),

@@ -96,8 +96,8 @@ impl Manager {
             issue,
             repository,
             link,
-            branch,
-            commit,
+            branch: branch.map(BranchName::from),
+            commit: commit.map(CommitId::from),
             agent: proposer.agent,
             duplicates: Vec::new(),
             follow_up: None,
@@ -121,7 +121,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         mut pull: NewPull,
-        commit: String,
+        commit: CommitId,
         push: Option<PushSpecification>,
         proposer: Proposer,
     ) -> Result<Proposed> {
@@ -592,7 +592,7 @@ impl Manager {
             if let Some(number) = forge
                 .open_pull_for(
                     &account,
-                    &workspace.require_branch("opening a PR")?.into(),
+                    workspace.require_branch("opening a PR")?,
                     head_repository,
                 )
                 .await?
@@ -828,7 +828,7 @@ async fn ensure_pull_head(
     let item = forge.read(account, ItemKind::Pr, number.get()).await?.item;
     let branch = workspace.require_branch("opening a PR")?;
     ensure!(
-        item.pr.as_ref().is_some_and(|pr| pr.head == branch),
+        item.pr.as_ref().is_some_and(|pr| pr.head == *branch),
         "{url} does not have the workspace branch {branch} as its head"
     );
     Ok(())
@@ -844,7 +844,7 @@ async fn pull_current(
     account: &Account,
     proposed: &PullSpecification,
 ) -> Result<bool> {
-    let Some(branch) = workspace.branch.clone().map(BranchName::from) else {
+    let Some(branch) = workspace.branch.clone() else {
         return Ok(false);
     };
     if proposed.pull.head != branch || super::pr::current_head(workspace).await? != proposed.commit
@@ -867,7 +867,7 @@ async fn head_commit(
     account: &Account,
     head_repository: Option<&str>,
 ) -> Result<Option<CommitId>> {
-    let branch = BranchName::from(workspace.require_branch("opening a PR")?);
+    let branch = workspace.require_branch("opening a PR")?.clone();
     match head_repository {
         Some(fork) => {
             let fork = forge.sibling(fork);
@@ -902,7 +902,10 @@ async fn proposed_from(space: &LinkSpace) -> Result<(Option<String>, Option<Stri
         return Ok((None, None));
     };
     let commit = crate::git::revision(&workspace.path, "HEAD", crate::git::run).await?;
-    Ok((workspace.branch.clone(), Some(commit.trim().to_owned())))
+    Ok((
+        workspace.branch.clone().map(String::from),
+        Some(commit.trim().to_owned()),
+    ))
 }
 
 /// A pending request for the space `id` to open what `specification`

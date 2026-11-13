@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use shoal_refs::CommitId;
+use shoal_refs::{BranchName, CommitId};
 
 use super::ConfigTarget;
 use super::Lifetime;
@@ -152,7 +152,7 @@ pub enum WorkspaceMethod {
     /// `origin/<branch>`, refusing a worktree that is not the recorded one on it.
     FastForwardWorkspace {
         workspace: SpaceSelector,
-        branch: String,
+        branch: BranchName,
     },
     /// The effective permissions of an agent starting in `mode` with
     /// `narrowing` in the workspace, which its launch's push rules follow.

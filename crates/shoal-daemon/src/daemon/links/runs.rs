@@ -4,6 +4,7 @@
 mod place;
 
 use crate::client::space_ids::SpaceId;
+use shoal_refs::BranchName;
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -238,7 +239,9 @@ const FROM_A_CHAT: &str = "a chat names a workspace below it with --space";
 /// repository; a chat has no branch.
 fn on_own_branch_name(workspace: Option<&Workspace>, branch: &str) -> Result<()> {
     ensure!(
-        workspace.is_some_and(|workspace| workspace.branch.as_deref() == Some(branch)),
+        workspace.is_some_and(
+            |workspace| workspace.branch.as_ref().map(BranchName::as_str) == Some(branch)
+        ),
         "scoped processes start CI runs only on the branch of the workspace they act from; {FROM_A_CHAT}"
     );
     Ok(())
@@ -248,7 +251,10 @@ fn on_own_branch_name(workspace: Option<&Workspace>, branch: &str) -> Result<()>
 /// repository; a chat has no branch.
 fn on_own_branch(workspace: Option<&Workspace>, run: &Run) -> Result<()> {
     ensure!(
-        workspace.is_some_and(|workspace| run.branch.is_some() && run.branch == workspace.branch),
+        workspace.is_some_and(|workspace| {
+            run.branch.is_some()
+                && run.branch.as_deref() == workspace.branch.as_ref().map(BranchName::as_str)
+        }),
         "scoped processes act only on CI runs of the branch of the workspace they act from; \
          {FROM_A_CHAT}, and use --pr for a PR's checks"
     );

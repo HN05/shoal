@@ -408,9 +408,9 @@ fn own_edits(action: &Action, edited: Edited) -> Edited {
 /// Refuse a PR whose head is not the workspace branch.
 fn ensure_branch_head(workspace: &Workspace, item: &Item) -> Result<()> {
     anyhow::ensure!(
-        item.pr
-            .as_ref()
-            .is_some_and(|pr| workspace.branch.as_deref() == Some(pr.head.as_str())),
+        item.pr.as_ref().is_some_and(
+            |pr| workspace.branch.as_ref().map(BranchName::as_str) == Some(pr.head.as_str())
+        ),
         "{} does not have the workspace branch as its head",
         item.url
     );
@@ -436,7 +436,7 @@ impl Manager {
         // Cleanup holds the workspace's gate, so it cannot remove the
         // workspace between opening the PR and linking it.
         let (workspace, _gate) = self.lock_pr_gate(selector).await?;
-        let branch = BranchName::from(workspace.require_branch("shoal pr open")?);
+        let branch = workspace.require_branch("shoal pr open")?.clone();
         self.verify_worktree(&workspace).await?;
         let head = super::pr::current_head(&workspace).await?;
         let push = match push_held {
@@ -542,7 +542,7 @@ impl Manager {
     /// that its review gate refuses; checked before anything is pushed.
     pub(crate) async fn check_pr_review_gate(&self, selector: &SpaceSelector) -> Result<()> {
         let workspace = self.workspace(selector).await?;
-        let Some(branch) = workspace.branch.clone().map(BranchName::from) else {
+        let Some(branch) = workspace.branch.clone() else {
             return Ok(());
         };
         if !self
@@ -702,7 +702,7 @@ async fn new_pull(
         .and_then(|base| base.branch.clone());
     let base = match (options.base, base_branch) {
         (Some(base), _) => base,
-        (None, Some(branch)) => branch.into(),
+        (None, Some(branch)) => branch,
         (None, None) => {
             crate::git::default_branch::resolve(
                 &workspace.path,
@@ -714,7 +714,7 @@ async fn new_pull(
     Ok(NewPull {
         title,
         body: conventions::pull_description(options.body, issue),
-        head: workspace.require_branch("shoal pr open")?.into(),
+        head: workspace.require_branch("shoal pr open")?.clone(),
         head_repository: None,
         base,
         draft: options.draft.unwrap_or(default_draft),

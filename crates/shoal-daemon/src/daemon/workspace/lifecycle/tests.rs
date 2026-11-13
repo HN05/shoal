@@ -23,6 +23,7 @@ use crate::{
     removal::{InspectionPolicy, NOTHING, UnsavedWork},
     state::WorkspaceState,
 };
+use shoal_refs::BranchName;
 use std::{fs, sync::Arc};
 
 pub(super) async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
@@ -1083,8 +1084,16 @@ async fn branch_removal_uses_the_inspected_default_branch() {
     let (_root, manager, workspace) = fixture().await;
     let repo = manager.repository(&workspace.repository_id).await.unwrap();
     for (inspected_default, later_default, delete) in [
-        ("main", workspace.branch.as_deref().unwrap(), true),
-        (workspace.branch.as_deref().unwrap(), "main", false),
+        (
+            "main",
+            workspace.branch.as_ref().map(BranchName::as_str).unwrap(),
+            true,
+        ),
+        (
+            workspace.branch.as_ref().map(BranchName::as_str).unwrap(),
+            "main",
+            false,
+        ),
     ] {
         git(
             &repo.path,

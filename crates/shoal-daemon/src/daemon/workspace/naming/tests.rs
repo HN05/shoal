@@ -1,4 +1,5 @@
 use crate::daemon::test_support::{manager, repository};
+use shoal_refs::BranchName;
 
 #[tokio::test]
 async fn a_name_is_cleaned_up_kept_on_the_record_and_returned_with_the_previous_one() {
@@ -25,7 +26,10 @@ async fn a_name_is_cleaned_up_kept_on_the_record_and_returned_with_the_previous_
     assert_eq!(renamed.previous_name, "topic");
     // Nothing built from the name moves.
     assert_eq!(renamed.workspace.path, workspace.path);
-    assert_eq!(renamed.workspace.branch.as_deref(), Some("topic"));
+    assert_eq!(
+        renamed.workspace.branch.as_ref().map(BranchName::as_str),
+        Some("topic")
+    );
     assert_eq!(
         manager.workspace(&selector).await.unwrap().name,
         "Plan: summary with shoal done"

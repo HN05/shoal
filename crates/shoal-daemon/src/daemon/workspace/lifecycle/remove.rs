@@ -14,6 +14,7 @@ use crate::{
     removal::{IdleRestore, Inspection, InspectionPolicy, RemovalResult, UnsavedWork},
 };
 use anyhow::{Context, Result, bail, ensure};
+use shoal_refs::CommitId;
 
 /// Refuse to remove any of `children`, those the removal of the space named
 /// `parent` takes first, when the user confirmed `removal` without one of
@@ -153,10 +154,15 @@ impl Manager {
         (self.remove_after_grace(space, Removal::Automatic { snapshot, cause })).await
     }
 
-    pub async fn remove_merged(&self, selector: &SpaceSelector, head: &str) -> Result<bool> {
+    pub async fn remove_merged(&self, selector: &SpaceSelector, head: &CommitId) -> Result<bool> {
         let space = PresentSpace::Workspace(self.workspace(selector).await?);
-        self.remove_after_grace(&space, Removal::Merged { head })
-            .await
+        self.remove_after_grace(
+            &space,
+            Removal::Merged {
+                head: head.as_str(),
+            },
+        )
+        .await
     }
 
     /// Remove `space` for its `completion` with cleanup, which `cause`
@@ -168,7 +174,7 @@ impl Manager {
         cause: EventCause,
     ) -> Result<bool> {
         let removal = Removal::Completed {
-            head: &completion.head,
+            head: completion.head.as_str(),
             integrated: completion.integrated,
             cause,
         };

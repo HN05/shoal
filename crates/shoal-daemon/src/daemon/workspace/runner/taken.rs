@@ -78,7 +78,7 @@ impl Manager {
         if took.awaits {
             self.move_job_workspace(
                 &job.workspace_id,
-                &record.run.commit,
+                &record.run.commit.as_str().into(),
                 record.run.reference.as_deref(),
             )
             .await?;

@@ -1,3 +1,5 @@
+use shoal_refs::CommitId;
+
 use super::*;
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -26,7 +28,7 @@ fn select(kind: Option<LinkKind>, input: Option<&str>) -> Selection {
     }
 }
 
-async fn review_events(manager: &Manager) -> Vec<(String, Option<String>, String)> {
+async fn review_events(manager: &Manager) -> Vec<(String, Option<String>, CommitId)> {
     manager
         .workspace_events(None, 100)
         .await
@@ -97,7 +99,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     let pr = url_of(&forge, LinkKind::Pr, 12);
     let issue = url_of(&forge, LinkKind::Issue, 7);
     let head = current_head(&workspace).await.unwrap();
-    github.push(&head);
+    github.push(head.as_str());
 
     // Nothing linked: the workspace itself is marked, but a kind needs links.
     let marks = manager
@@ -202,7 +204,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
             .await
             .is_err()
     );
-    github.push(&later);
+    github.push(later.as_str());
     manager
         .mark_ready(&SpaceSelector::id(&workspace.id), pr_only(), None)
         .await
@@ -331,7 +333,7 @@ async fn ready_skips_linked_prs_that_are_closed_or_at_another_head() {
     let pr = url_of(&forge, LinkKind::Pr, 12);
     let issue = url_of(&forge, LinkKind::Issue, 7);
     link(&manager, workspace.id.as_str(), &pr, Some(&issue)).await;
-    github.push(&current_head(&workspace).await.unwrap());
+    github.push(current_head(&workspace).await.unwrap().as_str());
     let marked_urls = |ready: &ReadyMarks| -> Vec<String> {
         (ready.marks.iter())
             .filter_map(|mark| mark.url.as_ref().map(ToString::to_string))
@@ -354,7 +356,7 @@ async fn ready_skips_linked_prs_that_are_closed_or_at_another_head() {
     assert_eq!(ready.skipped[0].url.url(), pr);
 
     // A merged PR stays unmarked whatever its head, and selecting it fails.
-    github.push(&current_head(&workspace).await.unwrap());
+    github.push(current_head(&workspace).await.unwrap().as_str());
     github.merge();
     let ready = manager
         .mark_ready(
@@ -662,7 +664,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         12,
     );
     link(&manager, workspace.id.as_str(), &pr, None).await;
-    github.push(&current_head(&workspace).await.unwrap());
+    github.push(current_head(&workspace).await.unwrap().as_str());
     let draft = || github.draft();
     let mutations = || github.mutations();
 

@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, ensure};
-use shoal_refs::CommitId;
+use shoal_refs::{BranchName, CommitId};
 
 use crate::space_names::SpaceSelector;
 use crate::{config::placeholders::render_os as render, connection::Daemon, model::Workspace};
@@ -60,7 +60,13 @@ pub fn workspace_fields<'a>(
         ("{workspace}", OsStr::new(workspace.directory_name())),
         (
             "{branch}",
-            OsStr::new(workspace.branch.as_deref().unwrap_or_default()),
+            OsStr::new(
+                workspace
+                    .branch
+                    .as_ref()
+                    .map(BranchName::as_str)
+                    .unwrap_or_default(),
+            ),
         ),
         ("{path}", workspace.path.as_os_str()),
     ];

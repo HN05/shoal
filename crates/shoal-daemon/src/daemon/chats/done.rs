@@ -42,7 +42,7 @@ impl Manager {
         let space = PresentSpace::Chat(chat.clone()).into();
         let results = self.keep_results(&space, done.results, attacher).await?;
         let completion = Completion {
-            head,
+            head: head.into(),
             cleanup: done.cleanup || settings.cleanup.done.enabled,
             integrated: false,
             results,

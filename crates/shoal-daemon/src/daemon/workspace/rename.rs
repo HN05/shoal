@@ -43,7 +43,7 @@ impl Manager {
         if branch == current {
             return Ok(workspace);
         }
-        let (old_name, new_name) = (BranchName::from(current.as_str()), BranchName::from(branch));
+        let (old_name, new_name) = (current.clone(), BranchName::from(branch));
         ensure!(
             !git::ref_exists(
                 &repo.path,
@@ -92,7 +92,7 @@ impl Manager {
         let recorded = workspace.require_branch("renaming a branch")?;
         let actual = git::head_branch(&workspace.path, true, git::run_isolated).await?;
         ensure!(
-            actual.as_ref().map(BranchName::as_str) == Some(recorded),
+            actual.as_ref() == Some(recorded),
             "worktree is not on its recorded branch"
         );
         let default = git::default_branch::resolve(
@@ -101,14 +101,14 @@ impl Manager {
         )
         .await?;
         ensure!(
-            recorded != default,
+            *recorded != default,
             "cannot rename the repository default branch"
         );
         ensure!(
             !git::worktrees(checkout, git::run_isolated)
                 .await?
                 .iter()
-                .any(|tree| tree.is_branch(&recorded.into()) && tree.path != workspace.path),
+                .any(|tree| tree.is_branch(recorded) && tree.path != workspace.path),
             "branch is also checked out in another worktree"
         );
         Ok(())
@@ -122,7 +122,7 @@ impl Manager {
     ) -> Result<()> {
         let workspace = workspace.clone();
         let intent = RenameIntent {
-            branch: branch.to_owned(),
+            branch: branch.to_owned().into(),
         };
         let caller_execution = caller_execution.cloned();
         self.store
@@ -139,7 +139,7 @@ impl Manager {
                 store::ensure_branch_available(
                     tx,
                     &workspace.repository_id,
-                    Some(&intent.branch),
+                    Some(intent.branch.as_str()),
                     Some(&workspace.id),
                 )?;
                 intent.record(tx, &workspace.id)?;
@@ -251,7 +251,7 @@ impl Manager {
                 workspace.path.display()
             );
             let candidate = Workspace {
-                branch: Some(actual.clone().into()),
+                branch: Some(actual.clone()),
                 ..workspace.clone()
             };
             self.reclaim_worktree(&candidate).await?;

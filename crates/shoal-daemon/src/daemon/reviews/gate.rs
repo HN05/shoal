@@ -1,6 +1,7 @@
 //! Review gates: with `[review] require_for_pr` or `require_for_ready`, a
 //! workspace process opens a new PR or marks work ready only once a
 //! finished review covers HEAD and every finding is resolved.
+use shoal_refs::CommitId;
 use std::fmt::Write as _;
 
 use anyhow::{Result, bail};
@@ -31,7 +32,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         gate: Gate,
-        head: &str,
+        head: &CommitId,
     ) -> Result<()> {
         let settings = self.workspace_settings(workspace).await?;
         let required = match gate {
@@ -57,7 +58,7 @@ impl Manager {
             None => format!(
                 "{} needs a finished review of HEAD {} first",
                 gate.command(),
-                &head[..head.len().min(12)]
+                head.short()
             ),
         };
         match active {

@@ -121,10 +121,11 @@ fn event_line(event: &EventDetails) -> (String, String) {
         EventKind::Retained => fixed("Removal failed", error(event)),
         EventKind::BranchChanged => fixed(
             "Branch changed",
-            event
+            (event
                 .branch
                 .clone()
-                .unwrap_or_else(|| "detached HEAD".into()),
+                .unwrap_or_else(|| "detached HEAD".into()))
+            .into(),
         ),
         EventKind::BaseChanged => fixed("Base changed", base(event)),
         EventKind::ParentChanged | EventKind::ChatChanged => fixed("Parent changed", parent(event)),
@@ -242,7 +243,7 @@ fn review(event: &EventDetails) -> String {
     let Some(review) = &event.review else {
         return String::new();
     };
-    let head = short_commit(&review.head);
+    let head = short_commit(review.head.as_str());
     match &review.url {
         Some(url) => format!("{} at {head}", reference(url)),
         None => format!("at {head}"),

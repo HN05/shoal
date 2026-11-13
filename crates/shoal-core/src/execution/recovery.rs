@@ -3,6 +3,7 @@ use crate::client::execution_ids::ExecutionId;
 use crate::client::{agent::AgentSessionId, space_ids::SpaceId};
 use crate::config::permissions::PermissionChange;
 use crate::paths::StateFiles;
+use shoal_refs::BranchName;
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -149,7 +150,11 @@ pub fn converted_subject(
     let mut prompt = format!(
         "Shoal converted this chat into a workspace. You now work in its worktree at {} on branch {}.",
         workspace.path.display(),
-        workspace.branch.as_deref().unwrap_or("-"),
+        workspace
+            .branch
+            .as_ref()
+            .map(BranchName::as_str)
+            .unwrap_or("-"),
     );
     prompt.push_str(if forked {
         " This conversation continues the chat's."

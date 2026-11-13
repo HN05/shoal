@@ -98,7 +98,7 @@ pub(super) fn render(workspace: &Workspace) {
 pub(super) fn describe_space(space: &SpaceRef) -> String {
     match (space.kind, &space.branch) {
         (SpaceKind::Chat, _) => format!("{} (chat)", space.name),
-        (SpaceKind::Workspace, Some(branch)) if *branch != space.name => {
+        (SpaceKind::Workspace, Some(branch)) if branch.as_str() != space.name.as_str() => {
             format!("{} ({branch})", space.name)
         }
         (SpaceKind::Workspace, _) => space.name.to_string(),
@@ -107,7 +107,9 @@ pub(super) fn describe_space(space: &SpaceRef) -> String {
 
 pub(super) fn describe(workspace: &WorkspaceRef) -> String {
     match &workspace.branch {
-        Some(branch) if *branch != workspace.name => format!("{} ({branch})", workspace.name),
+        Some(branch) if branch.as_str() != workspace.name.as_str() => {
+            format!("{} ({branch})", workspace.name)
+        }
         _ => workspace.name.to_string(),
     }
 }

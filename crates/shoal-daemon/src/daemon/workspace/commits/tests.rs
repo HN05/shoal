@@ -2,6 +2,7 @@ use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::forge::numbers::PullNumber;
 use crate::time::UnixTime;
+use shoal_refs::CommitId;
 use std::path::Path;
 
 use crate::client::space_names::SpaceSelector;
@@ -445,7 +446,7 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
     assert_eq!(moved.workspace.id, opened.workspace.id);
     assert_eq!(moved.workspace.at.unwrap().commit, second);
     assert_eq!(
-        moved.workspace.base_commit.as_deref(),
+        moved.workspace.base_commit.as_ref().map(CommitId::as_str),
         Some(second.as_str())
     );
     assert_eq!(head(&moved.workspace.path), (second, String::new()));

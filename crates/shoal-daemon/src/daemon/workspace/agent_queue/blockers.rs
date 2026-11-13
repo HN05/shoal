@@ -8,6 +8,7 @@
 //! others.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId, space_names::SpaceSelector};
+use shoal_refs::{BranchName, CommitId};
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result, bail};
@@ -46,9 +47,9 @@ enum Progress {
 #[derive(Debug, Clone)]
 struct Done {
     name: String,
-    branch: String,
+    branch: BranchName,
     path: std::path::PathBuf,
-    head: String,
+    head: CommitId,
 }
 
 /// A recorded blocker of a waiting launch or a space in `repository`; a
@@ -487,7 +488,7 @@ async fn readiness_of(progress: Vec<Progress>) -> Result<Readiness> {
     for candidate in &done {
         if contains_all(candidate, &done).await? {
             return Ok(Readiness::Ready {
-                base: Some(candidate.branch.clone()),
+                base: Some(candidate.branch.clone().into()),
             });
         }
     }
@@ -500,8 +501,8 @@ async fn contains_all(candidate: &Done, done: &[Done]) -> Result<bool> {
     for other in done {
         let contained = git::is_ancestor(
             &candidate.path,
-            &other.head,
-            &candidate.head,
+            other.head.as_str(),
+            candidate.head.as_str(),
             git::isolated_command,
         )
         .await

@@ -1,5 +1,6 @@
 //! Ready-for-review marks.
 use serde::{Deserialize, Serialize};
+use shoal_refs::CommitId;
 
 /// An agent's statement that linked work is ready for review at a commit.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -8,7 +9,7 @@ pub struct ReviewMark {
     /// workspace itself.
     pub kind: Option<crate::forge::items::link::ItemKind>,
     pub url: Option<crate::forge::items::reference::ItemRef>,
-    pub head: String,
+    pub head: CommitId,
     pub created_at: crate::time::UnixTime,
     /// Whether HEAD has moved since the mark; absent when HEAD was not read.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -5,6 +5,7 @@ use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
+use shoal_refs::{BranchName, CommitId};
 
 /// A Git worktree under a repository's Shoal directory that no workspace owns.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -20,9 +21,9 @@ pub struct KeptBranch {
     pub repository_id: RepositoryId,
     /// The repository's name, or its path when it has none.
     pub repository: String,
-    pub branch: String,
+    pub branch: BranchName,
     /// The commit removal left the branch on.
-    pub head: String,
+    pub head: CommitId,
     pub kept_at: crate::time::UnixTime,
     /// Commits only this branch has.
     pub unpushed_commits: u64,
@@ -34,8 +35,8 @@ pub struct KeptBranch {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BranchTarget {
     pub repository_id: RepositoryId,
-    pub branch: String,
-    pub head: String,
+    pub branch: BranchName,
+    pub head: CommitId,
 }
 
 /// What `shoal restore` recreates of a removed workspace until `expires_at`.
@@ -47,7 +48,7 @@ pub struct RemovedWorkspace {
     /// The checkpoint taken at removal.
     pub checkpoint: Checkpoint,
     pub base_ref: Option<String>,
-    pub base_commit: Option<String>,
+    pub base_commit: Option<CommitId>,
     /// Where it started, for a workspace at a commit, which restore opens
     /// without a branch.
     #[serde(default, skip_serializing_if = "Option::is_none")]

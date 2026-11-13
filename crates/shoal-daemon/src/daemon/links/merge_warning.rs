@@ -100,7 +100,7 @@ impl Manager {
             target: target.into(),
         };
         let branch = workspace.require_branch("merging")?.to_owned();
-        Ok(warning(branch, vec![recorded], &merged))
+        Ok(warning(branch.into(), vec![recorded], &merged))
     }
 
     /// The forge and the PR `input` names in the repository of `context`, or

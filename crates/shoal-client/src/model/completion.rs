@@ -1,5 +1,6 @@
 //! Completion signals and the files they hand back.
 use serde::{Deserialize, Serialize};
+use shoal_refs::CommitId;
 
 /// A file a completion handed back: the record of Shoal's copy, which tells a
 /// changed file from the one handed back before, and its name.
@@ -12,7 +13,7 @@ pub struct HandedBack {
 /// An assignment completion signal, bound to the workspace's HEAD.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Completion {
-    pub head: String,
+    pub head: CommitId,
     pub cleanup: bool,
     /// Another branch has HEAD's work under other commits, so cleanup need
     /// not wait for them to be pushed.

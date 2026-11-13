@@ -8,6 +8,7 @@ use crate::{
     },
     model::{SpaceKind, SpaceRef},
 };
+use shoal_refs::BranchName;
 
 /// Chat starts, stops and removals, and workspace parent changes, in
 /// journal order.
@@ -447,7 +448,10 @@ async fn chats_and_workspaces_may_share_a_name() {
         .await
         .unwrap();
     assert_eq!(
-        (renamed.name.as_str(), renamed.branch.as_deref()),
+        (
+            renamed.name.as_str(),
+            renamed.branch.as_ref().map(BranchName::as_str)
+        ),
         ("worker", Some("renamed"))
     );
 }

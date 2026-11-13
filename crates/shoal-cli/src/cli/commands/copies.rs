@@ -39,7 +39,9 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
         Some(workspace) => (
             workspace.id,
             workspace.repository_id,
-            workspace.branch.unwrap_or(workspace.name.into()),
+            workspace
+                .branch
+                .map_or_else(|| workspace.name.to_string(), String::from),
         ),
         None if args.checkpoint.is_some() => removed(ctx, selector).await?,
         None => anyhow::bail!("no workspace {selector}"),

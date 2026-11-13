@@ -52,12 +52,12 @@ impl Manager {
         let repo = self.repository(&workspace.repository_id).await?;
         let default =
             git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
-        let branch = BranchName::from(workspace.require_branch("unmerging")?);
+        let branch = workspace.require_branch("unmerging")?.clone();
         let held = self.held_merges(&repo, &default).await?;
         let (merge, later) = latest_merge_of(&held, &branch)
             .with_context(|| format!("{default} holds no local merge of {branch} to undo"))?;
         ensure_unpushed(&repo, &default, merge).await?;
-        self.ensure_unmanaged_checkout(&repo, default.as_str(), "unmerge")
+        self.ensure_unmanaged_checkout(&repo, &default, "unmerge")
             .await?;
         let checkout = clean_checkout(&repo, &default).await?;
         let tip = local_commit(&repo, &default).await?;

@@ -2,6 +2,7 @@
 //! acknowledged as merged.
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
+use shoal_refs::CommitId;
 
 use crate::forge::items::reference::{ItemInput, ItemRef};
 
@@ -16,10 +17,10 @@ pub struct Registration {
 pub enum RegistrationKind {
     Watch {
         urls: Vec<ItemRef>,
-        merged_head: Option<String>,
+        merged_head: Option<CommitId>,
     },
     /// Manual acknowledgement is tied to exactly this commit.
-    Acknowledgement { head: String },
+    Acknowledgement { head: CommitId },
 }
 
 /// Preserve legacy single-watch records while extending watch sets and completion.
@@ -29,8 +30,8 @@ struct RegistrationRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     urls: Option<Vec<ItemRef>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    merged_head: Option<String>,
-    head: Option<String>,
+    merged_head: Option<CommitId>,
+    head: Option<CommitId>,
     error: Option<String>,
 }
 

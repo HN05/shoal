@@ -209,7 +209,7 @@ async fn a_reopened_workspace_keeps_its_priority_unless_one_is_asked_for() {
     let reopened = manager
         .start_workspace(
             (&repo.id).into(),
-            opening(WorkspaceStart::Branch(branch), None, None),
+            opening(WorkspaceStart::Branch(branch.into()), None, None),
             bare(),
             Some(&caller),
         )

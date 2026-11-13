@@ -54,7 +54,9 @@ impl Manager {
         // and a new one takes the name every new branch is allocated, its
         // directory named after the branch asked for.
         let (name, branch) = match &source {
-            WorkspaceSource::Existing { branch, .. } => (branch.name.clone(), branch.name.clone()),
+            WorkspaceSource::Existing { branch, .. } => {
+                (branch.name.to_string(), branch.name.clone())
+            }
             WorkspaceSource::New { .. } => {
                 (branch.clone(), self.available_branch(&repo, &branch).await?)
             }
@@ -121,7 +123,7 @@ impl Manager {
                     let remote = (existing.remote.as_ref())
                         .map(|remote| format!("{remote}/{}", existing.name));
                     [
-                        Some(existing.name.clone()),
+                        Some(existing.name.to_string()),
                         remote,
                         Some(existing.selector()),
                     ]

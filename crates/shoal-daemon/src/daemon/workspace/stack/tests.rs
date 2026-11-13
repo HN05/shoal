@@ -37,7 +37,7 @@ async fn creation_infers_the_base_and_removal_moves_stacked_workspaces_down() {
     let lower = create("lower", None).await;
     let middle = create("middle", Some("lower")).await;
     let upper = create("upper", Some("refs/heads/middle")).await;
-    let commit = create("commit", Some(&lower.base_commit.clone().unwrap())).await;
+    let commit = create("commit", Some(lower.base_commit.clone().unwrap().as_str())).await;
     assert_eq!(middle.base_workspace, Some(reference(&lower)));
     assert_eq!(upper.base_workspace, Some(reference(&middle)));
     assert_eq!(lower.base_workspace, None);

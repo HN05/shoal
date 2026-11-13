@@ -245,7 +245,7 @@ impl Manager {
         files: &Files,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Result<(Agent, Ended)> {
-        self.prepare_checkout(workspace, commits.head.as_str(), files)
+        self.prepare_checkout(workspace, &commits.head, files)
             .await?;
         let run = Run {
             runs: &self.oneshot_runs,
@@ -285,7 +285,7 @@ impl Manager {
     async fn prepare_checkout(
         &self,
         workspace: &Workspace,
-        head: &str,
+        head: &CommitId,
         files: &Files,
     ) -> Result<()> {
         let repository = self.repository(&workspace.repository_id).await?;
@@ -294,7 +294,7 @@ impl Manager {
         reviewer::write_schema(files)?;
         std::fs::write(files.repository(), workspace.repository_id.as_str())
             .with_context(|| format!("write {}", files.repository().display()))?;
-        crate::git::detached::add(&repository.path, &files.checkout(), head).await
+        crate::git::detached::add(&repository.path, &files.checkout(), head.as_str()).await
     }
 
     /// One reviewer's attempt at `run`: agent `agent` with `model`.
@@ -371,7 +371,11 @@ impl Manager {
             (settings.rules.get(crate::config::modes::REVIEW_RULE)).map(|rule| rule.text.as_str()),
             &templates::ReviewFields {
                 workspace: workspace.directory_name(),
-                branch: workspace.branch.as_deref().unwrap_or_default(),
+                branch: workspace
+                    .branch
+                    .as_ref()
+                    .map(BranchName::as_str)
+                    .unwrap_or_default(),
                 path: &checkout.to_string_lossy(),
                 base: commits.base.as_str(),
             },
@@ -432,10 +436,7 @@ impl Manager {
                     .diff_base(&SpaceSelector::id(&workspace.id))
                     .await?
                     .commit;
-                Ok(Commits {
-                    head: head.into(),
-                    base,
-                })
+                Ok(Commits { head, base })
             }
             ReviewTarget::Pr { head, base, .. } => {
                 let base_ref = crate::git::remote_ref("origin", base.as_str());
@@ -457,7 +458,7 @@ impl Manager {
     /// whatever was committed on top of it there since.
     async fn pull_review_head(&self, workspace: &Workspace, head: &BranchName) -> Result<String> {
         if let Some(at) = &workspace.at {
-            return Ok(at.commit.clone());
+            return Ok(at.commit.clone().into());
         }
         let head_ref = crate::git::remote_ref("origin", head.as_str());
         crate::git::resolve_commit(&workspace.path, &head_ref, crate::git::run)

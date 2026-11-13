@@ -50,8 +50,7 @@ pub(super) async fn settle(
     taken.extend(
         workspaces
             .into_iter()
-            .filter_map(|workspace| workspace.branch)
-            .map(BranchName::from),
+            .filter_map(|workspace| workspace.branch),
     );
     ensure!(
         git::repo::allocate_branch(&name, &taken) == name,
@@ -90,7 +89,8 @@ fn on_branch<'a>(
     remote: Option<&(String, BranchName)>,
 ) -> Option<&'a Workspace> {
     let local = remote.map_or(name, |(_, branch)| branch.as_str());
-    (workspaces.iter()).find(|workspace| workspace.branch.as_deref() == Some(local))
+    (workspaces.iter())
+        .find(|workspace| workspace.branch.as_ref().map(BranchName::as_str) == Some(local))
 }
 
 /// The remote and branch `name` names in `repo`, if it names a remote one,

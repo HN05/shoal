@@ -430,7 +430,7 @@ pub(crate) fn workspaces(
 pub(crate) fn finished_at(
     db: &Connection,
     workspace_id: &SpaceId,
-    head: &str,
+    head: &CommitId,
 ) -> Result<Option<Review>> {
     let id: Option<ReviewId> = db.query_row(
         "SELECT MAX(id) FROM reviews WHERE workspace_id=?1 AND head=?2 AND state=?3",

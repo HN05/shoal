@@ -178,7 +178,7 @@ impl AddPlan {
         Ok(Self {
             repository: (&workspace.repository_id).into(),
             creation: Creation {
-                existing: workspace.branch.clone(),
+                existing: workspace.branch.clone().map(String::from),
                 ..Default::default()
             },
             place_name: None,

@@ -5,6 +5,7 @@
 //! for each file its commit left unchanged, so mtime-based build tools rebuild
 //! only what the branch changed.
 use crate::client::repository_ids::RepositoryId;
+use shoal_refs::CommitId;
 use std::{
     collections::HashSet,
     fs,
@@ -197,7 +198,7 @@ impl Layout {
 /// cloned and the modification time of every tracked file the build saw.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Snapshot {
-    pub commit: String,
+    pub commit: CommitId,
     /// Identifies the effective settings the outputs were built with.
     pub settings: String,
     paths: Vec<String>,
@@ -428,7 +429,7 @@ impl Staged {
         layout.ensure_owned()?;
         let staging = layout.staging();
         let snapshot = Snapshot {
-            commit,
+            commit: commit.into(),
             settings,
             paths: self.paths,
             times: modification_times(&layout.worktree(), files)?,

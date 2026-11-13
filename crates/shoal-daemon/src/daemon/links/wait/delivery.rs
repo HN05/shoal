@@ -190,7 +190,13 @@ impl Manager {
                 .await?
                 .into_iter()
                 .map(|url| url.to_string())
-                .chain(child.branch.clone().filter(|_| kind.is_none()))
+                .chain(
+                    child
+                        .branch
+                        .clone()
+                        .filter(|_| kind.is_none())
+                        .map(String::from),
+                )
                 .collect::<Vec<_>>();
             let pending = self.pending_activity(&child.id, &keys).await?;
             updates.extend(pending.into_iter().map(|mut update| {
@@ -211,7 +217,7 @@ impl Manager {
         let keys = items
             .into_iter()
             .map(|url| url.to_string())
-            .chain(workspace.branch)
+            .chain(workspace.branch.map(String::from))
             .collect::<Vec<_>>();
         self.pending_activity(&workspace.id, &keys).await
     }
