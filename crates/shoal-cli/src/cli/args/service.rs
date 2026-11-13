@@ -150,8 +150,9 @@ pub enum DaemonCommand {
     },
 }
 
-/// Whether stopping the daemon waits for work it runs itself, such as
-/// workspace setup and removal, which its exit would cut off.
+// Whether stopping the daemon waits for work it runs itself, such as
+// workspace setup and removal, which its exit would cut off. A doc comment
+// here would replace the description of the commands that flatten it.
 #[derive(Debug, Args)]
 pub struct ExitWait {
     /// Refuse instead of waiting when such work runs.
