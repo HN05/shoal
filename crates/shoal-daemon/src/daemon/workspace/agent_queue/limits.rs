@@ -207,12 +207,20 @@ pub(crate) fn admit(
             continue;
         }
         let used = used.entry(entry.repository.as_str()).or_default();
-        if let Some(held) = full_limit(limits, &entry.repository, total, *used, own) {
+        // A one-shot run, such as a review, holds no agent slot, so of the
+        // fixed limits only the disk's applies to it.
+        let held = match entry.work {
+            Work::OneShot { .. } => full_disk(limits, total),
+            _ => full_limit(limits, &entry.repository, total, *used, own),
+        };
+        if let Some(held) = held {
             admission.hold(entry, Some(held));
             continue;
         }
-        *used += 1 - own;
-        total += 1 - own;
+        if !matches!(entry.work, Work::OneShot { .. }) {
+            *used += 1 - own;
+            total += 1 - own;
+        }
         started = true;
         // Each healthy interval restarts one stopped agent or one-shot run.
         recovered &= own == 0 && entry.work != Work::OneShot { after_stop: true };
@@ -228,6 +236,11 @@ fn light_hold(limits: &Limits, total: usize) -> Option<HeldBy> {
     if let Some(capacity::Room::Held(held)) = limits.room {
         return Some(held);
     }
+    full_disk(limits, total)
+}
+
+/// The disk limit a start beside the `total` slots used would exceed.
+fn full_disk(limits: &Limits, total: usize) -> Option<HeldBy> {
     let full = limits.disk.is_some_and(|limit| total >= limit as usize);
     full.then_some(HeldBy::Disk)
 }
@@ -322,10 +335,16 @@ impl Manager {
         let overload = &config.machine.overload;
         let global = config.machine.max_agents;
         let max_jobs = config.machine.max_jobs;
+        // A one-shot run holds no slot, but uses the machine's memory.
+        let oneshots = self.agent_queue.admitted_oneshots().into_iter();
         let activities: Vec<Activity> = slots
             .iter()
             .map(|slot| slot.activity)
             .chain(jobs.iter().copied())
+            .chain(oneshots.map(|(_, held)| Activity::Running {
+                age: held,
+                memory: None,
+            }))
             .collect();
         let measured = match [global, max_jobs].contains(&RunLimit::Dynamic) {
             true => Some(self.measure(overload, &activities).await?),

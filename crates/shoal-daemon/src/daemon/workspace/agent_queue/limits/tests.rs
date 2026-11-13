@@ -430,3 +430,27 @@ fn a_light_agent_needs_no_memory_room_but_waits_out_critical_readings_and_low_di
     assert!(admitted(&low_disk(2)));
     assert!(!admitted(&low_disk(1)));
 }
+
+#[test]
+fn a_oneshot_run_holds_no_slot_but_waits_for_memory_room_and_low_disk() {
+    let review = [Waiting {
+        id: "review".into(),
+        repository: "a".into(),
+        work: Work::OneShot { after_stop: false },
+        light: false,
+    }];
+    let admitted = |limits: &Limits| !admit(&["a".into()], &review, limits, false).is_empty();
+    // The machine's and the repository's one slot is taken.
+    assert!(admitted(&limits(Some(1), &[("a", Some(1))])));
+    let room = |room| Limits {
+        room: free(room),
+        ..limits(None, &[])
+    };
+    assert!(!admitted(&room(GIB)));
+    assert!(admitted(&room(3 * GIB)));
+    let low_disk = Limits {
+        disk: Some(1),
+        ..limits(Some(2), &[])
+    };
+    assert!(!admitted(&low_disk));
+}

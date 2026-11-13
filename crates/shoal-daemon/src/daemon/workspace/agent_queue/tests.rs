@@ -1415,7 +1415,7 @@ async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
 }
 
 #[tokio::test]
-async fn a_oneshot_run_ranks_with_its_workspace_and_holds_its_slot() {
+async fn a_oneshot_run_starts_beside_the_agents_without_a_slot() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
@@ -1424,8 +1424,6 @@ async fn a_oneshot_run_ranks_with_its_workspace_and_holds_its_slot() {
         .create_workspace(&repo.id, "first".into(), None, None, None)
         .await
         .unwrap();
-    // The launch has no space, so it started no earlier than the workspace
-    // whose review ranks with it.
     let launch = add(&manager, &repo, "launch").await.entry.unwrap();
     let mut review =
         (manager.agent_queue).request_oneshot(&repo.id, serving(&workspace.id), false, || {});
@@ -1443,19 +1441,13 @@ async fn a_oneshot_run_ranks_with_its_workspace_and_holds_its_slot() {
         .await
         .unwrap();
 
-    // The one free slot goes to the run queued after the launch, which ranks
-    // with its older workspace.
+    // The run starts, and holds no slot, so the launch takes the one free
+    // slot beside it.
     manager.dispatch_queue().await.unwrap();
     tokio::time::timeout(Duration::from_secs(5), review.admitted())
         .await
         .unwrap();
-    assert!(!started(&launch.id));
-    manager.dispatch_queue().await.unwrap();
-    assert!(!started(&launch.id), "the run holds its slot");
-
-    drop(review);
-    manager.dispatch_queue().await.unwrap();
-    assert!(started(&launch.id));
+    assert!(started(&launch.id), "the run holds no slot");
 }
 
 /// What a one-shot run of `space`'s work serves, queued after everything.

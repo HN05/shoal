@@ -468,7 +468,9 @@ instead of the PR delivery guidance below.
   agents, executions awaiting reattachment, resume records and starting queue
   entries, excluding done workspaces and agents of a `light` mode, never from a
   separate counter. A light agent starts past the agent limits and memory room,
-  but not past critical or failed readings or low disk. A starting
+  but not past critical or failed readings or low disk. A review holds no
+  slot, but its memory counts and it waits for room and disk as a start does.
+  A starting
   entry keeps its slot only while its launch holds it or within the grace
   period, until its agent registers; queued entries create no worktree.
   A launch with blockers queues without a limit and starts only once each

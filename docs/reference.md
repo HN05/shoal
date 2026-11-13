@@ -963,12 +963,13 @@ no setup runs. The checkout's files are read-only whatever the reviewer's
 settings allow, and Shoal adds no trust entry for it; it is removed when the
 review ends. A checkout that cannot be removed stays until `shoal daemon restart`,
 and the repository cannot be moved until then; one whose reviewer's processes
-cannot be proven stopped also keeps its agent slot. The daemon reads the workspace's configuration only once its
+cannot be proven stopped also keeps counting toward the memory agents start in. The daemon reads the workspace's configuration only once its
 worktree verifies as the workspace's. A queued review takes the
 workspace's HEAD when it starts. A workspace has at most one queued or running
 review: running the command again returns the queued one, and is refused while one
-runs. A review waits in the [agent queue](#agent-queue) for a slot, ranked
-with the workspace it reviews, and holds it while its reviewer runs; `shoal queue` does not list it. A
+runs. A review waits in the [agent queue](#agent-queue), ranked
+with the workspace it reviews, for the memory and disk an agent's start needs,
+but takes no agent slot; `shoal queue` does not list it. A
 chat has no changes of its own; see [chat reviews](#chat-reviews) below.
 
 The reviewer is `--agent`, else [`[review] agent`](config.md#reviews), else `agent.default`, else one you
@@ -1951,8 +1952,9 @@ done, its restore waits in the queue or its mode is
 limits and whatever memory is in use, though critical or missing readings and
 low disk hold it as they hold every start; `shoal done`, the agent's exit,
 `resume --discard` and removal free it.
-A [local review](#local-reviews)'s reviewer also uses a slot while it runs; a
-queued review ranks with the workspace it reviews.
+A [local review](#local-reviews)'s reviewer uses no slot, so no count limits
+reviews, but its memory counts while it runs and a queued review waits for
+room and disk as an agent's start does, ranked with the workspace it reviews.
 Overload protection stops a running reviewer before any agent, and disk
 protection stops every reviewer; the review is queued again and starts over
 once readings are healthy.

@@ -99,10 +99,10 @@ impl Manager {
     /// The used slots. Each agent in a workspace that is not done uses one
     /// while it runs, awaits reattachment or waits for resume, counted once by
     /// its execution, except the `dormant` ones whose restore waits for an
-    /// update; so does each starting launch until its agent registers, and
-    /// each admitted one-shot run until it ends. An
+    /// update; so does each starting launch until its agent registers. An
     /// admitted restore starts in its agent's slot, and one of a last
-    /// session, which holds none, as a launch. A light agent holds none.
+    /// session, which holds none, as a launch. A light agent holds none, nor
+    /// does a one-shot run such as a review.
     pub(super) async fn occupied_slots(
         &self,
         dormant: &HashSet<ExecutionId>,
@@ -164,15 +164,6 @@ impl Manager {
                     activity: starting_since(launch.seen_at),
                 });
             }
-        }
-        for (repository, held) in self.agent_queue.admitted_oneshots() {
-            slots.push(Slot {
-                repository,
-                activity: Activity::Running {
-                    age: held,
-                    memory: None,
-                },
-            });
         }
         Ok(slots)
     }

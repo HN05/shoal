@@ -1536,16 +1536,19 @@ opening does, so clients do not rebuild it.
 
 `max_agents` admission belongs to the daemon, so concurrent additions and its
 dispatcher share one count. Slots derive from what the daemon tracks: connected
-agents, executions awaiting reattachment, resume records, starting queue entries
-and admitted one-shot runs such as reviews, excluding completed workspaces.
+agents, executions awaiting reattachment, resume records and starting queue
+entries, excluding completed workspaces. A one-shot run such as a review is
+short and holds no slot, so no count limits reviews, but its memory counts
+toward dynamic admission and it waits for room and disk as a start does.
 Agents therefore count however they started. A chat's agent, which waits for
 the user, is not tracked and counts nowhere; a workspace agent of a `light`
 mode counts nowhere either: it starts at once, holds no slot and load never
 stops it, so a mode whose agents use little of the machine, such as a plan
 run in a workspace, is not held up while heavy work fills it. The built-in
-modes that start chats are light, so they stay so in a workspace. A one-shot run's slot is its
-in-memory request, which ends with the run, or with the daemon for a run whose
-processes could not be proven stopped, so no slot outlives a restart. `machine.max_agents`
+modes that start chats are light, so they stay so in a workspace. A one-shot run's
+admission is its in-memory request, which ends with the run, or with the daemon
+for a run whose processes could not be proven stopped, so none outlives a
+restart. `machine.max_agents`
 limits the machine; the repository option `agent.max_running` limits each repository,
 with a global default like any other option, so one name never means both caps.
 The machine setting defaults to `dynamic`, which
