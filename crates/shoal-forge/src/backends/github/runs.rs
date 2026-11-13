@@ -133,9 +133,13 @@ impl Runs for GitHub {
     }
 }
 
-/// The PR of `repo` a run ran for. GitHub lists the PRs whose head is the
-/// run's, which may belong to another repository.
+/// The PR of `repo` a PR event's run ran for. GitHub lists the PRs whose
+/// head commit or branch is the run's, which may belong to another
+/// repository, also for a push's run, which ran for its branch instead.
 fn pull_of(repo: &ForgeRepo, run: &Value) -> Option<PullNumber> {
+    if !run["event"].as_str()?.starts_with("pull_request") {
+        return None;
+    }
     let prefix = format!("/repos/{}/pulls/", repo.path).to_ascii_lowercase();
     run["pull_requests"]
         .as_array()?

@@ -196,13 +196,17 @@ fn runs_name_the_pr_of_their_repository_they_ran_for() -> Result<()> {
     let issue = json!({"number": 3, "issue": {"number": 3}});
     assert_eq!(pull(codeberg, forgejo("issues", issue))?, None);
     // GitHub lists the PRs whose head the run ran on, also another
-    // repository's.
-    let github = json!({"id": 12, "html_url": "https://github.com/team/repo/actions/runs/12",
-    "head_branch": "topic", "status": "in_progress", "pull_requests": [
-        {"number": 4, "url": "https://api.github.com/repos/upstream/repo/pulls/4"},
-        {"number": 9, "url": "https://api.github.com/repos/Team/Repo/pulls/9"}
-    ]});
-    assert_eq!(pull("https://github.com/team/repo", github)?, Some(9));
+    // repository's, and also for a push's run.
+    let github = |event: &str| {
+        json!({"id": 12, "html_url": "https://github.com/team/repo/actions/runs/12",
+        "head_branch": "topic", "event": event, "status": "in_progress", "pull_requests": [
+            {"number": 4, "url": "https://api.github.com/repos/upstream/repo/pulls/4"},
+            {"number": 9, "url": "https://api.github.com/repos/Team/Repo/pulls/9"}
+        ]})
+    };
+    let repo = "https://github.com/team/repo";
+    assert_eq!(pull(repo, github("pull_request"))?, Some(9));
+    assert_eq!(pull(repo, github("push"))?, None);
     Ok(())
 }
 
