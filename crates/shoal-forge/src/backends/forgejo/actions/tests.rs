@@ -54,6 +54,12 @@ fn web_job_locations_are_repository_bound_and_use_indices() {
         RunId::new(9331)
     );
     assert!(run_id(&runs, RunNumber::new(2765), Some("earlier")).is_err());
+    // A pull_request_target run ran on the base branch's commit.
+    let runs = json!({"workflow_runs": [{
+        "id": 9331, "index_in_repo": 2765, "commit_sha": "base", "event": "pull_request",
+        "trigger_event": "pull_request_target", "event_payload": payload.to_string(),
+    }]});
+    assert!(run_id(&runs, RunNumber::new(2765), Some("head")).is_err());
     let jobs = json!([{"id": 18344, "run_id": 9331, "status": "success"}, {"id": 18345, "run_id": 9331, "status": "failure", "task_id": 9850}]);
     assert_eq!(
         job_id(&jobs, 1, RunId::new(9331)).unwrap(),

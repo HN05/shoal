@@ -149,12 +149,22 @@ pub(super) fn pull_of(run: &Value) -> Option<PullNumber> {
         .map(PullNumber::new)
 }
 
-/// The commit a run ran on. A PR run's is the head its payload names,
-/// where Forgejo posts its statuses: its `commit_sha` can name an earlier
-/// head when the PR's branch is force-pushed.
+/// The commit a run ran on. A run of a PR's head ran on the head its
+/// payload names, where Forgejo posts its statuses: its `commit_sha` can
+/// name an earlier head when the PR's branch is force-pushed.
 pub(super) fn commit_of(run: &Value) -> Option<String> {
-    let head = pull_payload(run).and_then(|payload| text(&payload["pull_request"]["head"]["sha"]));
+    let head = (pull_payload(run).filter(|_| !at_base(run)))
+        .and_then(|payload| text(&payload["pull_request"]["head"]["sha"]));
     head.or_else(|| text(&run["commit_sha"]))
+}
+
+/// Whether a PR event's run ran on the base branch's commit, as a
+/// `pull_request_target` run does, which Forgejo records with the
+/// `pull_request` event.
+pub(super) fn at_base(run: &Value) -> bool {
+    [&run["event"], &run["trigger_event"]]
+        .into_iter()
+        .any(|event| event == "pull_request_target")
 }
 
 /// The event payload of a run a PR event started.
