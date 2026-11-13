@@ -1618,8 +1618,9 @@ critical path, so a machine with room finishes sooner, and `cache` restores
 whose prompt cache is still warm, so an agent continues before its cached
 context costs a full read again, the one stopped last first, since its cache
 is surest to be warm when its agent starts; the others then follow
-`balanced`. An entry that has waited an hour goes ahead of what a schedule
-puts first, so no schedule starves work within its priority. Limits and
+`balanced`. An entry that has waited an hour ranks as if it led as well as
+any other, so no schedule passes it over or starves work within its
+priority, and its tier orders it among them as under `balanced`. Limits and
 admission stay with `max_agents`, `max_jobs` and `load`, so a schedule changes
 only the order. Within a priority, its tiers are `finishing` (a space with an open PR or a ready mark, CI
 jobs on PRs and the default branch), `started` (restores of agents that have

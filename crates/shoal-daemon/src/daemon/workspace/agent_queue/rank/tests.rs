@@ -565,3 +565,18 @@ fn a_schedule_passes_over_no_entry_that_waited_as_long_as_rises_a_tier() {
     snapshot.entries[1].queued_at = at(NOW - RISE_AFTER.as_secs() as i64);
     assert_eq!(order(&snapshot), ["alone", "awaited"]);
 }
+
+#[test]
+fn an_overdue_entry_ties_with_the_top_lead_and_keeps_its_tier_order() {
+    let mut snapshot = snapshot();
+    for (id, tier, created) in [("finishing", Tier::Finishing, 1), ("new", Tier::New, 2)] {
+        space(&mut snapshot, id, tier, created);
+    }
+    entry(&mut snapshot, "finishing", restore("finishing"));
+    entry(&mut snapshot, "new", launch(Some("new")));
+    snapshot.entries[1].queued_at = at(NOW - RISE_AFTER.as_secs() as i64);
+    for schedule in [Schedule::Balanced, Schedule::Speed, Schedule::Cache] {
+        snapshot.schedule = schedule;
+        assert_eq!(order(&snapshot), ["finishing", "new"], "{schedule:?}");
+    }
+}

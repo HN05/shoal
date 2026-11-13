@@ -140,6 +140,7 @@ pub(crate) fn rank(snapshot: &Snapshot) -> Vec<Ranked> {
     let mut placed: Vec<Placed> = (snapshot.entries.iter())
         .map(|entry| place(entry, &standing, &chains, snapshot))
         .collect();
+    lead_overdue(&mut placed);
     placed.sort_by(Placed::order);
     placed
         .into_iter()
@@ -345,6 +346,8 @@ struct Placed {
     rank: QueueRank,
     /// What the schedule puts first within a priority, higher first.
     lead: Lead,
+    /// Whether it has waited as long as rises a tier.
+    overdue: bool,
     steps: Steps,
     started: UnixTime,
     /// A CI job or review, which goes ahead of an agent of its space.
@@ -389,6 +392,7 @@ fn place(
         id: entry.id.clone(),
         rank,
         lead: lead(entry, chains, snapshot),
+        overdue: snapshot.now.duration_since(entry.queued_at) >= RISE_AFTER,
         steps: space.map(|space| space.steps).unwrap_or_default(),
         started: space.map_or(entry.queued_at, |space| space.created_at),
         serves: matches!(entry.work, Work::Job { .. } | Work::Review { .. }),
@@ -405,9 +409,18 @@ enum Lead {
     None,
     Chain(usize),
     Cache(UnixTime),
-    /// It has waited as long as rises a tier, so no schedule passes it over
-    /// any longer, and nothing starves within its priority.
-    Overdue,
+}
+
+/// Give each overdue entry the highest lead any entry has, so that no
+/// schedule passes it over and nothing starves within its priority, while
+/// the tier still orders it among the entries it ties with.
+fn lead_overdue(placed: &mut [Placed]) {
+    let Some(top) = placed.iter().map(|placed| placed.lead).max() else {
+        return;
+    };
+    for placed in placed.iter_mut().filter(|placed| placed.overdue) {
+        placed.lead = top;
+    }
 }
 
 /// The chains of work waiting on each node, which only `speed` reads.
@@ -421,10 +434,8 @@ fn schedule_chains(snapshot: &Snapshot) -> HashMap<Node, usize> {
 /// What `entry` leads with under the snapshot's schedule, from the `chains`
 /// of work waiting on each node.
 fn lead(entry: &Entry, chains: &HashMap<Node, usize>, snapshot: &Snapshot) -> Lead {
-    let overdue = snapshot.now.duration_since(entry.queued_at) >= RISE_AFTER;
     match snapshot.schedule {
         Schedule::Balanced => Lead::None,
-        _ if overdue => Lead::Overdue,
         Schedule::Speed => Lead::Chain(chain_behind(entry, chains)),
         Schedule::Cache => match (&entry.work, entry.prompt_cache_until) {
             (Work::Restore { .. }, Some(until)) if until > snapshot.now => Lead::Cache(until),
