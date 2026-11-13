@@ -132,11 +132,13 @@ fn dormant_restores(
 
 impl Manager {
     /// End abandoned starts and restores and those resolved another way,
-    /// with the restarts they started, queue the restores stopped agents
-    /// request, then start the waiting entries that fit.
+    /// with the restarts they started, return the starts whose setup failed
+    /// to wait for it, queue the restores stopped agents request, then start
+    /// the waiting entries that fit.
     pub(crate) async fn dispatch_queue(&self) -> Result<()> {
         let _gate = self.agent_queue.lock_admission().await;
         self.expire_starting_entries().await?;
+        self.return_failed_starts().await?;
         self.expire_orphaned_restores().await?;
         self.forget_resolved_restores().await?;
         self.fail_lost_renewals().await?;

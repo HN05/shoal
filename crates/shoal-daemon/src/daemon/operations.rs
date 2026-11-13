@@ -9,7 +9,7 @@ mod worker;
 use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_ids::SpaceId;
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     sync::{Arc, Mutex, PoisonError},
     time::Duration,
 };
@@ -78,6 +78,15 @@ impl Operations {
     fn get(&self, id: &str) -> Option<Arc<Entry>> {
         let entries = self.entries.lock().unwrap_or_else(PoisonError::into_inner);
         entries.get(id).cloned()
+    }
+
+    /// The workspaces an operation works in until its worker ends.
+    pub(crate) fn working_in(&self) -> HashSet<SpaceId> {
+        let entries = self.entries.lock().unwrap_or_else(PoisonError::into_inner);
+        (entries.values())
+            .filter(|entry| entry.running())
+            .map(|entry| entry.workspace.clone())
+            .collect()
     }
 
     /// Forget operation `id`; followers that hold it keep reading it.

@@ -216,6 +216,21 @@ impl AddPlan {
             && names_branch
     }
 
+    /// Open `workspace` on `branch`, which this plan's start opened, instead
+    /// of what its creation names, keeping the PR it links, as a launch
+    /// waiting for the workspace's retried setup does.
+    pub fn reopen(&mut self, workspace: &SpaceId, branch: String) {
+        self.creation = Creation {
+            existing: Some(branch),
+            pr: self.creation.pr.take(),
+            ..Default::default()
+        };
+        self.workspace = Some(workspace.clone());
+        self.queue_entry = None;
+        self.chat = None;
+        self.parent = None;
+    }
+
     /// The agent's name, when the addition starts one.
     pub fn agent_name(&self) -> Option<Agent> {
         self.agent.agent.clone()

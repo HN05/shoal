@@ -978,7 +978,9 @@ started offers only retry or keep. JSON callers get a nonzero exit.
 The agent a start launches in a workspace whose setup fails waits in the
 queue for that setup instead of holding its slot, queued by the
 preparation, which also carries the agent a CLI would run itself, so no
-follower is needed. A persisted
+follower is needed. A start whose preparation ended without queuing it, such
+as when its worker died, goes back to the queue as a new entry, which no hold
+on the old one keeps back, with its plan opening the workspace. A persisted
 dependency that only a preparation getting past its post-setup hook releases
 holds it, so a retried setup starts it without the user restating its mode,
 task or permissions, and a failed hook keeps it waiting. `restore` changes its

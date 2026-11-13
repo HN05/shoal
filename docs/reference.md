@@ -3171,7 +3171,8 @@ inspection (default); a setup that never started, which the daemon refused,
 offers only retry or keep. JSON/noninteractive mode returns nonzero, keeps the
 workspace, and sends setup output to stderr. The agent `shoal start` or an app
 launches there waits in the [agent queue](#agent-queue) for the setup,
-holding no slot; once a retried or ignored setup gets past the post-setup
+holding no slot, even when the process that prepared the workspace ended
+before it could queue the agent; `shoal queue cancel` removes it. Once a retried or ignored setup gets past the post-setup
 hook, from the prompt, `shoal setup` or `shoal restore <workspace>`, the queue
 starts it with its mode, task and permissions, or `shoal restore` does as its
 options say, linking the PR a start from a PR names, and a failed hook keeps
