@@ -3757,16 +3757,20 @@ on a terminal opens beside it; with `--restore`, without a terminal, or among
 several files, it starts in a background place of the host that starts queued
 agents, which the report names. Workspace processes can neither export nor import.
 
-`shoal move ssh <host> [space]...`, or `--repo <repository> --all`, runs that
-pipe for each space with `ssh <host> shoal --json move import --restore`, after
+`shoal move ssh <host> [space]...`, or `--repo <repository> --all`, moves each
+space with `ssh <host> shoal --json move import --restore`, after
 `ssh <host> shoal repo ls` shows Shoal answers there; when it does not, nothing
 ends. `--shoal <path>` names the program there when the remote shell's `PATH`
 lacks it, and `--no-restore` leaves the workspaces' agents stopped; chats still
 start in the background there. It checks the spaces as a batch export does and
-asks once before ending them. A workspace whose import fails stays removed here
-with the other machine's error, and `shoal restore` opens it again, unless
-that machine recorded it; a chat's file stays in `<state>/unmoved`, and the error
-names the `shoal move import` that continues the chat here.
+asks once before ending them. Each space then moves on its own, after the
+spaces below it: Shoal stops its agents, saving their sessions, exports it
+while it stays here, and imports it there, and only once that import succeeds
+ends it here through the export's removal. When the export or the import
+fails, the space stays here, its stopped agents' restores are queued, and the
+report gives the other machine's error. A workspace whose HEAD or unsaved files
+changed here since its export, or with a space below it that stayed, stays
+here too, and the report says it now exists on both machines.
 `--keep`, with `--checkpoint N` for one workspace, copies the spaces instead, as
 `shoal move export --keep` does, and imports each copy there as a new space,
 leaving the space running here; it asks nothing, and a space it cannot copy or

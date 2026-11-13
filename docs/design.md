@@ -3239,11 +3239,15 @@ continues there, and the user attends a chat, so export asks first; a chat whose
 agent reported no session refuses before stopping it, since nothing could continue
 it, and so does one with spaces below it, which its removal would take. Import starts the chat through the chat launch, in its mode, with the agent's resume
 arguments, under a free name since its own may be taken there, in the background
-when no terminal attends the import, as queued agents start. A chat keeps no
-record once it is removed, so a failed `move ssh` keeps its package where a workspace
-keeps its removal record. Export and import move work
-through any byte stream, and `move ssh` runs that pipe over SSH as a shorthand
-after checking Shoal answers there; Shoal keeps no registry of machines, and
+when no terminal attends the import, as queued agents start. Export and import
+move work through any byte stream, where the user runs both halves and chooses
+their order. `move ssh` runs both over SSH after checking Shoal answers there,
+and ends a space here only once its import there succeeded, since a chat keeps
+no record once it ends: it stops the space's agents, saving their sessions,
+exports it while it stays, and on a failed import queues their restores here,
+keeping no file; a workspace that changed here since its export stays,
+existing on both machines, rather than losing the newer work. Shoal keeps no
+registry of machines, and
 deciding when and where to move work belongs to a caller outside the core.
 A branch is merged when the local default branch or its remote-tracking branch
 records HEAD's tree, contains HEAD, takes HEAD's merge without changing its tree

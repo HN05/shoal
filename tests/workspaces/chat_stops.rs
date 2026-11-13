@@ -190,7 +190,7 @@ fn stops_and_resumes_the_chats_below(fixture: &Fixture, parent: &Parent) {
 /// Start the chat `name` with `shoal start --mode chat --here`, below `parent`
 /// when given, in a terminal with the environment `env`, and run `stop` once
 /// its agent runs, which must end it.
-fn run_chat_until_stopped(
+pub(super) fn run_chat_until_stopped(
     fixture: &Fixture,
     name: &str,
     parent: Option<&str>,

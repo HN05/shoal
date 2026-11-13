@@ -295,17 +295,18 @@ fn two_machines(config: Option<&str>) -> (Fixture, Fixture) {
     (here, there)
 }
 
-#[test]
-fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
-    let config = format!("{UNLIMITED_AGENTS}[agents.claude]\ncommand = ['sh', './agent.sh']\n");
-    let (here, there) = two_machines(Some(&config));
-    // Queued restores start in detached zmx sessions.
-    install_test_script(there.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+/// The config of machines whose agent runs `agent.sh` in its workspace.
+fn agent_config() -> String {
+    format!("{UNLIMITED_AGENTS}[agents.claude]\ncommand = ['sh', './agent.sh']\n")
+}
 
-    let workspace = here.add("handed");
+/// Start the agent of a new workspace `handed` of `fixture` in the
+/// terminal, returning its process and the workspace's path. The agent runs
+/// until it is stopped; started again, it records that and runs until the
+/// test releases it, or for at most two minutes.
+fn start_handed_agent(fixture: &Fixture) -> (std::process::Child, PathBuf) {
+    let workspace = fixture.add("handed");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
-    // The agent runs until it is stopped; started again, it records that and
-    // runs until the test releases it, or for at most two minutes.
     fs::write(
         path.join("agent.sh"),
         "if [ -e agent-started ]; then touch agent-restarted; \
@@ -314,12 +315,12 @@ fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
          trap 'exit 0' TERM\ntouch agent-started\nwhile :; do sleep 1; done\n",
     )
     .unwrap();
-    let agent = here
+    let agent = fixture
         .command()
         .args([
             "start",
             "--in",
-            &here.id("handed"),
+            &fixture.id("handed"),
             "--here",
             "--agent",
             "claude",
@@ -330,7 +331,16 @@ fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
         .spawn()
         .unwrap();
     wait_until("agent started", || path.join("agent-started").exists());
-    wait_registered_execution(&here, "handed");
+    wait_registered_execution(fixture, "handed");
+    (agent, path)
+}
+
+#[test]
+fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
+    let (here, there) = two_machines(Some(&agent_config()));
+    // Queued restores start in detached zmx sessions.
+    install_test_script(there.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    let (agent, path) = start_handed_agent(&here);
 
     // A machine ssh cannot reach removes nothing.
     let shoal = support::shoal_binary();
@@ -363,6 +373,102 @@ fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
     });
     fs::write(moved_path.join("release"), "").unwrap();
     wait_zmx_sessions_ended(there.root.path());
+}
+
+/// A machine `here` with `config`, whose repository has no origin, so an
+/// import on the second machine its `ssh mini` reaches fails.
+fn failing_machines(config: Option<&str>) -> (Fixture, Fixture) {
+    let (here, there) = (Fixture::with_config(config), Fixture::new());
+    install_ssh_to(&here, &there);
+    (here, there)
+}
+
+/// Whether `fixture`'s state directory keeps packages of failed moves,
+/// which a failed move no longer leaves.
+fn keeps_unmoved_packages(fixture: &Fixture) -> bool {
+    fixture.root.path().join("state/unmoved").exists()
+}
+
+#[test]
+fn a_failed_move_leaves_the_workspace_here_and_restarts_its_agent() {
+    let (here, _there) = failing_machines(Some(&agent_config()));
+    // Queued restores start in detached zmx sessions.
+    install_test_script(here.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    let (agent, path) = start_handed_agent(&here);
+
+    let shoal = support::shoal_binary();
+    let failed = here.run(&[
+        "--json",
+        "move",
+        "ssh",
+        "mini",
+        &here.id("handed"),
+        "--shoal",
+        shoal,
+    ]);
+    assert!(!failed.status.success(), "{failed:?}");
+    let report: Value = serde_json::from_slice(&failed.stdout).unwrap();
+    assert_eq!(report["moved"], serde_json::json!([]), "{report}");
+    assert!(agent.wait_with_output().unwrap().status.success());
+    wait_until("agent restarted here", || {
+        path.join("agent-restarted").exists()
+    });
+    assert_eq!(here.ok(&["list"])[0]["name"], "handed");
+    assert!(!keeps_unmoved_packages(&here));
+    fs::write(path.join("release"), "").unwrap();
+    wait_zmx_sessions_ended(here.root.path());
+}
+
+#[test]
+fn a_failed_move_leaves_the_chat_here_and_restores_its_agent() {
+    let here = super::restarts::parent_fixture();
+    let there = Fixture::new();
+    install_ssh_to(&here, &there);
+    let home = here.root.path().to_owned();
+
+    super::chat_stops::run_chat_until_stopped(&here, "talk", None, &[], || {
+        let shoal = support::shoal_binary();
+        let talk = here.id("talk");
+        let failed = here.run(&["move", "ssh", "mini", &talk, "--shoal", shoal, "--yes"]);
+        assert!(!failed.status.success(), "{failed:?}");
+    });
+    wait_until("chat restored", || home.join("chat-restored").exists());
+    assert!(!keeps_unmoved_packages(&here));
+    here.ok(&["rm", &here.id("talk"), "--yes"]);
+    wait_zmx_sessions_ended(&home);
+}
+
+#[test]
+fn a_workspace_changed_after_its_export_stays_here_too() {
+    let (here, there) = two_machines(None);
+    let workspace = here.add("changing");
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    // The import there runs once a commit here changed the workspace.
+    let bin = here.root.path().join("bin");
+    fs::rename(bin.join("ssh"), bin.join("ssh-mini")).unwrap();
+    install_test_script(
+        bin.join("ssh"),
+        format!(
+            "#!/bin/sh\n\
+             case \"$*\" in *'move import'*) \
+             git -C '{}' -c user.name=t -c user.email=t@t commit -q --allow-empty -m newer || exit 3;; \
+             esac\n\
+             exec '{}' \"$@\"\n",
+            path.display(),
+            bin.join("ssh-mini").display()
+        ),
+    );
+
+    let shoal = support::shoal_binary();
+    let changing = here.id("changing");
+    let moved = here.run(&["--json", "move", "ssh", "mini", &changing, "--shoal", shoal]);
+    assert!(!moved.status.success(), "{moved:?}");
+    let report: Value = serde_json::from_slice(&moved.stdout).unwrap();
+    let failure = report["failed"][0].to_string();
+    assert!(failure.contains("exists here and on mini"), "{report}");
+    assert!(path.exists());
+    let listed = there.ok(&["list"]);
+    assert_eq!(listed[0]["name"], "changing", "{listed}");
 }
 
 #[test]

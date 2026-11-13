@@ -81,12 +81,6 @@ pub trait StateFiles {
         self.state().join("proposals")
     }
 
-    /// Packages of spaces `shoal move ssh` ended here whose import on the
-    /// other machine failed, kept for `shoal move import` here.
-    fn unmoved_packages(&self) -> PathBuf {
-        self.state().join("unmoved")
-    }
-
     /// The workspaces each command last acted on, which `-` selects from.
     fn recent_workspaces(&self) -> PathBuf {
         self.state().join("recent-workspaces.json")

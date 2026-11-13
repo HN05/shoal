@@ -1,19 +1,18 @@
-//! `shoal move ssh`: hand spaces to another machine's Shoal, or copies of
-//! them with `--keep`, as `shoal move export | ssh <host> shoal move import
-//! --restore` does, once `ssh` reaches Shoal there.
-use crate::paths::StateFiles;
+//! `shoal move ssh`: hand spaces to another machine's Shoal, ending them
+//! here once imported there, or copies of them with `--keep`, once `ssh`
+//! reaches Shoal there.
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail, ensure};
 use serde_json::Value;
 
 mod copy;
+mod moving;
 
-use super::export::{self, ExportDirectory, PlannedExport};
-use crate::client::output::transfer::{Imported, Moves};
+use super::export;
+use crate::client::output::transfer::Imported;
 use crate::{
-    cli::{args::transfer::SshArgs, context::Context, ui},
-    model::{Chat, PresentSpace},
+    cli::{args::transfer::SshArgs, context::Context},
     subprocess::{Run, diagnostic},
 };
 
@@ -41,39 +40,8 @@ pub(super) async fn run(ctx: &Context, args: SshArgs) -> Result<i32> {
     .await?;
     match args.keep {
         true => copy::copy_spaces(ctx, &remote, &spaces, args.checkpoint).await,
-        false => move_spaces(ctx, &remote, &spaces, args.confirmation.yes).await,
+        false => moving::move_spaces(ctx, &remote, &spaces, args.confirmation.yes).await,
     }
-}
-
-/// Move `spaces` to `remote` once each one can end here, asking once where
-/// ending them needs the user unless `yes`.
-async fn move_spaces(
-    ctx: &Context,
-    remote: &Remote,
-    spaces: &[PresentSpace],
-    yes: bool,
-) -> Result<i32> {
-    let staging = tempfile::tempdir()?;
-    let directory = ExportDirectory::create(staging.path().to_owned())?;
-    let heading = match spaces {
-        [space] => format!("Move {} to {}", space.name(), remote.host),
-        _ => format!("Move {} spaces to {}", spaces.len(), remote.host),
-    };
-    let operation = ("move", "move");
-    let planned = export::check_exports(ctx, spaces, &directory, yes, &heading, operation).await?;
-    let mut report = ui::Report::new("move");
-    for planned in planned {
-        let name = planned.name().to_owned();
-        match move_one(ctx, remote, planned).await {
-            Ok(imported) => {
-                let message = format!("Moved {name} to {}", arrived(&remote.host, &imported));
-                report.done(ctx, &message, imported)
-            }
-            Err(error) => report.failed(ctx, &name, &error),
-        }
-    }
-    let summary = summary("Moved", &remote.host, report.counts());
-    report.finish(ctx, &summary, |moved, failed| Moves { moved, failed })
 }
 
 /// The summary of a batch that `verb` names, such as `Moved`, to `host`,
@@ -113,71 +81,6 @@ fn arrived(host: &str, imported: &Imported) -> String {
         _ => message.push_str("; its agents continue there"),
     }
     message
-}
-
-/// End and export the planned space, then import it on `remote`, queueing
-/// its agents' restores or starting its chat there when it resumes them.
-async fn move_one(ctx: &Context, remote: &Remote, planned: PlannedExport) -> Result<Imported> {
-    let (name, id) = (planned.name().to_owned(), planned.id().clone());
-    let chat = planned.chat().cloned();
-    let file = planned.export(ctx).await?;
-    let error = match remote.import(&file).await {
-        Ok(imported) => return Ok(imported),
-        Err(error) => error,
-    };
-    let Some(chat) = chat else {
-        return Err(error.context(format!(
-            "{name} is removed here; shoal restore {id} opens it here again, unless {} opened it",
-            remote.host
-        )));
-    };
-    match keep_package(ctx, &id, &file) {
-        Ok(kept) => Err(error.context(format!(
-            "{name} ended here; shoal move import {} continues it here again, unless {} started it",
-            kept.display(),
-            remote.host
-        ))),
-        Err(keeping) => Err(error.context(format!(
-            "{}, unless {} started it; its package could not be kept: {keeping:#}",
-            continues_here(ctx, &chat).await,
-            remote.host
-        ))),
-    }
-}
-
-/// How `chat`, which ended here, continues here without its package.
-async fn continues_here(ctx: &Context, chat: &Chat) -> String {
-    let repositories = crate::client::repositories::list(&ctx.paths)
-        .await
-        .unwrap_or_default();
-    let repository = chat.repository_id.as_ref().map_or("", |id| {
-        repositories
-            .iter()
-            .find(|repository| repository.id == *id)
-            .map_or(id.as_str(), crate::repository::name)
-    });
-    crate::transfer::continue_chat(chat, repository)
-        .unwrap_or_else(|| format!("chat {} ended here", chat.name))
-}
-
-/// Keep the package `file` of the space `id`, whose import failed, where it
-/// outlives the staging directory, named after that ID, returning where it
-/// went.
-fn keep_package(
-    ctx: &Context,
-    id: &crate::client::space_ids::SpaceId,
-    file: &Path,
-) -> Result<std::path::PathBuf> {
-    let directory = ctx.paths.unmoved_packages();
-    std::fs::create_dir_all(&directory)
-        .with_context(|| format!("create the directory {}", directory.display()))?;
-    let kept = tempfile::Builder::new()
-        .prefix(&format!("{id}-"))
-        .suffix(".shoal")
-        .tempfile_in(&directory)?;
-    std::fs::copy(file, kept.path())?;
-    let (_, path) = kept.keep()?;
-    Ok(path)
 }
 
 /// The Shoal on another machine, which `ssh` reaches.

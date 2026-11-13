@@ -17,7 +17,7 @@ use crate::{
         ui::{self, Fallback},
     },
     model::{Chat, PresentSpace},
-    removal::{RemovalCheck, UnsavedWork},
+    removal::{RemovalCheck, RemovalResult, UnsavedWork},
     transfer::ExportedSpace,
 };
 
@@ -265,19 +265,21 @@ async fn export_checked(ctx: &Context, check: &Checked, output: &Output) -> Resu
             .await?
         }
     };
-    if let Some(error) = exported
-        .removal
-        .as_ref()
-        .and_then(|removal| removal.hook_error.as_ref())
-    {
-        eprintln!("warning: {error}");
-    }
+    warn_removal(exported.removal.as_ref());
     warn(&exported);
     Ok(exported)
 }
 
+/// Show the failure of the hook that `removal`, which ended a workspace for
+/// its export, ran.
+pub(super) fn warn_removal(removal: Option<&RemovalResult>) {
+    if let Some(error) = removal.and_then(|removal| removal.hook_error.as_ref()) {
+        eprintln!("warning: {error}");
+    }
+}
+
 /// Show what the export left out.
-fn warn(exported: &ExportedSpace) {
+pub(super) fn warn(exported: &ExportedSpace) {
     for warning in &exported.warnings {
         eprintln!("warning: {warning}");
     }
@@ -513,20 +515,22 @@ impl PlannedExport {
         self.check.id()
     }
 
-    /// The chat the export ends, which keeps no record here once it ends,
-    /// unlike a removed workspace, from which it opens again without its
-    /// package.
-    pub(super) fn chat(&self) -> Option<&Chat> {
-        match &self.check {
-            Checked::Chat(chat) => Some(chat),
-            Checked::Workspace(_) => None,
-        }
+    /// The space with what ending it would do.
+    pub(super) fn checked(&self) -> &Checked {
+        &self.check
     }
 
-    /// End the space and export it, returning the file it went to.
-    pub(super) async fn export(self, ctx: &Context) -> Result<PathBuf> {
-        export_checked(ctx, &self.check, &self.output).await?;
-        Ok(self.output.file())
+    /// The file its export goes to.
+    pub(super) fn file(&self) -> PathBuf {
+        self.output.file()
+    }
+
+    /// How many spaces below it its removal takes first.
+    pub(super) fn below(&self) -> usize {
+        match &self.check {
+            Checked::Workspace(check) => check.children.len(),
+            Checked::Chat(_) => 0,
+        }
     }
 }
 
