@@ -34,10 +34,15 @@ fn web_job_locations_are_repository_bound_and_use_indices() {
     let runs =
         json!({"workflow_runs": [{"id": 9331, "index_in_repo": 2765, "commit_sha": "head"}]});
     assert_eq!(
-        run_id(&runs, RunNumber::new(2765), "head").unwrap(),
+        run_id(&runs, RunNumber::new(2765), Some("head")).unwrap(),
         RunId::new(9331)
     );
-    assert!(run_id(&runs, RunNumber::new(2765), "other").is_err());
+    assert!(run_id(&runs, RunNumber::new(2765), Some("other")).is_err());
+    // A run of an older commit can still hold the head's check.
+    assert_eq!(
+        run_id(&runs, RunNumber::new(2765), None).unwrap(),
+        RunId::new(9331)
+    );
     let jobs = json!([{"id": 18344, "run_id": 9331, "status": "success"}, {"id": 18345, "run_id": 9331, "status": "failure", "task_id": 9850}]);
     assert_eq!(
         job_id(&jobs, 1, RunId::new(9331)).unwrap(),

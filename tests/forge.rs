@@ -4138,8 +4138,10 @@ fn forgejo_ci_cancels_runs_and_reruns_jobs_from_release_17_as_the_scoped_agent()
             {"context": "docs", "status": "pending", "target_url": "/team/project/actions/runs/2765/jobs/0"},
             {"context": "lint", "status": "failure", "target_url": "/team/project/actions/runs/2764/jobs/0"}
         ]}},
+        // A run of an older commit can hold the head's checks, and
+        // cancelling it frees them.
         "GET repos/team/project/actions/runs?run_number=2765": {"body": {"workflow_runs": [
-            {"id": 9331, "index_in_repo": 2765, "commit_sha": "head"}
+            {"id": 9331, "index_in_repo": 2765, "commit_sha": "old"}
         ]}},
         "POST repos/team/project/actions/runs/9331/cancel": {"status": 204},
     });

@@ -4468,7 +4468,8 @@ a rerun while another job of the run is still running, and cancels the job's
 run; GitLab retries or cancels each job; Forgejo 17 and later rerun a failed
 job with the jobs that need it, or its run when several of the run's jobs are
 selected, which waits until none of them runs, and Forgejo cancels each check's
-run.
+run. A check whose run ran on an older commit than the head is cancelled with
+it but not rerun, since only a new run on the head checks the head.
 `--json` returns `url`, `action` and the `checks` acted on.
 
 `shoal view ci` shows a run's state (`waiting` until a runner takes a job,

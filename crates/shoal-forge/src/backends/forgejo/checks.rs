@@ -54,12 +54,15 @@ impl Checks for Forgejo {
     ) -> Result<String> {
         match operation {
             Operation::Post(endpoint) => Ok(endpoint),
+            // The run that posted a check on the head holds it, wherever
+            // it ran, so cancelling it frees the check; rerunning a run of
+            // an older commit would not.
             Operation::ForgejoRun { run_number, action } => {
-                let run = actions::run_id_for(repo, account, run_number, head).await?;
-                let endpoint = match action {
-                    CiAction::Rerun => "rerun",
-                    CiAction::Cancel => "cancel",
+                let (endpoint, on_head) = match action {
+                    CiAction::Rerun => ("rerun", Some(head)),
+                    CiAction::Cancel => ("cancel", None),
                 };
+                let run = actions::run_id_for(repo, account, run_number, on_head).await?;
                 Ok(format!("actions/runs/{run}/{endpoint}"))
             }
             Operation::RerunForgejoJob {

@@ -126,7 +126,7 @@ pub(crate) async fn failed_job_id(
     run_number: RunNumber,
     job_index: usize,
 ) -> Result<JobId> {
-    let run_id = run_id_for(repo, account, run_number, head).await?;
+    let run_id = run_id_for(repo, account, run_number, Some(head)).await?;
     let jobs = repo
         .send(
             account,
@@ -190,12 +190,12 @@ fn job_url(repo: &ForgeRepo, target: &str) -> String {
 }
 
 /// The API ID of the run numbered `number` in the repository, which must
-/// have run on `head`.
+/// have run on `head` when it names one.
 pub(crate) async fn run_id_for(
     repo: &ForgeRepo,
     account: &Account,
     number: RunNumber,
-    head: &str,
+    head: Option<&str>,
 ) -> Result<RunId> {
     let runs = repo
         .send(
@@ -318,11 +318,12 @@ pub(crate) async fn job_log(repo: &ForgeRepo, account: &Account, endpoint: &str)
     Ok(curl_body(&output)?.to_owned())
 }
 
-fn run_id(runs: &Value, number: RunNumber, head: &str) -> Result<RunId> {
+fn run_id(runs: &Value, number: RunNumber, head: Option<&str>) -> Result<RunId> {
     let run = numbered_run(runs, number)?;
     ensure!(
-        run["commit_sha"] == head,
-        "Actions run does not match the PR check's head"
+        head.is_none_or(|head| run["commit_sha"] == head),
+        "the check's run {number} ran on an older commit than the PR's head, which only a \
+         new run on the head checks; push a commit to start one"
     );
     run["id"]
         .as_u64()
