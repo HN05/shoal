@@ -72,7 +72,8 @@ pub struct ModeConfig {
     /// What the mode's agents may do, over `[permissions]`.
     #[option(section)]
     pub permissions: PermissionsConfig,
-    /// Whether its agents take an agent slot.
+    /// Whether its agents take an agent slot in a workspace; a chat's never
+    /// does.
     #[option(default = Weight::Heavy)]
     pub weight: Option<Weight>,
 }
@@ -109,7 +110,8 @@ pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
         focus: None,
         idle_wake_minutes: None,
         permissions: PermissionsConfig::default(),
-        // The chats wait for the user, not for the machine.
+        // The chats wait for the user, not for the machine, also when a
+        // layer sets them to start in a workspace.
         weight: Some(match kind {
             SpaceKind::Chat => Weight::Light,
             SpaceKind::Workspace => Weight::Heavy,
