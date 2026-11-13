@@ -263,10 +263,34 @@ workspace goes, so the cleanup sweep stops it as protection stops an agent
 between turns, and an update restores it although the assignment is done,
 since Shoal rather than the agent ended it. Load plays no part, so the recovery
 policy does not apply. Stopping any idle agent works the same way and is
-opt-in, since timers the agent keeps itself end with it, which only a done
-assignment leaves nothing to do. Either stops an agent once its prompt cache
-has expired and not before, since a resumed session's first request writes
-most of the cache again. A space's reported turn state counts the turns its
+opt-in (`[sleep] idle`), since timers the agent keeps itself end with it, which
+only a done assignment leaves nothing to do. Either stops an agent once its
+prompt cache has expired and not before, since a resumed session's first
+request writes most of the cache again.
+An agent Shoal stopped on its own and brings back on its own is asleep, and one
+that waits for `shoal restore` is stopped, so the user tells an agent that comes
+back from one that needs them. Every stop that queues a restore Shoal starts on its
+own puts the agent to sleep: protection, idle and blocked stops, signal stops,
+`shoal sleep` and making room. `shoal stop`, an agent that quits on its own and
+the agent of a removed or converted space are stopped, and a persistent stop
+stops the spaces below first, while a parent may sleep before its children,
+since their reports wake it. The asleep state is the restore's own: the
+restore keeps why the agent sleeps and what wakes it, so lists, status and the
+inbox read it without the recovery records, and `shoal attach`, the user
+asking for the agent, starts that restore at once. `shoal sleep` is the
+agent saying it has nothing to do until something arrives, so Shoal stops it
+once that costs no prompt cache whether or not work waits; queued work that
+needs a slot or memory may also put an idle agent to sleep, lowest rank and
+priority first and never above the entry's priority, but only one something
+will wake (a watched open PR, a blocker, an open question or a pending
+approval), so no sleep strands an agent, and never a light one, which frees
+too little. When a stop costs no cache depends on the schedule: `balanced` and
+`cache` wait for the cache to expire, or for CI the agent waits for that this
+machine's runner is expected to run longer than the cache lives, estimated
+from the durations of its jobs' recent runs, since a CI wait Shoal cannot
+estimate may end before the cache would; `speed` spends the cache to start
+other work sooner. A woken agent reports no idle turn until it has worked
+one, so it never sleeps again before it acts on what woke it. A space's reported turn state counts the turns its
 agent starts, a count that continues for a restored agent or another
 execution, and a protection stop is recorded by execution with the count it
 was decided at, until the agent runs again or its restore is cancelled. A
@@ -2107,7 +2131,8 @@ backs these wakes up: a message wakes an agent idle that long, by the state
 its hooks report rather than separate detection, and again after each further
 period without backoff, so it reaches the agent through the same delivery as
 any update. An agent that legitimately waits says so with `shoal sleep`, until
-its next turn or for good, which keeps the timer from waking it but no update;
+its next turn or after every turn, which keeps the timer from waking it but no
+update, and lets Shoal stop it as above;
 a done space is never woken. Only `worker` sets it: the chats wait for the
 user by design. Besides that prompt, Shoal writes to an agent's
 terminal only the interrupt key `shoal stop --interrupt` sends and the fixed
