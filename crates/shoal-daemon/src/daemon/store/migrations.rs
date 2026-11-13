@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_owners, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 161;
+pub(super) const SCHEMA_VERSION: i64 = 162;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -431,6 +431,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
         Some(unreference_execution_spaces),
     ),
     (161, include_str!("space_priority.sql"), None),
+    (162, "", Some(optional_queue_repositories)),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
@@ -680,6 +681,13 @@ pub(super) fn unreference_execution_spaces(db: &Connection) -> Result<()> {
         " workspace_id TEXT",
         "REFERENCES workspaces(id) ON DELETE CASCADE",
     )
+}
+
+/// A queue entry restores the agent of a space of either kind, and a chat
+/// without a repository has none.
+pub(super) fn optional_queue_repositories(db: &Connection) -> Result<()> {
+    // The leading space keeps other columns ending in it out of the match.
+    drop_not_null(db, "agent_queue", " repository_id TEXT")
 }
 
 /// Drop the `NOT NULL` constraint of the column `table` defines as

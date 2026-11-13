@@ -423,7 +423,7 @@ pub fn queue_rows(
         .map(|entry| {
             repositories
                 .iter()
-                .find(|repo| repo.id == entry.repository_id)
+                .find(|repo| entry.repository_id.as_ref() == Some(&repo.id))
                 .map_or("unknown repository", crate::repository::name)
         })
         .collect();

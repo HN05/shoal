@@ -15,7 +15,7 @@ fn free(memory: u64) -> Option<capacity::Room> {
 fn job(id: &str, memory: u64) -> Waiting {
     Waiting {
         id: id.into(),
-        repository: "a".into(),
+        repository: Some("a".into()),
         work: Work::Job {
             cost: capacity::JobCost {
                 memory: Some(memory),
@@ -23,6 +23,7 @@ fn job(id: &str, memory: u64) -> Waiting {
         },
         light: false,
         waited_for_memory: Duration::ZERO,
+        attended: false,
     }
 }
 
@@ -67,7 +68,7 @@ fn waiting(entries: &[(&str, &str)]) -> Vec<Waiting> {
         .iter()
         .map(|(id, repository)| Waiting {
             id: id.to_string().into(),
-            repository: (*repository).into(),
+            repository: Some((*repository).into()),
             work: if id.starts_with('r') {
                 Work::Restore {
                     waiting: true,
@@ -78,6 +79,7 @@ fn waiting(entries: &[(&str, &str)]) -> Vec<Waiting> {
             },
             light: id.starts_with('l'),
             waited_for_memory: Duration::ZERO,
+            attended: false,
         })
         .collect()
 }
@@ -438,10 +440,11 @@ fn a_light_agent_needs_no_memory_room_but_waits_out_critical_readings_and_low_di
 fn a_oneshot_run_holds_no_slot_but_waits_for_memory_room_and_low_disk() {
     let review = [Waiting {
         id: "review".into(),
-        repository: "a".into(),
+        repository: Some("a".into()),
         work: Work::OneShot { after_stop: false },
         light: false,
         waited_for_memory: Duration::ZERO,
+        attended: false,
     }];
     let admitted = |limits: &Limits| !admit(&["a".into()], &review, limits, false).is_empty();
     // The machine's and the repository's one slot is taken.
@@ -534,4 +537,27 @@ fn work_that_fits_starts_ahead_until_the_entry_waiting_for_memory_waited_its_lim
         admit(&occupied, &queue(BACKFILL_FOR), &full_repository, false),
         ["job"]
     );
+}
+
+#[test]
+fn an_attended_spaces_entry_starts_once_it_waits_for_nothing_else() {
+    let attended = |work| Waiting {
+        id: "chat".into(),
+        repository: None,
+        work,
+        light: false,
+        waited_for_memory: Duration::ZERO,
+        attended: true,
+    };
+    let full = limits(Some(1), &[]);
+    let occupied = [RepositoryId::from("a")];
+    let launch = [attended(Work::Launch)];
+    assert_eq!(admit(&occupied, &launch, &full, false), ["chat"]);
+    // A restore waiting for healthy readings still waits for them.
+    let recovering = [attended(Work::Restore {
+        waiting: true,
+        wake: Wake::Recovery,
+    })];
+    assert!(admit(&occupied, &recovering, &full, false).is_empty());
+    assert_eq!(admit(&occupied, &recovering, &full, true), ["chat"]);
 }

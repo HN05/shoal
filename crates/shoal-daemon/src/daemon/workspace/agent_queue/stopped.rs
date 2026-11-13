@@ -23,7 +23,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::Manager,
     execution::recovery,
-    model::{PresentSpace, QueueEntry, Workspace},
+    model::{PresentSpace, QueueEntry},
     paths::Paths,
     state::{QueueKind, QueueState},
 };
@@ -92,12 +92,14 @@ impl Restore {
 
 /// Record `restore` behind the work already waiting, unless its execution
 /// already has one, which a resume keeps in place and makes no longer
-/// automatic; one that starts at once refuses it. Its workspace must be
-/// ready and its execution ended, since a recorded one runs or is
-/// unresolved, unless its wrapper waits to restore it.
+/// automatic; one that starts at once refuses it. Its space must be a ready
+/// workspace or a chat, and its execution ended, since a recorded one runs
+/// or is unresolved, unless its wrapper waits to restore it.
 fn insert(tx: &rusqlite::Transaction<'_>, restore: &Restore) -> Result<()> {
-    crate::daemon::store::require_ready(tx, &restore.target.id)
-        .context("restore agents in a ready workspace")?;
+    if !crate::daemon::links::space::is_chat(tx, &restore.target.id)? {
+        crate::daemon::store::require_ready(tx, &restore.target.id)
+            .context("restore agents in a ready workspace")?;
+    }
     if restore.state == QueueState::Queued && keep_wrapper_restore(tx, restore)? {
         return Ok(());
     }
@@ -155,13 +157,15 @@ fn keep_wrapper_restore(db: &Connection, restore: &Restore) -> Result<bool> {
     Ok(kept == 1)
 }
 
-/// The ready workspaces whose assignment is not done, where stopped agents
-/// restore on their own.
-fn open_workspaces(db: &Connection) -> Result<Vec<Target>> {
+/// The ready workspaces and the chats whose assignment is not done, where
+/// stopped agents restore on their own.
+fn open_spaces(db: &Connection) -> Result<Vec<Target>> {
     Ok(db
         .prepare(
             "SELECT id,repository_id,name FROM workspaces w WHERE state='ready' AND NOT EXISTS
-                (SELECT 1 FROM space_completion c WHERE c.space_id=w.id)",
+                (SELECT 1 FROM space_completion c WHERE c.space_id=w.id)
+             UNION ALL SELECT id,repository_id,name FROM chats h WHERE NOT EXISTS
+                (SELECT 1 FROM space_completion c WHERE c.space_id=h.id)",
         )?
         .query_map([], |row| {
             Ok(Target {
@@ -306,33 +310,32 @@ impl Manager {
     /// that gate under the workspace's PR gate.
     async fn add_stopped_restore(
         &self,
-        workspace: &SpaceSelector,
+        space: &SpaceSelector,
         execution: &ExecutionId,
         env: BTreeMap<String, String>,
         now: bool,
     ) -> Result<QueueEntry> {
-        let workspace = self.workspace(workspace).await?;
-        let id = workspace.id.clone();
+        let space = self.space(space).await?;
+        let id = space.id().clone();
         // Read before the restored agent reads its messages.
         self.tell_still_blocked(&id).await;
-        let entry = (self.record_stopped_restore(workspace, execution, env, now)).await?;
+        let entry = (self.record_stopped_restore(&space, execution, env, now)).await?;
         self.reopen_for_resume(&id).await;
         Ok(entry)
     }
 
-    /// Record the restore of the agent stopped as `execution` in
-    /// `workspace`, starting it at once when `now`, and return its entry.
+    /// Record the restore of the agent stopped as `execution` in `space`,
+    /// starting it at once when `now`, and return its entry.
     async fn record_stopped_restore(
         &self,
-        workspace: Workspace,
+        space: &PresentSpace,
         execution: &ExecutionId,
         env: BTreeMap<String, String>,
         now: bool,
     ) -> Result<QueueEntry> {
-        let agent = stopped_agent(&self.paths, &workspace.id, execution)?
-            .with_context(|| format!("{} has no stopped agent {execution}", workspace.name))?;
-        let target = Target::of(&PresentSpace::Workspace(workspace));
-        let restore = Restore::new(target, execution, &agent, &env, false)?;
+        let agent = stopped_agent(&self.paths, space.id(), execution)?
+            .with_context(|| format!("{} has no stopped agent {execution}", space.name()))?;
+        let restore = Restore::new(Target::of(space), execution, &agent, &env, false)?;
         // Read the entry before dispatch can start it and its agent take it.
         let _gate = self.agent_queue.lock_admission().await;
         self.store.write(move |tx| insert(tx, &restore)).await?;
@@ -413,17 +416,17 @@ impl Manager {
     }
 
     /// Queue the restores that stopped agents request once their execution
-    /// has ended. A done workspace's agent waits until `shoal resume` names
-    /// its workspace.
+    /// has ended. A done space's agent waits until `shoal resume` names its
+    /// space.
     pub(super) async fn queue_requested_restores(&self) -> Result<()> {
-        let (workspaces, recorded) = self
+        let (spaces, recorded) = self
             .store
-            .run(|db| Ok((open_workspaces(db)?, recorded_executions(db)?)))
+            .run(|db| Ok((open_spaces(db)?, recorded_executions(db)?)))
             .await?;
-        for workspace in workspaces {
-            for (execution, env) in recovery::restore_requests(&self.paths, &workspace.id)? {
+        for space in spaces {
+            for (execution, env) in recovery::restore_requests(&self.paths, &space.id)? {
                 if !recorded.contains(&execution) {
-                    self.queue_requested_restore(&workspace, &execution, &env)
+                    self.queue_requested_restore(&space, &execution, &env)
                         .await?;
                 }
             }
@@ -432,24 +435,24 @@ impl Manager {
     }
 
     /// Queue the restore requested for the agent stopped as `execution` in
-    /// `workspace`, which starts with `env`, then forget the request. One
-    /// whose record is gone, resumed or discarded, is only forgotten; one
-    /// that cannot be queued stays without holding back the others.
+    /// `space`, which starts with `env`, then forget the request. One whose
+    /// record is gone, resumed or discarded, is only forgotten; one that
+    /// cannot be queued stays without holding back the others.
     async fn queue_requested_restore(
         &self,
-        workspace: &Target,
+        space: &Target,
         execution: &ExecutionId,
         env: &BTreeMap<String, String>,
     ) -> Result<()> {
-        let path = recovery::record_path(&self.paths, &workspace.id, execution);
+        let path = recovery::record_path(&self.paths, &space.id, execution);
         if let Some(record) = recovery::Record::load(&path).ok().flatten() {
-            let restore = Restore::new(workspace.clone(), execution, &record.agent, env, true)?;
+            let restore = Restore::new(space.clone(), execution, &record.agent, env, true)?;
             if let Err(error) = self.store.write(move |tx| insert(tx, &restore)).await {
                 crate::daemon::log!("agent queue: cannot queue restore of {execution}: {error:#}");
                 return Ok(());
             }
         }
-        recovery::forget_restore_request(&self.paths, &workspace.id, execution)
+        recovery::forget_restore_request(&self.paths, &space.id, execution)
     }
 
     /// Forget the waiting restores whose stopped agent's record is gone, as

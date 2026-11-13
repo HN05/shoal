@@ -64,7 +64,7 @@ impl<'a> Listed<'a> {
         match self {
             Self::Workspace(workspace) => Some(&workspace.repository_id),
             Self::Chat(chat) => chat.repository_id.as_ref(),
-            Self::Queued(entry) => Some(&entry.repository_id),
+            Self::Queued(entry) => entry.repository_id.as_ref(),
         }
     }
 

@@ -17,9 +17,11 @@ use crate::forge::items::{
 pub struct QueueEntry {
     pub id: crate::queue::QueueEntryId,
     pub kind: QueueKind,
-    pub repository_id: RepositoryId,
-    /// The workspace name: derived from the planned branch for a launch, the
-    /// stopped agent's for a restore.
+    /// The repository it starts in; none for a restore in a chat without
+    /// one.
+    pub repository_id: Option<RepositoryId>,
+    /// The space's name: derived from the planned branch for a launch, the
+    /// stopped agent's space's for a restore.
     pub name: SpaceName,
     pub agent: crate::agent::Agent,
     /// The mode a launch's agent starts in; none for a restore, which keeps
@@ -165,6 +167,12 @@ pub struct QueuedJob {
 }
 
 impl QueueEntry {
+    /// The repository a CI job's entry runs in, which every job's names.
+    pub fn job_repository(&self) -> anyhow::Result<&RepositoryId> {
+        use anyhow::Context as _;
+        (self.repository_id.as_ref()).context("the job's entry names no repository")
+    }
+
     /// The space the entry starts its agent in, once known.
     pub fn space(&self) -> Option<&SpaceId> {
         self.opens.as_ref().or(self.space_id.as_ref())

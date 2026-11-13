@@ -73,13 +73,19 @@ impl Manager {
             Ok(Claim::Started) => return,
             Ok(Claim::Superseded) => None,
             Ok(Claim::Withdrawn) => {
-                if let Err(error) = self.forget_job_entries(&entry.repository_id).await {
+                let forgotten = match entry.job_repository() {
+                    Ok(repository) => self.forget_job_entries(repository).await,
+                    Err(error) => Err(error),
+                };
+                if let Err(error) = forgotten {
                     crate::daemon::log!("runner: {error:#}");
                 }
                 return;
             }
             Ok(Claim::PermitsBusy) => {
-                self.runners.found_permits_busy(&entry.repository_id);
+                if let Ok(repository) = entry.job_repository() {
+                    self.runners.found_permits_busy(repository);
+                }
                 if let Err(error) = self.return_job(&entry.id).await {
                     crate::daemon::log!("runner: {error:#}");
                 }
@@ -111,7 +117,8 @@ impl Manager {
 
     async fn try_claim_job(&self, entry: &QueueEntry) -> Result<Claim> {
         let job = entry.job.as_deref().context("the entry names no job")?;
-        let settings = self.repository_settings(&entry.repository_id).await?;
+        let repository = entry.job_repository()?;
+        let settings = self.repository_settings(repository).await?;
         if !settings.runner.enabled {
             return Ok(Claim::Withdrawn);
         }
@@ -119,7 +126,7 @@ impl Manager {
             return Ok(Claim::Suspended);
         }
         let registration = self
-            .runner_registration(&entry.repository_id)
+            .runner_registration(repository)
             .await?
             .context("the repository's runner is no longer registered")?;
         let forge = ForgeRepo::resolve(&registration.forge_repository, &self.forge_hosts()).await?;
@@ -128,7 +135,7 @@ impl Manager {
         }
         let workspace = self
             .create_job_workspace(
-                &entry.repository_id,
+                repository,
                 (entry.name.as_str(), SpaceName::derive(&job.job.name, "ci")),
                 &job.run.commit,
                 job.run.reference.as_deref(),
@@ -251,7 +258,7 @@ impl Manager {
         let linked = self
             .link_job(
                 forge,
-                &entry.repository_id,
+                entry.job_repository()?,
                 job.job.clone(),
                 job.run.clone(),
             )
@@ -259,7 +266,7 @@ impl Manager {
         let job = serde_json::to_string(&linked)?;
         let (id, repository, workspace) = (
             entry.id.clone(),
-            entry.repository_id.clone(),
+            entry.job_repository()?.clone(),
             workspace.to_owned(),
         );
         self.store
@@ -403,7 +410,7 @@ impl Manager {
         let job = entry.job.as_deref().context("the entry names no job")?;
         let (id, repository, handle) = (
             entry.id.clone(),
-            entry.repository_id.clone(),
+            entry.job_repository()?.clone(),
             job.job.handle.clone(),
         );
         self.store

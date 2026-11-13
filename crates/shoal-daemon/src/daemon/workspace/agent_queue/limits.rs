@@ -115,12 +115,16 @@ impl Wake {
 #[derive(Clone)]
 pub(crate) struct Waiting {
     pub id: QueueEntryId,
-    pub repository: RepositoryId,
+    /// The repository of its space; none for a chat without one.
+    pub repository: Option<RepositoryId>,
     pub work: Work,
     /// Whether it starts a light agent, which needs neither a slot nor room.
     pub light: bool,
     /// How long admission has held it back for its memory, pass after pass.
     pub waited_for_memory: Duration,
+    /// Whether the user attends its space, a chat, whose agent starts once
+    /// it waits for nothing else, without a slot or room.
+    pub attended: bool,
 }
 
 /// How long work that fits in memory may start ahead of a higher-ranked
@@ -156,7 +160,8 @@ impl Admission {
 /// start, as an agent does. A light agent's entry needs no slot and no room,
 /// so it takes none of the pass's starts and, restored, none of the healthy
 /// interval's: only critical or missing readings and low disk hold it. An
-/// entry that waits or does not fit keeps its place and is passed over.
+/// entry of a space the user attends starts once it waits for nothing else.
+/// An entry that waits or does not fit keeps its place and is passed over.
 pub(crate) fn admit(
     occupied: &[RepositoryId],
     waiting: &[Waiting],
@@ -216,6 +221,11 @@ pub(crate) fn admit(
             Work::Restore { waiting: false, .. } => continue,
             Work::Restore { waiting: true, .. } => 1,
         };
+        // Every space the user does not attend has a repository.
+        let (false, Some(repository)) = (entry.attended, &entry.repository) else {
+            admission.admitted.push(entry.id.clone());
+            continue;
+        };
         if entry.light {
             match light_hold(limits, writing) {
                 Some(held) => admission.hold(entry, Some(held)),
@@ -230,12 +240,12 @@ pub(crate) fn admit(
             admission.hold(entry, Some(HeldBy::MemoryKept));
             continue;
         }
-        let used = used.entry(entry.repository.as_str()).or_default();
+        let used = used.entry(repository.as_str()).or_default();
         // A one-shot run, such as a review, holds no agent slot, so of the
         // fixed limits only the disk's applies to it.
         let full = match entry.work {
             Work::OneShot { .. } => full_disk(limits, writing),
-            _ => full_limit(limits, &entry.repository, [total, writing, *used], own),
+            _ => full_limit(limits, repository, [total, writing, *used], own),
         };
         if let Err(held) = measured_fit(limits.room, started, capacity::Room::fits_agent) {
             // An entry a fixed limit holds anyway gains nothing from memory
@@ -341,12 +351,13 @@ fn full_limit(
 pub(crate) fn room_for_a_job(occupied: &[RepositoryId], limits: &Limits) -> bool {
     let probe = [Waiting {
         id: QueueEntryId::from(String::new()),
-        repository: String::new().into(),
+        repository: Some(String::new().into()),
         work: Work::Job {
             cost: capacity::JobCost { memory: Some(0) },
         },
         light: false,
         waited_for_memory: Duration::ZERO,
+        attended: false,
     }];
     !admit(occupied, &probe, limits, false).admitted.is_empty()
 }

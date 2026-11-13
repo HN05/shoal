@@ -512,6 +512,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 161 {
         db.execute_batch(include_str!("space_priority.sql"))?;
     }
+    if version >= 162 {
+        optional_queue_repositories(&db)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"

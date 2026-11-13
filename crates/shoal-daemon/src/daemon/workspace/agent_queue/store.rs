@@ -16,7 +16,9 @@ use crate::{
 /// A waiting row of the queue.
 pub(super) struct QueuedRow {
     pub id: QueueEntryId,
-    pub repository: RepositoryId,
+    /// The repository of the space it starts in; none for a chat without
+    /// one.
+    pub repository: Option<RepositoryId>,
     pub kind: QueueKind,
     pub execution: Option<ExecutionId>,
     pub workspace: Option<SpaceId>,
@@ -28,13 +30,17 @@ pub(super) struct QueuedRow {
     pub job: Option<String>,
     /// The mode a launch's agent starts in.
     pub mode: Option<crate::config::modes::ModeName>,
+    /// Whether the user attends the space it restores an agent in, a
+    /// chat, whose agent starts once it waits for nothing.
+    pub attended: bool,
 }
 
 /// The waiting rows of the queue, in order.
 pub(super) fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
     Ok(db
         .prepare(
-            "SELECT id,repository_id,kind,execution_id,space_id,env IS NOT NULL,automatic,job,mode
+            "SELECT id,repository_id,kind,execution_id,space_id,env IS NOT NULL,automatic,job,mode,
+                EXISTS (SELECT 1 FROM chats WHERE chats.id=agent_queue.space_id)
              FROM agent_queue WHERE state=?1 ORDER BY seq",
         )?
         .query_map([QueueState::Queued], |row| {
@@ -48,6 +54,7 @@ pub(super) fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
                 automatic: row.get(6)?,
                 job: row.get(7)?,
                 mode: row.get(8)?,
+                attended: row.get(9)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?)

@@ -1776,3 +1776,38 @@ async fn an_entrys_wait_for_memory_lasts_while_passes_hold_it_for_memory() {
     queue.record_held_back(Default::default(), &Default::default(), at(240));
     assert_eq!(queue.waited_for_memory(&id, at(240)), Duration::ZERO);
 }
+
+/// A chat's restore, of one without a repository too, starts on a full
+/// machine, since the user attends the chat, whose agent takes no slot.
+#[tokio::test]
+async fn a_chats_restore_starts_on_a_full_machine() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let busy = add(&manager, &repo, "busy").await;
+    assert!(busy.start);
+    let (chat, _agent) =
+        crate::daemon::test_support::chat(&manager, "master", "chat", None, None).await;
+    let execution = ExecutionId::from("stopped");
+    crate::execution::recovery::save_record(
+        &manager.paths,
+        &chat.id,
+        &execution,
+        &crate::execution::TrackedAgent::named("claude"),
+        None,
+        None,
+    )
+    .unwrap();
+
+    let env = BTreeMap::from([("HERDR_ENV".into(), "1".into())]);
+    let entry = manager
+        .queue_stopped_restore(&SpaceSelector::id(&chat.id), &execution, env)
+        .await
+        .unwrap();
+    assert_eq!(entry.repository_id, None);
+    manager.dispatch_queue().await.unwrap();
+
+    assert!(started(&entry.id));
+    let held = add(&manager, &repo, "held").await;
+    assert!(!held.start, "the machine stays full");
+}

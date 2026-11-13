@@ -176,10 +176,8 @@ impl Manager {
 
     /// One admission pass over the entries of `work`.
     async fn admission(&self, work: &WaitingWork, recovered: bool) -> Result<Admission> {
-        let repositories = work
-            .entries
-            .iter()
-            .map(|entry| entry.repository.clone())
+        let repositories = (work.entries.iter())
+            .filter_map(|entry| entry.repository.clone())
             .collect();
         let mut dormant = dormant_restores(&work.entries, &work.restores);
         dormant.extend(work.stopped.iter().cloned());
@@ -251,20 +249,26 @@ impl Manager {
             automatic,
             job,
             mode,
+            attended,
         } in queued
         {
             let is_light = kind != QueueKind::Job
-                && light.entry(execution.as_ref(), &repository, mode.as_ref());
+                && (repository.as_ref()).is_some_and(|repository| {
+                    light.entry(execution.as_ref(), repository, mode.as_ref())
+                });
             let work = match (kind, execution, workspace) {
-                // A job waits while its repository's permits are all held.
-                (QueueKind::Job, ..) if self.runners.permits_busy(&repository) => {
-                    permits_busy.push(id);
-                    continue;
-                }
                 (QueueKind::Job, ..) => {
+                    let repository = repository
+                        .as_ref()
+                        .context("a job's entry names no repository")?;
+                    // A job waits while its repository's permits are all held.
+                    if self.runners.permits_busy(repository) {
+                        permits_busy.push(id);
+                        continue;
+                    }
                     let job = serde_json::from_str(&job.context("a job's entry names no job")?)?;
                     Work::Job {
-                        cost: self.job_cost(&repository, &job).await?,
+                        cost: self.job_cost(repository, &job).await?,
                     }
                 }
                 (QueueKind::Restore, Some(execution), Some(workspace)) if started_here => {
@@ -297,16 +301,18 @@ impl Manager {
                 repository,
                 work,
                 light: is_light,
+                attended,
             });
         }
         let oneshots = oneshots.into_iter().map(|oneshot| Waiting {
             waited_for_memory: self.agent_queue.waited_for_memory(&oneshot.id, now),
             id: oneshot.id,
-            repository: oneshot.repository,
+            repository: Some(oneshot.repository),
             work: Work::OneShot {
                 after_stop: oneshot.after_stop,
             },
             light: false,
+            attended: false,
         });
         waiting.extend(oneshots);
         self.in_rank_order(&mut waiting).await?;

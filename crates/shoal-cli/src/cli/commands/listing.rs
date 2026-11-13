@@ -48,7 +48,7 @@ impl ListFilter {
     }
 
     pub(super) fn keeps_entry(&self, entry: &QueueEntry) -> bool {
-        self.keeps_repository(&entry.repository_id)
+        self.keeps_space_repository(entry.repository_id.as_ref())
             && self.keeps_status(ListStatus::of_entry(entry))
     }
 
@@ -64,11 +64,17 @@ impl ListFilter {
     /// A chat without a repository is in none, which a repository filter
     /// leaves out.
     pub(super) fn keeps_chat(&self, chat: &Chat) -> bool {
-        let repository = match &chat.repository_id {
+        self.keeps_space_repository(chat.repository_id.as_ref())
+            && self.keeps_status(ListStatus::of_chat(chat))
+    }
+
+    /// Whether the repository filter keeps a space of `repository`, or one
+    /// without a repository, which only no filter keeps.
+    fn keeps_space_repository(&self, repository: Option<&RepositoryId>) -> bool {
+        match repository {
             Some(id) => self.keeps_repository(id),
             None => self.repository.is_none(),
-        };
-        repository && self.keeps_status(ListStatus::of_chat(chat))
+        }
     }
 
     /// An item of `repository_id` without a workspace, such as an issue

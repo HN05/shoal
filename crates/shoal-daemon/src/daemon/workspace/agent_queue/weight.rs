@@ -158,7 +158,7 @@ fn workspaces(db: &Connection) -> Result<Vec<(SpaceId, RepositoryId)>> {
 /// The repositories with a queue entry.
 fn queue_repositories(db: &Connection) -> Result<HashSet<RepositoryId>> {
     Ok(db
-        .prepare("SELECT DISTINCT repository_id FROM agent_queue")?
+        .prepare("SELECT DISTINCT repository_id FROM agent_queue WHERE repository_id IS NOT NULL")?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }

@@ -160,7 +160,7 @@ fn a_queued_agent_shows_as_its_workspaces_status_or_its_own_row() {
 fn rows_name_the_repository_when_they_span_several() {
     let plain = Palette::stdout(true);
     let mut other = entry("other", Some(1), None);
-    other.repository_id = "b".into();
+    other.repository_id = Some("b".into());
     let workspaces = [workspace("a", "local", "local", WorkspaceState::Ready)];
     let repositories = [("a".into(), "shoal".into()), ("b".into(), "docs".into())];
     let rows = |queued| {

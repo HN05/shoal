@@ -41,7 +41,9 @@ struct UnknownExecution {
 
 /// A starting queue entry.
 struct StartingEntry {
-    repository: RepositoryId,
+    /// Its space's repository; none for a chat without one, which takes no
+    /// slot.
+    repository: Option<RepositoryId>,
     /// The workspace it starts in, once known.
     workspace: Option<SpaceId>,
     /// When its holder was last seen.
@@ -132,11 +134,10 @@ impl Manager {
         agents.retain(|execution, _| !dormant.contains(execution) && !light.execution(execution));
         let mut launches = Vec::new();
         for entry in starting {
-            if light.entry(
-                entry.execution.as_ref(),
-                &entry.repository,
-                entry.mode.as_ref(),
-            ) {
+            let Some(repository) = &entry.repository else {
+                continue;
+            };
+            if light.entry(entry.execution.as_ref(), repository, entry.mode.as_ref()) {
                 continue;
             }
             match entry.execution.as_ref().and_then(|id| agents.get_mut(id)) {
@@ -154,13 +155,11 @@ impl Manager {
             })
             .collect();
         for launch in launches {
-            if launch
-                .workspace
-                .as_ref()
-                .is_none_or(|workspace| open.contains_key(workspace))
+            if let Some(repository) = launch.repository
+                && (launch.workspace.as_ref()).is_none_or(|workspace| open.contains_key(workspace))
             {
                 slots.push(Slot {
-                    repository: launch.repository,
+                    repository,
                     activity: starting_since(launch.seen_at),
                 });
             }
