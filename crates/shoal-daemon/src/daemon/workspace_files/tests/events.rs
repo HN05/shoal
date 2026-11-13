@@ -210,7 +210,7 @@ async fn every_deletion_records_one_removed_event_per_file() {
     manager
         .store
         .run(move |db| {
-            db.execute("DELETE FROM removed_workspaces WHERE workspace_id=?1", [id])?;
+            db.execute("DELETE FROM removed_space_files WHERE space_id=?1", [id])?;
             Ok(())
         })
         .await
@@ -279,7 +279,7 @@ async fn a_chats_file_events_name_the_chat() {
     manager
         .store
         .run(|db| {
-            db.execute("UPDATE ended_chats SET expires_at=0", [])?;
+            db.execute("UPDATE removed_space_files SET expires_at=0", [])?;
             Ok(())
         })
         .await
@@ -334,7 +334,7 @@ async fn the_file_events_of_a_chat_without_a_repository_name_none() {
     manager
         .store
         .run(|db| {
-            db.execute("UPDATE ended_chats SET expires_at=0", [])?;
+            db.execute("UPDATE removed_space_files SET expires_at=0", [])?;
             Ok(())
         })
         .await

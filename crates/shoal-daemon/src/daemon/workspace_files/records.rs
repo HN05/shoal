@@ -1,7 +1,7 @@
 //! The store's records of attached files: which copy belongs to which
 //! workspace or chat, how it came, and the removed workspaces and removed chats
 //! whose files stay. A space is gone when neither a workspace nor a chat has
-//! its ID; its removal or end record says how long its files stay.
+//! its ID; its row in `removed_space_files` says how long its files stay.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
@@ -13,11 +13,9 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use super::{AttachedFile, Attacher, FileSource, HomeKey, SentFile, Space, layout::Copy};
 
 const COLUMNS: &str = "id,space,source,name,title,path,bytes,created_at,attached_by,
-    COALESCE((SELECT expires_at FROM removed_workspaces r
-            WHERE r.workspace_id=workspace_files.space_id
-                AND workspace_files.space_id NOT IN (SELECT id FROM workspaces)),
-        (SELECT expires_at FROM ended_chats e WHERE e.chat_id=workspace_files.space_id)),
-    space_id IN (SELECT id FROM chats) OR space_id IN (SELECT chat_id FROM ended_chats)";
+    (SELECT expires_at FROM removed_space_files r WHERE r.space_id=workspace_files.space_id),
+    space_id IN (SELECT id FROM chats)
+        OR space_id IN (SELECT space_id FROM removed_space_files WHERE chat)";
 
 /// The owners of attached files that are gone.
 const GONE: &str = "space_id NOT IN (SELECT id FROM workspaces)
@@ -243,15 +241,13 @@ pub(super) fn kept(db: &Connection) -> Result<Vec<Space>> {
 }
 
 /// The removed workspaces and removed chats whose files `home` keeps though
-/// their record expired, or that never had one. A removed chat's record
-/// stays until its files are deleted, so a failed deletion still lists them
-/// as the chat's.
+/// their record expired, or that never had one. The record stays until the
+/// files are deleted, so a failed deletion still lists them as the space's.
 pub(super) fn expired(db: &Connection, home: &HomeKey) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare(&format!(
             "SELECT DISTINCT space_id FROM workspace_files WHERE {IN_HOME} AND {GONE}
-                AND space_id NOT IN (SELECT workspace_id FROM removed_workspaces)
-                AND space_id NOT IN (SELECT chat_id FROM ended_chats
+                AND space_id NOT IN (SELECT space_id FROM removed_space_files
                     WHERE expires_at > unixepoch())"
         ))?
         .query_map(params![home.repository_id(), home.root_dir()], |row| {
@@ -271,15 +267,18 @@ pub(super) fn forget(tx: &Transaction<'_>, ids: &[i64]) -> Result<()> {
 /// Forget every record of the removed workspace or removed chat `space_id`.
 pub(super) fn forget_space(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<()> {
     tx.execute("DELETE FROM workspace_files WHERE space_id=?1", [space_id])?;
-    tx.execute("DELETE FROM ended_chats WHERE chat_id=?1", [space_id])?;
+    tx.execute(
+        "DELETE FROM removed_space_files WHERE space_id=?1",
+        [space_id],
+    )?;
     Ok(())
 }
 
 /// Keep the files of the removed space `space_id` that outlive it, which
-/// keep its last name, and move those it was the parent of to its own
-/// parent, in the transaction that deletes its record, before the record
-/// goes: a chat keeps every one until `expires_at`, a workspace those it
-/// handed the user, for as long as its removal record.
+/// keep its last name, until `expires_at`, and move those it was the parent
+/// of to its own parent, in the transaction that deletes its record, before
+/// the record goes: a chat keeps every one, a workspace those it handed the
+/// user.
 pub(crate) fn keep_removed(
     tx: &Transaction<'_>,
     space_id: &SpaceId,
@@ -287,7 +286,7 @@ pub(crate) fn keep_removed(
 ) -> Result<()> {
     match crate::daemon::links::space::is_chat(tx, space_id)? {
         true => keep_ended_chat(tx, space_id, expires_at),
-        false => forget_removed(tx, space_id),
+        false => forget_removed(tx, space_id, expires_at),
     }
 }
 
@@ -304,29 +303,44 @@ fn keep_ended_chat(
         [chat_id],
     )?;
     reparent(tx, chat_id)?;
+    keep_until(tx, chat_id, expires_at)
+}
+
+/// Record that the files the space `space_id` keeps, if any, stay until
+/// `expires_at`, before its record goes.
+fn keep_until(
+    tx: &Transaction<'_>,
+    space_id: &SpaceId,
+    expires_at: crate::time::UnixTime,
+) -> Result<()> {
     tx.execute(
-        "INSERT OR REPLACE INTO ended_chats(chat_id,expires_at) SELECT ?1,?2
+        "INSERT OR REPLACE INTO removed_space_files(space_id,chat,expires_at)
+            SELECT ?1,?1 IN (SELECT id FROM chats),?2
             WHERE EXISTS(SELECT 1 FROM workspace_files WHERE space_id=?1)",
-        params![chat_id, expires_at],
+        params![space_id, expires_at],
     )?;
     Ok(())
 }
 
-/// Forget the expired records of removed chats whose files are gone, as when
-/// `files rm` deleted them all.
-pub(super) fn forget_expired_chats(db: &mut Connection) -> Result<()> {
+/// Forget the expired records of removed spaces whose files are gone, as
+/// when `files rm` deleted them all.
+pub(super) fn forget_expired(db: &mut Connection) -> Result<()> {
     db.execute(
-        "DELETE FROM ended_chats WHERE expires_at <= unixepoch()
-            AND chat_id NOT IN (SELECT space_id FROM workspace_files)",
+        "DELETE FROM removed_space_files WHERE expires_at <= unixepoch()
+            AND space_id NOT IN (SELECT space_id FROM workspace_files)",
         [],
     )?;
     Ok(())
 }
 
 /// Forget the records of the workspace `workspace_id` but those of the files
-/// it handed the user, which keep its last name, and move those it was the
-/// parent of to its own parent.
-fn forget_removed(tx: &Transaction<'_>, workspace_id: &SpaceId) -> Result<()> {
+/// it handed the user, which keep its last name until `expires_at`, and move
+/// those it was the parent of to its own parent.
+fn forget_removed(
+    tx: &Transaction<'_>,
+    workspace_id: &SpaceId,
+    expires_at: crate::time::UnixTime,
+) -> Result<()> {
     let [result, alert, question] = FileSource::KEPT;
     tx.execute(
         "DELETE FROM workspace_files WHERE space_id=?1 AND source NOT IN (?2,?3,?4)",
@@ -338,7 +352,7 @@ fn forget_removed(tx: &Transaction<'_>, workspace_id: &SpaceId) -> Result<()> {
         [workspace_id],
     )?;
     reparent(tx, workspace_id)?;
-    Ok(())
+    keep_until(tx, workspace_id, expires_at)
 }
 
 /// Move the records of files whose space was below the space `id`, which

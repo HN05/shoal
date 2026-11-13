@@ -74,8 +74,8 @@ impl Manager {
     }
 }
 
-/// The spaces with events that are gone without a removal record or a
-/// removed chat's unexpired files, each with when it was removed, or
+/// The spaces with events that are gone without a removal record or
+/// unexpired attached files, each with when it was removed, or
 /// recorded last when its removal is not in the journal. A space whose
 /// repository is no longer registered takes the global retention.
 fn gone(db: &Connection) -> Result<Vec<Gone>> {
@@ -92,7 +92,7 @@ fn gone(db: &Connection) -> Result<Vec<Gone>> {
                 AND space_id NOT IN (SELECT id FROM workspaces)
                 AND space_id NOT IN (SELECT id FROM chats)
                 AND space_id NOT IN (SELECT workspace_id FROM removed_workspaces)
-                AND space_id NOT IN (SELECT chat_id FROM ended_chats
+                AND space_id NOT IN (SELECT space_id FROM removed_space_files
                     WHERE expires_at > unixepoch())
             GROUP BY space_id)",
         )?

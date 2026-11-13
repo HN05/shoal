@@ -669,7 +669,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
     manager
         .store
         .run(move |db| {
-            db.execute("DELETE FROM removed_workspaces WHERE workspace_id=?1", [id])?;
+            db.execute("DELETE FROM removed_space_files WHERE space_id=?1", [id])?;
             Ok(())
         })
         .await
@@ -829,7 +829,7 @@ async fn expiry_refuses_results_whose_directory_was_replaced() {
     manager
         .store
         .run(move |db| {
-            db.execute("DELETE FROM removed_workspaces WHERE workspace_id=?1", [id])?;
+            db.execute("DELETE FROM removed_space_files WHERE space_id=?1", [id])?;
             Ok(())
         })
         .await
@@ -1330,7 +1330,7 @@ const BEFORE_ATTACHED_FILES: &str = "DROP TRIGGER workspace_sleep_removed;
     ALTER TABLE space_item_activity RENAME TO workspace_item_activity;
     ALTER TABLE workspace_item_activity RENAME COLUMN space_id TO workspace_id;
     DROP TABLE workspace_files;
-    DROP TABLE ended_chats;
+    DROP TABLE removed_space_files;
     ALTER TABLE chat_messages DROP COLUMN attachments;
     ALTER TABLE workspace_holds DROP COLUMN placed_by;
     ALTER TABLE executions DROP COLUMN agent_execution;
@@ -1469,7 +1469,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
     manager
         .store
         .run(|db| {
-            db.execute("UPDATE ended_chats SET expires_at=0", [])?;
+            db.execute("UPDATE removed_space_files SET expires_at=0", [])?;
             Ok(())
         })
         .await
@@ -1501,7 +1501,13 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
     );
     let left: i64 = manager
         .store
-        .run(|db| Ok(db.query_row("SELECT COUNT(*) FROM ended_chats", [], |row| row.get(0))?))
+        .run(|db| {
+            Ok(
+                db.query_row("SELECT COUNT(*) FROM removed_space_files", [], |row| {
+                    row.get(0)
+                })?,
+            )
+        })
         .await
         .unwrap();
     assert_eq!(left, 0);
@@ -1558,7 +1564,7 @@ async fn a_chat_without_a_repository_keeps_its_files_in_root_dir() {
     manager
         .store
         .run(|db| {
-            db.execute("UPDATE ended_chats SET expires_at=0", [])?;
+            db.execute("UPDATE removed_space_files SET expires_at=0", [])?;
             Ok(())
         })
         .await
@@ -1626,7 +1632,7 @@ async fn files_of_a_chat_without_a_repository_stay_with_the_root_dir_it_started_
     manager
         .store
         .run(|db| {
-            db.execute("UPDATE ended_chats SET expires_at=0", [])?;
+            db.execute("UPDATE removed_space_files SET expires_at=0", [])?;
             Ok(())
         })
         .await

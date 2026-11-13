@@ -74,7 +74,7 @@ impl Manager {
                 failed.push(format!("{}: {error:#}", key.describe()));
             }
         }
-        self.store.run(records::forget_expired_chats).await?;
+        self.store.run(records::forget_expired).await?;
         ensure!(failed.is_empty(), "{}", failed.join("; "));
         Ok(())
     }

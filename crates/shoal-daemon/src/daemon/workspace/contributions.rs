@@ -163,7 +163,7 @@ async fn advertised_refs(checkout: &std::path::Path) -> Result<Vec<git::RemoteHe
 
 /// Whether the repository still has a workspace, a queued agent, a chat, a
 /// pending issue proposal, a kept branch, an unexpired checkpoint, removal
-/// record or removed chat's files, or a resource another repository's
+/// record or removed space's files, or a resource another repository's
 /// workspace borrows.
 fn in_use(db: &Connection, id: &RepositoryId) -> Result<bool> {
     Ok(recorded_use(db, id)? || crate::daemon::resources::borrowed(db, id)?)
@@ -180,7 +180,7 @@ fn recorded_use(db: &Connection, id: &RepositoryId) -> Result<bool> {
             WHERE repository_id=?1 AND expires_at > unixepoch()
         UNION ALL SELECT 1 FROM removed_workspaces
             WHERE repository_id=?1 AND expires_at > unixepoch()
-        UNION ALL SELECT 1 FROM ended_chats JOIN workspace_files ON space_id=chat_id
+        UNION ALL SELECT 1 FROM removed_space_files JOIN workspace_files USING(space_id)
             WHERE repository_id=?1 AND expires_at > unixepoch()",
         [id],
     )

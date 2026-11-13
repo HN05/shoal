@@ -554,6 +554,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 175 {
         db.execute_batch(include_str!("queue_issue_labels.sql"))?;
     }
+    if version >= 176 {
+        db.execute_batch(include_str!("removed_space_files.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -2410,5 +2413,50 @@ fn every_space_keeps_its_unread_messages_in_one_table() -> Result<()> {
         )?,
         0
     );
+    Ok(())
+}
+
+#[test]
+fn removed_spaces_keep_their_files_until_their_chat_or_removal_record_expires() -> Result<()> {
+    let mut db = historical_database(175)?;
+    db.execute_batch(
+        "INSERT INTO removed_workspaces(workspace_id,repository_id,name,expires_at,record)
+            VALUES ('kept','repo','kept',unixepoch()+60,'{}'),
+                ('expired','repo','expired',1,'{}'),
+                ('workspace','repo','worker',unixepoch()+60,'{}'),
+                ('empty','repo','empty',unixepoch()+60,'{}');
+        INSERT INTO ended_chats(chat_id,expires_at) VALUES ('chat',7),('cleared',8);
+        INSERT INTO workspace_files(space_id,space,repository_id,source,name,path,bytes,created_at)
+            VALUES ('kept','kept','repo','result','a.md','/repo/a.md',1,1),
+                ('expired','expired','repo','result','b.md','/repo/b.md',1,1),
+                ('workspace','worker','repo','added','c.md','/repo/c.md',1,1),
+                ('chat','chat','repo','added','d.md','/repo/d.md',1,1);",
+    )?;
+    migrate(&mut db)?;
+    let rows: Vec<(String, bool, bool)> = db
+        .prepare(
+            "SELECT space_id,chat,expires_at > unixepoch() FROM removed_space_files
+                ORDER BY space_id",
+        )?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let row = |id: &str, chat, unexpired| (id.to_owned(), chat, unexpired);
+    assert_eq!(
+        rows,
+        [
+            row("chat", true, false),
+            row("cleared", true, false),
+            row("kept", false, true)
+        ]
+    );
+    // A removed chat's file events still name it as a chat.
+    db.execute("DELETE FROM workspace_files WHERE space_id='chat'", [])?;
+    let chat: Option<String> = db.query_row(
+        "SELECT json_extract(record,'$.chat_id') FROM workspace_events
+            WHERE json_extract(record,'$.kind')='file_removed'",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(chat.as_deref(), Some("chat"));
     Ok(())
 }
