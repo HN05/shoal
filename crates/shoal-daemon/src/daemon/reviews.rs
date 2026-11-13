@@ -319,7 +319,8 @@ impl Manager {
 
     /// Refuse while a review of the repository is queued or running, or a
     /// review that ended, even with its workspace, still has a checkout, a
-    /// worktree of the repository.
+    /// worktree of the repository, or left its run in the repository's
+    /// directory.
     pub(crate) async fn ensure_no_reviews_in(&self, repository_id: &RepositoryId) -> Result<()> {
         let id = repository_id.to_owned();
         let active = self.store.run(move |db| store::active_in(db, &id)).await?;
@@ -327,8 +328,9 @@ impl Manager {
             active.is_empty() && !self.reviews.holds_checkout_of(repository_id, false),
             "a review of the repository is queued or running; wait for it or cancel it"
         );
+        let left = self.review_runs_left(repository_id).await?;
         ensure!(
-            !self.reviews.holds_checkout_of(repository_id, true),
+            !self.reviews.holds_checkout_of(repository_id, true) && !left,
             "an ended review left a checkout of the repository that could not be removed; \
              restart the daemon with `shoal daemon restart` to remove it"
         );

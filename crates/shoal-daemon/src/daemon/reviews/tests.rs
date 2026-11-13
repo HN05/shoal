@@ -1,5 +1,5 @@
 use crate::client::space_ids::SpaceId;
-use crate::paths::StateFiles;
+use crate::shoal_dirs::{Contents, ShoalDir};
 use crate::time::UnixTime;
 use shoal_refs::BranchName;
 use std::sync::Arc;
@@ -19,6 +19,8 @@ struct Fixture {
     _root: tempfile::TempDir,
     manager: Arc<Manager>,
     workspace: Workspace,
+    /// The repository's directory of review runs.
+    runs: ShoalDir,
 }
 
 /// A workspace whose reviewers are `[agents.<name>]` scripts, in which
@@ -57,10 +59,16 @@ async fn fixture(reviewers: &[(&str, &str)], review: &str) -> Fixture {
         _root: root,
         manager,
         workspace,
+        runs: ShoalDir::of(&repo, Contents::ReviewRuns).unwrap(),
     }
 }
 
 impl Fixture {
+    /// The directory of review `id`'s run.
+    fn run(&self, id: ReviewId) -> std::path::PathBuf {
+        self.runs.root().join(id.to_string())
+    }
+
     /// A review of the workspace, once its run ended and delivered it.
     async fn review(&self) -> Review {
         self.review_of(&self.workspace.id).await
@@ -136,14 +144,7 @@ async fn a_review_reads_the_committed_head_and_stores_its_findings() {
         review.findings[0].id.to_string(),
         format!("{}.1", review.id)
     );
-    assert!(
-        !fixture
-            .manager
-            .paths
-            .reviews()
-            .join(review.id.to_string())
-            .exists()
-    );
+    assert!(!fixture.run(review.id).exists());
     let worktrees = crate::git::run(&fixture.workspace.path, &["worktree", "list"])
         .await
         .unwrap();
@@ -273,7 +274,7 @@ async fn cancelling_stops_the_reviewer_and_removes_its_checkout() {
         .unwrap();
     assert_eq!(cancelled.state, ReviewState::Cancelled);
     ended.changed().await.unwrap();
-    assert!(!manager.paths.reviews().join(queued.id.to_string()).exists());
+    assert!(!fixture.run(queued.id).exists());
     let again = manager.cancel_review(None, Some(queued.id), None).await;
     assert!(again.is_err());
 }
@@ -336,11 +337,8 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
         })
         .await
         .unwrap();
-    let checkout = manager
-        .paths
-        .reviews()
-        .join(queued.to_string())
-        .join("checkout");
+    fixture.runs.create().unwrap();
+    let checkout = fixture.run(queued).join("checkout");
     std::fs::create_dir_all(checkout.parent().unwrap()).unwrap();
     let head = crate::git::run(&fixture.workspace.path, &["rev-parse", "HEAD"])
         .await
@@ -492,7 +490,7 @@ async fn removing_the_workspace_stops_its_review() {
         .unwrap();
     ended.changed().await.unwrap();
     assert!(manager.review(queued.id).await.is_err());
-    assert!(!manager.paths.reviews().join(queued.id.to_string()).exists());
+    assert!(!fixture.run(queued.id).exists());
 }
 
 #[tokio::test]
@@ -1040,7 +1038,48 @@ async fn removing_the_repository_stops_its_reviews_first() {
         .remove_repository(&fixture.workspace.repository_id)
         .await
         .unwrap();
-    assert!(!manager.paths.reviews().join(queued.id.to_string()).exists());
+    assert!(!fixture.runs.root().exists());
+}
+
+#[tokio::test]
+async fn a_review_runs_in_its_repository_directory() {
+    let script = "pwd > \"$(dirname '{review}')/cwd\"\ncat '{review}'";
+    let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
+    let review = fixture.review().await;
+    assert_eq!(review.state, ReviewState::Finished, "{review:?}");
+    let cwd = std::fs::read_to_string(fixture._root.path().join("cwd")).unwrap();
+    let cwd = std::fs::canonicalize(cwd.trim()).unwrap_or_else(|_| cwd.trim().into());
+    let run = fixture.run(review.id);
+    assert!(cwd.starts_with(&run), "{cwd:?} outside {run:?}");
+    assert!(!fixture.manager.paths.state.join("reviews").exists());
+}
+
+#[tokio::test]
+async fn recovery_removes_the_runs_an_earlier_version_left_in_the_state_directory() {
+    let fixture = fixture(&[], "").await;
+    let manager = &fixture.manager;
+    let repository = fixture.workspace.repository_id.clone();
+    let old = manager.paths.state.join("reviews");
+    let run = old.join("7");
+    std::fs::create_dir_all(run.join("checkout")).unwrap();
+    std::fs::write(run.join("repository"), repository.as_str()).unwrap();
+    manager.recover_reviews().await.unwrap();
+    assert!(!old.exists());
+    manager.ensure_no_reviews_in(&repository).await.unwrap();
+}
+
+#[tokio::test]
+async fn a_run_left_in_the_repository_directory_holds_back_its_move() {
+    let fixture = fixture(&[], "").await;
+    let manager = &fixture.manager;
+    let repository = fixture.workspace.repository_id.clone();
+    fixture.runs.create().unwrap();
+    manager.ensure_no_reviews_in(&repository).await.unwrap();
+    let run = fixture.run(ReviewId(7));
+    std::fs::create_dir_all(run.join("checkout")).unwrap();
+    assert!(manager.ensure_no_reviews_in(&repository).await.is_err());
+    std::fs::remove_dir_all(&run).unwrap();
+    manager.ensure_no_reviews_in(&repository).await.unwrap();
 }
 
 #[tokio::test]
@@ -1078,9 +1117,9 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
         })
         .await
         .unwrap();
-    let run = manager.paths.reviews().join(stuck.to_string());
+    fixture.runs.create().unwrap();
+    let run = fixture.run(stuck);
     std::fs::create_dir_all(run.join("checkout").join("file")).unwrap();
-    std::fs::write(run.join("repository"), repository.as_str()).unwrap();
     // Without write access to the run, its checkout cannot go.
     std::fs::set_permissions(&run, std::fs::Permissions::from_mode(0o500)).unwrap();
     manager.recover_reviews().await.unwrap();
@@ -1140,11 +1179,10 @@ async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_admission() {
         .await
         .unwrap();
     // The second run's review went with its workspace.
-    let runs =
-        [stuck, ReviewId(stuck.0 + 1)].map(|id| manager.paths.reviews().join(id.to_string()));
+    fixture.runs.create().unwrap();
+    let runs = [stuck, ReviewId(stuck.0 + 1)].map(|id| fixture.run(id));
     for run in &runs {
         std::fs::create_dir_all(run.join("checkout")).unwrap();
-        std::fs::write(run.join("repository"), repository.as_str()).unwrap();
     }
     // What the stopped daemon's reviewers left cannot be proven stopped.
     manager

@@ -1011,9 +1011,9 @@ Shoal tracks execution; the review tool owns sessions, exports, and forge access
 
 `shoal review run [space]` queues a review of the workspace's committed HEAD
 against [`shoal diff`](#diff)'s base. An agent reviews it once in the
-background, read-only, in a detached checkout of that commit outside the
-workspace, so uncommitted edits and later commits stay out; no session opens and
-no setup runs. The checkout's files are read-only whatever the reviewer's
+background, read-only, in a detached checkout of that commit in the repository
+directory's `.reviews`, outside the workspace, so uncommitted edits and later
+commits stay out; no session opens and no setup runs. The checkout's files are read-only whatever the reviewer's
 settings allow, and Shoal adds no trust entry for it; it is removed when the
 review ends. A checkout that cannot be removed stays until `shoal daemon restart`,
 and the repository cannot be moved until then; one whose reviewer's processes

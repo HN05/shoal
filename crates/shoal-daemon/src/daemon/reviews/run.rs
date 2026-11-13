@@ -1,7 +1,6 @@
 //! Running queued reviews: each starts at once, takes the workspace's HEAD,
 //! runs its reviewer in a detached checkout, falls back to a second
 //! reviewer once, and records what it found.
-use crate::paths::StateFiles;
 use std::{collections::HashSet, path::Path, sync::Arc};
 
 use crate::client::repository_ids::RepositoryId;
@@ -26,9 +25,13 @@ use crate::{
             agent_queue::{self, OneShotAdmission, Serving},
         },
     },
-    model::Workspace,
+    model::{Repository, Workspace},
     reviews::{FailureReason, Review, ReviewId, ReviewState, ReviewTarget},
+    shoal_dirs::{Contents, ShoalDir, remove_if_empty},
 };
+
+/// Where earlier versions kept the runs, in the state directory.
+const OLD_RUNS: &str = "reviews";
 
 /// Start every queued review, now and whenever one is queued; each then
 /// waits in the agent queue for admission.
@@ -160,10 +163,13 @@ impl Manager {
         self.verify_worktree(&workspace).await?;
         let settings = self.workspace_settings_with_templates(&workspace).await?;
         let commits = self.review_commits(&workspace, &review.target).await?;
+        // The run's directory is the repository's, which a registration
+        // older than it reserves first.
+        let repository = (self.reserve_repository_directory(&workspace.repository_id)).await?;
+        let files = run_files(&repository, id)?;
         if !self.start_review(id, &commits).await? {
             return Ok(Pass::Ended);
         }
-        let files = self.run_files(id);
         let checkout = self.reviews.hold_checkout(id, &workspace.repository_id);
         let ended = self
             .run_in_checkout(&review, &workspace, &settings, &commits, &files, cancelled)
@@ -227,13 +233,6 @@ impl Manager {
             .await
     }
 
-    /// The files of review `id`'s run.
-    fn run_files(&self, id: ReviewId) -> Files {
-        Files {
-            directory: self.paths.reviews().join(id.to_string()),
-        }
-    }
-
     /// Check the reviewed commit out and run the reviewers there; returns
     /// the agent that produced the result and how it ended.
     async fn run_in_checkout(
@@ -280,8 +279,8 @@ impl Manager {
         })
     }
 
-    /// The run's directory with the output schema, the repository's ID and
-    /// a detached checkout of `head`.
+    /// The run's directory with the output schema and a detached checkout
+    /// of `head`.
     async fn prepare_checkout(
         &self,
         workspace: &Workspace,
@@ -289,11 +288,10 @@ impl Manager {
         files: &Files,
     ) -> Result<()> {
         let repository = self.repository(&workspace.repository_id).await?;
+        review_runs(&repository)?.create()?;
         std::fs::create_dir_all(&files.directory)
             .with_context(|| format!("create {}", files.directory.display()))?;
         reviewer::write_schema(files)?;
-        std::fs::write(files.repository(), workspace.repository_id.as_str())
-            .with_context(|| format!("write {}", files.repository().display()))?;
         crate::git::detached::add(&repository.path, &files.checkout(), head.as_str()).await
     }
 
@@ -476,7 +474,7 @@ impl Manager {
             Err(_) => self.unlisted_runs().await?,
         };
         for run in &kept {
-            self.hold_unreconciled_run(*run).await;
+            self.hold_unreconciled_run(run);
         }
         let ids: Vec<ReviewId> = kept.iter().map(|run| run.id).collect();
         let now = UnixTime::now();
@@ -497,52 +495,100 @@ impl Manager {
     /// The runs of the running reviews, any of whose processes may still
     /// run, for when the run directories cannot be listed.
     async fn unlisted_runs(&self) -> Result<Vec<Unreconciled>> {
-        let running = self.store.run(|db| store::running(db)).await?;
-        Ok(running
-            .into_iter()
-            .map(|id| Unreconciled {
+        let mut unlisted = Vec::new();
+        for id in self.store.run(|db| store::running(db)).await? {
+            unlisted.push(Unreconciled {
                 id,
                 left_running: true,
-            })
-            .collect())
+                run: self.running_run(id).await,
+            });
+        }
+        Ok(unlisted)
+    }
+
+    /// Where running review `id`'s run is: in the state directory, for one
+    /// an earlier version started, or else in the reviewed workspace's
+    /// repository's directory, while the workspace exists.
+    async fn running_run(&self, id: ReviewId) -> Option<LeftRun> {
+        let old = Files {
+            directory: self.paths.state.join(OLD_RUNS).join(id.to_string()),
+        };
+        if old.directory.exists() {
+            return Some(LeftRun::old(old));
+        }
+        let review = self.store.run(move |db| store::load(db, id)).await.ok()??;
+        let workspace = self.workspace_by_id(&review.workspace_id).await.ok()?;
+        let repository = self.repository(&workspace.repository_id).await.ok()?;
+        Some(LeftRun {
+            files: run_files(&repository, id).ok()?,
+            repository: Some(repository.id),
+        })
     }
 
     /// Hold what `run`, which could not be removed, may still use until the
     /// daemon restarts: its checkout of the repository and, when its
     /// processes may still run, its tracking and its admission there.
-    async fn hold_unreconciled_run(&self, run: Unreconciled) {
-        let Unreconciled { id, left_running } = run;
-        let files = self.run_files(id);
-        if left_running {
-            self.oneshot_runs.track(&files.directory);
+    fn hold_unreconciled_run(&self, run: &Unreconciled) {
+        let Some(left) = &run.run else {
+            return;
+        };
+        if run.left_running {
+            self.oneshot_runs.track(&left.files.directory);
         }
-        // The run names it, as removing the workspace deletes the review.
-        match std::fs::read_to_string(files.repository()) {
-            Ok(repository) => {
-                let repository = RepositoryId::from(repository);
-                self.reviews.hold_checkout(id, &repository).keep();
-                if left_running {
-                    self.agent_queue.hold_oneshot(&repository);
-                }
-            }
-            Err(error) => log!(
-                "review {id}: read {}: {error}",
-                files.repository().display()
-            ),
+        // Its place names the repository, as removing the workspace deletes
+        // the review.
+        let Some(repository) = &left.repository else {
+            return;
+        };
+        self.reviews.hold_checkout(run.id, repository).keep();
+        if run.left_running {
+            self.agent_queue.hold_oneshot(repository);
         }
     }
 
     /// Remove the runs a stopped daemon left, returning those that could
-    /// not be removed; their checkouts stay for the next start.
+    /// not be removed; their checkouts stay for the next start. The state
+    /// directory's old runs go with the directory.
     async fn remove_interrupted_runs(&self) -> Result<Vec<Unreconciled>> {
         let mut kept = Vec::new();
-        for files in run_directories(&self.paths.reviews())? {
-            let left_running = self.remove_interrupted_run(&files).await;
-            if let (Some(id), Some(left_running)) = (files.review(), left_running) {
-                kept.push(Unreconciled { id, left_running });
+        for left in self.left_runs().await? {
+            let left_running = self.remove_interrupted_run(&left.files).await;
+            if let (Some(id), Some(left_running)) = (left.files.review(), left_running) {
+                kept.push(Unreconciled {
+                    id,
+                    left_running,
+                    run: Some(left),
+                });
             }
         }
+        remove_if_empty(&self.paths.state.join(OLD_RUNS))?;
         Ok(kept)
+    }
+
+    /// The runs stopped daemons may have left: in each repository's
+    /// directory, and in the state directory, where earlier versions kept
+    /// them.
+    async fn left_runs(&self) -> Result<Vec<LeftRun>> {
+        let mut runs = Vec::new();
+        for repository in self.repositories().await? {
+            let Some(dir) = ShoalDir::of(&repository, Contents::ReviewRuns) else {
+                continue;
+            };
+            if !dir.check_own()? {
+                continue;
+            }
+            runs.extend(
+                run_directories(dir.root())?
+                    .into_iter()
+                    .map(|files| LeftRun {
+                        files,
+                        repository: Some(repository.id.clone()),
+                    }),
+            );
+        }
+        let old = run_directories(&self.paths.state.join(OLD_RUNS))?;
+        runs.extend(old.into_iter().map(LeftRun::old));
+        Ok(runs)
     }
 
     /// Remove a run a stopped daemon left, after stopping its reviewer's
@@ -556,14 +602,53 @@ impl Manager {
         log!("{}: {error:#}", files.directory.display());
         Some(false)
     }
+
+    /// Whether a run is left in the repository `id`'s directory, as one
+    /// whose reviewer's processes may still run: a worktree of the
+    /// repository whose link a move would break.
+    pub(super) async fn review_runs_left(&self, id: &RepositoryId) -> Result<bool> {
+        let repository = self.repository(id).await?;
+        let Some(dir) = ShoalDir::of(&repository, Contents::ReviewRuns) else {
+            return Ok(false);
+        };
+        tokio::task::spawn_blocking(move || {
+            Ok(dir.check_own()? && !run_directories(dir.root())?.is_empty())
+        })
+        .await?
+    }
+}
+
+/// A run a stopped daemon may have left, with the repository its checkout
+/// belongs to, when that is known.
+#[derive(Clone)]
+struct LeftRun {
+    files: Files,
+    repository: Option<RepositoryId>,
+}
+
+impl LeftRun {
+    /// A run in the state directory, from an earlier version, which wrote
+    /// its repository beside it.
+    fn old(files: Files) -> Self {
+        let repository = match std::fs::read_to_string(files.repository()) {
+            Ok(repository) => Some(RepositoryId::from(repository)),
+            Err(error) => {
+                log!("read {}: {error}", files.repository().display());
+                None
+            }
+        };
+        Self { files, repository }
+    }
 }
 
 /// A run a stopped daemon left that recovery could not remove.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct Unreconciled {
     id: ReviewId,
     /// Whether its reviewer's processes may still run.
     left_running: bool,
+    /// Where it is, when known.
+    run: Option<LeftRun>,
 }
 
 /// Remove review `id`'s run and give back its checkout and admission. A run whose
@@ -635,13 +720,28 @@ fn run_directories(directory: &Path) -> Result<Vec<Files>> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => return Err(error).with_context(|| format!("read {}", directory.display())),
     };
-    entries
-        .map(|entry| {
-            Ok(Files {
-                directory: entry?.path(),
-            })
-        })
-        .collect()
+    let mut runs = Vec::new();
+    for entry in entries {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            runs.push(Files {
+                directory: entry.path(),
+            });
+        }
+    }
+    Ok(runs)
+}
+
+/// The files of review `id`'s run, in the reviewed repository's directory.
+fn run_files(repository: &Repository, id: ReviewId) -> Result<Files> {
+    Ok(Files {
+        directory: review_runs(repository)?.root().join(id.to_string()),
+    })
+}
+
+/// The directory of the repository's review runs.
+fn review_runs(repository: &Repository) -> Result<ShoalDir> {
+    ShoalDir::of(repository, Contents::ReviewRuns).context("the repository has no directory")
 }
 
 /// Remove a run's checkout and files.

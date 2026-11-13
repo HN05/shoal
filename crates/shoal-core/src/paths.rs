@@ -86,12 +86,6 @@ pub trait StateFiles {
         self.state().join("chats").join(chat.id.as_str())
     }
 
-    /// Where each running review keeps its detached checkout and its
-    /// reviewer's output, until the review ends.
-    fn reviews(&self) -> PathBuf {
-        self.state().join("reviews")
-    }
-
     /// The copies of Shoal's release that execution wrappers run from, kept
     /// while one runs from them.
     fn releases(&self) -> PathBuf {

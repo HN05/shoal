@@ -15,6 +15,7 @@ use crate::{
     git,
     model::{Repository, RepositoryRemoval, Workspace},
     removal::{InspectionPolicy, UnsavedWork},
+    shoal_dirs::{Contents, ShoalDir},
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, bail, ensure};
@@ -143,7 +144,9 @@ impl Manager {
         verify_directory(&repo.path, identity, true)?;
         self.remove_seed(&repo).await?;
         delete_caches(&repo).await?;
-        delete_tmp_dirs(&repo).await?;
+        delete_shoal_dir(&repo, Contents::TmpDirs).await?;
+        // Every run of the repository's reviews was stopped and removed.
+        delete_shoal_dir(&repo, Contents::ReviewRuns).await?;
         self.delete_proposal_files(&repo).await?;
         super::imported_sessions::remove_imported_sessions(&repo).await?;
         self.delete_repository_files(&repo).await?;
@@ -491,11 +494,12 @@ async fn delete_local_config(directory: Option<std::path::PathBuf>) -> Result<()
     .await?
 }
 
-async fn delete_tmp_dirs(repo: &Repository) -> Result<()> {
-    let Some(tmp_dirs) = crate::tmp_dirs::Layout::of(repo) else {
+/// Delete the repository's directory of `contents`, which nothing outlives.
+async fn delete_shoal_dir(repo: &Repository, contents: Contents) -> Result<()> {
+    let Some(dir) = ShoalDir::of(repo, contents) else {
         return Ok(());
     };
-    tokio::task::spawn_blocking(move || tmp_dirs.remove()).await?
+    tokio::task::spawn_blocking(move || dir.remove()).await?
 }
 
 async fn delete_empty_workspaces_dir(directory: Option<std::path::PathBuf>) -> Result<()> {

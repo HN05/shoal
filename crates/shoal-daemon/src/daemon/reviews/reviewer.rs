@@ -18,6 +18,7 @@ use crate::{
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 /// The files of one review's run, in its own directory.
+#[derive(Clone)]
 pub(super) struct Files {
     pub directory: PathBuf,
 }
@@ -32,8 +33,9 @@ impl Files {
         self.directory.join("checkout")
     }
 
-    /// The ID of the checkout's repository, written before the checkout,
-    /// so a restart finds it without the review.
+    /// The ID of the checkout's repository, which runs in the state
+    /// directory, from earlier versions, wrote before the checkout, since
+    /// that directory names no repository.
     pub fn repository(&self) -> PathBuf {
         self.directory.join("repository")
     }
