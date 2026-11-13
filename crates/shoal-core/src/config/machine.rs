@@ -58,7 +58,7 @@ pub struct Machine {
 impl Machine {
     /// Give each key a `same_as` reference names its target's value, over
     /// the defaults of what the file leaves out.
-    pub fn follow_references(&mut self) -> Result<()> {
+    pub(crate) fn follow_references(&mut self) -> Result<()> {
         let mut layers = [std::mem::take(self)];
         same_as::follow(
             &mut layers,

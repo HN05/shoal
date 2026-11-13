@@ -27,13 +27,13 @@ impl References {
     /// Take every reference out of `table`, a file's root or a table below
     /// it, so the rest reads as values. A table that is anything but one
     /// string `same_as` stays, for its option to read.
-    pub fn take(table: &mut DeTable<'_>) -> Self {
+    pub(crate) fn take(table: &mut DeTable<'_>) -> Self {
         let mut found = Vec::new();
         take(table, &mut Vec::new(), &mut found);
         Self(found)
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 }
@@ -74,7 +74,7 @@ fn target(table: &DeTable<'_>) -> Option<String> {
 /// a higher layer sets the key itself. A key that takes its value from a
 /// key that does in turn follows it once that one has its value. `root`
 /// names the keys of the files' root in errors.
-pub fn follow<T: Serialize + DeserializeOwned>(
+pub(crate) fn follow<T: Serialize + DeserializeOwned>(
     layers: &mut [T],
     references: fn(&T) -> &References,
     merged: impl Fn(&[T]) -> Result<Value>,
