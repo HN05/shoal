@@ -18,8 +18,8 @@ own you may write to its agent with `shoal messages send --space <space>`
 (`--attach FILE` hands it a file), answer its questions with
 `shoal questions <S.N> --answer <answer>`, hold it with
 `shoal acquire hold --workspace <workspace> --name <name> --reason <why>`, stop
-its agents with `shoal stop <space>`, resume the ones you or the spaces below
-you stopped with `shoal resume <space>`, and remove it with `shoal rm <space>`
+its agents with `shoal stop <space>`, restore the ones you or the spaces below
+you stopped with `shoal restore <space>`, and remove it with `shoal rm <space>`
 unless the user holds something there. Change or remove another agent's space
 only when the user asks or its work is finished.
 

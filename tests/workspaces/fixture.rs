@@ -252,7 +252,7 @@ impl Fixture {
         (output, fs::read_to_string(&rows).unwrap_or_default())
     }
 
-    /// Save an interrupted command for `shoal resume`, as `shoal stop` does.
+    /// Save an interrupted command for `shoal restore`, as `shoal stop` does.
     pub(crate) fn save_stopped_command(&self, workspace: &Value) {
         let state = self
             .root

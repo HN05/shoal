@@ -210,7 +210,7 @@ shoal files 3                 # The files attached to the workspace
 shoal files 5                 # The files a chat's agent attached
 shoal questions               # Pick a question and answer it
 shoal questions 3 --answer 2  # Answer question 3 with its second choice
-shoal stop 3                  # Stop agents and commands here and below; they stay down until shoal resume
+shoal stop 3                  # Stop agents and commands here and below; they stay down until shoal restore
 shoal stop 3 5                # Stop several; the picker selects them with Tab or Ctrl-A
 shoal stop --all              # Stop every workspace and chat; a reboot saves agents too
 shoal stop --interrupt 3          # Cancel its agent's turn; the agent keeps running
@@ -218,11 +218,12 @@ shoal stop --leftovers        # Stop what this workspace's commands left running
 shoal stop --processes 3          # Stop its processes Shoal does not track; agents keep running
 shoal restart --all --agent claude  # Restart Claude agents in new terminals, such as after an update
 shoal restart --all --sequential    # Restart one at a time, idle agents first
-shoal resume --all            # Queue the restore of stopped agents, restore stopped chats; report stopped commands
-shoal resume 3                # Continue its stopped agent, or the turn shoal stop --interrupt ended
-shoal resume 3 --now          # Restore its stopped agent at once in the background
-shoal resume 3 --focus # Restore its stopped agent in this terminal
-shoal resume 5                # Restore a chat Shoal saved, continuing its session
+shoal restore                 # Pick stopped work, stopped chats and removed workspaces to restore
+shoal restore --all           # Queue the restore of stopped agents, restore stopped chats; report stopped commands
+shoal restore 3               # Continue its stopped agent, or the turn shoal stop --interrupt ended
+shoal restore 3 --now         # Restore its stopped agent at once in the background
+shoal restore 3 --focus       # Restore its stopped agent in this terminal
+shoal restore 5               # Restore a chat Shoal saved, continuing its session
 shoal done 3                  # Mark finished and request safe cleanup
 shoal done --cleanup 3 # Request cleanup despite [cleanup.done] enabled = false
 shoal done --attach report.md  # Hand back files, such as an investigation's report
@@ -357,11 +358,11 @@ workspaces and leases; before that, Shoal tells running agents that memory press
 false`. See [overload protection](docs/reference.md#overload-protection)
 for thresholds and timing. When disk space runs low, the daemon removes
 workspaces idle cleanup would remove; if space stays critical, it stops tracked
-executions. Agents restore once space returns; `shoal resume` restores the rest. Stop agents manually with `shoal stop`:
+executions. Agents restore once space returns; `shoal restore` restores the rest. Stop agents manually with `shoal stop`:
 they stay down, holding no agent slot and no workspace from cleanup, until
-`shoal resume` continues them, as it continues an agent that exited on its own,
+`shoal restore` continues them, as it continues an agent that exited on its own,
 such as one you quit. To take agents down briefly, use `shoal restart`. `shoal
-resume --all` queues the restores to start as the agent limits allow; `--now`
+restore --all` queues the restores to start as the agent limits allow; `--now`
 starts them at once in the background, and `--focus` restores one agent in this
 terminal. Agents whose terminal closed, or that a logout or reboot
 stopped, come back through the same queue on their own. Codex and Claude automatically continue
@@ -480,15 +481,15 @@ shows why it keeps one workspace.
 Removal keeps the workspace's HEAD and unsaved files in a checkpoint, except a
 disposable workspace's, as `shoal checkpoint` does and Shoal does when an
 agent exits or is stopped. Until the checkpoint expires, after 30 days by default,
-`shoal restore` picks a removed workspace, and `shoal restore <workspace>`
-opens one again with its links and the unsaved files the checkpoint kept;
-`shoal resume` then continues the agents the removal stopped. A checkpoint keeps
+`shoal restore` picks a removed workspace among what it restores, and
+`shoal restore <id>` opens one again with its links and the unsaved files the
+checkpoint kept; restoring it again continues the agents the removal stopped. A checkpoint keeps
 HEAD only when the unsaved files are too large or include a nested repository or
 changed submodule; see [Checkpoints and restore](docs/reference.md#checkpoints-and-restore).
 `shoal restore <workspace> --checkpoint <number>` returns an existing workspace
 to one of its checkpoints. `shoal move export <workspace> -o <file>`
 removes a workspace and writes its removal checkpoint and record to a file, and `shoal
-move import <file>` opens it on another machine or the same one, where `shoal resume`
+move import <file>` opens it on another machine or the same one, where `shoal restore`
 continues its agents' sessions from the transcripts the file carries;
 `--new-sessions` starts them over. A chat moves the same way: the export ends it,
 and the import starts it again, continuing its session.
@@ -523,7 +524,7 @@ brew upgrade hn05/tap/shoal
 Update a downloaded binary or `Shoal.app` with `shoal update`. Managed daemons apply the upgrade once their operations are idle; run
 `shoal daemon restart` to apply an upgrade immediately; running agents and
 commands reattach to the new daemon. Wrappers from releases before reattachment
-are stopped instead; restore them with `shoal resume --all`. The next `shoal`
+are stopped instead; restore them with `shoal restore --all`. The next `shoal`
 command updates installed skills; reload `source <(shoal shell init)` in open
 terminals.
 

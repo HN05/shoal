@@ -1,4 +1,4 @@
-//! `shoal stop` of chats: it saves them for `shoal resume`, for the user or
+//! `shoal stop` of chats: it saves them for `shoal restore`, for the user or
 //! a parent's agent, and takes the chats below a stopped space.
 use super::chats::start_test_chat;
 use super::restarts::{Parent, parent_fixture};
@@ -6,7 +6,7 @@ use super::zmx::wait_zmx_sessions_ended;
 use super::*;
 
 /// The user stops a running chat, which waits for the user's
-/// `shoal resume`.
+/// `shoal restore`.
 #[test]
 fn the_user_stops_a_chat_and_resumes_it() {
     let fixture = parent_fixture();
@@ -18,7 +18,7 @@ fn the_user_stops_a_chat_and_resumes_it() {
     assert!(!chat_runs(&fixture, "talk"));
 
     let talk = fixture.id("talk");
-    fixture.ok(&["resume", &talk]);
+    fixture.ok(&["restore", &talk]);
     wait_until("chat restored", || home.join("chat-restored").exists());
     fixture.ok(&["rm", &talk, "--yes"]);
     wait_zmx_sessions_ended(&home);
@@ -130,12 +130,12 @@ fn stops_and_resumes_the_chats_below(fixture: &Fixture, parent: &Parent) {
         assert_eq!(stopped["stopped"], true, "{stopped}");
     });
     let talk = fixture.id("talk");
-    parent.ok(fixture, &["resume", &talk]);
+    parent.ok(fixture, &["restore", &talk]);
     wait_until("the parent's restore", || restored.exists());
 
     fixture.ok(&["stop", &talk]);
     parent.ok(fixture, &["stop", &talk]);
-    let output = parent.run(fixture, &["resume", &talk]);
+    let output = parent.run(fixture, &["restore", &talk]);
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("ask the user"), "{output:?}");
     fixture.ok(&["rm", &talk, "--yes"]);

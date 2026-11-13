@@ -1,5 +1,5 @@
 //! Checkpoints of workspaces: taking one, and returning a workspace to one.
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 use shoal_refs::BranchName;
 
 use crate::client::recovery;
@@ -39,9 +39,26 @@ pub(in crate::cli::commands) async fn checkpoint(
     Ok(0)
 }
 
+/// Return the one workspace `spaces` names, else the current one or the
+/// one picked, to `checkpoint`, or to the one the user picks when it names
+/// none.
+pub(super) async fn run(
+    ctx: &Context,
+    spaces: Vec<SpaceSelector>,
+    checkpoint: Option<CheckpointNumber>,
+) -> Result<i32> {
+    ensure!(spaces.len() <= 1, "--checkpoint takes one workspace");
+    let workspace = spaces.into_iter().next();
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    match checkpoint {
+        Some(checkpoint) => restore(ctx, workspace, checkpoint).await,
+        None => choose(ctx, workspace).await,
+    }
+}
+
 /// Return the workspace to the checkpoint the user picks, or list its
 /// checkpoints when there is no terminal or none to pick.
-pub(super) async fn choose(ctx: &Context, workspace: SpaceSelector) -> Result<i32> {
+async fn choose(ctx: &Context, workspace: SpaceSelector) -> Result<i32> {
     let checkpoints =
         (list(ctx, &workspace).await?).with_context(|| format!("no workspace {workspace}"))?;
     if checkpoints.is_empty() || !ctx.interactive() {
@@ -61,14 +78,11 @@ pub(super) async fn choose(ctx: &Context, workspace: SpaceSelector) -> Result<i3
 
 /// Every checkpoint of an existing workspace, requested page by page;
 /// `None` when no workspace matches.
-pub(super) async fn list(
-    ctx: &Context,
-    workspace: &SpaceSelector,
-) -> Result<Option<Vec<Checkpoint>>> {
+async fn list(ctx: &Context, workspace: &SpaceSelector) -> Result<Option<Vec<Checkpoint>>> {
     recovery::checkpoints(&ctx.paths, workspace).await
 }
 
-pub(super) async fn restore(
+async fn restore(
     ctx: &Context,
     workspace: SpaceSelector,
     checkpoint: CheckpointNumber,

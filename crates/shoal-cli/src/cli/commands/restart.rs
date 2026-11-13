@@ -1,6 +1,6 @@
 //! Restarting agents, each in a new wrapper or in place, together or one at
 //! a time, so each runs its agent's current binary. A chat's agent restarts
-//! in a new place, as `shoal resume` restores a chat.
+//! in a new place, as `shoal restore` restores a chat.
 use anyhow::{Result, ensure};
 
 use crate::client::output::agents::Restarted;

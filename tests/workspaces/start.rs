@@ -2105,7 +2105,7 @@ fn stop_narrowed_agent(fixture: &Fixture, workspace: &Value) -> PathBuf {
     record
 }
 
-/// `shoal resume --permission` changes the permissions a stopped agent was
+/// `shoal restore --permission` changes the permissions a stopped agent was
 /// given, which its restore registers: a key it names takes its value, even
 /// wider than the mode's, `KEY=mode` drops one, and the rest keep theirs.
 /// Without it the restore keeps them all, and a refused resume changes
@@ -2120,7 +2120,7 @@ fn resume_changes_the_permissions_a_stopped_agent_was_given() {
         || fixture.ok(&["status", &fixture.id("stopped")])["workspace"]["narrowing"].clone();
     let resume = |args: &[&str]| {
         let resume = [
-            "resume",
+            "restore",
             &fixture.id("stopped"),
             "--execution",
             "stopped-agent",
@@ -2142,7 +2142,7 @@ fn resume_changes_the_permissions_a_stopped_agent_was_given() {
     let output = fixture
         .command()
         .args([
-            "resume",
+            "restore",
             &fixture.id("stopped"),
             "--now",
             "--permission",
@@ -2167,7 +2167,7 @@ fn resume_changes_the_permissions_a_stopped_agent_was_given() {
 }
 
 /// The narrowing a restore the daemon starts from the queue runs under,
-/// which `shoal resume` with `args` queued for an agent that started with
+/// which `shoal restore` with `args` queued for an agent that started with
 /// `push=propose`.
 fn queued_restore_narrowing(args: &[&str]) -> Value {
     let fixture = Fixture::with_config(Some(
@@ -2176,7 +2176,7 @@ fn queued_restore_narrowing(args: &[&str]) -> Value {
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let workspace = fixture.add("stopped");
     stop_narrowed_agent(&fixture, &workspace);
-    let queued = fixture.ok(&[&["resume", &fixture.id("stopped")][..], args].concat());
+    let queued = fixture.ok(&[&["restore", &fixture.id("stopped")][..], args].concat());
     assert_eq!(queued["queued"].as_array().unwrap().len(), 1, "{queued}");
     let path = Path::new(workspace["path"].as_str().unwrap());
     wait_until("the restore", || path.join("restored").exists());
@@ -2196,7 +2196,7 @@ fn a_queued_restore_keeps_the_recorded_narrowing() {
 }
 
 /// A restore the daemon starts from the queue runs with the permissions its
-/// `shoal resume --permission` gave.
+/// `shoal restore --permission` gave.
 #[test]
 fn a_queued_restore_runs_with_the_permissions_its_resume_gave() {
     assert_eq!(
@@ -2205,7 +2205,7 @@ fn a_queued_restore_runs_with_the_permissions_its_resume_gave() {
     );
 }
 
-/// `shoal resume --permission` restores a stopped chat with the permissions
+/// `shoal restore --permission` restores a stopped chat with the permissions
 /// it gives, even wider than its mode's, which the chat records with the
 /// keys it leaves out; without it the chat keeps them all.
 #[test]
@@ -2221,7 +2221,7 @@ fn resume_changes_the_permissions_a_stopped_chat_was_given() {
     let resume = |fixture: &Fixture, args: &[&str]| {
         let mut command = fixture.command();
         command
-            .args(["resume", &fixture.id("talk"), "--focus"])
+            .args(["restore", &fixture.id("talk"), "--focus"])
             .args(args);
         let (output, transcript) = fixture.interactive_command(&mut command, "");
         assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -3268,7 +3268,7 @@ fn resume_now_without_a_terminal_has_the_daemon_start_its_restores() {
         .iter()
         .zip(&paths)
     {
-        let resumed = fixture.ok(&[&["resume"][..], args].concat());
+        let resumed = fixture.ok(&[&["restore"][..], args].concat());
         let queued = resumed["queued"].as_array().unwrap();
         assert_eq!(queued.len(), 1, "{resumed}");
         assert_eq!(queued[0]["state"], "starting", "{resumed}");
@@ -3297,7 +3297,7 @@ fn resume_without_a_terminal_or_host_is_refused_before_queuing() {
     fs::create_dir(&bin).unwrap();
     let output = fixture
         .command()
-        .args(["resume", &fixture.id("stopped"), "--now"])
+        .args(["restore", &fixture.id("stopped"), "--now"])
         .env("PATH", fixture.restricted_path(&bin))
         .stdin(Stdio::null())
         .output()
@@ -3311,7 +3311,7 @@ fn resume_without_a_terminal_or_host_is_refused_before_queuing() {
     assert!(record.exists());
 }
 
-/// `shoal resume` queues restores, which the daemon starts in detached
+/// `shoal restore` queues restores, which the daemon starts in detached
 /// sessions as `max_agents` allows, leaving out done workspaces.
 #[test]
 fn resume_queues_restores_that_start_as_agent_slots_free() {
@@ -3344,7 +3344,7 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
     }
     fixture.ok(&["done", &fixture.id("finished")]);
 
-    let queued = fixture.ok(&["resume", "--all"]);
+    let queued = fixture.ok(&["restore", "--all"]);
     let names: Vec<_> = queued["queued"]
         .as_array()
         .unwrap()

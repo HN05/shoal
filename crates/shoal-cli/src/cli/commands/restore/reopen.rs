@@ -1,7 +1,6 @@
 //! Opening removed workspaces again from their removal records.
 use crate::cli::commands::restore::agents::reports::QueuedExt;
 use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use std::collections::BTreeSet;
 
 use anyhow::Result;
@@ -14,54 +13,52 @@ use crate::{
     cli::{
         context::Context,
         output::{Palette, Style},
-        shell, terminal, ui,
+        shell, terminal,
     },
     model::{RemovedWorkspace, RestoredWorkspace},
     state::WorkspaceState,
 };
 
-/// Reopen the removed workspace the user picks, or list the removed
-/// workspaces when there is no terminal or none to pick.
-pub(super) async fn choose_removed(ctx: &Context) -> Result<i32> {
-    let removed = crate::client::removal::removed(&ctx.paths).await?;
-    if removed.is_empty() || !ctx.interactive() {
-        ctx.show(&removed, |removed| print_removed(removed))?;
-        return Ok(0);
+/// Open each of the `removed` workspaces again, set it up, link its PRs
+/// and run its post-setup hook, in which the agents restored for it start;
+/// `None` once a setup did not finish, which it reported. A workspace
+/// opened alone becomes the directory of a shell that follows the caller.
+pub(super) async fn reopen_each(
+    ctx: &Context,
+    removed: &[SpaceSelector],
+) -> Result<Option<Vec<Reopened>>> {
+    let mut reopened = Vec::new();
+    for workspace in removed {
+        let restore = crate::client::removal::restore(&ctx.paths, workspace.clone());
+        let restored = ctx.progress("Restoring workspace", restore).await?;
+        let Some(opened) = prepare_reopened(ctx, *restored).await? else {
+            return Ok(None);
+        };
+        super::super::workspaces::run_post_setup(ctx, &opened.workspace).await?;
+        reopened.push(opened);
     }
-    let entries = removed
-        .iter()
-        .map(|workspace| workspace.workspace_id.to_string())
-        .zip(removed_lines(&removed))
-        .collect();
-    let workspace = SpaceId::from(ui::pick(ctx, "Removed workspace> ", entries)?);
-    reopen(ctx, SpaceSelector::Id(workspace)).await
-}
-
-/// Open a removed workspace again from its removal record.
-pub(super) async fn reopen(ctx: &Context, workspace: SpaceSelector) -> Result<i32> {
-    let restored = ctx
-        .progress(
-            "Restoring workspace",
-            crate::client::removal::restore(&ctx.paths, workspace),
-        )
-        .await?;
-    finish_reopen(ctx, *restored, "Restored", false).await
+    if let [opened] = reopened.as_slice()
+        && terminal::follows_caller(ctx)
+    {
+        shell::navigate(ctx, &opened.workspace.path)?;
+    }
+    Ok(Some(reopened))
 }
 
 /// Set up a workspace the daemon opened again from a removal record, and
-/// link its PRs, then queue its stopped agents when `resume`; `action`
+/// link its PRs, then queue its stopped agents when `restore`; `action`
 /// begins the report.
 pub(in crate::cli::commands) async fn finish_reopen(
     ctx: &Context,
     restored: RestoredWorkspace,
     action: &str,
-    resume: bool,
+    restore: bool,
 ) -> Result<i32> {
     let Some(mut reopened) = prepare_reopened(ctx, restored).await? else {
         return Ok(1);
     };
     // The agents start in a workspace whose post-setup hook succeeded.
-    if resume {
+    if restore {
         super::super::workspaces::run_post_setup(ctx, &reopened.workspace).await?;
         reopened.queue_agents(ctx).await;
     }
@@ -69,7 +66,7 @@ pub(in crate::cli::commands) async fn finish_reopen(
     if terminal::follows_caller(ctx) {
         shell::navigate(ctx, &reopened.workspace.path)?;
     }
-    if !resume {
+    if !restore {
         super::super::workspaces::run_post_setup(ctx, &reopened.workspace).await?;
     }
     Ok(0)
@@ -81,7 +78,7 @@ pub(crate) trait ReopenedExt {
     fn message(&self, ctx: &Context, action: &str) -> String;
 
     /// Queue the restores of the agents the removal stopped, warning when
-    /// that fails, since `shoal resume` still restores them.
+    /// that fails, since `shoal restore` still restores them.
     async fn queue_agents(&mut self, ctx: &Context);
 }
 
@@ -106,11 +103,11 @@ impl ReopenedExt for Reopened {
                 .unwrap_or_default(),
             0 => String::new(),
             1 => format!(
-                "; shoal resume {} continues its stopped agent",
+                "; shoal restore {} restores its stopped agent",
                 workspace.number
             ),
             _ => format!(
-                "; shoal resume {} continues its stopped agents",
+                "; shoal restore {} restores its stopped agents",
                 workspace.number
             ),
         };
@@ -135,7 +132,7 @@ impl ReopenedExt for Reopened {
         match super::agents::queue::queue_stopped(ctx, &stopped).await {
             Ok(queued) => self.queued = Some(queued),
             Err(error) => eprintln!(
-                "warning: cannot queue the stopped agents; shoal resume {} restores them: {error:#}",
+                "warning: cannot queue the stopped agents; shoal restore {} restores them: {error:#}",
                 self.workspace.number
             ),
         }
@@ -186,20 +183,9 @@ pub(in crate::cli::commands) async fn prepare_reopened(
     }))
 }
 
-/// List `removed`, each led by the ID that selects it, since a removed
-/// workspace has no number and its name selects nothing.
-fn print_removed(removed: &[RemovedWorkspace]) {
-    if removed.is_empty() {
-        outln!("No removed workspaces to restore");
-    }
-    for (workspace, line) in removed.iter().zip(removed_lines(removed)) {
-        outln!("{}  {line}", workspace.workspace_id);
-    }
-}
-
 /// One aligned line per removed workspace: its name, branch, when and why
 /// it was removed, and the number of the checkpoint its removal took.
-fn removed_lines(removed: &[RemovedWorkspace]) -> Vec<String> {
+pub(super) fn removed_lines(removed: &[RemovedWorkspace]) -> Vec<String> {
     let width = removed
         .iter()
         .map(|workspace| workspace.name.chars().count())

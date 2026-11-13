@@ -117,8 +117,8 @@ fn emit_stopped_work(
     stopped: Option<bool>,
 ) -> Result<()> {
     let message = match stopped {
-        Some(true) => format!("{message}; restore stopped work with shoal resume --all"),
-        None => format!("{message}; restore any stopped work with shoal resume --all"),
+        Some(true) => format!("{message}; restore stopped work with shoal restore --all"),
+        None => format!("{message}; restore any stopped work with shoal restore --all"),
         Some(false) => message.to_owned(),
     };
     ctx.emit_styled(

@@ -87,7 +87,7 @@ fn a_saved_chats_open_question_stays_in_the_inbox() {
 fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     let mut fixture = chat_session_fixture();
     let home = fixture.root.path().to_owned();
-    // `shoal daemon stop` saves the chat for `shoal resume`.
+    // `shoal daemon stop` saves the chat for `shoal restore`.
     let chat = save_running_chat(&fixture, |fixture| {
         let output = fixture.run(&["daemon", "stop"]);
         assert!(output.status.success(), "{output:?}");
@@ -110,7 +110,7 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
             "sh",
             "-c",
         ])
-        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" resume talk --forget; exit $?"#)
+        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" restore talk --forget; exit $?"#)
         .arg(support::shoal_binary())
         .output()
         .unwrap();
@@ -124,7 +124,7 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
-            .args(["resume", &fixture.id("talk"), "--focus"]),
+            .args(["restore", &fixture.id("talk"), "--focus"]),
         "",
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -184,7 +184,7 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
     let worker = fixture.add("worker");
     stop_agent(&fixture, &worker);
     // A list naming a chat and a workspace acts on both.
-    let forgotten = fixture.ok(&["resume", &chat, &fixture.id("worker"), "--forget"]);
+    let forgotten = fixture.ok(&["restore", &chat, &fixture.id("worker"), "--forget"]);
     forgotten_both(&fixture, &chat, &forgotten);
     // `--all` takes the stopped chats too.
     let chat = save_chat(&mut fixture);
@@ -192,14 +192,14 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
     forgotten_both(
         &fixture,
         &chat,
-        &fixture.ok(&["resume", "--all", "--forget"]),
+        &fixture.ok(&["restore", "--all", "--forget"]),
     );
     // The picker offers the stopped chats after the workspaces with stopped
     // work.
     let chat = save_chat(&mut fixture);
     stop_agent(&fixture, &worker);
     let both = format!("{chat} {}", worker["id"].as_str().unwrap());
-    let (output, rows) = fixture.pick(&["resume", "--forget"], &both, "");
+    let (output, rows) = fixture.pick(&["restore", "--forget"], &both, "");
     assert!(output.status.success(), "{output:?}");
     let rows = rows.lines().collect::<Vec<_>>();
     assert_eq!(rows.len(), 2, "{rows:?}");
@@ -1697,13 +1697,13 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
         "worker chat"
     );
 
-    // Its agent exited; `shoal resume` restores it in the worktree.
+    // Its agent exited; `shoal restore` restores it in the worktree.
     assert_eq!(chats[0]["running"], false, "{chats}");
     fs::remove_file(home.join("chat-cwd")).unwrap();
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
-            .args(["resume", &fixture.id("worker chat"), "--focus"]),
+            .args(["restore", &fixture.id("worker chat"), "--focus"]),
         "",
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -2175,7 +2175,7 @@ fn a_restored_chat_continues_its_session_with_its_messages_waiting() {
     assert!(output.status.success(), "{output:?}");
 
     let (output, transcript) =
-        fixture.interactive_command(fixture.command().args(["resume", &talk, "--focus"]), "");
+        fixture.interactive_command(fixture.command().args(["restore", &talk, "--focus"]), "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let args = fs::read_to_string(home.join("chat-args")).unwrap();
     assert!(args.contains("--resume\nchat-session\n"), "{args}");

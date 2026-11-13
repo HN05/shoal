@@ -35,7 +35,7 @@ fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
     .unwrap();
 
     let output = fixture.run(&[
-        "resume",
+        "restore",
         &fixture.id("quarantined"),
         "--execution",
         execution,
@@ -196,7 +196,7 @@ fn daemon_stop_and_signals_stop_tracked_agents() {
         saved
     };
     // `shoal daemon stop` stops the agent as `shoal stop` does, so it stays
-    // down until `shoal resume`.
+    // down until `shoal restore`.
     let agent = start(&fixture);
     let output = fixture.run(&["daemon", "stop"]);
     assert!(output.status.success(), "{output:?}");

@@ -55,7 +55,7 @@ pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
             repository,
             keep_sessions,
             new_sessions,
-            resume,
+            restore,
         }) => {
             let sessions = if keep_sessions {
                 Some(true)
@@ -67,7 +67,7 @@ pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
             let options = import::ImportOptions {
                 repository,
                 sessions,
-                resume,
+                restore,
             };
             let files = match files.is_empty() {
                 true => vec![standard_input()?],

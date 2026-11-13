@@ -443,7 +443,7 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
         .spawn()
         .unwrap();
     wait_until("agent started", || old.join("started").exists());
-    // A workspace running only a command keeps it for `shoal resume`.
+    // A workspace running only a command keeps it for `shoal restore`.
     let building = fixture.add("building");
     let building = PathBuf::from(building["path"].as_str().unwrap());
     let command = fixture
@@ -486,7 +486,7 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
     assert_eq!(moved.as_array().unwrap().len(), 1, "{moved}");
     assert!(agent.wait_with_output().unwrap().status.success());
     command.wait_with_output().unwrap();
-    let resumed = fixture.ok(&["resume", &fixture.id("building")]);
+    let resumed = fixture.ok(&["restore", &fixture.id("building")]);
     let argv = &resumed["commands"][0]["commands"][0];
     assert_eq!(argv[0], "sh", "{resumed}");
     let path = fs::canonicalize(fixture.root.path())

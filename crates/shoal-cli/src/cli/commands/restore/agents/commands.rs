@@ -1,4 +1,4 @@
-//! The commands stopped with a workspace's agents: one resume claims them,
+//! The commands stopped with a workspace's agents: one restore claims them,
 //! then reports them to the user or hands them to the restored agent.
 use anyhow::Result;
 
@@ -10,7 +10,7 @@ use crate::{
     model::PresentSpace,
 };
 
-/// Only one resume reports a command; another holding its lock skips it.
+/// Only one restore reports a command; another holding its lock skips it.
 pub(super) fn claim(commands: &mut Vec<SavedCommand>) -> Vec<RecoveryClaim> {
     let mut claims = Vec::new();
     commands.retain(|command| match recovery::claim(&command.path) {

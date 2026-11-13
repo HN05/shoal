@@ -33,7 +33,7 @@ pub(super) async fn run_all(
             match commands::report(ctx, &space, &saved.commands) {
                 Ok(report) => resumed.commands.push(report),
                 Err(error) => {
-                    let failure = ui::failure(ctx, "resume", space.name(), &error);
+                    let failure = ui::failure(ctx, "restore", space.name(), &error);
                     resumed.failed.push(failure);
                 }
             }
@@ -87,7 +87,7 @@ pub(super) async fn start_sessions(
                 continue;
             }
             Err(error) => {
-                let failure = ui::failure(ctx, "resume", space.name(), &error);
+                let failure = ui::failure(ctx, "restore", space.name(), &error);
                 output.failed.push(failure);
                 continue;
             }
@@ -139,7 +139,7 @@ async fn start_session(
     let target = ConfigTarget::Space(SpaceSelector::id(space.id()));
     let settings = crate::config::settings(&ctx.paths, target).await?;
     let args = [
-        "resume",
+        "restore",
         space.id().as_str(),
         "--execution",
         session.id.as_str(),

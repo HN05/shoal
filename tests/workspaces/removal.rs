@@ -80,16 +80,19 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
     fixture.ok(&["rename", &fixture.id("scratch"), "Scratch notes"]);
     fixture.ok(&["rm", "--wait", &fixture.id("Scratch notes"), "--yes"]);
     assert!(!path.exists());
-    let removed = fixture.ok(&["restore"]);
+    let removed = fixture.ok(&["restore"])["removed"].clone();
     assert_eq!(removed[0]["name"], "Scratch notes");
     assert_eq!(removed[0]["cause"], "manual");
 
-    let restored = fixture.ok(&["restore", &fixture.id("Scratch notes")]);
+    let restored = fixture.ok(&["restore", &fixture.id("Scratch notes")])["reopened"][0].clone();
     assert_eq!(restored["workspace"]["name"], "Scratch notes");
     assert_eq!(restored["workspace"]["branch"], "scratch");
     assert_eq!(restored["workspace"]["state"], "ready");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
-    assert_eq!(fixture.ok(&["restore"]), serde_json::json!([]));
+    assert_eq!(
+        fixture.ok(&["restore"])["removed"].clone(),
+        serde_json::json!([])
+    );
     let missing = fixture.run(&["restore", &fixture.id("missing")]);
     assert!(!missing.status.success());
 
@@ -109,6 +112,48 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
     let restored = fixture.ok(&["restore", &fixture.id("Scratch notes"), "--checkpoint", "2"]);
     assert_eq!(restored["replaced"]["number"], 3);
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
+    // A checkpoint is one workspace's, which no agent restore goes with.
+    let workspace = fixture.id("Scratch notes");
+    for args in [
+        &[workspace.as_str(), workspace.as_str(), "--checkpoint", "2"][..],
+        &[workspace.as_str(), "--checkpoint", "2", "--forget"],
+        &[workspace.as_str(), "--checkpoint", "--now"],
+        &["--all", "--checkpoint"],
+    ] {
+        let refused = fixture.run(&[&["restore"][..], args].concat());
+        assert!(!refused.status.success(), "{args:?}");
+    }
+    // None of them kept the state in another checkpoint.
+    let checkpoints = fixture.ok(&["restore", &workspace, "--checkpoint"]);
+    assert_eq!(checkpoints.as_array().unwrap().len(), 3, "{checkpoints}");
+}
+
+#[test]
+fn restore_without_a_terminal_lists_stopped_work_and_removed_workspaces() {
+    let fixture = Fixture::new();
+    let stopped = fixture.add("stopped");
+    fixture.add("gone");
+    fixture.ok(&["rm", "--wait", &fixture.id("gone"), "--yes"]);
+    fixture.save_stopped_command(&stopped);
+    let listed = fixture.ok(&["restore"]);
+    assert_eq!(
+        listed["stopped"][0]["workspace"]["name"], "stopped",
+        "{listed}"
+    );
+    assert_eq!(listed["stopped"][0]["saved"]["commands"], 1, "{listed}");
+    assert_eq!(listed["removed"][0]["name"], "gone", "{listed}");
+    assert_eq!(listed["removed"][0]["checkpoint"]["number"], 1, "{listed}");
+
+    // --all restores the stopped work and leaves the removed workspace.
+    let restored = fixture.ok(&["restore", "--all"]);
+    assert_eq!(
+        restored["commands"][0]["workspace"], "stopped",
+        "{restored}"
+    );
+    assert_eq!(restored.get("reopened"), None, "{restored}");
+    let listed = fixture.ok(&["restore"]);
+    assert_eq!(listed["stopped"], serde_json::json!([]), "{listed}");
+    assert_eq!(listed["removed"][0]["name"], "gone", "{listed}");
 }
 
 #[test]
@@ -129,7 +174,7 @@ fn restore_lists_removed_workspaces_beyond_one_protocol_frame() {
         [],
     )
     .unwrap();
-    let removed = fixture.ok(&["restore"]);
+    let removed = fixture.ok(&["restore"])["removed"].clone();
     let names: Vec<_> = removed
         .as_array()
         .unwrap()
@@ -163,7 +208,7 @@ fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoi
         "{rows:?}"
     );
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
-    let removed = fixture.ok(&["restore"]);
+    let removed = fixture.ok(&["restore"])["removed"].clone();
     let names: Vec<_> = removed
         .as_array()
         .unwrap()
@@ -230,12 +275,12 @@ fn resume_continues_the_agent_a_removal_stopped_once_restored() {
     agent.wait_with_output().unwrap();
     command.wait_with_output().unwrap();
     assert!(!path.exists());
-    let removed = fixture.ok(&["restore"]);
+    let removed = fixture.ok(&["restore"])["removed"].clone();
     let agents = removed[0]["agents"].as_array().unwrap();
     assert_eq!(agents.len(), 1, "{removed}");
     assert_eq!(agents[0]["record"]["agent"], "claude");
 
-    let restored = fixture.ok(&["restore", &fixture.id("removed")]);
+    let restored = fixture.ok(&["restore", &fixture.id("removed")])["reopened"][0].clone();
     assert_eq!(restored["warnings"], serde_json::json!([]));
     assert_eq!(restored["workspace"]["path"], workspace["path"]);
     let execution = agents[0]["execution"].as_str().unwrap();
@@ -251,7 +296,7 @@ fn resume_continues_the_agent_a_removal_stopped_once_restored() {
         .filter(|name| name.ends_with(".recovery.json") || name.ends_with(".command.json"))
         .collect::<Vec<_>>();
     assert_eq!(saved, [format!("{execution}.recovery.json")]);
-    let resumed = fixture.run(&["resume", &fixture.id("removed"), "--focus"]);
+    let resumed = fixture.run(&["restore", &fixture.id("removed"), "--focus"]);
     assert!(resumed.status.success(), "{resumed:?}");
     assert!(path.join("resumed").exists());
     assert!(!state.join(format!("{execution}.recovery.json")).exists());
@@ -1124,7 +1169,10 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     assert_eq!(removed["branch_deleted"], true, "{removed}");
     assert!(!path.exists() && !child_path.exists());
     assert!(git(&fixture.repo, &["branch", "--list", "scratch"]).is_empty());
-    assert_eq!(fixture.ok(&["restore"]), serde_json::json!([]));
+    assert_eq!(
+        fixture.ok(&["restore"])["removed"].clone(),
+        serde_json::json!([])
+    );
 
     // Its removal keeps nothing to export, which refuses a batch before
     // removing any of it.

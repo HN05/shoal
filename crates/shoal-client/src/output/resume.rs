@@ -4,8 +4,9 @@ use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    model::{QueueEntry, RemovedWorkspace, Workspace},
+    model::{Chat, QueueEntry, RemovedWorkspace, Workspace},
     output::{batch::Failure, outputs},
+    saved::SavedSummary,
 };
 
 /// A workspace's stopped commands, which Shoal reports rather than reruns.
@@ -44,6 +45,9 @@ pub struct Resumed {
     pub agents: Vec<ResumedAgent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub set_up: Vec<SetUp>,
+    /// The removed workspaces it opened again.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reopened: Vec<Reopened>,
     pub failed: Vec<Failure>,
 }
 
@@ -51,6 +55,9 @@ pub struct Resumed {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForgottenWork {
     pub forgotten: Vec<ExecutionId>,
+    /// The removed workspaces it opened again.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reopened: Vec<Reopened>,
     pub failed: Vec<Failure>,
 }
 
@@ -63,6 +70,9 @@ pub struct Queued {
     pub commands: Vec<StoppedCommands>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub set_up: Vec<SetUp>,
+    /// The removed workspaces it opened again.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reopened: Vec<Reopened>,
     pub failed: Vec<Failure>,
 }
 
@@ -78,11 +88,29 @@ pub struct Reopened {
     pub queued: Option<Queued>,
 }
 
+/// A workspace with stopped work or a last session, and what it saved.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoppedWorkspace {
+    pub workspace: Workspace,
+    pub saved: SavedSummary,
+}
+
+/// What `shoal restore` without a space picks among: the workspaces with
+/// stopped work, unfinished work first, the stopped chats and the removed
+/// workspaces.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Restorable {
+    pub stopped: Vec<StoppedWorkspace>,
+    pub chats: Vec<Chat>,
+    pub removed: Vec<RemovedWorkspace>,
+}
+
 outputs!(
     StoppedCommands,
     SetUp,
     Resumed,
     ForgottenWork,
     Queued,
-    Reopened
+    Reopened,
+    Restorable
 );

@@ -1,9 +1,10 @@
-//! A workspace whose setup failed, or never started, resumes by retrying its
+//! A workspace whose setup failed, or never started, restores by retrying its
 //! setup, after which the agent waiting in the queue for it starts: as the
 //! queue admits it, at once for `--now`, or in this terminal for `--focus`.
 use anyhow::{Context as _, Result};
 
-use super::{permission_change, targets::Selected};
+use super::super::targets::Selected;
+use super::permission_change;
 use crate::client::output::{batch::Failure, resume::SetUp};
 use crate::{
     cli::{
@@ -19,14 +20,17 @@ use crate::{
 /// A selected workspace whose setup failed or never started, with the
 /// launch of the agent waiting for it, if one does.
 #[derive(Debug)]
-pub(super) struct FailedSetup {
+pub(in crate::cli::commands::restore) struct FailedSetup {
     pub workspace: Workspace,
     pub launch: Option<QueueEntry>,
 }
 
 /// Move the selected workspaces whose setup failed or never started from
 /// `selected`'s spaces to its setups; a chat has no setup.
-pub(super) async fn take_failed(ctx: &Context, selected: &mut Selected) -> Result<()> {
+pub(in crate::cli::commands::restore) async fn take_failed(
+    ctx: &Context,
+    selected: &mut Selected,
+) -> Result<()> {
     let Some(selectors) = selected.spaces.take() else {
         return Ok(());
     };
@@ -81,7 +85,7 @@ pub(super) async fn retry_each(
     for setup in setups {
         match retry(ctx, setup, now).await {
             Ok(done) => set_up.push(done),
-            Err(error) => failed.push(ui::failure(ctx, "resume", &setup.workspace.name, &error)),
+            Err(error) => failed.push(ui::failure(ctx, "restore", &setup.workspace.name, &error)),
         }
     }
     (set_up, failed)

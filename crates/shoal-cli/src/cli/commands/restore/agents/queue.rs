@@ -3,7 +3,8 @@
 use crate::client::execution_ids::ExecutionId;
 use anyhow::{Context as _, Result, ensure};
 
-use super::{commands, permission_change, reports, stale, targets::Selected};
+use super::super::targets::Selected;
+use super::{commands, permission_change, reports, stale};
 use crate::client::output::resume::Queued;
 use crate::client::saved::{Queuing, Restore};
 use crate::client::space_ids::SpaceId;
@@ -34,7 +35,7 @@ pub(super) async fn queue_below(
         stopped.push(stopped_agents(ctx, selector, execution.as_ref()).await?);
     }
     permission_change::apply(ctx, &stopped, &selected.setups, change).await?;
-    let resumed = super::set_up(ctx, &selected, false).await;
+    let resumed = super::set_up(ctx, &selected, Vec::new(), false).await;
     queue_all(ctx, stopped, resumed, false).await
 }
 
@@ -44,7 +45,7 @@ pub(in crate::cli::commands) type Stopped =
 
 /// Queue the restores of the agents among `stopped`; their workspaces'
 /// stopped commands go to them, and those of workspaces without one stay
-/// for `shoal resume`.
+/// for `shoal restore`.
 pub(in crate::cli::commands) async fn queue_stopped(
     ctx: &Context,
     stopped: &Stopped,
@@ -78,7 +79,7 @@ async fn stopped_agents(
     saved.commands.clear();
     ensure!(
         !(saved.agents.is_empty() && saved.sessions.is_empty()),
-        "{} has no stopped agent to resume",
+        "{} has no stopped agent to restore",
         space.name()
     );
     Ok((space, saved))
@@ -160,6 +161,7 @@ pub(super) async fn queue_all(
     failed.append(&mut queued.failed);
     queued.failed = failed;
     queued.set_up = resumed.set_up;
+    queued.reopened = resumed.reopened;
     reports::queued(ctx, &queued)?;
     Ok(if queued.failed.is_empty() { 0 } else { 1 })
 }
@@ -181,13 +183,13 @@ pub(super) async fn queue_each(
             let _claims = commands::claim(&mut saved.commands);
             match commands::report(ctx, &space, &saved.commands) {
                 Ok(report) => commands.push(report),
-                Err(error) => failed.push(ui::failure(ctx, "resume", space.name(), &error)),
+                Err(error) => failed.push(ui::failure(ctx, "restore", space.name(), &error)),
             }
         }
         for saved in saved.agents.iter().chain(&saved.sessions) {
             match queue(ctx, &space, &saved.id, now).await {
                 Ok(entry) => queued.push(entry),
-                Err(error) => failed.push(ui::failure(ctx, "resume", space.name(), &error)),
+                Err(error) => failed.push(ui::failure(ctx, "restore", space.name(), &error)),
             }
         }
     }

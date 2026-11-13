@@ -1,11 +1,11 @@
-//! `shoal resume --forget`: forgetting stopped agents, commands and last
+//! `shoal restore --forget`: forgetting stopped agents, commands and last
 //! sessions instead of restoring them.
 use anyhow::Result;
 
 use super::reports;
 use crate::client::assignments;
 use crate::client::execution_ids::ExecutionId;
-use crate::client::output::resume::ForgottenWork;
+use crate::client::output::resume::{ForgottenWork, Reopened};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, ui},
@@ -23,6 +23,7 @@ pub(super) async fn forget_work(
     let forgotten = assignments::forget_stopped_work(&ctx.paths, space, execution).await?;
     let report = ForgottenWork {
         forgotten: forgotten.executions,
+        reopened: Vec::new(),
         failed: Vec::new(),
     };
     reports::forgotten(ctx, &report, &[forgotten.space.as_str()])?;
@@ -30,8 +31,12 @@ pub(super) async fn forget_work(
 }
 
 /// Forget every space's stopped agents and commands, going on after one
-/// fails.
-pub(super) async fn forget_each(ctx: &Context, stopped: &[(PresentSpace, Saved)]) -> Result<i32> {
+/// fails, and report it with the workspaces `reopened` for the restore.
+pub(super) async fn forget_each(
+    ctx: &Context,
+    stopped: &[(PresentSpace, Saved)],
+    reopened: Vec<Reopened>,
+) -> Result<i32> {
     let mut failed = Vec::new();
     let mut ids = Vec::new();
     let mut names = Vec::new();
@@ -46,6 +51,7 @@ pub(super) async fn forget_each(ctx: &Context, stopped: &[(PresentSpace, Saved)]
     }
     let forgotten = ForgottenWork {
         forgotten: ids,
+        reopened,
         failed,
     };
     reports::forgotten(ctx, &forgotten, &names)?;

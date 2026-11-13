@@ -250,7 +250,7 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
-            .args(["resume", "--all", "--now"])
+            .args(["restore", "--all", "--now"])
             .env("HERDR_ENV", "1")
             .env("HERDR_WORKSPACE_ID", "w1")
             .env("HERDR_TAB_ID", "w1:t1")
@@ -265,7 +265,7 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
         |run: &[String], (_, id, execution): &(String, String, String), close: &[&str]| {
             let worker = run[3].split(' ').collect::<Vec<_>>();
             let resume = [
-                "resume",
+                "restore",
                 id.as_str(),
                 "--execution",
                 execution.as_str(),
@@ -287,7 +287,7 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
         calls[1][3].starts_with("env SHOAL_OUTPUT=text "),
         "{calls:?}"
     );
-    assert!(calls[1][3].contains(" --text resume "), "{calls:?}");
+    assert!(calls[1][3].contains(" --text restore "), "{calls:?}");
     assert_eq!(calls[2][..4], ["pane", "process-info", "--pane", "w1:p6"]);
     let create = &calls[3];
     assert_eq!(create[..2], ["tab", "create"]);
@@ -326,7 +326,7 @@ fn herdr_resume_honors_new_tab_and_enabled_settings() {
         .unwrap();
     }
     // Without new tabs, an idle recorded pane is still reused.
-    let (output, transcript) = herdr_call(&fixture, &["resume", "--all", "--now"], "");
+    let (output, transcript) = herdr_call(&fixture, &["restore", "--all", "--now"], "");
     assert!(output.status.success(), "{output:?} {transcript}");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("--execution second-agent"), "{stdout}");
@@ -342,7 +342,7 @@ fn herdr_resume_honors_new_tab_and_enabled_settings() {
         "[terminal.herdr]\nenabled = false\n",
     )
     .unwrap();
-    let (output, transcript) = herdr_call(&fixture, &["resume", "--all", "--now"], "");
+    let (output, transcript) = herdr_call(&fixture, &["restore", "--all", "--now"], "");
     assert!(output.status.success(), "{output:?} {transcript}");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("--execution first-agent"), "{stdout}");

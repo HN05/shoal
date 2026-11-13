@@ -1,4 +1,4 @@
-//! The daemon's start of a queued restore: it starts `shoal resume` for the
+//! The daemon's start of a queued restore: it starts `shoal restore` for the
 //! admitted entry where the agent stopped or in a background place, and that
 //! process restores the agent there, taking over the entry's slot.
 use anyhow::{Result, ensure};
@@ -26,7 +26,7 @@ pub async fn start_entry(
 ) -> Result<i32> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
-        "resume agents outside scoped executions"
+        "restore agents outside scoped executions"
     );
     let ([space], Some(execution)) = (targets.space.as_slice(), execution) else {
         anyhow::bail!("a queued restore names one space and its stopped execution");
@@ -64,7 +64,7 @@ pub(in crate::cli::commands) async fn start_queued(
         .session(execution)
         .and_then(|session| session.origin.as_ref());
     let args = [
-        "resume",
+        "restore",
         space.id().as_str(),
         "--execution",
         execution.as_str(),

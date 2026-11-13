@@ -38,12 +38,12 @@ pub(super) async fn stop_all(ctx: &Context) -> Result<i32> {
 
 /// Stop `spaces` in parallel, reporting each; one failure does not keep the
 /// others running, and an execution Shoal cannot prove ended fails its
-/// workspace unless `acknowledge_unproven`. `resume` is what the hint to
-/// continue them passes `shoal resume`; empty, it names each one.
+/// workspace unless `acknowledge_unproven`. `restore` is what the hint to
+/// continue them passes `shoal restore`; empty, it names each one.
 pub(super) async fn stop_each(
     ctx: &Context,
     spaces: &[PresentSpace],
-    resume: &str,
+    restore: &str,
     acknowledge_unproven: bool,
 ) -> Result<i32> {
     let stops = spaces
@@ -51,7 +51,7 @@ pub(super) async fn stop_each(
         .map(|space| stop(ctx, space, acknowledge_unproven));
     let results = join_all(stops).await;
     let mut report = ui::Report::new("stop");
-    let mut resumable = Vec::new();
+    let mut restorable = Vec::new();
     let mut removed = Vec::new();
     for (space, result) in spaces.iter().zip(results) {
         let name = space.name();
@@ -59,7 +59,7 @@ pub(super) async fn stop_each(
             Ok(stop) => {
                 let message = stop.message(name);
                 if stop.saved() {
-                    resumable.push(space.number().to_string());
+                    restorable.push(space.number().to_string());
                 }
                 let outcome = match stop {
                     Stop::CancelledRun(run) => Outcome::Cancelled(CancelledRun {
@@ -76,10 +76,10 @@ pub(super) async fn stop_each(
             Err(error) => report.failed(ctx, name, &error),
         }
     }
-    let summary = match (resumable.is_empty(), resume.is_empty()) {
+    let summary = match (restorable.is_empty(), restore.is_empty()) {
         (true, _) => String::new(),
-        (false, true) => continue_hint(&resumable.join(" ")),
-        (false, false) => continue_hint(resume),
+        (false, true) => continue_hint(&restorable.join(" ")),
+        (false, false) => continue_hint(restore),
     };
     report.finish(ctx, &summary, |outcomes, failed| {
         let (mut stopped, mut cancelled_runs) = (Vec::new(), Vec::new());
@@ -124,7 +124,7 @@ async fn stop(ctx: &Context, space: &PresentSpace, acknowledge_unproven: bool) -
 enum Stop {
     /// A space's agents and commands stopped, with how many untracked
     /// processes, the launches the stop removed from the queue, and whether
-    /// it saved work for `shoal resume`.
+    /// it saved work for `shoal restore`.
     Space {
         other_processes: usize,
         cancelled: Vec<QueueEntry>,
@@ -156,7 +156,7 @@ impl Stop {
         }
     }
 
-    /// Whether this stop saved work for `shoal resume`, which refuses to
+    /// Whether this stop saved work for `shoal restore`, which refuses to
     /// resume a space without any.
     fn saved(&self) -> bool {
         match self {

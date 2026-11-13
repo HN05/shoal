@@ -74,9 +74,5 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: WorkspaceComman
         WorkspaceCommand::Checkpoint { workspace, name } => {
             restore::checkpoint(&ctx, workspace, name).await
         }
-        WorkspaceCommand::Restore {
-            workspace,
-            checkpoint,
-        } => restore::run(&ctx, workspace, checkpoint).await,
     }
 }

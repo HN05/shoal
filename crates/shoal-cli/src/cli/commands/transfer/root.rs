@@ -63,7 +63,7 @@ pub(super) async fn run(ctx: &Context, args: RootArgs) -> Result<()> {
     .await;
     // A failed request may follow moves that completed.
     retrust(ctx, &before).await;
-    let queued = resume_stopped(ctx, &stopped).await;
+    let queued = restore_stopped(ctx, &stopped).await;
     show(ctx, &moved?, queued.as_ref())
 }
 
@@ -80,7 +80,7 @@ async fn plan_moves(
 }
 
 /// Stop the workspaces `executions` run in, keeping their agents' sessions,
-/// and add to `stopped` the executions each stop saved for `shoal resume`,
+/// and add to `stopped` the executions each stop saved for `shoal restore`,
 /// by workspace, including any started since the plan or ended by a stop
 /// that failed. A CI job's workspace is waited for until the job, whose run
 /// the stop cancelled, ends and its workspace goes, and stays out of
@@ -158,7 +158,7 @@ async fn job_ended(ctx: &Context, workspace: &SpaceId) -> Result<()> {
     }
 }
 
-/// The executions whose stopped work the workspace saves for `shoal resume`.
+/// The executions whose stopped work the workspace saves for `shoal restore`.
 async fn saved_executions(ctx: &Context, workspace: &SpaceId) -> Result<BTreeSet<ExecutionId>> {
     Ok(
         crate::client::saved::read(&ctx.paths, SpaceSelector::id(workspace))
@@ -194,7 +194,7 @@ impl Registrations {
 
 /// For each repository whose directory moved since `before`, remove agent
 /// trust for its old paths and trust its workspaces for the agents whose
-/// sessions `shoal resume` continues there. Failures only warn.
+/// sessions `shoal restore` continues there. Failures only warn.
 async fn retrust(ctx: &Context, before: &Registrations) {
     let after = match Registrations::load(ctx).await {
         Ok(after) => after,
@@ -229,15 +229,15 @@ async fn retrust(ctx: &Context, before: &Registrations) {
 }
 
 /// Queue the restores of the agents among `stopped`, warning when that
-/// fails, since `shoal resume` still restores them.
-async fn resume_stopped(ctx: &Context, stopped: &Stopped) -> Option<Queued> {
+/// fails, since `shoal restore` still restores them.
+async fn restore_stopped(ctx: &Context, stopped: &Stopped) -> Option<Queued> {
     if stopped.is_empty() {
         return None;
     }
     match super::super::restore::agents::queue::queue_stopped(ctx, stopped).await {
         Ok(queued) => Some(queued),
         Err(error) => {
-            eprintln!("warning: cannot resume the stopped agents; run shoal resume: {error:#}");
+            eprintln!("warning: cannot restore the stopped agents; run shoal restore: {error:#}");
             None
         }
     }
@@ -284,7 +284,7 @@ fn plan(moves: &RepositoryMoves, workspaces: &[Workspace]) -> String {
         }
     }
     if !moves.executions.is_empty() {
-        text.push_str("\nStop, then resume after the move:");
+        text.push_str("\nStop, then restore after the move:");
     }
     for execution in &moves.executions {
         let workspace = workspaces

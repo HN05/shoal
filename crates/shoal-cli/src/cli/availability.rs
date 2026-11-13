@@ -81,8 +81,8 @@ impl Need {
             | ["demo", "start"] => Self::Ready,
             [
                 "diff" | "conflicts" | "rm" | "leases" | "messages" | "files" | "questions"
-                | "approvals" | "view" | "resume" | "catalog" | "history" | "config" | "pr"
-                | "issue" | "alerts" | "demo" | "queue" | "review",
+                | "approvals" | "view" | "catalog" | "history" | "config" | "pr" | "issue"
+                | "alerts" | "demo" | "queue" | "review",
                 ..,
             ] => Self::Any,
             ["internal", ..] => Self::Any,

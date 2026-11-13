@@ -149,7 +149,7 @@ fn assert_failed_labelling_refuses_launches(
             "--agent",
             "claude",
         ],
-        vec!["resume", &fixture.id("new-owner"), "--focus"],
+        vec!["restore", &fixture.id("new-owner"), "--focus"],
         vec![
             "start",
             "--mode",
@@ -426,7 +426,7 @@ fn a_resumed_session_ends_once_a_kept_completion_resolves_its_agent() -> anyhow:
         state.join("resumed-agent.recovery.json"),
         r#"{"agent":"pi"}"#,
     )?;
-    fixture.ok(&["resume", &fixture.id("resumed")]);
+    fixture.ok(&["restore", &fixture.id("resumed")]);
     // The watcher has the daemon close the session Shoal recorded creating.
     let watched = || fs::read_to_string(home.join("zmx-calls")).unwrap_or_default();
     wait_until("the session's end", || {

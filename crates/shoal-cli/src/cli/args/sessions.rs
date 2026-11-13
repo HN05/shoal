@@ -8,25 +8,38 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::args::{AgentParser, SpaceTargets, permission_assignment},
+    model::CheckpointNumber,
     sessions::HostName,
 };
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum SessionsCommand {
-    /// Queue the restore of stopped agent sessions and list interrupted commands.
+    /// Restore what of a space is stopped, interrupted or removed, or return a workspace to a checkpoint.
     ///
-    /// The daemon starts queued restores as `max_agents` allows: where each
-    /// agent stopped, otherwise in a background place of the terminal host it
-    /// was queued from or of `terminal.default_host`, such as a Herdr tab or a
-    /// detached zmx session. `--all` leaves out workspaces whose assignment is done. A named workspace
-    /// or running chat whose agent's turn `shoal stop --interrupt` ended continues that
-    /// turn instead.
-    /// A stopped chat restores at once under its name, continuing its
-    /// session; the picker and `--all` include stopped chats.
-    Resume {
+    /// Queues the restore of stopped agent sessions and lists interrupted commands. The daemon
+    /// starts queued restores as `max_agents` allows: where each agent stopped, otherwise in a
+    /// background place of the terminal host it was queued from or of `terminal.default_host`,
+    /// such as a Herdr tab or a detached zmx session. A named workspace or running chat whose
+    /// agent's turn `shoal stop --interrupt` ended continues that turn instead. A stopped chat
+    /// restores at once under its name, continuing its session. A removed workspace, named by its
+    /// ID, opens again with its unsaved files and links.
+    ///
+    /// Without a space, restores the current one when it has something to restore; otherwise
+    /// picks among stopped work, stopped chats and removed workspaces, or lists them without a
+    /// terminal. `--all` restores every space with stopped work whose assignment is not done.
+    Restore {
         #[command(flatten)]
         targets: SpaceTargets,
+        /// Return the workspace to this checkpoint after keeping its current state in a new
+        /// one; without a number, pick one of its checkpoints or list them.
+        #[arg(
+            long,
+            value_name = "N",
+            num_args = 0..=1,
+            conflicts_with_all = ["all", "execution", "forget", "now", "focus", "permissions"]
+        )]
+        checkpoint: Option<Option<CheckpointNumber>>,
         /// Select a stopped execution when the workspace has several records.
         #[arg(long, conflicts_with = "all")]
         execution: Option<ExecutionId>,
@@ -68,7 +81,7 @@ pub enum SessionsCommand {
     /// Restart running agents in new terminals, resuming their sessions.
     ///
     /// Agents restart together and run the agent's current binary; commands
-    /// keep running. A chat restarts in a background place, as shoal resume
+    /// keep running. A chat restarts in a background place, as shoal restore
     /// restores it.
     Restart {
         #[command(flatten)]

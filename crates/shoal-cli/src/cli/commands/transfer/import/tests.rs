@@ -19,7 +19,7 @@ fn options(sessions: Option<bool>) -> ImportOptions {
     ImportOptions {
         repository: None,
         sessions,
-        resume: false,
+        restore: false,
     }
 }
 

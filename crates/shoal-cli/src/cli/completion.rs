@@ -78,12 +78,9 @@ enum Target {
     /// Spaces: workspaces as [`Target::Workspaces`] offers them, then
     /// chats.
     Spaces(Need),
-    /// Workspaces described by what `shoal resume` restores in them, then
-    /// the stopped chats.
-    ResumeSpaces,
-    /// Removed workspaces `shoal restore` can open again, then existing
-    /// ones it can return to a checkpoint.
-    RestorableWorkspaces,
+    /// Workspaces described by what `shoal restore` restores in them, then
+    /// the stopped chats, then the removed workspaces it opens again.
+    RestoreSpaces,
     Pools,
     Members,
     ResourceNames,
@@ -179,7 +176,7 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                     && !typed.all
                     && matches!(
                         target,
-                        Target::Workspaces(_) | Target::Spaces(_) | Target::ResumeSpaces
+                        Target::Workspaces(_) | Target::Spaces(_) | Target::RestoreSpaces
                     );
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let mut values = typed.complete(target, current);
@@ -352,7 +349,7 @@ impl Typed {
         };
         let workspaces = matches!(
             target,
-            Target::Workspaces(_) | Target::Spaces(_) | Target::ResumeSpaces
+            Target::Workspaces(_) | Target::Spaces(_) | Target::RestoreSpaces
         );
         values.retain(|value| {
             value.get_value().to_str().is_some_and(|s| {
@@ -380,17 +377,6 @@ impl Typed {
         }
         if matches!(target, Target::Branches) {
             return branch_candidates().await;
-        }
-        if matches!(target, Target::RestorableWorkspaces) {
-            let removed = crate::client::removal::removed(&paths).await?;
-            let existing = crate::client::workspaces::list(&paths).await?;
-            let removed = removed.into_iter().map(|workspace| {
-                let help = format!("{} (removed)", workspace.name);
-                CompletionCandidate::new(workspace.workspace_id.to_string()).help(Some(help.into()))
-            });
-            let existing = (existing.iter())
-                .map(|workspace| space_candidate(workspace.number, &workspace.name));
-            return Ok(removed.chain(existing).collect());
         }
         if matches!(target, Target::ApprovalRequests) {
             let requests = crate::client::approvals::list(&paths, None).await?;
@@ -439,13 +425,13 @@ impl Typed {
             }
             return Ok(candidates);
         }
-        if matches!(target, Target::ResumeSpaces) {
+        if matches!(target, Target::RestoreSpaces) {
             let summaries = ui::saved_summaries(&paths).await;
             let mut candidates: Vec<_> = workspaces
                 .into_iter()
                 .map(|w| {
-                    let status = ui::resumable(summaries.get(&w.id))
-                        .map_or_else(|| ui::NOTHING_TO_RESUME.into(), |(text, _)| text);
+                    let status = ui::restorable(summaries.get(&w.id))
+                        .map_or_else(|| ui::NOTHING_TO_RESTORE.into(), |(text, _)| text);
                     let help = format!("{}: {status}", w.name);
                     space_candidate(w.number, &w.name).help(Some(help.into()))
                 })
@@ -453,6 +439,11 @@ impl Typed {
             candidates.extend(stopped_chat_candidates(
                 crate::client::chats::recorded(&paths).await?,
             ));
+            let removed = crate::client::removal::removed(&paths).await?;
+            candidates.extend(removed.into_iter().map(|workspace| {
+                let help = format!("{} (removed)", workspace.name);
+                CompletionCandidate::new(workspace.workspace_id.to_string()).help(Some(help.into()))
+            }));
             return Ok(candidates);
         }
         let workspace = self
@@ -501,8 +492,7 @@ impl Typed {
             | Target::Branches
             | Target::Workspaces(_)
             | Target::Spaces(_)
-            | Target::ResumeSpaces
-            | Target::RestorableWorkspaces
+            | Target::RestoreSpaces
             | Target::ApprovalRequests
             | Target::Questions => unreachable!(),
         }
@@ -555,7 +545,7 @@ async fn chat_candidates(paths: &CommandPaths) -> Result<Vec<CompletionCandidate
         .collect())
 }
 
-/// The stopped chats among `chats`, which `shoal resume` restores.
+/// The stopped chats among `chats`, which `shoal restore` restores.
 fn stopped_chat_candidates(chats: Vec<Chat>) -> Vec<CompletionCandidate> {
     chats
         .iter()
@@ -576,8 +566,7 @@ fn target_of(id: &str, parent: &str, name: &str, need: Need) -> Option<Target> {
         ("name", _, "run") => Some(Target::Commands),
         ("repository" | "repository_override" | "repo", _, _) => Some(Target::Repositories),
         ("branch", _, "start") => Some(Target::Branches),
-        ("workspace" | "space", _, "resume") => Some(Target::ResumeSpaces),
-        ("workspace", _, "restore") => Some(Target::RestorableWorkspaces),
+        ("space", _, "restore") => Some(Target::RestoreSpaces),
         ("workspace", _, _) | ("in_workspace", _, "start") => Some(Target::Workspaces(need)),
         ("parent", _, "start") => Some(Target::Spaces(need)),
         ("space", _, _) => Some(Target::Spaces(need)),

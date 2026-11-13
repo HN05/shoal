@@ -88,7 +88,7 @@ async fn interrupt_turn(ctx: &Context, interruption: &Interruption) -> Result<()
     Ok(())
 }
 
-/// The turns an interrupt ended that `shoal resume` continues.
+/// The turns an interrupt ended that `shoal restore` continues.
 pub(super) struct Continuation(Vec<Target>);
 
 impl Continuation {

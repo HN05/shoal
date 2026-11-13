@@ -1,6 +1,6 @@
 //! `shoal move ssh`: hand spaces to another machine's Shoal, or copies of
 //! them with `--keep`, as `shoal move export | ssh <host> shoal move import
-//! --resume` does, once `ssh` reaches Shoal there.
+//! --restore` does, once `ssh` reaches Shoal there.
 use crate::paths::StateFiles;
 use std::path::Path;
 
@@ -25,7 +25,7 @@ pub(super) async fn run(ctx: &Context, args: SshArgs) -> Result<i32> {
     let remote = Remote {
         host: args.host,
         shoal: args.shoal,
-        resume: !args.no_resume,
+        restore: !args.no_restore,
     };
     let spaces = match args.repository {
         Some(repository) => export::repository_spaces(ctx, repository).await?,
@@ -187,7 +187,7 @@ struct Remote {
     shoal: String,
     /// Whether imports there queue the agents' restores and start the
     /// chats they bring.
-    resume: bool,
+    restore: bool,
 }
 
 impl Remote {
@@ -214,8 +214,8 @@ impl Remote {
     /// it resumes them, and return what the import reported.
     async fn import(&self, file: &Path) -> Result<Imported> {
         let mut args = vec!["move", "import"];
-        if self.resume {
-            args.push("--resume");
+        if self.restore {
+            args.push("--restore");
         }
         let input = std::fs::File::open(file)?;
         let output = Run::new(self.command(&args))

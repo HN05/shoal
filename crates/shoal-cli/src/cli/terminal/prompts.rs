@@ -1,7 +1,7 @@
 //! The prompts Shoal submits to agents.
 use crate::terminal::WAKE_PROMPT;
 
-/// What `shoal resume` submits to an agent whose turn an interrupt ended.
+/// What `shoal restore` submits to an agent whose turn an interrupt ended.
 pub(in crate::cli) const CONTINUE_PROMPT: &str = "Continue where you left off.";
 
 /// Whether Shoal, rather than the user, submitted `prompt`: one of its

@@ -82,7 +82,7 @@ instead of the PR delivery guidance below.
   every verified process carrying the workspace identity, and never signals a
   process whose recorded identity was not verified. Herdr
   completion waits for tracked executions to resolve or for Herdr to report the
-  agent's turn finished, and for stopped work to be resumed, before closing the
+  agent's turn finished, and for stopped work to be restored, before closing the
   tab; removal closes it immediately. Unreadable
   inventory entries block ownership proof only while their recorded identity is live;
   recovery polls incomplete proof within a bounded wait without weakening it,
@@ -190,7 +190,7 @@ instead of the PR delivery guidance below.
   idle Claude Code's after an interrupted turn or once it has idled with no
   wait for its updates for three minutes, once per idle stretch, the
   agent's interrupt key the CLI types for `shoal stop --interrupt`, and the
-  fixed prompt with which `shoal resume` continues that turn; the daemon never
+  fixed prompt with which `shoal restore` continues that turn; the daemon never
   writes to a terminal. Workspace events are an unscoped, durable lifecycle
   stream with replay gaps, independent of notification read state, recorded
   for chats through the same path as workspaces and kept per space: while it
@@ -249,7 +249,7 @@ instead of the PR delivery guidance below.
   way (`"propose"` by default) or refuses it with `"deny"`; it is never linked. These permissions
   are the acting caller's space's, from its agent's mode (`[modes.NAME.permissions]` over
   `[permissions]`), each no wider than its parent's, then each key the `--permission` given to
-  its agent at start, resume or restart sets, as given, computed at each check
+  its agent at start, restore or restart sets, as given, computed at each check
   through one daemon operation; flag a check that reads a repository's `[permissions]` directly.
   A scoped process gives only values its own space holds, including the value a `KEY=mode` drop
   falls back to, which the daemon checks wherever such a process brings a value in; flag a path that records one unchecked. This is cooperative, not a
@@ -425,9 +425,9 @@ instead of the PR delivery guidance below.
   focus, and explicit focus settings override either default. `--focus` also
   starts the agent past `max_agents`, as `--now` does; the `focus` setting does not.
   Help calls, calls without a terminal and `--here` calls run in place, except
-  that a scoped caller's agent, and an agent of `start` or `resume --now` from a
+  that a scoped caller's agent, and an agent of `start` or `restore --now` from a
   caller without a terminal, start detached through the daemon unless `start --here` or
-  `resume --focus` keeps an unscoped caller's in place. Shell and untracked
+  `restore --focus` keeps an unscoped caller's in place. Shell and untracked
   desktop handoffs retain the tab.
 - Each command, flag and value has one name; flag a clap alias, including an
   old name kept after a rename. A short form is not an alias, but its letter
@@ -534,13 +534,13 @@ configured command for another agent, plus proven child
   all work saved first, as before a system shutdown, and `shoal daemon stop`
   stops it as `shoal stop --all` does.
   Manual stop, refused reattachment and a restart's stop of wrappers that cannot
-  reattach save agent recovery and user command arguments for explicit resume,
+  reattach save agent recovery and user command arguments for explicit restore,
   preserve work and leases, and never rerun a recorded command. Every daemon stop
   carries its cause, which the wrapper prints after the agent stops. A hangup or
   terminate signal to an agent's wrapper or agent saves the agent's recovery the
   same way, with the signal as its reason, and is not an exit on its own. Its
   queued restore of an agent stopped between turns, with no processes left
-  outside its process group, waits for an update unless `shoal resume` asked
+  outside its process group, waits for an update unless `shoal restore` asked
   for it.
   Scoped callers stop only the executions of the workspaces below theirs.
 - Command wrappers keep running when the daemon goes away and reattach only after
@@ -565,7 +565,7 @@ configured command for another agent, plus proven child
   `{diff_base}` resolves lazily through the shared daemon diff-base lookup.
   AI tools (built-in providers and `[agents.<name>]` entries with a `command`
   or `base`) are agents, which start only through `shoal start` (or
-  `contribute`), `resume` and `restart`, as tracked agents; pickers and
+  `contribute`), `restore` and `restart`, as tracked agents; pickers and
   completion offer AI tools only. `shoal run <name>` runs only `[commands]`
   entries, whose names may be agents'. Agents'
   `{prompt}` combines general instructions and issue context, prepended to

@@ -11,7 +11,7 @@ use crate::{
 
 /// A daemon restart quarantines interrupted executions as unknown. Recovery
 /// records are still safe to use once the daemon has rechecked that execution's
-/// recorded processes are gone, so make that repair part of resume itself. An
+/// recorded processes are gone, so make that repair part of the restore itself. An
 /// agent whose wrapper waits to restore it is stopped, not active.
 pub(super) async fn reconcile(
     ctx: &Context,
@@ -60,7 +60,7 @@ pub(super) async fn reconcile(
             .iter()
             .find(|execution| execution.id == *selected)
             .is_some_and(|execution| execution.cleared),
-        "selected execution is still unresolved; stop what remains of it with shoal stop, then resume again"
+        "selected execution is still unresolved; stop what remains of it with shoal stop, then restore again"
     );
     Ok(())
 }

@@ -323,7 +323,7 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
         fixture
             .command()
             .env("SHELL", &shell)
-            .args(["resume", "--all", "--now"]),
+            .args(["restore", "--all", "--now"]),
         "",
         true,
     );
@@ -345,7 +345,7 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
             .unwrap();
         assert!(
             send[2].ends_with(&format!(
-                " resume {id} --execution {execution} --focus --opened-in zmx --close-in zmx && exit; exec \"$SHELL\" -l\r"
+                " restore {id} --execution {execution} --focus --opened-in zmx --close-in zmx && exit; exec \"$SHELL\" -l\r"
             )),
             "{send:?}"
         );
@@ -372,7 +372,7 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
         fixture
             .command()
             .env("SHELL", &shell)
-            .args(["resume", &fixture.id("single"), "--now"]),
+            .args(["restore", &fixture.id("single"), "--now"]),
         "",
         true,
     );
@@ -384,7 +384,7 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
         .find(|call| call.starts_with(&["send".into(), "single".into()]))
         .unwrap();
     assert!(
-        send[2].contains(&format!(" resume {id} --execution single-agent --focus ")),
+        send[2].contains(&format!(" restore {id} --execution single-agent --focus ")),
         "{send:?}"
     );
 
@@ -402,7 +402,7 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
         fixture
             .command()
             .env("SHELL", &shell)
-            .args(["resume", &fixture.id("single"), "--focus"]),
+            .args(["restore", &fixture.id("single"), "--focus"]),
         "",
         true,
     );

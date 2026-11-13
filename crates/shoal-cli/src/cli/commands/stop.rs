@@ -1,4 +1,4 @@
-//! Stopping keeps agent sessions and commands for `shoal resume`, a
+//! Stopping keeps agent sessions and commands for `shoal restore`, a
 //! workspace's or a chat's; agents stay down until it continues them. The
 //! other processes of a space stop for good, and the agent launches waiting
 //! in the queue leave it, having nothing to save.
@@ -180,9 +180,9 @@ pub(super) async fn stop(
 }
 
 /// How to continue what `shoal stop` stopped in `targets`, the arguments of
-/// `shoal resume`, and how to take agents down only briefly instead.
+/// `shoal restore`, and how to take agents down only briefly instead.
 pub(super) fn continue_hint(targets: &str) -> String {
     format!(
-        "Continue with shoal resume {targets}. To restart agents without stopping them, use shoal restart"
+        "Continue with shoal restore {targets}. To restart agents without stopping them, use shoal restart"
     )
 }

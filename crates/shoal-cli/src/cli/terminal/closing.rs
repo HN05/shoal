@@ -1,6 +1,6 @@
 //! When a place a host opened for a workspace closes once a completion that
 //! keeps the workspace has its agent's final turn finished. A place whose
-//! agent is stopped and waits for `shoal resume` stays open, showing why it
+//! agent is stopped and waits for `shoal restore` stays open, showing why it
 //! stopped and where it resumes. A detached watcher decides this for each
 //! place, and at removal only for a place the daemon does not close then,
 //! such as a tab opened before Shoal recorded its places. A marker the
@@ -388,7 +388,7 @@ enum Lifecycle {
     Active,
     /// Done without cleanup at `head`. `running` while a tracked execution
     /// has not resolved, whose agent's hooks last reported `turn`; `stopped`
-    /// while an agent or command waits for `shoal resume`.
+    /// while an agent or command waits for `shoal restore`.
     Kept {
         head: String,
         running: bool,

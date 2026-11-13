@@ -76,7 +76,7 @@ fn restart_starts_the_agent_in_a_new_wrapper_where_the_old_one_could_not() {
     wait_zmx_sessions_ended(fixture.root.path());
 }
 
-/// A chat restarts as `shoal resume` restores it: the daemon saves its
+/// A chat restarts as `shoal restore` restores it: the daemon saves its
 /// session and stops its agent, then restores it in a zmx session, where the
 /// agent continues the session.
 #[test]
@@ -316,15 +316,15 @@ fn a_workspaces_agent_resumes_the_agents_its_restart_stopped() {
     };
 
     failed_restart(&|args| fixture.run(args));
-    let output = parent.run(&fixture, &["resume", &fixture.id("child")]);
+    let output = parent.run(&fixture, &["restore", &fixture.id("child")]);
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("ask the user"), "{output:?}");
-    fixture.ok(&["resume", &fixture.id("child")]);
+    fixture.ok(&["restore", &fixture.id("child")]);
     wait_until("the user's restore", || restored.exists());
     fs::remove_file(&restored).unwrap();
 
     failed_restart(&|args| parent.run(&fixture, args));
-    parent.ok(&fixture, &["resume", &fixture.id("child")]);
+    parent.ok(&fixture, &["restore", &fixture.id("child")]);
     wait_until("the parent's restore", || restored.exists());
     fixture.ok(&["stop", &fixture.id("child")]);
     drop(agent);
@@ -507,19 +507,19 @@ fn resumes_the_chats_it_stopped(fixture: &Fixture, parent: &Parent) {
         chat.join().unwrap();
     });
     install_test_script(&zmx, terminal_zmx());
-    let output = parent.run(fixture, &["resume", &fixture.id("talk")]);
+    let output = parent.run(fixture, &["restore", &fixture.id("talk")]);
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("ask the user"), "{output:?}");
     assert!(!restored.exists());
 
-    fixture.ok(&["resume", &fixture.id("talk")]);
+    fixture.ok(&["restore", &fixture.id("talk")]);
     wait_until("the user's restore", || restored.exists());
     fs::remove_file(&restored).unwrap();
     install_test_script(&zmx, FAILING_ZMX);
     let output = parent.run(fixture, &["restart", &fixture.id("talk")]);
     assert!(!output.status.success(), "{output:?}");
     install_test_script(&zmx, terminal_zmx());
-    let resumed = parent.ok(fixture, &["resume", &fixture.id("talk")]);
+    let resumed = parent.ok(fixture, &["restore", &fixture.id("talk")]);
     assert_eq!(resumed["queued"][0]["name"], "talk", "{resumed}");
     wait_until("the parent's restore", || restored.exists());
     fixture.ok(&["rm", "--wait", &fixture.id("talk"), "--yes"]);

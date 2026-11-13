@@ -48,7 +48,7 @@ pub(super) struct ImportOptions {
     pub sessions: Option<bool>,
     /// Whether to queue the restores of the agents the export stopped, and
     /// start chats in the background.
-    pub resume: bool,
+    pub restore: bool,
 }
 
 /// `shoal move import`: continue the spaces exported to `files`, or to the
@@ -74,7 +74,7 @@ pub(super) async fn import(
                     ctx,
                     restored,
                     "Imported",
-                    options.resume,
+                    options.restore,
                 )
                 .await
             }
@@ -94,9 +94,9 @@ pub(super) async fn import(
 }
 
 /// Where a chat imported on its own starts: beside this terminal, unless
-/// `--resume` starts it in the background, as it must without a terminal.
+/// `--restore` starts it in the background, as it must without a terminal.
 fn chat_place(ctx: &Context, options: &ImportOptions) -> ChatPlace {
-    match options.resume || !ctx.on_terminal() {
+    match options.restore || !ctx.on_terminal() {
         true => ChatPlace::Background,
         false => ChatPlace::Beside,
     }
@@ -332,7 +332,7 @@ async fn import_workspace(
     };
     let workspace = reopened.workspace.clone();
     let post_setup = super::super::workspaces::run_post_setup(ctx, &workspace).await;
-    if post_setup.is_ok() && options.resume {
+    if post_setup.is_ok() && options.restore {
         reopened.queue_agents(ctx).await;
     }
     let message = reopened.message(ctx, "Imported");

@@ -494,7 +494,7 @@ pub(in crate::cli) fn plan_change(
 }
 
 /// Trust the path of `workspace`, reopened from `removed`, for each agent
-/// whose session `shoal resume` continues there as a tracked agent, since
+/// whose session `shoal restore` continues there as a tracked agent, since
 /// resuming does not trust it as a launch does. Failures only warn.
 pub(in crate::cli) async fn trust_resumed(
     ctx: &Context,
@@ -515,7 +515,7 @@ pub(in crate::cli) async fn trust_resumed(
 }
 
 /// Trust the path of `workspace`, which moved, for each agent it saves for
-/// `shoal resume`, which restores them there without trusting it.
+/// `shoal restore`, which restores them there without trusting it.
 pub(in crate::cli) async fn trust_saved(ctx: &Context, workspace: &Workspace) {
     match crate::client::saved::read(&ctx.paths, SpaceSelector::id(&workspace.id)).await {
         Ok(saved) => {

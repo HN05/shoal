@@ -1,18 +1,25 @@
-//! What `shoal resume` tells the user: the report of each outcome, and the
+//! What `shoal restore` tells the user: the report of each outcome, and the
 //! notices a restore in this terminal prints before its agent starts.
 use anyhow::Result;
 use std::fmt::Display;
 
+use crate::cli::commands::restore::reopen::ReopenedExt;
 use crate::client::execution_ids::ExecutionId;
-use crate::client::output::resume::{ForgottenWork, Queued, Resumed, SetUp, StoppedCommands};
+use crate::client::output::resume::{
+    ForgottenWork, Queued, Reopened, Resumed, SetUp, StoppedCommands,
+};
 use crate::{
     cli::context::Context, execution::recovery::SavedCommand, model::PresentSpace,
     state::QueueState,
 };
 
-/// Report that no space has anything to resume, as a resume that starts
-/// agents at once when `started`, otherwise as one that queues them.
-pub(super) fn nothing(ctx: &Context, started: bool) -> Result<()> {
+/// Report that no space has anything to restore but the workspaces
+/// `reopened`, as a restore that starts agents at once when `started`,
+/// otherwise as one that queues them.
+pub(super) fn nothing(ctx: &Context, reopened: Vec<Reopened>, started: bool) -> Result<()> {
+    if !reopened.is_empty() {
+        return self::reopened(ctx, reopened);
+    }
     let message = "No stopped agents, commands or chats";
     match started {
         true => ctx.emit(message, Resumed::default()),
@@ -20,9 +27,23 @@ pub(super) fn nothing(ctx: &Context, started: bool) -> Result<()> {
     }
 }
 
-/// Report the `queued` restores and the workspaces set up.
+/// Report the workspaces `reopened` for a restore before anything else it
+/// restores; nothing without any.
+pub(super) fn reopened(ctx: &Context, reopened: Vec<Reopened>) -> Result<()> {
+    if reopened.is_empty() {
+        return Ok(());
+    }
+    let report = Queued {
+        reopened,
+        ..Default::default()
+    };
+    queued(ctx, &report)
+}
+
+/// Report the `queued` restores and the workspaces reopened and set up.
 pub(super) fn queued(ctx: &Context, queued: &Queued) -> Result<()> {
     ctx.show(queued, |queued| {
+        reopened_lines(ctx, &queued.reopened);
         set_up(&queued.set_up);
         if let Some(summary) = queued.summary() {
             outln!("{summary}");
@@ -30,7 +51,14 @@ pub(super) fn queued(ctx: &Context, queued: &Queued) -> Result<()> {
     })
 }
 
-/// List each workspace a resume set up again, with where its waiting agent
+/// Tell what each of the `reopened` workspaces restored.
+fn reopened_lines(ctx: &Context, reopened: &[Reopened]) {
+    for reopened in reopened {
+        outln!("{}", reopened.message(ctx, "Restored"));
+    }
+}
+
+/// List each workspace a restore set up again, with where its waiting agent
 /// is.
 fn set_up(set_up: &[SetUp]) {
     for done in set_up {
@@ -65,7 +93,7 @@ fn summary(count: usize, starting: bool) -> String {
     format!("{done} {count} {agents}; shoal queue shows them")
 }
 
-/// Report the agents a resume started at once, as `output` lists them:
+/// Report the agents a restore started at once, as `output` lists them:
 /// `in_wrappers` of them where they wait to restore, those it started in
 /// `place`, and the `listed` ones the user starts in terminals of their own.
 pub(super) fn started(
@@ -76,6 +104,7 @@ pub(super) fn started(
     listed: &[(&PresentSpace, &ExecutionId)],
 ) -> Result<()> {
     ctx.show(output, |output| {
+        reopened_lines(ctx, &output.reopened);
         set_up(&output.set_up);
         if in_wrappers > 0 {
             let noun = if in_wrappers == 1 { "agent" } else { "agents" };
@@ -84,16 +113,17 @@ pub(super) fn started(
         if let Some(place) = place {
             let started = output.agents.len() - listed.len() - in_wrappers;
             let noun = if started == 1 { "agent" } else { "agents" };
-            outln!("Resuming {started} {noun} in {place}");
+            outln!("Restoring {started} {noun} in {place}");
         }
         if !listed.is_empty() {
-            outln!("Resume each agent in its own terminal:");
+            outln!("Restore each agent in its own terminal:");
         }
         for (space, id) in listed {
+            let number = space.number().to_string();
             let words = [
                 "shoal",
-                "resume",
-                space.name(),
+                "restore",
+                &number,
                 "--execution",
                 id.as_str(),
                 "--focus",
@@ -105,7 +135,8 @@ pub(super) fn started(
 
 /// Report the `forgotten` work of the workspaces `names` lists.
 pub(super) fn forgotten(ctx: &Context, forgotten: &ForgottenWork, names: &[&str]) -> Result<()> {
-    ctx.show(forgotten, |_| {
+    ctx.show(forgotten, |forgotten| {
+        reopened_lines(ctx, &forgotten.reopened);
         if !names.is_empty() {
             outln!(
                 "Forgot stopped agents and commands for {}",

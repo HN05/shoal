@@ -206,14 +206,16 @@ pub async fn select_workspace_filter(
     )
 }
 
-/// Like `select_workspaces`, but the current workspace counts only with
-/// something to resume, and the picker lists what each workspace has to
-/// resume beside the `saved` chats. `None` when nothing is resumable
-/// anywhere.
-pub async fn select_stopped_spaces(
+/// The spaces `shoal restore` acts on: those `names` selects, else the
+/// current workspace when it has something to restore, else those picked
+/// among the workspaces with stopped work, the `saved` chats and the
+/// `removed` workspaces, whose picker entries the caller labels. `None`
+/// without a terminal or anything to pick, which the caller lists instead.
+pub async fn select_restorable(
     ctx: &Context,
     names: Vec<SpaceSelector>,
     saved: &[Chat],
+    removed: Entries,
 ) -> Result<Option<Vec<SpaceSelector>>> {
     if !names.is_empty() {
         return select_workspaces(ctx, names).await.map(Some);
@@ -228,56 +230,45 @@ pub async fn select_stopped_spaces(
         }
         Resolution::Picker(workspaces) => workspaces,
     };
-    let Some(entries) = resume_entries(ctx, workspaces, saved, &summaries) else {
+    let mut entries = stopped_entries(ctx, workspaces, &summaries);
+    entries.extend(chat_entries(
+        saved,
+        Palette::stderr(ctx.json),
+        picker_width(),
+    ));
+    entries.extend(removed);
+    if entries.is_empty() || !ctx.interactive() {
         return Ok(None);
-    };
-    require_argument(ctx, "spaces", SPACE)?;
+    }
     pick_many(ctx, "Spaces> ", entries).map(|picked| Some(picked_ids(picked)))
 }
 
-/// Workspaces with stopped work come first, then those with a last session,
-/// then the `saved` chats, then the workspaces with nothing to resume, as
-/// `summaries` says; `None` when nothing is resumable.
-fn resume_entries(
+/// The workspaces with stopped work, then those with only a last session,
+/// each with what `summaries` says it saved.
+fn stopped_entries(
     ctx: &Context,
     workspaces: Vec<Workspace>,
-    saved: &[Chat],
     summaries: &HashMap<SpaceId, SavedSummary>,
-) -> Option<Entries> {
+) -> Entries {
     let mut rows = workspaces
         .into_iter()
-        .map(|w| (resumable(summaries.get(&w.id)), w))
+        .filter_map(|w| Some((restorable(summaries.get(&w.id))?, w)))
         .collect::<Vec<_>>();
-    if saved.is_empty() && rows.iter().all(|(resumable, _)| resumable.is_none()) {
-        return None;
-    }
-    rows.sort_by_key(|(resumable, _)| match resumable {
-        Some((_, true)) => 0,
-        Some((_, false)) => 1,
-        None => 2,
-    });
-    let with_work = rows
-        .iter()
-        .filter(|(resumable, _)| resumable.is_some())
-        .count();
+    rows.sort_by_key(|((_, unfinished), _)| !unfinished);
     let (statuses, workspaces): (Vec<_>, Vec<_>) = rows
         .into_iter()
-        .map(|(resumable, w)| {
-            let stopped = matches!(resumable, Some((_, true)));
-            let status = ListStatus::of_workspace(&w, stopped);
-            ((status, resume_status_cell(resumable)), w)
+        .map(|((text, unfinished), w)| {
+            let status = ListStatus::of_workspace(&w, unfinished);
+            ((status, restorable_status_cell(text, unfinished)), w)
         })
         .unzip();
     let palette = Palette::stderr(ctx.json);
     let labels = rows_with_status(&workspaces, &[], statuses, palette, picker_width(), false);
-    let mut entries: Entries = workspaces
+    workspaces
         .into_iter()
         .map(|w| w.id.into())
         .zip(labels)
-        .collect();
-    let chats = chat_entries(saved, palette, picker_width());
-    entries.splice(with_work..with_work, chats);
-    Some(entries)
+        .collect()
 }
 
 /// What each workspace this process sees saved, in brief, by workspace;
@@ -290,10 +281,10 @@ pub async fn saved_summaries(paths: &CommandPaths) -> HashMap<SpaceId, SavedSumm
         .collect()
 }
 
-/// What `shoal resume` restores in a workspace that saved `summary`, such
+/// What `shoal restore` restores in a workspace that saved `summary`, such
 /// as `stopped: claude, 1 command`, and whether it is unfinished work
 /// rather than only last sessions; `None` when nothing is saved.
-pub fn resumable(summary: Option<&SavedSummary>) -> Option<(String, bool)> {
+pub fn restorable(summary: Option<&SavedSummary>) -> Option<(String, bool)> {
     let summary = summary?;
     let mut parts = (summary.agents.iter())
         .map(|agent| {
@@ -310,14 +301,13 @@ pub fn resumable(summary: Option<&SavedSummary>) -> Option<(String, bool)> {
     Some((format!("stopped: {}", parts.join(", ")), summary.unfinished))
 }
 
-/// How the resume picker and completion name a workspace without stopped work.
-pub const NOTHING_TO_RESUME: &str = "nothing to resume";
+/// How completion names a workspace without stopped work.
+pub const NOTHING_TO_RESTORE: &str = "nothing to restore";
 
-fn resume_status_cell(resumable: Option<(String, bool)>) -> Cell {
-    match resumable {
-        Some((text, true)) => (text, Some(ListStatus::Stopped.style())),
-        Some((text, false)) => (text, None),
-        None => (NOTHING_TO_RESUME.into(), Some(Style::Muted)),
+fn restorable_status_cell(text: String, unfinished: bool) -> Cell {
+    match unfinished {
+        true => (text, Some(ListStatus::Stopped.style())),
+        false => (text, None),
     }
 }
 

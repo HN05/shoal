@@ -1,5 +1,5 @@
 //! What a stop saves of a workspace's agents and commands, and how
-//! `shoal resume` restores it or `--forget` forgets it.
+//! `shoal restore` restores it or `--forget` forgets it.
 use super::creation::{WAITER, fail_setup, require_fix};
 use super::*;
 
@@ -145,7 +145,7 @@ impl Stopped {
             .collect()
     }
 
-    /// Whether stopped agents or commands wait for `shoal resume`.
+    /// Whether stopped agents or commands wait for `shoal restore`.
     fn pending(&self) -> bool {
         !self.saved(".recovery.json").is_empty() || !self.saved(".command.json").is_empty()
     }
@@ -162,11 +162,11 @@ impl Stopped {
             .collect()
     }
 
-    /// Run `shoal resume` for the workspace in this process, with `args`.
+    /// Run `shoal restore` for the workspace in this process, with `args`.
     fn resume(&self, fixture: &Fixture, args: &[&str]) -> Output {
         fixture
             .command()
-            .args(["resume", &fixture.id(self.name)])
+            .args(["restore", &fixture.id(self.name)])
             .args(args)
             .output()
             .unwrap()
@@ -285,7 +285,7 @@ fn resume_retries_a_failed_setup_beside_the_stopped_work_it_resumes() {
     require_fix(&fixture);
     let failing = fail_setup(&fixture, "failing");
 
-    let resumed = fixture.ok(&["resume", &fixture.id("stopped"), &fixture.id("failing")]);
+    let resumed = fixture.ok(&["restore", &fixture.id("stopped"), &fixture.id("failing")]);
     assert_eq!(resumed["set_up"].as_array().unwrap().len(), 1, "{resumed}");
     assert_eq!(
         resumed["commands"].as_array().unwrap().len(),

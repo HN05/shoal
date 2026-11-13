@@ -48,7 +48,7 @@ fn spaces() -> Spaces {
 #[test]
 fn a_target_resolves_to_a_running_chat_or_a_space_by_id() {
     let spaces = spaces();
-    let resolved = |selector: &str| resolve(&spaces, SpaceSelector::from(selector));
+    let resolved = |selector: &str| resolve(&spaces, &[], SpaceSelector::from(selector));
     assert_eq!(
         resolved("3"),
         Target::Space(SpaceSelector::id(&"w1".into()))
@@ -65,7 +65,7 @@ fn a_target_resolves_to_a_running_chat_or_a_space_by_id() {
 #[test]
 fn a_space_named_twice_is_selected_once() {
     let selectors = ["c2", "3", "2", "w1"].map(SpaceSelector::from).to_vec();
-    let selected = Selected::resolved(&spaces(), selectors);
+    let selected = Selected::resolved(&spaces(), &[], selectors);
     assert_eq!(
         selected.spaces,
         Some(vec![

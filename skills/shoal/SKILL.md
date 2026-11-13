@@ -147,7 +147,7 @@ shoal questions <S.N> --answer "<answer or choice number>"
 shoal stop <child>                  # --skip-children stops only the child
 shoal stop --interrupt <child>      # Cancel its agent's turn, keeping it running
 shoal restart <child>               # Its agent, a workspace's or a chat's
-shoal resume <child>                # --forget forgets the saved session
+shoal restore <child>               # --forget forgets the saved session
 shoal files <child>
 ```
 
@@ -155,9 +155,9 @@ shoal files <child>
 keeping their sessions, and cancels agents queued to start there; `restart` stops the child's agent and
 starts its session again at once; `stop --interrupt` cancels the current
 turn of the child's agent, a workspace's or a chat's, which stays running;
-`resume` continues a turn an interrupt ended and queues the agents, a
+`restore` continues a turn an interrupt ended and queues the agents, a
 workspace's or a chat's, that the caller stopped or its restart left
-stopped, while the user resumes the ones the user stopped; for a workspace
+stopped, while the user restores the ones the user stopped; for a workspace
 whose setup failed, it retries the setup, and the agent waiting for it starts.
 
 A child's approval request comes to its coordinator first.
@@ -226,7 +226,7 @@ turn ends, Shoal stops it and restores it when nothing blocks the space any
 longer, its first message naming what cleared: an issue closing, a PR merging
 or closing, a space done or removed, or a CI run, or a later run of its
 workflow on the default branch, passing. A coordinator removes a blocker of a
-space below with `--space`; `shoal resume` restores a blocked agent at once,
+space below with `--space`; `shoal restore` restores a blocked agent at once,
 and `shoal done` removes the blockers.
 
 ## Idle wakes
@@ -309,7 +309,7 @@ each with where it comes from. A command acting on a space below uses the
 caller's own. `shoal start --permission KEY=VALUE`, repeatable, gives a child
 a permission whatever its mode allows, such as `--permission push=propose`;
 you give only what your own space holds, and a value above that is refused.
-`shoal resume` and `shoal restart` take `--permission` too, which sets the
+`shoal restore` and `shoal restart` take `--permission` too, which sets the
 keys it names, `KEY=mode` dropping one, and keeps the rest; without it they
 keep them all.
 
@@ -532,15 +532,15 @@ shoal cleanup spaces
 shoal cleanup --dry-run
 shoal cleanup caches
 shoal move ssh <host> <workspace> --yes
-shoal move export <workspace> --yes | shoal move import --resume
+shoal move export <workspace> --yes | shoal move import --restore
 ```
 
 Removing a space removes the spaces below it first, held ones included, and
 asks what to do with unmerged work. `rm` returns once its checks pass and
 removes a workspace in the background; a later failure arrives as a message,
 and `--wait` waits for the removal. A checkpoint keeps HEAD and unsaved files;
-Shoal also takes one when an agent exits or is stopped. `restore` reopens
-a removed workspace; `restore --checkpoint` lists a workspace's checkpoints,
+Shoal also takes one when an agent exits or is stopped. `restore` also reopens
+a removed workspace, which only the user does; `restore --checkpoint` lists a workspace's checkpoints,
 and with a number returns to one after keeping the current state in a new
 checkpoint, refusing while another command runs in the workspace. `cleanup spaces` removes every
 space automatic cleanup would remove without waiting for its idle delay;

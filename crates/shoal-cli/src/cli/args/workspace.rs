@@ -5,7 +5,6 @@ use clap::{Args, Subcommand};
 
 use crate::cli::list_status;
 use crate::client::space_names::SpaceSelector;
-use crate::model::CheckpointNumber;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -135,17 +134,6 @@ pub enum WorkspaceCommand {
         /// Describe the checkpoint in shoal restore's list, in at most 200 characters.
         #[arg(long)]
         name: Option<String>,
-    },
-    /// Open a removed workspace again with its unsaved files and links, or return a workspace to a checkpoint.
-    ///
-    /// Without a workspace, picks a removed workspace to open again. With --checkpoint, picks one
-    /// of the workspace's checkpoints, or with its number returns to it after keeping the current
-    /// state in a new checkpoint. Without a terminal, the choices are listed.
-    Restore {
-        workspace: Option<SpaceSelector>,
-        /// Return the workspace to this checkpoint; without a number, pick one or list them.
-        #[arg(long, value_name = "N", num_args = 0..=1)]
-        checkpoint: Option<Option<CheckpointNumber>>,
     },
 }
 

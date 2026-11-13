@@ -1,11 +1,12 @@
-//! `--permission` on `shoal resume`: a change to the permissions the restored
+//! `--permission` on `shoal restore`: a change to the permissions the restored
 //! agents and chats and the agents waiting for failed setups were given. A
 //! scoped process gives only what it holds, which is checked for every
-//! selected space before anything is set up or restores, and a resume makes
+//! selected space before anything is set up or restores, and a restore makes
 //! the change in the records it restores or starts once nothing refuses it.
 use anyhow::{Context as _, Result, ensure};
 
-use super::{setups::FailedSetup, targets::Selected};
+use super::super::targets::Selected;
+use super::setups::FailedSetup;
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -26,12 +27,12 @@ pub(super) async fn check(
     change: &PermissionChange,
 ) -> Result<()> {
     let selectors = (selected.spaces.as_deref())
-        .context("--permission changes the permissions of the spaces a resume names")?;
+        .context("--permission changes the permissions of the spaces a restore names")?;
     for selector in selectors {
         let (space, saved) = saved_agents(ctx, selector, execution).await?;
         ensure!(
             !saved.agents.iter().any(|agent| agent.waits_in_wrapper),
-            "the agent of {} restores in the wrapper that waits for it, which keeps its permissions; resume it without --permission",
+            "the agent of {} restores in the wrapper that waits for it, which keeps its permissions; restore it without --permission",
             space.name()
         );
         let repository = space.repository_id().map(|id| id.as_str().into());

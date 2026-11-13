@@ -1,4 +1,4 @@
-//! Where a resume runs a stopped agent's restore outside this terminal: a
+//! Where a restore runs a stopped agent's restore outside this terminal: a
 //! workspace's in a place its terminal host opens beside or where the agent
 //! stopped, a chat's in a background place, as its start opens one.
 use std::ffi::OsString;

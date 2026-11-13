@@ -71,7 +71,10 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert_eq!(imported["workspace"]["name"], "moving");
     assert_eq!(imported["workspace"]["state"], "ready");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
-    assert_eq!(fixture.ok(&["restore"]), serde_json::json!([]));
+    assert_eq!(
+        fixture.ok(&["restore"])["removed"].clone(),
+        serde_json::json!([])
+    );
     // The agent never reported a session, so it starts as a new agent
     // does, told the workspace moved.
     let record = fixture
@@ -86,7 +89,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert!(record.exists());
     let resumed = fixture
         .command()
-        .args(["resume", &fixture.id("moving"), "--focus"])
+        .args(["restore", &fixture.id("moving"), "--focus"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -149,7 +152,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
 }
 
 #[test]
-fn import_resume_queues_the_agents_the_export_stopped_once_post_setup_succeeds() {
+fn import_restore_queues_the_agents_the_export_stopped_once_post_setup_succeeds() {
     let fixture = Fixture::with_config(Some(&format!(
         "{UNLIMITED_AGENTS}[agents.claude]\ncommand = ['sh', './agent.sh']\n"
     )));
@@ -221,7 +224,7 @@ fn import_resume_queues_the_agents_the_export_stopped_once_post_setup_succeeds()
         file.to_str().unwrap(),
         "--repo",
         repo,
-        "--resume",
+        "--restore",
     ]);
     assert!(!failed.status.success(), "{failed:?}");
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
@@ -235,7 +238,7 @@ fn import_resume_queues_the_agents_the_export_stopped_once_post_setup_succeeds()
         file.to_str().unwrap(),
         "--repo",
         repo,
-        "--resume",
+        "--restore",
     ]);
     let queued = imported["queued"]["queued"].as_array().unwrap();
     assert_eq!(queued.len(), 1, "{imported}");
@@ -778,7 +781,7 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
         let output = fixture
             .command()
             .current_dir(path)
-            .args(["resume", "--focus"])
+            .args(["restore", "--focus"])
             .stdin(Stdio::null())
             .output()
             .unwrap();
@@ -898,7 +901,7 @@ fn export_carries_session_files_that_import_puts_back() {
     let output = fixture
         .command()
         .current_dir(path)
-        .args(["resume", "--focus"])
+        .args(["restore", "--focus"])
         .stdin(Stdio::null())
         .output()
         .unwrap();
