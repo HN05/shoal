@@ -443,7 +443,9 @@ instead of the PR delivery guidance below.
   caller's scope or permissions, lose or damage work, or cannot be done at
   all. Flag a new refusal whose reason is a limit of how Shoal is built, such
   as a code path one kind of caller does not take, unless an issue tracks
-  supporting the request.
+  supporting the request, and one whose reason is a view of where a setting or
+  action belongs or of what the user ought to want, such as a config file
+  refusing an option of its schema whose value would apply there.
 - Commands refuse invalid given arguments before any prompt for omitted ones;
   interactive `start` has the daemon check its creation request first.
 - Agent pickers offer “No agent”: issue creation continues without a launch,

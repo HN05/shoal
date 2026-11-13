@@ -59,7 +59,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   the caller's scope or permissions, lose or damage work, or cannot be done at
   all. A limit of how Shoal is built, such as a code path one kind of caller
   does not take, is no such reason: support the request instead, or file an
-  issue for it when that lies outside the change.
+  issue for it when that lies outside the change. Nor is a view of where a
+  setting or action belongs, or of what the user ought to want: a config file
+  takes every option its schema has, except where its value cannot apply.
 - Invoke external tools with argument arrays. Worktrees are created and
   removed with plain Git through the `git` module; preserve Shoal's ownership
   records and cleanup policy.
