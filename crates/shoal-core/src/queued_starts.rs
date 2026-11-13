@@ -11,7 +11,6 @@ use crate::client::queue::{self, QueueEntryId};
 use crate::{paths::CommandPaths, state::QueueKind};
 
 pub use launch::{plan as launch_plan, start_admitted as start_admitted_launch};
-pub use restore::start_chat as restore_chat_in_background;
 
 /// Start the admitted queue `entry`: open its launch's place, or restore its
 /// stopped agent, freeing its slot with the error when that fails.

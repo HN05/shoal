@@ -7,8 +7,6 @@ use anyhow::{Context as _, Result};
 
 use crate::client::{execution_ids::ExecutionId, space_names::SpaceSelector};
 use crate::{
-    agents::HomeRecords,
-    config::Effective,
     model::{PresentSpace, QueueEntry},
     paths::CommandPaths,
     protocol::ConfigTarget,
@@ -35,7 +33,7 @@ pub(super) async fn start(paths: &CommandPaths, entry: &QueueEntry) -> Result<()
         PresentSpace::Workspace(workspace) => {
             queued::restore_in_background(paths, &settings, workspace, &args).await
         }
-        PresentSpace::Chat(_) => start_chat(paths, &settings, &space, &args).await,
+        PresentSpace::Chat(_) => queued::restore_chat(paths, &settings, &space, &args).await,
     }
 }
 
@@ -69,25 +67,4 @@ fn restore_args(
         entry.id.as_str(),
     ]
     .map(OsString::from)
-}
-
-/// Run Shoal with `args`, a restore of the agent of the chat `space`, in a
-/// new background place of the first host that would start a queued agent,
-/// in its home.
-pub async fn start_chat(
-    paths: &CommandPaths,
-    settings: &Effective,
-    space: &PresentSpace,
-    args: &[OsString],
-) -> Result<()> {
-    let records = HomeRecords::read(paths, &SpaceSelector::id(space.id())).await?;
-    let home = records.home()?;
-    let repository = match &records {
-        HomeRecords::Chat { repository, .. } => repository.as_ref(),
-        HomeRecords::Workspace(_) => None,
-    };
-    let name = space.name().as_str();
-    let argv = crate::terminal::shoal_command(paths, args)?;
-    queued::start_chat(paths, settings, repository, home.path(), name, argv, true).await?;
-    Ok(())
 }

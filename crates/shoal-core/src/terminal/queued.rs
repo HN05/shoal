@@ -7,13 +7,15 @@ use anyhow::{Context as _, Result};
 
 use super::{
     Beside, current_origin, enabled_host, groups, naming,
-    opening::start_in_background,
     opening::{chat_place_env, open_add, open_in_background, rerun_in_host, reusable_place},
+    opening::{shoal_command, start_in_background},
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
+    agents::HomeRecords,
     config::Effective,
     env,
-    model::{Repository, Workspace},
+    model::{PresentSpace, Repository, Workspace},
     paths::CommandPaths,
     sessions::Origin,
     start_plan::AddPlan,
@@ -171,6 +173,27 @@ pub async fn start_chat(
     )
     .await?
     .context(NO_QUEUED_HOST)
+}
+
+/// Run Shoal with `args`, a restore of the agent of the chat `space`, in a
+/// new background place of the first host that would start a queued agent,
+/// in its home.
+pub async fn restore_chat(
+    paths: &CommandPaths,
+    settings: &Effective,
+    space: &PresentSpace,
+    args: &[OsString],
+) -> Result<()> {
+    let records = HomeRecords::read(paths, &SpaceSelector::id(space.id())).await?;
+    let home = records.home()?;
+    let repository = match &records {
+        HomeRecords::Chat { repository, .. } => repository.as_ref(),
+        HomeRecords::Workspace(_) => None,
+    };
+    let name = space.name().as_str();
+    let argv = shoal_command(paths, args)?;
+    start_chat(paths, settings, repository, home.path(), name, argv, true).await?;
+    Ok(())
 }
 
 #[cfg(test)]
