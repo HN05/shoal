@@ -13,7 +13,7 @@ use super::{
     answer,
     workspace::{HeldBack, Manager},
 };
-use crate::protocol::{self, Body, Exit, ExitWhen, Response};
+use crate::protocol::{self, Body, Exit, ExitWhen, Response, Work};
 
 /// How often an exit that waits looks again at the work in progress.
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
@@ -68,7 +68,7 @@ pub(super) async fn wait(
         if reported.as_ref() != Some(&running) {
             let response = Response::new(request_id, Body::ExitWaits(running.clone()));
             protocol::write(stream, &response).await?;
-            if when == ExitWhen::IfIdle && !work::only_passes(&running) {
+            if when == ExitWhen::IfIdle && Work::refuses_idle_exit(&running) {
                 return Ok(None);
             }
             reported = Some(running);

@@ -1,5 +1,5 @@
 use super::*;
-use crate::protocol::{ErrorCode, RemoteError};
+use crate::protocol::{ErrorCode, RemoteError, WorkSpace};
 use tokio::net::UnixListener;
 
 /// Supervision that takes the daemon recorded in the state directory's
@@ -425,10 +425,32 @@ async fn an_exit_that_waits_reports_the_work_until_the_daemon_agrees() -> Result
 
 #[tokio::test]
 async fn an_exit_that_does_not_wait_reports_the_work_that_keeps_the_daemon() -> Result<()> {
-    let bodies = vec![Body::ExitWaits(vec![Work::Other])];
+    let workspace = WorkSpace {
+        id: "workspace".into(),
+        number: 3.into(),
+        name: "api".parse().unwrap(),
+    };
+    let named = Work::Command { workspace };
+    let bodies = vec![Body::ExitWaits(vec![named.clone()])];
     let (ended, reported) = exit_answering(ExitWhen::IfIdle, bodies).await?;
-    assert_eq!(ended, Ended::Refused(vec![Work::Other]));
+    assert_eq!(ended, Ended::Refused(vec![named]));
     assert!(reported.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_exit_that_does_not_wait_still_waits_out_requests_and_passes() -> Result<()> {
+    let exited = Body::Exited(crate::protocol::Exited {
+        stopped_work: false,
+    });
+    let bodies = vec![Body::ExitWaits(vec![Work::Other]), Body::Ok, exited];
+    let (ended, reported) = exit_answering(ExitWhen::IfIdle, bodies).await?;
+    let exited = Ended::Exited {
+        waited_for: vec![Work::Other],
+        stopped_work: Some(false),
+    };
+    assert_eq!(ended, exited);
+    assert_eq!(reported, [vec![Work::Other]]);
     Ok(())
 }
 

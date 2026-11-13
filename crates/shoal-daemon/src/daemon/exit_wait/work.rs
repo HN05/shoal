@@ -48,12 +48,6 @@ impl Manager {
     }
 }
 
-/// Whether `work` holds only requests and background passes, which end
-/// soon on their own.
-pub(super) fn only_passes(work: &[Work]) -> bool {
-    work.iter().all(|work| matches!(work, Work::Other))
-}
-
 /// The workspace `work` works in.
 fn working_in(work: &Work) -> Option<&SpaceId> {
     match work {

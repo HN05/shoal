@@ -62,6 +62,14 @@ pub enum Work {
     Other,
 }
 
+impl Work {
+    /// Whether `work` refuses an exit that waits only when nothing but
+    /// requests and background passes runs, which end soon on their own.
+    pub fn refuses_idle_exit(work: &[Self]) -> bool {
+        work.iter().any(|work| !matches!(work, Self::Other))
+    }
+}
+
 /// The workspace a piece of [`Work`] works in.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkSpace {

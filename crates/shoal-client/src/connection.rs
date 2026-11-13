@@ -474,7 +474,7 @@ pub async fn exit(
     loop {
         match body {
             Body::Ok => return Ok(ExitAnswer::Exiting(Exiting { stream, waited_for })),
-            Body::ExitWaits(work) if when == ExitWhen::IfIdle => {
+            Body::ExitWaits(work) if when == ExitWhen::IfIdle && Work::refuses_idle_exit(&work) => {
                 return Ok(ExitAnswer::Refused(work));
             }
             Body::ExitWaits(work) => {
