@@ -157,7 +157,11 @@ impl Manager {
 
     /// The chat without a repository `chat` names, acting in the registered
     /// repository `repository` names, which counts as its own.
-    async fn chat_in(&self, chat: &SpaceSelector, repository: &RepositoryId) -> Result<LinkSpace> {
+    pub(in crate::daemon::links) async fn chat_in(
+        &self,
+        chat: &SpaceSelector,
+        repository: &RepositoryId,
+    ) -> Result<LinkSpace> {
         let (chat, checkout) = self.chat_acting_in(chat, repository).await?;
         Ok(LinkSpace::Chat { chat, checkout })
     }

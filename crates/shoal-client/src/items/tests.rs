@@ -72,6 +72,7 @@ async fn item_wait_continues_on_the_replacement_daemon() {
             &paths,
             &"work".into(),
             Default::default(),
+            None,
             Some(deadline(600)),
             false,
         ),
@@ -106,6 +107,7 @@ async fn item_wait_ends_at_its_deadline_while_the_daemon_is_away() {
         &paths,
         &"work".into(),
         Default::default(),
+        None,
         Some(deadline(600)),
         false,
     )

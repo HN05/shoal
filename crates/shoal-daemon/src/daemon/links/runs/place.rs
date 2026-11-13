@@ -22,7 +22,7 @@ use crate::{
 };
 
 /// The refusal of a workspace process's request about another repository.
-const ELSEWHERE: &str =
+pub(super) const ELSEWHERE: &str =
     "workspace processes act only on CI runs and workflows of their own repository";
 
 /// The repository a CI run request acts in and the account it acts as.
@@ -162,7 +162,8 @@ impl Manager {
 
     /// Refuse a workspace process the explicitly selected run of another
     /// repository than its space's, which a watch would read with the user's
-    /// own logins.
+    /// own logins. A chat without a repository counts every registered
+    /// repository as its own, and its watch reads no other.
     pub(in crate::daemon) async fn ensure_own_repository_run(
         &self,
         selector: &SpaceSelector,
@@ -174,6 +175,9 @@ impl Manager {
         let Some(named) = self.named_run_forge(input).await? else {
             return Ok(());
         };
+        if self.space(selector).await?.repository_id().is_none() {
+            return Ok(());
+        }
         let space = self.link_space(selector).await?;
         ensure!(named == self.space_forge(&space).await?, ELSEWHERE);
         Ok(())

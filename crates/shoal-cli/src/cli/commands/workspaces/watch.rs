@@ -18,7 +18,7 @@ pub(in crate::cli::commands) async fn watch_items(
     // The installed release continues the wait after an upgrade.
     let executable = crate::installed::Executable::current();
     let deadline = timeout.map(|timeout| Instant::now() + Duration::from_secs(timeout));
-    let updates = items::await_updates(&ctx.paths, &workspace, selection, deadline, resumed)
+    let updates = items::await_updates(&ctx.paths, &workspace, selection, None, deadline, resumed)
         .await
         .map_err(|error| {
             executable.resume_or(error, || resume_watch_arguments(&workspace, deadline))

@@ -3,6 +3,7 @@
 use anyhow::Result;
 use tokio::time::Instant;
 
+use crate::repository_ids::RepositoryId;
 use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, await_reply, request},
@@ -62,7 +63,8 @@ pub async fn watch_pr(daemon: &impl Daemon, space: SpaceSelector, url: ItemInput
     request(daemon, ItemMethod::SetPr { space, action }).await
 }
 
-/// The next activity on the items of `space` that `selection` selects,
+/// The next activity on the items of `space` that `selection` selects, an
+/// item of the registered `repository` for a chat without a repository,
 /// waiting across daemon restarts until `deadline`, when the updates come
 /// back timed out; `restarted` says the daemon restarted before the wait
 /// began. Waiting acknowledges nothing.
@@ -70,12 +72,14 @@ pub async fn await_updates(
     daemon: &impl Daemon,
     space: &SpaceSelector,
     selection: Selection,
+    repository: Option<RepositoryId>,
     deadline: Option<Instant>,
     restarted: bool,
 ) -> Result<Updates> {
     let method = || ItemMethod::WatchItems {
         space: space.clone(),
         selection: selection.clone(),
+        repository: repository.clone(),
         timeout_secs: seconds_left(deadline),
     };
     let reply = await_reply(daemon, method, restarted);

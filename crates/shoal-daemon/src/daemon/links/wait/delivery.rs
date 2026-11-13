@@ -10,7 +10,7 @@ use super::{
     wake_log::WakeWaitLog,
 };
 use crate::{
-    client::{space_ids::SpaceId, space_names::SpaceSelector},
+    client::{repository_ids::RepositoryId, space_ids::SpaceId, space_names::SpaceSelector},
     daemon::{agent_messages::AgentMessage, workspace::Manager},
     forge::{
         items::link::{LinkKind, Selection},
@@ -20,10 +20,14 @@ use crate::{
 };
 
 impl Manager {
+    /// The next messages or activity of the items `selection` names of the
+    /// space `selector` names, an item of the registered `repository` for
+    /// a chat without a repository, within `seconds`, or without a limit.
     pub async fn wait_items(
         &self,
         selector: &SpaceSelector,
         selection: &Selection,
+        repository: Option<&RepositoryId>,
         seconds: Option<u64>,
     ) -> Result<Updates> {
         if let Some(seconds) = seconds {
@@ -38,6 +42,9 @@ impl Manager {
         );
         let deadline = watch_deadline(seconds);
         let space = self.space(selector).await?;
+        let repository = self
+            .watched_repository(&space, selection, repository)
+            .await?;
         // The space's hooks deliver what a watch would, so the newest of them
         // takes it.
         let wait = self.waits.start(space.id());
@@ -50,7 +57,7 @@ impl Manager {
             // A cancelled poll leaves its deliveries pending for the newer wait.
             tokio::select! {
                 updates = wait_for_updates(deadline, &mut background, || {
-                    self.poll_space_activity(&space, selection)
+                    self.poll_space_activity(&space, selection, repository.as_ref())
                 }) => {
                     let updates = updates?;
                     // Including settled ones queued while the wait ran. A
@@ -88,7 +95,7 @@ impl Manager {
         let log = WakeWaitLog::start(space.name());
         let selector = SpaceSelector::id(space.id());
         let updates = self
-            .wait_items(&selector, &Selection::default(), None)
+            .wait_items(&selector, &Selection::default(), None, None)
             .await;
         log.answered(&updates);
         updates

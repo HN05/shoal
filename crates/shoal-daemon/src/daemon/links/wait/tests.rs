@@ -47,6 +47,7 @@ impl Manager {
                 kind: Some(LinkKind::Pr),
                 input: None,
             },
+            None,
             seconds,
         )
         .await
@@ -577,7 +578,7 @@ async fn a_chat_without_a_repository_watches_one_kind_below_it() {
         kind: Some(kind),
         input: None,
     };
-    let issues = (manager.wait_items(&chat, &watch(LinkKind::Issue), Some(60)))
+    let issues = (manager.wait_items(&chat, &watch(LinkKind::Issue), None, Some(60)))
         .await
         .unwrap();
     let urls: Vec<_> = issues.updates.iter().map(|update| &update.url).collect();
@@ -585,9 +586,115 @@ async fn a_chat_without_a_repository_watches_one_kind_below_it() {
     assert_eq!(issues.updates[0].workspace.as_deref(), Some("below"));
     // Nothing below links a run, so a watch of runs would wait forever.
     let runs = manager
-        .wait_items(&chat, &watch(LinkKind::Ci), Some(60))
+        .wait_items(&chat, &watch(LinkKind::Ci), None, Some(60))
         .await;
     assert!(runs.is_err(), "{runs:?}");
+}
+
+/// A chat without a repository beside a registered repository on a forge
+/// that serves its open issues, each with a comment.
+struct ServedChat {
+    _forge: crate::forge::test_support::Server,
+    chat: SpaceSelector,
+    repository: crate::model::Repository,
+    /// The repository's URL on the forge.
+    origin: String,
+}
+
+async fn chat_beside_served_repository(
+    manager: &Arc<Manager>,
+    root: &std::path::Path,
+) -> ServedChat {
+    let server = crate::forge::test_support::Server::start(|request| {
+        let Some(path) = request
+            .line
+            .strip_prefix("GET /api/v1/repos/team/repo/issues/")
+            .and_then(|path| path.split_whitespace().next())
+        else {
+            return (404, Vec::new(), Vec::new());
+        };
+        let body = match path.split_once('/') {
+            Some((_, "comments")) => json!([{"id": 1, "user": {"login": "dev"},
+                "body": "Reproduced", "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-01-01T00:00:00Z"}]),
+            Some(_) => return (404, Vec::new(), Vec::new()),
+            None => json!({"number": path.parse::<u64>().unwrap(), "title": "Fix",
+                "state": "open"}),
+        };
+        (200, Vec::new(), body.to_string().into())
+    });
+    let host = server.host.clone();
+    crate::forge::hosts::learn(&host, crate::forge::backends::ForgeKind::Forgejo);
+    crate::daemon::test_support::configure(
+        manager,
+        &format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n"),
+    )
+    .await;
+    let path = repository(root, "repo");
+    let origin = format!("http://{host}/team/repo");
+    crate::daemon::test_support::git(&path, &["remote", "add", "origin", &origin]);
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat =
+        crate::daemon::test_support::chat(manager, "master", "orchestrate", None, None).await;
+    ServedChat {
+        _forge: server,
+        chat: SpaceSelector::id(&chat.id),
+        repository: repo,
+        origin,
+    }
+}
+
+#[tokio::test]
+async fn a_chat_without_a_repository_watches_an_item_by_its_url() {
+    let (root, manager) = manager().await;
+    let manager = Arc::new(manager);
+    let served = chat_beside_served_repository(&manager, root.path()).await;
+    let chat = &served.chat;
+    let issue = format!("{}/issues/3", served.origin);
+    let selection = Selection {
+        kind: Some(LinkKind::Issue),
+        input: Some(issue.parse().unwrap()),
+    };
+    let updates = (manager.wait_items(chat, &selection, None, Some(60)))
+        .await
+        .unwrap();
+    assert_eq!(updates.updates[0].url, issue);
+    // A repository nobody registered is read from no chat, whichever
+    // repository it names besides.
+    let elsewhere = Selection {
+        kind: Some(LinkKind::Issue),
+        input: Some(issue.replace("/repo/", "/other/").parse().unwrap()),
+    };
+    for named in [None, Some(&served.repository.id)] {
+        let refused = manager.wait_items(chat, &elsewhere, named, Some(60)).await;
+        let refused = refused.unwrap_err().to_string();
+        assert!(refused.contains("no registered repository"), "{refused}");
+    }
+}
+
+#[tokio::test]
+async fn a_chat_without_a_repository_watches_a_number_in_the_named_repository() {
+    let (root, manager) = manager().await;
+    let manager = Arc::new(manager);
+    let served = chat_beside_served_repository(&manager, root.path()).await;
+    let chat = &served.chat;
+    let selection = Selection {
+        kind: Some(LinkKind::Issue),
+        input: Some("4".parse().unwrap()),
+    };
+    let unknown = manager.wait_items(chat, &selection, None, Some(60)).await;
+    assert!(unknown.unwrap_err().to_string().contains("--repo"));
+    let repository = Some(&served.repository.id);
+    let updates = (manager.wait_items(chat, &selection, repository, Some(60)))
+        .await
+        .unwrap();
+    assert_eq!(
+        updates.updates[0].url,
+        format!("{}/issues/4", served.origin)
+    );
 }
 
 #[tokio::test]
@@ -741,7 +848,10 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
         input: None,
     };
     // A poll records the parent's own observations without refusing the kind.
-    let quiet = manager.poll_item_activity(&parent.id, &prs).await.unwrap();
+    let quiet = manager
+        .poll_item_activity(&parent.id, &prs, None)
+        .await
+        .unwrap();
     assert!(quiet.is_empty());
     // Queued updates end a wait at once; the timeout only guards a hang.
     let watch = |selection: Selection| {
@@ -750,7 +860,7 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
         async move {
             tokio::time::timeout(
                 Duration::from_secs(60),
-                manager.wait_items(&SpaceSelector::id(&id), &selection, None),
+                manager.wait_items(&SpaceSelector::id(&id), &selection, None, None),
             )
             .await
             .expect("watch ended")
@@ -1742,7 +1852,7 @@ async fn polls_stop_looking_up_items_whose_activity_ended() {
     register_watch(&manager, &workspace.id, PR.as_str()).await;
     // Nothing serves either item, so looking one up fails.
     let unfiltered = Selection::default();
-    let poll = || manager.poll_item_activity(&workspace.id, &unfiltered);
+    let poll = || manager.poll_item_activity(&workspace.id, &unfiltered, None);
     assert!(poll().await.is_err());
 
     let ended = |state: &str| {
@@ -1864,7 +1974,7 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
         let id = parent.id.clone();
         async move {
             manager
-                .wait_items(&SpaceSelector::id(&id), &prs, None)
+                .wait_items(&SpaceSelector::id(&id), &prs, None, None)
                 .await
         }
     });
@@ -2346,7 +2456,7 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
         .await
         .unwrap();
 
-    let poll = || manager.poll_item_activity(&workspace.id, &all);
+    let poll = || manager.poll_item_activity(&workspace.id, &all, None);
     assert!(poll().await.unwrap().is_empty());
     for (repo, content) in [(&workspace.path, "workspace\n"), (&repo_path, "main\n")] {
         std::fs::write(repo.join("tracked"), content).unwrap();
@@ -2384,7 +2494,9 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
         kind: Some(LinkKind::Issue),
         input: None,
     };
-    let polled = manager.poll_item_activity(&workspace.id, &issues).await;
+    let polled = manager
+        .poll_item_activity(&workspace.id, &issues, None)
+        .await;
     assert!(polled.is_err());
 
     // A failing issue lookup still lets a new branch conflict through.
@@ -2452,7 +2564,9 @@ async fn sensitive_files_changed_on_both_sides_are_reported_beside_a_linked_pr()
     crate::daemon::test_support::commit(&repo_path, ".");
     let all = Selection::default();
 
-    let updates = manager.poll_item_activity(&workspaces[0].id, &all).await;
+    let updates = manager
+        .poll_item_activity(&workspaces[0].id, &all, None)
+        .await;
     let updates = updates.unwrap();
     assert_eq!(updates.len(), 1);
     let message = &updates[0].message;
@@ -2486,7 +2600,7 @@ async fn sensitive_files_changed_on_both_sides_are_reported_beside_a_linked_pr()
         message.contains("version") && !message.contains("tracked"),
         "{message}"
     );
-    let updates = manager.poll_item_activity(&linked.id, &all).await;
+    let updates = manager.poll_item_activity(&linked.id, &all, None).await;
     assert_eq!(updates.unwrap(), queued, "the watch reports it once");
     let recorded = manager.recorded_changed_on_both_sides(&linked.id).await;
     assert_eq!(recorded.unwrap().unwrap().files, ["version"]);
@@ -2591,7 +2705,7 @@ async fn branch_conflicts_with_a_target_that_has_heads_changes_are_not_reported(
     let all = Selection::default();
     assert!(
         manager
-            .poll_item_activity(&workspace.id, &all)
+            .poll_item_activity(&workspace.id, &all, None)
             .await
             .unwrap()
             .is_empty()
@@ -2630,7 +2744,7 @@ async fn branch_conflicts_of_work_integrated_elsewhere_are_not_reported() {
         .await
         .unwrap();
     let all = Selection::default();
-    let poll = || manager.poll_item_activity(&workspace.id, &all);
+    let poll = || manager.poll_item_activity(&workspace.id, &all, None);
     assert!(poll().await.unwrap().is_empty());
     // Withdrawing the completion reports the conflict again.
     manager
@@ -2849,6 +2963,7 @@ async fn a_watch_times_out_while_its_messages_settle() {
         .wait_items(
             &SpaceSelector::id(&workspace.id),
             &Selection::default(),
+            None,
             Some(1),
         )
         .await

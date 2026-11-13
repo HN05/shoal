@@ -14,7 +14,7 @@ use super::{
     items::activity_ended,
 };
 use crate::{
-    client::{space_ids::SpaceId, space_names::SpaceSelector},
+    client::{repository_ids::RepositoryId, space_ids::SpaceId, space_names::SpaceSelector},
     daemon::{links::space::LinkSpace, notifications::NotificationKind, workspace::Manager},
     forge::{
         account::Account,
@@ -34,17 +34,22 @@ const ITEMS_READ_AT_ONCE: usize = 4;
 
 impl Manager {
     /// The activity of the items of `space` that `selection` names, as
-    /// [`Self::poll_item_activity`] finds it. A space without a repository
-    /// has no items of its own to look up, and reads what is queued for it
-    /// and the spaces below it of the selected kind.
+    /// [`Self::poll_item_activity`] finds it, an item of the registered
+    /// `repository` for a chat without a repository. A space without a
+    /// repository has no items of its own to look up, and reads what is
+    /// queued for it and the spaces below it of the selected kind.
     pub(super) async fn poll_space_activity(
         &self,
         space: &PresentSpace,
         selection: &Selection,
+        repository: Option<&RepositoryId>,
     ) -> Result<Vec<Update>> {
         match (space.repository_id(), &selection.input) {
             (None, None) => self.queued_kind_activity(space, selection.kind).await,
-            _ => self.poll_item_activity(space.id(), selection).await,
+            _ => {
+                self.poll_item_activity(space.id(), selection, repository)
+                    .await
+            }
         }
     }
 
@@ -64,6 +69,7 @@ impl Manager {
         &self,
         id: &SpaceId,
         selection: &Selection,
+        repository: Option<&RepositoryId>,
     ) -> Result<Vec<Update>> {
         // A selected item is the workspace's own.
         let children = match selection.input {
@@ -71,7 +77,7 @@ impl Manager {
             None => self.delegated_spaces(id).await?,
         };
         let guard = self.gates.lock_prs(receiving(id, &children)).await;
-        let space = self.link_space(&SpaceSelector::id(id)).await?;
+        let space = self.watching_space(id, repository).await?;
         let items = self.watched_items(&space, selection).await?;
         let report = branch_report(&items);
         let branch = watches_branch(selection).then(|| space.branch().map(str::to_owned));
@@ -117,6 +123,20 @@ impl Manager {
                 }
                 Ok(updates)
             }
+        }
+    }
+
+    /// The space `id` whose items a watch looks up, acting in the registered
+    /// `repository` when it is a chat without a repository.
+    async fn watching_space(
+        &self,
+        id: &SpaceId,
+        repository: Option<&RepositoryId>,
+    ) -> Result<LinkSpace> {
+        let space = SpaceSelector::id(id);
+        match repository {
+            Some(repository) => self.chat_in(&space, repository).await,
+            None => self.link_space(&space).await,
         }
     }
 

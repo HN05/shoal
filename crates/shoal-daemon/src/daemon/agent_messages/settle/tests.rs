@@ -178,7 +178,7 @@ async fn a_wait_returns_a_run_once_it_settles() {
     .await;
     let selection = Selection::default();
     let selected = SpaceSelector::id(&workspace.id);
-    let wait = manager.wait_items(&selected, &selection, None);
+    let wait = manager.wait_items(&selected, &selection, None, None);
     let updates = settle_while(&manager, wait).await.unwrap();
     assert_eq!(updates.messages.len(), 2, "{updates:?}");
 }

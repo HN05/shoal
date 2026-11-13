@@ -8,6 +8,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     forge::items::action::Action,
@@ -36,12 +37,14 @@ pub(super) async fn handle(
         ItemMethod::WatchItems {
             space: workspace,
             selection,
+            repository,
             timeout_secs,
         } => {
             return Ok(Answer::wait(item_updates(
                 manager.clone(),
                 workspace,
                 selection,
+                repository,
                 timeout_secs,
             )));
         }
@@ -396,18 +399,20 @@ async fn pr_updates(
         kind: Some(crate::forge::items::link::LinkKind::Pr),
         input: None,
     };
-    item_updates(manager, workspace, selection, timeout_secs).await
+    item_updates(manager, workspace, selection, None, timeout_secs).await
 }
 
-/// The workspace's next updates of the selected items.
+/// The workspace's next updates of the selected items, in the registered
+/// `repository` for a chat without a repository.
 async fn item_updates(
     manager: Arc<Manager>,
     workspace: SpaceSelector,
     selection: crate::forge::items::link::Selection,
+    repository: Option<RepositoryId>,
     timeout_secs: Option<u64>,
 ) -> Result<Body> {
     let updates = manager
-        .wait_items(&workspace, &selection, timeout_secs)
+        .wait_items(&workspace, &selection, repository.as_ref(), timeout_secs)
         .await?;
     Ok(Body::PrUpdates(updates))
 }

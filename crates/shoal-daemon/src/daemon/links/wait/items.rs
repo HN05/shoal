@@ -5,7 +5,7 @@ use rusqlite::{OptionalExtension, params};
 
 use super::cursor::cursor_record;
 use crate::{
-    client::space_ids::SpaceId,
+    client::{repository_ids::RepositoryId, space_ids::SpaceId},
     daemon::{
         links::{
             pr::{Registration, RegistrationKind},
@@ -16,10 +16,11 @@ use crate::{
     forge::{
         items::{
             link::{ItemKind, LinkKind, Selection},
-            reference::ItemRef,
+            reference::{ItemInput, ItemRef},
         },
         updates::Snapshot,
     },
+    model::PresentSpace,
     repository,
 };
 
@@ -48,6 +49,55 @@ impl Manager {
         };
         let item = ItemRef::in_repository(&named.unwrap_or(forge), kind, input)?;
         Ok(Some(item))
+    }
+
+    /// The registered repository in which `space` watches the item
+    /// `selection` names: none for a space with a repository, which watches
+    /// its own, and for a chat without one, which reads only registered
+    /// repositories, the one the item's URL names, or else `named`.
+    pub(super) async fn watched_repository(
+        &self,
+        space: &PresentSpace,
+        selection: &Selection,
+        named: Option<&RepositoryId>,
+    ) -> Result<Option<RepositoryId>> {
+        let Some(input) = selection
+            .input
+            .as_ref()
+            .filter(|_| space.repository_id().is_none())
+        else {
+            ensure!(
+                named.is_none(),
+                "only a chat without a repository names the repository of one item it watches"
+            );
+            return Ok(None);
+        };
+        let ItemInput::Url(item) = input else {
+            let named = named.with_context(|| {
+                format!(
+                    "chat {} has no repository of its own; name the item's repository with \
+                     --repo or select the item by its URL",
+                    space.name()
+                )
+            })?;
+            return Ok(Some(named.clone()));
+        };
+        let repository = self.item_repository(item).await?;
+        ensure!(
+            named.is_none_or(|named| *named == repository),
+            "{item} is not in the repository --repo names"
+        );
+        Ok(Some(repository))
+    }
+
+    /// The registered repository of `item`.
+    async fn item_repository(&self, item: &ItemRef) -> Result<RepositoryId> {
+        let repository = self.item_forge(item).await?.repository_url();
+        let registered = self.registered_named(Some(&repository)).await?;
+        let registered = registered.with_context(|| {
+            format!("{item} is in no registered repository; only those are read from a chat")
+        })?;
+        Ok(registered.id)
     }
 
     /// The explicitly selected item, or the space's linked items of the

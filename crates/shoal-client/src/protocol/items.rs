@@ -40,6 +40,10 @@ pub enum ItemMethod {
     WatchItems {
         space: SpaceSelector,
         selection: crate::forge::items::link::Selection,
+        /// The registered repository of the item a chat without a
+        /// repository selects.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        repository: Option<RepositoryId>,
         timeout_secs: Option<u64>,
     },
     /// Link the open PR of the workspace's branch, or open one and link it.
