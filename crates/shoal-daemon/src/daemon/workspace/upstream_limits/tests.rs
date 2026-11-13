@@ -66,3 +66,22 @@ async fn a_reported_limit_stands_until_the_proxy_or_its_execution_ends() {
         .unwrap();
     assert!(limits().is_empty());
 }
+
+#[tokio::test]
+async fn a_chats_agent_reports_its_limit_too() {
+    let (_temp, manager) = manager().await;
+    let chat = crate::daemon::test_support::chat(&manager, "master", "chat", None, None).await;
+    let limit = UpstreamLimit {
+        limit: ServiceLimit::Exhausted,
+        until: Some(UnixTime::from_seconds(5_000)),
+    };
+    let execution = ExecutionId::from("chat-agent");
+    manager
+        .report_upstream_limit(&SpaceSelector::id(&chat.id), execution.clone(), Some(limit))
+        .await
+        .unwrap();
+    assert_eq!(
+        manager.upstream_limits.lock().unwrap().get(&execution),
+        Some(&limit)
+    );
+}

@@ -19,16 +19,16 @@ pub(crate) use crate::client::executions::UpstreamLimit;
 pub(crate) const UNNAMED_LIMIT_FOR: Duration = Duration::from_secs(15 * 60);
 
 impl Manager {
-    /// Keep the limit the proxy of `execution` in workspace `selector`
-    /// found its upstream under, or forget it once there is none, and let
-    /// the queue decide again.
+    /// Keep the limit the proxy of `execution` in space `selector` found
+    /// its upstream under, or forget it once there is none, and let the
+    /// queue decide again.
     pub async fn report_upstream_limit(
         &self,
         selector: &SpaceSelector,
         execution: ExecutionId,
         limit: Option<UpstreamLimit>,
     ) -> Result<()> {
-        self.workspace(selector).await?;
+        self.space(selector).await?;
         let mut limits = self.upstream_limits.lock().unwrap();
         match limit {
             Some(limit) => limits.insert(execution, standing(limit, UnixTime::now())),
