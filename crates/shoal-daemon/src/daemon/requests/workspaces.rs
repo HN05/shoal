@@ -404,7 +404,7 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::RecordOwnedPlace { workspace, .. }
             | WorkspaceMethod::PlaceOwnership { workspace, .. }
             | WorkspaceMethod::LayeredConfig {
-                target: ConfigTarget::Workspace(workspace),
+                target: ConfigTarget::Space(workspace),
             } => Some(workspace),
             WorkspaceMethod::SpaceStatus { space } | WorkspaceMethod::SpaceSessions { space } => {
                 Some(space)

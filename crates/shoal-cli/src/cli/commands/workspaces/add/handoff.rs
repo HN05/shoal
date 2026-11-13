@@ -51,7 +51,7 @@ pub(in crate::cli) async fn start_queued(
     name: &str,
 ) -> Result<()> {
     let target = match opens {
-        Some(workspace) => ConfigTarget::Workspace(SpaceSelector::id(workspace)),
+        Some(workspace) => ConfigTarget::Space(SpaceSelector::id(workspace)),
         None => ConfigTarget::Repository(plan.repository.clone()),
     };
     let settings = crate::config::settings(&ctx.paths, target).await?;

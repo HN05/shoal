@@ -2,13 +2,13 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-/// Whose repository config: a workspace's worktree file under the saved
-/// config, the registered checkout's before a workspace exists, or none,
-/// for the global config alone.
+/// Whose repository config: a space's, a workspace's worktree file under
+/// the saved config or a chat's repository's; the registered checkout's
+/// before a workspace exists; or none, for the global config alone.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfigTarget {
-    Workspace(crate::space_names::SpaceSelector),
+    Space(crate::space_names::SpaceSelector),
     Repository(crate::repository::Selector),
     Global,
 }
@@ -25,12 +25,7 @@ impl ConfigTarget {
 
     /// The config of `space`: a workspace's own, or a chat's.
     pub fn space(space: &crate::model::PresentSpace) -> Self {
-        match space {
-            crate::model::PresentSpace::Workspace(workspace) => {
-                Self::Workspace(crate::space_names::SpaceSelector::id(&workspace.id))
-            }
-            crate::model::PresentSpace::Chat(chat) => Self::chat(chat),
-        }
+        Self::Space(crate::space_names::SpaceSelector::id(space.id()))
     }
 }
 

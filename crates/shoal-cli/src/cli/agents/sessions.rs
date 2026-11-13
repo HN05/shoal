@@ -68,7 +68,7 @@ pub(in crate::cli) async fn install_session_files(
     }
     let (target, workspace) = match home {
         SessionHome::Workspace(workspace) => (
-            ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
+            ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
             Some(workspace),
         ),
         SessionHome::Repository(selector) => (ConfigTarget::Repository(selector), None),

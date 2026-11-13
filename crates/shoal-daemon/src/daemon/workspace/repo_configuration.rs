@@ -11,7 +11,7 @@ use crate::{
     },
     fsutil::off_runtime,
     hooks::{HookDirectory, HookKind},
-    model::{LocalConfigEdit, Workspace},
+    model::{LocalConfigEdit, PresentSpace, Workspace},
     protocol::ConfigTarget,
 };
 use anyhow::{Context, Result};
@@ -145,20 +145,28 @@ impl Manager {
     }
 
     /// The repository layer for `target`; a repository's file is the one in
-    /// its registered checkout, and the global config has none.
+    /// its registered checkout, which is a chat's too, and the global
+    /// config has none.
     pub async fn config_layers_for(&self, target: ConfigTarget) -> Result<ConfigLayers> {
         match target {
             ConfigTarget::Global => Ok(ConfigLayers::default()),
-            ConfigTarget::Workspace(selector) => {
-                let workspace = self.workspace(&selector).await?;
-                self.workspace_layers(&workspace).await
-            }
-            ConfigTarget::Repository(selector) => {
-                let repo = self.repository(&selector).await?;
-                let file = self.worktree_file(&repo.path).await?;
-                self.config_layers(&repo.id, file).await
-            }
+            ConfigTarget::Space(selector) => match self.space(&selector).await? {
+                PresentSpace::Workspace(workspace) => self.workspace_layers(&workspace).await,
+                PresentSpace::Chat(chat) => match chat.repository_id {
+                    Some(id) => self.checkout_layers(id.into()).await,
+                    None => Ok(ConfigLayers::default()),
+                },
+            },
+            ConfigTarget::Repository(selector) => self.checkout_layers(selector).await,
         }
+    }
+
+    /// The layers of the repository `selector` names, with the file in its
+    /// registered checkout.
+    async fn checkout_layers(&self, selector: crate::repository::Selector) -> Result<ConfigLayers> {
+        let repo = self.repository(&selector).await?;
+        let file = self.worktree_file(&repo.path).await?;
+        self.config_layers(&repo.id, file).await
     }
 
     /// The config file and template files of the checkout or worktree at

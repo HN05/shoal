@@ -272,7 +272,7 @@ pub(super) async fn launch_agent(
 ) -> Result<i32> {
     let settings = crate::config::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
+        ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     let integration = agent_integration(&settings, &agent);
@@ -590,7 +590,7 @@ pub(in crate::cli) async fn trust_saved(ctx: &Context, workspace: &Workspace) {
 async fn trust_for(ctx: &Context, workspace: &Workspace, agents: Vec<Agent>) {
     let settings = match crate::config::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
+        ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
     )
     .await
     {

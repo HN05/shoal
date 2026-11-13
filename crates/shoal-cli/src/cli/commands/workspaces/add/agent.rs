@@ -42,7 +42,7 @@ impl<'a> AddSettings<'a> {
 
     /// The settings of the existing workspace `id`.
     pub(super) fn workspace(ctx: &'a Context, id: &crate::client::space_ids::SpaceId) -> Self {
-        Self::of(ctx, ConfigTarget::Workspace(id.into()))
+        Self::of(ctx, ConfigTarget::Space(id.into()))
     }
 
     fn of(ctx: &'a Context, target: ConfigTarget) -> Self {

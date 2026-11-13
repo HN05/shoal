@@ -41,7 +41,7 @@ pub(super) async fn execute_command(
     let target = workspace
         .clone()
         .context("select a workspace to execute in")?;
-    let settings = crate::config::settings(&ctx.paths, ConfigTarget::Workspace(target)).await?;
+    let settings = crate::config::settings(&ctx.paths, ConfigTarget::Space(target)).await?;
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let agents = agents::names(&settings)
         .into_iter()

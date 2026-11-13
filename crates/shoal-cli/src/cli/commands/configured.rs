@@ -73,7 +73,7 @@ async fn current_layers(ctx: &Context) -> Result<ConfigLayers> {
 }
 
 async fn workspace_layers(ctx: &Context, workspace: SpaceSelector) -> Result<ConfigLayers> {
-    crate::client::workspaces::config_layers(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
+    crate::client::workspaces::config_layers(&ctx.paths, ConfigTarget::Space(workspace.clone()))
         .await
 }
 
@@ -97,7 +97,7 @@ async fn definition(ctx: &Context, name: &str, named: Option<SpaceSelector>) -> 
     let workspaces = running_workspaces(ctx).await?;
     if let Some(workspace) = selected_workspace(ctx, &workspaces, named.clone()).await? {
         if !defines(ctx, &workspace.id, name).await? {
-            let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
+            let target = ConfigTarget::Space(SpaceSelector::id(&workspace.id));
             return Err(not_configured(ctx, name, target).await);
         }
         return Ok(Definition::Workspace(workspace.id.clone()));
@@ -163,7 +163,7 @@ pub(in crate::cli) fn current_workspace(workspaces: &[Workspace]) -> Result<Opti
 }
 
 async fn defines(ctx: &Context, workspace: &SpaceId, name: &str) -> Result<bool> {
-    let target = ConfigTarget::Workspace(SpaceSelector::id(workspace));
+    let target = ConfigTarget::Space(SpaceSelector::id(workspace));
     Ok(crate::config::settings(&ctx.paths, target)
         .await?
         .commands
@@ -214,7 +214,7 @@ async fn run_defined(
     };
     recent::record(ctx, &workspace).await;
     let settings =
-        crate::config::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
+        crate::config::settings(&ctx.paths, ConfigTarget::Space(workspace.clone())).await?;
     let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
     let command = expand(
         &ctx.paths,

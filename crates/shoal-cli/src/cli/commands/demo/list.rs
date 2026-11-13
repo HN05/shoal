@@ -22,7 +22,7 @@ pub(super) async fn list(ctx: &Context, workspace: Option<SpaceSelector>) -> Res
         Some(workspace) => {
             crate::config::settings(
                 &ctx.paths,
-                ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
+                ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
             )
             .await?
             .into_settings()

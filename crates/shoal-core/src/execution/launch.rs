@@ -553,7 +553,7 @@ async fn prepare_agent_launch(
     }
     let (config, settings) = crate::config::configuration(
         paths,
-        crate::protocol::ConfigTarget::Workspace(workspace.clone()),
+        crate::protocol::ConfigTarget::Space(workspace.clone()),
     )
     .await?;
     let secrets = if has_agent {

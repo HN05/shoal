@@ -318,7 +318,7 @@ impl Typed {
                         context.resolve(None, Scoping::Unscoped, ScopeOrder::AfterDirectory)
                     })
                     .context("no current workspace")?;
-                let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
+                let target = ConfigTarget::Space(SpaceSelector::id(&workspace.id));
                 crate::client::workspaces::config_layers(&paths, target).await
             }));
             if let Ok(found) = layer {

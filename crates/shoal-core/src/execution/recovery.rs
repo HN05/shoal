@@ -313,7 +313,7 @@ impl Recovery {
     ) -> Result<Self> {
         let settings = crate::config::settings(
             paths,
-            ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
+            ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
         )
         .await?;
         let name = restored.agent.normalized();

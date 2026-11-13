@@ -111,7 +111,7 @@ async fn a_workspace_in_a_stalled_directory_refuses_its_layers_without_reading_t
     std::fs::write(workspace.path.join(".shoal.toml"), "not toml [").unwrap();
     manager.file_access.stall_rechecking(&workspace.path);
 
-    let target = crate::protocol::ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
+    let target = crate::protocol::ConfigTarget::Space(SpaceSelector::id(&workspace.id));
     let error = format!("{:#}", manager.config_layers_for(target).await.unwrap_err());
     let directory = workspace.path.parent().unwrap().display().to_string();
     assert!(
@@ -127,7 +127,7 @@ async fn a_workspace_in_a_stalled_directory_refuses_its_layers_without_reading_t
     // Once access recovers, the file is read and ignored as rejected, and
     // the layers say why.
     manager.file_access.recover_at(&workspace.path);
-    let target = crate::protocol::ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
+    let target = crate::protocol::ConfigTarget::Space(SpaceSelector::id(&workspace.id));
     let layers = manager.config_layers_for(target).await.unwrap();
     let rejected = layers.rejected_worktree_file.unwrap();
     assert!(rejected.contains("TOML parse error"), "{rejected}");
@@ -235,5 +235,50 @@ async fn a_lease_is_kept_while_the_file_that_may_name_its_hooks_is_rejected() {
     assert_eq!(
         manager.list_resources(Some(&selector)).await.unwrap().len(),
         1
+    );
+}
+
+/// A chat's config is its repository's, read from the registered checkout,
+/// even for a chat in a workspace's worktree, whose file is the workspace's.
+#[tokio::test]
+async fn a_chats_layers_are_its_repositorys() {
+    let (root, manager) = test_support::manager().await;
+    let checkout = test_support::repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    std::fs::write(checkout.join(".shoal.toml"), "git_profile = 'checkout'\n").unwrap();
+    std::fs::write(
+        workspace.path.join(".shoal.toml"),
+        "git_profile = 'worktree'\n",
+    )
+    .unwrap();
+    let chat = manager
+        .start_chat_in_workspace(
+            &SpaceSelector::id(&workspace.id),
+            "reviewing".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+
+    let read = |id: &crate::client::space_ids::SpaceId| {
+        let target = crate::protocol::ConfigTarget::Space(SpaceSelector::id(id));
+        manager.config_layers_for(target)
+    };
+    let chat = read(&chat.id).await.unwrap();
+    let workspace = read(&workspace.id).await.unwrap();
+    assert_eq!(chat.worktree_file.git_profile.as_deref(), Some("checkout"));
+    assert_eq!(
+        workspace.worktree_file.git_profile.as_deref(),
+        Some("worktree")
     );
 }

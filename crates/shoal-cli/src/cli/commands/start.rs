@@ -450,13 +450,13 @@ fn asked_kind(args: &StartArgs) -> Option<SpaceKind> {
 /// [`mode_repository`] finds, else the global config's. Nothing is asked.
 async fn mode_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
     if let Some(Some(workspace)) = &args.in_workspace {
-        let target = ConfigTarget::Workspace(workspace.clone());
+        let target = ConfigTarget::Space(workspace.clone());
         return crate::config::settings(&ctx.paths, target).await;
     }
     match mode_repository(ctx, args).await? {
         Some(id) => {
             let target = match branch_workspace(ctx, args, &id).await? {
-                Some(workspace) => ConfigTarget::Workspace(SpaceSelector::Id(workspace)),
+                Some(workspace) => ConfigTarget::Space(SpaceSelector::Id(workspace)),
                 None => ConfigTarget::Repository(id.into()),
             };
             crate::config::settings(&ctx.paths, target).await
@@ -720,7 +720,7 @@ async fn forked(
         Some(agent) => agent,
         None => running.name().parse()?,
     };
-    let target = ConfigTarget::Workspace(parent.clone());
+    let target = ConfigTarget::Space(parent.clone());
     let settings = crate::config::settings(&ctx.paths, target).await?;
     crate::agents::ensure_forks(&settings, &agent)?;
     Ok((parent, agent, session))

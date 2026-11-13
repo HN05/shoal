@@ -145,7 +145,7 @@ pub(super) async fn ensure_daemon_starts(
         }
         let settings = crate::config::settings(
             &ctx.paths,
-            ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
+            ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
         )
         .await?;
         crate::cli::terminal::ensure_background(&settings).with_context(|| {

@@ -209,7 +209,7 @@ impl Target {
     fn config(&self) -> ConfigTarget {
         match self {
             Self::Workspace(inspection) => {
-                ConfigTarget::Workspace(SpaceSelector::id(&inspection.workspace.id))
+                ConfigTarget::Space(SpaceSelector::id(&inspection.workspace.id))
             }
             Self::Chat(chat) => ConfigTarget::chat(chat),
         }

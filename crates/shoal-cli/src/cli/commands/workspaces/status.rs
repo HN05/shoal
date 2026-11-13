@@ -103,7 +103,7 @@ fn listed<T>(found: Result<Vec<T>>) -> (Vec<T>, Option<String>) {
 async fn sessions(ctx: &Context, space: &SpaceDetail) -> Result<Vec<crate::terminal::Session>> {
     let (target, places) = match space {
         SpaceDetail::Workspace(status) => (
-            ConfigTarget::Workspace(SpaceSelector::id(&status.workspace.id)),
+            ConfigTarget::Space(SpaceSelector::id(&status.workspace.id)),
             Recorded::workspace(&status.executions, &status.places),
         ),
         SpaceDetail::Chat { chat } => (ConfigTarget::chat(chat), Recorded::chat(chat)),

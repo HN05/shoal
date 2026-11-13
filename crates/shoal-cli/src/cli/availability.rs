@@ -345,7 +345,7 @@ async fn workspace_settings<'a>(
         if settings.contains_key(workspace) {
             continue;
         }
-        let target = crate::protocol::ConfigTarget::Workspace(SpaceSelector::id(workspace));
+        let target = crate::protocol::ConfigTarget::Space(SpaceSelector::id(workspace));
         let layers = crate::client::workspaces::config_layers(paths, target).await;
         if let Ok(resolved) = layers.and_then(|layers| config.resolve(&layers)) {
             settings.insert(workspace.clone(), resolved);

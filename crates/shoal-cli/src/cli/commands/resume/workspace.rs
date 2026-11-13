@@ -197,7 +197,7 @@ async fn start_copied(
     let agent = &session.agent;
     let settings = crate::config::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
+        ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     let fork = session
@@ -228,7 +228,7 @@ async fn start_converted(
         .with_context(|| format!("cannot start agent {agent} of {}", workspace.name))?;
     let settings = crate::config::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
+        ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     let fork = session
@@ -299,7 +299,7 @@ async fn launch(
     }
     let settings = crate::config::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
+        ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     let agent = recovery.tracked();

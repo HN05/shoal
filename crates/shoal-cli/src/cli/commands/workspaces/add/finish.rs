@@ -290,7 +290,7 @@ async fn enters_added(
     };
     let settings = crate::config::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
+        ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     Ok(!agents::runs_in_session(chosen, &settings))

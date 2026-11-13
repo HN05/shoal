@@ -150,7 +150,7 @@ pub(super) fn reference(ctx: &Context) -> Result<i32> {
 
 async fn target(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<ConfigTarget> {
     if let Some(workspace) = explicit {
-        return Ok(ConfigTarget::Workspace(workspace));
+        return Ok(ConfigTarget::Space(workspace));
     }
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let scoping = Scoping::of_workspace();
@@ -160,7 +160,7 @@ async fn target(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<Config
     };
     let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
     if let Some(workspace) = context.resolve(None, scoping, ScopeOrder::BeforeDirectory) {
-        return Ok(ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)));
+        return Ok(ConfigTarget::Space(SpaceSelector::id(&workspace.id)));
     }
     let cwd = cwd.context("scoped workspace is unavailable")?;
     let repositories = crate::client::repositories::list(&ctx.paths).await?;
@@ -174,7 +174,7 @@ async fn target(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<Config
         Some(repository) => ConfigTarget::Repository(repository.id.clone().into()),
         None => {
             let picked = ui::pick_workspace(ctx, workspaces, "workspace").await?;
-            ConfigTarget::Workspace(SpaceSelector::id(&picked))
+            ConfigTarget::Space(SpaceSelector::id(&picked))
         }
     })
 }

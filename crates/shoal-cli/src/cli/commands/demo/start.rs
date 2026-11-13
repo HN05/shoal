@@ -80,7 +80,7 @@ pub(super) async fn start(
         .workspace;
     let settings = crate::config::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
+        ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     let chosen = choose(&settings.demos, name, command)?.with(overrides);

@@ -172,7 +172,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                 .into(),
             )
         } else if let Method::Operation(Operation::Workspace(WorkspaceMethod::LayeredConfig {
-            target: ConfigTarget::Workspace(workspace),
+            target: ConfigTarget::Space(workspace),
         })) = &request.method
         {
             let mut layers = ConfigLayers::default();
