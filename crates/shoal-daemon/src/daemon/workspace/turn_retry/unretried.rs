@@ -48,14 +48,14 @@ impl Unretried {
     }
 }
 
-/// Drop the workspace's retry and note that `execution`'s failed turn went
+/// Drop the space's retry and note that `execution`'s failed turn went
 /// unretried, together. Whether the note is new.
 fn record(
     tx: &rusqlite::Transaction<'_>,
-    workspace_id: &SpaceId,
+    space_id: &SpaceId,
     execution: &ExecutionId,
 ) -> Result<bool> {
-    cancel(tx, workspace_id)?;
+    cancel(tx, space_id)?;
     let noted = tx.execute(
         "INSERT OR IGNORE INTO execution_unretried_turns(execution_id) VALUES (?1)",
         [execution],

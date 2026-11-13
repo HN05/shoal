@@ -542,6 +542,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 171 {
         db.execute_batch(include_str!("agent_stoppers.sql"))?;
     }
+    if version >= 172 {
+        db.execute_batch(include_str!("space_turn_retries.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -1236,6 +1239,25 @@ fn migrated_spaces_keep_their_issue_first_and_take_more() -> Result<()> {
         .map(|issue| (issue.url.number().get(), issue.title.as_deref()))
         .collect();
     assert_eq!(issues, [(4, Some("Fix it")), (5, None)]);
+    Ok(())
+}
+
+#[test]
+fn migrated_workspaces_keep_their_turn_retry() -> Result<()> {
+    let mut db = historical_database(171)?;
+    db.execute_batch(
+        "INSERT INTO workspace_turn_retries(workspace_id,execution_id,failure,attempt,due_at,delivered)
+             VALUES ('workspace','execution','overloaded',2,1000,0);",
+    )?;
+    migrate(&mut db)?;
+    let retry = crate::daemon::workspace::turn_retry::get(&db, &"workspace".into())?;
+    let kept = crate::daemon::workspace::turn_retry::TurnRetry {
+        failure: crate::state::TurnFailure::Overloaded,
+        attempt: 2,
+        due_at: UnixTime::from_seconds(1000),
+        delivered: false,
+    };
+    assert_eq!(retry, Some(kept));
     Ok(())
 }
 

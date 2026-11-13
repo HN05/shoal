@@ -279,7 +279,7 @@ where
     })
 }
 
-/// A workspace's retry of its agent's failed turn.
+/// A space's retry of its agent's failed turn.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TurnRetry {
     pub failure: TurnFailure,

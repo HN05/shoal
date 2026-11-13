@@ -40,12 +40,12 @@ const RESET_MARGIN: Duration = Duration::from_secs(30);
 /// How often the loop looks again without a retry to wait for.
 const IDLE_RECHECK: Duration = Duration::from_secs(60 * 60);
 
-pub(crate) fn get(db: &Connection, workspace_id: &SpaceId) -> Result<Option<TurnRetry>> {
+pub(crate) fn get(db: &Connection, space_id: &SpaceId) -> Result<Option<TurnRetry>> {
     Ok(db
         .query_row(
-            "SELECT failure,attempt,due_at,delivered FROM workspace_turn_retries
-             WHERE workspace_id=?1",
-            [workspace_id],
+            "SELECT failure,attempt,due_at,delivered FROM space_turn_retries
+             WHERE space_id=?1",
+            [space_id],
             |row| {
                 Ok(TurnRetry {
                     failure: row.get(0)?,
@@ -60,19 +60,15 @@ pub(crate) fn get(db: &Connection, workspace_id: &SpaceId) -> Result<Option<Turn
 
 /// Follow a reported turn state: a new turn cancels a retry not delivered
 /// yet, and the end of the turn a delivered retry started finishes it.
-pub(super) fn follow_state(
-    db: &Connection,
-    workspace_id: &SpaceId,
-    state: AgentState,
-) -> Result<()> {
+pub(super) fn follow_state(db: &Connection, space_id: &SpaceId, state: AgentState) -> Result<()> {
     let delivered = match state {
         AgentState::Working => false,
         AgentState::Idle => true,
         AgentState::Waiting => return Ok(()),
     };
     db.execute(
-        "DELETE FROM workspace_turn_retries WHERE workspace_id=?1 AND delivered=?2",
-        params![workspace_id, delivered],
+        "DELETE FROM space_turn_retries WHERE space_id=?1 AND delivered=?2",
+        params![space_id, delivered],
     )?;
     Ok(())
 }
@@ -93,7 +89,7 @@ fn spread() -> f64 {
     (uuid::Uuid::new_v4().as_u128() % 1_000_000) as f64 / 1_000_000.0
 }
 
-/// Record the turn `failure` ended in `execution` as its workspace's
+/// Record the turn `failure` ended in `execution` as its space's
 /// retry: the next attempt after a delivered one, the first for a new
 /// execution or a change between usage limits and transient failures, and the
 /// same one when the failure is reported again before it is due. An attempt
@@ -101,17 +97,17 @@ fn spread() -> f64 {
 /// same transaction as a report of it, so neither can slip between.
 fn record_failure(
     tx: &Transaction<'_>,
-    workspace_id: &SpaceId,
+    space_id: &SpaceId,
     execution: &ExecutionId,
     failure: TurnFailure,
     now: UnixTime,
     spread: f64,
 ) -> Result<()> {
     let reset = upstream_reset(tx, execution)?;
-    let previous = previous_attempt(tx, workspace_id)?;
+    let previous = previous_attempt(tx, space_id)?;
     let (attempt, due_at) = next_attempt(previous, execution, failure, now, spread);
     let due_at = reset.map_or(due_at, |reset| due_at.max(reset + RESET_MARGIN));
-    save_retry(tx, workspace_id, execution, failure, attempt, due_at)?;
+    save_retry(tx, space_id, execution, failure, attempt, due_at)?;
     Ok(())
 }
 
@@ -134,7 +130,7 @@ fn record_reset(
         params![execution, reset],
     )?;
     let held = tx.execute(
-        "UPDATE workspace_turn_retries SET due_at=MAX(due_at,?2)
+        "UPDATE space_turn_retries SET due_at=MAX(due_at,?2)
          WHERE execution_id=?1 AND delivered=0",
         params![execution, reset + RESET_MARGIN],
     )?;
@@ -171,13 +167,13 @@ struct PreviousAttempt {
     delivered: bool,
 }
 
-/// Decode the workspace's most recent attempt, when one is recorded.
-fn previous_attempt(db: &Connection, workspace_id: &SpaceId) -> Result<Option<PreviousAttempt>> {
+/// Decode the space's most recent attempt, when one is recorded.
+fn previous_attempt(db: &Connection, space_id: &SpaceId) -> Result<Option<PreviousAttempt>> {
     Ok(db
         .query_row(
-            "SELECT execution_id,failure,attempt,due_at,delivered FROM workspace_turn_retries
-             WHERE workspace_id=?1",
-            [workspace_id],
+            "SELECT execution_id,failure,attempt,due_at,delivered FROM space_turn_retries
+             WHERE space_id=?1",
+            [space_id],
             |row| {
                 Ok(PreviousAttempt {
                     execution: row.get(0)?,
@@ -213,30 +209,30 @@ fn next_attempt(
     }
 }
 
-/// Persist the next attempt, replacing a previous one for the workspace.
+/// Persist the next attempt, replacing a previous one for the space.
 fn save_retry(
     db: &Connection,
-    workspace_id: &SpaceId,
+    space_id: &SpaceId,
     execution: &ExecutionId,
     failure: TurnFailure,
     attempt: u32,
     due_at: UnixTime,
 ) -> Result<()> {
     db.execute(
-        "INSERT INTO workspace_turn_retries(workspace_id,execution_id,failure,attempt,due_at,delivered)
+        "INSERT INTO space_turn_retries(space_id,execution_id,failure,attempt,due_at,delivered)
              VALUES (?1,?2,?3,?4,?5,0)
-             ON CONFLICT(workspace_id) DO UPDATE SET execution_id=excluded.execution_id,
+             ON CONFLICT(space_id) DO UPDATE SET execution_id=excluded.execution_id,
                  failure=excluded.failure,attempt=excluded.attempt,due_at=excluded.due_at,delivered=0",
-        params![workspace_id, execution, failure, attempt, due_at],
+        params![space_id, execution, failure, attempt, due_at],
     )?;
     Ok(())
 }
 
-/// Drop the workspace's retry.
-pub(super) fn cancel(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
+/// Drop the space's retry.
+pub(super) fn cancel(db: &Connection, space_id: &SpaceId) -> Result<()> {
     db.execute(
-        "DELETE FROM workspace_turn_retries WHERE workspace_id=?1",
-        [workspace_id],
+        "DELETE FROM space_turn_retries WHERE space_id=?1",
+        [space_id],
     )?;
     Ok(())
 }
@@ -249,28 +245,26 @@ struct Due {
     deliverable: bool,
 }
 
-/// The workspaces whose retry is due at `now`.
-fn due_workspaces(db: &Connection, now: UnixTime) -> Result<Vec<SpaceId>> {
+/// The spaces whose retry is due at `now`.
+fn due_spaces(db: &Connection, now: UnixTime) -> Result<Vec<SpaceId>> {
     Ok(db
-        .prepare(
-            "SELECT workspace_id FROM workspace_turn_retries WHERE delivered=0 AND due_at<=?1",
-        )?
+        .prepare("SELECT space_id FROM space_turn_retries WHERE delivered=0 AND due_at<=?1")?
         .query_map([now], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The workspace's retry when it is still due at `now`.
-fn due(db: &Connection, workspace_id: &SpaceId, now: UnixTime) -> Result<Option<Due>> {
+/// The space's retry when it is still due at `now`.
+fn due(db: &Connection, space_id: &SpaceId, now: UnixTime) -> Result<Option<Due>> {
     Ok(db
         .query_row(
             "SELECT r.failure,r.attempt,
                 s.state IS 'idle' AND s.execution_id IS r.execution_id
                 AND NOT EXISTS (SELECT 1 FROM space_completion c
-                    WHERE c.space_id=r.workspace_id)
-             FROM workspace_turn_retries r
-             LEFT JOIN space_agent_state s ON s.space_id=r.workspace_id
-             WHERE r.workspace_id=?1 AND r.delivered=0 AND r.due_at<=?2",
-            params![workspace_id, now],
+                    WHERE c.space_id=r.space_id)
+             FROM space_turn_retries r
+             LEFT JOIN space_agent_state s ON s.space_id=r.space_id
+             WHERE r.space_id=?1 AND r.delivered=0 AND r.due_at<=?2",
+            params![space_id, now],
             |row| {
                 Ok(Due {
                     failure: row.get(0)?,
@@ -286,34 +280,30 @@ fn due(db: &Connection, workspace_id: &SpaceId, now: UnixTime) -> Result<Option<
 struct Delivered {
     /// Whether a message was queued.
     queued: bool,
-    /// The workspaces whose retry could not be delivered, with why; each is
+    /// The spaces whose retry could not be delivered, with why; each is
     /// tried again after the first delay.
     failed: Vec<(SpaceId, anyhow::Error)>,
     /// When the next retry is due.
     next: Option<UnixTime>,
 }
 
-/// Deliver each retry due at `now`, each workspace's on its own, so one
+/// Deliver each retry due at `now`, each space's on its own, so one
 /// that cannot be delivered, such as to a full message queue, holds up no
 /// other and waits the first delay again.
 fn deliver_due(db: &mut Connection, now: UnixTime) -> Result<Delivered> {
     let mut queued = false;
     let mut failed = Vec::new();
-    for workspace_id in due_workspaces(db, now)? {
-        match store::write_transaction(db, |tx| deliver(tx, &workspace_id, now)) {
+    for space_id in due_spaces(db, now)? {
+        match store::write_transaction(db, |tx| deliver(tx, &space_id, now)) {
             Ok(delivered) => queued |= delivered,
             Err(error) => {
-                postpone(
-                    db,
-                    &workspace_id,
-                    now + Duration::from_secs(FIRST_DELAY_SECS),
-                )?;
-                failed.push((workspace_id, error));
+                postpone(db, &space_id, now + Duration::from_secs(FIRST_DELAY_SECS))?;
+                failed.push((space_id, error));
             }
         }
     }
     let next = db.query_row(
-        "SELECT MIN(due_at) FROM workspace_turn_retries WHERE delivered=0",
+        "SELECT MIN(due_at) FROM space_turn_retries WHERE delivered=0",
         [],
         |row| row.get(0),
     )?;
@@ -324,35 +314,31 @@ fn deliver_due(db: &mut Connection, now: UnixTime) -> Result<Delivered> {
     })
 }
 
-/// Ask the agent to continue when the workspace's retry is still due at
+/// Ask the agent to continue when the space's retry is still due at
 /// `now` and may be delivered, queueing the message and marking the retry
 /// delivered together, or drop a retry that may not be. One transaction
 /// checks and delivers, so a turn that starts meanwhile never receives a
 /// cancelled retry. Whether a message was queued.
-fn deliver(tx: &Transaction<'_>, workspace_id: &SpaceId, now: UnixTime) -> Result<bool> {
-    let Some(due) = due(tx, workspace_id, now)? else {
+fn deliver(tx: &Transaction<'_>, space_id: &SpaceId, now: UnixTime) -> Result<bool> {
+    let Some(due) = due(tx, space_id, now)? else {
         return Ok(false);
     };
     if due.deliverable {
-        agent_messages::queue_shoal_message(
-            tx,
-            workspace_id,
-            &continuation(due.failure, due.attempt),
-        )?;
+        agent_messages::queue_shoal_message(tx, space_id, &continuation(due.failure, due.attempt))?;
         tx.execute(
-            "UPDATE workspace_turn_retries SET delivered=1 WHERE workspace_id=?1",
-            [workspace_id],
+            "UPDATE space_turn_retries SET delivered=1 WHERE space_id=?1",
+            [space_id],
         )?;
     } else {
-        cancel(tx, workspace_id)?;
+        cancel(tx, space_id)?;
     }
     Ok(due.deliverable)
 }
 
-fn postpone(db: &Connection, workspace_id: &SpaceId, due_at: UnixTime) -> Result<()> {
+fn postpone(db: &Connection, space_id: &SpaceId, due_at: UnixTime) -> Result<()> {
     db.execute(
-        "UPDATE workspace_turn_retries SET due_at=?2 WHERE workspace_id=?1 AND delivered=0",
-        params![workspace_id, due_at],
+        "UPDATE space_turn_retries SET due_at=?2 WHERE space_id=?1 AND delivered=0",
+        params![space_id, due_at],
     )?;
     Ok(())
 }
