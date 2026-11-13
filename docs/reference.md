@@ -530,7 +530,7 @@ An idle agent keeps its memory while it waits for its next update. Each
 done workspaces that something besides their work and PRs keeps from
 [completion cleanup](#assignment-completion), such as a
 [hold](#workspace-holds) or an open [question](#questions), and with
-[`[idle_stop]`](config.md#idle-stops) enabled any idle agent. Only an agent idle with no processes running
+[`[sleep] idle`](config.md#sleep) enabled any idle agent. Only an agent idle with no processes running
 outside its process group, with a restore command, and whose
 [prompt cache](#agent-state) has expired stops: a resumed agent's first request
 writes most of its cache again, which an expired cache costs anyway. An agent
@@ -541,7 +541,7 @@ started, counts as expired; one that ended a turn has the
 notification, and restores the agent once an update arrives for it, though its
 assignment is done and whatever `[machine.overload.recovery]` says. Timers the agent
 keeps itself, such as Claude Code's `ScheduleWakeup` or `/loop`, end with it,
-which is why `[idle_stop]` is opt-in.
+which is why `[sleep] idle` is opt-in.
 
 ### Idle wakes
 
@@ -1449,7 +1449,7 @@ turns ends normally. A pending retry outlasts a daemon restart;
 
 `status` shows when an idle agent's [cache expires](#agent-state) from its
 tool's [`prompt_cache_minutes`](config.md#ai-tools), which by default keeps
-[`[idle_stop]`](#idle-agents) from stopping an agent the moment its turn ends.
+[`[sleep] idle`](#idle-agents) from stopping an agent the moment its turn ends.
 
 A tool's [`proxy`](config.md#agent-tools-on-this-machine) sends its tracked
 agents' API requests through Shoal's retrying proxy to the `upstream` of a

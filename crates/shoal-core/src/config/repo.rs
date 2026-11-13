@@ -82,7 +82,7 @@ pub struct RepoConfig {
     #[option(section)]
     pub cleanup: CleanupConfig,
     #[option(section)]
-    pub idle_stop: IdleStopConfig,
+    pub sleep: SleepConfig,
     #[option(section)]
     pub pr: PrConfig,
     #[option(section)]
@@ -565,13 +565,14 @@ pub struct RestoreConfig {
     pub archive_max_mb: Option<u64>,
 }
 
-/// Stopping any agent idle once its prompt cache expires, which is opt-in.
+/// When Shoal puts agents to sleep: `idle` puts any agent to sleep once it
+/// is idle and its prompt cache has expired, which is opt-in.
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
-#[options(resolved = IdleStop)]
-pub struct IdleStopConfig {
+#[options(resolved = SleepSettings)]
+pub struct SleepConfig {
     #[option(default = false)]
-    pub enabled: Option<bool>,
+    pub idle: Option<bool>,
 }
 
 /// Who runs local reviews and whether PR reviews post their findings.

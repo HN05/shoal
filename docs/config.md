@@ -474,11 +474,11 @@ takes `requires_approval` and `approval_lifetime`, as a
 [protected resource](#approvals) does. Shoal stores the commands, never the
 values. See [agent secrets](reference.md#agent-secrets).
 
-### Idle stops
+### Sleep
 
 ```toml
-[idle_stop]
-enabled = false   # Stop any idle agent once its prompt cache expires
+[sleep]
+idle = false   # Put any idle agent to sleep once its prompt cache expires
 ```
 
 See [idle agents](reference.md#idle-agents).

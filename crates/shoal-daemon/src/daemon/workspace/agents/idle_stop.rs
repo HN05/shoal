@@ -34,7 +34,7 @@ impl Manager {
     /// Stop each idle agent whose space is blocked, and each whose prompt
     /// cache has expired in a done workspace whose cleanup is held, which
     /// could otherwise run until the workspace goes, or in any workspace
-    /// whose `[idle_stop]` is enabled. A failure in one workspace does not
+    /// whose `[sleep] idle` is enabled. A failure in one workspace does not
     /// skip the others.
     pub(crate) async fn stop_idle_agents(&self) -> Result<()> {
         // The process scan that tells agents with work in flight waits until
@@ -105,7 +105,7 @@ impl Manager {
         let settings = self
             .workspace_settings(&self.workspace_by_id(id).await?)
             .await?;
-        Ok(settings.idle_stop.enabled.then(Protection::idle_expired))
+        Ok(settings.sleep.idle.then(Protection::idle_expired))
     }
 
     /// Stop the `chosen` agents that are still idle in the turn they were

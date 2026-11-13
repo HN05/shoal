@@ -55,7 +55,7 @@ pub(crate) trait ProtectionExt {
     fn idle_held() -> Self;
 
     /// An idle agent whose prompt cache expired, which Shoal stops to free
-    /// memory under `[idle_stop]`.
+    /// memory under `[sleep] idle`.
     fn idle_expired() -> Self;
 
     /// An idle stop for `reason`, whose restore waits for an update. Wrappers
@@ -148,7 +148,7 @@ const RESTART_REASON: &str = "restarted by shoal restart";
 /// The stop reason of an idle agent of a done workspace whose cleanup is held.
 const IDLE_HELD_REASON: &str = "idle in a done workspace whose cleanup is held";
 
-/// The stop reason of an idle agent `[idle_stop]` stops.
+/// The stop reason of an idle agent `[sleep] idle` puts to sleep.
 const IDLE_EXPIRED_REASON: &str = "idle with its prompt cache expired";
 
 /// The stop reason of an agent whose turn ended while its space is blocked,

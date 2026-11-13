@@ -187,7 +187,7 @@ async fn other_agents_keep_running() {
 }
 
 #[tokio::test]
-async fn idle_stop_stops_any_agent_once_its_cache_expires() {
+async fn sleep_idle_stops_any_agent_once_its_cache_expires() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
@@ -201,10 +201,10 @@ async fn idle_stop_stops_any_agent_once_its_cache_expires() {
     };
     let (workspace, execution) = agent(&manager, &repo.id, "idle", unfinished).await;
     manager.stop_idle_agents().await.unwrap();
-    assert!(!*execution.stop.borrow(), "idle_stop is opt-in");
+    assert!(!*execution.stop.borrow(), "[sleep] idle is opt-in");
 
     manager
-        .write_local_config(&repo.id, Some("[idle_stop]\nenabled = true\n".into()))
+        .write_local_config(&repo.id, Some("[sleep]\nidle = true\n".into()))
         .await
         .unwrap();
     cache_expires_in(&manager, &workspace, 60).await;
@@ -478,7 +478,7 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
     );
 }
 
-/// An idle chat in a repository under `root` with `[idle_stop]` enabled,
+/// An idle chat in a repository under `root` with `[sleep] idle` enabled,
 /// whose prompt cache has expired, and its agent's execution.
 async fn idle_chat(
     manager: &std::sync::Arc<Manager>,
@@ -493,7 +493,7 @@ async fn idle_chat(
         .await
         .unwrap();
     manager
-        .write_local_config(&repo.id, Some("[idle_stop]\nenabled = true\n".into()))
+        .write_local_config(&repo.id, Some("[sleep]\nidle = true\n".into()))
         .await
         .unwrap();
     let chat = manager
@@ -541,7 +541,7 @@ async fn idle_chat(
 }
 
 /// A chat's idle agent keeps running with its prompt cache expired, since
-/// the user attends it, while `[idle_stop]` stops a workspace's.
+/// the user attends it, while `[sleep] idle` stops a workspace's.
 #[tokio::test]
 async fn a_chats_idle_agent_keeps_running_once_its_cache_expires() {
     let (root, manager) = manager().await;
