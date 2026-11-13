@@ -124,11 +124,21 @@ impl AgentQueue {
     }
 
     /// Replace what held back waiting entries with the pass's `held` at
-    /// `now`, and keep since when each one held for its memory has been,
-    /// which an entry held for anything else or started starts over.
-    pub(crate) fn record_held_back(&self, held: HashMap<QueueEntryId, HeldBy>, now: Instant) {
+    /// `now`, and keep since when each one held for its memory has been. An
+    /// entry held for anything else, or no longer among the `unstarted` ones
+    /// the pass considered, waits anew; one the pass did not measure, since
+    /// it started another, keeps its wait.
+    pub(crate) fn record_held_back(
+        &self,
+        held: HashMap<QueueEntryId, HeldBy>,
+        unstarted: &HashSet<QueueEntryId>,
+        now: Instant,
+    ) {
         let mut since = self.memory_since.lock().unwrap();
-        since.retain(|id, _| matches!(held.get(id), Some(HeldBy::Memory { .. })));
+        since.retain(|id, _| match held.get(id) {
+            Some(held) => matches!(held, HeldBy::Memory { .. }),
+            None => unstarted.contains(id),
+        });
         for (id, held) in &held {
             if let HeldBy::Memory { .. } = held {
                 since.entry(id.clone()).or_insert(now);

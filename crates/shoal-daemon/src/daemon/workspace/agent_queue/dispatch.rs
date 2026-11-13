@@ -132,7 +132,12 @@ impl Manager {
         let bases = self.hold_back_blocked(&mut work.entries).await?;
         let published = self.overload_recovery.published();
         let admission = self.fitting_entries(&work, published.is_some()).await?;
-        (self.agent_queue).record_held_back(admission.held, std::time::Instant::now());
+        let unstarted = (work.entries.iter())
+            .map(|entry| entry.id.clone())
+            .filter(|id| !admission.admitted.contains(id))
+            .collect();
+        let now = std::time::Instant::now();
+        (self.agent_queue).record_held_back(admission.held, &unstarted, now);
         if admission.admitted.is_empty() {
             return Ok(false);
         }

@@ -1753,9 +1753,14 @@ async fn an_entrys_wait_for_memory_lasts_while_passes_hold_it_for_memory() {
     let memory = crate::model::HeldBy::Memory { needed: 2, left: 1 };
     let start = std::time::Instant::now();
     let at = |seconds| start + Duration::from_secs(seconds);
-    let hold = |held, seconds| queue.record_held_back([(id.clone(), held)].into(), at(seconds));
+    let unstarted = [id.clone()].into();
+    let hold = |held, seconds| {
+        queue.record_held_back([(id.clone(), held)].into(), &unstarted, at(seconds));
+    };
     hold(memory, 0);
     hold(memory, 60);
+    // A pass that started another entry first did not measure it.
+    queue.record_held_back(Default::default(), &unstarted, at(70));
     assert_eq!(
         queue.waited_for_memory(&id, at(90)),
         Duration::from_secs(90)
@@ -1768,6 +1773,6 @@ async fn an_entrys_wait_for_memory_lasts_while_passes_hold_it_for_memory() {
         queue.waited_for_memory(&id, at(200)),
         Duration::from_secs(20)
     );
-    queue.record_held_back(Default::default(), at(240));
+    queue.record_held_back(Default::default(), &Default::default(), at(240));
     assert_eq!(queue.waited_for_memory(&id, at(240)), Duration::ZERO);
 }
