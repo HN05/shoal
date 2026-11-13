@@ -13,7 +13,7 @@ use crate::execution::recovery::{self, Saved, SavedExt as _};
 use crate::protocol::SavedAgent;
 
 /// A workspace process that stopped another workspace's executions, which
-/// may resume the agents among them.
+/// their records name.
 pub(super) struct Stopper<'a> {
     /// The ID of the process's space.
     pub(super) space: &'a SpaceId,

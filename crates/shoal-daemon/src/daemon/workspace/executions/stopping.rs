@@ -274,8 +274,8 @@ impl Manager {
     }
 
     /// Stop as [`Manager::stop_space`] does at the user's request, then
-    /// keep the stopped agents as last sessions, which stay down until the
-    /// user resumes them, or the process of the space `stopped_by` that
+    /// keep the stopped agents as last sessions, which stay down until
+    /// something resumes them, recording the space `stopped_by` whose process
     /// stopped them. With `acknowledge_unproven`, executions whose launch
     /// identity was never recorded count as ended once nothing of them is
     /// visible, because the user checked. Returns the waiting launches it

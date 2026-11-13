@@ -195,8 +195,7 @@ impl Manager {
     /// it for a restart, `in_place` or in a new wrapper, which starts it with `change`
     /// made when given, or join the restart already in progress as
     /// it was asked. The handoff names the space `stopped_by`, whose process
-    /// asked for the restart, so it may resume an agent the restart leaves
-    /// stopped.
+    /// asked for the restart.
     fn stop_for_restart(
         &self,
         id: &ExecutionId,

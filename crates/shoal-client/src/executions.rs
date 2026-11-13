@@ -128,8 +128,7 @@ pub struct Record {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub converted: bool,
     /// The space whose process asked for the stop, as for a restart that
-    /// left the agent stopped, which with the spaces above it may resume the
-    /// agent; unknown for one the user or Shoal stopped.
+    /// left the agent stopped; unknown for one the user or Shoal stopped.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stopped_by: Option<SpaceId>,
     /// What the agent was doing when it stopped, as its hooks last reported
@@ -220,9 +219,8 @@ pub struct LastSession {
     )]
     pub origin: Option<Origin>,
     /// The space whose process stopped the agent with `shoal stop`, or whose
-    /// restart left it stopped, which with the spaces above it may resume
-    /// it; unknown for one the user or Shoal stopped, or that exited on its
-    /// own.
+    /// restart left it stopped; unknown for one the user or Shoal stopped,
+    /// or that exited on its own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stopped_by: Option<SpaceId>,
     /// Why and when Shoal stopped the agent; none for one that exited on its

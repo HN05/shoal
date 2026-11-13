@@ -592,7 +592,7 @@ pub fn save_record(
 }
 
 /// Save the record as [`save_record`] does, for a stop the process of the
-/// space `stopped_by` asked for when given, which may resume the agent.
+/// space `stopped_by` asked for when given.
 pub fn save_record_stopped_by(
     paths: &Paths,
     space_id: &SpaceId,
