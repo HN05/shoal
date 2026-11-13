@@ -385,7 +385,7 @@ impl Manager {
             .workspace_below(caller, workspace, WORKER_REFUSAL)
             .await?;
         let giver = Some(&caller.space_id);
-        (self.ensure_workspace_agent_held(giver, target, &mode, given)).await?;
+        (self.ensure_agent_held(giver, target, &mode, given)).await?;
         Ok(target)
     }
 

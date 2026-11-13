@@ -1376,7 +1376,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                     narrowing: Default::default(),
                     mode: None,
                     model: Default::default(),
-                    workspace: SpaceSelector::id(&target.id),
+                    space: SpaceSelector::id(&target.id),
                     kind: requested,
                     agent: None,
                     recover: false,
@@ -1397,10 +1397,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                 assert_eq!(result.is_ok(), allowed, "{kind:?}: {method:?}: {result:?}");
                 if allowed {
                     assert_eq!(result.unwrap().unwrap().kind(), Some(kind));
-                    let ExecutionMethod::Execute {
-                        workspace: target, ..
-                    } = method
-                    else {
+                    let ExecutionMethod::Execute { space: target, .. } = method else {
                         unreachable!()
                     };
                     assert_eq!(target, SpaceSelector::id(&workspace.id));

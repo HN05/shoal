@@ -109,7 +109,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         narrowing: Default::default(),
         mode: None,
         model: Default::default(),
-        workspace: SpaceSelector::id(&workspace.id),
+        space: SpaceSelector::id(&workspace.id),
         wrapper: wrapper.clone(),
         kind: crate::daemon::workspace::ExecutionKind::Command,
         agent: None,

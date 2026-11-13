@@ -234,7 +234,7 @@ impl Agent {
 impl Manager {
     pub(crate) async fn notify_agent_exit(
         &self,
-        workspace: &crate::model::Workspace,
+        space: &crate::model::PresentSpace,
         agent: &crate::agent::Agent,
         exit_code: Option<i32>,
         complete: bool,
@@ -247,14 +247,14 @@ impl Manager {
             );
             let recovery = if crate::execution::recovery::record_path(
                 &self.paths,
-                &workspace.id,
+                space.id(),
                 execution_id,
             )
             .is_file()
             {
                 format!(
                     "restore with shoal resume {} --execution {execution_id}",
-                    workspace.number
+                    space.number()
                 )
             } else {
                 "recovery record unavailable; inspect the workspace and relaunch the agent's saved session".into()
@@ -265,24 +265,25 @@ impl Manager {
                 "; its processes are not proven stopped, so the execution stays unknown until they exit or shoal stop stops them"
             };
             format!(
-                "{agent} stopped after {reason} ({status}); {recovery}{reconcile}; workspace and resource leases retained"
+                "{agent} stopped after {reason} ({status}); {recovery}{reconcile}; {} and resource leases retained",
+                space.kind()
             )
         } else {
             match exit_code {
                 Some(code) if complete => format!("{agent} exited with code {code}"),
                 Some(code) => format!(
                     "{agent} exited with code {code}, leaving processes behind; stop them with shoal stop {}",
-                    workspace.number
+                    space.number()
                 ),
                 None => format!(
                     "{agent} disconnected without reporting; stop what remains of it with shoal stop {}",
-                    workspace.number
+                    space.number()
                 ),
             }
         };
         self.notify_space(
-            &workspace.name,
-            &workspace.id,
+            space.name(),
+            space.id(),
             NotificationKind::AgentExited,
             message,
         )
@@ -290,19 +291,19 @@ impl Manager {
     }
 
     /// Forget a finished agent's reported session, first keeping it as one of
-    /// the workspace's last sessions when the agent `exited` on its own before
-    /// the assignment finished, for `shoal resume` to continue.
+    /// the last sessions of the space `space_id` when the agent `exited` on
+    /// its own before the assignment finished, for `shoal resume` to continue.
     pub(crate) async fn end_agent_session(
         &self,
-        workspace: &crate::model::Workspace,
+        space_id: &SpaceId,
         agent: &TrackedAgent,
         execution: &ExecutionId,
         exited: bool,
     ) {
         let kept = if exited {
-            self.keep_agent_session(workspace, agent, execution).await
+            self.keep_agent_session(space_id, agent, execution).await
         } else {
-            crate::execution::recovery::forget_session(&self.paths, &workspace.id, execution)
+            crate::execution::recovery::forget_session(&self.paths, space_id, execution)
         };
         if let Err(error) = kept {
             log!("agent session of {execution} not kept: {error:#}");
@@ -310,18 +311,19 @@ impl Manager {
     }
 
     /// Forget an ended agent's reported session, first keeping it as one of
-    /// the workspace's last sessions while the assignment is unfinished.
+    /// the last sessions of the space `space_id` while its assignment is
+    /// unfinished.
     pub(crate) async fn keep_agent_session(
         &self,
-        workspace: &crate::model::Workspace,
+        space_id: &SpaceId,
         agent: &TrackedAgent,
         execution: &ExecutionId,
     ) -> anyhow::Result<()> {
         use crate::execution::recovery::{self, LastSession};
-        if self.completion(&workspace.id).await?.is_none() {
-            LastSession::save(&self.paths, &workspace.id, agent, execution)?;
+        if self.completion(space_id).await?.is_none() {
+            LastSession::save(&self.paths, space_id, agent, execution)?;
         }
-        recovery::forget_session(&self.paths, &workspace.id, execution)
+        recovery::forget_session(&self.paths, space_id, execution)
     }
 
     /// A new agent or a finished assignment replaces the last sessions.
@@ -333,7 +335,29 @@ impl Manager {
         }
     }
 
+    /// What follows the exit of the agent of `space`: a workspace keeps a
+    /// checkpoint of its worktree and runs its exit hook, then cleanup
+    /// looks at the space again.
     pub(crate) async fn post_agent_exit(
+        &self,
+        space: &crate::model::PresentSpace,
+        agent: &crate::agent::Agent,
+        exit_code: Option<i32>,
+        complete: bool,
+    ) {
+        if let Some(workspace) = space.worktree() {
+            self.after_worktree_agent(workspace, agent, exit_code, complete)
+                .await;
+        }
+        // A completion or forge transition may have happened while the agent
+        // was running. Retry cleanup once the exit hook is finished.
+        self.signals.wake_cleanup();
+    }
+
+    /// Keep a checkpoint of `workspace` once its agent's processes are
+    /// proven `complete`, and run its exit hook, telling the user when it
+    /// fails.
+    async fn after_worktree_agent(
         &self,
         workspace: &crate::model::Workspace,
         agent: &crate::agent::Agent,
@@ -357,9 +381,6 @@ impl Manager {
             )
             .await;
         }
-        // A completion or forge transition may have happened while the agent
-        // was running. Retry cleanup once the exit hook is finished.
-        self.signals.wake_cleanup();
     }
 
     async fn run_agent_exit_hook(

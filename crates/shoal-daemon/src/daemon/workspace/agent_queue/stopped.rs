@@ -23,17 +23,28 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::Manager,
     execution::recovery,
-    model::{QueueEntry, Workspace},
+    model::{PresentSpace, QueueEntry, Workspace},
     paths::Paths,
     state::{QueueKind, QueueState},
 };
 
-/// The workspace a stopped agent restores in.
+/// The space a stopped agent restores in.
 #[derive(Clone)]
 struct Target {
     id: SpaceId,
-    repository: RepositoryId,
+    /// Its repository; none for a chat without one.
+    repository: Option<RepositoryId>,
     name: String,
+}
+
+impl Target {
+    fn of(space: &PresentSpace) -> Self {
+        Self {
+            id: space.id().clone(),
+            repository: space.repository_id().cloned(),
+            name: space.name().to_string(),
+        }
+    }
 }
 
 /// A stopped agent's restore to record.
@@ -320,11 +331,7 @@ impl Manager {
     ) -> Result<QueueEntry> {
         let agent = stopped_agent(&self.paths, &workspace.id, execution)?
             .with_context(|| format!("{} has no stopped agent {execution}", workspace.name))?;
-        let target = Target {
-            id: workspace.id,
-            repository: workspace.repository_id,
-            name: workspace.name.into(),
-        };
+        let target = Target::of(&PresentSpace::Workspace(workspace));
         let restore = Restore::new(target, execution, &agent, &env, false)?;
         // Read the entry before dispatch can start it and its agent take it.
         let _gate = self.agent_queue.lock_admission().await;
@@ -347,23 +354,19 @@ impl Manager {
     /// agent ran. Requires the queue gate.
     pub(crate) async fn admit_stopped_restore(
         &self,
-        workspace: &Workspace,
+        space: &PresentSpace,
         execution: &ExecutionId,
         id: QueueEntryId,
     ) -> Result<Start> {
-        let path = recovery::record_path(&self.paths, &workspace.id, execution);
+        let path = recovery::record_path(&self.paths, space.id(), execution);
         let record = recovery::Record::load(&path)?
-            .with_context(|| format!("{} has no stopped agent {execution}", workspace.name))?;
+            .with_context(|| format!("{} has no stopped agent {execution}", space.name()))?;
         let env = crate::terminal::detached_start_environment(record.origin.as_ref());
-        let target = Target {
-            id: workspace.id.clone(),
-            repository: workspace.repository_id.clone(),
-            name: workspace.name.to_string(),
-        };
-        let restore = Restore::new(target, execution, &record.agent, &env, false)?.starting(id);
+        let restore =
+            Restore::new(Target::of(space), execution, &record.agent, &env, false)?.starting(id);
         let start = Start {
             id: restore.id.clone(),
-            name: workspace.name.clone(),
+            name: space.name().clone(),
             env,
         };
         self.store.write(move |tx| insert(tx, &restore)).await?;
@@ -378,23 +381,18 @@ impl Manager {
     /// is queued; otherwise its record stays for `shoal resume`.
     pub(crate) async fn queue_failed_restore(
         &self,
-        workspace: &crate::model::Workspace,
+        space: &PresentSpace,
         agent: &crate::agent::Agent,
         execution: &ExecutionId,
         code: i32,
     ) -> bool {
-        let path = recovery::record_path(&self.paths, &workspace.id, execution);
+        let path = recovery::record_path(&self.paths, space.id(), execution);
         let Some(record) = recovery::Record::load(&path).ok().flatten() else {
             return false;
         };
         let env = crate::terminal::detached_start_environment(record.origin.as_ref());
-        let target = Target {
-            id: workspace.id.clone(),
-            repository: workspace.repository_id.clone(),
-            name: workspace.name.to_string(),
-        };
         let queued = async {
-            let restore = Restore::new(target, execution, agent, &env, true)?;
+            let restore = Restore::new(Target::of(space), execution, agent, &env, true)?;
             let _gate = self.agent_queue.lock_admission().await;
             self.store.write(move |tx| insert(tx, &restore)).await
         };
@@ -404,7 +402,7 @@ impl Manager {
             );
             return false;
         }
-        self.notify_space(&workspace.name, &workspace.id,
+        self.notify_space(space.name(), space.id(),
             crate::daemon::notifications::NotificationKind::AgentExited,
             format!(
                 "Restore of {agent} failed with exit code {code}; its restore waits in the agent queue"

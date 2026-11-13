@@ -338,9 +338,9 @@ async fn a_demo_registers_its_next_run_once_the_exited_one_is_released() {
     // The next run starts only in the worktree the workspace recorded.
     let moved = first.path.with_extension("moved");
     std::fs::rename(&first.path, &moved).unwrap();
-    assert!(manager.release_exited_child(&id, &first).await.is_err());
+    assert!(manager.release_exited_child(&id, &first.id).await.is_err());
     std::fs::rename(&moved, &first.path).unwrap();
-    manager.release_exited_child(&id, &first).await.unwrap();
+    manager.release_exited_child(&id, &first.id).await.unwrap();
     manager
         .record_execution_child(id, Some(next.clone()), next.pid)
         .await

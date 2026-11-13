@@ -9,6 +9,7 @@ use crate::daemon::{
 };
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
+use crate::model::PresentSpace;
 use futures_util::FutureExt;
 
 #[tokio::test]
@@ -38,10 +39,21 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
         .unwrap();
     let cleanup_woken = manager.signals.cleanup_woken();
     manager
-        .notify_agent_exit(&workspace, &"helper".into(), None, false, None)
+        .notify_agent_exit(
+            &PresentSpace::Workspace(workspace.clone()),
+            &"helper".into(),
+            None,
+            false,
+            None,
+        )
         .await;
     manager
-        .post_agent_exit(&workspace, &"helper".into(), None, false)
+        .post_agent_exit(
+            &PresentSpace::Workspace(workspace.clone()),
+            &"helper".into(),
+            None,
+            false,
+        )
         .await;
     assert!(cleanup_woken.now_or_never().is_some());
     assert_eq!(
@@ -54,10 +66,21 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
         .await
         .unwrap();
     manager
-        .notify_agent_exit(&workspace, &"helper".into(), Some(143), true, None)
+        .notify_agent_exit(
+            &PresentSpace::Workspace(workspace.clone()),
+            &"helper".into(),
+            Some(143),
+            true,
+            None,
+        )
         .await;
     manager
-        .post_agent_exit(&workspace, &"helper".into(), Some(143), true)
+        .post_agent_exit(
+            &PresentSpace::Workspace(workspace.clone()),
+            &"helper".into(),
+            Some(143),
+            true,
+        )
         .await;
     assert_eq!(
         fs::read_to_string(workspace.path.join("exits")).unwrap(),
@@ -106,7 +129,12 @@ async fn agent_exit_wakes_cleanup_for_completed_workspace() {
         .unwrap();
     assert!(complete);
     manager
-        .post_agent_exit(&workspace, &"helper".into(), Some(0), complete)
+        .post_agent_exit(
+            &PresentSpace::Workspace(workspace.clone()),
+            &"helper".into(),
+            Some(0),
+            complete,
+        )
         .await;
     assert!(manager.signals.cleanup_woken().now_or_never().is_some());
     crate::daemon::cleanup::sweep(&manager, &mut Default::default())
@@ -185,7 +213,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
         );
         manager
             .notify_agent_exit(
-                &workspace,
+                &PresentSpace::Workspace(workspace.clone()),
                 &"codex".into(),
                 Some(143),
                 false,

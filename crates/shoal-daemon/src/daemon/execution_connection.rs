@@ -26,14 +26,14 @@ use super::{
 use crate::client::space_names::SpaceSelector;
 use crate::{
     execution::TrackedAgent,
-    model::Workspace,
+    model::PresentSpace,
     process::identity::Identity,
     protocol::{self, Body, Control, ErrorCode, ExecutionEvent, Protection, Reattach, Response},
 };
 use registration::Registered;
 
 pub(super) struct ExecutionContext {
-    pub workspace: SpaceSelector,
+    pub space: SpaceSelector,
     pub wrapper: Identity,
     pub kind: ExecutionKind,
     pub agent: Option<TrackedAgent>,
@@ -55,7 +55,7 @@ pub(super) struct ExecutionContext {
 struct Connected {
     id: ExecutionId,
     kind: ExecutionKind,
-    workspace: Workspace,
+    space: PresentSpace,
     agent: Option<TrackedAgent>,
     recover: bool,
     /// The wrapper keeps its command running when the daemon shuts down.
@@ -137,7 +137,7 @@ pub(super) async fn reattach(
         manager.reattach_execution(&request).await
     }
     .await;
-    let ReattachedExecution { workspace, stop } = match reattached {
+    let ReattachedExecution { space, stop } = match reattached {
         Ok(reattached) => reattached,
         Err(error) => {
             let body = Body::error(ErrorCode::ExecutionFailed, format!("{error:#}"));
@@ -147,7 +147,7 @@ pub(super) async fn reattach(
     let execution = Connected {
         id: request.execution,
         kind: ExecutionKind::Command,
-        workspace,
+        space,
         agent: request.agent.map(|name| TrackedAgent {
             name,
             model: request.model,
@@ -279,7 +279,7 @@ async fn relay(
     let Connected {
         id: execution_id,
         kind,
-        workspace,
+        space,
         agent,
         recover,
         reattach,
@@ -354,15 +354,15 @@ async fn relay(
                     .await?;
                 if let Some(tracked) = agent {
                     if !restored {
-                        manager.forget_last_sessions(&workspace.id);
+                        manager.forget_last_sessions(space.id());
                     } else if !resumed_here && *unqueued {
                         // A restore the agent queue starts withdrew it when queued
                         // if `shoal resume` asked for it.
-                        manager.reopen_for_resume(&workspace.id).await;
+                        manager.reopen_for_resume(space.id()).await;
                     }
                     manager.agent_started(execution_id).await;
                     let started = agent_event(tracked, execution_id, None);
-                    (manager.record_agent(&workspace.id, EventKind::AgentStarted, started)).await;
+                    (manager.record_agent(space.id(), EventKind::AgentStarted, started)).await;
                 }
                 protocol::write(writer, &Control::Started).await?;
             }
@@ -379,7 +379,7 @@ async fn relay(
                     None => manager.gates.owned_operation().await,
                 };
                 // A refusal stops the demo instead of letting it run again.
-                let control = match manager.release_exited_child(execution_id, workspace).await {
+                let control = match manager.release_exited_child(execution_id, space.id()).await {
                     Ok(()) => Control::ChildReleased,
                     Err(error) => {
                         sent_stop = true;
@@ -403,7 +403,7 @@ async fn relay(
                     origin: *origin,
                     agent: agent.is_some(),
                 });
-                let control = register_again(manager, execution_id, &workspace.id, place).await;
+                let control = register_again(manager, execution_id, space.id(), place).await;
                 sent_stop |= matches!(control, Control::Stop { .. });
                 protocol::write(writer, &control).await?;
                 *unattachable = Some(operation);
@@ -412,13 +412,13 @@ async fn relay(
                 *handoff_claimed = true;
                 if let Some(tracked) = agent {
                     let stopped = agent_event(tracked, execution_id, None);
-                    (manager.record_agent(&workspace.id, EventKind::AgentStopped, stopped)).await;
+                    (manager.record_agent(space.id(), EventKind::AgentStopped, stopped)).await;
                 }
                 // A wrapper whose own session ended saves its agent unasked,
                 // which stops the agent as a requested pause does.
                 sent_stop = true;
                 if !recovering {
-                    execution_recovery::stop_survivors(manager, execution_id, &workspace.id).await;
+                    execution_recovery::stop_survivors(manager, execution_id, space.id()).await;
                     continue;
                 }
                 use execution_recovery::Action;
@@ -430,7 +430,7 @@ async fn relay(
                 match execution_recovery::pause(
                     manager,
                     execution_id,
-                    &workspace.id,
+                    space.id(),
                     incoming,
                     stop,
                     hears_restore_waits.then_some(&mut *writer),
@@ -462,15 +462,15 @@ async fn relay(
     }
 }
 
-/// The plan of execution `id` of workspace `workspace_id`, whose wrapper
+/// The plan of execution `id` of the space `space_id`, whose wrapper
 /// registers again from `place`, or the stop that refuses it.
 async fn register_again(
     manager: &Manager,
     id: &ExecutionId,
-    workspace_id: &SpaceId,
+    space_id: &SpaceId,
     place: Option<ExecutionPlace>,
 ) -> Control {
-    match manager.reregister_execution(id, workspace_id, place).await {
+    match manager.reregister_execution(id, space_id, place).await {
         Ok(plan) => Control::Registered {
             plan: Box::new(plan),
         },
@@ -612,7 +612,7 @@ async fn finish(
     let Connected {
         id: execution_id,
         kind,
-        workspace,
+        space,
         agent,
         started,
         resuming,
@@ -660,18 +660,18 @@ async fn finish(
     {
         let exited = started && !stopped && failed_restore.is_none();
         manager
-            .end_agent_session(&workspace, agent, &execution_id, exited)
+            .end_agent_session(space.id(), agent, &execution_id, exited)
             .await;
     }
     if (overload_reason.is_some() || restarting) && !handoff_claimed && complete {
-        execution_recovery::discard_handoff(manager, &workspace.id, &execution_id);
+        execution_recovery::discard_handoff(manager, space.id(), &execution_id);
         overload_reason = None;
     }
     let requeued = if let Some(agent) = &agent
         && let Some(code) = failed_restore
     {
         manager
-            .queue_failed_restore(&workspace, &agent.name, &execution_id, code)
+            .queue_failed_restore(&space, &agent.name, &execution_id, code)
             .await
     } else {
         false
@@ -683,10 +683,10 @@ async fn finish(
             false => (EventKind::AgentExited, code),
         };
         let ended = agent_event(agent, &execution_id, code);
-        manager.record_agent(&workspace.id, kind, ended).await;
+        manager.record_agent(space.id(), kind, ended).await;
         manager
             .notify_agent_exit(
-                &workspace,
+                &space,
                 &agent.name,
                 result.as_ref().ok().copied(),
                 complete,
@@ -704,18 +704,13 @@ async fn finish(
     if renewed {
         let finished = result.is_ok() && complete;
         manager
-            .restart_in_new_wrapper(&workspace, &execution_id, finished)
+            .restart_in_new_wrapper(&space, &execution_id, finished)
             .await;
     }
     // A bounded hook can outlast the wrapper's acknowledgement deadline.
     if let Some(agent) = agent.filter(|_| !renewed) {
         manager
-            .post_agent_exit(
-                &workspace,
-                &agent.name,
-                result.as_ref().ok().copied(),
-                complete,
-            )
+            .post_agent_exit(&space, &agent.name, result.as_ref().ok().copied(), complete)
             .await;
     }
     acknowledged?;

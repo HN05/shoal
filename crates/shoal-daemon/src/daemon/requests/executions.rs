@@ -19,7 +19,7 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
         ExecutionMethod::Execute {
-            workspace,
+            space,
             wrapper,
             kind,
             agent,
@@ -35,7 +35,7 @@ pub(super) async fn handle(
         } => {
             let manager = manager.clone();
             let context = execution_connection::ExecutionContext {
-                workspace,
+                space,
                 wrapper,
                 kind,
                 agent: agent.map(|name| crate::execution::TrackedAgent {
@@ -117,17 +117,17 @@ impl Scoped for ExecutionMethod {
                 None
             }
             ExecutionMethod::Execute {
-                workspace,
+                space,
                 kind: ExecutionKind::Command | ExecutionKind::Merge | ExecutionKind::Unmerge,
                 ..
-            } => Some(workspace),
+            } => Some(space),
             ExecutionMethod::Execute {
-                workspace,
+                space,
                 kind: ExecutionKind::Setup,
                 ..
             } => {
                 refuse_nested_setup(caller)?;
-                Some(workspace)
+                Some(space)
             }
         })
     }

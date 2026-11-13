@@ -13,7 +13,7 @@ use super::{Agent, Manager, Restarts};
 use crate::{
     config::permissions::PermissionChange,
     daemon::workspace::agent_queue::Start,
-    model::{RunningAgent, Workspace},
+    model::{PresentSpace, RunningAgent},
     sessions::Origin,
 };
 
@@ -153,13 +153,13 @@ pub(crate) fn forget_ended(renewals: &mut Renewals, agents: &HashMap<ExecutionId
 }
 
 impl Manager {
-    /// Start the agent of `execution` in `workspace` in a new wrapper for
+    /// Start the agent of `execution` in `space` in a new wrapper for
     /// the restart its wrapper `finished` with, through the agent queue,
     /// where the agent ran. A restart that cannot start it fails, leaving
     /// the record for `shoal resume`; one a stop cancelled starts nothing.
     pub(crate) async fn restart_in_new_wrapper(
         &self,
-        workspace: &Workspace,
+        space: &PresentSpace,
         execution: &ExecutionId,
         finished: bool,
     ) {
@@ -176,9 +176,7 @@ impl Manager {
         if !self.follow_start(execution, &entry).await {
             return;
         }
-        let admitted = self
-            .admit_stopped_restore(workspace, execution, entry)
-            .await;
+        let admitted = self.admit_stopped_restore(space, execution, entry).await;
         drop(gate);
         let started = match admitted {
             Ok(start) => self.spawn_restore(&start).await,

@@ -114,7 +114,7 @@ const REQUESTS: &[&str] = &[
     r#"{"space_agents":{"space":"fix"}}"#,
     r#"{"interrupt_turn":{"space":"fix","execution":"e1"}}"#,
     // Executions.
-    r#"{"execute":{"workspace":"fix","wrapper":{"pid":2,"birth":"b"},"kind":"command","agent":null,"recover":false,"reattach":false,"queue_entry":null}}"#,
+    r#"{"execute":{"space":"fix","wrapper":{"pid":2,"birth":"b"},"kind":"command","agent":null,"recover":false,"reattach":false,"queue_entry":null}}"#,
     r#"{"reattach":{"execution":"e1","wrapper":{"pid":2,"birth":"b"},"child":null,"group_id":2,"scope_token":"t1","agent":null,"recover":false,"running_ms":0}}"#,
     r#""check_merge""#,
     r#""check_unmerge""#,

@@ -31,7 +31,7 @@ async fn scoped_merge_answers_with_its_approval_request() {
         3,
         manager.clone(),
         ExecutionContext {
-            workspace: SpaceSelector::id(&workspace.id),
+            space: SpaceSelector::id(&workspace.id),
             wrapper: crate::process::identity::capture(std::process::id())
                 .unwrap()
                 .unwrap(),
@@ -129,7 +129,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
         8,
         manager.clone(),
         ExecutionContext {
-            workspace: SpaceSelector::id(&workspace.id),
+            space: SpaceSelector::id(&workspace.id),
             wrapper: wrapper.clone(),
             kind: ExecutionKind::Command,
             agent: None,
@@ -217,7 +217,7 @@ async fn running_executions_leave_daemon_operations_idle() {
         1,
         manager.clone(),
         ExecutionContext {
-            workspace: SpaceSelector::id(&workspace.id),
+            space: SpaceSelector::id(&workspace.id),
             wrapper: wrapper.clone(),
             kind: ExecutionKind::Command,
             agent: None,
@@ -289,7 +289,7 @@ async fn a_wrapper_registers_again_from_where_it_runs() {
         1,
         manager.clone(),
         ExecutionContext {
-            workspace: SpaceSelector::id(&workspace.id),
+            space: SpaceSelector::id(&workspace.id),
             wrapper,
             kind: ExecutionKind::Command,
             agent: None,
@@ -354,7 +354,7 @@ async fn refused_agent(manager: &Arc<Manager>, workspace: &crate::model::Workspa
         1,
         manager.clone(),
         ExecutionContext {
-            workspace: SpaceSelector::id(&workspace.id),
+            space: SpaceSelector::id(&workspace.id),
             wrapper,
             kind: ExecutionKind::Command,
             agent: Some(crate::execution::TrackedAgent::named("claude")),

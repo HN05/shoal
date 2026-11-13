@@ -6,67 +6,48 @@ use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result};
 use rusqlite::OptionalExtension;
-use std::collections::BTreeMap;
 
 use super::{
     super::{Manager, places::ExecutionPlace},
-    ProcessDirectories,
+    homes::{Home, Provisions},
 };
-use crate::{
-    config::repo::Cache,
-    daemon::store,
-    model::{ExecutionPlan, PortReservation, Repository},
-};
-
-/// What a registration reads from the execution's record and workspace.
-struct Registration {
-    scope_token: ScopeToken,
-    ports: Vec<PortReservation>,
-    directories: ProcessDirectories,
-}
+use crate::model::ExecutionPlan;
 
 impl Manager {
-    /// The plan of execution `id` of workspace `workspace_id` for its wrapper,
-    /// which registers again where it runs now, at `place`. The workspace's
-    /// ports and environment are read again, as for a new execution.
+    /// The plan of execution `id` of the space `space_id` for its wrapper,
+    /// which registers again where it runs now, at `place`. What the plan
+    /// takes from the space is read again, as for a new execution.
     pub(crate) async fn reregister_execution(
         &self,
         id: &ExecutionId,
-        workspace_id: &SpaceId,
+        space_id: &SpaceId,
         place: Option<ExecutionPlace>,
     ) -> Result<ExecutionPlan> {
-        let workspace = self.workspace_by_id(workspace_id).await?;
-        let settings = self.workspace_settings(&workspace).await?;
-        let repository = self.repository(&workspace.repository_id).await?;
+        let home = self.execution_home(space_id).await?;
         // A place's ownership moves only under the lock its closes hold.
         let _ownership = match place {
             Some(_) => Some(self.place_ownership.lock().await),
             None => None,
         };
-        let registration = {
-            let (id, workspace_id) = (id.to_owned(), workspace.id.clone());
-            let (repository, caches) = (repository.clone(), settings.caches.clone());
+        let (home, scope_token, provisions) = {
+            let id = id.to_owned();
+            let caches = home.caches();
             self.store
                 .write(move |tx| {
-                    register_again(tx, &id, &workspace_id, place, &repository, &caches)
+                    let (scope_token, provisions) = register_again(tx, &id, &home, place, &caches)?;
+                    Ok((home, scope_token, provisions))
                 })
                 .await?
         };
-        let environment = crate::env::render_configured_environment(
-            &settings.env,
-            &workspace,
-            crate::repository::name(&repository),
-            &registration.ports,
-            &registration.directories.caches,
-            registration.directories.tmp_dir.as_deref(),
-        );
+        let Provisions { ports, directories } = provisions;
+        let environment = home.environment(&ports, &directories);
         Ok(ExecutionPlan {
             id: id.to_owned(),
-            space: (&workspace).into(),
-            scope_token: registration.scope_token,
+            space: home.plan_space(),
+            scope_token,
             setup_cmd: None,
             copy_ignored: None,
-            ports: registration.ports,
+            ports,
             environment,
             merge: None,
             unmerge: None,
@@ -74,16 +55,16 @@ impl Manager {
     }
 }
 
-/// Record `place` for execution `id` and read what its plan needs, in one
-/// transaction, as [`Manager::persist_execution`] does for a new one.
+/// Record `place` for execution `id` and read its scope token and what its
+/// plan takes from `home`, in one transaction, as
+/// [`Manager::persist_execution`] does for a new one.
 fn register_again(
     tx: &rusqlite::Transaction<'_>,
     id: &ExecutionId,
-    workspace_id: &SpaceId,
+    home: &Home,
     place: Option<ExecutionPlace>,
-    repository: &Repository,
-    caches: &BTreeMap<String, Cache>,
-) -> Result<Registration> {
+    caches: &std::collections::BTreeMap<String, crate::config::repo::Cache>,
+) -> Result<(ScopeToken, Provisions)> {
     // Only commands, which may reattach, keep their token.
     let scope_token = tx
         .query_row(
@@ -95,13 +76,7 @@ fn register_again(
         .flatten()
         .context("the execution cannot register again")?;
     if let Some(place) = &place {
-        super::super::places::record_execution_place(tx, id, workspace_id, place)?;
+        super::super::places::record_execution_place(tx, id, home.id(), place)?;
     }
-    let ports = store::ports(tx, Some(workspace_id))?;
-    let directories = ProcessDirectories::prepare(repository, caches, workspace_id)?;
-    Ok(Registration {
-        scope_token,
-        ports,
-        directories,
-    })
+    Ok((scope_token, home.provide(tx, caches)?))
 }

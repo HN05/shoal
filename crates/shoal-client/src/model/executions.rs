@@ -66,6 +66,9 @@ pub struct ExecutionPlan {
 pub struct ExecutionSpace {
     pub id: SpaceId,
     pub number: SpaceNumber,
+    /// Whether it is a workspace or a chat, which gives its processes their
+    /// identity.
+    pub kind: super::SpaceKind,
     /// The directory its commands run in.
     pub path: PathBuf,
 }
@@ -82,6 +85,7 @@ impl From<&Workspace> for ExecutionSpace {
         Self {
             id: workspace.id.clone(),
             number: workspace.number,
+            kind: super::SpaceKind::Workspace,
             path: workspace.path.clone(),
         }
     }

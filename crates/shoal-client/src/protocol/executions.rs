@@ -5,14 +5,15 @@ use super::Lifetime;
 use crate::space_names::SpaceSelector;
 use crate::{executions::ExecutionKind, processes::Identity};
 
-/// Requests that run tracked commands in a workspace.
+/// Requests that run tracked commands in a space: a workspace's commands,
+/// or a workspace's or a chat's agent.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionMethod {
     /// Long-lived: the connection stays open for the execution's lifetime.
     /// `agent` names the agent the command runs, whose exit the user is told about.
     Execute {
-        workspace: SpaceSelector,
+        space: SpaceSelector,
         wrapper: Identity,
         kind: ExecutionKind,
         #[serde(default)]

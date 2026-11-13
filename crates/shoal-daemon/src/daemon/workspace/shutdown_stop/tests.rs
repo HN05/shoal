@@ -45,7 +45,7 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
         1,
         manager.clone(),
         ExecutionContext {
-            workspace: SpaceSelector::id(&workspace.id),
+            space: SpaceSelector::id(&workspace.id),
             wrapper: wrapper.clone(),
             kind: ExecutionKind::Command,
             agent: None,

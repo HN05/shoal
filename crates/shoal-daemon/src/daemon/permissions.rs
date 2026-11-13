@@ -110,29 +110,39 @@ impl Manager {
         (self.ensure_change_held(giver, &space, change, repository.as_ref())).await
     }
 
-    /// Refuse an agent in `mode` of `workspace` the scoped process of the
-    /// space `giver` queues or registers with `given`, which replaces what
-    /// the workspace recorded, where it changes that as
+    /// Refuse an agent in `mode` of the space `space` names that the scoped
+    /// process of the space `giver` queues or registers with `given`, which
+    /// replaces what the space recorded, where it changes that as
     /// [`Self::ensure_change_held`] refuses a change, with the fallback of
     /// each key it drops in that agent's mode.
-    pub(crate) async fn ensure_workspace_agent_held(
+    pub(crate) async fn ensure_agent_held(
         &self,
         giver: Option<&SpaceId>,
-        workspace: &SpaceSelector,
+        space: &SpaceSelector,
         mode: &crate::config::modes::ModeName,
         given: &PermissionsConfig,
     ) -> Result<()> {
         if giver.is_none() {
             return Ok(());
         }
-        let recorded = self.workspace(workspace).await?;
-        let change = PermissionChange::between(&recorded.narrowing, given);
-        let repository = recorded.repository_id.clone();
-        let space = PresentSpace::Workspace(Workspace {
-            mode: Some(mode.clone()),
-            ..recorded
-        });
-        (self.ensure_change_held(giver, &space, &change, Some(&repository))).await
+        let (space, recorded) = match self.space(space).await? {
+            PresentSpace::Workspace(workspace) => {
+                let recorded = workspace.narrowing;
+                let mode = Some(mode.clone());
+                (
+                    PresentSpace::Workspace(Workspace { mode, ..workspace }),
+                    recorded,
+                )
+            }
+            PresentSpace::Chat(chat) => {
+                let recorded = chat.narrowing;
+                let mode = mode.clone();
+                (PresentSpace::Chat(Chat { mode, ..chat }), recorded)
+            }
+        };
+        let change = PermissionChange::between(&recorded, given);
+        let repository = space.repository_id().cloned();
+        (self.ensure_change_held(giver, &space, &change, repository.as_ref())).await
     }
 
     /// Refuse a restore of `chat` the scoped process of the space `giver`

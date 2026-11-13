@@ -467,7 +467,7 @@ async fn open_execution(
 ) -> Result<(Link, ExecutionPlan)> {
     let wrapper = this_wrapper()?;
     let method = ExecutionMethod::Execute {
-        workspace,
+        space: workspace,
         wrapper: wrapper.clone(),
         kind: mode.kind(),
         queue_entry: agent

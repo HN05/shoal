@@ -57,7 +57,7 @@ pub(super) async fn register(
     context: ExecutionContext,
 ) -> Result<Registered, Box<Body>> {
     let ExecutionContext {
-        workspace,
+        space,
         wrapper,
         kind,
         agent,
@@ -75,27 +75,28 @@ pub(super) async fn register(
             format!("{error:#}"),
         ))
     };
-    if kind == ExecutionKind::Command && agent.is_some() {
-        let workspace = manager.workspace(&workspace).await.map_err(refused)?;
-        Manager::ensure_holds_agents(&workspace).map_err(refused)?;
+    let tracks_agent = kind == ExecutionKind::Command && agent.is_some();
+    let target = manager.space(&space).await.map_err(refused)?;
+    if let (true, Some(workspace)) = (tracks_agent, target.worktree()) {
+        Manager::ensure_holds_agents(workspace).map_err(refused)?;
     }
     let giver = caller.as_ref().map(|caller| &caller.space_id);
     if let Some(agent) = &agent {
-        (manager.ensure_workspace_agent_held(giver, &workspace, &agent.mode, &agent.narrowing))
+        (manager.ensure_agent_held(giver, &space, &agent.mode, &agent.narrowing))
             .await
             .map_err(refused)?;
     }
-    let admitted = match kind == ExecutionKind::Command && agent.is_some() {
-        true => Some(manager.admit_agent(&workspace).await.map_err(refused)?),
+    // The user attends a chat, whose agent starts at once.
+    let admitted = match tracks_agent && !target.space_kind().attended() {
+        true => Some(manager.admit_agent(&space).await.map_err(refused)?),
         false => None,
     };
-    let tracks_agent = kind == ExecutionKind::Command && agent.is_some();
     let takes_entry = tracks_agent.then_some(queue_entry.as_ref()).flatten();
     // An agent takes its launch's reservation of the workspace's one agent,
     // and one without a launch must find no launch holding it.
     let reserved = match (takes_entry, tracks_agent) {
         (Some(entry), _) => Some(manager.reserve_queue_entry(entry).await.map_err(refused)?),
-        (None, true) => Some(manager.reserve_worker(&workspace).await.map_err(refused)?),
+        (None, true) => Some(manager.reserve_worker(&space).await.map_err(refused)?),
         (None, false) => None,
     };
     let request = ExecutionRequest {
@@ -105,13 +106,14 @@ pub(super) async fn register(
             agent: agent.is_some(),
         }),
         merge,
+        agent: tracks_agent,
     };
     let begun = manager
-        .begin_execution_placed(&workspace, Some(wrapper), kind, caller.as_ref(), request)
+        .begin_execution_placed(&space, Some(wrapper), kind, caller.as_ref(), request)
         .await;
     let StartedExecution {
         plan,
-        workspace,
+        space,
         stop,
         _git_guard,
     } = match begun {
@@ -136,15 +138,15 @@ pub(super) async fn register(
             .track_agent(
                 &plan.id,
                 agent,
-                &workspace.id,
-                &workspace.name,
+                space.id(),
+                space.name(),
                 recover,
                 std::time::Duration::ZERO,
             )
             .await;
         if let Some(entry) = takes_entry {
             manager.continue_restart(entry, &plan.id).await;
-            manager.consume_queue_entry(entry, &workspace.id).await;
+            manager.consume_queue_entry(entry, space.id()).await;
         }
     }
     drop(reserved);
@@ -152,7 +154,7 @@ pub(super) async fn register(
     let execution = Connected {
         id: plan.id.clone(),
         kind,
-        workspace,
+        space,
         agent,
         recover,
         reattach,
@@ -188,7 +190,7 @@ pub(super) async fn cancel(manager: &Manager, execution: Connected) -> Result<()
         "{} execution {} in {} was not delivered: its wrapper left before the daemon registered it",
         execution.kind,
         execution.id,
-        execution.workspace.name
+        execution.space.name()
     );
     manager
         .cancel_execution(&execution.id, execution.kind)

@@ -17,6 +17,7 @@ use crate::daemon::{
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use crate::execution::recovery::SavedExt as _;
+use crate::model::PresentSpace;
 use crate::paths::CommandPaths;
 use crate::paths::StateFiles;
 use std::{fs, future::Future, os::unix::fs::PermissionsExt};
@@ -1206,7 +1207,12 @@ async fn an_automatic_restore_in_a_new_wrapper_keeps_the_completion() {
     fs::remove_file(workspace.path.join("started")).unwrap();
     assert!(
         manager
-            .queue_failed_restore(&workspace, &"fixture".into(), &execution, 1)
+            .queue_failed_restore(
+                &PresentSpace::Workspace(workspace.clone()),
+                &"fixture".into(),
+                &execution,
+                1
+            )
             .await
     );
     let restore = starting_restore(&manager, execution.as_str()).await;

@@ -59,7 +59,7 @@ impl Running {
             1,
             manager.clone(),
             ExecutionContext {
-                workspace: SpaceSelector::id(&workspace.id),
+                space: SpaceSelector::id(&workspace.id),
                 wrapper: wrapper.clone(),
                 kind: ExecutionKind::Command,
                 agent: None,

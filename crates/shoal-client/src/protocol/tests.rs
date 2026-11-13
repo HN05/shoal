@@ -305,7 +305,7 @@ fn tracked_execution_requests_require_a_known_kind() {
             narrowing: Default::default(),
             mode: None,
             model: Default::default(),
-            workspace: "worker".into(),
+            space: "worker".into(),
             wrapper: wrapper.clone(),
             kind,
             agent: Some("test-agent".into()),
@@ -330,7 +330,7 @@ fn tracked_execution_requests_require_a_known_kind() {
         assert_eq!(agent, Some("test-agent".into()));
     }
     for kind in [None, Some("unknown"), Some("Setup")] {
-        let mut request = json!({"execute": {"workspace": "worker", "wrapper": wrapper}});
+        let mut request = json!({"execute": {"space": "worker", "wrapper": wrapper}});
         if let Some(kind) = kind {
             request["execute"]["kind"] = kind.into();
         }

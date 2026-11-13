@@ -53,8 +53,7 @@ impl Manager {
             mode: (execution.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT),
             narrowing: execution.narrowing,
         };
-        let workspace = self.workspace_by_id(&execution.space_id).await?;
-        self.keep_agent_session(&workspace, &agent, &execution.id)
+        self.keep_agent_session(&execution.space_id, &agent, &execution.id)
             .await
     }
 }

@@ -991,7 +991,7 @@ async fn connect_runner(manager: &Arc<Manager>, workspace: &SpaceId) -> Connecte
         1,
         manager.clone(),
         ExecutionContext {
-            workspace: SpaceSelector::from(workspace.as_str()),
+            space: SpaceSelector::from(workspace.as_str()),
             wrapper: wrapper.clone(),
             kind: ExecutionKind::Command,
             agent: None,

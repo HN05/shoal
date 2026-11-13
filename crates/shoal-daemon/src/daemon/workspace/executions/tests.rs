@@ -521,7 +521,7 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
     }
     assert!(!manager.executions.is_connected(&id).await);
     let reattached = manager.reattach_execution(&request).await.unwrap();
-    assert_eq!(reattached.workspace.id, workspace.id);
+    assert_eq!(reattached.space.id(), &workspace.id);
     assert!(manager.executions.is_connected(&id).await);
     let caller = manager.caller(&token).await.unwrap().unwrap();
     assert_eq!(caller.execution_id(), Some(&id));
@@ -642,7 +642,7 @@ async fn a_wrapper_between_runs_reattaches_after_its_child_was_forgotten() {
         })
         .await
         .unwrap();
-    assert_eq!(reattached.workspace.id, workspace.id);
+    assert_eq!(reattached.space.id(), &workspace.id);
 }
 
 #[tokio::test]

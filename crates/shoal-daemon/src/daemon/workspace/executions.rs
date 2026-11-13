@@ -2,6 +2,7 @@
 //! lives in [`stopping`]. Terminal I/O stays in crate::execution, in the
 //! invoking CLI process.
 mod completion;
+mod homes;
 mod reregistration;
 mod stopping;
 
@@ -15,11 +16,10 @@ use crate::{
     config::repo::Cache,
     daemon::{scope::Caller, store},
     demos::Launch,
-    fsutil::off_runtime,
     hooks::HookKind,
     model::{
-        CopiedFrom, CopyIgnored, Execution, ExecutionPlan, MergePlan, PortReservation, Repository,
-        UnmergePlan, Workspace,
+        CopiedFrom, CopyIgnored, Execution, ExecutionPlan, MergePlan, PortReservation,
+        PresentSpace, Repository, UnmergePlan, Workspace,
     },
     process::{
         execution::Processes,
@@ -50,7 +50,7 @@ pub use stopping::{Save, StopRequest, UnprovenStop};
 /// A restored connection for a wrapper whose command kept running.
 #[derive(Debug)]
 pub(crate) struct ReattachedExecution {
-    pub workspace: Workspace,
+    pub space: PresentSpace,
     pub stop: watch::Receiver<bool>,
 }
 
@@ -58,8 +58,8 @@ pub(crate) struct ReattachedExecution {
 #[derive(Debug)]
 pub(crate) struct StartedExecution {
     pub plan: ExecutionPlan,
-    /// The workspace it runs in, as the registration read it.
-    pub workspace: Workspace,
+    /// The space it runs in, as the registration read it.
+    pub space: PresentSpace,
     pub stop: watch::Receiver<bool>,
     pub _git_guard: Option<OwnedMutexGuard<()>>,
 }
@@ -73,6 +73,8 @@ pub(crate) struct ExecutionRequest {
     pub place: Option<ExecutionPlace>,
     /// How a merge runs.
     pub merge: Option<crate::model::MergeOptions>,
+    /// Whether it runs a tracked agent, as a chat's one execution does.
+    pub agent: bool,
 }
 
 #[derive(Default)]
@@ -90,19 +92,19 @@ struct PreparedExecution {
 /// The record a new execution persists at registration.
 struct ExecutionRecord {
     id: ExecutionId,
-    workspace_id: SpaceId,
     kind: ExecutionKind,
+    /// Whether it runs a tracked agent.
+    agent: bool,
     parent_execution: Option<ExecutionId>,
     /// The agent execution whose process tree registers it.
     agent_execution: Option<ExecutionId>,
     wrapper: Option<Identity>,
-    scope_token: ScopeToken,
     demo: Option<Launch>,
     place: Option<ExecutionPlace>,
 }
 
-/// The directories a workspace's processes use: the repository's caches and
-/// the workspace's temporary directory.
+/// The directories a space's processes use: a workspace's repository's
+/// caches and the space's temporary directory.
 struct ProcessDirectories {
     caches: BTreeMap<String, PathBuf>,
     tmp_dir: Option<PathBuf>,
@@ -124,7 +126,8 @@ impl ProcessDirectories {
 
 struct RegisteredExecution {
     id: ExecutionId,
-    workspace: Workspace,
+    space: PresentSpace,
+    plan_space: crate::model::ExecutionSpace,
     scope_token: ScopeToken,
     ports: Vec<PortReservation>,
     environment: std::collections::BTreeMap<String, std::ffi::OsString>,
@@ -233,11 +236,18 @@ impl Manager {
         caller: Option<&Caller>,
         request: ExecutionRequest,
     ) -> Result<StartedExecution> {
-        let ExecutionRequest { demo, place, merge } = request;
-        let (workspace, preparation) = self
+        let ExecutionRequest {
+            demo,
+            place,
+            merge,
+            agent,
+        } = request;
+        let (space_id, preparation) = self
             .prepare_execution(selector, wrapper.as_ref(), kind, caller, merge)
             .await?;
-        let agent_execution = match caller {
+        // An agent's execution is its own, wherever the process that started
+        // it runs.
+        let agent_execution = match caller.filter(|_| !agent) {
             Some(caller) => self.caller_agent(caller).await.map(|agent| agent.execution),
             None => None,
         };
@@ -251,16 +261,17 @@ impl Manager {
             unmerge,
             _resources,
         } = preparation;
-        let registered = self
-            .register_execution(
-                &workspace.id,
-                wrapper,
-                kind,
-                (caller.and_then(Caller::execution_id), agent_execution),
-                demo,
-                place,
-            )
-            .await?;
+        let record = ExecutionRecord {
+            id: ExecutionId::generate(),
+            kind,
+            agent,
+            parent_execution: caller.and_then(Caller::execution_id).cloned(),
+            agent_execution,
+            wrapper,
+            demo,
+            place,
+        };
+        let registered = self.register_execution(&space_id, record).await?;
         // Setup releases its Git gate before the hook; resources remain guarded
         // until pre-setup completes, while merge's gate travels with the plan.
         drop(registration_guard);
@@ -269,7 +280,7 @@ impl Manager {
         Ok(StartedExecution {
             plan: ExecutionPlan {
                 id: registered.id,
-                space: (&registered.workspace).into(),
+                space: registered.plan_space,
                 scope_token: registered.scope_token,
                 setup_cmd,
                 copy_ignored,
@@ -278,67 +289,35 @@ impl Manager {
                 merge,
                 unmerge,
             },
-            workspace: registered.workspace,
+            space: registered.space,
             stop: registered.stop,
             _git_guard: lifetime_guard,
         })
     }
 
-    /// `parents` are the execution that registers this one and the agent
-    /// execution whose process tree it runs in.
+    /// Record `record` as an execution of the space `space_id`, with what
+    /// its plan reads from the space.
     async fn register_execution(
         &self,
-        workspace_id: &SpaceId,
-        wrapper: Option<Identity>,
-        kind: ExecutionKind,
-        parents: (Option<&ExecutionId>, Option<ExecutionId>),
-        demo: Option<Launch>,
-        place: Option<ExecutionPlace>,
+        space_id: &SpaceId,
+        record: ExecutionRecord,
     ) -> Result<RegisteredExecution> {
         let mut connections = self.executions.connections().await;
         connections.ensure_accepting()?;
-        let workspace = self.workspace_by_id(workspace_id).await?;
-        ensure!(
-            off_runtime::is_dir(&workspace.path).await?,
-            "workspace directory is missing"
+        let home = self.execution_home(space_id).await?;
+        let (id, kind, agent_execution) = (
+            record.id.clone(),
+            record.kind,
+            record.agent_execution.clone(),
         );
-        self.verify_worktree(&workspace).await?;
-        self.touch(&workspace.id).await;
-        let settings = self.workspace_settings(&workspace).await?;
-        let repository = self.repository(&workspace.repository_id).await?;
-        let id = ExecutionId::generate();
-        let scope_token = crate::daemon::scope::new_token();
-        let (parent_execution, agent_execution) = parents;
-        let (ports, directories) = self
-            .persist_execution(
-                ExecutionRecord {
-                    id: id.clone(),
-                    workspace_id: workspace.id.clone(),
-                    kind,
-                    parent_execution: parent_execution.cloned(),
-                    agent_execution: agent_execution.clone(),
-                    wrapper,
-                    scope_token: scope_token.clone(),
-                    demo,
-                    place,
-                },
-                repository.clone(),
-                settings.caches.clone(),
-            )
-            .await?;
-        let environment = crate::env::render_configured_environment(
-            &settings.env,
-            &workspace,
-            crate::repository::name(&repository),
-            &ports,
-            &directories.caches,
-            directories.tmp_dir.as_deref(),
-        );
+        let (home, scope_token, provisions) = self.persist_execution(record, home).await?;
+        let homes::Provisions { ports, directories } = provisions;
+        let environment = home.environment(&ports, &directories);
         let receiver = connections
             .connect(
                 &id,
                 kind,
-                &workspace.id,
+                home.id(),
                 scope_token.clone(),
                 agent_execution,
                 false,
@@ -346,7 +325,8 @@ impl Manager {
             .await;
         Ok(RegisteredExecution {
             id,
-            workspace,
+            plan_space: home.plan_space(),
+            space: home.into_space(),
             scope_token,
             ports,
             environment,
@@ -354,24 +334,21 @@ impl Manager {
         })
     }
 
-    /// Reserve the execution's lifecycle, insert its running record and
-    /// prepare the repository's caches and the workspace's temporary
-    /// directory in one transaction, returning the workspace's ports and the
-    /// directories.
+    /// Reserve the execution's lifecycle, insert its running record and read
+    /// its scope token and what its plan takes from `home` in one
+    /// transaction, returning the space with that.
     async fn persist_execution(
         &self,
         record: ExecutionRecord,
-        repository: Repository,
-        caches: BTreeMap<String, Cache>,
-    ) -> Result<(Vec<PortReservation>, ProcessDirectories)> {
+        home: homes::Home,
+    ) -> Result<(homes::Home, ScopeToken, homes::Provisions)> {
         let ExecutionRecord {
             id,
-            workspace_id,
             kind,
+            agent,
             parent_execution,
             agent_execution,
             wrapper,
-            scope_token,
             demo,
             place,
         } = record;
@@ -380,18 +357,24 @@ impl Manager {
             Some(_) => Some(self.place_ownership.lock().await),
             None => None,
         };
-        // Only commands may reattach: setup and merge hold daemon gates
-        // that a restart releases.
-        let reattach_token = (kind == ExecutionKind::Command).then_some(scope_token);
+        let caches = home.caches();
         self.store
             .write(move |tx| {
-                kind.reserve(tx, &workspace_id, parent_execution.as_ref())?;
+                let space_id = home.id();
+                home.reserve(tx, kind, agent, parent_execution.as_ref())?;
+                // Under the write lock emptying caches takes, and undone with
+                // the execution's row when the directories cannot be prepared.
+                let provisions = home.provide(tx, &caches)?;
+                let scope_token = home.scope_token(tx)?;
+                // Only commands may reattach: setup and merge hold daemon
+                // gates that a restart releases.
+                let reattach_token = (kind == ExecutionKind::Command).then_some(&scope_token);
                 tx.execute(
                     "INSERT INTO executions(id,space_id,state,wrapper,scope_token,agent_execution)
                         VALUES (?1,?2,?3,?4,?5,?6)",
                     params![
                         id,
-                        workspace_id,
+                        space_id,
                         ExecutionState::Running,
                         store::json_text(wrapper.as_ref())?,
                         reattach_token,
@@ -399,16 +382,12 @@ impl Manager {
                     ],
                 )?;
                 if let Some(demo) = &demo {
-                    super::demos::record(tx, &id, &workspace_id, demo)?;
+                    super::demos::record(tx, &id, space_id, demo)?;
                 }
                 if let Some(place) = &place {
-                    super::places::record_execution_place(tx, &id, &workspace_id, place)?;
+                    super::places::record_execution_place(tx, &id, space_id, place)?;
                 }
-                let ports = store::ports(tx, Some(&workspace_id))?;
-                // Under the write lock emptying caches takes, and undone with
-                // the execution's row when the directories cannot be prepared.
-                let directories = ProcessDirectories::prepare(&repository, &caches, &workspace_id)?;
-                Ok((ports, directories))
+                Ok((home, scope_token, provisions))
             })
             .await
     }
@@ -419,20 +398,23 @@ impl Manager {
         kind: ExecutionKind,
         pre_setup: Option<&Path>,
     ) -> Result<()> {
-        let workspace = &registered.workspace;
-        if let Some(command) = pre_setup
-            && let Err(error) = async {
-                crate::hooks::run_detached(
-                    crate::hooks::Hook::PreSetup,
-                    workspace,
-                    command,
-                    &self.paths,
-                    &registered.environment,
-                )
-                .await?;
-                self.verify_worktree(workspace).await
-            }
-            .await
+        // Only a workspace's setup has a pre-setup hook.
+        let (Some(command), PresentSpace::Workspace(workspace)) = (pre_setup, &registered.space)
+        else {
+            return Ok(());
+        };
+        if let Err(error) = async {
+            crate::hooks::run_detached(
+                crate::hooks::Hook::PreSetup,
+                workspace,
+                command,
+                &self.paths,
+                &registered.environment,
+            )
+            .await?;
+            self.verify_worktree(workspace).await
+        }
+        .await
         {
             self.finish_execution(registered.id.clone(), kind, Some(1))
                 .await?;
@@ -454,21 +436,28 @@ impl Manager {
         kind: ExecutionKind,
         caller: Option<&Caller>,
         merge: Option<crate::model::MergeOptions>,
-    ) -> Result<(Workspace, PreparedExecution)> {
+    ) -> Result<(SpaceId, PreparedExecution)> {
         if let Some(wrapper) = wrapper {
             ensure!(
                 process::alive(wrapper)?,
                 "execution wrapper is no longer alive"
             );
         }
-        let workspace = self.workspace(selector).await?;
-        // Its temporary directory goes in the repository's directory.
-        self.reserve_repository_directory(&workspace.repository_id)
-            .await?;
-        let preparation = self
-            .prepare_execution_kind(&workspace, kind, caller, merge)
-            .await?;
-        Ok((workspace, preparation))
+        let preparation = match self.space(selector).await? {
+            PresentSpace::Workspace(workspace) => {
+                // Its temporary directory goes in the repository's directory.
+                self.reserve_repository_directory(&workspace.repository_id)
+                    .await?;
+                let preparation = self
+                    .prepare_execution_kind(&workspace, kind, caller, merge)
+                    .await?;
+                (workspace.id, preparation)
+            }
+            // A chat runs only its agent, which its registration checks, with
+            // nothing to prepare.
+            PresentSpace::Chat(chat) => (chat.id, PreparedExecution::default()),
+        };
+        Ok(preparation)
     }
 
     /// `merge` says how a merge runs; a scoped `caller`'s merge or unmerge
@@ -591,16 +580,16 @@ impl Manager {
 
     /// Forget the exited child of an execution whose wrapper starts another,
     /// once what it left running is proven stopped, as a paused agent's is,
-    /// and the worktree the next run starts in is still the recorded one.
+    /// and the space the next run starts in is still where it was recorded.
     /// Unproven survivors keep the child's identity, so the next run cannot
     /// register over the evidence.
     pub(crate) async fn release_exited_child(
         &self,
         id: &ExecutionId,
-        workspace: &Workspace,
+        space: &SpaceId,
     ) -> Result<()> {
         match self
-            .pause_agent_execution(id, &workspace.id, timing::PROCESS_PROOF_TIMEOUT)
+            .pause_agent_execution(id, space, timing::PROCESS_PROOF_TIMEOUT)
             .await?
         {
             super::agents::Pause::Paused => {}
@@ -608,7 +597,7 @@ impl Manager {
                 bail!("the previous run left processes Shoal cannot prove stopped: {issue}")
             }
         }
-        self.verify_worktree(workspace).await
+        self.execution_home(space).await.map(drop)
     }
 
     /// Close an execution. `exit_code` is `None` when the wrapper disconnected
@@ -698,18 +687,19 @@ impl Manager {
         );
         let (workspace_id, agent_execution, narrowing) =
             self.authorize_reattachment(request).await?;
-        let workspace = self.workspace_by_id(&workspace_id).await?;
+        let space = (self.find_space(&workspace_id).await?)
+            .with_context(|| format!("no space {workspace_id}"))?;
         // Before protection can know the agent again and save a new stop.
         // A wrapper awaiting a restore has received its stop.
         if request.awaiting_restore.is_none() {
-            self.discard_undelivered_stop(&workspace, &request.execution);
+            self.discard_undelivered_stop(&space, &request.execution);
         }
         // A stopped agent stays stopped until its restore.
         let stop = connections
             .connect(
                 &request.execution,
                 ExecutionKind::Command,
-                &workspace.id,
+                space.id(),
                 request.scope_token.clone(),
                 agent_execution,
                 request.awaiting_restore.is_some(),
@@ -734,8 +724,8 @@ impl Manager {
             self.track_agent(
                 &request.execution,
                 &agent,
-                &workspace.id,
-                &workspace.name,
+                space.id(),
+                space.name(),
                 request.recover,
                 Duration::from_millis(request.running_ms),
             )
@@ -745,8 +735,8 @@ impl Manager {
                     .await;
             }
         }
-        self.touch(&workspace.id).await;
-        Ok(ReattachedExecution { workspace, stop })
+        self.touch(space.id()).await;
+        Ok(ReattachedExecution { space, stop })
     }
 
     /// Check a reattaching wrapper against its execution record and the scope
@@ -792,12 +782,11 @@ impl Manager {
 
     /// A reattaching wrapper still runs its command, so a stop the previous
     /// daemon saved but never delivered no longer describes the agent.
-    fn discard_undelivered_stop(&self, workspace: &Workspace, execution: &ExecutionId) {
-        match crate::execution::recovery::discard_undelivered(&self.paths, &workspace.id, execution)
-        {
+    fn discard_undelivered_stop(&self, space: &PresentSpace, execution: &ExecutionId) {
+        match crate::execution::recovery::discard_undelivered(&self.paths, space.id(), execution) {
             Ok(true) => log!(
                 "discarded an undelivered stop for execution {execution} in {}",
-                workspace.name
+                space.name()
             ),
             Ok(false) => {}
             Err(error) => {

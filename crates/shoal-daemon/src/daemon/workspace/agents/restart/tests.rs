@@ -1,5 +1,6 @@
 use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::RecordExt;
+use crate::model::PresentSpace;
 use std::time::Duration;
 
 use crate::client::space_names::SpaceSelector;
@@ -665,7 +666,7 @@ async fn a_stop_cancels_a_restart_between_its_wrappers() {
     let error = answered(restarting).await.unwrap_err();
     assert!(format!("{error}").contains("cancelled"), "{error}");
     manager
-        .restart_in_new_wrapper(&workspace, &before, true)
+        .restart_in_new_wrapper(&PresentSpace::Workspace(workspace.clone()), &before, true)
         .await;
     assert_eq!(restores_of(&manager, before.as_str()).await, 0);
 
@@ -673,7 +674,7 @@ async fn a_stop_cancels_a_restart_between_its_wrappers() {
     let after = second.plan.id.clone();
     let restarting = hand_over(&manager, &workspace, &second).await;
     manager
-        .restart_in_new_wrapper(&workspace, &after, true)
+        .restart_in_new_wrapper(&PresentSpace::Workspace(workspace.clone()), &after, true)
         .await;
     assert_eq!(restores_of(&manager, after.as_str()).await, 1);
     manager
