@@ -18,6 +18,8 @@ struct Candidate {
     execution: ExecutionId,
     workspace_id: SpaceId,
     workspace: SpaceName,
+    /// Whether the user attends its space.
+    attended: bool,
     /// The idle turn it was found in.
     turn: Turn,
 }
@@ -73,6 +75,7 @@ impl Manager {
                             execution: id.clone(),
                             workspace_id: agent.workspace_id.clone(),
                             workspace: agent.workspace.clone(),
+                            attended: agent.attended,
                             turn,
                         })
                     })
@@ -82,7 +85,8 @@ impl Manager {
     }
 
     /// Why the `candidate` agent stops, if it does: its space is blocked,
-    /// or, once its prompt cache expired, to free memory.
+    /// or, once its prompt cache expired and unless the user attends its
+    /// space, to free memory.
     async fn idle_stop(
         &self,
         candidate: &Candidate,
@@ -92,7 +96,7 @@ impl Manager {
         if self.space_blocked(id).await? {
             return Ok(Some(Protection::blocked()));
         }
-        if !cache_expired {
+        if !cache_expired || candidate.attended {
             return Ok(None);
         }
         if self.completion(id).await?.is_some() && self.keep_reason(id).await?.is_some() {

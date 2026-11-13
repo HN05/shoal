@@ -225,6 +225,20 @@ impl Manager {
         .await
     }
 
+    /// Register the execution of an agent in the space `selector` names, a
+    /// workspace's or a chat's, with its scope token, as its wrapper does
+    /// before it tracks the agent.
+    #[cfg(test)]
+    pub(crate) async fn begin_agent_execution(&self, selector: &str) -> Result<StartedExecution> {
+        let request = ExecutionRequest {
+            agent: true,
+            ..Default::default()
+        };
+        let selector = SpaceSelector::from(selector);
+        self.begin_execution_placed(&selector, None, ExecutionKind::Command, None, request)
+            .await
+    }
+
     /// Register an execution and issue its scope token, recording the demo it
     /// runs and the place it runs at with it. The returned receiver fires
     /// when the workspace asks its commands to stop.

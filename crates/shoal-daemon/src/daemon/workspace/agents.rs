@@ -174,6 +174,9 @@ pub(crate) struct Agent {
     narrowing: crate::config::permissions::PermissionsConfig,
     workspace: SpaceName,
     workspace_id: SpaceId,
+    /// Whether the user attends its space, so that Shoal never stops it to
+    /// free capacity.
+    attended: bool,
     started: Instant,
     recover: bool,
     stop: watch::Sender<bool>,
@@ -460,6 +463,7 @@ impl Manager {
         running: Duration,
     ) {
         self.record_execution_agent(id, tracked).await;
+        let attended = self.attended(workspace_id).await;
         let connections = self.executions.connections().await;
         let Some(stop) = connections.stop_channel(id) else {
             return;
@@ -471,6 +475,7 @@ impl Manager {
             narrowing: tracked.narrowing,
             workspace: workspace.clone(),
             workspace_id: workspace_id.clone(),
+            attended,
             started: Instant::now()
                 .checked_sub(running)
                 .unwrap_or_else(Instant::now),
@@ -483,6 +488,17 @@ impl Manager {
         connections
             .with_agents(|agents| agents.insert(id.clone(), agent))
             .await;
+    }
+
+    /// Whether the user attends the space `id`, as its kind says; a space
+    /// that cannot be read counts as unattended.
+    async fn attended(&self, id: &SpaceId) -> bool {
+        let id = id.to_owned();
+        let kind = self
+            .store
+            .run(move |db| crate::daemon::spaces::space_kind(db, &id))
+            .await;
+        (kind.ok().flatten()).is_some_and(crate::model::SpaceKind::attended)
     }
 
     /// Keep the name, model, effort, mode and narrowing of the agent
@@ -1009,10 +1025,13 @@ impl Manager {
                             id,
                             started: agent.started,
                             attached: agent.attached == Some(true),
+                            attended: agent.attended,
                         });
                 let selected: Vec<ExecutionId> = match select {
+                    // Load stops the heavy agents the user does not attend.
                     Select::One => {
-                        let heavy = running.filter(|agent| !light.execution(agent.id));
+                        let heavy =
+                            running.filter(|agent| !agent.attended && !light.execution(agent.id));
                         first_to_stop(heavy, turns).into_iter().cloned().collect()
                     }
                     Select::All => running.map(|agent| agent.id.clone()).collect(),
@@ -1209,6 +1228,8 @@ struct Running<'a> {
     started: Instant,
     /// Whether a terminal shows it, so the user may be working with it.
     attached: bool,
+    /// Whether the user attends its space.
+    attended: bool,
 }
 
 /// Of the `running` agents, one nobody is attached to while there is one,

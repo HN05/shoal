@@ -477,3 +477,69 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
             .unwrap()
     );
 }
+
+/// A chat's idle agent keeps running with its prompt cache expired, since
+/// the user attends it, while `[idle_stop]` stops a workspace's.
+#[tokio::test]
+async fn a_chats_idle_agent_keeps_running_once_its_cache_expires() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    manager
+        .write_local_config(&repo.id, Some("[idle_stop]\nenabled = true\n".into()))
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.into(),
+            "talk".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let execution = manager
+        .begin_agent_execution(chat.id.as_str())
+        .await
+        .unwrap();
+    manager
+        .track_agent(
+            &execution.plan.id,
+            &crate::execution::TrackedAgent::named("claude"),
+            &chat.id,
+            &chat.name,
+            true,
+            std::time::Duration::ZERO,
+        )
+        .await;
+    manager
+        .set_agent_state(
+            &SpaceSelector::id(&chat.id),
+            AgentState::Idle,
+            Some(execution.plan.id.clone()),
+            None,
+        )
+        .await
+        .unwrap();
+    let id = chat.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE space_agent_state SET prompt_cache_expires_at=unixepoch() WHERE space_id=?1",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    manager.stop_idle_agents().await.unwrap();
+
+    assert!(!*execution.stop.borrow());
+}

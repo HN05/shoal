@@ -633,3 +633,51 @@ async fn an_agent_records_its_mode_with_its_execution_workspace_and_last_session
         serde_json::from_value(serde_json::json!({"execution": "e", "agent": "claude"})).unwrap();
     assert_eq!(earlier.mode, "worker");
 }
+
+/// Load never stops a chat's agent, which the user attends, while a lack of
+/// disk space stops it with the others, since any agent may be writing.
+#[tokio::test]
+async fn load_leaves_a_chats_agent_running_while_disk_space_stops_it() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.into(),
+            "talk".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let execution = manager
+        .begin_agent_execution(chat.id.as_str())
+        .await
+        .unwrap();
+    manager
+        .track_agent(
+            &execution.plan.id,
+            &crate::execution::TrackedAgent::named("claude"),
+            &chat.id,
+            &chat.name,
+            true,
+            Duration::ZERO,
+        )
+        .await;
+
+    assert!(
+        !manager
+            .stop_agent_for_overload("critical memory pressure")
+            .await
+    );
+    assert!(!*execution.stop.borrow());
+    let protection = Protection::load("low disk space");
+    let stopped = manager.stop_agents_for_disk_space(&protection).await;
+    assert_eq!(stopped.len(), 1);
+    assert!(*execution.stop.borrow());
+}
