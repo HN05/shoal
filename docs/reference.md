@@ -1630,8 +1630,10 @@ happy-cli would encrypt it, starts `happy codex` attached to that session throug
 Happy's own `HAPPY_RECONNECT_*` variables, waits up to 90 seconds for the session
 to report alive, and posts the prompt (`curl`, token on stdin). A launch whose
 session Happy's server cannot create, such as on a machine not logged in to
-Happy, is refused before anything runs; one whose session does not receive the
+Happy, fails before `happy codex` starts; one whose session does not receive the
 prompt is stopped, its session on Happy's server deleted, and the launch fails.
+Either way a workspace, queue entry or chat stays as any other failed launch
+leaves it.
 
 ### Demos
 
