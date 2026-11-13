@@ -5,10 +5,14 @@ use std::collections::{HashMap, HashSet};
 use anyhow::Result;
 use rusqlite::Connection;
 
-use crate::client::{execution_ids::ExecutionId, repository_ids::RepositoryId};
+use crate::client::{
+    execution_ids::ExecutionId, executions::Record, repository_ids::RepositoryId,
+    space_ids::SpaceId,
+};
 use crate::{
     config::modes::{ModeName, Weight},
     daemon::workspace::Manager,
+    execution::recovery::{self, RecordExt},
 };
 
 /// The light modes of the repositories asked about, and the tracked agents
@@ -56,11 +60,18 @@ type ExecutionMode = (ExecutionId, RepositoryId, Option<ModeName>);
 impl Manager {
     /// Which agents are light now: the modes of every repository with a
     /// workspace agent or a queue entry, and the workspace agents in a light
-    /// one.
+    /// one, whether they run or, stopped, wait for their restore.
     pub(crate) async fn light(&self) -> Result<Light> {
-        let (executions, mut repositories) = (self.store)
-            .read(|tx| Ok((execution_modes(tx)?, queue_repositories(tx)?)))
+        let (mut executions, workspaces, mut repositories) = (self.store)
+            .read(|tx| {
+                Ok((
+                    execution_modes(tx)?,
+                    workspaces(tx)?,
+                    queue_repositories(tx)?,
+                ))
+            })
             .await?;
+        executions.extend(self.stopped_modes(&workspaces, &executions)?);
         repositories.extend(
             executions
                 .iter()
@@ -76,6 +87,29 @@ impl Manager {
             }
         }
         Ok(light)
+    }
+
+    /// The stopped agents of `workspaces` that `executions` leaves out, each
+    /// with its repository and the mode its saved record keeps.
+    fn stopped_modes(
+        &self,
+        workspaces: &[(SpaceId, RepositoryId)],
+        executions: &[ExecutionMode],
+    ) -> Result<Vec<ExecutionMode>> {
+        let known: HashSet<&ExecutionId> = executions.iter().map(|(id, ..)| id).collect();
+        let mut stopped = Vec::new();
+        for (workspace, repository) in workspaces {
+            for execution in recovery::agent_records(&self.paths, workspace)? {
+                if known.contains(&execution) {
+                    continue;
+                }
+                let path = recovery::record_path(&self.paths, workspace, &execution);
+                if let Some(record) = Record::load(&path)? {
+                    stopped.push((execution, repository.clone(), Some(record.mode)));
+                }
+            }
+        }
+        Ok(stopped)
     }
 
     /// The light modes of each of `repositories`. A repository whose
@@ -108,6 +142,14 @@ fn execution_modes(db: &Connection) -> Result<Vec<ExecutionMode>> {
              JOIN workspaces w ON w.id=e.space_id WHERE e.agent IS NOT NULL",
         )?
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Each workspace with its repository.
+fn workspaces(db: &Connection) -> Result<Vec<(SpaceId, RepositoryId)>> {
+    Ok(db
+        .prepare("SELECT id,repository_id FROM workspaces")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
         .collect::<rusqlite::Result<_>>()?)
 }
 

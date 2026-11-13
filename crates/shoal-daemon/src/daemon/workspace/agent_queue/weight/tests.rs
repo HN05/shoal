@@ -2,12 +2,13 @@ use std::collections::HashSet;
 
 use rusqlite::params;
 
-use crate::client::space_names::SpaceSelector;
+use crate::client::{execution_ids::ExecutionId, space_names::SpaceSelector};
 use crate::{
     daemon::{
         test_support::{global_config, manager},
         workspace::agent_queue::tests::{add, create, register, request},
     },
+    execution::recovery::record_path,
     model::QueueRequest,
     state::{ExecutionState, QueueState},
 };
@@ -57,4 +58,26 @@ async fn a_light_agent_holds_no_slot_and_starts_beside_full_limits() {
         .await
         .unwrap();
     assert_eq!(admission.entry.unwrap().state, QueueState::Starting);
+}
+
+#[tokio::test]
+async fn a_stopped_light_agent_waiting_for_its_restore_holds_no_slot() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config("[modes.triage]\nweight = 'light'\n"));
+    let workspace = create(&manager, &repo, "stopped").await;
+    // Stopped agents keep only their saved records, each with its mode.
+    for (execution, mode) in [("heavy", "worker"), ("light", "triage")] {
+        let execution = ExecutionId::from(execution);
+        let record = record_path(&manager.paths, &workspace.id, &execution);
+        std::fs::create_dir_all(record.parent().unwrap()).unwrap();
+        let saved = serde_json::json!({"agent": "claude", "mode": mode});
+        std::fs::write(&record, saved.to_string()).unwrap();
+    }
+    assert_eq!(
+        manager.occupied_slots(&HashSet::new()).await.unwrap().len(),
+        1
+    );
+    let light = manager.light().await.unwrap();
+    assert!(light.execution(&"light".into()) && !light.execution(&"heavy".into()));
 }

@@ -142,8 +142,10 @@ impl Admission {
 /// stopped, start only on sustained healthy readings (`recovered`), one per
 /// healthy interval. A CI job counts only against the jobs' limits, and under
 /// dynamic admission needs room for its own memory and takes the pass's one
-/// start, as an agent does. An entry that waits or does not fit keeps its
-/// place and is passed over.
+/// start, as an agent does. A light agent's entry needs no slot and no room,
+/// so it takes none of the pass's starts and, restored, none of the healthy
+/// interval's: only critical or missing readings and low disk hold it. An
+/// entry that waits or does not fit keeps its place and is passed over.
 pub(crate) fn admit(
     occupied: &[RepositoryId],
     waiting: &[Waiting],
