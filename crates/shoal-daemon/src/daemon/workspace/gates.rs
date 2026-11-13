@@ -24,6 +24,9 @@ pub(crate) struct Gates {
     background_operations: Arc<RwLock<()>>,
     /// The exits that wait for work in progress, holding back new work.
     held_back: Arc<watch::Sender<Holds>>,
+    /// Whether an exit that waited holds operations off until the daemon
+    /// has exited.
+    exit_quiet: Arc<watch::Sender<bool>>,
     registry: Mutex<()>,
     checkpoints: Mutex<()>,
     simulators: Mutex<()>,
@@ -86,6 +89,18 @@ impl std::fmt::Display for Exiting {
 }
 
 impl std::error::Error for Exiting {}
+
+/// Operations held off for an exit that waited, until it drops.
+pub(crate) struct ExitQuiescence {
+    exit_quiet: Arc<watch::Sender<bool>>,
+    _quiescence: OwnedRwLockWriteGuard<()>,
+}
+
+impl Drop for ExitQuiescence {
+    fn drop(&mut self) {
+        self.exit_quiet.send_replace(false);
+    }
+}
 
 /// How many exits of each kind hold back new work.
 #[derive(Debug, Default, Clone, Copy)]
@@ -168,6 +183,27 @@ impl Gates {
     /// [`Self::quiesce`] when no background operation is in progress.
     pub(crate) fn try_quiesce(&self) -> Option<OwnedRwLockWriteGuard<()>> {
         self.background_operations.clone().try_write_owned().ok()
+    }
+
+    /// Keep `quiescence` until the daemon has exited, for an exit that
+    /// waited, which [`Self::operation_unless_exiting`] tells apart from a
+    /// passing attempt to quiesce.
+    pub(crate) fn keep_for_exit(&self, quiescence: OwnedRwLockWriteGuard<()>) -> ExitQuiescence {
+        self.exit_quiet.send_replace(true);
+        ExitQuiescence {
+            exit_quiet: self.exit_quiet.clone(),
+            _quiescence: quiescence,
+        }
+    }
+
+    /// [`Self::owned_operation`], or `None` once an exit that waited holds
+    /// operations off until the daemon has exited.
+    pub(crate) async fn operation_unless_exiting(&self) -> Option<OwnedRwLockReadGuard<()>> {
+        let mut exit_quiet = self.exit_quiet.subscribe();
+        tokio::select! {
+            operation = self.owned_operation() => Some(operation),
+            _ = exit_quiet.wait_for(|quiet| *quiet) => None,
+        }
     }
 
     /// Hold back the background passes and requests that start work an

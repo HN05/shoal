@@ -35,7 +35,11 @@ const MIN_LONG_LIVED: usize = 64;
 /// Refuse the request on `stream`, which arrived once an exit that waited
 /// held operations off, as `exiting` says, so its client sends it to the
 /// next daemon when one follows.
-pub(super) async fn refuse_while_exiting(mut stream: UnixStream, exiting: Exiting) {
+pub(super) async fn refuse_while_exiting(mut stream: UnixStream, exiting: Option<Exiting>) {
+    // An exit that waited holds back new work until the daemon has exited.
+    let exiting = exiting.unwrap_or(Exiting {
+        exit: crate::protocol::Exit::Restart,
+    });
     let read = protocol::read::<Request>(&mut stream);
     let Ok(Ok(request)) = tokio::time::timeout(timing::REQUEST_READ_TIMEOUT, read).await else {
         return;

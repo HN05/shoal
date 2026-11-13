@@ -93,13 +93,11 @@ use events::{ShoalEventDetails, ShoalEventKind};
 pub(crate) use log::log;
 use ownership::Ownership;
 use scope::Caller;
-use workspace::{Ending, Exiting, Manager};
+use workspace::{Ending, Manager};
 
 use crate::{
     paths::Paths,
-    protocol::{
-        self, Body, ErrorCode, Exit, Method, Operation, Reattachment, Request, Response, timing,
-    },
+    protocol::{self, Body, ErrorCode, Method, Operation, Reattachment, Request, Response, timing},
 };
 
 const SIMULATOR_SWEEP_INTERVAL: Duration = Duration::from_secs(15);
@@ -250,16 +248,19 @@ pub async fn run(
                     }
                 };
                 let server = server.clone();
-                // An exit that waited holds operations off until the daemon
-                // has exited, so the loop must not wait for one.
-                let Some(operation) = server.manager.gates.try_owned_operation() else {
-                    // Only an exit that waited holds operations off here.
-                    let exiting = server.manager.gates.exiting();
-                    let exiting = exiting.unwrap_or(Exiting { exit: Exit::Restart });
-                    clients.spawn(connections::refuse_while_exiting(stream, exiting));
-                    continue;
-                };
+                // An exit's attempt to quiesce holds operations off for a
+                // moment, and one that waited until the daemon has exited,
+                // so the loop never waits for one.
+                let operation = server.manager.gates.try_owned_operation();
                 clients.spawn(async move {
+                    let gates = &server.manager.gates;
+                    let operation = match operation {
+                        Some(operation) => Some(operation),
+                        None => gates.operation_unless_exiting().await,
+                    };
+                    let Some(operation) = operation else {
+                        return connections::refuse_while_exiting(stream, gates.exiting()).await;
+                    };
                     if let Err(error) = serve(stream, server, operation).await {
                         log!("client connection: {error:#}");
                     }

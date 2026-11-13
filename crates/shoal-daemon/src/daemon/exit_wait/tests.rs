@@ -220,3 +220,23 @@ async fn work_stays_held_back_until_every_exit_that_waits_lets_go() {
     assert!(manager.gates.admit().is_ok());
     assert!(manager.gates.background_pass().now_or_never().is_some());
 }
+
+#[tokio::test]
+async fn a_request_waits_out_an_attempt_to_quiesce_but_not_an_exit_that_waited() {
+    let (_root, manager) = manager().await;
+    let attempt = manager.gates.try_quiesce().unwrap();
+    let waiting = tokio::spawn({
+        let manager = manager.clone();
+        async move { manager.gates.operation_unless_exiting().await.is_some() }
+    });
+    tokio::task::yield_now().await;
+    drop(attempt);
+    assert!(waiting.await.unwrap());
+
+    let quiet = manager
+        .gates
+        .keep_for_exit(manager.gates.try_quiesce().unwrap());
+    assert!(manager.gates.operation_unless_exiting().await.is_none());
+    drop(quiet);
+    assert!(manager.gates.operation_unless_exiting().await.is_some());
+}

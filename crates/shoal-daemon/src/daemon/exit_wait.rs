@@ -11,7 +11,7 @@ use tokio::{net::UnixStream, sync::OwnedRwLockWriteGuard};
 
 use super::{
     answer,
-    workspace::{HeldBack, Manager},
+    workspace::{ExitQuiescence, HeldBack, Manager},
 };
 use crate::protocol::{self, Body, Exit, ExitWhen, Response, Work};
 
@@ -24,6 +24,11 @@ const POLL_INTERVAL: Duration = Duration::from_millis(200);
 /// mutations; execution connections hold one only while their execution
 /// changes or their wrapper cannot reattach.
 pub(super) fn quiesce(manager: &Manager) -> Option<OwnedRwLockWriteGuard<()>> {
+    // Checked first too, so a connected execution does not hold operations
+    // off for a moment on every attempt while it runs.
+    if manager.executions.has_unattachable() {
+        return None;
+    }
     let guard = manager.gates.try_quiesce()?;
     (!manager.executions.has_unattachable()).then_some(guard)
 }
@@ -31,7 +36,7 @@ pub(super) fn quiesce(manager: &Manager) -> Option<OwnedRwLockWriteGuard<()>> {
 /// A daemon ready to exit: nothing its exit would cut off runs, and nothing
 /// new starts until it has exited.
 pub(super) struct Quiet {
-    quiescence: Option<OwnedRwLockWriteGuard<()>>,
+    quiescence: Option<ExitQuiescence>,
     _held_back: HeldBack,
 }
 
@@ -60,7 +65,7 @@ pub(super) async fn wait(
     loop {
         if let Some(quiescence) = quiesce(manager) {
             return Ok(Some(Quiet {
-                quiescence: Some(quiescence),
+                quiescence: Some(manager.gates.keep_for_exit(quiescence)),
                 _held_back: held_back,
             }));
         }
