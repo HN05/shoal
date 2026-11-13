@@ -154,12 +154,15 @@ async fn a_spaces_ci_has_what_its_longest_job_has_left_once_each_has_run() {
     )
     .await;
     manager.record_job_usage(&earlier).await.unwrap();
+    let ran = crate::time::UnixTime::now().duration_since(earlier.launched_at.unwrap());
     let seconds: i64 = manager
         .store
         .run(|db| Ok(db.query_row("SELECT seconds FROM ci_job_usage", [], |row| row.get(0))?))
         .await
         .unwrap();
-    assert!((1800..1860).contains(&seconds), "{seconds}");
+    // It ran from its recorded start until it ended, before `ran` was read.
+    let ran = i64::try_from(ran.as_secs()).unwrap();
+    assert!((1800..=ran).contains(&seconds), "{seconds}");
     manager
         .store
         .run(move |db| {
