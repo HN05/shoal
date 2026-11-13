@@ -132,7 +132,7 @@ impl Manager {
         let bases = self.hold_back_blocked(&mut work.entries).await?;
         let published = self.overload_recovery.published();
         let admission = self.fitting_entries(&work, published.is_some()).await?;
-        self.agent_queue.record_held_back(admission.held);
+        (self.agent_queue).record_held_back(admission.held, std::time::Instant::now());
         if admission.admitted.is_empty() {
             return Ok(false);
         }
@@ -211,6 +211,7 @@ impl Manager {
     /// restore the daemon starts is admitted like a launch once it waits for
     /// nothing.
     async fn waiting_work(&self) -> Result<WaitingWork> {
+        let now = std::time::Instant::now();
         let held = self.agent_queue.held();
         let mut queued = self.store.run(|db| queued_rows(db)).await?;
         queued.retain(|row| !held.contains(&row.id));
@@ -275,7 +276,7 @@ impl Manager {
                 _ => Work::Launch,
             };
             waiting.push(Waiting {
-                waited_for_memory: self.agent_queue.waited_for_memory(&id),
+                waited_for_memory: self.agent_queue.waited_for_memory(&id, now),
                 id,
                 repository,
                 work,
@@ -283,7 +284,7 @@ impl Manager {
             });
         }
         let oneshots = oneshots.into_iter().map(|oneshot| Waiting {
-            waited_for_memory: self.agent_queue.waited_for_memory(&oneshot.id),
+            waited_for_memory: self.agent_queue.waited_for_memory(&oneshot.id, now),
             id: oneshot.id,
             repository: oneshot.repository,
             work: Work::OneShot {

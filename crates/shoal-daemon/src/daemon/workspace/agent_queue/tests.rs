@@ -1751,15 +1751,23 @@ async fn an_entrys_wait_for_memory_lasts_while_passes_hold_it_for_memory() {
     let queue = &manager.agent_queue;
     let id = QueueEntryId::from("waiting");
     let memory = crate::model::HeldBy::Memory { needed: 2, left: 1 };
-    let hold = |held| queue.record_held_back([(id.clone(), held)].into());
-    hold(memory);
-    let first = queue.waited_for_memory(&id);
-    hold(memory);
-    assert!(queue.waited_for_memory(&id) >= first);
+    let start = std::time::Instant::now();
+    let at = |seconds| start + Duration::from_secs(seconds);
+    let hold = |held, seconds| queue.record_held_back([(id.clone(), held)].into(), at(seconds));
+    hold(memory, 0);
+    hold(memory, 60);
+    assert_eq!(
+        queue.waited_for_memory(&id, at(90)),
+        Duration::from_secs(90)
+    );
     // Held for anything else, or started, it waits for memory anew.
-    hold(crate::model::HeldBy::MaxAgents);
-    assert_eq!(queue.waited_for_memory(&id), Duration::ZERO);
-    hold(memory);
-    queue.record_held_back(Default::default());
-    assert_eq!(queue.waited_for_memory(&id), Duration::ZERO);
+    hold(crate::model::HeldBy::MaxAgents, 120);
+    assert_eq!(queue.waited_for_memory(&id, at(120)), Duration::ZERO);
+    hold(memory, 180);
+    assert_eq!(
+        queue.waited_for_memory(&id, at(200)),
+        Duration::from_secs(20)
+    );
+    queue.record_held_back(Default::default(), at(240));
+    assert_eq!(queue.waited_for_memory(&id, at(240)), Duration::ZERO);
 }

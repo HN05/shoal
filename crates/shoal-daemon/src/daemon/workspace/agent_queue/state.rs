@@ -123,24 +123,26 @@ impl AgentQueue {
         self.holds.lock().unwrap().keys().cloned().collect()
     }
 
-    /// Replace what held back waiting entries with the last pass's `held`,
-    /// and keep since when each one held for its memory has been, which an
-    /// entry held for anything else or started starts over.
-    pub(crate) fn record_held_back(&self, held: HashMap<QueueEntryId, HeldBy>) {
+    /// Replace what held back waiting entries with the pass's `held` at
+    /// `now`, and keep since when each one held for its memory has been,
+    /// which an entry held for anything else or started starts over.
+    pub(crate) fn record_held_back(&self, held: HashMap<QueueEntryId, HeldBy>, now: Instant) {
         let mut since = self.memory_since.lock().unwrap();
         since.retain(|id, _| matches!(held.get(id), Some(HeldBy::Memory { .. })));
         for (id, held) in &held {
             if let HeldBy::Memory { .. } = held {
-                since.entry(id.clone()).or_insert_with(Instant::now);
+                since.entry(id.clone()).or_insert(now);
             }
         }
         *self.held_back.lock().unwrap() = held;
     }
 
-    /// How long the entry `id` has been held back for its memory.
-    pub(crate) fn waited_for_memory(&self, id: &QueueEntryId) -> Duration {
+    /// How long, at `now`, the entry `id` has been held back for its memory.
+    pub(crate) fn waited_for_memory(&self, id: &QueueEntryId, now: Instant) -> Duration {
         let since = self.memory_since.lock().unwrap();
-        since.get(id).map_or(Duration::ZERO, Instant::elapsed)
+        since
+            .get(id)
+            .map_or(Duration::ZERO, |since| now.duration_since(*since))
     }
 
     /// What held back the entry `id` at the last admission pass.
