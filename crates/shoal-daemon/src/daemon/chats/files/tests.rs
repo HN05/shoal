@@ -2,7 +2,7 @@ use crate::daemon::test_support::{manager, repository};
 use crate::paths::StateFiles;
 
 #[tokio::test]
-async fn chat_files_move_from_the_chat_name_to_its_id_and_others_go() {
+async fn chat_logs_move_from_the_chat_name_to_its_id_and_others_go() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -16,29 +16,25 @@ async fn chat_files_move_from_the_chat_name_to_its_id_and_others_go() {
     let directory = manager.paths.state.join("chats");
     std::fs::create_dir_all(&directory).unwrap();
     let write = |file: &str| std::fs::write(directory.join(file), file).unwrap();
-    // Files from before chats' files were named after their IDs.
+    // A log from before chats' files were named after their IDs.
     write("talk.log");
-    write("talk.prompt.md");
-    // An ended chat's file.
+    // An ended chat's file, and a first message earlier versions kept.
     write("ended.log");
+    write(&format!("{}.prompt.md", chat.id));
     manager.rekey_chat_files().await.unwrap();
 
-    let files = manager.paths.chat_files(&chat);
-    let read = |extension: &str| std::fs::read_to_string(files.with_extension(extension));
-    assert_eq!(read("log").unwrap(), "talk.log");
-    assert_eq!(read("prompt.md").unwrap(), "talk.prompt.md");
-    let mut left: Vec<_> = std::fs::read_dir(&directory)
+    let log = manager.paths.chat_files(&chat).with_extension("log");
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), "talk.log");
+    let left: Vec<_> = std::fs::read_dir(&directory)
         .unwrap()
-        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .map(|entry| entry.unwrap().path())
         .collect();
-    left.sort();
-    assert_eq!(
-        left,
-        [format!("{}.log", chat.id), format!("{}.prompt.md", chat.id)]
-    );
-    // Files already named after the chat stay.
+    assert_eq!(left, std::slice::from_ref(&log));
+    // A log already named after the chat is not replaced.
+    write("talk.log");
+    std::fs::write(&log, "current").unwrap();
     manager.rekey_chat_files().await.unwrap();
-    assert_eq!(read("log").unwrap(), "talk.log");
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), "current");
 }
 
 #[tokio::test]
@@ -84,15 +80,10 @@ async fn files_of_a_name_the_upgrade_cut_go_to_the_chat_it_recorded_alone() {
     write(&format!("{kept}.log"), "kept");
     write(&format!("{ended}.log"), "ended");
     write("shared.log", "shared");
-    // A file the chat has under its ID already is not replaced.
-    let files = manager.paths.chat_files(&cut);
-    std::fs::write(files.with_extension("prompt.md"), "current").unwrap();
-    write(&format!("{kept}.prompt.md"), "earlier");
     manager.rekey_chat_files().await.unwrap();
 
-    let read = |extension: &str| std::fs::read_to_string(files.with_extension(extension)).unwrap();
-    assert_eq!(read("log"), "kept");
-    assert_eq!(read("prompt.md"), "current");
+    let log = manager.paths.chat_files(&cut).with_extension("log");
+    assert_eq!(std::fs::read_to_string(log).unwrap(), "kept");
     assert!(!directory.join(format!("{ended}.log")).exists());
     // Neither chat sharing the name is its owner for sure, so it stays.
     assert!(directory.join("shared.log").exists());

@@ -11,7 +11,7 @@ use std::{
 use anyhow::{Result, ensure};
 
 pub(crate) use crate::client::paths::DEFAULT_STATE;
-pub use crate::client::paths::{Paths, SESSION_LOG, SESSION_PROMPT};
+pub use crate::client::paths::{Paths, SESSION_LOG};
 use crate::client::{connection::Daemon, scope_tokens::ScopeToken, space_ids::SpaceId};
 
 /// The daemon of the `shoal` command, which its requests reach with the scope

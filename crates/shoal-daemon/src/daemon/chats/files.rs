@@ -1,6 +1,5 @@
-//! The files a chat started detached keeps under the state directory, its
-//! session's log and first message, named after the chat's ID so its name
-//! can change freely.
+//! The file a chat started detached keeps under the state directory, its
+//! session's log, named after the chat's ID so its name can change freely.
 use crate::paths::StateFiles;
 use anyhow::{Context as _, Result};
 use std::{collections::HashMap, path::Path};
@@ -10,13 +9,14 @@ use crate::{
     daemon::workspace::Manager,
     fsutil::off_runtime,
     model::Chat,
-    paths::{Paths, SESSION_LOG, SESSION_PROMPT},
+    paths::{Paths, SESSION_LOG},
 };
 
 impl Manager {
-    /// Name the files each chat kept under its name after its ID instead,
-    /// and delete the files no chat owns, which ended chats left. A chat
-    /// whose name the upgrade cut owns those named as it was before.
+    /// Name the logs each chat kept under its name after its ID instead,
+    /// and delete the files no chat owns, which ended chats and earlier
+    /// versions left. A chat whose name the upgrade cut owns those named as
+    /// it was before.
     pub(crate) async fn rekey_chat_files(&self) -> Result<()> {
         let chats = self.chats().await?;
         let legacy = self.store.run(|db| legacy_names(db)).await?;
@@ -55,8 +55,8 @@ fn rekey(paths: &Paths, chats: &[Chat], legacy: &[(SpaceId, String)]) -> Result<
         }
         let path = entry.path();
         match owner(&path, &owners) {
-            Owner::Chat(chat, extension) => {
-                let named = paths.chat_files(chat).with_extension(extension);
+            Owner::Chat(chat) => {
+                let named = paths.chat_files(chat).with_extension(SESSION_LOG);
                 // A file the chat has under its ID already stays its own.
                 if named != path && !named.exists() {
                     std::fs::rename(&path, &named)
@@ -104,8 +104,7 @@ fn owners<'a>(
 
 /// Who owns one of a chat's files.
 enum Owner<'a> {
-    /// The chat, and the file's extension.
-    Chat(&'a Chat, &'static str),
+    Chat(&'a Chat),
     /// Chats that share the name the file was named after, which keep it.
     Unclear,
     /// No chat: one that ended left it.
@@ -117,15 +116,12 @@ fn owner<'a>(path: &Path, owners: &HashMap<String, Option<&'a Chat>>) -> Owner<'
     let Some(file) = path.file_name().and_then(|file| file.to_str()) else {
         return Owner::None;
     };
-    let found = [SESSION_LOG, SESSION_PROMPT]
-        .into_iter()
-        .find_map(|extension| {
-            let stem = file.strip_suffix(extension)?.strip_suffix('.')?;
-            Some((*owners.get(stem)?, extension))
-        });
-    match found {
-        Some((Some(chat), extension)) => Owner::Chat(chat, extension),
-        Some((None, _)) => Owner::Unclear,
+    let stem = file
+        .strip_suffix(SESSION_LOG)
+        .and_then(|stem| stem.strip_suffix('.'));
+    match stem.and_then(|stem| owners.get(stem)) {
+        Some(Some(chat)) => Owner::Chat(chat),
+        Some(None) => Owner::Unclear,
         None => Owner::None,
     }
 }
