@@ -165,12 +165,13 @@ not: preparing, stopping, restoring or removing a workspace, an operation such
 as a PR's push or a merge, a connected `shoal setup` or merge, and a cleanup
 sweep or checkout sync. `shoal daemon stop` and `restart` therefore wait until
 none runs, printing what they wait for each time that changes; `--json` lists
-it in `waited_for`. While they wait, the daemon starts no background pass that
-would start such work and refuses requests that would, such as
+it in `waited_for`. While they wait, the daemon starts no cleanup sweep,
+checkout sync, CI job or queued launch, which wait for the next daemon, and
+refuses requests that would start such work, such as
 `shoal start`, `shoal rm` and `shoal pr open`: during a restart their
 commands print that they wait and run on the next daemon, while a stop, which
-no daemon follows, fails them. Agents start and other requests go on as
-usual. `--no-wait` refuses instead, exiting 2 and listing the work in
+no daemon follows, fails them. Restores of running agents and other requests
+go on as usual. `--no-wait` refuses instead, exiting 2 and listing the work in
 `blocked_by`, though it still waits for requests and background passes, which
 end on their own; `--force` exits at once and cuts the work off, and the next
 daemon marks each workspace it interrupted failed. Interrupting the wait

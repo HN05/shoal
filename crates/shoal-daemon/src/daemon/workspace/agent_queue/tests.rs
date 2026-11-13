@@ -1912,3 +1912,28 @@ async fn a_chats_restore_starts_under_its_tools_upstream_limit() {
     manager.dispatch_queue().await.unwrap();
     assert!(started(&entry.id));
 }
+
+#[tokio::test]
+async fn an_exit_that_waits_keeps_queued_launches_for_the_next_daemon() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let first = add(&manager, &repo, "first").await.entry.unwrap();
+    let second = add(&manager, &repo, "second").await.entry.unwrap();
+    let held = manager.gates.hold_back(crate::protocol::Exit::Stop);
+    manager.fail_queue_entry(&first.id, "gone").await.unwrap();
+    manager.dispatch_queue().await.unwrap();
+    let state = |entries: Vec<QueueEntry>| {
+        (entries.into_iter())
+            .find(|entry| entry.id == second.id)
+            .map(|entry| entry.state)
+    };
+    let entries = manager.queue_entries().await.unwrap();
+    assert_eq!(state(entries), Some(QueueState::Queued));
+    assert!(!started(&second.id));
+    drop(held);
+    manager.dispatch_queue().await.unwrap();
+    let entries = manager.queue_entries().await.unwrap();
+    assert_eq!(state(entries), Some(QueueState::Starting));
+    assert!(started(&second.id));
+}

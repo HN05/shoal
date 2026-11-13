@@ -157,6 +157,7 @@ impl Manager {
             return Ok(false);
         }
         let mut work = self.waiting_work().await?;
+        self.hold_back_for_exit(&mut work);
         let bases = self.hold_back_blocked(&mut work.entries).await?;
         let published = self.overload_recovery.published();
         let admission = self.fitting_entries(&work, published.is_some()).await?;
@@ -169,6 +170,18 @@ impl Manager {
         };
         let starts = self.mark_starting(admitted, bases).await?;
         self.start_launches(starts, caller).await
+    }
+
+    /// Leave out of `work` every entry the daemon would start while an exit
+    /// holds back new work, so a stop keeps them queued for the next daemon
+    /// rather than failing them; a restore its waiting wrapper carries out
+    /// stays, since the exit may be waiting for it.
+    fn hold_back_for_exit(&self, work: &mut WaitingWork) {
+        if self.gates.exiting().is_some() {
+            let restores = &work.restores;
+            work.entries
+                .retain(|entry| restores.contains_key(&entry.id));
+        }
     }
 
     /// Record what held back the entries of `work` that `admission` passed
