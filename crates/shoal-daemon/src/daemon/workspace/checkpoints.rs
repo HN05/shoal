@@ -165,15 +165,7 @@ impl Manager {
         let Some(mut latest) = self.store.run(move |db| latest(db, &id)).await? else {
             return Ok(None);
         };
-        if (&latest.branch, &latest.head, latest.files_omitted)
-            != (&next.branch, &next.head, next.files_omitted)
-            || !git::checkpoint::same_files(
-                &workspace.path,
-                latest.commit.as_str(),
-                next.commit.as_str(),
-            )
-            .await?
-        {
+        if !keeps_same(&workspace.path, &latest, next).await? {
             return Ok(None);
         }
         latest.expires_at = latest.expires_at.max(next.expires_at);
@@ -458,6 +450,17 @@ impl Manager {
 async fn current_branch(path: &std::path::Path) -> Result<Option<BranchName>> {
     let branch = git::current_branch(path).await?.trim().to_owned();
     Ok((!branch.is_empty()).then(|| branch.into()))
+}
+
+/// Whether the checkpoints `kept` and `next` of the workspace at `path`
+/// keep the same branch, HEAD and unsaved files.
+async fn keeps_same(path: &std::path::Path, kept: &Checkpoint, next: &Checkpoint) -> Result<bool> {
+    if (&kept.branch, &kept.head, kept.files_omitted)
+        != (&next.branch, &next.head, next.files_omitted)
+    {
+        return Ok(false);
+    }
+    git::checkpoint::same_files(path, kept.commit.as_str(), next.commit.as_str()).await
 }
 
 fn branch_label(branch: Option<&BranchName>) -> String {

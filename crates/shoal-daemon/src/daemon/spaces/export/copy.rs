@@ -1,7 +1,6 @@
 //! Copies of spaces that keep running: a workspace at a checkpoint with its
 //! agents and the sessions they reported, or a chat with its session, which
 //! `shoal move import` opens as a new space whose agents start from forks.
-use crate::execution::recovery::LastSessionExt;
 use crate::transfer::ManifestExt;
 use anyhow::{Result, ensure};
 
@@ -9,9 +8,9 @@ use super::Prepared;
 use crate::client::space_names::SpaceSelector;
 use crate::model::CheckpointNumber;
 use crate::{
-    daemon::{events::EventCause, workspace::Manager},
-    execution::recovery::{self, Copied, LastSession, Record, StoppedAgent},
-    model::{Chat, Execution, PresentSpace, RemovedWorkspace, Workspace},
+    daemon::workspace::Manager,
+    execution::recovery::{self, Copied, Record, StoppedAgent},
+    model::{Chat, Execution, PresentSpace, Workspace},
     time::UnixTime,
     transfer::{Manifest, Source},
 };
@@ -61,23 +60,8 @@ impl Manager {
             checkpoint.number,
             workspace.name
         );
-        let copied = RemovedWorkspace {
-            workspace_id: workspace.id.clone(),
-            repository_id: workspace.repository_id.clone(),
-            name: workspace.name.clone(),
-            expires_at: checkpoint.expires_at,
-            checkpoint,
-            base_ref: workspace.base_ref.clone(),
-            base_commit: workspace.base_commit.clone(),
-            at: workspace.at.clone(),
-            links: workspace.links.clone(),
-            agents: self.copied_agents(&workspace).await?,
-            // An unreadable last session is not worth refusing the copy for.
-            last_sessions: LastSession::all(&self.paths, &workspace.id).unwrap_or_default(),
-            session_files: Vec::new(),
-            cause: EventCause::Manual,
-            removed_at: UnixTime::now(),
-        };
+        let agents = self.copied_agents(&workspace).await?;
+        let copied = super::packaged_record(&self.paths, &workspace, checkpoint, agents);
         let repo = self.repository(&workspace.repository_id).await?;
         let mut manifest = Manifest::of(&repo, Source::Workspace(copied)).await?;
         manifest.copy = Some(Copied {

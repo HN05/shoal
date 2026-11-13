@@ -2,6 +2,7 @@
 //! stopping a chat's agent first, or copies one that keeps running, and
 //! writes what continues it on another machine.
 use crate::client::space_ids::SpaceId;
+use crate::execution::recovery::LastSessionExt;
 use crate::transfer::ManifestExt;
 use anyhow::{Context, Result, ensure};
 
@@ -10,9 +11,15 @@ use crate::model::CheckpointNumber;
 use crate::{
     client::transcripts::Environments,
     config::Effective,
-    daemon::workspace::{Manager, kept_session_sources},
-    model::{Chat, PresentSpace, Repository, SpaceKind, Workspace},
+    daemon::{
+        events::EventCause,
+        workspace::{Manager, kept_session_sources},
+    },
+    execution::recovery::{LastSession, StoppedAgent},
+    model::{Chat, Checkpoint, PresentSpace, RemovedWorkspace, Repository, SpaceKind, Workspace},
+    paths::Paths,
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
+    time::UnixTime,
     transfer::{ExportedSpace, Manifest, SessionSource, Source},
 };
 
@@ -145,24 +152,10 @@ impl Manager {
     ) -> Result<Prepared> {
         let (removal, settings) = match self.workspace(selector).await {
             Ok(workspace) => {
-                // The package is built from the removal record, which a
-                // disposable workspace's removal does not keep.
-                anyhow::ensure!(
-                    !workspace.disposable,
-                    "workspace {} is disposable, so its removal keeps nothing to export",
-                    workspace.name
-                );
-                let taking = self.exported_with(&workspace, &unsaved).await?;
+                ensure_exportable(&workspace)?;
                 // Its own config may describe its agents, and goes with it.
                 let settings = self.workspace_settings(&workspace).await;
-                let removal = self
-                    .remove_workspace_taking(
-                        &SpaceSelector::id(&workspace.id),
-                        unsaved,
-                        inspection,
-                        &taking,
-                    )
-                    .await?;
+                let removal = (self.remove_exported(&workspace, unsaved, inspection)).await?;
                 (Some((workspace.id.clone(), removal)), Some(settings))
             }
             Err(_) => (None, None),
@@ -190,6 +183,19 @@ impl Manager {
             settings,
             continues: None,
         })
+    }
+
+    /// Remove `workspace` for its export through the removal path, taking
+    /// the spaces below it that `unsaved` confirms.
+    async fn remove_exported(
+        &self,
+        workspace: &Workspace,
+        unsaved: UnsavedWork,
+        inspection: InspectionPolicy,
+    ) -> Result<RemovalResult> {
+        let taking = self.exported_with(workspace, &unsaved).await?;
+        let selector = SpaceSelector::id(&workspace.id);
+        (self.remove_workspace_taking(&selector, unsaved, inspection, &taking)).await
     }
 
     /// The IDs of the spaces the export of `workspace` removes first, of
@@ -225,31 +231,7 @@ impl Manager {
     /// is made, stopping a running one, so the session's files stop changing
     /// and only writing them is left.
     async fn end_chat_for_export(&self, chat: Chat) -> Result<Prepared> {
-        if let Some(workspace) = &chat.workspace {
-            anyhow::bail!(
-                "chat {} runs in workspace {}, and shoal move does not move a chat in a workspace",
-                chat.name,
-                workspace.name
-            );
-        }
-        let Some(repo) = self.chat_repository(&chat).await? else {
-            anyhow::bail!(
-                "chat {} has no repository, and shoal move moves only a chat in one",
-                chat.name
-            );
-        };
-        let Some(continues) = crate::transfer::continue_chat(&chat, crate::repository::name(&repo))
-        else {
-            anyhow::bail!(
-                "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",
-                chat.name
-            );
-        };
-        ensure!(
-            self.children(&chat.id).await?.is_empty(),
-            "chat {} has spaces below it; move or remove them first",
-            chat.name
-        );
+        let (repo, continues) = self.movable_chat(&chat).await?;
         let id = chat.id.clone();
         let manifest = Manifest::of(&repo, Source::Chat(chat)).await?;
         self.remove_chat(&SpaceSelector::id(&id), Some(Vec::new()))
@@ -262,6 +244,39 @@ impl Manager {
             kept_sessions: Vec::new(),
             continues: Some(continues),
         })
+    }
+
+    /// The repository of `chat`, which moves to another machine, and how
+    /// the user continues it here, refusing a chat in a workspace, one
+    /// without a repository, one whose agent reported no session to continue
+    /// and one with spaces below it.
+    async fn movable_chat(&self, chat: &Chat) -> Result<(Repository, String)> {
+        if let Some(workspace) = &chat.workspace {
+            anyhow::bail!(
+                "chat {} runs in workspace {}, and shoal move does not move a chat in a workspace",
+                chat.name,
+                workspace.name
+            );
+        }
+        let Some(repo) = self.chat_repository(chat).await? else {
+            anyhow::bail!(
+                "chat {} has no repository, and shoal move moves only a chat in one",
+                chat.name
+            );
+        };
+        let Some(continues) = crate::transfer::continue_chat(chat, crate::repository::name(&repo))
+        else {
+            anyhow::bail!(
+                "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",
+                chat.name
+            );
+        };
+        ensure!(
+            self.children(&chat.id).await?.is_empty(),
+            "chat {} has spaces below it; move or remove them first",
+            chat.name
+        );
+        Ok((repo, continues))
     }
 
     /// The files of the sessions the agents of the package `manifest`
@@ -311,6 +326,45 @@ impl Manager {
                 (Vec::new(), warnings)
             }
         }
+    }
+}
+
+/// Refuse to export `workspace` when disposable: the package is built from
+/// its removal record, which a disposable workspace's removal does not keep.
+fn ensure_exportable(workspace: &Workspace) -> Result<()> {
+    ensure!(
+        !workspace.disposable,
+        "workspace {} is disposable, so its removal keeps nothing to export",
+        workspace.name
+    );
+    Ok(())
+}
+
+/// The record a package of `workspace`, which keeps running, holds: its
+/// `checkpoint` and `agents` with the last sessions it keeps, as its
+/// removal would record them.
+fn packaged_record(
+    paths: &Paths,
+    workspace: &Workspace,
+    checkpoint: Checkpoint,
+    agents: Vec<StoppedAgent>,
+) -> RemovedWorkspace {
+    RemovedWorkspace {
+        workspace_id: workspace.id.clone(),
+        repository_id: workspace.repository_id.clone(),
+        name: workspace.name.clone(),
+        expires_at: checkpoint.expires_at,
+        checkpoint,
+        base_ref: workspace.base_ref.clone(),
+        base_commit: workspace.base_commit.clone(),
+        at: workspace.at.clone(),
+        links: workspace.links.clone(),
+        agents,
+        // An unreadable last session is not worth refusing the export for.
+        last_sessions: LastSession::all(paths, &workspace.id).unwrap_or_default(),
+        session_files: Vec::new(),
+        cause: EventCause::Manual,
+        removed_at: UnixTime::now(),
     }
 }
 
