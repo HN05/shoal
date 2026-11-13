@@ -708,6 +708,7 @@ mod files;
 pub(crate) mod launches;
 mod removal;
 mod removing;
+mod upgraded;
 
 pub(crate) use removing::{Removing, Reservation};
 

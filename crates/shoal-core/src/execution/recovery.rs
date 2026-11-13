@@ -441,6 +441,27 @@ fn save_restorable(
     Ok(path)
 }
 
+/// Save `record`, an agent stopped as `id` without a wrapper, such as a
+/// chat's an upgrade stopped, with a request to restore it with `env`,
+/// the variables of its terminal host, when it comes back on its own.
+pub fn save_stopped(
+    paths: &Paths,
+    space_id: &SpaceId,
+    id: &ExecutionId,
+    record: Record,
+    restore: Option<BTreeMap<String, String>>,
+) -> Result<PathBuf> {
+    let restorer = match restore {
+        Some(env) => Restorer::Queue(env),
+        None => Restorer::User,
+    };
+    let record = Record {
+        stage: Some(Stage::Stopped),
+        ..record
+    };
+    save_restorable(paths, space_id, id, record, restorer)
+}
+
 /// What brings a stopped agent back besides `shoal resume`.
 #[derive(Debug)]
 pub(crate) enum Restorer {
