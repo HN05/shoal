@@ -9,7 +9,7 @@ use rusqlite::Connection;
 use super::{Manager, cancel};
 use crate::{
     daemon::notifications::NotificationKind,
-    model::Workspace,
+    model::PresentSpace,
     state::{AgentState, TurnFailure},
 };
 
@@ -84,19 +84,19 @@ pub(in crate::daemon::workspace) fn follow_state(
 }
 
 impl Manager {
-    /// Drop the workspace's retry and tell whoever receives `agent`'s events
+    /// Drop the space's retry and tell whoever receives `agent`'s events
     /// that Shoal does not retry the turn `failure` ended in `execution`,
     /// unless it told of a failed turn of the execution since the agent last
     /// ended one normally.
     pub(super) async fn leave_failed_turn(
         &self,
-        workspace: &Workspace,
+        space: &PresentSpace,
         execution: &ExecutionId,
         agent: &crate::agent::Agent,
         failure: TurnFailure,
         reason: Unretried,
     ) -> Result<()> {
-        let (id, execution) = (workspace.id.clone(), execution.to_owned());
+        let (id, execution) = (space.id().clone(), execution.to_owned());
         if self
             .store
             .write(move |tx| record(tx, &id, &execution))
@@ -104,8 +104,8 @@ impl Manager {
         {
             let message = reason.message(agent, failure);
             self.notify_space(
-                &workspace.name,
-                &workspace.id,
+                space.name(),
+                space.id(),
                 NotificationKind::TurnFailed,
                 message,
             )

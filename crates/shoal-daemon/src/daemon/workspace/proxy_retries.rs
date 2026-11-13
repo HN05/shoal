@@ -11,7 +11,7 @@ use super::Manager;
 pub(crate) use crate::client::executions::ProxyRetry;
 
 impl Manager {
-    /// Keep the retry the proxy of `execution` in workspace `selector`
+    /// Keep the retry the proxy of `execution` in space `selector`
     /// waits to make, or forget it once there is none.
     pub async fn report_proxy_retry(
         &self,
@@ -19,7 +19,7 @@ impl Manager {
         execution: ExecutionId,
         retry: Option<ProxyRetry>,
     ) -> Result<()> {
-        self.workspace(selector).await?;
+        self.space(selector).await?;
         let mut retries = self.proxy_retries.lock().unwrap();
         match retry {
             Some(retry) => retries.insert(execution, retry),
@@ -38,7 +38,7 @@ impl Manager {
         execution: ExecutionId,
         resets_at: Option<crate::time::UnixTime>,
     ) -> Result<()> {
-        self.workspace(selector).await?;
+        self.space(selector).await?;
         self.record_upstream_reset(execution, resets_at).await
     }
 
@@ -59,7 +59,7 @@ impl Manager {
         }
     }
 
-    /// The retry the proxy of one of `executions`, the workspace's running
+    /// The retry the proxy of one of `executions`, the space's running
     /// ones, waits to make.
     pub(crate) fn proxy_retry(&self, executions: &[crate::model::Execution]) -> Option<ProxyRetry> {
         let retries = self.proxy_retries.lock().unwrap();

@@ -12,6 +12,7 @@ use crate::{
         workspace::{
             Manager,
             done::{self, push_completion_details},
+            turn_retry,
         },
         workspace_files::Attacher,
     },
@@ -115,6 +116,8 @@ fn record_completion(
 ) -> Result<Vec<crate::daemon::item_numbers::ItemNumber>> {
     let changed = done::record_completion(tx, id, completion)?;
     let closed = questions::close_open(tx, id)?;
+    // Finished work leaves its failed turn alone.
+    turn_retry::cancel(tx, id)?;
     ensure!(
         changed || !closed.is_empty() || progressed,
         "the chat is already marked done at this HEAD"

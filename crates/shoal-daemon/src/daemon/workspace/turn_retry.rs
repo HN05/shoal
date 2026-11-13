@@ -19,6 +19,7 @@ use super::Manager;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{agent_messages, log, store},
+    model::PresentSpace,
     state::{AgentState, TurnFailure},
     time::UnixTime,
 };
@@ -229,7 +230,7 @@ fn save_retry(
 }
 
 /// Drop the space's retry.
-pub(super) fn cancel(db: &Connection, space_id: &SpaceId) -> Result<()> {
+pub(crate) fn cancel(db: &Connection, space_id: &SpaceId) -> Result<()> {
     db.execute(
         "DELETE FROM space_turn_retries WHERE space_id=?1",
         [space_id],
@@ -377,13 +378,13 @@ impl Manager {
         let Some(agent) = self.agent_name(execution).await else {
             return Ok(());
         };
-        let workspace = self.workspace(selector).await?;
-        if let Some(reason) = Unretried::of(failure, self.retries(&workspace, &agent).await) {
+        let space = self.space(selector).await?;
+        if let Some(reason) = Unretried::of(failure, self.retries(&space, &agent).await) {
             return self
-                .leave_failed_turn(&workspace, execution, &agent, failure, reason)
+                .leave_failed_turn(&space, execution, &agent, failure, reason)
                 .await;
         }
-        let (id, execution) = (workspace.id.clone(), execution.to_owned());
+        let (id, execution) = (space.id().clone(), execution.to_owned());
         let (now, spread) = (UnixTime::now(), spread());
         self.store
             .write(move |tx| record_failure(tx, &id, &execution, failure, now, spread))
@@ -410,13 +411,9 @@ impl Manager {
         Ok(())
     }
 
-    /// Whether the AI tool `agent` names has `retry` on in `workspace`.
-    async fn retries(
-        &self,
-        workspace: &crate::model::Workspace,
-        agent: &crate::agent::Agent,
-    ) -> bool {
-        self.workspace_settings(workspace)
+    /// Whether the AI tool `agent` names has `retry` on in `space`.
+    async fn retries(&self, space: &PresentSpace, agent: &crate::agent::Agent) -> bool {
+        self.present_space_settings(space)
             .await
             .is_ok_and(|settings| {
                 settings

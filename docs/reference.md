@@ -1495,7 +1495,7 @@ for overloaded APIs and server errors. Each wait varies randomly by ±20%.
 It then sends the idle agent a [message](#agent-messages) to continue its
 unfinished work, which reaches it in a new turn of the same conversation. A new
 turn before then cancels the retry, and the agent's exit, completion or the
-workspace's removal drops it. Attempts follow one another, with no cap, until a
+space's removal drops it, a workspace's or a chat's. Attempts follow one another, with no cap, until a
 turn ends normally, so an outage of any length or a daily or weekly usage limit
 passes and the agent carries on; switching between transient failures and usage
 limits starts the wait over. When the agent's proxy learns when the upstream
@@ -1505,7 +1505,7 @@ upstream answers again. Claude Code's
 failure hook names no reset time, so without a proxy a usage limit is checked
 about hourly. A turn Shoal does not retry, because `retry` is off or the error is
 one a retry does not fix, such as failed authentication, gets a `turn_failed`
-notification naming the failure, which a child workspace's coordinating agent
+notification naming the failure, which a child space's coordinating agent
 receives instead; later failed turns of the same agent add none until one of its
 turns ends normally. A pending retry outlasts a daemon restart;
 `status` shows it, and `--json` gives `turn_retry` with `failure`, `attempt`,

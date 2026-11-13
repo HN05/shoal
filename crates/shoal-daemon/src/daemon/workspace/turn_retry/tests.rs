@@ -712,3 +712,52 @@ async fn a_repository_setting_decides_whether_its_agents_retry() {
     .await;
     assert!(retry(&manager, &workspace).await.is_some());
 }
+
+#[tokio::test]
+async fn a_chats_failed_turn_waits_past_its_reset_until_the_chat_is_done() {
+    let (_temp, manager) = manager().await;
+    let chat = crate::daemon::test_support::chat(&manager, "talk", "chat", None, None).await;
+    let execution = manager.workspace_executions(&chat.id).await.unwrap()[0]
+        .id
+        .clone();
+    let selector = SpaceSelector::id(&chat.id);
+    let reset = UnixTime::from_seconds(4_000_000_000_000);
+    manager
+        .report_upstream_reset(&selector, execution.clone(), Some(reset))
+        .await
+        .unwrap();
+    let fail = |failure| {
+        let execution = Some(execution.clone());
+        manager.report_turn_failure(
+            &selector,
+            failure,
+            execution,
+            None,
+            Default::default(),
+            None,
+        )
+    };
+    fail(TurnFailure::RateLimited).await.unwrap();
+    let id = chat.id.clone();
+    let pending = || {
+        let id = id.clone();
+        manager.store.run(move |db| get(db, &id))
+    };
+    assert_eq!(
+        pending().await.unwrap().map(|retry| retry.due_at),
+        Some(reset + RESET_MARGIN)
+    );
+    deliver_now(&manager).await;
+    let messages: Vec<_> = (manager.agent_messages(&selector).await.unwrap().into_iter())
+        .map(|message| message.message)
+        .collect();
+    assert_eq!(messages, [continuation(TurnFailure::RateLimited, 1)]);
+
+    fail(TurnFailure::Overloaded).await.unwrap();
+    assert!(pending().await.unwrap().is_some());
+    manager
+        .mark_space_done(&selector, Done::default(), &Attacher::User)
+        .await
+        .unwrap();
+    assert_eq!(pending().await.unwrap(), None);
+}
