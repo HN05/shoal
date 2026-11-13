@@ -1,4 +1,5 @@
 use crate::client::execution_ids::ExecutionId;
+use crate::execution::recovery::SavedExt as _;
 use std::fs;
 
 use super::transfer::{exporter, import, importer, packaged_workspace};
@@ -121,4 +122,22 @@ async fn a_moving_chat_stops_its_agent_and_stays_until_its_end() {
         .unwrap();
     assert!(ended.is_none());
     assert!(manager.chats().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_workspace_with_a_space_below_that_stays_is_not_exported() {
+    let (source, exporting, source_repo, _origin) = exporter().await;
+    let workspace = stopped_workspace(&exporting, &source_repo).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    (exporting.split_workspace(&selector, "child".into(), None, Default::default()))
+        .await
+        .unwrap();
+    let file = source.path().join("moving.shoal");
+
+    let exported = exporting.export_moving_space(&selector, file.clone()).await;
+    assert!(exported.is_err());
+    assert!(!file.exists());
+    // Its agent's record stays as it was, not restored by a move.
+    let saved = recovery::Saved::load(&exporting.paths, &workspace.id).unwrap();
+    assert_eq!(saved.agents.len(), 1);
 }

@@ -69,6 +69,9 @@ impl Manager {
         // Refuses the chats in it or below it, which its end would take.
         self.exported_with(&workspace, &UnsavedWork::default())
             .await?;
+        // The spaces below it moved first; one that stayed keeps it here,
+        // before anything stops or reaches the other machine.
+        self.ensure_nothing_below_stays(&workspace).await?;
         let selector = SpaceSelector::id(&workspace.id);
         self.stop_space(&selector, StopRequest::moving()).await?;
         let checkpoint = self.take_checkpoint(&selector, None).await?;
@@ -112,7 +115,7 @@ impl Manager {
 
     /// Refuse to end `workspace` once it differs from its checkpoint
     /// `exported`, as after a commit made here since its export, or while a
-    /// space below it stays here, whose move failed.
+    /// space below it stays here, which joined it since.
     async fn ensure_unchanged_since_export(
         &self,
         workspace: &Workspace,
@@ -124,6 +127,12 @@ impl Manager {
             "workspace {} changed here after its export: its HEAD or unsaved files differ from checkpoint {exported}",
             workspace.name
         );
+        self.ensure_nothing_below_stays(workspace).await
+    }
+
+    /// Refuse to move `workspace` while a space below it stays here, as one
+    /// whose own move failed, which its end here would take.
+    async fn ensure_nothing_below_stays(&self, workspace: &Workspace) -> Result<()> {
         let staying: Vec<String> = (self.spaces_taken_with(&workspace.id).await?)
             .into_iter()
             .map(|space| space.name.into())

@@ -3768,9 +3768,10 @@ spaces below it: Shoal stops its agents, saving their sessions, exports it
 while it stays here, and imports it there, and only once that import succeeds
 ends it here through the export's removal. When the export or the import
 fails, the space stays here, its stopped agents' restores are queued, and the
-report gives the other machine's error. A workspace whose HEAD or unsaved files
-changed here since its export, or with a space below it that stayed, stays
-here too, and the report says it now exists on both machines.
+report gives the other machine's error. A workspace with a space below it
+that stayed is not exported and stays here. A workspace whose HEAD or unsaved
+files changed here since its export stays here too, and the report says it now
+exists on both machines.
 `--keep`, with `--checkpoint N` for one workspace, copies the spaces instead, as
 `shoal move export --keep` does, and imports each copy there as a new space,
 leaving the space running here; it asks nothing, and a space it cannot copy or
