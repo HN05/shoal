@@ -446,14 +446,7 @@ fn starting_commit(row: &Row<'_>) -> rusqlite::Result<Option<crate::model::Start
 
 /// Read canonical links while keeping malformed legacy PR records out of list output.
 pub fn space_links(db: &Connection, space_id: &SpaceId) -> rusqlite::Result<SpaceLinks> {
-    let (issue, issue_title) = db
-        .query_row(
-            "SELECT url,title FROM space_issue WHERE space_id=?1",
-            [space_id],
-            |row| Ok((Some(row.get(0)?), row.get(1)?)),
-        )
-        .optional()?
-        .unwrap_or_default();
+    let issues = assigned_issues(db, space_id)?;
     let prs = db
         .query_row(
             "SELECT record FROM pr_cleanup WHERE space_id=?1",
@@ -471,12 +464,23 @@ pub fn space_links(db: &Connection, space_id: &SpaceId) -> rusqlite::Result<Spac
         })
         .unwrap_or_default();
     Ok(SpaceLinks {
-        issue,
-        issue_title,
+        issues,
         prs,
         opened: recorded_items(db, space_id, Relation::Opened)?,
         related: recorded_items(db, space_id, Relation::Related)?,
     })
+}
+
+/// The space's assigned issues in the order they were assigned.
+fn assigned_issues(db: &Connection, space_id: &SpaceId) -> rusqlite::Result<Vec<LinkedItem>> {
+    db.prepare("SELECT url,title FROM space_issue WHERE space_id=?1 ORDER BY rowid")?
+        .query_map([space_id], |row| {
+            Ok(LinkedItem {
+                url: row.get(0)?,
+                title: row.get(1)?,
+            })
+        })?
+        .collect()
 }
 
 /// The workspace's items with a recorded relation, oldest first.

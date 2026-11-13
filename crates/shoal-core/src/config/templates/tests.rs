@@ -281,8 +281,10 @@ fn restored_rules_name_the_issue_the_space_links() {
         settings("[rules.worker]\ntext = 'On #{issue.number}, {issue.title}: {issue.url}'\n");
     let mut linked = workspace();
     let url = "https://forge.example/team/repo/issues/7";
-    linked.links.issue = Some(url.parse().unwrap());
-    linked.links.issue_title = Some("Decide".into());
+    linked.links.issues = vec![crate::model::LinkedItem {
+        url: url.parse().unwrap(),
+        title: Some("Decide".into()),
+    }];
     let issue = IssueFields::linked(&linked.links);
     let place = Place::Workspace {
         workspace: &linked,
@@ -294,7 +296,7 @@ fn restored_rules_name_the_issue_the_space_links() {
         "workspace topic",
         &format!("\n\nOn #7, Decide: {url}"),
     );
-    linked.links.issue = None;
+    linked.links.issues.clear();
     assert!(IssueFields::linked(&linked.links).is_none());
 }
 

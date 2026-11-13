@@ -48,8 +48,9 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
         .await
         .unwrap();
     let links = manager.workspace_by_id(&workspace.id).await.unwrap().links;
-    assert_eq!(links.issue.as_ref().map(|url| url.url()), Some(url));
-    assert_eq!(links.issue_title.as_deref(), Some("Show titles"));
+    let issue = links.issue().unwrap();
+    assert_eq!(issue.url.url(), url);
+    assert_eq!(issue.title.as_deref(), Some("Show titles"));
     let linked: Vec<_> = manager
         .workspace_events(None, 100)
         .await
@@ -151,7 +152,8 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
             .await
             .unwrap()
             .links
-            .issue_title
+            .issues[0]
+            .title
             .is_none()
     );
     assert!(

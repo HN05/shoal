@@ -98,7 +98,7 @@ async fn linking_an_item_again_replaces_its_recorded_relation() {
         .unwrap();
 
     let links = manager.workspace_by_id(&id).await.unwrap().links;
-    assert_eq!(links.issue, None);
+    assert!(links.issues.is_empty());
     assert!(links.prs.is_empty());
     assert!(links.opened.is_empty());
     assert_eq!(
@@ -189,7 +189,7 @@ async fn an_assignment_replaces_the_recorded_relation_and_refuses_another() {
     link_issue(&manager, &id, Relation::Assigned).await.unwrap();
 
     let links = manager.workspace_by_id(&id).await.unwrap().links;
-    let issue = links.issue.as_ref().map(|url| url.url());
+    let issue = links.issue().map(|issue| issue.url.url());
     assert_eq!(issue, Some("https://github.com/team/repo/issues/7"));
     assert!(links.related.is_empty());
     for relation in [Relation::Opened, Relation::Related] {
@@ -197,7 +197,7 @@ async fn an_assignment_replaces_the_recorded_relation_and_refuses_another() {
         assert!(format!("{refused:#}").contains("linked as assigned"));
     }
     let links = manager.workspace_by_id(&id).await.unwrap().links;
-    assert!(links.issue.is_some() && links.opened.is_empty() && links.related.is_empty());
+    assert!(links.issue().is_some() && links.opened.is_empty() && links.related.is_empty());
 }
 
 #[tokio::test]
@@ -216,7 +216,7 @@ async fn assigned_relation_uses_the_issue_link() {
         .await
         .unwrap();
     let links = manager.workspace_by_id(&id).await.unwrap().links;
-    assert_eq!(links.issue.as_ref().map(|url| url.url()), Some(issue));
+    assert_eq!(links.issue().map(|linked| linked.url.url()), Some(issue));
     assert!(links.opened.is_empty() && links.related.is_empty());
     assert_eq!(
         link_events(&manager, EventKind::Linked).await[0].relation,
@@ -231,10 +231,7 @@ async fn assigned_relation_uses_the_issue_link() {
         )
         .await
         .unwrap();
-    assert_eq!(
-        manager.workspace_by_id(&id).await.unwrap().links.issue,
-        None
-    );
+    assert!((manager.workspace_by_id(&id).await.unwrap().links.issues).is_empty());
     for kind in [Some(LinkKind::Issue), None] {
         let unlinked = manager
             .unlink_items(&SpaceSelector::id(&id), Relation::Assigned, kind, None)
@@ -330,7 +327,7 @@ async fn an_issue_linked_without_its_title_gets_the_forges() {
     let unread = link("9", Relation::Opened).await.unwrap();
 
     let links = manager.workspace_by_id(&workspace.id).await.unwrap().links;
-    assert_eq!(links.issue_title.as_deref(), Some("Issue 5"));
+    assert_eq!(links.issues[0].title.as_deref(), Some("Issue 5"));
     assert_eq!(links.related[0].title.as_deref(), Some("Issue 6"));
     assert!(unread.title_error.is_some());
     assert_eq!(links.opened[0].title, None);

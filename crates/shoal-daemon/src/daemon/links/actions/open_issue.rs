@@ -228,7 +228,7 @@ impl Manager {
             "workspace cannot accept an issue in its current state"
         );
         anyhow::ensure!(
-            !link || workspace.links.issue.is_none(),
+            !link || workspace.links.issue().is_none(),
             "the workspace already has a linked issue; open the issue without --link"
         );
         let settings = self.workspace_settings(&workspace).await?;

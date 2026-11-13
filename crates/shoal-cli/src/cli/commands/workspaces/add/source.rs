@@ -161,7 +161,7 @@ async fn issue_creation(
         .iter()
         .filter(|workspace| workspace.repository_id == repo.id)
     {
-        if workspace.links.issue.as_ref() == Some(issue_url) {
+        if (workspace.links.issues.iter()).any(|issue| issue.url == *issue_url) {
             ensure!(
                 associated.is_none(),
                 "multiple workspaces are associated with this issue; pass an explicit branch"

@@ -1608,7 +1608,7 @@ fn mappers_use_named_columns() -> Result<()> {
             "branch": "feature", "state": "failed", "error": "setup error",
             "base_commit": "abc", "base_ref": "refs/heads/main",
             "git_dir": "/git/worktrees/worker", "git_dir_id": "1:2",
-            "base_workspace": null, "parent": null, "links": {"issue": null, "prs": [], "opened": [], "related": []}, "running": false, "done": false,
+            "base_workspace": null, "parent": null, "links": {"issues": [], "prs": [], "opened": [], "related": []}, "running": false, "done": false,
             "setup_skipped": false, "disposable": false
         }),
     )?;

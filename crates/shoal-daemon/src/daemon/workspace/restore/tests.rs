@@ -146,7 +146,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
     assert!(!removed.checkpoint.files_omitted);
     assert_eq!(removed.cause, EventCause::Manual);
     assert_eq!(
-        removed.links.issue.as_ref().map(|url| url.url()),
+        removed.links.issue().map(|issue| issue.url.url()),
         Some("https://forge/team/repo/issues/1")
     );
     assert_eq!(removed.expires_at, removed.checkpoint.expires_at);
@@ -311,7 +311,7 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
         .await
         .unwrap();
     assert_eq!(
-        workspace.links.issue.as_ref().map(|url| url.url()),
+        workspace.links.issue().map(|issue| issue.url.url()),
         Some("https://github.com/acme/repo/issues/1")
     );
     let recorded = |items: &[crate::model::LinkedItem]| {
@@ -578,7 +578,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         .collect();
     assert_eq!(urls, ["https://github.com/acme/repo/pull/3"]);
     assert_eq!(
-        saved.links.issue.as_ref().map(|url| url.url()),
+        saved.links.issue().map(|issue| issue.url.url()),
         Some("https://github.com/acme/repo/issues/7")
     );
 }
@@ -814,8 +814,7 @@ fn a_record_from_before_one_relation_per_item_records_each_item_once() {
         "https://forge/o/r/issues/5",
     );
     let links = SpaceLinks {
-        issue: Some(issue.parse().unwrap()),
-        issue_title: None,
+        issues: vec![item(issue)],
         prs: Vec::new(),
         opened: vec![item(issue), item(run)],
         related: vec![item(run), item(other)],

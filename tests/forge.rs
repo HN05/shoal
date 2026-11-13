@@ -853,7 +853,7 @@ fn a_chat_opens_issues_and_acts_on_its_linked_items() {
     );
     let chats = fixture.request(json!("list_chats"));
     let links = &chats["data"][0]["links"];
-    assert_eq!(links["issue"], json!(url), "{chats}");
+    assert_eq!(links["issues"][0]["url"], json!(url), "{chats}");
     assert_eq!(links["opened"], json!([]), "{chats}");
     // An action without an item acts on the chat's linked issue.
     fixture.requests();
@@ -2514,7 +2514,10 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
     fixture.ok(&["link", "8", "assigned", "--space", &fixture.id("topic")]);
     fixture.ok(&["link", "#9", "assigned", "--space", &fixture.id("topic")]);
     let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
-    assert_eq!(links["issue"], format!("{}/issues/8", fixture.web));
+    assert_eq!(
+        links["issues"][0]["url"],
+        format!("{}/issues/8", fixture.web)
+    );
     assert_eq!(links["prs"], json!([format!("{}/pulls/9", fixture.web)]));
 
     let marks = fixture.ok(&["ready", "#9", "--space", &fixture.id("topic")]);
@@ -2533,7 +2536,7 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
     assert_eq!(marks[0]["kind"], "issue", "{marks}");
     fixture.ok(&["unlink", "8", "assigned", "--space", &fixture.id("topic")]);
     let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
-    assert!(links["issue"].is_null(), "{links}");
+    assert_eq!(links["issues"], json!([]), "{links}");
     assert_eq!(links["prs"], json!([format!("{}/pulls/9", fixture.web)]));
 
     // Recorded relations name the kind without asking the forge, as forges
@@ -2823,14 +2826,12 @@ fn issues_open_with_labels_and_link_on_request() {
         assert_eq!(opened["linked"], forge == Forge::GitHub);
         // The issue is assigned when linked, else recorded as opened.
         let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
-        let (opened, issue) = match forge == Forge::GitHub {
-            true => (json!([]), json!(url)),
-            false => (
-                json!([{"kind": "issue", "url": url, "title": "Flaky"}]),
-                json!(null),
-            ),
+        let item = json!([{"kind": "issue", "url": url, "title": "Flaky"}]);
+        let (opened, issues) = match forge == Forge::GitHub {
+            true => (json!([]), item),
+            false => (item, json!([])),
         };
-        assert_eq!((&links["opened"], &links["issue"]), (&opened, &issue));
+        assert_eq!((&links["opened"], &links["issues"]), (&opened, &issues));
         let sent: Vec<_> = fixture
             .requests()
             .into_iter()
@@ -2847,8 +2848,8 @@ fn issues_open_with_labels_and_link_on_request() {
                     )]
                 );
                 let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
-                assert_eq!(links["issue"], url);
-                assert_eq!(links["issue_title"], "Flaky");
+                assert_eq!(links["issues"][0]["url"], url);
+                assert_eq!(links["issues"][0]["title"], "Flaky");
             }
             Forge::Forgejo => assert_eq!(
                 sent,
@@ -5568,7 +5569,7 @@ fn a_chats_proposed_issue_opens_from_its_checkout_on_approval() {
     assert_eq!(posted, [json!("POST repos/team/project/issues")]);
     let chats = fixture.request(json!("list_chats"));
     let links = &chats["data"][0]["links"];
-    assert_eq!(links["issue"], json!(url), "{chats}");
+    assert_eq!(links["issues"][0]["url"], json!(url), "{chats}");
     assert_eq!(links["opened"], json!([]), "{chats}");
     let told: Vec<_> = (fixture
         .ok(&["messages", &fixture.id("planning")])

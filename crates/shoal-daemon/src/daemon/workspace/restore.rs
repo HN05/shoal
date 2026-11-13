@@ -366,20 +366,15 @@ impl Manager {
         Ok(removed)
     }
 
-    /// Link the restored workspace's issue and recorded items again; the
+    /// Link the restored workspace's issues and recorded items again; the
     /// caller links its PRs. Each failure becomes a warning.
     async fn relink(&self, workspace_id: &SpaceId, links: &SpaceLinks) -> Vec<String> {
         let mut warnings = Vec::new();
-        if let Some(url) = &links.issue
-            && let Err(error) = self
-                .set_issue(
-                    &SpaceSelector::id(workspace_id),
-                    &url.clone().into(),
-                    links.issue_title.clone(),
-                )
-                .await
-        {
-            warnings.push(format!("cannot link issue {url}: {error:#}"));
+        for issue in &links.issues {
+            let (selector, input) = (SpaceSelector::id(workspace_id), issue.url.clone().into());
+            if let Err(error) = self.set_issue(&selector, &input, issue.title.clone()).await {
+                warnings.push(format!("cannot link issue {}: {error:#}", issue.url));
+            }
         }
         if let Err(error) = self.record_items(workspace_id, recorded(links)).await {
             warnings.push(format!("cannot link opened and related items: {error:#}"));

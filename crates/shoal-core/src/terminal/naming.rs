@@ -147,20 +147,18 @@ pub(super) async fn workspace_label(
 }
 
 /// The name of the places hosting `workspace`, without a host's template:
-/// its repository and issue looked up.
+/// its repository and first issue looked up.
 pub async fn place_name(paths: &CommandPaths, workspace: &Workspace) -> Result<PlaceName> {
     let repositories = crate::client::repositories::list(paths).await?;
     let repo = repositories
         .iter()
         .find(|repo| repo.id == workspace.repository_id)
         .context("repository is no longer registered")?;
-    let issue = match &workspace.links.issue {
-        Some(url) => {
+    let issue = match workspace.links.issue() {
+        Some(linked) => {
             let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
-            Some(
-                crate::client::forge_reads::issue_details(paths, context, url.clone().into())
-                    .await?,
-            )
+            let input = linked.url.clone().into();
+            Some(crate::client::forge_reads::issue_details(paths, context, input).await?)
         }
         None => None,
     };

@@ -7,20 +7,47 @@ use crate::forge::items::{link::LinkKind, reference::ItemRef};
 /// Canonical issue and pull-request links associated with a space, a
 /// workspace or chat.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(from = "LinksFields")]
 pub struct SpaceLinks {
-    /// The assigned issue.
-    pub issue: Option<ItemRef>,
-    /// The linked issue's title when the linking caller knew it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub issue_title: Option<String>,
+    /// The assigned issues in the order they were assigned, each with its
+    /// title when the linking caller knew it.
+    pub issues: Vec<LinkedItem>,
     /// The assigned PRs.
     pub prs: Vec<ItemRef>,
     /// Issues and PRs the space created through Shoal, oldest first.
-    #[serde(default)]
     pub opened: Vec<LinkedItem>,
     /// Issues and PRs linked as related to the work, oldest first.
-    #[serde(default)]
     pub related: Vec<LinkedItem>,
+}
+
+/// How [`SpaceLinks`] reads: removal records and move packages of earlier
+/// releases hold one assigned issue and its title in place of the list.
+#[derive(Deserialize)]
+struct LinksFields {
+    #[serde(default)]
+    issues: Vec<LinkedItem>,
+    #[serde(default)]
+    issue: Option<ItemRef>,
+    #[serde(default)]
+    issue_title: Option<String>,
+    prs: Vec<ItemRef>,
+    #[serde(default)]
+    opened: Vec<LinkedItem>,
+    #[serde(default)]
+    related: Vec<LinkedItem>,
+}
+
+impl From<LinksFields> for SpaceLinks {
+    fn from(fields: LinksFields) -> Self {
+        let title = fields.issue_title;
+        let earlier = fields.issue.map(|url| LinkedItem { url, title });
+        Self {
+            issues: earlier.into_iter().chain(fields.issues).collect(),
+            prs: fields.prs,
+            opened: fields.opened,
+            related: fields.related,
+        }
+    }
 }
 
 impl SpaceLinks {
@@ -41,18 +68,27 @@ impl SpaceLinks {
         }
     }
 
-    /// Every link with its relation: the assigned issue and PRs, then the
+    /// The first assigned issue, which names a new branch, titles the PR and
+    /// starts the agent.
+    pub fn issue(&self) -> Option<&LinkedItem> {
+        self.issues.first()
+    }
+
+    /// The first assigned issue's title, which lists show as the space's
+    /// work.
+    pub fn issue_title(&self) -> Option<&str> {
+        self.issue()?.title.as_deref()
+    }
+
+    /// Every link with its relation: the assigned issues and PRs, then the
     /// opened and related items.
     pub fn relations(&self) -> Vec<(Relation, LinkedItem)> {
-        let issue = self.issue.iter().map(|url| LinkedItem {
-            url: url.clone(),
-            title: self.issue_title.clone(),
-        });
+        let issues = self.issues.iter().cloned();
         let prs = self.prs.iter().map(|url| LinkedItem {
             url: url.clone(),
             title: None,
         });
-        let assigned = issue.chain(prs).map(|item| (Relation::Assigned, item));
+        let assigned = issues.chain(prs).map(|item| (Relation::Assigned, item));
         let opened = (self.opened.iter().cloned()).map(|item| (Relation::Opened, item));
         let related = (self.related.iter().cloned()).map(|item| (Relation::Related, item));
         assigned.chain(opened).chain(related).collect()

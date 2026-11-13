@@ -147,7 +147,7 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     let repo = repository();
     let url = "https://forge.example/team/repo/issues/7";
     let links: SpaceLinks = serde_json::from_value(serde_json::json!({
-        "issue": url, "issue_title": "Decide", "prs": [],
+        "issues": [{"kind": "issue", "url": url, "title": "Decide"}], "prs": [],
     }))
     .unwrap();
     let agent: Agent = "claude".parse().unwrap();
@@ -209,8 +209,9 @@ fn the_setup_chat_starts_again_with_config_setup_and_its_options() {
 fn a_chat_that_was_a_workspace_is_told_so_in_the_place_it_opens() {
     let repo = repository();
     let links: crate::model::SpaceLinks = serde_json::from_value(serde_json::json!({
-        "issue": "https://forge.example/team/repo/issues/7",
-        "issue_title": "Fix the login", "prs": [],
+        "issues": [{"kind": "issue", "url": "https://forge.example/team/repo/issues/7",
+            "title": "Fix the login"}],
+        "prs": [],
     }))
     .unwrap();
     let topic = Topic {

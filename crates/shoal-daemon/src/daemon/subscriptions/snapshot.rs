@@ -197,10 +197,8 @@ async fn links(manager: &Manager, workspaces: &[Workspace]) -> Result<Vec<Record
 /// its forge, from `activity` by URL.
 fn workspace_links(workspace: &Workspace, activity: &HashMap<String, Snapshot>) -> Vec<Link> {
     let links = &workspace.links;
-    let assigned = links
-        .issue
-        .iter()
-        .map(|url| (LinkKind::Issue, url, links.issue_title.clone()))
+    let assigned = (links.issues.iter())
+        .map(|issue| (LinkKind::Issue, &issue.url, issue.title.clone()))
         .chain(links.prs.iter().map(|url| (LinkKind::Pr, url, None)))
         .map(|(kind, url, title)| (Relation::Assigned, kind, url, title));
     let recorded = [

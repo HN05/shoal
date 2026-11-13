@@ -407,7 +407,7 @@ impl ItemExt for Item {
     }
 
     fn text(&self) -> String {
-        let title = |w: &Workspace| w.links.issue_title.clone().unwrap_or_default();
+        let title = |w: &Workspace| w.links.issue_title().unwrap_or_default().to_owned();
         match self {
             Self::Question { question } => question.one_line(),
             Self::Approval { request } => super::approvals::about(request),
@@ -425,11 +425,11 @@ impl ItemExt for Item {
             Self::Ready { workspace, mark } if mark.url.is_none() => title(workspace),
             Self::Ready { workspace, mark } => marked(mark, &workspace.links),
             Self::ChatReady { chat, mark } if mark.url.is_none() => {
-                chat.links.issue_title.clone().unwrap_or_default()
+                chat.links.issue_title().unwrap_or_default().to_owned()
             }
             Self::ChatReady { chat, mark } => marked(mark, &chat.links),
             Self::ChatNeedsInput { chat } | Self::ChatDone { chat } => {
-                chat.links.issue_title.clone().unwrap_or_default()
+                chat.links.issue_title().unwrap_or_default().to_owned()
             }
             Self::Demo { demo } => demo.launch.name.clone(),
             Self::Untracked { worktree } => home_relative(&worktree.path),
@@ -508,10 +508,11 @@ fn blocked_by(progress: Option<&crate::client::progress::Progress>) -> String {
     }
 }
 
-/// The marked item, with the title of the space's issue when it has one.
+/// The marked item, with the title of the space's first issue when it has
+/// one.
 fn marked(mark: &ReviewMark, links: &SpaceLinks) -> String {
     let label = ui::mark_label(mark);
-    match &links.issue_title {
+    match links.issue_title() {
         Some(issue) => format!("{label} {issue}"),
         None => label,
     }

@@ -54,3 +54,20 @@ fn a_linked_item_keeps_its_kind_beside_its_url_and_refuses_another() {
     let wrong = serde_json::json!({"kind": "issue", "url": pull});
     assert!(serde_json::from_value::<LinkedItem>(wrong).is_err());
 }
+
+#[test]
+fn links_of_an_earlier_release_keep_their_issue_as_the_first_assigned() {
+    let url = "https://forge/o/r/issues/4";
+    let earlier = serde_json::json!({"issue": url, "issue_title": "Fix it", "prs": []});
+    let links: SpaceLinks = serde_json::from_value(earlier).unwrap();
+    assert_eq!(
+        links.issues,
+        [LinkedItem {
+            url: url.parse().unwrap(),
+            title: Some("Fix it".into()),
+        }]
+    );
+    let without: SpaceLinks =
+        serde_json::from_value(serde_json::json!({"issue": null, "prs": []})).unwrap();
+    assert!(without.issues.is_empty());
+}

@@ -131,8 +131,10 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     assert_eq!(
         listed[0].links,
         crate::model::SpaceLinks {
-            issue: Some(issue.parse().unwrap()),
-            issue_title: None,
+            issues: vec![crate::model::LinkedItem {
+                url: issue.parse().unwrap(),
+                title: None,
+            }],
             prs: vec![pr.parse().unwrap()],
             ..Default::default()
         }

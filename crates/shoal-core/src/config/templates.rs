@@ -193,7 +193,8 @@ impl IssueFields {
     /// The fields of the issue `links` assign, for an agent restored
     /// without its subject.
     pub fn linked(links: &SpaceLinks) -> Option<Self> {
-        Some(Self::at(links.issue.as_ref()?, links.issue_title.clone()))
+        let issue = links.issue()?;
+        Some(Self::at(&issue.url, issue.title.clone()))
     }
 
     /// The fields of `issue`, titled `title`, without asking the forge.

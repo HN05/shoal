@@ -683,16 +683,18 @@ async fn new_pull(
     options: PullOptions,
     default_draft: bool,
 ) -> Result<NewPull> {
-    let issue = match &workspace.links.issue {
-        Some(issue) => {
-            issue.belongs_to(forge)?;
-            Some(issue.issue()?)
+    let linked = workspace.links.issue();
+    let issue = match linked {
+        Some(linked) => {
+            linked.url.belongs_to(forge)?;
+            Some(linked.url.issue()?)
         }
         None => None,
     };
-    let title = match (options.title, &workspace.links.issue_title, issue) {
+    let linked_title = linked.and_then(|linked| linked.title.clone());
+    let title = match (options.title, linked_title, issue) {
         (Some(title), _, _) => title,
-        (None, Some(title), _) => title.clone(),
+        (None, Some(title), _) => title,
         (None, None, Some(number)) => {
             forge
                 .read(account, ItemKind::Issue, number.get())

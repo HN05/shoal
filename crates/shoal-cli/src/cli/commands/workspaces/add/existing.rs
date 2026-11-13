@@ -62,7 +62,11 @@ pub(in crate::cli::commands) async fn start_worker(
     // A task after `--` replaces the issue as the agent's subject.
     let issue = match agent.agent.is_some() && args.is_empty() {
         true => {
-            load_linked_issue(ctx, &target, workspace.links.issue.clone().map(Into::into)).await?
+            let linked = workspace
+                .links
+                .issue()
+                .map(|issue| issue.url.clone().into());
+            load_linked_issue(ctx, &target, linked).await?
         }
         false => None,
     };

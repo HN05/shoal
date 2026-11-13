@@ -696,8 +696,10 @@ fn a_converted_workspaces_agent_is_told_its_place_and_the_stopped_commands() {
         crate::state::WorkspaceState::Ready,
     );
     let url = "https://forge.example/team/repo/issues/7";
-    workspace.links.issue = Some(url.parse().unwrap());
-    workspace.links.issue_title = Some("Fix the login".into());
+    workspace.links.issues = vec![crate::model::LinkedItem {
+        url: url.parse().unwrap(),
+        title: Some("Fix the login".into()),
+    }];
 
     let told = converted_subject(&workspace, true, Some("handoff"));
 

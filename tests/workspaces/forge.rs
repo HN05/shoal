@@ -495,11 +495,11 @@ fn link_picks_an_omitted_open_issue_or_pull_request() {
         serde_json::json!(["https://github.com/team/project/pull/7"])
     );
     assert_eq!(
-        workspace["workspace"]["links"]["issue"],
+        workspace["workspace"]["links"]["issues"][0]["url"],
         "https://github.com/team/project/issues/34"
     );
     assert_eq!(
-        workspace["workspace"]["links"]["issue_title"],
+        workspace["workspace"]["links"]["issues"][0]["title"],
         "Fix API timeout"
     );
 }

@@ -105,8 +105,8 @@ impl Topic {
     ) -> Self {
         let topic = Self::repository(repo, mode);
         let linked = StartArgs {
-            linked_issue: links.issue.clone(),
-            linked_issue_title: links.issue.as_ref().and(links.issue_title.clone()),
+            linked_issue: links.issue().map(|issue| issue.url.clone()),
+            linked_issue_title: links.issue_title().map(str::to_owned),
             ..in_checkout(repo)
         };
         Self {

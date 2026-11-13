@@ -938,9 +938,9 @@ whose files are not on this machine, or of an agent whose tool Shoal does not
 know, has no `path` and no files, and one whose files could not be looked for
 says why in `error`; sessions the agents' hooks never reported, such as those
 before a `/clear`, are not listed. Workspace records from `list --json` and `status --json` include
-the assigned issue in `links.issue`, assigned PR URLs in `links.prs`, and items
-recorded as opened or related in `links.opened` and `links.related`, each with
-`kind`, `url` and `title` when known; an acknowledgement without a PR URL leaves
+the assigned issues in `links.issues`, first assigned first, assigned PR URLs in
+`links.prs`, and items recorded as opened or related in `links.opened` and
+`links.related`, each item with `kind`, `url` and `title` when known; an acknowledgement without a PR URL leaves
 `links.prs` empty. `status` lists opened and related items too. An issue, PR or
 CI run URL, `pr`, `issue` or `ci` with a number or URL, or `resource` with a pool
 or member name shows every space that links it or workspace that holds it instead, as a JSON array; a number must be linked in only one repository.

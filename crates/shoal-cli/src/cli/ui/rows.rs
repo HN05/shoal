@@ -175,11 +175,11 @@ fn progress_cell(progress: Option<&Progress>) -> Cell {
 }
 
 /// What a workspace row names as its work: the CI job it runs, or the
-/// linked issue's title when known.
+/// first linked issue's title when known.
 fn workspace_subject(workspace: &Workspace) -> String {
     match &workspace.job {
         Some(job) => job_subject(job),
-        None => workspace.links.issue_title.clone().unwrap_or_default(),
+        None => workspace.links.issue_title().unwrap_or_default().to_owned(),
     }
 }
 

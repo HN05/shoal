@@ -39,11 +39,12 @@ impl Manager {
     }
 }
 
-/// The issue `workspace` is assigned, titled as its link recorded it, else
-/// by its URL, without labels: the workspace ranks by its issue's own.
+/// The first issue `workspace` is assigned, titled as its link recorded it,
+/// else by its URL, without labels: the workspace ranks by its issues' own.
 fn assigned_issue(workspace: &Workspace) -> Option<LaunchIssue> {
-    let url = workspace.links.issue.clone()?;
-    let title = (workspace.links.issue_title.clone()).unwrap_or_else(|| url.to_string());
+    let issue = workspace.links.issue()?;
+    let url = issue.url.clone();
+    let title = (issue.title.clone()).unwrap_or_else(|| url.to_string());
     let labels = Vec::new();
     Some(LaunchIssue { url, title, labels })
 }

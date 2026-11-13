@@ -88,7 +88,7 @@ const REQUESTS: &[&str] = &[
     r#"{"export_space":{"space":"fix","unsaved":{"confirmed":{"files":true,"detached_head":null,"files_restorable":false}},"file":"/work/fix.shoal"}}"#,
     r#"{"export_moving_space":{"space":"fix","file":"/work/fix.shoal"}}"#,
     r#"{"end_moved_space":{"space":"fix","unsaved":"all","checkpoint":3}}"#,
-    r#"{"import_workspace":{"repository":"app","bundle":null,"prerequisite":null,"workspace":{"workspace_id":"w1","repository_id":"r1","name":"fix","checkpoint":{"workspace_id":"w1","repository_id":"r1","number":1,"cause":"removal","branch":"fix","head":"abc","commit":"abc","files_omitted":false,"created_at":1,"expires_at":2},"base_ref":null,"base_commit":null,"links":{"issue":null,"prs":[],"opened":[],"related":[]},"cause":"manual","removed_at":1,"expires_at":2}}}"#,
+    r#"{"import_workspace":{"repository":"app","bundle":null,"prerequisite":null,"workspace":{"workspace_id":"w1","repository_id":"r1","name":"fix","checkpoint":{"workspace_id":"w1","repository_id":"r1","number":1,"cause":"removal","branch":"fix","head":"abc","commit":"abc","files_omitted":false,"created_at":1,"expires_at":2},"base_ref":null,"base_commit":null,"links":{"issues":[],"prs":[],"opened":[],"related":[]},"cause":"manual","removed_at":1,"expires_at":2}}}"#,
     r#"{"checkpoint":{"workspace":"fix","name":"before rebase"}}"#,
     r#"{"checkpoints":{"workspace":"fix","after":null}}"#,
     r#"{"saved":{"space":"fix"}}"#,

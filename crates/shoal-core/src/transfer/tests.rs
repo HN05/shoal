@@ -88,8 +88,10 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         root_dir: None,
         session: Some("s1".into()),
         links: crate::model::SpaceLinks {
-            issue: Some("https://forge.example/team/repo/issues/12".parse().unwrap()),
-            issue_title: Some("Plan the cache".into()),
+            issues: vec![crate::model::LinkedItem {
+                url: "https://forge.example/team/repo/issues/12".parse().unwrap(),
+                title: Some("Plan the cache".into()),
+            }],
             prs: vec!["https://forge.example/team/repo/pulls/14".parse().unwrap()],
             opened: Vec::new(),
             related: vec![crate::model::LinkedItem {
@@ -143,7 +145,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         [
             (
                 crate::model::Relation::Assigned,
-                chat.links.issue.clone().unwrap()
+                chat.links.issues[0].url.clone()
             ),
             (crate::model::Relation::Assigned, chat.links.prs[0].clone()),
             (
@@ -276,7 +278,7 @@ fn manifest_with_sessions() -> Manifest {
         },
         "base_ref": null,
         "base_commit": null,
-        "links": {"issue": null, "prs": []},
+        "links": {"issues": [], "prs": []},
         "agents": [agent],
         // Earlier removal records kept a single last session.
         "last_session": last,

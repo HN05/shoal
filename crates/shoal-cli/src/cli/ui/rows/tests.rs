@@ -138,8 +138,8 @@ fn usage_shows_cpu_once_measured_and_memory_in_binary_units() {
         workspace("a", "quiet", "quiet", WorkspaceState::Ready),
     ];
     workspaces[0].usage = Some(usage(Some(50.0), 1 << 20));
-    workspaces[0].links.issue_title = Some("Title".into());
-    workspaces[1].links.issue_title = Some("Title".into());
+    workspaces[0].links.issues = vec![issue("Title")];
+    workspaces[1].links.issues = vec![issue("Title")];
     let rows = workspace_tree_rows(&workspaces, &[], &Statuses::default(), &[], plain, None);
     assert_eq!(
         rows,
@@ -236,7 +236,7 @@ fn workspace_rows_align_status_and_titles() {
         workspace("a", "quiet", "quiet", WorkspaceState::Ready),
     ];
     workspaces[3].running = true;
-    workspaces[3].links.issue_title = Some("Refine the list view".into());
+    workspaces[3].links.issues = vec![issue("Refine the list view")];
     let mark = |stale| crate::model::ReviewMark {
         kind: None,
         url: None,
@@ -321,6 +321,14 @@ fn workspace_rows_align_status_and_titles() {
             "○ 1  y          app    inactive"
         ]
     );
+}
+
+/// An assigned issue titled `title`.
+fn issue(title: &str) -> crate::model::LinkedItem {
+    crate::model::LinkedItem {
+        url: "https://forge.example/team/repo/issues/1".parse().unwrap(),
+        title: Some(title.into()),
+    }
 }
 
 fn repository(id: &str, source: &str) -> Repository {
@@ -501,7 +509,7 @@ fn rows_show_the_steps_done_and_the_status_line_in_place_of_the_title() {
         blockers: Vec::new(),
     };
     let mut working = workspace("a", "working", "working", WorkspaceState::Ready);
-    working.links.issue_title = Some("Fix the login timeout".into());
+    working.links.issues = vec![issue("Fix the login timeout")];
     working.progress = Some(Progress {
         status: Some("Reproduced; the cause is the query limit".into()),
         steps: vec![
@@ -513,7 +521,7 @@ fn rows_show_the_steps_done_and_the_status_line_in_place_of_the_title() {
         updated_at: crate::time::UnixTime::EPOCH,
     });
     let mut planned = workspace("a", "planned", "planned", WorkspaceState::Ready);
-    planned.links.issue_title = Some("Add onboarding".into());
+    planned.links.issues = vec![issue("Add onboarding")];
     planned.progress = Some(Progress {
         status: None,
         steps: vec![step("Sketch", true)],
