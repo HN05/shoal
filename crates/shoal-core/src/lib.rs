@@ -16,7 +16,7 @@ pub mod env;
 pub mod execution;
 pub mod fsutil;
 pub mod git;
-mod git_credential;
+pub mod git_credential;
 pub mod git_profile;
 mod happy;
 pub mod hooks;

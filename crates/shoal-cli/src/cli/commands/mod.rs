@@ -24,7 +24,6 @@ mod dispatch;
 mod download;
 mod events;
 mod files;
-mod git_credential;
 mod holds;
 mod inbox;
 pub(super) mod issues;

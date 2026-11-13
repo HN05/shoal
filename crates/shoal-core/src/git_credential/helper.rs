@@ -9,10 +9,10 @@ use std::io::{Read as _, Write as _};
 
 use anyhow::Result;
 
-use crate::cli::context::Context;
+use crate::paths::CommandPaths;
 
 /// Answer Git's `operation` request on standard input.
-pub(super) async fn run(ctx: &Context, operation: String) -> Result<i32> {
+pub async fn answer(paths: &CommandPaths, operation: String) -> Result<i32> {
     if operation != "get" {
         return Ok(0);
     }
@@ -21,7 +21,7 @@ pub(super) async fn run(ctx: &Context, operation: String) -> Result<i32> {
     let Some(host) = https_host(&request) else {
         return Ok(0);
     };
-    let answer = match crate::client::agents::git_credential(&ctx.paths, host.to_owned()).await {
+    let answer = match crate::client::agents::git_credential(paths, host.to_owned()).await {
         Ok(Some(credential)) => format!(
             "username={}\npassword={}\n",
             credential.username, credential.password

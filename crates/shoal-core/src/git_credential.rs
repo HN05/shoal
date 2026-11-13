@@ -1,10 +1,15 @@
 //! The Git settings that give an agent launch's Git over HTTPS the agent
 //! token of each host that has one, through Shoal's credential helper. For
 //! each such host, an empty helper first clears the user's helpers for that
-//! host only, so none of them answers for it or saves the token.
+//! host only, so none of them answers for it or saves the token. The helper
+//! that answers Git lives here too.
+mod helper;
+
 use std::ffi::{OsStr, OsString};
 
 use anyhow::Result;
+
+pub use helper::answer;
 
 use crate::{
     paths::Paths,
