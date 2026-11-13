@@ -524,4 +524,14 @@ fn work_that_fits_starts_ahead_until_the_entry_waiting_for_memory_waited_its_lim
         admit(&[], &queue(BACKFILL_FOR), &fixed_jobs, false),
         ["job"]
     );
+    // An agent its repository's full limit holds anyway keeps nothing back.
+    let full_repository = Limits {
+        repositories: [("a".into(), Some(1))].into(),
+        ..limits
+    };
+    let occupied = ["a".into()];
+    assert_eq!(
+        admit(&occupied, &queue(BACKFILL_FOR), &full_repository, false),
+        ["job"]
+    );
 }

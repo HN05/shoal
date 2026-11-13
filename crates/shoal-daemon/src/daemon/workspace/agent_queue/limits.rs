@@ -230,19 +230,21 @@ pub(crate) fn admit(
             admission.hold(entry, Some(HeldBy::MemoryKept));
             continue;
         }
-        if let Err(held) = measured_fit(limits.room, started, capacity::Room::fits_agent) {
-            starved |= overdue_for_memory(entry, held);
-            admission.hold(entry, held);
-            continue;
-        }
         let used = used.entry(entry.repository.as_str()).or_default();
         // A one-shot run, such as a review, holds no agent slot, so of the
         // fixed limits only the disk's applies to it.
-        let held = match entry.work {
+        let full = match entry.work {
             Work::OneShot { .. } => full_disk(limits, writing),
             _ => full_limit(limits, &entry.repository, [total, writing, *used], own),
         };
-        if let Some(held) = held {
+        if let Err(held) = measured_fit(limits.room, started, capacity::Room::fits_agent) {
+            // An entry a fixed limit holds anyway gains nothing from memory
+            // kept for it.
+            starved |= full.is_none() && overdue_for_memory(entry, held);
+            admission.hold(entry, held);
+            continue;
+        }
+        if let Some(held) = full {
             admission.hold(entry, Some(held));
             continue;
         }
