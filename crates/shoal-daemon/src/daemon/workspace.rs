@@ -409,14 +409,14 @@ impl Manager {
         self.annotate_review(&mut workspace, review::check_deadline())
             .await;
         let simulators = self.list_simulators(Some(&workspace.id)).await?;
-        let issue = self.issue_registration(&workspace.id).await?;
+        let issues = self.issue_registrations(&workspace.id).await?;
         let pr_cleanup = self.pr_registration(&workspace.id).await?;
         let completion = self.completion(&workspace.id).await?;
         let mut inspection = self
             .store
             .run(move |db| {
                 Ok(Inspection {
-                    issue,
+                    issues,
                     completion,
                     pr_cleanup,
                     executions: store::executions(db, &workspace.id)?,

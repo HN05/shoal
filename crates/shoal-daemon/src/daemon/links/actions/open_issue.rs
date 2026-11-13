@@ -106,10 +106,6 @@ impl Manager {
         let destination = self.issue_destination(own, repository.as_deref()).await?;
         if link {
             anyhow::ensure!(
-                self.issue_registration(space.id()).await?.is_none(),
-                "the chat already has a linked issue; open the issue without --link"
-            );
-            anyhow::ensure!(
                 !destination.elsewhere,
                 "an issue in another repository cannot be linked; open it without --link"
             );
@@ -226,10 +222,6 @@ impl Manager {
         anyhow::ensure!(
             workspace.state.accepts_links(),
             "workspace cannot accept an issue in its current state"
-        );
-        anyhow::ensure!(
-            !link || workspace.links.issue().is_none(),
-            "the workspace already has a linked issue; open the issue without --link"
         );
         let settings = self.workspace_settings(&workspace).await?;
         let (own, account) = self.workspace_forge_account(&workspace).await?;

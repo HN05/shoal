@@ -291,7 +291,7 @@ fn unpolled_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>
     Ok(runs)
 }
 
-/// The workspace's assigned issue and PRs, of `kind` or every kind.
+/// The workspace's assigned issues and PRs, of `kind` or every kind.
 pub(crate) fn linked_items(
     db: &rusqlite::Connection,
     id: &SpaceId,
@@ -317,14 +317,7 @@ pub(crate) fn linked_items(
         }
     }
     if kind != Some(ItemKind::Pr) {
-        let url: Option<ItemRef> = db
-            .query_row(
-                "SELECT url FROM space_issue WHERE space_id=?1",
-                [id],
-                |row| row.get(0),
-            )
-            .optional()?;
-        items.extend(url);
+        items.extend(crate::daemon::links::issue::assigned_issues(db, id)?);
     }
     Ok(items)
 }

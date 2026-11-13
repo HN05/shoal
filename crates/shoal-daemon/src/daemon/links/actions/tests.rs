@@ -172,3 +172,48 @@ async fn a_linked_item_of_an_earlier_origin_is_not_taken_for_the_current_ones() 
     // After its origin moved to another repository, issue 7 there is another issue.
     assert!(linked("https://forge.example/team/new").await.is_err());
 }
+
+#[tokio::test]
+async fn several_assigned_issues_need_the_number_of_the_one_acted_on() {
+    use crate::daemon::test_support::{manager, repository};
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            for number in [7, 8] {
+                db.execute(
+                    "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                    rusqlite::params![
+                        id,
+                        format!("https://forge.example/team/repo/issues/{number}")
+                    ],
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let forge = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+    let linked = |named: Option<&str>| {
+        let named = named.map(|named| named.parse().unwrap());
+        let (manager, forge, id) = (&manager, &forge, workspace.id.clone());
+        async move {
+            (manager.named_or_linked(named, Some(&id), forge, ItemKind::Issue))
+                .await
+                .map(|issue| issue.number().get())
+        }
+    };
+    let error = linked(None).await.unwrap_err();
+    assert!(format!("{error:#}").contains("several"), "{error:#}");
+    assert_eq!(linked(Some("8")).await.unwrap(), 8);
+}

@@ -539,8 +539,8 @@ impl Manager {
     }
 
     /// Record the opened issue as the space's and assign it when it was
-    /// proposed with `link` and none is assigned. The issue exists, so a
-    /// failure only logs. Returns whether it was linked.
+    /// proposed with `link`. The issue exists, so a failure only logs.
+    /// Returns whether it was linked.
     async fn record_proposed_issue(
         &self,
         space: Option<&LinkSpace>,
@@ -552,7 +552,6 @@ impl Manager {
             return false;
         };
         let recorded = async {
-            let link = link && self.issue_registration(space.id()).await?.is_none();
             self.keep_created(space.id(), ItemKind::Issue, item, link)
                 .await
         };

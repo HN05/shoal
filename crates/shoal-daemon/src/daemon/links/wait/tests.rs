@@ -2164,10 +2164,10 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
     assert_eq!(updates.len(), 1);
     assert!(
         manager
-            .issue_registration(&workspace.id)
+            .issue_registrations(&workspace.id)
             .await
             .unwrap()
-            .is_none()
+            .is_empty()
     );
     assert!(
         manager

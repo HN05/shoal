@@ -1263,7 +1263,7 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
         "assigned",
     ]);
     let inspection = fixture.ok(&["status", &fixture.id("items")]);
-    assert!(inspection["issue"].is_null());
+    assert_eq!(inspection["issues"], serde_json::json!([]));
     assert_eq!(
         inspection["pr_cleanup"]["url"],
         "https://github.com/team/project/pull/7"
@@ -1275,7 +1275,8 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
         "https://github.com/team/project/issues/2"
     );
     let inspection = fixture.ok(&["status", &fixture.id("items")]);
-    assert!(inspection["issue"].is_null() && inspection["completion"].is_null());
+    assert_eq!(inspection["issues"], serde_json::json!([]));
+    assert!(inspection["completion"].is_null());
     write_issue(&fixture, 1, "relink");
     fixture.ok(&[
         "link",
@@ -1286,7 +1287,10 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
         &fixture.id("items"),
     ]);
     fixture.ok(&["unlink", "assigned", "--space", &fixture.id("items")]);
-    assert!(fixture.ok(&["status", &fixture.id("items")])["issue"].is_null());
+    assert_eq!(
+        fixture.ok(&["status", &fixture.id("items")])["issues"],
+        serde_json::json!([])
+    );
     assert!(fixture.ok(&["status", &fixture.id("items")])["pr_cleanup"].is_null());
     // With nothing linked, a watch waits for branch conflicts alone.
     let items = PathBuf::from(
@@ -1845,7 +1849,7 @@ fn view_shows_linked_items_with_status_and_discussion() {
     );
 
     let status = fixture.ok(&["status", &fixture.id("view")]);
-    assert_eq!(status["issue_status"]["state"], "open");
+    assert_eq!(status["issue_states"][0]["state"], "open");
 
     let brief = fixture.ok(&[
         "view",

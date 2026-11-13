@@ -55,7 +55,7 @@ impl Manager {
                 integrated: completion.integrated,
             }));
         }
-        if self.issue_registration(id).await?.is_some() {
+        if !self.issue_registrations(id).await?.is_empty() {
             return Ok(Some(CleanupReason::Issue));
         }
         Ok(None)

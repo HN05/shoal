@@ -381,7 +381,7 @@ async fn inspect(
             }),
             executions,
             places: vec![],
-            issue: None,
+            issues: Vec::new(),
             pr_cleanup: None,
             ports: vec![],
             resources: vec![],

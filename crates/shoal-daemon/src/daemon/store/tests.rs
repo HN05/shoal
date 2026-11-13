@@ -536,6 +536,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 169 {
         db.execute_batch(include_str!("item_relations.sql"))?;
     }
+    if version >= 170 {
+        db.execute_batch(include_str!("space_issues.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -1210,6 +1213,26 @@ fn removal_snapshots_become_checkpoints_their_records_name() -> Result<()> {
         |r| r.get(0),
     )?;
     assert_eq!(last, 1);
+    Ok(())
+}
+
+#[test]
+fn migrated_spaces_keep_their_issue_first_and_take_more() -> Result<()> {
+    let mut db = historical_database(169)?;
+    db.execute(
+        "INSERT INTO space_issue(space_id,url,title) VALUES ('workspace',?1,'Fix it')",
+        ["https://forge.example/o/r/issues/4"],
+    )?;
+    migrate(&mut db)?;
+    db.execute(
+        "INSERT INTO space_issue(space_id,url) VALUES ('workspace',?1)",
+        ["https://forge.example/o/r/issues/5"],
+    )?;
+    let links = super::space_links(&db, &"workspace".into())?;
+    let issues: Vec<_> = (links.issues.iter())
+        .map(|issue| (issue.url.number().get(), issue.title.as_deref()))
+        .collect();
+    assert_eq!(issues, [(4, Some("Fix it")), (5, None)]);
     Ok(())
 }
 

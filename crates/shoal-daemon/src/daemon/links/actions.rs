@@ -767,11 +767,11 @@ pub(in crate::daemon::links) const NOTHING_LINKED: &str =
 
 /// The one assigned item of `kind` among `assigned`.
 fn only_assigned(kind: ItemKind, assigned: Vec<ItemRef>) -> Result<ItemRef> {
-    match (kind, assigned.as_slice()) {
-        (_, [url]) => Ok(url.clone()),
-        (ItemKind::Issue, _) => bail!("no issue is linked; pass a number or URL"),
-        (ItemKind::Pr, []) => bail!("no PR is linked; pass a number or URL"),
-        (ItemKind::Pr, _) => bail!("several PRs are linked; pass a number or URL"),
+    let noun = kind.noun();
+    match assigned.as_slice() {
+        [url] => Ok(url.clone()),
+        [] => bail!("no {noun} is linked; pass a number or URL"),
+        _ => bail!("several {noun}s are linked; pass a number or URL"),
     }
 }
 

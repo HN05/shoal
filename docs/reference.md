@@ -902,7 +902,7 @@ own stdin, stdout, stderr, and exit code.
 running or stopped, which the target names, else the current one: its state, a
 workspace's changes since its fork point and what it holds, its agent sessions,
 each session its agents reported with the path of its transcript on this machine,
-whether its linked issue is open or closed,
+whether each assigned issue is open or closed,
 and each watched PR as the forge reports it now: open, merged or closed, merge
 conflicts, each CI check's result, which is `waiting` while no runner has taken
 its job where the forge tells that apart, the CI runs on an open PR's head that
@@ -4018,7 +4018,8 @@ details the forge reports it has, or as posted when it cannot be read.
 
 `shoal pr` and `shoal issue` change an item of the repository of the space they
 run in, a workspace or chat, or the one `-s`/`--space` names: the number or URL given,
-otherwise the space's linked issue or only linked PR. A chat acts in its
+otherwise the space's only assigned issue or PR, which needs its number or URL
+when several are assigned. A chat acts in its
 repository's registered checkout, and an issue it opens is recorded as opened
 there, or with `--link` assigned to it. Outside a space they act on the
 repository of the registered checkout they run in, as its agent account, and take
@@ -4184,8 +4185,8 @@ open draft PR), title and labels; JSON lists the items with the fields every
 other item command reports. Bitbucket's `--author` matches a nickname.
 `issue open` takes `--title`, `--body` or `--body-file`, repeated `--label`,
 repeated `--assignee` and `--milestone TITLE`;
-the new issue is recorded as opened, or with `--link` assigned instead, which
-fails while another issue is assigned and then leaves it opened. A workspace being removed refuses it. A chat
+the new issue is recorded as opened, or with `--link` assigned instead, after the
+issues already assigned. A workspace being removed refuses it. A chat
 opens it in its repository's registered checkout, under that repository's
 settings, and records it the same way. Outside a space it opens the issue in the
 repository of the registered checkout it runs in, records it nowhere, and
@@ -4250,8 +4251,7 @@ shoal approvals --deny 3.7 --duplicate-of-approval 3.4
 
 `approve` opens the item as the space's agent account, with `--title`,
 `--body` or `--body-file` replacing what was proposed. An issue is recorded as
-opened by its space and assigned when it was proposed with `--link` and no
-issue is assigned yet; a chat's opens through the repository's checkout, as
+opened by its space and assigned when it was proposed with `--link`; a chat's opens through the repository's checkout, as
 does any after its space is removed. A PR is linked
 like one `pr open` opened. Approving a PR request whose branch was renamed, or has
 another commit locally or where `pr open` pushed it, is refused, the request
@@ -4585,10 +4585,12 @@ kind the kind of the linked item with that number, otherwise the kind the forge
 reports; GitLab and Bitbucket number issues and PRs separately, so there such a
 number must be linked. Use `--space` to select another space, a workspace or chat,
 than the current one. Numbers resolve against its origin and URLs must match it. Linking
-an item again under its relation changes nothing but a newly known title; an
-assigned issue must be unlinked before assigning a different one.
-Linking an issue records its title for workspace lists; when the forge cannot be
-read, the link is recorded without one and a warning names the error.
+an item again under its relation changes nothing but a newly known title.
+Assigned issues accumulate without duplicates in the order they were assigned;
+the first names a new branch, gives a new PR its title and starts the agent.
+Linking an issue records its title, and workspace lists show the first's; when
+the forge cannot be read, the link is recorded without one and a warning names
+the error.
 Assigned PRs accumulate without duplicates, and any PR of the repository can be
 assigned whatever its head branch, such as one pushed from the worktree on
 another branch. Assigned items suppress idle cleanup.
@@ -4644,7 +4646,7 @@ without one keeps its GitLab name.
 and `xdg-open` elsewhere, without waiting for the browser, and prints each URL,
 also when the opener fails; workspace processes cannot.
 
-`shoal watch` polls the assigned issue and PRs and the linked runs every ~30
+`shoal watch` polls the assigned issues and PRs and the linked runs every ~30
 seconds, and the daemon queues what its own polling of a ready workspace's linked
 items observes for the next watch, which returns at once; `watch pr`, `watch
 issue` or `watch ci` filters by kind. A run delivers one `ci_completed` update

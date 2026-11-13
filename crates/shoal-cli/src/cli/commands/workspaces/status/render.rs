@@ -376,14 +376,15 @@ fn render_leases(status: &WorktreeStatus, palette: Palette) {
     }
 }
 
-/// The space's issue, completion and PRs.
+/// The space's issues, completion and PRs.
 fn render_assignment(status: &SpaceStatus, palette: Palette) {
-    if let Some(issue) = &status.issue {
+    for issue in &status.issues {
         outln!("Issue:         {}", issue.url);
-        if let Some(state) = status.issue_status.as_ref().and_then(|s| s.state.as_ref()) {
+        let looked_up = (status.issue_states.iter()).find(|state| state.url == issue.url);
+        if let Some(state) = looked_up.and_then(|looked_up| looked_up.state.as_ref()) {
             outln!("  State:       {state}");
         }
-        let lookup = status.issue_status.as_ref().and_then(|s| s.error.as_ref());
+        let lookup = looked_up.and_then(|looked_up| looked_up.error.as_ref());
         for error in issue.error.iter().chain(lookup) {
             outln!("  {}", palette.paint(Style::Warning, error));
         }

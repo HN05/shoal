@@ -1350,7 +1350,7 @@ fn add_from_issue_reads_the_forge_and_passes_context_to_agents() {
         assert_eq!(workspace["name"], title);
         assert_eq!(workspace["branch"], format!("{number}-fix-api-timeout"));
         assert_eq!(
-            fixture.ok(&["status", workspace["id"].as_str().unwrap()])["issue"]["url"],
+            fixture.ok(&["status", workspace["id"].as_str().unwrap()])["issues"][0]["url"],
             url
         );
         let api = if host == "github.com" {
@@ -1928,7 +1928,7 @@ fn interactive_add_picks_an_open_issue_or_pull_request() {
     assert!(output.status.success(), "{output:?} {transcript}");
     let issue = fixture.ok(&["status", &fixture.id("Fix API timeout")]);
     assert_eq!(
-        issue["issue"]["url"],
+        issue["issues"][0]["url"],
         "https://github.com/team/project/issues/34"
     );
     // The PR's head branch belongs to a workspace, which reopens.

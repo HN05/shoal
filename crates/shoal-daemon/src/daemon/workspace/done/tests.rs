@@ -697,7 +697,7 @@ async fn issue_and_watch_completion_wait_for_explicit_done() {
         .await
         .unwrap();
     assert!(inspection.completion.is_none());
-    assert!(inspection.issue.unwrap().error.is_none());
+    assert!(inspection.issues[0].error.is_none());
     assert!(inspection.pr_cleanup.unwrap().error.is_none());
     // Explicit completion applies the watch's merge checks.
     manager

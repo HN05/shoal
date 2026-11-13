@@ -66,16 +66,15 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
     assert_eq!(linked.len(), 1);
     assert_eq!(linked[0].kind, crate::forge::items::link::LinkKind::Issue);
     assert_eq!(linked[0].url, url);
-    assert!(
-        manager
-            .set_issue(
-                &SpaceSelector::id(&workspace.id),
-                &"317".parse().unwrap(),
-                None
-            )
-            .await
-            .is_err()
-    );
+    // A second issue joins the first.
+    manager
+        .set_issue(
+            &SpaceSelector::id(&workspace.id),
+            &"317".parse().unwrap(),
+            None,
+        )
+        .await
+        .unwrap();
     assert!(
         manager
             .set_issue(
@@ -94,32 +93,27 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
             .is_none()
     );
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
-    assert_eq!(
-        reopened
-            .inspect_workspace(&SpaceSelector::id(&workspace.id))
-            .await
-            .unwrap()
-            .issue
-            .unwrap()
-            .url,
-        url.parse().unwrap()
-    );
+    let inspected = reopened
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+    let numbers = |issues: &[Registration]| -> Vec<u64> {
+        issues
+            .iter()
+            .map(|issue| issue.url.number().get())
+            .collect()
+    };
+    assert_eq!(numbers(&inspected.issues), [316, 317]);
     assert!(
         reopened
             .clear_issue(
                 &SpaceSelector::id(&workspace.id),
-                Some(&"317".parse().unwrap())
+                Some(&"318".parse().unwrap())
             )
             .await
             .is_err()
     );
-    assert!(
-        reopened
-            .issue_registration(&workspace.id)
-            .await
-            .unwrap()
-            .is_some()
-    );
+    // Unlinking one issue keeps the others.
     reopened
         .clear_issue(
             &SpaceSelector::id(&workspace.id),
@@ -131,40 +125,25 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
             |item| matches!(item, EventItem::Event(event) if event.details.kind == EventKind::Unlinked
                 && event.details.link.as_ref().is_some_and(|link| link.url == url))
         ));
-    assert!(
-        reopened
-            .issue_registration(&workspace.id)
-            .await
-            .unwrap()
-            .is_none()
-    );
+    let registrations = reopened.issue_registrations(&workspace.id).await.unwrap();
+    assert_eq!(numbers(&registrations), [317]);
+    let links = reopened.workspace_by_id(&workspace.id).await.unwrap().links;
+    assert!(links.issues[0].title.is_none());
+    // An issue linked again comes after those still assigned.
     reopened
         .set_issue(
             &SpaceSelector::id(&workspace.id),
-            &"317".parse().unwrap(),
+            &"316".parse().unwrap(),
             None,
         )
         .await
         .unwrap();
-    assert!(
-        reopened
-            .workspace_by_id(&workspace.id)
-            .await
-            .unwrap()
-            .links
-            .issues[0]
-            .title
-            .is_none()
-    );
-    assert!(
-        reopened
-            .issue_registration(&workspace.id)
-            .await
-            .unwrap()
-            .unwrap()
-            .url
-            .url()
-            .ends_with("/317")
-    );
+    let registrations = reopened.issue_registrations(&workspace.id).await.unwrap();
+    assert_eq!(numbers(&registrations), [317, 316]);
+    reopened
+        .clear_issue(&SpaceSelector::id(&workspace.id), None)
+        .await
+        .unwrap();
+    assert!((reopened.issue_registrations(&workspace.id).await.unwrap()).is_empty());
     reopened.store.shutdown().await;
 }

@@ -13,7 +13,7 @@ use crate::{
         approvals, forge_hosts::ForgeHosts, links::pr, questions, workspace::Manager,
         workspace_files,
     },
-    forge::{ForgeRepo, account::Account, review::status::PrStatus},
+    forge::{ForgeRepo, account::Account, items::reference::ItemRef, review::status::PrStatus},
     model::{Attention, Completion, IssueStatus, PresentSpace, SpaceDetail, SpaceStatus},
     repository,
 };
@@ -21,7 +21,7 @@ use crate::{
 /// What a space records about its links and work, which its status shows
 /// with their state on the forge.
 pub(crate) struct Records {
-    pub(crate) issue: Option<issue::Registration>,
+    pub(crate) issues: Vec<issue::Registration>,
     pub(crate) pr_cleanup: Option<Registration>,
     pub(crate) completion: Option<Completion>,
 }
@@ -36,18 +36,18 @@ impl Manager {
             Err(error) => (None, Some(format!("{error:#}"))),
         };
         let (space, records, origin) = self.space_detail(space).await?;
-        let (prs, issue_status) = self.linked_states(&origin, &records).await;
+        let (prs, issue_states) = self.linked_states(&origin, &records).await;
         let attention = self.attention(&space).await?;
         let jobs = self.linked_job_workspaces(space.id()).await?;
         let waiting_jobs = self.linked_waiting_jobs(space.id()).await?;
         Ok(SpaceStatus {
             space,
-            issue: records.issue,
+            issues: records.issues,
             completion: records.completion,
             pr_cleanup: records.pr_cleanup,
             attention,
             prs,
-            issue_status,
+            issue_states,
             permissions,
             permissions_error,
             jobs,
@@ -105,19 +105,19 @@ impl Manager {
     /// What the chat `id` records about its links, with its `completion`.
     async fn chat_records(&self, id: &SpaceId, completion: Option<Completion>) -> Result<Records> {
         Ok(Records {
-            issue: self.issue_registration(id).await?,
+            issues: self.issue_registrations(id).await?,
             pr_cleanup: self.pr_registration(id).await?,
             completion,
         })
     }
 
-    /// The state of the watched PRs and linked issue in `records`, looked
+    /// The state of the watched PRs and assigned issues in `records`, looked
     /// up on the forge of `origin`'s remote.
     async fn linked_states(
         &self,
         origin: &Path,
         records: &Records,
-    ) -> (Vec<PrStatus>, Option<IssueStatus>) {
+    ) -> (Vec<PrStatus>, Vec<IssueStatus>) {
         let remote = self
             .check_access(origin, repository::remote_url_from_path(origin))
             .await;
@@ -125,36 +125,49 @@ impl Manager {
         let hosts = self.forge_hosts();
         tokio::join!(
             pr::watched(&hosts, &account, &remote, records.pr_cleanup.as_ref()),
-            issue_status(&hosts, &account, &remote, records.issue.as_ref())
+            issue_states(&hosts, &account, &remote, &records.issues)
         )
     }
 }
 
-/// The state of the linked `issue` on the forge of `remote`, the space's
-/// origin remote.
+/// The state of each of the assigned `issues` on the forge of `remote`, the
+/// space's origin remote.
+async fn issue_states(
+    hosts: &ForgeHosts<'_>,
+    account: &Account,
+    remote: &Result<Option<String>>,
+    issues: &[issue::Registration],
+) -> Vec<IssueStatus> {
+    let states = (issues.iter()).map(|issue| issue_status(hosts, account, remote, &issue.url));
+    futures_util::future::join_all(states).await
+}
+
+/// The state of the issue at `url` on the forge of `remote`.
 async fn issue_status(
     hosts: &ForgeHosts<'_>,
     account: &Account,
     remote: &Result<Option<String>>,
-    issue: Option<&issue::Registration>,
-) -> Option<IssueStatus> {
-    let url = &issue?.url;
+    url: &ItemRef,
+) -> IssueStatus {
     let closed = async {
         let remote = pr::origin(remote, "issue lookup needs an origin remote")?;
         let forge = ForgeRepo::resolve(remote, hosts).await?;
         forge.issue_closed(account, url).await
     }
     .await;
-    Some(match closed {
+    let url = url.clone();
+    match closed {
         Ok(closed) => IssueStatus {
+            url,
             state: Some(if closed { "closed" } else { "open" }.into()),
             error: None,
         },
         Err(error) => IssueStatus {
+            url,
             state: None,
             error: Some(format!("{error:#}")),
         },
-    })
+    }
 }
 
 #[cfg(test)]

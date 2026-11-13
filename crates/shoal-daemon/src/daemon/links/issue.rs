@@ -5,7 +5,7 @@ use crate::refusal::{Reason, Refusal};
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::Connection;
 
 pub(crate) use crate::client::links::issue::Registration;
 use crate::{
@@ -31,28 +31,27 @@ pub(crate) struct OpenIssue {
 }
 
 impl Manager {
-    pub async fn issue_registration(&self, id: &SpaceId) -> Result<Option<Registration>> {
+    /// The space's assigned issues in the order they were assigned.
+    pub async fn issue_registrations(&self, id: &SpaceId) -> Result<Vec<Registration>> {
         let id = id.to_owned();
         self.store
-            .run(move |db| {
-                Ok(db
-                    .query_row(
-                        "SELECT url,error FROM space_issue WHERE space_id=?1",
-                        [id],
-                        |row| {
-                            Ok(Registration {
-                                url: row.get(0)?,
-                                error: row.get(1)?,
-                            })
-                        },
-                    )
-                    .optional()?)
+            .read(move |tx| {
+                Ok(tx
+                    .prepare("SELECT url,error FROM space_issue WHERE space_id=?1 ORDER BY rowid")?
+                    .query_map([id], |row| {
+                        Ok(Registration {
+                            url: row.get(0)?,
+                            error: row.get(1)?,
+                        })
+                    })?
+                    .collect::<rusqlite::Result<_>>()?)
             })
             .await
     }
 
     /// Association is part of opening a workspace, before tracked setup starts.
-    /// Linking the same issue again records a newly known title.
+    /// The issue joins the space's assigned issues; linking an assigned one
+    /// again records a newly known title.
     pub async fn set_issue(
         &self,
         selector: &SpaceSelector,
@@ -159,28 +158,21 @@ impl Manager {
     }
 }
 
-/// Assign an issue within the caller's transaction, in place of its opened
-/// or related link, retaining a known title when none is supplied and
-/// recording only a new association as linked.
+/// Assign an issue within the caller's transaction, after those already
+/// assigned and in place of its opened or related link, retaining a known
+/// title when none is supplied and recording only a new association as
+/// linked.
 fn assign(db: &Connection, id: &SpaceId, url: &str, title: Option<&str>) -> Result<()> {
     super::ensure_accepts_links(db, id)?;
-    let existing: Option<String> = db
-        .query_row(
-            "SELECT url FROM space_issue WHERE space_id=?1",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    ensure!(
-        existing.as_deref().is_none_or(|existing| existing == url),
-        "another issue is already assigned"
-    );
+    let assigned = assigned_issues(db, id)?
+        .iter()
+        .any(|issue| issue.url() == url);
     db.execute(
         "INSERT INTO space_issue(space_id,url,title) VALUES (?1,?2,?3)
-         ON CONFLICT(space_id) DO UPDATE SET title=COALESCE(excluded.title,title)",
+         ON CONFLICT(space_id,url) DO UPDATE SET title=COALESCE(excluded.title,title)",
         rusqlite::params![id, url, title],
     )?;
-    if existing.is_none() {
+    if !assigned {
         super::drop_recorded(db, id, url, None)?;
         events::record_link(
             db,
@@ -194,28 +186,34 @@ fn assign(db: &Connection, id: &SpaceId, url: &str, title: Option<&str>) -> Resu
     Ok(())
 }
 
-/// Remove the workspace's issue, which must be `selected` when one is named,
-/// along with what its link kept.
+/// Remove the space's issue `selected` names, which must be assigned, or
+/// else every assigned issue, along with what their links kept.
 fn unlink(db: &Connection, id: &SpaceId, selected: Option<&str>) -> Result<()> {
     super::ensure_accepts_links(db, id)?;
-    let existing: Option<ItemRef> = db
-        .query_row(
-            "SELECT url FROM space_issue WHERE space_id=?1",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?;
+    let mut removed = assigned_issues(db, id)?;
     if let Some(url) = selected {
+        removed.retain(|issue| issue.url() == url);
         ensure!(
-            existing.as_ref().map(ItemRef::url) == Some(url),
+            !removed.is_empty(),
             Refusal::new(Reason::NotFound, format!("issue is not linked: {url}"))
         );
     }
-    if let Some(url) = existing {
-        super::forget_assigned(db, id, ItemKind::Issue, &[url])?;
+    super::forget_assigned(db, id, ItemKind::Issue, &removed)?;
+    for url in &removed {
+        db.execute(
+            "DELETE FROM space_issue WHERE space_id=?1 AND url=?2",
+            rusqlite::params![id, url.url()],
+        )?;
     }
-    db.execute("DELETE FROM space_issue WHERE space_id=?1", [id])?;
     Ok(())
+}
+
+/// The URLs of the space's assigned issues in the order they were assigned.
+pub(crate) fn assigned_issues(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
+    Ok(db
+        .prepare("SELECT url FROM space_issue WHERE space_id=?1 ORDER BY rowid")?
+        .query_map([id], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 #[cfg(test)]

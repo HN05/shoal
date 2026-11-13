@@ -3385,11 +3385,14 @@ fn lists_search_another_repository_with_the_same_filters() {
 }
 
 #[test]
-fn issue_open_with_link_refuses_before_creating_when_an_issue_is_linked() {
+fn issue_open_with_link_assigns_the_issue_after_the_one_linked() {
     let fixture = Fixture::new(Forge::GitHub, "");
+    let created = json!({"number": 40, "title": "Follow-up", "state": "open", "labels": []});
     fixture.respond(json!({
         "GET repos/team/project/issues/34": {"body": {"number": 34, "state": "open",
             "title": "Assignment", "body": "", "labels": []}},
+        "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
+        "GET repos/team/project/issues/40": {"body": created},
     }));
     fixture.ok(&[
         "link",
@@ -3399,8 +3402,7 @@ fn issue_open_with_link_refuses_before_creating_when_an_issue_is_linked() {
         "--space",
         &fixture.id("topic"),
     ]);
-    fixture.requests();
-    let output = fixture.run(&[
+    let opened = fixture.ok(&[
         "issue",
         "open",
         "--space",
@@ -3409,8 +3411,20 @@ fn issue_open_with_link_refuses_before_creating_when_an_issue_is_linked() {
         "Follow-up",
         "--link",
     ]);
-    assert!(!output.status.success(), "{output:?}");
-    assert!(fixture.requests().is_empty());
+    assert_eq!(opened["linked"], true, "{opened}");
+    let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
+    let numbers: Vec<_> = (links["issues"].as_array().unwrap().iter())
+        .map(|issue| {
+            issue["url"]
+                .as_str()
+                .unwrap()
+                .rsplit('/')
+                .next()
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+    assert_eq!(numbers, ["34", "40"], "{links}");
 }
 
 #[test]

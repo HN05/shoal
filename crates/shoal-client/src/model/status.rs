@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Inspection {
-    pub issue: Option<crate::links::issue::Registration>,
+    /// The assigned issues in the order they were assigned.
+    pub issues: Vec<crate::links::issue::Registration>,
     pub completion: Option<Completion>,
     pub pr_cleanup: Option<crate::links::pr::Registration>,
     pub workspace: Workspace,
@@ -37,7 +38,8 @@ pub struct DiffSummary {
 pub struct SpaceStatus {
     #[serde(flatten)]
     pub space: SpaceDetail,
-    pub issue: Option<crate::links::issue::Registration>,
+    /// The assigned issues in the order they were assigned.
+    pub issues: Vec<crate::links::issue::Registration>,
     pub completion: Option<Completion>,
     pub pr_cleanup: Option<crate::links::pr::Registration>,
     #[serde(flatten)]
@@ -45,9 +47,9 @@ pub struct SpaceStatus {
     /// The current state of each watched PR.
     #[serde(default)]
     pub prs: Vec<crate::forge::review::status::PrStatus>,
-    /// The linked issue's current state.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub issue_status: Option<IssueStatus>,
+    /// The current state of each assigned issue.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub issue_states: Vec<IssueStatus>,
     /// What its agents may do, each with where it comes from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permissions: Option<crate::config::permissions::Permissions>,
@@ -189,9 +191,11 @@ pub struct WorktreeStatus {
     pub chats: Vec<SpaceRef>,
 }
 
-/// A failed lookup leaves `state` empty and records its error.
+/// The state of the issue at `url`; a failed lookup leaves `state` empty and
+/// records its error.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IssueStatus {
+    pub url: crate::forge::items::reference::ItemRef,
     /// `open` or `closed`.
     pub state: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

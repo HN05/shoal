@@ -2360,7 +2360,7 @@ stored one; the update also after those. A comment whose files still fail stays 
 nor finished later, and its error says so. Each action
 returns the item as the forge reports it afterwards and records an
 `item_changed` event for integrations. A new issue is recorded as opened and
-assigned only on request: a workspace's assigned issue is its work, while an issue
+assigned only on request: a workspace's assigned issues are its work, while an issue
 an agent opens is usually follow-up work. Browsing across repositories and review
 tooling stay with clients.
 

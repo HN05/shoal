@@ -21,7 +21,7 @@ impl Manager {
         selector: &SpaceSelector,
     ) -> Result<(WorktreeStatus, Records)> {
         let Inspection {
-            issue,
+            issues,
             completion,
             pr_cleanup,
             mut workspace,
@@ -86,7 +86,7 @@ impl Manager {
             chats,
         };
         let records = Records {
-            issue,
+            issues,
             pr_cleanup,
             completion,
         };

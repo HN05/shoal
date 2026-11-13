@@ -270,7 +270,7 @@ impl Manager {
         Ok(())
     }
 
-    /// Fail unless an item of `kind` is assigned: the issue, or a PR watch or
+    /// Fail unless an item of `kind` is assigned: an issue, or a PR watch or
     /// acknowledgement, which an unreadable registration counts as.
     async fn require_assigned(
         &self,
@@ -279,7 +279,7 @@ impl Manager {
     ) -> Result<()> {
         let space = self.link_space(selector).await?;
         let id = space.id();
-        let issue = kind != Some(ItemKind::Pr) && self.issue_registration(id).await?.is_some();
+        let issue = kind != Some(ItemKind::Pr) && !self.issue_registrations(id).await?.is_empty();
         let pr =
             kind != Some(ItemKind::Issue) && !matches!(self.pr_registration(id).await, Ok(None));
         ensure!(
