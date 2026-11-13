@@ -157,7 +157,7 @@ impl Manager {
 
     /// Verify the worktree a removal deletes as [`Self::verify_worktree`]
     /// does, except one Git disowned, whose admin directory is gone and
-    /// whose `.git` link, if left, still names the recorded one.
+    /// whose `.git` link still names the recorded one.
     pub(crate) async fn verify_removed_worktree(&self, workspace: &Workspace) -> Result<()> {
         if crate::removal::disowned(workspace).await? {
             return Ok(());
