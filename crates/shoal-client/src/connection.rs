@@ -504,11 +504,7 @@ pub async fn exit(
             }
             Body::ExitWaits(work) => {
                 waiting(&work);
-                for work in work {
-                    if !waited_for.contains(&work) {
-                        waited_for.push(work);
-                    }
-                }
+                Work::list_new(&mut waited_for, work);
             }
             Body::Error {
                 code: ErrorCode::InvalidRequest | ErrorCode::ProtocolMismatch,

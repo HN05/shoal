@@ -68,6 +68,15 @@ impl Work {
     pub fn refuses_idle_exit(work: &[Self]) -> bool {
         work.iter().any(|work| !matches!(work, Self::Other))
     }
+
+    /// Add each piece of `work` to `listed` that it does not list yet.
+    pub fn list_new(listed: &mut Vec<Self>, work: impl IntoIterator<Item = Self>) {
+        for work in work {
+            if !listed.contains(&work) {
+                listed.push(work);
+            }
+        }
+    }
 }
 
 /// The workspace a piece of [`Work`] works in.
