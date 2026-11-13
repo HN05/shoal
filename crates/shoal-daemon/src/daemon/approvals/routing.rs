@@ -14,9 +14,9 @@ use crate::{
     daemon::{
         events::{self, EventKind},
         item_numbers::ItemNumber,
+        links::space::require_ready_space,
         log,
         scope::Caller,
-        store::require_ready,
         workspace::Manager,
     },
 };
@@ -133,7 +133,7 @@ pub struct Decision {
 /// same decision is a no-op.
 pub fn decide(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision> {
     let mut request = by_key(tx, key)?.context("the approval request no longer exists")?;
-    require_ready(tx, &request.space_id)?;
+    require_ready_space(tx, &request.space_id)?;
     ensure!(
         !matches!(
             request.status,

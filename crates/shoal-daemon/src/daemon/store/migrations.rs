@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_owners, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 176;
+pub(super) const SCHEMA_VERSION: i64 = 177;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -446,6 +446,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (174, include_str!("issue_assignees.sql"), None),
     (175, include_str!("queue_issue_labels.sql"), None),
     (176, include_str!("removed_space_files.sql"), None),
+    (177, include_str!("chat_approvals.sql"), Some(chat_approvals)),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
@@ -512,6 +513,29 @@ fn rebuild(db: &Connection, table: &str, from: &str, to: &str) -> Result<()> {
         db.execute_batch(&dependent)?;
     }
     Ok(())
+}
+
+/// A request names the chat that made it as one of a workspace names the
+/// workspace, and exactly one of the workspace, the chat or a proposed
+/// issue's repository owns it, which only a rebuild lets the table check.
+/// A migration from an earlier version applies it again.
+pub(super) fn chat_approvals(db: &Connection) -> Result<()> {
+    let added: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('access_requests') WHERE name='chat_id')",
+        [],
+        |row| row.get(0),
+    )?;
+    if !added {
+        db.execute_batch(
+            "ALTER TABLE access_requests ADD COLUMN chat_id TEXT REFERENCES chats(id) ON DELETE CASCADE;",
+        )?;
+    }
+    rebuild(
+        db,
+        "access_requests",
+        "CHECK((workspace_id IS NULL) <> (repository_id IS NULL))",
+        "CHECK((workspace_id IS NOT NULL) + (chat_id IS NOT NULL) + (repository_id IS NOT NULL) = 1)",
+    )
 }
 
 /// A branch rename keeps the workspace's name, so an unfinished one reserves

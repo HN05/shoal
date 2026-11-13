@@ -267,8 +267,9 @@ pub(crate) fn record_chat_conversion(
 
 /// Replace the chat `id`, whose workspace row was just inserted under its
 /// ID, with that workspace, unless a stop saved the chat meanwhile: its
-/// questions and unread messages become the workspace's, and its agent's
-/// scope token reaches the workspace until the agent restarts there.
+/// questions, approval requests and unread messages become the workspace's,
+/// and its agent's scope token reaches the workspace until the agent
+/// restarts there.
 /// Returns the row the chat had.
 pub(crate) fn replace_chat(tx: &Transaction<'_>, id: &SpaceId) -> Result<ChatRow> {
     anyhow::ensure!(
@@ -283,6 +284,10 @@ pub(crate) fn replace_chat(tx: &Transaction<'_>, id: &SpaceId) -> Result<ChatRow
     let row = chat_row(tx, id)?;
     tx.execute(
         "UPDATE questions SET workspace_id=chat_id,chat_id=NULL WHERE chat_id=?1",
+        [id],
+    )?;
+    tx.execute(
+        "UPDATE access_requests SET workspace_id=chat_id,chat_id=NULL WHERE chat_id=?1",
         [id],
     )?;
     tx.execute(
@@ -310,12 +315,16 @@ pub(crate) fn relocated_chat(
 }
 
 /// Give back the chat `row`, which the workspace `id` replaced, and remove
-/// that workspace's row: its completion, questions and unread messages
-/// return to the chat.
+/// that workspace's row: its completion, questions, approval requests and
+/// unread messages return to the chat.
 pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) -> Result<()> {
     insert_chat_row(tx, row)?;
     tx.execute(
         "UPDATE questions SET chat_id=workspace_id,workspace_id=NULL WHERE workspace_id=?1",
+        [id],
+    )?;
+    tx.execute(
+        "UPDATE access_requests SET chat_id=workspace_id,workspace_id=NULL WHERE workspace_id=?1",
         [id],
     )?;
     // The chat's agent, which has yet to move, runs on as the chat's.

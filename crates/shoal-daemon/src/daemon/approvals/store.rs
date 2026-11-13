@@ -11,8 +11,8 @@ use crate::{
     daemon::{
         events::{self, EventKind},
         item_numbers::{self, ItemKind, ItemNumber},
+        links::space::require_ready_space,
         notifications::{self, NotificationKind},
-        store::require_ready,
         workspace::Manager,
     },
     model::PresentSpace,
@@ -24,7 +24,7 @@ macro_rules! select {
     ($($filter:literal)?) => {
         concat!(
             "SELECT id,record,active,space_number,number,
-                workspace_id IS NULL AND NOT EXISTS (SELECT 1 FROM spaces
+                repository_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM spaces
                     WHERE spaces.number=access_requests.space_number)
             FROM access_requests "$(, $filter)?
         )
@@ -35,20 +35,26 @@ pub(super) const COLUMNS: &str = select!();
 pub(super) const BY_KEY: &str = select!("WHERE id=?1");
 const BY_NUMBER: &str = select!("WHERE space_number=?1 AND number=?2");
 pub(super) const CURRENT: &str =
-    select!("WHERE workspace_id=?1 AND target_key=?2 AND name=?3 AND active=1");
+    select!("WHERE (workspace_id=?1 OR chat_id=?1) AND target_key=?2 AND name=?3 AND active=1");
 pub(super) const CANDIDATES: &str =
-    select!("WHERE workspace_id=?1 AND target_key=?2 ORDER BY rowid");
+    select!("WHERE (workspace_id=?1 OR chat_id=?1) AND target_key=?2 ORDER BY rowid");
 
 /// Whether a request the repository owns, an issue proposal, was made by
 /// the space `?1`; a malformed record of another space's history stays out
 /// of the selection.
-const REPOSITORY_OWNED: &str = "(workspace_id IS NULL
+const REPOSITORY_OWNED: &str = "(repository_id IS NOT NULL
     AND CASE WHEN json_valid(record) THEN json_extract(record, '$.space_id') END=?1)";
 
 /// Whether the space `?1` decides a request routed to it; a malformed
 /// record of another space's history stays out of the selection.
 const DECIDED_BY: &str =
     "CASE WHEN json_valid(record) THEN json_extract(record, '$.decider') END=?1";
+
+/// The `workspace_id` and `chat_id` of a request the space `?2` owns, one
+/// of them the space, the other none; both none without a space, for a
+/// proposed issue its repository owns.
+pub(super) const OWNING_SPACE: &str =
+    "(SELECT id FROM workspaces WHERE id=?2),(SELECT id FROM chats WHERE id=?2)";
 
 /// A stored request's key, record, active flag, number and whether its
 /// space is gone.
@@ -146,7 +152,7 @@ fn by_number(db: &Connection, number: ItemNumber) -> Result<Option<ApprovalReque
 /// for its repository.
 pub fn list(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
-        "{COLUMNS} WHERE ?1 IS NULL OR workspace_id=?1
+        "{COLUMNS} WHERE ?1 IS NULL OR workspace_id=?1 OR chat_id=?1
             OR {REPOSITORY_OWNED}
         ORDER BY rowid"
     ))?
@@ -159,7 +165,7 @@ pub fn list(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<ApprovalRequ
 /// the order they were made: what the space lists.
 fn list_of_space(db: &Connection, space: Option<&SpaceId>) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
-        "{COLUMNS} WHERE ?1 IS NULL OR workspace_id=?1
+        "{COLUMNS} WHERE ?1 IS NULL OR workspace_id=?1 OR chat_id=?1
             OR {REPOSITORY_OWNED} OR {DECIDED_BY}
         ORDER BY rowid"
     ))?
@@ -195,7 +201,7 @@ pub fn check(
     tx: &Transaction<'_>,
     mut request: ApprovalRequest,
 ) -> Result<Option<ApprovalRequest>> {
-    require_ready(tx, &request.space_id)?;
+    require_ready_space(tx, &request.space_id)?;
     if let Some(existing) = current(tx, &request.space_id, &request.target, &request.name)? {
         ensure!(
             existing.specification == request.specification
@@ -214,13 +220,13 @@ pub fn check(
     ensure!(!request.reason.trim().is_empty(), ReasonRequired);
     crate::validate::reason("approval", Some(&request.reason))?;
     request.space = Some(tx.query_row(
-        "SELECT name FROM workspaces WHERE id=?1",
+        "SELECT name FROM spaces WHERE id=?1",
         [&request.space_id],
         |r| r.get(0),
     )?);
     request.key = uuid::Uuid::new_v4().to_string();
     request.number = item_numbers::next(tx, &request.space_id)?;
-    tx.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,space_number,number) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+    tx.execute(&format!("INSERT INTO access_requests(id,workspace_id,chat_id,target_key,name,record,space_number,number) VALUES (?1,{OWNING_SPACE},?3,?4,?5,?6,?7)"),
         params![request.key,request.space_id,request.target,request.name,serde_json::to_string(&request)?,request.number.space,request.number.item])?;
     events::record_approval(tx, EventKind::ApprovalRequested, &request)?;
     Ok(Some(request))
@@ -393,7 +399,7 @@ impl Manager {
     ) -> Result<bool> {
         self.store
             .write(move |tx| {
-                require_ready(tx, &owner)?;
+                require_ready_space(tx, &owner)?;
                 let released = release(tx, &owner, &target, &name)?;
                 Ok(released)
             })

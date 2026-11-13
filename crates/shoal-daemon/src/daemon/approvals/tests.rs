@@ -721,8 +721,10 @@ async fn bundled_planner_bounds_lookups_and_limits_candidate_decoding() -> Resul
             let candidate_plan = plan(db, CANDIDATES, params!["owner", target])?;
             assert!(id_plan.contains("SEARCH access_requests USING INDEX sqlite_autoindex_access_requests_1 (id=?)"), "{id_plan}");
             assert!(current_plan.contains("SEARCH access_requests USING INDEX access_request_name (workspace_id=? AND target_key=? AND name=?)"), "{current_plan}");
+            assert!(current_plan.contains("SEARCH access_requests USING INDEX access_request_chat_name (chat_id=? AND target_key=? AND name=?)"), "{current_plan}");
             assert!(candidate_plan.contains("SEARCH access_requests USING INDEX access_request_target (workspace_id=? AND target_key=?)"), "{candidate_plan}");
-            db.execute_batch("SAVEPOINT without_index; DROP INDEX access_request_target;")?;
+            assert!(candidate_plan.contains("SEARCH access_requests USING INDEX access_request_chat_target (chat_id=? AND target_key=?)"), "{candidate_plan}");
+            db.execute_batch("SAVEPOINT without_index; DROP INDEX access_request_target; DROP INDEX access_request_chat_target;")?;
             let old_plan = plan(db, CANDIDATES, params!["owner", target])?;
             assert!(old_plan.contains("SCAN access_requests"), "{old_plan}");
             db.execute_batch("ROLLBACK TO without_index; RELEASE without_index;")?;
@@ -950,4 +952,33 @@ async fn a_parent_approves_a_merge_with_its_own_merge_permission_at_its_commit()
     assert!(stale.is_err());
     let retired = manager.approval_by_key(&requested.key).await.unwrap();
     assert_eq!(retired.unwrap().status, DecisionStatus::Outdated);
+}
+
+#[tokio::test]
+async fn a_chat_owns_its_requests_until_it_goes() -> Result<()> {
+    let (_root, manager) = crate::daemon::test_support::manager().await;
+    let chat = crate::daemon::test_support::chat(&manager, "master", "chat", None, None).await;
+    let target = Target::Resource {
+        scope: Scope::Global,
+        pool: "lock".into(),
+    };
+    let pending = manager
+        .request_approval(sample(&chat.id, target.clone()))
+        .await?
+        .unwrap();
+    assert_eq!(pending.number.space, chat.number);
+    let id = chat.id.clone();
+    manager
+        .store
+        .write(move |tx| {
+            assert_eq!(
+                current(tx, &id, &target, "default")?.unwrap().key,
+                pending.key
+            );
+            assert_eq!(list(tx, Some(&id))?.len(), 1);
+            tx.execute("DELETE FROM chats WHERE id=?1", [&id])?;
+            assert!(current(tx, &id, &target, "default")?.is_none());
+            Ok(())
+        })
+        .await
 }
