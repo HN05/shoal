@@ -5088,12 +5088,12 @@ setup or cleanup failures. Branch changes are observed during daemon sweeps;
 detached HEAD has a null branch, and the recorded workspace branch remains
 unchanged.
 
-A `type: "chat"` line records a chat's start, rename or removal: its `id`,
-`created_at`, `kind` (`chat_started`, `chat_renamed`, or `chat_ended` when it
-is removed) and a `chat` object with its `id`, `repository_id` (null for a
+A `type: "chat"` line records a chat's start or rename: its `id`,
+`created_at`, `kind` (`chat_started` or `chat_renamed`; earlier journals also
+hold `chat_ended` for a removal) and a `chat` object with its `id`, `repository_id` (null for a
 chat without a repository), `name` (the new one after a rename), `agent` and
-Unix-seconds `started_at`. Its agent's starts and stops are recorded as a
-workspace agent's.
+Unix-seconds `started_at`. Its removal, and its agent's starts and stops, are
+recorded as a workspace's.
 
 A `type: "file"` line records a file [attached](#attached-files) to a workspace
 or chat by any route (`kind: "file_added"`) or deleted by any route, including

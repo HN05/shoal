@@ -3,7 +3,7 @@ use crate::{
     config::modes::ModeName,
     daemon::{
         conversions::{Converting, Pending},
-        events::{ChatEventKind, EventItem, EventKind},
+        events::{EventItem, EventKind},
         test_support::{chat, manager, repository},
         workspace::Manager,
     },
@@ -95,7 +95,7 @@ async fn a_chat_becomes_a_workspace_under_its_id_number_name_and_parent() {
     );
     for gone in [
         EventKind::Created.to_string(),
-        ChatEventKind::Ended.to_string(),
+        EventKind::Removed.to_string(),
     ] {
         assert!(!kinds.contains(&gone), "{kinds:?}");
     }
