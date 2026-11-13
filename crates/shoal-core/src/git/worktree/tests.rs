@@ -341,3 +341,76 @@ async fn a_clean_worktree_with_a_submodule_is_removed() {
     .unwrap();
     assert!(!workspace.exists());
 }
+
+/// A directory nobody may write into, which keeps Git from deleting the
+/// file in it; root deletes it whatever the permissions say.
+fn read_only_directory(workspace: &Path) {
+    use std::os::unix::fs::PermissionsExt as _;
+    let directory = workspace.join("read-only");
+    std::fs::create_dir(&directory).unwrap();
+    std::fs::write(directory.join("output"), "built").unwrap();
+    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o555)).unwrap();
+}
+
+/// The admin directory of the worktree at `workspace`.
+async fn admin_dir(workspace: &Path) -> std::path::PathBuf {
+    std::path::PathBuf::from(
+        git(workspace, &["rev-parse", "--absolute-git-dir"])
+            .await
+            .trim_end(),
+    )
+}
+
+/// Git forgets a worktree once it starts deleting its files, so files it
+/// could not delete go too.
+#[tokio::test]
+async fn files_git_leaves_behind_go_with_the_worktree() {
+    let root = tempfile::tempdir().unwrap();
+    let (repo, workspace) = with_topic(root.path()).await;
+    read_only_directory(&workspace);
+    let removed = remove(&repo, &workspace, FileRemoval::Force, BranchRemoval::Keep)
+        .await
+        .unwrap();
+    assert!(!workspace.exists());
+    assert_eq!(
+        removed.branch.as_ref().map(BranchName::as_str),
+        Some("topic")
+    );
+}
+
+/// What a `worktree remove` that failed partway leaves: the directory,
+/// with its `.git` link or without it, and no admin directory.
+#[tokio::test]
+async fn a_worktree_whose_admin_directory_is_gone_is_disowned() {
+    let root = tempfile::tempdir().unwrap();
+    let (_repo, workspace) = with_topic(root.path()).await;
+    let admin = admin_dir(&workspace).await;
+    assert!(!disowned(&workspace, &admin).await.unwrap());
+    std::fs::remove_dir_all(&admin).unwrap();
+    assert!(disowned(&workspace, &admin).await.unwrap());
+    std::fs::remove_file(workspace.join(".git")).unwrap();
+    assert!(disowned(&workspace, &admin).await.unwrap());
+    read_only_directory(&workspace);
+    delete_disowned(&workspace).await.unwrap();
+    assert!(!workspace.exists());
+    assert!(!disowned(&workspace, &admin).await.unwrap());
+}
+
+/// A directory whose `.git` names another admin directory, or is a
+/// repository of its own, is not the worktree that was disowned.
+#[tokio::test]
+async fn another_checkout_at_the_path_is_not_disowned() {
+    let root = tempfile::tempdir().unwrap();
+    let (repo, workspace) = with_topic(root.path()).await;
+    let admin = admin_dir(&workspace).await;
+    let other = root.path().join("other");
+    add(&repo, &other, &"other".into(), Some("main"))
+        .await
+        .unwrap();
+    std::fs::copy(other.join(".git"), workspace.join(".git")).unwrap();
+    std::fs::remove_dir_all(&admin).unwrap();
+    assert!(!disowned(&workspace, &admin).await.unwrap());
+    std::fs::remove_file(workspace.join(".git")).unwrap();
+    std::fs::create_dir(workspace.join(".git")).unwrap();
+    assert!(!disowned(&workspace, &admin).await.unwrap());
+}

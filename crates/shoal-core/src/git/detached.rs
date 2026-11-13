@@ -72,7 +72,7 @@ pub async fn remove(path: &Path) -> Result<()> {
 /// Give or take the write permission on every file and directory under
 /// `path`, without following symbolic links: the owner's when giving it,
 /// everyone's when taking it.
-fn set_writable(path: &Path, writable: bool) -> std::io::Result<()> {
+pub(super) fn set_writable(path: &Path, writable: bool) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt as _;
     let metadata = std::fs::symlink_metadata(path)?;
     if metadata.file_type().is_symlink() {

@@ -1,6 +1,6 @@
 //! The linked worktrees of workspaces on a branch: creating one, and
 //! removing any workspace's worktree, with its branch when the caller says
-//! so. No hooks run.
+//! so, or what is left of one Git disowned. No hooks run.
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
@@ -72,17 +72,25 @@ pub async fn remove(
 
 /// The branch Git lists the worktree at `path` on; `None` when detached.
 async fn registered_branch(repo: &Path, path: &Path) -> Result<Option<BranchName>> {
+    let Some(worktree) = listed(repo, path).await? else {
+        anyhow::bail!("Git lists no worktree at {}", path.display())
+    };
+    Ok(worktree
+        .branch
+        .as_deref()
+        .and_then(super::strip_local)
+        .map(BranchName::from))
+}
+
+/// The worktree Git lists at `path`, if any.
+async fn listed(repo: &Path, path: &Path) -> Result<Option<super::Worktree>> {
     let path = resolved(path).await;
     for worktree in super::worktrees(repo, super::run_isolated).await? {
         if resolved(&worktree.path).await == path {
-            return Ok(worktree
-                .branch
-                .as_deref()
-                .and_then(super::strip_local)
-                .map(BranchName::from));
+            return Ok(Some(worktree));
         }
     }
-    anyhow::bail!("Git lists no worktree at {}", path.display())
+    Ok(None)
 }
 
 /// `path` with symbolic links resolved as far as it exists.
@@ -103,15 +111,65 @@ async fn remove_worktree(repo: &Path, path: &Path, files: FileRemoval) -> Result
         command.arg("--force");
     }
     command.arg("--").arg(path);
-    super::output(command)
-        .await
-        .with_context(|| format!("remove the worktree at {}", path.display()))?;
+    if let Err(error) = super::output(command).await {
+        // Once Git starts deleting files it forgets the worktree, whatever
+        // it could not delete, so the rest goes as a disowned worktree's.
+        if listed(repo, path).await?.is_some() {
+            return Err(error.context(format!("remove the worktree at {}", path.display())));
+        }
+        delete_disowned(path).await?;
+    }
     ensure!(
         !off_runtime::exists(path).await?,
         "Git left {} after removing its worktree",
         path.display()
     );
     Ok(())
+}
+
+/// Whether Git disowned the linked worktree at `path`, whose admin
+/// directory was `admin_dir`: that directory is gone, as `worktree remove`
+/// leaves it when it cannot delete every file, while the worktree's
+/// directory stays with no `.git` or one still naming `admin_dir`.
+pub async fn disowned(path: &Path, admin_dir: &Path) -> Result<bool> {
+    if !off_runtime::is_dir(path).await? || off_runtime::try_exists(admin_dir).await? {
+        return Ok(false);
+    }
+    let linked = {
+        let path = path.to_owned();
+        off_runtime::run(move || linked_admin_dir(&path)).await
+    };
+    match linked {
+        Ok(None) => Ok(true),
+        Ok(Some(named)) => Ok(resolved(&named).await == resolved(admin_dir).await),
+        // A `.git` directory, or a link that cannot be read, proves nothing.
+        Err(_) => Ok(false),
+    }
+}
+
+/// The admin directory the `.git` link of the worktree at `path` names;
+/// `None` when it has none. Git writes a relative link when
+/// `worktree.useRelativePaths` is set.
+fn linked_admin_dir(path: &Path) -> Result<Option<PathBuf>> {
+    let link = path.join(".git");
+    let Some(contents) = crate::fsutil::read_optional(&link)? else {
+        return Ok(None);
+    };
+    let named = (contents.strip_prefix("gitdir: "))
+        .with_context(|| format!("{} links no admin directory", link.display()))?;
+    Ok(Some(path.join(named.trim_end_matches('\n'))))
+}
+
+/// Delete the directory of the worktree at `path` that Git disowned,
+/// whatever it holds.
+pub async fn delete_disowned(path: &Path) -> Result<()> {
+    let path = path.to_owned();
+    off_runtime::run(move || {
+        super::detached::set_writable(&path, true)
+            .with_context(|| format!("make {} writable", path.display()))?;
+        std::fs::remove_dir_all(&path).with_context(|| format!("remove {}", path.display()))
+    })
+    .await
 }
 
 /// Whether the clean worktree at `path` has submodules, which Git refuses
