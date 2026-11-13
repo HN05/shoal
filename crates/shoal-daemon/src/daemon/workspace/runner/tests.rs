@@ -48,9 +48,9 @@ pub(super) async fn launch(
 }
 
 /// A repository whose origin is a Forgejo that lists `jobs` as waiting:
-/// run 1 pushed `main` at its head and run 2 is for PR 12 at that head,
-/// which `pull_head` names when the PR moved on since; run 3 runs, and run
-/// 6 was cancelled.
+/// run 1 pushed `main` at its head and runs 2 and 8 wait for PR 12 at that
+/// head, which `pull_head` names when the PR moved on since, and the forge
+/// refuses to cancel run 8; run 3 runs, and run 6 was cancelled.
 struct Fixture {
     _root: tempfile::TempDir,
     manager: Arc<Manager>,
@@ -96,8 +96,20 @@ async fn fixture(jobs: Vec<Value>, pull_head: Option<&'static str>, settings: &s
             let mut cancelled = run(6, "push", &pushed, json!({}));
             cancelled["status"] = json!("cancelled");
             json!({"workflow_runs": [cancelled]})
-        } else if line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel" {
+        } else if line == "GET /api/v1/repos/team/repo/actions/runs/8" {
+            run(8, "pull_request", &pushed, json!({"number": 12}))
+        } else if let Some(number) = ["2", "8"].into_iter().find(|number| {
+            line == format!("GET /api/v1/repos/team/repo/actions/runs?run_number={number}")
+        }) {
+            let mut waiting = run(number.parse().unwrap(), "pull_request", &pushed, json!({}));
+            waiting["status"] = json!("waiting");
+            json!({"workflow_runs": [waiting]})
+        } else if line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel"
+            || line == "POST /api/v1/repos/team/repo/actions/runs/2/cancel"
+        {
             return (204, Vec::new(), Vec::new());
+        } else if line == "POST /api/v1/repos/team/repo/actions/runs/8/cancel" {
+            return (403, Vec::new(), b"{}".to_vec());
         } else if line == "GET /api/v1/repos/team/repo/pulls/12" {
             json!({"number": 12, "title": "Fix", "state": "open", "head": {"sha": pull_head, "ref": "fix"}, "base": {"ref": "main"}})
         } else {
@@ -492,11 +504,18 @@ async fn waiting_jobs_are_read_every_minute_while_none_could_start() {
 }
 
 #[tokio::test]
-async fn a_job_whose_pr_moved_on_is_passed_over_without_a_workspace() {
+async fn a_job_whose_pr_moved_on_has_its_run_cancelled_without_a_workspace() {
     let fixture = fixture(vec![job("old", 4, 2)], Some("new"), "").await;
     let manager = &fixture.manager;
 
     admit_and_claim(manager).await;
+    assert!(
+        fixture
+            .server
+            .received()
+            .iter()
+            .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/2/cancel")
+    );
     assert!(job_entries(manager).await.is_empty());
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
     assert!(
@@ -515,6 +534,25 @@ async fn a_job_whose_pr_moved_on_is_passed_over_without_a_workspace() {
         notifications
             .iter()
             .all(|notification| notification.kind != NotificationKind::RunnerFailed),
+        "{notifications:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_superseded_run_the_forge_does_not_cancel_is_passed_over_with_a_notification() {
+    let fixture = fixture(vec![job("old", 4, 8)], Some("new"), "").await;
+    let manager = &fixture.manager;
+
+    admit_and_claim(manager).await;
+    assert!(job_entries(manager).await.is_empty());
+    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    let notifications = manager.notifications(false, 50).await.unwrap();
+    let run = format!("http://{}/team/repo/actions/runs/8", fixture.server.host);
+    assert!(
+        notifications.iter().any(|notification| {
+            notification.kind == NotificationKind::RunnerFailed
+                && notification.message.contains(&run)
+        }),
         "{notifications:?}"
     );
 }

@@ -119,6 +119,17 @@ impl ForgeRepo {
         self.kind.run(self, number, &value)
     }
 
+    /// Cancel `run` unless it has finished, returning whether it ran.
+    pub async fn cancel_unfinished(&self, account: &Account, run: &ItemRef) -> Result<bool> {
+        let run = self.find_run(account, run, CiAction::Cancel).await?;
+        if !run.state.unfinished() {
+            return Ok(false);
+        }
+        self.act_on_run(account, &run, CiAction::Cancel, false)
+            .await?;
+        Ok(true)
+    }
+
     /// Apply `action` to `run`; `failed` reruns only its failed jobs.
     pub async fn act_on_run(
         &self,
