@@ -9,7 +9,10 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use super::{About, AgentMessage, Delivery, MAX_UNREAD, MAX_UNREAD_BYTES, Unread};
 use crate::{
-    client::space_ids::{SpaceId, SpaceNumber},
+    client::{
+        space_ids::{SpaceId, SpaceNumber},
+        space_names::{SpaceName, label},
+    },
     daemon::{
         notifications::{self, NotificationKind},
         workspace_files,
@@ -155,11 +158,11 @@ fn listed(
 
 /// `message` as an agent reads it: naming the space it is `about`, by its
 /// `number` while it has one, since names repeat.
-fn rendered(about: Option<String>, number: Option<SpaceNumber>, message: String) -> String {
+fn rendered(about: Option<SpaceName>, number: Option<SpaceNumber>, message: String) -> String {
     match (about, number) {
         (None, _) => message,
         (Some(about), None) => format!("{about}: {message}"),
-        (Some(about), Some(number)) => format!("{number} {about}: {message}"),
+        (Some(about), Some(number)) => format!("{}: {message}", label(number, &about)),
     }
 }
 
