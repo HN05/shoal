@@ -1195,28 +1195,31 @@ When `done` keeps the workspace, a session Shoal starts for `shoal start`, an
 attached agent or a background `shoal restore` ends after the agent's final turn,
 unless `[terminal] close_when_done = false` keeps it open.
 
-`shoal attach [target]` reattaches to the session of the workspace or running
+`shoal attach [target]` reattaches to the session of the workspace or
 [chat](#chats) named `target`, with a picker or `--session <name>` when a
 workspace has several; the picker and `shoal status` list each with the agent
 the daemon recorded running there and mark it `attached` while a terminal shows
 it: a zmx client, a Rex app with the block's session open, or, since Herdr does
 not count its clients, the focused Herdr tab. Without a target it takes the
 current workspace, else the only running chat of the current checkout, else a
-picker of the workspaces and chats with sessions. An agent or chat running in
+picker of the workspaces and the chats with sessions or whose agent is
+[asleep](#sleep) or stopped, each with its status. An agent or chat running in
 a Herdr pane counts as a session named after its tab: attaching focuses the
 tab and, from a terminal outside Herdr, attaches a Herdr client to the tab's
 Herdr session, and inside another Herdr session it is refused. A chat running
 in the Happy app or in a terminal no host serves has no session, and attaching says
 where it runs instead. Attach finds a session where the daemon recorded the
 workspace's agent or the chat running, or one Shoal opened for the workspace,
-such as a detached session left at its shell after a failed setup. The
-session of an agent Shoal stopped, such as for memory pressure, shows only the
-stop while it waits for its automatic restore: the pickers list its workspace
-and that session as stopped, and attaching to it starts the restore now, as
-`shoal queue start --attach <workspace>` does, and attaches once the agent
-runs. Without a
-restore in the queue, attaching says why the agent stopped and what restores
-it. Sessions are named after the workspace's directory, or for a
+such as a detached session left at its shell after a failed setup. Attaching
+wakes an agent at once, whatever the agent limits and the queue's rank, and
+attaches once it runs: the session of an agent that sleeps shows only the stop
+while its wrapper waits, the pickers list that session as stopped, and
+attaching to it starts its restore there, as `shoal queue start --attach`
+does. Without a session showing an agent, attaching starts the restore an
+asleep agent waits for, or restores a stopped agent as `shoal restore --now`
+does. Neither starts a second agent beside one whose wrapper waits. A session
+whose agent stopped without a restore in the queue says why the agent stopped
+and what restores it. Sessions are named after the workspace's directory, or for a
 chat opaquely, such as `chat-0b9c3a52`, since nothing is built from its name, suffixed `-2`, `-3`, ... when the name
 is in use, so `zmx ls` and `zmx attach` work as well, and labelled with their
 owner, `shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`.

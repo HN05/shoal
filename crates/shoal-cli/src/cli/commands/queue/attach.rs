@@ -19,8 +19,8 @@ use crate::{
 };
 
 /// How long to wait for the agent's session, which setup comes before.
-const WAIT: Duration = Duration::from_secs(600);
-const POLL: Duration = Duration::from_millis(200);
+pub(in crate::cli::commands) const WAIT: Duration = Duration::from_secs(600);
+pub(in crate::cli::commands) const POLL: Duration = Duration::from_millis(200);
 
 /// Refuse to attach to the entry `selector` names when it is a CI job,
 /// which has no session, before anything starts it.

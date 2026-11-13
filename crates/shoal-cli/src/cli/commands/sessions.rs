@@ -1,6 +1,6 @@
 //! Persistent agent sessions run in terminal hosts; attaching hands this
-//! terminal to one of a workspace's or a running chat's, resuming a
-//! workspace's agent that Shoal stopped first.
+//! terminal to one of a workspace's or a chat's, first waking at once an
+//! agent that sleeps or is stopped there.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, bail, ensure};
@@ -9,6 +9,8 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         agents,
+        args::SpaceTargets,
+        commands::queued_agents,
         context::Context,
         recent,
         terminal::{self, Recorded},
@@ -17,6 +19,7 @@ use crate::{
     model::{Chat, Inspection},
     protocol::{ConfigTarget, Protection},
     sessions::Origin,
+    state::{QueueKind, QueueState},
     terminal::Session,
 };
 
@@ -31,12 +34,7 @@ pub(super) async fn attach(
     );
     ensure!(ctx.on_terminal(), "attach requires a terminal");
     let target = Target::resolve(ctx, target).await?;
-    let sessions = target.sessions(ctx).await?;
-    let chosen = chosen_session(ctx, &target, session, &sessions)?.clone();
-    let (target, session) = match chosen.stopped {
-        Some(_) => target.resumed(ctx, &chosen).await?,
-        None => (target, chosen),
-    };
+    let (target, session) = target.awake_session(ctx, session).await?;
     if terminal::attach(&target.number().to_string(), &session).await? {
         target.record_detach(ctx).await;
     }
@@ -79,7 +77,7 @@ pub(super) async fn agent_terminal_session(
     id: &SpaceId,
     execution: Option<&ExecutionId>,
 ) -> Result<Option<String>> {
-    let target = Target::inspected(ctx, SpaceSelector::id(id)).await?;
+    let target = Target::by_id(ctx, id.clone()).await?;
     let session = agent_session(target.sessions(ctx).await?, execution);
     Ok(session.map(|session| session.name))
 }
@@ -104,12 +102,13 @@ enum Target {
 }
 
 impl Target {
-    /// The running chat or workspace `name` selects, where `-` is the one
-    /// whose session this terminal last left running; without one, the
-    /// current workspace, else the current checkout's only running chat,
-    /// else a picker of the workspaces and chats with sessions.
+    /// The chat or workspace `name` selects, where `-` is the one whose
+    /// session this terminal last left running; without one, the current
+    /// workspace, else the current checkout's only running chat, else a
+    /// picker of the workspaces and the chats with sessions or an agent that
+    /// sleeps or is stopped.
     async fn resolve(ctx: &Context, name: Option<SpaceSelector>) -> Result<Self> {
-        let chats = crate::client::chats::list(&ctx.paths).await?;
+        let chats = crate::client::chats::recorded(&ctx.paths).await?;
         if name.as_ref().is_some_and(recent::is_previous) {
             let id = recent::previous_space(ctx, &chats).await?;
             return Self::space(ctx, chats, id).await;
@@ -124,7 +123,11 @@ impl Target {
             Err(error) if error.is::<NoCurrentWorkspace>() => {}
             current => return current,
         }
-        if let Some(chat) = checkout_chat(ctx, &chats).await? {
+        let running: Vec<Chat> = (chats.iter())
+            .filter(|chat| chat.running)
+            .cloned()
+            .collect();
+        if let Some(chat) = checkout_chat(ctx, &running).await? {
             return Ok(Self::Chat(Box::new(chat)));
         }
         Self::picked(ctx, chats).await
@@ -144,12 +147,13 @@ impl Target {
         Ok(Self::Workspace(Box::new(inspection)))
     }
 
-    /// A workspace or one of `chats`, each with an agent session, from a picker.
+    /// A workspace or one of `chats` with an agent session, or whose agent
+    /// sleeps or is stopped, which the picker's status shows, from a picker.
     async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Self> {
         let attachable = terminal::session_owners(&chat_places(&chats));
         let chats: Vec<_> = chats
             .into_iter()
-            .filter(|chat| attachable.contains(&chat.id))
+            .filter(|chat| attachable.contains(&chat.id) || !chat.running || chat.asleep.is_some())
             .collect();
         let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
         let id = ui::pick_space(ctx, workspaces, &chats, "workspace").await?;
@@ -162,6 +166,19 @@ impl Target {
             return Ok(Self::Chat(Box::new(chat)));
         }
         Self::inspected(ctx, SpaceSelector::Id(id)).await
+    }
+
+    /// The chat or workspace with the ID `id`, as it is now.
+    async fn by_id(ctx: &Context, id: SpaceId) -> Result<Self> {
+        let chats = crate::client::chats::recorded(&ctx.paths).await?;
+        Self::space(ctx, chats, id).await
+    }
+
+    fn id(&self) -> &SpaceId {
+        match self {
+            Self::Workspace(inspection) => &inspection.workspace.id,
+            Self::Chat(chat) => &chat.id,
+        }
     }
 
     /// Remember a workspace or chat once its session was shown and still
@@ -183,26 +200,86 @@ impl Target {
         terminal::sessions(&settings, &self.places()).await
     }
 
-    /// The workspace, read again, and the session of the agent Shoal
-    /// stopped in `session` once it runs again through its queued restore;
-    /// refused with what restores it when no restore waits.
-    async fn resumed(self, ctx: &Context, session: &Session) -> Result<(Self, Session)> {
-        let (Self::Workspace(inspection), Some(execution), Some(protection)) =
-            (&self, &session.execution, &session.stopped)
-        else {
-            bail!(
-                "{} has no stopped agent in session {}",
-                self.name(),
-                session.name
-            );
+    /// The session `named` names, the target's only one or one picked,
+    /// taken once the agent there runs. With no session named and none
+    /// showing an agent, an agent that sleeps or is stopped wakes first; a
+    /// session where Shoal stopped the agent wakes it.
+    async fn awake_session(self, ctx: &Context, named: Option<String>) -> Result<(Self, Session)> {
+        let sessions = self.sessions(ctx).await?;
+        let shows_agent = sessions.iter().any(|session| session.agent.is_some());
+        if named.is_none() && !shows_agent && self.wake(ctx).await? {
+            return self.awaited(ctx, None).await;
+        }
+        let chosen = chosen_session(ctx, &self, named, &sessions)?.clone();
+        let (Some(execution), Some(protection)) = (&chosen.execution, &chosen.stopped) else {
+            return Ok((self, chosen));
         };
         if !super::queue::resume_stopped(ctx, execution).await? {
             bail!("{}", stopped_agent(&self, protection));
         }
-        let target = Self::inspected(ctx, SpaceSelector::id(&inspection.workspace.id)).await?;
-        let resumed = agent_session(target.sessions(ctx).await?, Some(execution))
-            .with_context(|| format!("{} has no session {}", target.name(), session.name))?;
-        Ok((target, resumed))
+        self.awaited(ctx, Some(execution)).await
+    }
+
+    /// Wake the target's agent at once, whatever the agent limits and the
+    /// queue's rank: start the restore that waits for it, as for an agent
+    /// that sleeps, or restore its stopped work as `shoal restore --now` does.
+    /// Whether it had either.
+    async fn wake(&self, ctx: &Context) -> Result<bool> {
+        let entries = queued_agents::entries(ctx).await?;
+        let restore = (entries.into_iter())
+            .find(|entry| entry.kind == QueueKind::Restore && entry.space() == Some(self.id()));
+        if let Some(entry) = restore {
+            if entry.state == QueueState::Queued {
+                crate::client::queue::start(&ctx.paths, entry.id.to_string()).await?;
+            }
+            return Ok(true);
+        }
+        let space = SpaceSelector::id(self.id());
+        if crate::client::saved::read(&ctx.paths, space.clone())
+            .await?
+            .is_empty()
+        {
+            return Ok(false);
+        }
+        let targets = SpaceTargets {
+            space: vec![space],
+            all: false,
+        };
+        let now = super::restore::agents::Options {
+            execution: None,
+            forget: false,
+            no_agents: false,
+            now: true,
+            focus: false,
+            change: None,
+        };
+        super::restore::run(ctx, targets, None, now).await?;
+        Ok(true)
+    }
+
+    /// The target, read again, with the session its agent, only
+    /// `execution` when given, runs in once it does.
+    async fn awaited(
+        self,
+        ctx: &Context,
+        execution: Option<&ExecutionId>,
+    ) -> Result<(Self, Session)> {
+        let deadline = tokio::time::Instant::now() + super::queue::WAIT;
+        let id = self.id().clone();
+        loop {
+            let target = Self::by_id(ctx, id.clone()).await?;
+            if let Some(session) = agent_session(target.sessions(ctx).await?, execution) {
+                return Ok((target, session));
+            }
+            ensure!(
+                tokio::time::Instant::now() < deadline,
+                "{} has no agent session after {} seconds; shoal attach {} attaches once it has one",
+                target.name(),
+                super::queue::WAIT.as_secs(),
+                target.number()
+            );
+            tokio::time::sleep(super::queue::POLL).await;
+        }
     }
 
     /// Whose settings choose the hosts to look in.
