@@ -1,8 +1,8 @@
 -- A chat's agent runs as an execution of the chat, so the chat no longer
 -- records the process it ran in. Each chat whose agent ran or Shoal saved
 -- is kept here until the daemon saves its agent for `shoal resume`, or
--- queues its restore when it was saved to come back on its own; one whose
--- agent exited keeps its session as a workspace's does.
+-- queues its restore when it ran or was saved to come back on its own; one
+-- whose agent exited keeps its session as a workspace's does.
 CREATE TABLE upgraded_chat_agents (
     chat_id TEXT PRIMARY KEY REFERENCES chats(id) ON DELETE CASCADE,
     saved INTEGER NOT NULL CHECK(saved IN (0,1)),
@@ -11,7 +11,7 @@ CREATE TABLE upgraded_chat_agents (
     turn TEXT
 );
 INSERT INTO upgraded_chat_agents(chat_id,saved,automatic,stopped_by,turn)
-    SELECT id, restore IS NULL OR saved, restore IS 'automatic', stopped_by,
+    SELECT id, restore IS NULL OR saved, restore IS NULL OR restore='automatic', stopped_by,
         (SELECT state FROM space_agent_state WHERE space_id=chats.id)
     FROM chats;
 DELETE FROM space_agent_state WHERE space_id IN (SELECT id FROM chats);

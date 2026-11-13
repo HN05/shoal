@@ -82,7 +82,8 @@ async fn an_upgraded_chats_agent_is_saved_as_a_stopped_agent_with_its_session() 
 }
 
 /// An upgraded chat's agent still running outside an execution stops before
-/// it is saved, so that no resume runs a second agent on its session.
+/// it is saved, so that no restore runs a second agent on its session, and
+/// comes back on its own.
 #[tokio::test]
 async fn an_upgraded_chats_running_agent_stops_before_it_is_saved() {
     let (root, manager) = manager().await;
@@ -92,14 +93,18 @@ async fn an_upgraded_chats_running_agent_stops_before_it_is_saved() {
         .await
         .unwrap();
     let talk = chat(&manager, "talk", "chat", Some(&repo), None).await;
-    upgrade(&manager, &talk, true, false).await;
+    upgrade(&manager, &talk, true, true).await;
     let agent = chat_process(&manager, &talk).await;
 
     manager.save_upgraded_chat_agents().await.unwrap();
 
     assert!(ended(agent));
-    assert_eq!(
-        Saved::load(&manager.paths, &talk.id).unwrap().agents.len(),
-        1
-    );
+    let [saved] = Saved::load(&manager.paths, &talk.id)
+        .unwrap()
+        .agents
+        .try_into()
+        .unwrap();
+    let requests = recovery::restore_requests(&manager.paths, &talk.id).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].0, saved.id);
 }

@@ -2137,7 +2137,7 @@ fn chats_keep_their_agents_to_restore_once_they_record_no_process() -> Result<()
             row("automatic", true, true, None, None),
             row("exited", false, false, None, None),
             row("resume", true, false, Some("running"), None),
-            row("running", true, false, None, Some("working")),
+            row("running", true, true, None, Some("working")),
         ]
     );
     let left: i64 = db.query_row(

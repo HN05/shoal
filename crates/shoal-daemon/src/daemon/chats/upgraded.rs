@@ -1,8 +1,8 @@
 //! The agents of chats from before a chat's agent ran as an execution of
 //! the chat: one still running outside an execution is stopped, then each
-//! is saved as a workspace's stopped agent is, for `shoal resume` or, when
-//! Shoal saved it to come back on its own, for the agent queue, and one that
-//! exited keeps its session.
+//! is saved as a workspace's stopped agent is, for the agent queue to
+//! restore when it ran or Shoal saved it to come back on its own, otherwise
+//! for `shoal resume`, and one that exited keeps its session.
 use anyhow::{Context as _, Result};
 use rusqlite::Connection;
 
@@ -23,7 +23,7 @@ struct Upgraded {
     chat: SpaceId,
     /// Shoal stopped it, or the upgrade did, rather than it exiting.
     saved: bool,
-    /// Shoal saved it to come back on its own.
+    /// It ran, or Shoal saved it to come back on its own.
     automatic: bool,
     /// The space whose process stopped it.
     stopped_by: Option<SpaceId>,
