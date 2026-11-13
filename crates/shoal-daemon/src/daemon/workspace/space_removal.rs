@@ -6,7 +6,7 @@ use crate::client::{execution_ids::ExecutionId, space_ids::SpaceId};
 use crate::paths::StateFiles;
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::params;
-use std::{borrow::Cow, collections::HashSet};
+use std::borrow::Cow;
 
 use super::{
     Manager, StopRequest,
@@ -84,23 +84,16 @@ impl Manager {
         cancelled: &[IdleRestore],
     ) -> Result<SpaceAgent> {
         let id = space.id();
-        let running = (self.agents_running_in(id).await?).iter().any(|execution| {
-            !cancelled
-                .iter()
-                .any(|stopped| stopped.execution == *execution)
-        });
-        let idle = self.idle_restores(id).await?;
-        let mut saved = self.saved_agent(id, &idle, cancelled)?;
+        let mut saved = self.saved_agent(id, cancelled).await?;
         // A saved chat in its worktree comes back there, as a saved agent
         // does.
         if let Some(workspace) = space.worktree() {
             for chat in self.chats_in(&workspace.id).await? {
-                let idle = self.idle_restores(&chat.id).await?;
-                saved = saved || self.saved_agent(&chat.id, &idle, cancelled)?;
+                saved = saved || self.saved_agent(&chat.id, cancelled).await?;
             }
         }
         Ok(SpaceAgent {
-            state: match (running, saved) {
+            state: match (self.agent_runs(id, cancelled).await?, saved) {
                 (true, _) => AgentState::Running,
                 (false, true) => AgentState::Saved,
                 (false, false) => AgentState::Stopped,
@@ -109,11 +102,12 @@ impl Manager {
         })
     }
 
-    /// The executions of the space `id` whose agent runs: those of an agent
-    /// whose restore waits in the queue run none.
-    async fn agents_running_in(&self, id: &SpaceId) -> Result<Vec<ExecutionId>> {
+    /// Whether an agent of the space `id` runs, other than the `cancelled`
+    /// ones a removal stopped: an agent whose restore waits in the queue
+    /// does not.
+    async fn agent_runs(&self, id: &SpaceId, cancelled: &[IdleRestore]) -> Result<bool> {
         let id = id.to_owned();
-        (self.store)
+        let running: Vec<ExecutionId> = (self.store)
             .run(move |db| {
                 db.prepare(
                     "SELECT id FROM executions e WHERE space_id=?1 AND agent IS NOT NULL
@@ -126,18 +120,19 @@ impl Manager {
                 .collect::<rusqlite::Result<_>>()
                 .map_err(Into::into)
             })
-            .await
+            .await?;
+        Ok(running.iter().any(|execution| {
+            !cancelled
+                .iter()
+                .any(|stopped| stopped.execution == *execution)
+        }))
     }
 
     /// Whether the space `id` has stopped work saved to restore, other than
-    /// the `idle` restores, which their wrappers wait to carry out, and the
-    /// `cancelled` ones a removal stopped.
-    fn saved_agent(
-        &self,
-        id: &SpaceId,
-        idle: &HashSet<ExecutionId>,
-        cancelled: &[IdleRestore],
-    ) -> Result<bool> {
+    /// the restores of idle agents, which their wrappers wait to carry out,
+    /// and the `cancelled` ones a removal stopped.
+    async fn saved_agent(&self, id: &SpaceId, cancelled: &[IdleRestore]) -> Result<bool> {
+        let idle = self.idle_restores(id).await?;
         crate::execution::recovery::pending_except(&self.paths, id, |execution| {
             idle.contains(execution)
                 || cancelled

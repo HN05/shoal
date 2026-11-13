@@ -4957,7 +4957,7 @@ spaces it would remove now, without their idle periods and also where those
 rules are disabled, with their IDs in the same order in `removed_ids`; in `branches`, [kept branches](#kept-branches); and in `caches`,
 [shared caches](#shared-caches), each repository's with the `outcome` `emptied`,
 `busy` or `failed`. `kept` gives, by `space`, the reason `status` gives for keeping each other
-space, `agent_running` for a running chat. Without a terminal, or with `--dry-run`, it stops there. On a terminal,
+space, `agent_running` for one whose agent runs. Without a terminal, or with `--dry-run`, it stops there. On a terminal,
 a picker offers the spaces, kept branches and caches nothing is using, with
 nothing selected; Tab selects several, and deleting kept branches asks first unless
 `--yes` is given. `shoal cleanup spaces`, `branches` and `caches` act on one
