@@ -4,6 +4,7 @@
 A shell waiting on sleep leaves an orphan when a test stops the shell. macOS
 hides that orphan's environment, blocking concurrent tests' setup verification.
 """
+import json
 import os
 import sys
 import time
@@ -39,10 +40,21 @@ def record_launch():
     temporary.replace(record)
 
 
+def server_url():
+    # happy-cli's precedence: the environment, then its settings.
+    env = os.environ
+    home = Path(env.get('HAPPY_HOME_DIR') or Path(env['HOME']) / '.happy')
+    try:
+        settings = json.loads((home / 'settings.json').read_text())
+    except (OSError, ValueError):
+        settings = {}
+    return env.get('HAPPY_SERVER_URL') or settings.get('serverUrl')
+
+
 def activate_session():
     # A real session connects to Happy's server and heartbeats.
     session = os.environ.get('HAPPY_RECONNECT_SESSION_ID')
-    server = os.environ.get('HAPPY_SERVER_URL')
+    server = server_url()
     if session and server:
         time.sleep(1)
         request = urllib.request.Request(f'{server}/test/activate/{session}', method='POST')

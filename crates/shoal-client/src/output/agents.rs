@@ -132,11 +132,6 @@ outputs!(
 /// detached launch reports.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Delivery {
-    /// Where the first message waits for the user to send it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prompt_file: Option<std::path::PathBuf>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prompt_delivered: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub happy_session_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

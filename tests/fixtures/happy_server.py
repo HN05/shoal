@@ -2,7 +2,8 @@
 """A stand-in for Happy's server: the routes Shoal uses to seed a session
 and deliver a prompt, plus a test hook that marks a session alive the way a
 connected happy-cli heartbeat would. Prints its port on the first stdout line
-and mirrors every request into the JSON file named by argv[1]."""
+and mirrors every request into the JSON file named by argv[1]. With
+`--reject-messages` after it, it refuses every message posted to a session."""
 import json
 import os
 import sys
@@ -13,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 STATE = {"sessions": {}, "messages": {}, "requests": []}
 LOCK = threading.Lock()
 RECORD = sys.argv[1]
+REJECT_MESSAGES = "--reject-messages" in sys.argv[2:]
 
 
 def persist():
@@ -94,6 +96,8 @@ class Handler(BaseHTTPRequestHandler):
             session_id = self.path.split("/")[3]
             if session_id not in STATE["sessions"]:
                 return 404, {"error": "Session not found"}
+            elif REJECT_MESSAGES:
+                return 500, {"error": "messages rejected"}
             else:
                 stored = STATE["messages"].setdefault(session_id, [])
                 for index, message in enumerate(body["messages"]):

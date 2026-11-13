@@ -44,8 +44,6 @@ pub struct Session<'a> {
     pub directory: &'a Path,
     /// The branch checked out there, for a workspace's session.
     pub branch: Option<&'a str>,
-    /// Where the session keeps its files, without an extension.
-    pub files: &'a Path,
     /// The first message.
     pub prompt: Option<String>,
     pub args: Vec<OsString>,
@@ -62,8 +60,9 @@ pub trait Prepared: Send + Sync {
     /// Undo the preparation of a session that never started.
     fn discard(self: Box<Self>) -> BoxFuture<'static, ()>;
 
-    /// Deliver the first message to the started session.
-    fn deliver(self: Box<Self>) -> BoxFuture<'static, Delivered>;
+    /// Deliver the first message to the started session, failing when it
+    /// does not arrive.
+    fn deliver(&self) -> BoxFuture<'_, Result<Delivered>>;
 }
 
 /// What output says of a first message once the session started.

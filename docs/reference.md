@@ -1619,8 +1619,7 @@ workspace) but runs through the tracked wrapper in a background `shoal` process:
 it gets the scope token and port variables, counts as activity for idle cleanup,
 and `stop`, `rm`, PR cleanup, and reconciliation treat it like any other command.
 Shoal returns once the daemon records the launch, printing the execution, PID,
-and log (`--json` adds `prompt_file`, `prompt_delivered`, `happy_session_id` and
-`happy_daemon_recorded`). Without `~/.happy/daemon.state.json` (`$HAPPY_HOME_DIR`
+and log (`--json` adds `happy_session_id` and `happy_daemon_recorded`). Without `~/.happy/daemon.state.json` (`$HAPPY_HOME_DIR`
 overrides `~/.happy`) Shoal warns that the session will not appear in the app
 until `happy daemon start` runs, and launches anyway.
 
@@ -1629,9 +1628,10 @@ Shoal delivers it the way the app does: with the login in `~/.happy/access.key` 
 (`$HAPPY_SERVER_URL`, the settings file, or Happy's default), encrypted as
 happy-cli would encrypt it, starts `happy codex` attached to that session through
 Happy's own `HAPPY_RECONNECT_*` variables, waits up to 90 seconds for the session
-to report alive, and posts the prompt (`curl`, token on stdin). The prompt is also
-saved beside the log; when Happy is not logged in or delivery fails, Shoal warns
-and leaves it there for you to send from the app.
+to report alive, and posts the prompt (`curl`, token on stdin). A launch whose
+session Happy's server cannot create, such as on a machine not logged in to
+Happy, is refused before anything runs; one whose session does not receive the
+prompt is stopped, its session on Happy's server deleted, and the launch fails.
 
 ### Demos
 
@@ -1720,11 +1720,9 @@ place. `--here` runs it in place in this terminal. A Happy chat
 starts detached in the checkout as `start --in --agent happy-codex` starts a workspace session, and
 you continue it in the Happy app. Happy's Claude takes the instructions as
 arguments, and Happy's Codex receives them as its first message the way its
-prompts are delivered. Its output and any saved first message are kept at
-`<state>/chats/<id>.log` and `.prompt.md`, named after the chat's ID;
-`--json` reports
-the `chat`, `log`, `prompt_file`, `prompt_delivered`, `happy_session_id` and
-`happy_daemon_recorded`. A chat's agent carries a scope of its own, which
+prompts are delivered. Its output is kept at `<state>/chats/<id>.log`, named
+after the chat's ID; `--json` reports the `chat`, `log`, `happy_session_id`
+and `happy_daemon_recorded`. A chat's agent carries a scope of its own, which
 lasts as long as the chat, across stops and restores, so only your own terminal
 is unscoped. It acts on the chat and the spaces below it as a workspace's agent
 acts on its own, under the [scoped workspace commands](#scoped-workspace-commands)

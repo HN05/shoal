@@ -21,7 +21,7 @@ use crate::{
     },
     cli::context::Context,
     config::{Effective, templates},
-    execution::{self, DetachedLaunch},
+    execution::{self, DetachedExecution, DetachedLaunch},
     model::{Chat, Repository, Workspace},
     paths::Paths,
 };
@@ -60,7 +60,6 @@ pub(super) async fn start(
         paths: &ctx.paths,
         directory: &workspace.path,
         branch: workspace.branch.as_ref().map(BranchName::as_str),
-        files: &files,
         prompt,
         args,
     };
@@ -71,7 +70,7 @@ pub(super) async fn start(
         mode,
         narrowing,
     };
-    let (launch, prepared) = launch_session(
+    let (execution, prepared) = launch_session(
         ctx,
         &agent,
         &(&workspace).into(),
@@ -80,7 +79,7 @@ pub(super) async fn start(
         app.not_inherited(),
     )
     .await?;
-    let delivered = prepared.deliver().await;
+    let (launch, delivered) = deliver_first_message(execution, prepared).await?;
     report_session(ctx, app, &workspace, &launch, delivered)?;
     Ok(0)
 }
@@ -96,7 +95,7 @@ async fn launch_session(
     files: &Path,
     prepared: Box<dyn Prepared>,
     not_inherited: &[&str],
-) -> Result<(DetachedLaunch, Box<dyn Prepared>)> {
+) -> Result<(DetachedExecution, Box<dyn Prepared>)> {
     let launched = execution::launch_detached(
         &ctx.paths,
         space,
@@ -108,12 +107,32 @@ async fn launch_session(
     )
     .await;
     match launched {
-        Ok(launch) => Ok((launch, prepared)),
+        Ok(execution) => Ok((execution, prepared)),
         Err(error) => {
             prepared.discard().await;
             Err(error)
         }
     }
+}
+
+/// Deliver the first message of the `prepared` session `execution` runs. A
+/// session that does not receive it is no working launch: it is stopped and
+/// its preparation discarded, and the launch fails with the reason.
+async fn deliver_first_message(
+    execution: DetachedExecution,
+    prepared: Box<dyn Prepared>,
+) -> Result<(DetachedLaunch, Delivered)> {
+    let undelivered = match prepared.deliver().await {
+        Ok(delivered) => return Ok((execution.launch, delivered)),
+        Err(error) => error,
+    };
+    if let Err(error) = execution.interrupt().await {
+        eprintln!(
+            "warning: could not stop the session that did not receive its first message: {error:#}"
+        );
+    }
+    prepared.discard().await;
+    Err(undelivered)
 }
 
 /// Report the workspace session `launch` started, with what `delivered`
@@ -224,7 +243,7 @@ impl Prepared for WithEnv {
         self.prepared.discard()
     }
 
-    fn deliver(self: Box<Self>) -> BoxFuture<'static, Delivered> {
+    fn deliver(&self) -> BoxFuture<'_, Result<Delivered>> {
         self.prepared.deliver()
     }
 }
@@ -320,7 +339,6 @@ pub(super) async fn start_chat(
         paths: &ctx.paths,
         directory: home.path(),
         branch: None,
-        files: &files,
         prompt,
         args,
     };
@@ -337,9 +355,9 @@ pub(super) async fn start_chat(
         kind: crate::model::SpaceKind::Chat,
         path: home.path().to_owned(),
     };
-    let (launch, prepared) =
+    let (execution, prepared) =
         launch_session(ctx, &agent, &space, &files, prepared, app.not_inherited()).await?;
-    let delivered = prepared.deliver().await;
+    let (launch, delivered) = deliver_first_message(execution, prepared).await?;
     report_chat(
         ctx,
         app,

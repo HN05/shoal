@@ -87,8 +87,8 @@ space is selected by its ID and a queued agent by its entry's ID, and an
 issue's agent is also blocked by the issues its forge records as blocking it;
 the agent then starts on the done workspace's branch, and `blockers` lists
 what still blocks it. A Happy agent reports
-its launch (`execution_id`, `pid`, `log`); `prompt_delivered: false` means the
-first message is in `prompt_file` for the user to send from the app.
+its launch (`execution_id`, `pid`, `log`); a `happy-codex` launch fails when
+its first message cannot reach the session, such as without a Happy login.
 
 ## Child workspaces
 

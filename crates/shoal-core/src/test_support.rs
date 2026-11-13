@@ -607,3 +607,37 @@ pub fn decline_zellij_setup(home: &Path) {
         .unwrap();
     }
 }
+
+/// The message Shoal posted to a Happy session, decrypted from its posted
+/// `content` with `key`, the account secret for the `legacy` encryption
+/// variant or the session's key for `dataKey`, as Happy spells them.
+pub fn happy_message(variant: &str, key: &[u8], content: &[u8]) -> serde_json::Value {
+    let plaintext = match variant {
+        "legacy" => {
+            use crypto_secretbox::{
+                XSalsa20Poly1305,
+                aead::{Aead, KeyInit},
+            };
+            let (nonce, ciphertext) = content.split_at(24);
+            XSalsa20Poly1305::new_from_slice(key)
+                .unwrap()
+                .decrypt(nonce.into(), ciphertext)
+                .unwrap()
+        }
+        "dataKey" => {
+            use aes_gcm::{
+                Aes256Gcm,
+                aead::{Aead, KeyInit},
+            };
+            let (version, bundle) = content.split_first().unwrap();
+            assert_eq!(*version, 0);
+            let (nonce, ciphertext) = bundle.split_at(12);
+            Aes256Gcm::new_from_slice(key)
+                .unwrap()
+                .decrypt(nonce.try_into().unwrap(), ciphertext)
+                .unwrap()
+        }
+        _ => panic!("unknown Happy encryption variant {variant}"),
+    };
+    serde_json::from_slice(&plaintext).unwrap()
+}

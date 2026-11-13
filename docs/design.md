@@ -2014,8 +2014,10 @@ execution), so it stays stoppable and visible to cleanup. Happy's Codex mode tak
 no prompt argument, so Shoal delivers prompts the way the app does: it creates the
 session on Happy's server with the machine's own Happy login, encrypted as
 happy-cli would, attaches the CLI through Happy's reconnection variables, and posts
-the first message once the session is alive, keeping a copy on disk when that
-fails. Shoal reads Happy's credentials only for this and stores none. A Happy-side
+the first message once the session is alive. A session that cannot receive its
+first message is no working launch, so a launch Happy cannot seed is refused and
+one whose delivery fails is stopped; nothing is left on disk for the user to
+send. Shoal reads Happy's credentials only for this and stores none. A Happy-side
 pre-spawn hook asking Shoal for a workspace was considered and not adopted.
 
 Workspace and chat lifecycle events persist in a separate SQLite journal alongside

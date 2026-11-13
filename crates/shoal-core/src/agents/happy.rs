@@ -1,10 +1,7 @@
 //! Happy runs an agent in a detached session the Happy app shows, started
 //! as Happy's own daemon starts them, and delivers a first message the agent
 //! cannot take as an argument through Happy's server.
-use std::{
-    ffi::OsString,
-    path::{Path, PathBuf},
-};
+use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
@@ -127,12 +124,10 @@ impl Prepared for HappySession {
         Box::pin(self.opening.discard())
     }
 
-    fn deliver(self: Box<Self>) -> BoxFuture<'static, Delivered> {
+    fn deliver(&self) -> BoxFuture<'_, Result<Delivered>> {
         Box::pin(async move {
-            let prompt_delivered = self.opening.deliver(self.prompt.as_deref()).await;
+            self.opening.deliver(self.prompt.as_deref()).await?;
             let fields = Delivery {
-                prompt_file: self.opening.prompt_file.clone(),
-                prompt_delivered: Some(prompt_delivered),
                 happy_session_id: self
                     .opening
                     .seeded
@@ -140,10 +135,10 @@ impl Prepared for HappySession {
                     .map(|seeded| seeded.session.id.clone()),
                 happy_daemon_recorded: Some(self.daemon_recorded),
             };
-            Delivered {
-                note: self.opening.delivery(prompt_delivered),
+            Ok(Delivered {
+                note: self.opening.note(),
                 fields,
-            }
+            })
         })
     }
 }
@@ -162,58 +157,39 @@ fn warn_without_daemon(home: &Path) -> bool {
     recorded
 }
 
-/// Keep `prompt` beside the session's other `files`, for the user to send
-/// when Happy cannot deliver it.
-fn save_prompt(files: &Path, prompt: &str) -> Result<PathBuf> {
-    let path = files.with_extension(crate::paths::SESSION_PROMPT);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
-    }
-    std::fs::write(&path, prompt).with_context(|| format!("write {}", path.display()))?;
-    Ok(path)
-}
-
 /// How a session's first message reaches it. Happy's Codex mode has no prompt
-/// argument: the prompt is kept in a file and, when this machine is logged in
-/// to Happy, delivered through Happy's server to a session Shoal creates for
-/// the agent to attach to.
+/// argument: the prompt is delivered through Happy's server to a session
+/// Shoal creates for the agent to attach to, which needs this machine logged
+/// in to Happy.
 struct Opening {
-    prompt_file: Option<PathBuf>,
     seeded: Option<happy::client::Seeded>,
 }
 
 impl Opening {
-    /// Keep the prompt beside the session's other `files` and seed its
-    /// session, for an agent that cannot take it as an argument.
+    /// Seed the session of an agent that cannot take its first message as
+    /// an argument, refusing the launch when Happy cannot take it.
     async fn prepare(agent: Agent, session: &Session<'_>) -> Result<Self> {
         let Session {
             paths,
             directory,
             branch,
-            files,
             prompt,
             ..
         } = session;
-        let Some(prompt) = prompt.as_deref().filter(|_| !happy::accepts_prompt(agent)) else {
-            return Ok(Self {
-                prompt_file: None,
-                seeded: None,
-            });
-        };
-        let path = save_prompt(files, prompt)?;
-        let seeded = match happy::client::seed(paths, directory, *branch, agent).await {
-            Ok(seeded) => Some(seeded),
-            Err(error) => {
-                eprintln!(
-                    "warning: cannot deliver the prompt through Happy ({error:#}); send the prompt saved at {} to the session yourself",
-                    path.display()
-                );
-                None
-            }
-        };
+        if prompt.is_none() || happy::accepts_prompt(agent) {
+            return Ok(Self { seeded: None });
+        }
+        let seeded = happy::client::seed(paths, directory, *branch, agent)
+            .await
+            .with_context(|| {
+                format!(
+                    "cannot start happy-{}: it takes its first message only through Happy's \
+                     server, which needs this machine logged in to Happy",
+                    agent.as_str()
+                )
+            })?;
         Ok(Self {
-            prompt_file: Some(path),
-            seeded,
+            seeded: Some(seeded),
         })
     }
 
@@ -232,36 +208,23 @@ impl Opening {
         }
     }
 
-    /// Send `prompt` to the started session, returning whether it arrived. A
+    /// Send `prompt` to the started session through its seeded one. A
     /// prompt passed as an argument is delivered by the launch itself.
-    async fn deliver(&self, prompt: Option<&str>) -> bool {
-        let Some(prompt) = prompt else {
-            return false;
+    async fn deliver(&self, prompt: Option<&str>) -> Result<()> {
+        let (Some(seeded), Some(prompt)) = (&self.seeded, prompt) else {
+            return Ok(());
         };
-        let (Some(seeded), Some(path)) = (&self.seeded, &self.prompt_file) else {
-            return self.prompt_file.is_none();
-        };
-        match seeded
+        seeded
             .deliver(prompt, std::time::Duration::from_secs(90))
             .await
-        {
-            Ok(()) => true,
-            Err(error) => {
-                eprintln!(
-                    "warning: prompt not delivered ({error:#}); send the prompt saved at {} to the session yourself",
-                    path.display()
-                );
-                false
-            }
-        }
+            .context("the Happy session did not receive its first message")
     }
 
-    /// The line reporting where a saved prompt went.
-    fn delivery(&self, delivered: bool) -> &'static str {
-        match (&self.prompt_file, delivered) {
-            (Some(_), true) => "\nPrompt delivered to the session",
-            (Some(_), false) => "\nPrompt saved for you to send from the app",
-            (None, _) => "",
+    /// The line reporting a prompt delivered through the seeded session.
+    fn note(&self) -> &'static str {
+        match self.seeded {
+            Some(_) => "\nPrompt delivered to the session",
+            None => "",
         }
     }
 }

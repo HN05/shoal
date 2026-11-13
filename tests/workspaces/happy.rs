@@ -56,6 +56,8 @@ fn happy_agents_are_refused_until_enabled() {
 fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
     let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
     let record = install_fake_happy(&fixture);
+    let server = FakeHappyServer::start(&fixture);
+    log_in_to_happy(&fixture, &server);
     let state_file = fixture.root.path().join(".happy/daemon.state.json");
     for (operation, agent) in [("stop", "codex"), ("rm", "claude")] {
         let name = format!("happy-{agent}");
@@ -88,13 +90,9 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             let launch: Value = serde_json::from_slice(lines.next().unwrap()).unwrap();
             assert!(lines.next().is_none());
             assert_eq!(launch["happy_daemon_recorded"], false);
-            // Without Happy credentials, the guidance message is saved instead.
-            let prompt_file = launch["prompt_file"].as_str().unwrap();
-            assert!(
-                fs::read_to_string(prompt_file)
-                    .unwrap()
-                    .starts_with(GUIDANCE_START)
-            );
+            // Happy's Codex takes Shoal's guidance as its first message.
+            let session = launch["happy_session_id"].as_str().unwrap();
+            assert!(server.first_message(session).starts_with(GUIDANCE_START));
             let config: toml::Value = toml::from_str(
                 &fs::read_to_string(fixture.root.path().join(".codex/config.toml")).unwrap(),
             )
@@ -221,12 +219,14 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
 }
 
 #[test]
-fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
+fn happy_issue_prompts_reach_claude_as_arguments_and_codex_as_its_first_message() {
     let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
     let config_dir = fixture.root.path().join(".config/shoal");
     fs::create_dir_all(config_dir.join("rules")).unwrap();
     fs::write(config_dir.join("rules/worker.md"), "General {workspace}").unwrap();
     let record = install_fake_happy(&fixture);
+    let server = FakeHappyServer::start(&fixture);
+    log_in_to_happy(&fixture, &server);
     let title = "Fix API timeout";
     let body = "Keep the connection alive.";
     fixture.script_github(&github_issue(34, title, body));
@@ -269,7 +269,6 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             .0
             .split('\0')
             .collect();
-        let stderr = String::from_utf8_lossy(&output.stderr);
         if agent == "happy-claude" {
             assert_eq!(
                 args[..5],
@@ -288,8 +287,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             assert_eq!(args[6], "--append-system-prompt");
             assert_eq!(after_guidance(args[7]), "General 34-fix-api-timeout");
             assert_eq!(after_temp_dirs(&args[8..])[..2], ["--model", "test"]);
-            assert_eq!(launch["prompt_file"], Value::Null);
-            assert_eq!(launch["prompt_delivered"], true, "{launch}");
+            assert_eq!(launch["happy_session_id"], Value::Null);
         } else {
             assert_eq!(
                 args[..7],
@@ -303,9 +301,10 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
                     "test"
                 ]
             );
-            // Not logged in to Happy: the prompt is saved and the user is told.
-            let prompt_file = PathBuf::from(launch["prompt_file"].as_str().unwrap());
-            let prompt = after_guidance(&fs::read_to_string(&prompt_file).unwrap());
+            // The guidance and the issue arrive together as its first message.
+            let session = launch["happy_session_id"].as_str().unwrap();
+            let message = server.first_message(session);
+            let prompt = after_guidance(&message);
             assert!(
                 prompt.starts_with("General 34-fix-api-timeout\n\n"),
                 "{prompt}"
@@ -313,11 +312,6 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             for value in [title, body, "https://github.com/team/project/issues/34"] {
                 assert!(prompt.contains(value), "{prompt}");
             }
-            assert_eq!(launch["prompt_delivered"], false);
-            assert_eq!(launch["happy_session_id"], Value::Null);
-            // The user is told where the prompt was saved.
-            assert!(stderr.contains(prompt_file.to_str().unwrap()), "{stderr}");
-            assert!(recorded.contains("reconnect=|||||\n"), "{recorded}");
         }
         let pid = launch["pid"].as_u64().unwrap() as u32;
         fixture.ok(&["rm", "--wait", &fixture.id(&name), "--yes"]);
@@ -335,6 +329,15 @@ struct FakeHappyServer {
 
 impl FakeHappyServer {
     fn start(fixture: &Fixture) -> Self {
+        Self::start_with(fixture, &[])
+    }
+
+    /// A server that refuses every message posted to a session.
+    fn rejecting_messages(fixture: &Fixture) -> Self {
+        Self::start_with(fixture, &["--reject-messages"])
+    }
+
+    fn start_with(fixture: &Fixture, args: &[&str]) -> Self {
         use std::io::BufRead;
         let script = fixture.root.path().join("happy_server.py");
         fs::write(&script, include_str!("../fixtures/happy_server.py")).unwrap();
@@ -342,6 +345,7 @@ impl FakeHappyServer {
         let mut child = Command::new("python3")
             .arg(&script)
             .arg(&record)
+            .args(args)
             .stdout(Stdio::piped())
             .spawn()
             .unwrap();
@@ -359,6 +363,44 @@ impl FakeHappyServer {
     fn state(&self) -> Value {
         serde_json::from_str(&fs::read_to_string(&self.record).unwrap()).unwrap()
     }
+
+    /// The one message Shoal posted to `session`, of encryption `variant`
+    /// with `key`.
+    fn message(&self, session: &str, variant: &str, key: &[u8]) -> Value {
+        use base64::Engine;
+        let state = self.state();
+        let messages = state["messages"][session].as_array().unwrap();
+        assert_eq!(messages.len(), 1, "{state}");
+        assert!(!messages[0]["localId"].as_str().unwrap().is_empty());
+        let content = base64::engine::general_purpose::STANDARD
+            .decode(messages[0]["content"].as_str().unwrap())
+            .unwrap();
+        shoal_core::test_support::happy_message(variant, key, &content)
+    }
+
+    /// The text of the one message Shoal posted to `session` for the login
+    /// [`log_in_to_happy`] writes.
+    fn first_message(&self, session: &str) -> String {
+        let message = self.message(session, "legacy", &HAPPY_SECRET);
+        message["content"]["text"].as_str().unwrap().to_owned()
+    }
+}
+
+/// The account secret of the login [`log_in_to_happy`] writes.
+const HAPPY_SECRET: [u8; 32] = [7; 32];
+
+/// Log the fixture's machine in to Happy on `server`, as a legacy account
+/// whose secret is [`HAPPY_SECRET`]; Happy's Codex needs that to receive its
+/// first message.
+fn log_in_to_happy(fixture: &Fixture, server: &FakeHappyServer) {
+    use base64::Engine;
+    let home = fixture.root.path().join(".happy");
+    fs::create_dir_all(&home).unwrap();
+    let settings = serde_json::json!({"machineId": "machine-1", "serverUrl": server.url});
+    fs::write(home.join("settings.json"), settings.to_string()).unwrap();
+    let secret = base64::engine::general_purpose::STANDARD.encode(HAPPY_SECRET);
+    let credentials = serde_json::json!({"token": "test-token", "secret": secret});
+    fs::write(home.join("access.key"), credentials.to_string()).unwrap();
 }
 
 impl Drop for FakeHappyServer {
@@ -412,23 +454,25 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
             ])
             .env("HAPPY_RECORD", &record)
             .env("HAPPY_SERVER_URL", &server.url)
+            // Launched from inside another seeded session: its attachment must not leak.
+            .env("HAPPY_RECONNECT_SESSION_ID", "parent-session")
+            .env("HAPPY_RECONNECT_ENCRYPTION_KEY", &key)
+            .env("HAPPY_RECONNECT_ENCRYPTION_VARIANT", "legacy")
             .output()
             .unwrap();
         assert!(output.status.success(), "{output:?}");
         let launch: Value = happy_launch(&output);
-        assert_eq!(launch["prompt_delivered"], true, "{launch}");
         let session_id = launch["happy_session_id"].as_str().unwrap().to_owned();
         assert!(session_id.starts_with("session-"));
-        let message = fs::read_to_string(launch["prompt_file"].as_str().unwrap()).unwrap();
-        // Happy's Codex takes Shoal's guidance as its first message.
-        assert!(message.starts_with(GUIDANCE_START), "{message}");
-        let plaintext = serde_json::json!({
-            "role": "user",
-            "content": {"type": "text", "text": message},
-            "meta": {"sentFrom": "shoal"},
-        })
-        .to_string()
-        .len();
+        // The message reached the session, so nothing is left for the user to send.
+        assert_eq!(launch.get("prompt_file"), None, "{launch}");
+        assert_eq!(launch.get("prompt_delivered"), None, "{launch}");
+        let state_dir = Path::new(launch["log"].as_str().unwrap()).parent().unwrap();
+        let prompts: Vec<_> = (fs::read_dir(state_dir).unwrap())
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .filter(|file| file.ends_with(".prompt.md"))
+            .collect();
+        assert_eq!(prompts, Vec::<String>::new());
 
         // The CLI was launched attached to the seeded session.
         wait_until("fake happy record", || record.exists());
@@ -474,18 +518,19 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
             assert_eq!(*sealed, Value::Null);
         }
         assert!(requests.iter().any(|r| r["path"] == "/v2/sessions/active"));
-        let messages = state["messages"][&session_id].as_array().unwrap();
-        assert_eq!(messages.len(), 1);
-        assert!(!messages[0]["localId"].as_str().unwrap().is_empty());
-        let content = base64
-            .decode(messages[0]["content"].as_str().unwrap())
-            .unwrap();
-        let expected = if variant == "dataKey" {
-            1 + 12 + plaintext + 16
-        } else {
-            24 + plaintext + 16
-        };
-        assert_eq!(content.len(), expected);
+        let session_key = base64.decode(fields[1]).unwrap();
+        let message = server.message(&session_id, variant, &session_key);
+        // Happy's Codex takes Shoal's guidance as its first message.
+        let text = message["content"]["text"].as_str().unwrap();
+        assert!(text.starts_with(GUIDANCE_START), "{text}");
+        assert_eq!(
+            message,
+            serde_json::json!({
+                "role": "user",
+                "content": {"type": "text", "text": text},
+                "meta": {"sentFrom": "shoal"},
+            })
+        );
         assert_eq!(
             requests
                 .iter()
@@ -500,49 +545,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         fs::remove_file(&record).unwrap();
     }
 
-    // A wrong token fails delivery softly.
-    fs::write(
-        happy_home.join("access.key"),
-        r#"{"token": "wrong", "secret": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}"#,
-    )
-    .unwrap();
-    fixture.add("unseeded");
-    let output = fixture
-        .command()
-        .args([
-            "--json",
-            "start",
-            "--in",
-            &fixture.id("unseeded"),
-            "--here",
-            "--agent",
-            "happy-codex",
-        ])
-        .env("HAPPY_RECORD", &record)
-        .env("HAPPY_SERVER_URL", &server.url)
-        // Launched from inside another seeded session: its attachment must not leak.
-        .env("HAPPY_RECONNECT_SESSION_ID", "parent-session")
-        .env("HAPPY_RECONNECT_ENCRYPTION_KEY", &key)
-        .env("HAPPY_RECONNECT_ENCRYPTION_VARIANT", "legacy")
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "{output:?}");
-    let launch: Value = happy_launch(&output);
-    assert_eq!(launch["prompt_delivered"], false);
-    assert_eq!(launch["happy_session_id"], Value::Null);
-    wait_until("fake happy record", || record.exists());
-    let recorded = fs::read_to_string(&record).unwrap();
-    assert!(recorded.contains("reconnect=|||||\n"), "{recorded}");
-    let pid = launch["pid"].as_u64().unwrap() as u32;
-    fixture.ok(&["rm", "--wait", &fixture.id("unseeded")]);
-    wait_until("happy to exit", || !process_alive(pid));
-
     // A seeded session that no launch will ever attach to is deleted again.
-    fs::write(
-        happy_home.join("access.key"),
-        serde_json::json!({"token": "test-token", "secret": key}).to_string(),
-    )
-    .unwrap();
     fixture.add("orphan");
     let launch_orphan = || {
         fixture
@@ -593,6 +596,71 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         .collect();
     assert_eq!(methods.last(), Some(&"DELETE"), "{methods:?}");
     assert_eq!(state["sessions"].as_object().unwrap().len(), 2, "{state}");
+}
+
+/// A Happy Codex launch whose session Happy's server cannot create, which
+/// its first message needs, is refused before anything runs.
+#[test]
+fn a_happy_codex_launch_happy_cannot_seed_is_refused_before_it_starts() {
+    let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
+    let record = install_fake_happy(&fixture);
+    let server = FakeHappyServer::start(&fixture);
+    fixture.add("unseeded");
+    let id = fixture.id("unseeded");
+    let start = || {
+        let output = fixture
+            .command()
+            .args(["--json", "start", "--in", &id, "--here"])
+            .args(["--agent", "happy-codex"])
+            .env("HAPPY_RECORD", &record)
+            .output()
+            .unwrap();
+        assert!(!output.status.success(), "{output:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("logged in to Happy"), "{stderr}");
+    };
+    // Not logged in, then logged in with a token the server refuses.
+    start();
+    log_in_to_happy(&fixture, &server);
+    let wrong = serde_json::json!({"token": "wrong", "secret": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="});
+    fs::write(
+        fixture.root.path().join(".happy/access.key"),
+        wrong.to_string(),
+    )
+    .unwrap();
+    start();
+    assert!(!record.exists());
+    let status = fixture.ok(&["status", &id]);
+    assert_eq!(status["executions"], serde_json::json!([]), "{status}");
+    assert_eq!(server.state()["sessions"], serde_json::json!({}));
+}
+
+/// A Happy Codex session that does not receive its first message is no
+/// working launch: Shoal stops it and deletes its seeded session, and the
+/// launch fails.
+#[test]
+fn a_happy_codex_session_that_misses_its_first_message_is_stopped() {
+    let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
+    let record = install_fake_happy(&fixture);
+    let server = FakeHappyServer::rejecting_messages(&fixture);
+    log_in_to_happy(&fixture, &server);
+    fixture.add("undelivered");
+    let id = fixture.id("undelivered");
+    let output = fixture
+        .command()
+        .args(["--json", "start", "--in", &id, "--here"])
+        .args(["--agent", "happy-codex"])
+        .env("HAPPY_RECORD", &record)
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    // The session ran and attached before its message was refused.
+    assert!(record.exists());
+    wait_until("the session to stop", || {
+        fixture.ok(&["status", &id])["executions"] == serde_json::json!([])
+    });
+    let state = server.state();
+    assert_eq!(state["sessions"], serde_json::json!({}), "{state}");
 }
 
 #[test]
@@ -712,6 +780,8 @@ fn happy_chats_get_the_agent_token_helper_for_git() {
 fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
     let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
     let record = install_fake_happy(&fixture);
+    let server = FakeHappyServer::start(&fixture);
+    log_in_to_happy(&fixture, &server);
     let repo = fixture.repo.to_str().unwrap();
     let checkout = fs::canonicalize(&fixture.repo).unwrap();
     // Started from a Rex block, a detached chat still runs elsewhere.
@@ -780,7 +850,7 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
         claude[6]
     );
     assert_eq!(after_temp_dirs(&claude[7..]), ["--model", "test"]);
-    assert_eq!(started["prompt_file"], Value::Null);
+    assert_eq!(started["happy_session_id"], Value::Null);
     // The chat lasts while the session runs, not the command that started it.
     let pid = started["pid"].as_u64().unwrap();
     // Recorded before its agent registered, it runs once it did.
@@ -795,8 +865,7 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
         fs::read_to_string(&log).is_ok_and(|output| output.contains("hello from happy"))
     });
 
-    // Happy's Codex takes them as its first message, saved here when Happy
-    // cannot deliver it.
+    // Happy's Codex takes them as its first message.
     let (started, recorded) = chat("happy-codex");
     // Names may repeat, so the second chat takes the same one.
     assert_eq!(started["chat"]["name"], CHAT_NAME);
@@ -812,9 +881,8 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
             "test"
         ]
     );
-    let message = fs::read_to_string(started["prompt_file"].as_str().unwrap()).unwrap();
+    let message = server.first_message(started["happy_session_id"].as_str().unwrap());
     assert!(message.contains(checkout.to_str().unwrap()), "{message}");
-    assert_eq!(started["prompt_delivered"], false);
 
     for pid in [pid, started["pid"].as_u64().unwrap()] {
         Command::new("kill").arg(pid.to_string()).status().unwrap();
@@ -843,6 +911,8 @@ fn happy_launch(output: &Output) -> Value {
 fn a_start_without_a_terminal_hands_a_happy_agent_over_here() {
     let fixture = Fixture::with_config(Some(&format!("{UNLIMITED_AGENTS}{HAPPY_ENABLED}")));
     let record = install_fake_happy(&fixture);
+    let server = FakeHappyServer::start(&fixture);
+    log_in_to_happy(&fixture, &server);
     let path = fixture.restricted_path(&fixture.root.path().join("bin"));
     let repo = fixture.repo.to_str().unwrap();
     let start = |args: &[&str]| {
@@ -891,6 +961,8 @@ fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
         "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n{NO_HOST}{HAPPY_ENABLED}[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n"
     )));
     let record = install_fake_happy(&fixture);
+    let server = FakeHappyServer::start(&fixture);
+    log_in_to_happy(&fixture, &server);
     let repo = fixture.repo.to_str().unwrap();
     let mut first = fixture
         .command()
