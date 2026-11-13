@@ -505,12 +505,14 @@ impl RegistrationChange {
     }
 
     /// Store the registration within the caller's transaction. A dropped watch
-    /// takes its replay cursors and review mark with it, and every watch added
-    /// or dropped is journaled as an assigned PR link change.
+    /// takes its replay cursors and review mark with it, an added one replaces
+    /// the PR's opened or related link, and every watch added or dropped is
+    /// journaled as an assigned PR link change.
     fn apply(&self, db: &Connection, id: &SpaceId) -> Result<()> {
         super::forget_assigned(db, id, ItemKind::Pr, &self.removed)?;
         store_registration(db, id, self.registration.as_ref())?;
         for url in &self.added {
+            super::drop_recorded(db, id, url.url(), None)?;
             events::record_link(
                 db,
                 id,

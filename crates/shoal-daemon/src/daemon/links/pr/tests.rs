@@ -194,3 +194,51 @@ async fn a_chat_removed_before_its_pr_link_is_written_keeps_none() {
             .is_none()
     );
 }
+
+#[tokio::test]
+async fn watching_a_related_pr_replaces_its_link_and_keeps_its_cursor() {
+    use crate::daemon::test_support::{manager, repository};
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "watch".into(), None, None, None)
+        .await
+        .unwrap();
+    let (id, url) = (workspace.id.clone(), "https://github.com/team/repo/pull/2");
+    let counts = manager
+        .store
+        .write(move |tx| {
+            super::super::record(
+                tx,
+                &id,
+                crate::model::Relation::Related,
+                LinkKind::Pr,
+                url,
+                None,
+            )?;
+            tx.execute(
+                "INSERT INTO pr_activity(space_id,url,record) VALUES (?1,?2,'{}')",
+                rusqlite::params![id, url],
+            )?;
+            let watch = Registration {
+                kind: RegistrationKind::Watch {
+                    urls: vec![url.parse()?],
+                    merged_head: None,
+                },
+                error: None,
+            };
+            RegistrationChange::new(None, Some(watch)).apply(tx, &id)?;
+            let count = |table: &str| -> rusqlite::Result<i64> {
+                let query = format!("SELECT COUNT(*) FROM {table} WHERE space_id=?1");
+                tx.query_row(&query, [&id], |row| row.get(0))
+            };
+            Ok((count("space_items")?, count("pr_activity")?))
+        })
+        .await
+        .unwrap();
+    assert_eq!(counts, (0, 1));
+}

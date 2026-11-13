@@ -2367,8 +2367,8 @@ tooling stay with clients.
 `shoal pr open` pushes to the branch's push remote, then finds or opens the branch's
 PR and assigns it in one daemon request; a push remote on the origin's forge host
 other than `origin` is a fork the PR comes from, so a PR Shoal opens is left unlinked only when removal started
-after its check, which the result reports as a warning; a PR it creates is also
-recorded as opened. A new PR is ready
+after its check, which the result reports as a warning, or as opened when it
+created the PR and assigning it failed. A new PR is ready
 unless `--draft` or `[pr] draft` asks for one, because opening a ready PR is
 what requests review.
 An explicitly supplied description is preserved verbatim; when no description
@@ -3311,7 +3311,10 @@ watch. A PR's runs are not linked for it, as its checks already cover them. A
 chat links the runs it starts as a workspace does, but its checkout's branch is
 not its own: `ci ls` defaults to the runs on its linked PR's head, its other
 CI commands act on that PR's checks, and `ci run` starts on the default branch
-unless `--branch` names another. Unlinking
+unless `--branch` names another. A space links each item under one relation, so every list, watch and
+cleanup rule reads one answer for it: assigning an item replaces its opened or
+related link without dropping its replay cursor, an assigned item refuses
+another relation, and opened and related replace each other. Unlinking
 selects a relation's items, one kind of them, or one item. PR links accumulate
 without duplicates and require
 every watched PR to merge, with HEAD present in at least one or merged into the freshly

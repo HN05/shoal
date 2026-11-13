@@ -843,8 +843,8 @@ fn a_chat_opens_issues_and_acts_on_its_linked_items() {
         assert!(output.status.success(), "{args:?}: {output:?}");
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
-    // The chat opens an issue and assigns it to itself, which records it as
-    // opened there too.
+    // The chat opens an issue and assigns it to itself, which is its only
+    // relation there.
     let opened = in_chat(&["issue", "open", "--title", "Flaky", "--link"]);
     let url = format!("{}/issues/40", fixture.web);
     assert_eq!(
@@ -854,11 +854,7 @@ fn a_chat_opens_issues_and_acts_on_its_linked_items() {
     let chats = fixture.request(json!("list_chats"));
     let links = &chats["data"][0]["links"];
     assert_eq!(links["issue"], json!(url), "{chats}");
-    assert_eq!(
-        links["opened"],
-        json!([{"kind": "issue", "url": url, "title": "Flaky"}]),
-        "{chats}"
-    );
+    assert_eq!(links["opened"], json!([]), "{chats}");
     // An action without an item acts on the chat's linked issue.
     fixture.requests();
     in_chat(&["issue", "comment", "--body", "Seen"]);
@@ -2595,7 +2591,8 @@ fn a_pr_from_another_branch_of_the_worktree_is_assigned_and_watched() {
     let watched = fixture.ok(&["watch", "pr", "--space", &fixture.id("topic")]);
     assert_eq!(watched["updates"][0]["kind"], "comment", "{watched}");
 
-    // `view` shows every linked item with its relations.
+    // `view` shows every linked item with its relation; an assigned one
+    // takes no other.
     fixture.ok(&[
         "link",
         "pr",
@@ -2604,7 +2601,8 @@ fn a_pr_from_another_branch_of_the_worktree_is_assigned_and_watched() {
         "--space",
         &fixture.id("topic"),
     ]);
-    fixture.ok(&["link", "pr", "8", "opened", "--space", &fixture.id("topic")]);
+    let refused = fixture.run(&["link", "pr", "8", "opened", "--space", &fixture.id("topic")]);
+    assert!(!refused.status.success(), "{refused:?}");
     let output = fixture.run(&[
         "view",
         "--space",
@@ -2621,7 +2619,7 @@ fn a_pr_from_another_branch_of_the_worktree_is_assigned_and_watched() {
         [
             (
                 json!(format!("{}/pulls/8", fixture.web)),
-                json!(["assigned", "opened"])
+                json!(["assigned"])
             ),
             (
                 json!(format!("{}/pulls/10", fixture.web)),
@@ -2823,11 +2821,16 @@ fn issues_open_with_labels_and_link_on_request() {
         assert_eq!(opened["labels"], json!(["bug"]));
         assert_eq!(opened["created"], true);
         assert_eq!(opened["linked"], forge == Forge::GitHub);
-        // Linked or not, the issue is recorded as opened by the workspace.
-        assert_eq!(
-            fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"]["opened"],
-            json!([{"kind": "issue", "url": url, "title": "Flaky"}])
-        );
+        // The issue is assigned when linked, else recorded as opened.
+        let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
+        let (opened, issue) = match forge == Forge::GitHub {
+            true => (json!([]), json!(url)),
+            false => (
+                json!([{"kind": "issue", "url": url, "title": "Flaky"}]),
+                json!(null),
+            ),
+        };
+        assert_eq!((&links["opened"], &links["issue"]), (&opened, &issue));
         let sent: Vec<_> = fixture
             .requests()
             .into_iter()
@@ -5566,11 +5569,7 @@ fn a_chats_proposed_issue_opens_from_its_checkout_on_approval() {
     let chats = fixture.request(json!("list_chats"));
     let links = &chats["data"][0]["links"];
     assert_eq!(links["issue"], json!(url), "{chats}");
-    assert_eq!(
-        links["opened"],
-        json!([{"kind": "issue", "url": url, "title": "Flaky"}]),
-        "{chats}"
-    );
+    assert_eq!(links["opened"], json!([]), "{chats}");
     let told: Vec<_> = (fixture
         .ok(&["messages", &fixture.id("planning")])
         .as_array()

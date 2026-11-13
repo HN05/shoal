@@ -286,8 +286,8 @@ objects, with `"side": "old"` for a removed line. A comment on a line the diff
 does not show refuses the whole review before anything is posted. These
 commands act on the linked item, or on the number or URL given.
 
-`issue open` records the issue as opened by the space, and only `--link`
-assigns it. `--repo OWNER/NAME`, or a repository URL on another forge, opens it
+`issue open` records the issue as opened by the space, or with `--link`
+assigns it instead. `--repo OWNER/NAME`, or a repository URL on another forge, opens it
 in another repository, as the space's `issue_other_repositories` permission
 allows;
 `issue ls` and `pr ls` take `--repo` too. `shoal pr revert [<number>]`
@@ -349,13 +349,15 @@ shoal watch pr [--timeout <seconds>]
 
 A link names its relation last: `assigned` for the space's own work, `opened`
 for an item it created another way, `related` for one the work relates to.
+Each item has one relation: assigning an item replaces its opened or related
+link, and an assigned item is refused another until it is unlinked.
 Assigned PRs accumulate per workspace, whatever their head branch, such as a
 stacked PR pushed from the worktree; after `done`, cleanup waits until all
 have merged and contain HEAD, or the default branch has their changes, and a
 closed, unmerged PR keeps it waiting until it is unlinked. `unlink` without a
 number unlinks every assigned PR.
 
-`shoal view` shows every linked item with its relations, each item's
+`shoal view` shows every linked item with its relation, each item's
 description, comments and reviews with inline comments, and the log tails and
 URLs of failed CI jobs where the forge reads job logs; `--check` selects one
 check's log.

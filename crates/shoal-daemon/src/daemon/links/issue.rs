@@ -159,8 +159,9 @@ impl Manager {
     }
 }
 
-/// Assign an issue within the caller's transaction, retaining a known title
-/// when none is supplied and recording only a new association as linked.
+/// Assign an issue within the caller's transaction, in place of its opened
+/// or related link, retaining a known title when none is supplied and
+/// recording only a new association as linked.
 fn assign(db: &Connection, id: &SpaceId, url: &str, title: Option<&str>) -> Result<()> {
     super::ensure_accepts_links(db, id)?;
     let existing: Option<String> = db
@@ -180,6 +181,7 @@ fn assign(db: &Connection, id: &SpaceId, url: &str, title: Option<&str>) -> Resu
         rusqlite::params![id, url, title],
     )?;
     if existing.is_none() {
+        super::drop_recorded(db, id, url, None)?;
         events::record_link(
             db,
             id,

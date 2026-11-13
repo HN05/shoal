@@ -17,7 +17,7 @@ use crate::{
     daemon::events::EventCause,
     git,
     model::{
-        CheckpointCause, OpenedWorkspace, Relation, RemovedWorkspace, Repository,
+        CheckpointCause, LinkedItem, OpenedWorkspace, Relation, RemovedWorkspace, Repository,
         RestoredWorkspace, SpaceLinks, Workspace,
     },
     time::UnixTime,
@@ -364,18 +364,7 @@ impl Manager {
         {
             warnings.push(format!("cannot link issue {url}: {error:#}"));
         }
-        let recorded = links
-            .opened
-            .iter()
-            .map(|item| (Relation::Opened, item.clone()))
-            .chain(
-                links
-                    .related
-                    .iter()
-                    .map(|item| (Relation::Related, item.clone())),
-            )
-            .collect();
-        if let Err(error) = self.record_items(workspace_id, recorded).await {
+        if let Err(error) = self.record_items(workspace_id, recorded(links)).await {
             warnings.push(format!("cannot link opened and related items: {error:#}"));
         }
         warnings
@@ -554,6 +543,19 @@ fn find(db: &Connection, id: &SpaceId) -> Result<Option<RemovedWorkspace>> {
     Ok(record
         .map(|record| serde_json::from_str(&record))
         .transpose()?)
+}
+
+/// The opened and related items to record again from `links`, each under the
+/// first relation it lists: a record taken before an item had one relation
+/// can also list an assigned item as opened or related, or an item as both,
+/// which keeps the assignment, or else opened, as the migration does.
+fn recorded(links: &SpaceLinks) -> Vec<(Relation, LinkedItem)> {
+    (links.relations().into_iter())
+        .filter(|(relation, item)| {
+            *relation != Relation::Assigned
+                && links.relations_of(&item.url).first() == Some(relation)
+        })
+        .collect()
 }
 
 #[cfg(test)]

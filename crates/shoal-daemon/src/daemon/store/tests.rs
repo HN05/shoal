@@ -533,6 +533,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 168 {
         db.execute_batch(include_str!("ci_job_durations.sql"))?;
     }
+    if version >= 169 {
+        db.execute_batch(include_str!("item_relations.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -2203,6 +2206,43 @@ fn chats_keep_their_agents_to_restore_once_they_record_no_process() -> Result<()
         |row| row.get(0),
     )?;
     assert_eq!(left, 0);
+    Ok(())
+}
+
+#[test]
+fn an_item_linked_under_several_relations_keeps_one() -> Result<()> {
+    let mut db = historical_database(168)?;
+    db.execute_batch(
+        r#"INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+             VALUES ('other','repo','other','/other','other','ready');
+         INSERT INTO space_issue(space_id,url) VALUES ('workspace','https://forge/o/r/issues/1');
+         INSERT INTO pr_cleanup(space_id,record) VALUES
+             ('workspace','{"urls":["https://forge/o/r/pulls/2","https://forge/o/r/pulls/3"]}'),
+             ('other','{"url":"https://forge/o/r/pulls/2"}');
+         INSERT INTO space_items(space_id,relation,kind,url) VALUES
+             ('workspace','opened','issue','https://forge/o/r/issues/1'),
+             ('workspace','opened','pr','https://forge/o/r/pulls/2'),
+             ('workspace','related','pr','https://forge/o/r/pulls/3'),
+             ('workspace','opened','ci','https://forge/o/r/actions/runs/4'),
+             ('workspace','related','ci','https://forge/o/r/actions/runs/4'),
+             ('workspace','related','issue','https://forge/o/r/issues/5'),
+             ('other','opened','pr','https://forge/o/r/pulls/2'),
+             ('other','related','pr','https://forge/o/r/pulls/3');"#,
+    )?;
+    migrate(&mut db)?;
+    let rows: Vec<(String, String, String)> = db
+        .prepare("SELECT space_id,relation,url FROM space_items ORDER BY rowid")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let row = |space: &str, relation: &str, url: &str| (space.into(), relation.into(), url.into());
+    assert_eq!(
+        rows,
+        [
+            row("workspace", "opened", "https://forge/o/r/actions/runs/4"),
+            row("workspace", "related", "https://forge/o/r/issues/5"),
+            row("other", "related", "https://forge/o/r/pulls/3"),
+        ]
+    );
     Ok(())
 }
 

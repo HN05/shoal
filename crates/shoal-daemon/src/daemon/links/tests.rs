@@ -48,7 +48,7 @@ async fn link_events(manager: &Manager, kind: EventKind) -> Vec<LinkEvent> {
 }
 
 #[tokio::test]
-async fn recorded_relations_are_kept_apart_from_the_assignment() {
+async fn linking_an_item_again_replaces_its_recorded_relation() {
     let (_root, manager, id) = workspace_with_origin().await;
     let issue = "https://github.com/team/repo/issues/40";
     let pr = "https://github.com/team/repo/pull/41";
@@ -100,12 +100,13 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
     let links = manager.workspace_by_id(&id).await.unwrap().links;
     assert_eq!(links.issue, None);
     assert!(links.prs.is_empty());
+    assert!(links.opened.is_empty());
     assert_eq!(
-        links.opened,
-        [LinkedItem {
+        links.related[1],
+        LinkedItem {
             url: issue.parse().unwrap(),
-            title: Some("Follow-up".into()),
-        }]
+            title: Some("Report".into()),
+        }
     );
     let related: Vec<_> = links.related.iter().map(|item| item.url.url()).collect();
     assert_eq!(related, [pr, issue]);
@@ -158,15 +159,45 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
             .is_err()
     );
     let links = manager.workspace_by_id(&id).await.unwrap().links;
-    assert!(links.related.is_empty());
-    assert_eq!(links.opened.len(), 1);
+    assert!(links.related.is_empty() && links.opened.is_empty());
     let unlinked = link_events(&manager, EventKind::Unlinked).await;
-    assert_eq!(unlinked.len(), 2);
-    assert!(
-        unlinked
-            .iter()
-            .all(|link| link.relation == Relation::Related)
+    let relations: Vec<_> = unlinked.iter().map(|link| link.relation).collect();
+    assert_eq!(
+        relations,
+        [Relation::Opened, Relation::Related, Relation::Related]
     );
+}
+
+async fn link_issue(manager: &Manager, id: &SpaceId, relation: Relation) -> Result<Linked> {
+    let input = "7".parse().unwrap();
+    let title = Some("Fix".into());
+    (manager.link_item(
+        &SpaceSelector::id(id),
+        LinkKind::Issue,
+        &input,
+        relation,
+        title,
+        None,
+    ))
+    .await
+}
+
+#[tokio::test]
+async fn an_assignment_replaces_the_recorded_relation_and_refuses_another() {
+    let (_root, manager, id) = workspace_with_origin().await;
+    link_issue(&manager, &id, Relation::Related).await.unwrap();
+    link_issue(&manager, &id, Relation::Assigned).await.unwrap();
+
+    let links = manager.workspace_by_id(&id).await.unwrap().links;
+    let issue = links.issue.as_ref().map(|url| url.url());
+    assert_eq!(issue, Some("https://github.com/team/repo/issues/7"));
+    assert!(links.related.is_empty());
+    for relation in [Relation::Opened, Relation::Related] {
+        let refused = link_issue(&manager, &id, relation).await.unwrap_err();
+        assert!(format!("{refused:#}").contains("linked as assigned"));
+    }
+    let links = manager.workspace_by_id(&id).await.unwrap().links;
+    assert!(links.issue.is_some() && links.opened.is_empty() && links.related.is_empty());
 }
 
 #[tokio::test]

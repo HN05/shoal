@@ -4171,8 +4171,8 @@ open draft PR), title and labels; JSON lists the items with the fields every
 other item command reports. Bitbucket's `--author` matches a nickname.
 `issue open` takes `--title`, `--body` or `--body-file`, repeated `--label`,
 repeated `--assignee` and `--milestone TITLE`;
-the new issue is recorded as opened, and assigned only with `--link`, which fails
-while another issue is assigned. A workspace being removed refuses it. A chat
+the new issue is recorded as opened, or with `--link` assigned instead, which
+fails while another issue is assigned and then leaves it opened. A workspace being removed refuses it. A chat
 opens it in its repository's registered checkout, under that repository's
 settings, and records it the same way. Outside a space it opens the issue in the
 repository of the registered checkout it runs in, records it nowhere, and
@@ -4552,9 +4552,13 @@ and PR numbers. The relation is required:
 | Relation | Effect |
 |---|---|
 | `assigned` | The work the workspace exists for: the rules below and in [ready for review](#ready-for-review) apply |
-| `opened` | Records that the workspace created the item; `issue open` and `pr open` record it themselves |
+| `opened` | Records that the workspace created the item; `issue open` and `pr open` record what they create and do not assign |
 | `related` | Records an item the work relates to |
 
+A space links each item under one relation. Assigning an item replaces its
+opened or related link, linking an opened item as related or a related one as
+opened replaces that link, and an assigned item is refused another relation
+until it is unlinked.
 Opened and related issues and PRs have no watch, completion or cleanup effect;
 `status pr <number>` finds the workspaces that link an item under any relation.
 A run is linked only as opened or related, since an assigned item drives
@@ -4567,8 +4571,9 @@ follow it past the PR's merge. Commands that select items this way give a number
 kind the kind of the linked item with that number, otherwise the kind the forge
 reports; GitLab and Bitbucket number issues and PRs separately, so there such a
 number must be linked. Use `--space` to select another space, a workspace or chat,
-than the current one. Numbers resolve against its origin and URLs must match it. Links are
-idempotent; an assigned issue must be unlinked before assigning a different one.
+than the current one. Numbers resolve against its origin and URLs must match it. Linking
+an item again under its relation changes nothing but a newly known title; an
+assigned issue must be unlinked before assigning a different one.
 Linking an issue records its title for workspace lists; when the forge cannot be
 read, the link is recorded without one and a warning names the error.
 Assigned PRs accumulate without duplicates, and any PR of the repository can be
@@ -4582,7 +4587,7 @@ chat from completion cleanup; the activity Shoal polls for its items reaches its
 messages, through the chat's hooks, and wakes it as they do. Its links go with it
 when it is removed. A chat started on an issue is assigned the issue.
 
-`shoal view` shows every linked item, with the relations it is linked under, as
+`shoal view` shows every linked item, with the relation it is linked under, as
 the forge reports it now: title, state,
 author, labels, assignees, milestone, description, comments, and reviews with their inline comments,
 with the reactions on the item and each comment where the forge has them, as

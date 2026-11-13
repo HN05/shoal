@@ -327,8 +327,9 @@ fn nothing(kind: Option<LinkKind>) -> String {
     }
 }
 
-/// Record a relation that has no lifecycle effect. Recording it again keeps
-/// the first record and fills in a newly known title.
+/// Record a relation that has no lifecycle effect, in place of the item's
+/// other recorded relation; an assigned item keeps its assignment. Recording
+/// it again keeps the first record and fills in a newly known title.
 pub(crate) fn record(
     db: &Connection,
     id: &SpaceId,
@@ -342,6 +343,8 @@ pub(crate) fn record(
         bail!("assigned items are linked through their issue or PR watch");
     }
     ensure_accepts_links(db, id)?;
+    ensure_unassigned(db, id, kind, url)?;
+    drop_recorded(db, id, url, Some(relation))?;
     let added = db.execute(
         "INSERT INTO space_items(space_id,relation,kind,url,title)
          VALUES (?1,?2,?3,?4,?5) ON CONFLICT DO NOTHING",
@@ -355,6 +358,44 @@ pub(crate) fn record(
         )?;
     } else {
         events::record_link(db, id, EventKind::Linked, relation, kind, url)?;
+    }
+    Ok(())
+}
+
+/// Refuse to record another relation of an item the space assigns.
+fn ensure_unassigned(db: &Connection, id: &SpaceId, kind: LinkKind, url: &str) -> Result<()> {
+    let Some(kind) = kind.item() else {
+        return Ok(());
+    };
+    let assigned = wait::linked_items(db, id, Some(kind))?;
+    ensure!(
+        !assigned.iter().any(|item| item.url() == url),
+        "{url} is linked as {}",
+        Relation::Assigned
+    );
+    Ok(())
+}
+
+/// Drop the recorded relations of `url` but `kept`, journaling each as
+/// unlinked. What they kept stays, so the relation that replaces them
+/// carries on from it.
+pub(crate) fn drop_recorded(
+    db: &Connection,
+    id: &SpaceId,
+    url: &str,
+    kept: Option<Relation>,
+) -> Result<()> {
+    let dropped = db
+        .prepare(
+            "DELETE FROM space_items WHERE space_id=?1 AND url=?2 AND relation IS NOT ?3
+             RETURNING relation,kind",
+        )?
+        .query_map(rusqlite::params![id, url, kept], |row| {
+            Ok((row.get::<_, Relation>(0)?, row.get::<_, LinkKind>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for (relation, kind) in dropped {
+        events::record_link(db, id, EventKind::Unlinked, relation, kind, url)?;
     }
     Ok(())
 }
