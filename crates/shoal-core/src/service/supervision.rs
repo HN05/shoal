@@ -22,6 +22,6 @@ impl Supervision for Command {
     }
 
     fn waiting_for_restart(&self) {
-        eprintln!("Waiting for the daemon to restart...");
+        eprintln!("The daemon is exiting; waiting for it to start again...");
     }
 }

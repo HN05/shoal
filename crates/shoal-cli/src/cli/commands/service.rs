@@ -21,7 +21,7 @@ pub(super) async fn run(ctx: Context, command: DaemonCommand, daemon: Daemon) ->
             Ok(0)
         }
         DaemonCommand::Start => daemon::start(&ctx).await,
-        DaemonCommand::Stop => daemon::stop(&ctx).await,
-        DaemonCommand::Restart => daemon::restart(&ctx).await,
+        DaemonCommand::Stop(wait) => daemon::stop(&ctx, wait.when()).await,
+        DaemonCommand::Restart(wait) => daemon::restart(&ctx, wait.when()).await,
     }
 }

@@ -357,3 +357,75 @@ async fn a_request_an_exiting_daemon_held_back_goes_to_the_next_daemon() -> Resu
     answering.await??;
     Ok(())
 }
+
+/// How a daemon's exit ended in [`exit_answering`].
+#[derive(Debug, PartialEq)]
+enum Ended {
+    Exited {
+        waited_for: Vec<Work>,
+        stopped_work: Option<bool>,
+    },
+    Refused(Vec<Work>),
+}
+
+/// Ask a daemon to exit as `when` says, while it answers with `bodies`:
+/// how the exit ended, and the work `exit` reported waiting for.
+async fn exit_answering(when: ExitWhen, bodies: Vec<Body>) -> Result<(Ended, Vec<Vec<Work>>)> {
+    let temp = tempfile::tempdir_in("/tmp")?;
+    let paths = Paths::for_test(temp.path());
+    paths.prepare()?;
+    let listener = UnixListener::bind(&paths.socket)?;
+    let daemon = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await?;
+        let request: Request = protocol::read(&mut stream).await?;
+        let Method::Exit(exit) = &request.method else {
+            anyhow::bail!("expected an exit request");
+        };
+        anyhow::ensure!(exit.when == when);
+        for body in bodies {
+            protocol::write(&mut stream, &Response::new(request.id, body)).await?;
+        }
+        anyhow::Ok(())
+    });
+    let mut reported = Vec::new();
+    let request = ExitRequest {
+        exit: crate::protocol::Exit::Restart,
+        when,
+    };
+    let ended = match exit(&paths, request, |work| reported.push(work.to_vec())).await? {
+        ExitAnswer::Exiting(exiting) => Ended::Exited {
+            waited_for: exiting.waited_for.clone(),
+            stopped_work: exiting.stopped_work().await,
+        },
+        ExitAnswer::Refused(work) => Ended::Refused(work),
+        ExitAnswer::Unanswered => anyhow::bail!("the daemon answered"),
+    };
+    daemon.await??;
+    Ok((ended, reported))
+}
+
+#[tokio::test]
+async fn an_exit_that_waits_reports_the_work_until_the_daemon_agrees() -> Result<()> {
+    let exited = Body::Exited(crate::protocol::Exited {
+        stopped_work: false,
+    });
+    let waits = || Body::ExitWaits(vec![Work::Other]);
+    let bodies = vec![waits(), waits(), Body::Ok, exited];
+    let (ended, reported) = exit_answering(ExitWhen::Idle, bodies).await?;
+    let exited = Ended::Exited {
+        waited_for: vec![Work::Other],
+        stopped_work: Some(false),
+    };
+    assert_eq!(ended, exited);
+    assert_eq!(reported, [vec![Work::Other], vec![Work::Other]]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_exit_that_does_not_wait_reports_the_work_that_keeps_the_daemon() -> Result<()> {
+    let bodies = vec![Body::ExitWaits(vec![Work::Other])];
+    let (ended, reported) = exit_answering(ExitWhen::IfIdle, bodies).await?;
+    assert_eq!(ended, Ended::Refused(vec![Work::Other]));
+    assert!(reported.is_empty());
+    Ok(())
+}

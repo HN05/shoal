@@ -11,7 +11,7 @@ use crate::{
     cli::{client, context::Context, output::Style, shell},
     config::repo::ConfigLayers,
     paths::Paths,
-    protocol::Exit,
+    protocol::{Exit, ExitRequest, ExitWhen},
     service::{self, Platform},
     sessions::HostName,
     terminal,
@@ -54,7 +54,11 @@ pub(super) async fn install(
             if !ctx.json {
                 eprintln!("Updating daemon service after a protocol change...");
             }
-            let stopping = stop_daemon(&ctx.paths, Exit::Restart);
+            let request = ExitRequest {
+                exit: Exit::Restart,
+                when: ExitWhen::Now,
+            };
+            let stopping = stop_daemon(&ctx.paths, request, |_| {});
             ctx.progress("Stopping incompatible daemon", stopping).await.context(
                 "could not stop the incompatible daemon service; stop any foreground daemon before rerunning `shoal daemon install`",
             )?;

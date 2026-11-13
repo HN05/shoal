@@ -3,7 +3,11 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{output::outputs, protocol::DaemonStatus, sessions::HostName};
+use crate::{
+    output::outputs,
+    protocol::{DaemonStatus, Work},
+    sessions::HostName,
+};
 
 /// A service definition, as `shoal daemon install --dry-run` prints it.
 #[derive(Serialize, Deserialize)]
@@ -35,12 +39,22 @@ pub struct Status {
 }
 
 /// A daemon started, or stopped with whether work it stopped waits for
-/// `shoal restore`.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+/// `shoal restore`, after the work in progress its exit waited for.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Running {
     pub running: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stopped_work: Option<bool>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub waited_for: Vec<Work>,
+}
+
+/// A daemon left running, since its exit would cut off the work in progress
+/// in `blocked_by`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Kept {
+    pub running: bool,
+    pub blocked_by: Vec<Work>,
 }
 
 /// A daemon that reread the global config.
@@ -64,6 +78,7 @@ outputs!(
     Installed,
     Status,
     Running,
+    Kept,
     Reloaded,
     ConfigInstalled
 );

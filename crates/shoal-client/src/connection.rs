@@ -19,8 +19,8 @@ use crate::{
     paths::Paths,
     processes::Identity,
     protocol::{
-        self, Body, DaemonMethod, DaemonStatus, ErrorCode, Exit, ExitRequest, ExitWhen, Method,
-        Request, Response, ViewPiece, timing,
+        self, Body, DaemonMethod, DaemonStatus, ErrorCode, ExitRequest, ExitWhen, Method, Request,
+        Response, ViewPiece, Work, timing,
     },
     scope_tokens::ScopeToken,
 };
@@ -444,13 +444,17 @@ pub async fn reload_config(daemon: &impl Daemon) -> Result<bool> {
     }
 }
 
-/// Ask the daemon to exit with `exit`, whatever its release: the connection
-/// that hears what it left, or `None` when no daemon answers the request, as
-/// when none runs, it is still starting, or its release predates the request.
-/// A refusal fails.
-pub async fn exit(daemon: &impl Daemon, exit: Exit) -> Result<Option<Exiting>> {
-    let when = ExitWhen::Now;
-    let request = request_to(daemon, ExitRequest { exit, when });
+/// Ask the daemon to exit as `request` says, whatever its release. A daemon
+/// that waits for work its exit would cut off sends that work, which
+/// `waiting` hears each time it changes, until it agrees to exit. A refusal
+/// fails.
+pub async fn exit(
+    daemon: &impl Daemon,
+    request: ExitRequest,
+    mut waiting: impl FnMut(&[Work]),
+) -> Result<ExitAnswer> {
+    let when = request.when;
+    let request = request_to(daemon, request);
     let asked = async {
         let stream = UnixStream::connect(&daemon.paths().socket).await.ok()?;
         let mut stream = BufReader::new(stream);
@@ -461,22 +465,57 @@ pub async fn exit(daemon: &impl Daemon, exit: Exit) -> Result<Option<Exiting>> {
         Some((response, stream))
     };
     // The answer reads the same in every protocol version.
-    let Ok(Some((response, stream))) = timeout(timing::ADMIN_REQUEST_TIMEOUT, asked).await else {
-        return Ok(None);
+    let Ok(Some((response, mut stream))) = timeout(timing::ADMIN_REQUEST_TIMEOUT, asked).await
+    else {
+        return Ok(ExitAnswer::Unanswered);
     };
-    match response.body {
-        Body::Ok => Ok(Some(Exiting { stream })),
-        Body::Error {
-            code: ErrorCode::InvalidRequest | ErrorCode::ProtocolMismatch,
-            ..
-        } => Ok(None),
-        body => body.into_result().map(|_| None),
+    let mut waited_for = Vec::<Work>::new();
+    let mut body = response.body;
+    loop {
+        match body {
+            Body::Ok => return Ok(ExitAnswer::Exiting(Exiting { stream, waited_for })),
+            Body::ExitWaits(work) if when == ExitWhen::IfIdle => {
+                return Ok(ExitAnswer::Refused(work));
+            }
+            Body::ExitWaits(work) => {
+                waiting(&work);
+                for work in work {
+                    if !waited_for.contains(&work) {
+                        waited_for.push(work);
+                    }
+                }
+            }
+            Body::Error {
+                code: ErrorCode::InvalidRequest | ErrorCode::ProtocolMismatch,
+                ..
+            } => return Ok(ExitAnswer::Unanswered),
+            body => return body.into_result().map(|_| ExitAnswer::Unanswered),
+        }
+        // The work waited for may take long; a daemon that went meanwhile
+        // answers nothing.
+        body = match protocol::read_buffered::<Response>(&mut stream).await {
+            Ok(response) => response.body,
+            Err(_) => return Ok(ExitAnswer::Unanswered),
+        };
     }
+}
+
+/// How the daemon answered a request to exit.
+pub enum ExitAnswer {
+    /// It agreed to exit.
+    Exiting(Exiting),
+    /// It runs the work, which its exit would cut off, and stays.
+    Refused(Vec<Work>),
+    /// No daemon answered the request, as when none runs, it is still
+    /// starting, or its release predates the request.
+    Unanswered,
 }
 
 /// A daemon that agreed to exit, on the connection that hears what it left.
 pub struct Exiting {
     stream: BufReader<UnixStream>,
+    /// The work it waited for before it agreed, each once.
+    pub waited_for: Vec<Work>,
 }
 
 impl Exiting {

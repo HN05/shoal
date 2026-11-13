@@ -201,6 +201,14 @@ answered before the protocol check, since restarting is how an upgrade reaches
 a daemon of another release; a daemon that does not answer gets SIGTERM. Once
 its work has ended, the daemon answers again on the same connection whether it
 left stopped work, which `shoal daemon stop` reads to point to `shoal restore`.
+Work the daemon runs itself, in background operations, operation workers and
+connected setup or merges, cannot detach, so `shoal daemon stop` and `restart`
+ask the daemon to exit only once none runs, with the same quiescence an update
+waits for. That wait happens in the daemon before it begins to exit, outside
+the service manager's stop timeout. Meanwhile it holds back the background
+passes and requests that would start such work, whose clients send them again
+until the next daemon takes them; agents, which reattach, still start, and
+other requests go on, so agents keep working through the wait.
 
 Overload protection is configured machine-wide: memory is enabled by default,
 CPU is opt-in and requires sustained aggregate busy time, which leaves out

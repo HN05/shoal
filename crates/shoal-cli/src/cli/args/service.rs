@@ -7,6 +7,7 @@ use clap::{Args, Subcommand};
 use crate::{
     agent::Agent,
     cli::args::{AgentParser, ModelArgs, command_line::CommandLine},
+    protocol::ExitWhen,
 };
 
 #[derive(Debug, Subcommand)]
@@ -136,13 +137,39 @@ pub enum DaemonCommand {
         executable: Option<PathBuf>,
     },
     Start,
-    Stop,
-    Restart,
+    /// Stop the daemon and every agent, once nothing the daemon runs itself
+    /// would be cut off.
+    Stop(ExitWait),
+    /// Restart the daemon, once nothing it runs itself would be cut off;
+    /// agents keep running.
+    Restart(ExitWait),
     /// Run in the foreground, without registering an OS service.
     Run {
         #[arg(long, hide = true)]
         managed: bool,
     },
+}
+
+/// Whether stopping the daemon waits for work it runs itself, such as
+/// workspace setup and removal, which its exit would cut off.
+#[derive(Debug, Args)]
+pub struct ExitWait {
+    /// Refuse instead of waiting when such work runs.
+    #[arg(long, conflicts_with = "force")]
+    pub no_wait: bool,
+    /// Stop at once, cutting off such work.
+    #[arg(long)]
+    pub force: bool,
+}
+
+impl ExitWait {
+    pub fn when(&self) -> ExitWhen {
+        match (self.no_wait, self.force) {
+            (_, true) => ExitWhen::Now,
+            (true, false) => ExitWhen::IfIdle,
+            (false, false) => ExitWhen::Idle,
+        }
+    }
 }
 
 #[cfg(test)]

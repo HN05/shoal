@@ -111,6 +111,7 @@ when a daemon with full request slots refuses to say which space the current
 directory is in, `shoal status` warns and shows the daemon's status.
 `daemon stop` and `restart` send a daemon that does not answer SIGTERM, through
 the service manager or directly for a foreground daemon, as while it starts.
+Both first [wait for the work the daemon runs itself](#daemon-restarts).
 `daemon start`
 without an installed service offers to run `shoal daemon install` in an interactive terminal.
 
@@ -158,6 +159,21 @@ How the daemon exits decides what becomes of tracked agents and commands:
   agent first, and restores that need no user wait in the agent queue. The
   service definition's `ExitTimeOut` (launchd) or `TimeoutStopSec` (systemd)
   gives the stop time before the service manager kills the daemon.
+
+Agents and CI jobs outlive the daemon, but the work the daemon runs itself does
+not: preparing, stopping, restoring or removing a workspace, an operation such
+as a PR's push or a merge, a connected `shoal setup` or merge, and a cleanup
+sweep or checkout sync. `shoal daemon stop` and `restart` therefore wait until
+none runs, printing what they wait for each time that changes; `--json` lists
+it in `waited_for`. While they wait, the daemon starts no background pass that
+would start such work and holds back requests that would, such as
+`shoal start`, `shoal rm` and `shoal pr open`, whose commands print that they
+wait and run on the next daemon; agents start and other requests go on as
+usual. `--no-wait` refuses instead, exiting 2 and listing the work in
+`blocked_by`, though it still waits for requests and background passes, which
+end on their own; `--force` exits at once and cuts the work off, and the next
+daemon marks each workspace it interrupted failed. Interrupting the wait
+leaves the daemon running and releases what it held back.
 
 The service commands ask the daemon how to exit over its socket, whatever its
 release; one that does not answer gets SIGTERM. When work keeps running, its
