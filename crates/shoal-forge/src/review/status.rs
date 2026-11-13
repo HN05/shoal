@@ -14,7 +14,7 @@ use crate::{
     updates::Snapshot,
 };
 
-crate::state::states!(PrState {
+shoal_states::states!(PrState {
     Open => "open",
     Merged => "merged",
     Closed => "closed",
@@ -30,7 +30,7 @@ impl From<ItemState> for PrState {
     }
 }
 
-crate::state::states!(ReviewState {
+shoal_states::states!(ReviewState {
     Unreviewed => "none",
     Commented => "commented",
     Approved => "approved",

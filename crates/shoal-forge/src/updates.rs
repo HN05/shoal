@@ -47,7 +47,7 @@ pub use state::{SnapshotKind, SnapshotState};
 mod watch;
 pub use watch::WatchRecord;
 
-crate::state::states!(UpdateKind {
+shoal_states::states!(UpdateKind {
     Comment => "comment",
     CiCompleted => "ci_completed",
     MergeConflict => "merge_conflict",

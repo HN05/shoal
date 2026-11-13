@@ -21,7 +21,7 @@ use crate::{
     transport::{api::Request, resend::Transient, response::Response},
 };
 
-crate::state::states!(
+shoal_states::states!(
     /// The API a forge host serves.
     ForgeKind: Variants {
         GitHub => "github",

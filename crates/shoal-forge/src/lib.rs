@@ -14,7 +14,6 @@ pub mod numbers;
 pub mod raw;
 pub mod repo;
 pub mod review;
-mod state;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 pub mod transport;

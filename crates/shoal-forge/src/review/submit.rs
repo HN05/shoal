@@ -9,6 +9,7 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use shoal_refs::CommitId;
+use shoal_states::states;
 
 use crate::{
     ForgeRepo,
@@ -20,7 +21,6 @@ use crate::{
     },
     numbers::PullNumber,
     review::diff::{Bases, Diff, Placed},
-    state::states,
     transport::api::Request,
     updates::Edited,
 };

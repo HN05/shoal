@@ -2,6 +2,7 @@
 //! ones for choosing one interactively.
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
+use shoal_states::states;
 
 use crate::{
     ForgeRepo,
@@ -12,7 +13,6 @@ use crate::{
         item::{Item, ItemState},
         link::ItemKind,
     },
-    state::states,
 };
 
 states!(StateFilter: ValueEnum {

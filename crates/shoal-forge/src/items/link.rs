@@ -10,7 +10,7 @@ use crate::{
     repo::locator::{ISSUE_URL, PULL_URL, item_path, locate},
 };
 
-crate::state::states!(ItemKind {
+shoal_states::states!(ItemKind {
     Issue => "issue",
     Pr => "pr",
 });
@@ -33,7 +33,7 @@ impl ItemKind {
     }
 }
 
-crate::state::states!(
+shoal_states::states!(
     /// What a workspace links and a selection names: an issue, a PR or a CI
     /// run. Only issues and PRs are items of the forge's item API.
     LinkKind: Variants {

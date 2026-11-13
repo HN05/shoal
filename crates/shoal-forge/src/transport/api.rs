@@ -26,7 +26,7 @@ pub(crate) const FILE_TIMEOUT: Duration = Duration::from_secs(600);
 /// the request sets a lower one.
 pub(crate) const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
 
-crate::state::states!(
+shoal_states::states!(
     /// The HTTP methods forge requests use.
     HttpMethod: ValueEnum {
         Get => "GET",

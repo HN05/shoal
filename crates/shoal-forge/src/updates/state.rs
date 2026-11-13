@@ -1,6 +1,7 @@
 //! What a snapshot observed: the kind of thing it read and the state it
 //! saw that thing in.
 use serde::{Deserialize, Deserializer, de::IntoDeserializer};
+use shoal_states::states;
 
 use crate::{
     ci::JobState,
@@ -8,7 +9,6 @@ use crate::{
         item::ItemState,
         link::{ItemKind, LinkKind},
     },
-    state::states,
 };
 
 states!(

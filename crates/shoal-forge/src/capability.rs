@@ -3,8 +3,8 @@
 //! with one error that names the forge and what it lacks.
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use shoal_states::states;
 
-use crate::state::states;
 use crate::{
     ForgeRepo,
     account::Account,

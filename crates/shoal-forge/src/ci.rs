@@ -13,7 +13,9 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use shoal_refs::CommitId;
+use shoal_states::states;
 
+use crate::ci::check_state::CheckState;
 use crate::{
     ForgeRepo,
     account::Account,
@@ -23,7 +25,6 @@ use crate::{
     numbers::{JobId, PullNumber, RunId, RunNumber},
     transport::api::{HttpMethod, Request},
 };
-use crate::{ci::check_state::CheckState, state::states};
 
 states!(CiAction: ValueEnum {
     Rerun => "rerun",

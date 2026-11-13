@@ -2,7 +2,7 @@
 //! map onto.
 use serde::{Deserialize, Deserializer};
 
-use crate::state::states;
+use shoal_states::states;
 
 states!(
     /// A CI check's state, in GitHub's terms, which name the most; the other

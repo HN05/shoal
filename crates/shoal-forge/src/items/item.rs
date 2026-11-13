@@ -6,8 +6,8 @@ use serde_json::Value;
 use shoal_refs::{BranchName, CommitId};
 
 use crate::backends::{Backend, Items};
-use crate::state::states;
 use crate::{ForgeRepo, items::link::ItemKind};
+use shoal_states::states;
 
 states!(ItemState {
     Open => "open",
