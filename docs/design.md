@@ -209,10 +209,12 @@ wants. One `load` setting
 user chooses how hard to load the machine without tuning each percentage;
 explicit thresholds override it. Linux memory defaults rise with swap, which
 makes the OOM killer a later risk. Stop connected tracked
-agents through their execution wrappers, preserving work and leases: agents no
-terminal shows first, since the user is likely working with a shown one, then
-the agent idle longest, since an idle agent loses no turn, and a working one,
-newest first, only when no idle one is left. Shown agents still stop once no
+agents through their execution wrappers, preserving work and leases, in the
+agent queue's rank reversed: agents no terminal shows first, since the user is
+likely working with a shown one, then idle ones, since an idle agent loses no
+turn, and working ones only when no idle one is left, each the lowest priority
+and rank first, so the work the queue would start last gives way first; within
+a space the agent idle longest, or the newest working one. Shown agents still stop once no
 other is left, since a host such as Herdr may count every agent as shown. An idle agent with processes outside its
 process group counts as working, since their completion may start its next
 turn, and so does one without turn reports. Its hook waiting for the next

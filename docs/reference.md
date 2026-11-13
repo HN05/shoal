@@ -179,8 +179,11 @@ then suggests `shoal restore --all`.
 ### Overload protection
 
 At the configured memory threshold, the daemon asks one connected tracked agent
-of a mode that is not [light](config.md#modes-and-rules) to stop: one you are not attached to while there is one, and of those the one
-idle longest, otherwise the newest. Each agent's wrapper reports every 10
+of a mode that is not [light](config.md#modes-and-rules) to stop, in the
+[agent queue's](#queue-order) order reversed: one you are not attached to while
+there is one, an idle one before a working one, then the one whose space ranks
+last, lowest priority first; within a space the one idle longest, otherwise the
+newest. Each agent's wrapper reports every 10
 seconds whether a terminal shows the agent, as `shoal status` marks its session
 `attached`; one running in a terminal no host serves always counts as attached.
 An agent is idle when its

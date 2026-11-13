@@ -383,7 +383,7 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
 }
 
 #[tokio::test]
-async fn overload_stops_the_agent_idle_longest_before_working_ones() {
+async fn overload_stops_idle_agents_lowest_rank_first_before_working_ones() {
     use crate::{execution::recovery::Record, state::AgentState};
     let (_root, manager) = manager().await;
     let repo = repository(_root.path(), "repo");
@@ -438,12 +438,21 @@ async fn overload_stops_the_agent_idle_longest_before_working_ones() {
             .unwrap();
         agents.push((workspace, execution));
     }
+    // The agent idle longest ranks higher, so the other idle one goes first.
+    manager
+        .set_priority(
+            None,
+            &SpaceSelector::id(&agents[1].0.id),
+            crate::client::priority::Priority::URGENT,
+        )
+        .await
+        .unwrap();
     // The working agent started last, so the newest-first order alone would
     // stop it first.
     let stopped = |index: usize| *agents[index].1.stop.borrow();
     for (index, turn) in [
-        (1, AgentState::Idle),
         (2, AgentState::Idle),
+        (1, AgentState::Idle),
         (0, AgentState::Working),
     ] {
         assert!(

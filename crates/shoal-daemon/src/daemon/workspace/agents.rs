@@ -1066,6 +1066,7 @@ impl Manager {
             log!("agent weights unavailable to protection: {error:#}");
             Default::default()
         });
+        let ranks = self.protection_ranks().await;
         self.executions
             .with_agents(|agents| {
                 let running =
@@ -1074,6 +1075,7 @@ impl Manager {
                         .filter(|(_, agent)| agent.running())
                         .map(|(id, agent)| Running {
                             id,
+                            space: &agent.workspace_id,
                             started: agent.started,
                             attached: agent.attached == Some(true),
                             attended: agent.attended,
@@ -1083,7 +1085,10 @@ impl Manager {
                     Select::One => {
                         let heavy =
                             running.filter(|agent| !agent.attended && !light.execution(agent.id));
-                        first_to_stop(heavy, turns).into_iter().cloned().collect()
+                        first_to_stop(heavy, turns, &ranks)
+                            .into_iter()
+                            .cloned()
+                            .collect()
                     }
                     Select::All => running.map(|agent| agent.id.clone()).collect(),
                 };
@@ -1096,6 +1101,19 @@ impl Manager {
                     .collect()
             })
             .await
+    }
+
+    /// Where each running agent's space ranks, first first, as the agent
+    /// queue would start them; without the rank every space ranks alike.
+    async fn protection_ranks(&self) -> HashMap<SpaceId, usize> {
+        let spaces = self.running_agent_workspaces().await;
+        let ranked = self.ranked_spaces(&spaces).await.unwrap_or_else(|error| {
+            log!("queue rank unavailable to protection: {error:#}");
+            Vec::new()
+        });
+        (ranked.into_iter().enumerate())
+            .map(|(place, (space, _))| (space, place))
+            .collect()
     }
 
     /// Stop the agent of `id`, chosen in `turn`, for `protection`: save the
@@ -1276,6 +1294,7 @@ enum Select {
 /// A running agent protection may stop.
 struct Running<'a> {
     id: &'a ExecutionId,
+    space: &'a SpaceId,
     started: Instant,
     /// Whether a terminal shows it, so the user may be working with it.
     attached: bool,
@@ -1283,32 +1302,29 @@ struct Running<'a> {
     attended: bool,
 }
 
-/// Of the `running` agents, one nobody is attached to while there is one,
-/// whose stop costs the least work.
+/// Of the `running` agents, the one whose stop costs the least, by the
+/// queue's rank in reverse: one no terminal shows while there is one, then
+/// an idle one, then the space that `ranks` places last, the lowest
+/// priority and rank; within a space the one idle longest, otherwise the
+/// newest, which has the least progress to lose.
 fn first_to_stop<'a>(
     running: impl Iterator<Item = Running<'a>>,
     turns: &HashMap<ExecutionId, Turn>,
+    ranks: &HashMap<SpaceId, usize>,
 ) -> Option<&'a ExecutionId> {
-    let (attached, unattached): (Vec<_>, Vec<_>) = running.partition(|agent| agent.attached);
-    least_work(unattached, turns).or_else(|| least_work(attached, turns))
-}
-
-/// Of `agents`, the one idle longest, otherwise the newest, which has the
-/// least progress to lose.
-fn least_work<'a>(
-    agents: Vec<Running<'a>>,
-    turns: &HashMap<ExecutionId, Turn>,
-) -> Option<&'a ExecutionId> {
-    let (idle, working): (Vec<_>, Vec<_>) = agents
-        .into_iter()
-        .partition(|agent| turns.get(agent.id).is_some_and(Turn::idle));
-    match idle.into_iter().min_by_key(|agent| turns[agent.id].since) {
-        Some(agent) => Some(agent.id),
-        None => working
-            .into_iter()
-            .max_by_key(|agent| agent.started)
-            .map(|agent| agent.id),
-    }
+    running
+        .min_by_key(|agent| {
+            let idle = turns.get(agent.id).filter(|turn| turn.idle());
+            let place = ranks.get(agent.space).copied().unwrap_or(usize::MAX);
+            (
+                agent.attached,
+                idle.is_none(),
+                std::cmp::Reverse(place),
+                idle.map(|turn| turn.since),
+                std::cmp::Reverse(agent.started),
+            )
+        })
+        .map(|agent| agent.id)
 }
 
 /// An agent asked to stop for protection.
