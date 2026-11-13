@@ -11,7 +11,7 @@
 //! job or review ahead of an agent, then arrival.
 use std::{
     cmp::Ordering,
-    collections::{HashMap, HashSet, hash_map},
+    collections::{HashMap, hash_map},
     time::Duration,
 };
 
@@ -136,15 +136,9 @@ pub(crate) struct Ranked {
 pub(crate) fn rank(snapshot: &Snapshot) -> Vec<Ranked> {
     let mut standing = own_standing(snapshot);
     inherit(&mut standing, snapshot);
-    let chains = match snapshot.schedule {
-        Schedule::Speed => chains(snapshot),
-        Schedule::Balanced | Schedule::Cache => HashMap::new(),
-    };
+    let chains = schedule_chains(snapshot);
     let mut placed: Vec<Placed> = (snapshot.entries.iter())
-        .map(|entry| Placed {
-            lead: lead(entry, &chains, snapshot),
-            ..place(entry, &standing, snapshot)
-        })
+        .map(|entry| place(entry, &standing, &chains, snapshot))
         .collect();
     placed.sort_by(Placed::order);
     placed
@@ -372,7 +366,12 @@ impl Placed {
 
 /// `entry` with its rank and the space whose progress and age order it
 /// within its tier.
-fn place(entry: &Entry, standing: &Standing, snapshot: &Snapshot) -> Placed {
+fn place(
+    entry: &Entry,
+    standing: &Standing,
+    chains: &HashMap<Node, usize>,
+    snapshot: &Snapshot,
+) -> Placed {
     let tier = aged(own_tier(&entry.work), entry, snapshot.now);
     let (mut rank, space) = match &entry.work {
         Work::Job { spaces, .. } => served(tier, spaces, standing, snapshot),
@@ -389,7 +388,7 @@ fn place(entry: &Entry, standing: &Standing, snapshot: &Snapshot) -> Placed {
     Placed {
         id: entry.id.clone(),
         rank,
-        lead: Lead::default(),
+        lead: lead(entry, chains, snapshot),
         steps: space.map(|space| space.steps).unwrap_or_default(),
         started: space.map_or(entry.queued_at, |space| space.created_at),
         serves: matches!(entry.work, Work::Job { .. } | Work::Review { .. }),
@@ -406,6 +405,14 @@ enum Lead {
     None,
     Chain(usize),
     Cache(UnixTime),
+}
+
+/// The chains of work waiting on each node, which only `speed` reads.
+fn schedule_chains(snapshot: &Snapshot) -> HashMap<Node, usize> {
+    match snapshot.schedule {
+        Schedule::Speed => chains::chains(&snapshot.edges),
+        Schedule::Balanced | Schedule::Cache => HashMap::new(),
+    }
 }
 
 /// What `entry` leads with under the snapshot's schedule, from the `chains`
@@ -435,44 +442,6 @@ fn chain_behind(entry: &Entry, chains: &HashMap<Node, usize>) -> usize {
     (served.into_iter())
         .map(|space| 1 + chain(&Node::Space(space)))
         .fold(chain(&own), usize::max)
-}
-
-/// How much work waits on each node: the length of the longest chain of
-/// waits that ends at it, each node of a cycle counted once.
-fn chains(snapshot: &Snapshot) -> HashMap<Node, usize> {
-    let mut waiting_on: HashMap<&Node, Vec<&Node>> = HashMap::new();
-    for edge in &snapshot.edges {
-        waiting_on.entry(&edge.on).or_default().push(&edge.waiting);
-    }
-    let mut chains = HashMap::new();
-    for node in waiting_on.keys() {
-        chain_to(node, &waiting_on, &mut chains, &mut HashSet::new());
-    }
-    chains
-}
-
-/// The longest chain of waits ending at `node`, through no node of `path`
-/// again, recorded in `chains`.
-fn chain_to<'a>(
-    node: &'a Node,
-    waiting_on: &HashMap<&'a Node, Vec<&'a Node>>,
-    chains: &mut HashMap<Node, usize>,
-    path: &mut HashSet<&'a Node>,
-) -> usize {
-    if let Some(&known) = chains.get(node) {
-        return known;
-    }
-    if !path.insert(node) {
-        return 0;
-    }
-    let waiting = waiting_on.get(node).into_iter().flatten();
-    let length = waiting
-        .map(|waiter| 1 + chain_to(waiter, waiting_on, chains, path))
-        .max()
-        .unwrap_or(0);
-    path.remove(node);
-    chains.insert(node.clone(), length);
-    length
 }
 
 /// The rank of the agent `entry` at its own `tier`: its node's priority,
@@ -550,6 +519,8 @@ fn first_space(a: (&QueueRank, Option<&Space>), b: (&QueueRank, Option<&Space>))
         .then_with(|| steps(b.1).cmp_share(steps(a.1)))
         .then_with(|| created(a.1).cmp(&created(b.1)))
 }
+
+mod chains;
 
 #[cfg(test)]
 mod tests;
