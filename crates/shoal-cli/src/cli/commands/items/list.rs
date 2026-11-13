@@ -32,7 +32,7 @@ pub(super) async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Resul
     Ok(0)
 }
 
-/// One line per item: its number, state, title and labels.
+/// One line per item.
 fn render_list(kind: ItemKind, items: &[Item]) {
     if items.is_empty() {
         match kind {
@@ -47,14 +47,25 @@ fn render_list(kind: ItemKind, items: &[Item]) {
         .max()
         .unwrap_or(0);
     for item in items {
-        let state = match &item.pr {
-            Some(pr) if pr.draft && item.state == ItemState::Open => "draft",
-            _ => item.state.as_str(),
-        };
-        let mut line = format!("#{:<width$}  {state:<6}  {}", item.number, item.title);
-        if !item.labels.is_empty() {
-            line += &format!("  [{}]", item.labels.join(", "));
-        }
-        outln!("{line}");
+        outln!("{}", item_line(item, width));
     }
 }
+
+/// `item`'s number, padded to `width`, state, title, labels and assignees.
+fn item_line(item: &Item, width: usize) -> String {
+    let state = match &item.pr {
+        Some(pr) if pr.draft && item.state == ItemState::Open => "draft",
+        _ => item.state.as_str(),
+    };
+    let mut line = format!("#{:<width$}  {state:<6}  {}", item.number, item.title);
+    if !item.labels.is_empty() {
+        line += &format!("  [{}]", item.labels.join(", "));
+    }
+    for assignee in &item.assignees {
+        line += &format!("  @{assignee}");
+    }
+    line
+}
+
+#[cfg(test)]
+mod tests;

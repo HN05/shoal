@@ -4188,8 +4188,9 @@ registered repository is searched through its checkout, needing no workspace,
 as `issue open`, `repo labels`, `forge capabilities`, `forge reactions` and
 `forge api` use it. Workspace processes search as the agent account, anyone else
 with your own logins. Each line shows an item's number, state (`draft` for an
-open draft PR), title and labels; JSON lists the items with the fields every
-other item command reports. Bitbucket's `--author` matches a nickname.
+open draft PR), title, labels and each assignee after an `@`; JSON lists the
+items with the fields every other item command reports. Bitbucket's `--author`
+matches a nickname.
 `issue open` takes `--title`, `--body` or `--body-file`, repeated `--label`,
 repeated `--assignee` and `--milestone TITLE`;
 the new issue is recorded as opened, or with `--link` assigned instead, after the
