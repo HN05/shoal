@@ -691,7 +691,6 @@ fn forget_unstarted(db: &mut Connection, id: &SpaceId) -> Result<()> {
 mod done;
 mod files;
 pub(crate) mod launches;
-mod removal;
 mod upgraded;
 
 #[cfg(test)]

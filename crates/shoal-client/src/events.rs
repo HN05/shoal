@@ -167,7 +167,8 @@ states!(
     /// What happened to a chat.
     ChatEventKind {
         Started => "chat_started",
-        /// The chat was removed.
+        /// The chat was removed, as journaled before its removal was
+        /// journaled as a space's `removed`.
         Ended => "chat_ended",
         /// The chat took a new name, which its `chat` carries.
         Renamed => "chat_renamed",

@@ -3,7 +3,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::paths::StateFiles;
 use crate::{
     daemon::{
-        events::{ChatEventKind, EventItem, EventKind},
+        events::{ChatEventKind, EventCause, EventItem, EventKind},
         test_support::{chat_process, ended, manager, repository},
     },
     model::{SpaceKind, SpaceRef},
@@ -370,6 +370,23 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
         .unwrap();
     assert!(manager.chats().await.unwrap().is_empty());
     assert!(!tmp_dir.exists());
+    // Its log records the removal with its cause, as a workspace's does.
+    let entries = (manager.space_log(
+        &SpaceSelector::id(&chat.id),
+        crate::client::log::LogFilter::Entries,
+        50,
+    ))
+    .await
+    .unwrap();
+    let removed = entries.into_iter().rev().find_map(|entry| match entry {
+        crate::client::log::LogEntry::Event(event) => Some(event.details),
+        _ => None,
+    });
+    let removed = removed.map(|details| (details.kind, details.cause));
+    assert_eq!(
+        removed,
+        Some((EventKind::Removed, Some(EventCause::Manual)))
+    );
 
     // A chat that cannot have one is forgotten at once.
     std::fs::remove_dir_all(directory.join(".tmp")).unwrap();

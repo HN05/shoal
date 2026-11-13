@@ -275,10 +275,25 @@ pub(super) fn forget_space(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<(
     Ok(())
 }
 
+/// Keep the files of the removed space `space_id` that outlive it, which
+/// keep its last name, and move those it was the parent of to its own
+/// parent, in the transaction that deletes its record, before the record
+/// goes: a chat keeps every one until `expires_at`, a workspace those it
+/// handed the user, for as long as its removal record.
+pub(crate) fn keep_removed(
+    tx: &Transaction<'_>,
+    space_id: &SpaceId,
+    expires_at: crate::time::UnixTime,
+) -> Result<()> {
+    match crate::daemon::links::space::is_chat(tx, space_id)? {
+        true => keep_ended_chat(tx, space_id, expires_at),
+        false => forget_removed(tx, space_id),
+    }
+}
+
 /// Keep the files of the chat `chat_id`, which keep its last name, until
-/// `expires_at`, and move those it was the parent of to its own parent, in
-/// the transaction that deletes the chat, before its row goes.
-pub(crate) fn keep_ended_chat(
+/// `expires_at`, and move those it was the parent of to its own parent.
+fn keep_ended_chat(
     tx: &Transaction<'_>,
     chat_id: &SpaceId,
     expires_at: crate::time::UnixTime,
@@ -310,9 +325,8 @@ pub(super) fn forget_expired_chats(db: &mut Connection) -> Result<()> {
 
 /// Forget the records of the workspace `workspace_id` but those of the files
 /// it handed the user, which keep its last name, and move those it was the
-/// parent of to its own parent, in the transaction that deletes it, before
-/// its row goes.
-pub(crate) fn forget_removed(tx: &Transaction<'_>, workspace_id: &SpaceId) -> Result<()> {
+/// parent of to its own parent.
+fn forget_removed(tx: &Transaction<'_>, workspace_id: &SpaceId) -> Result<()> {
     let [result, alert, question] = FileSource::KEPT;
     tx.execute(
         "DELETE FROM workspace_files WHERE space_id=?1 AND source NOT IN (?2,?3,?4)",

@@ -821,7 +821,12 @@ that opened them, so what runs there is the new chat's. Spaces form one tree thr
 opened alike: every space has at most one parent, a ready workspace or a chat
 of its own repository, or a chat without a repository, never one below it, and
 any other child in another repository is refused: spaces across repositories
-share a parent only in a chat without one. Every
+share a parent only in a chat without one. Every space has one record in
+`space_records`, which its workspace or chat row extends and a conversion
+keeps; deleting it removes the space with what each table of spaces holds for
+it. A removal reserves the space first, in memory whatever its kind, and a
+workspace's worktree also through its `removing` state, which startup
+recovery reads. Every
 reader takes one walk up or one walk down that link, with no branch on kind,
 and asks each space one question, whether it has an agent: a workspace's
 agent, a chat's running agent, or a queued restore of either. A scope reaches

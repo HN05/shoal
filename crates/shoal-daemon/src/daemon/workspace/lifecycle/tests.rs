@@ -1352,7 +1352,10 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
         .unwrap();
     // The daemon stops right after the middle workspace's removal commits.
     manager
-        .commit_workspace_removal(&middle.id, EventCause::Manual)
+        .delete_space_record(
+            &crate::model::PresentSpace::Workspace(middle.clone()),
+            EventCause::Manual,
+        )
         .await
         .unwrap();
     let id = bottom.id.clone();

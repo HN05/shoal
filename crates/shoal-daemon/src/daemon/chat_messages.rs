@@ -313,17 +313,17 @@ pub(crate) fn rebase_attachments(
     agent_messages::rewrite_attachments(tx, "chat_messages", attached, source, destination)
 }
 
-/// Give the user the notifications that the removed chat's unread messages
-/// stand for, with the files they attach, in the transaction that deletes
-/// the chat and with it the messages. Returns the last notification
-/// recorded.
-pub(super) fn hand_to_user(tx: &Transaction<'_>, chat: &SpaceId) -> Result<Option<i64>> {
+/// Give the user the notifications that the unread chat messages of the
+/// removed space `space` stand for, with the files they attach, in the
+/// transaction that deletes the space and with it the messages. Returns the
+/// last notification recorded.
+pub(crate) fn hand_to_user(tx: &Transaction<'_>, space: &SpaceId) -> Result<Option<i64>> {
     let unread = tx
         .prepare(
             "SELECT workspace,workspace_id,kind,message,attachments FROM chat_messages
                 WHERE chat_id=?1 AND kind IS NOT NULL ORDER BY id",
         )?
-        .query_map([chat], |row| {
+        .query_map([space], |row| {
             let about = About {
                 name: Some(row.get(0)?),
                 id: row.get(1)?,

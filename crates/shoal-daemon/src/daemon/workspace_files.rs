@@ -23,9 +23,7 @@ pub(crate) mod layout;
 mod records;
 mod retention;
 
-pub(crate) use records::{
-    count, forget_removed, ids_at, keep_ended_chat, rebase, record, sent_files, sent_ids,
-};
+pub(crate) use records::{count, ids_at, keep_removed, rebase, record, sent_files, sent_ids};
 
 use layout::{Kept, Layout};
 

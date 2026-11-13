@@ -41,17 +41,19 @@ impl Manager {
             .await
     }
 
-    /// When the files of `chat` expire if it ends now: after its
-    /// repository's `cleanup.restore.retention_days`, as a removed
-    /// workspace's results do, or the global setting's for a chat without a
-    /// repository or when the repository's cannot be read.
-    pub(crate) async fn chat_files_expiry(&self, chat: &crate::model::Chat) -> UnixTime {
-        let settings = match self.chat_settings(chat).await {
+    /// When the files of `space` that outlive it expire if it is removed
+    /// now: after its `cleanup.restore.retention_days`, or the global
+    /// setting's when its own cannot be read.
+    pub(crate) async fn removed_files_expiry(
+        &self,
+        space: &crate::model::PresentSpace,
+    ) -> UnixTime {
+        let settings = match self.present_space_settings(space).await {
             Ok(settings) => Ok(settings),
             Err(error) => {
                 log!(
-                    "files of chat {} kept by the global retention: {error:#}",
-                    chat.id
+                    "files of {} kept by the global retention: {error:#}",
+                    space.id()
                 );
                 self.config().resolve(&Default::default())
             }

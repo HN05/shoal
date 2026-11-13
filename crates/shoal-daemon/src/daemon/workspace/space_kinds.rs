@@ -1,7 +1,7 @@
-//! The operations cleanup and removal take on a space whose storage still
-//! differs by kind: its agent, reserving it for removal, and its record.
-//! Cleanup and removal call only these, and ask nothing else of a space's
-//! kind than whether it has a worktree.
+//! The operations cleanup and removal take on a space, whatever its kind:
+//! its agent, reserving it for removal, and its record. Cleanup and removal
+//! call only these, and ask nothing else of a space's kind than whether it
+//! has a worktree.
 use crate::client::{execution_ids::ExecutionId, space_ids::SpaceId};
 use crate::paths::StateFiles;
 use anyhow::{Context as _, Result, ensure};
@@ -15,7 +15,10 @@ use super::{
     reservation::RemovalRules,
 };
 use crate::{
-    daemon::{events, spaces},
+    daemon::{
+        approvals::{ApprovalRequest, release_decided_by},
+        chat_messages, events, spaces, workspace_files,
+    },
     fsutil::off_runtime,
     model::{PresentSpace, Workspace},
     removal::IdleRestore,
@@ -256,14 +259,16 @@ impl Manager {
         space: &PresentSpace,
         cause: events::EventCause,
     ) -> Result<()> {
-        match space {
-            PresentSpace::Workspace(workspace) => {
-                let released = self.commit_workspace_removal(&workspace.id, cause).await?;
-                self.ask_user_about(&released).await;
-                Ok(())
-            }
-            PresentSpace::Chat(chat) => self.delete_chat(chat).await,
+        let expires_at = self.removed_files_expiry(space).await;
+        let id = space.id().to_owned();
+        let deleted = (self.store)
+            .write(move |tx| delete_record(tx, &id, cause, expires_at))
+            .await?;
+        self.ask_user_about(&deleted.released).await;
+        if let Some(id) = deleted.notification {
+            self.signals.notification_recorded(id);
         }
+        Ok(())
     }
 
     /// Forget what `space` kept outside its record once that is deleted or,
@@ -301,34 +306,43 @@ impl Manager {
     fn delete_session_logs(&self, id: &crate::client::space_ids::SpaceId) {
         let _ = std::fs::remove_dir_all(self.paths.space_state(id));
     }
+}
 
-    /// Delete the record of the workspace `id`, which `cause` removed, in
-    /// one transaction with the commands and files it recorded, giving the
-    /// requests it decides, such as an issue proposal that outlives it, back
-    /// to the user; those given back.
-    pub(in crate::daemon::workspace) async fn commit_workspace_removal(
-        &self,
-        id: &crate::client::space_ids::SpaceId,
-        cause: events::EventCause,
-    ) -> Result<Vec<crate::daemon::approvals::ApprovalRequest>> {
-        let id = id.to_owned();
-        self.store
-            .write(move |tx| {
-                // Children go first; none may outlive its parent.
-                ensure!(
-                    !crate::daemon::store::exists(
-                        tx,
-                        "SELECT 1 FROM space_parents WHERE parent_id=?1",
-                        [&id],
-                    )?,
-                    "spaces were opened below it during removal; retaining it"
-                );
-                events::record(tx, &id, events::EventKind::Removed, cause, None)?;
-                crate::daemon::workspace_files::forget_removed(tx, &id)?;
-                let released = crate::daemon::approvals::release_decided_by(tx, &id)?;
-                tx.execute("DELETE FROM space_records WHERE id=?1", [&id])?;
-                Ok(released)
-            })
-            .await
-    }
+/// What [`delete_record`] gave the user.
+struct Deleted {
+    /// The last notification recorded for the space's unread messages.
+    notification: Option<i64>,
+    /// The approval requests the space had not decided.
+    released: Vec<ApprovalRequest>,
+}
+
+/// Delete the record of the space `id`, which `cause` removed, once the
+/// spaces below it are gone, in one transaction with what it recorded:
+/// the user gets its unread messages and the requests it decides, such as
+/// an issue proposal that outlives it, and the attached files that outlive
+/// it stay, a chat's until `expires_at`.
+fn delete_record(
+    tx: &rusqlite::Transaction<'_>,
+    id: &SpaceId,
+    cause: events::EventCause,
+    expires_at: UnixTime,
+) -> Result<Deleted> {
+    // Children go first; none may outlive its parent.
+    ensure!(
+        super::tree::children(tx, id)?.is_empty(),
+        "spaces were opened below it during removal; retaining it"
+    );
+    events::record(tx, id, events::EventKind::Removed, cause, None)?;
+    let notification = chat_messages::hand_to_user(tx, id)?;
+    workspace_files::keep_removed(tx, id, expires_at)?;
+    // With the record, so no request is left with a removed decider.
+    let released = release_decided_by(tx, id)?;
+    ensure!(
+        tx.execute("DELETE FROM space_records WHERE id=?1", [id])? == 1,
+        "the space was removed meanwhile"
+    );
+    Ok(Deleted {
+        notification,
+        released,
+    })
 }
