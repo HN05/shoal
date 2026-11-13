@@ -340,15 +340,18 @@ The agents Shoal starts get JSON from `shoal` without `--json`; give an agent
 you start yourself `SHOAL_OUTPUT=json` for the same, and pass `--text` for
 human output.
 
-For a separate agent account, configure the agent's token and a
-[Git profile](docs/reference.md#git-profiles) for the agent's commits:
+Agents' issue and PR changes need an `agent_token` for the forge host: a
+separate agent account's token, or `{ same_as = "user_token" }` to make them
+with your login. A [Git profile](docs/reference.md#git-profiles) sets the
+agent's commits:
 
 ```toml
 [agent]
 git_profile = "agent"
 
 [machine.forges."git.example.com"]
-agent_token = { cmd = ["op", "read", "op://dev/agent/token"] }  # Shoal's changes as the agent
+user_token = { cmd = ["security", "find-generic-password", "-s", "forgejo", "-w"] }
+agent_token = { cmd = ["op", "read", "op://dev/agent/token"] }  # Or { same_as = "user_token" }
 ```
 
 See [agent accounts](docs/reference.md#agent-accounts).
