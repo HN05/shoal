@@ -3109,7 +3109,9 @@ the workspace. Records expire with their checkpoint. `shoal restore`
 reopens the branch through the existing-branch path, creating it at the removed
 HEAD when deleted and refusing one that no longer contains it, then applies the
 snapshot's files without staging them, links what the record names and saves its
-agents' recovery records under the new workspace ID for `shoal restore`; once the
+agents' recovery records under the new workspace ID, which the same `shoal restore`
+then restores as a stopped space's, since reopening is a step on the way back to
+the work; once the
 files are back, one transaction moves the checkpoints to that ID and deletes the
 record. A restore first claims the record, keeping it and its checkpoints from
 expiring for an hour while it runs. Reopening is

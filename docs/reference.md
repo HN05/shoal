@@ -446,6 +446,10 @@ is restored, naming `--focus` to restore one agent here. `-f`/`--focus` restores
 regardless of the limits.
 Use `--forget` to forget the workspace's stopped agents, last sessions and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
+`--no-agents` restores everything but the agents, which stay saved: it reopens a
+removed workspace and retries a failed setup, leaving the agent waiting for it
+in the queue as `shoal setup` does, and with nothing else to restore reports
+that.
 `--permission KEY=VALUE`, repeatable, restores each selected agent
 with that [permission](#mode-permissions) given, `KEY=mode` dropping one
 given before, while the keys it leaves out keep theirs; its records keep them
@@ -3567,8 +3571,12 @@ instead. It takes one workspace, and none of the flags that restore agents.
 workspace exists, recreating the branch at the removed HEAD when it was deleted,
 puts its unsaved files back as uncommitted changes, links its issue and its
 opened and related items, saves the agents stopped by the removal or before it
-and the last sessions, which a later `shoal restore` restores, runs setup, links its PRs, and keeps its checkpoints; a link or save that fails is
-a warning. It refuses when another
+and the last sessions, runs setup, links its PRs, and keeps its checkpoints; a link or save that fails is
+a warning. Once its post-setup hook succeeds, it restores those agents and last
+sessions as it restores a stopped space's, queued unless `--now` or `--focus`, under
+`--permission`; one it cannot restore is reported and stays saved, and the workspace
+stays open. `--no-agents` keeps them saved for a later `shoal restore`, keeping the
+workspace from idle cleanup as stopped work does, and `--forget` forgets them. It refuses when another
 workspace uses the branch, when the branch no longer contains the removed HEAD,
 or when it moved past HEAD while unsaved files would have to be applied to it;
 the error names the commit to recover by hand. Workspace processes cannot reopen removed workspaces.

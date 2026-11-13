@@ -789,7 +789,7 @@ fn status_shows_where_each_reported_session_keeps_its_transcript() {
 }
 
 #[test]
-fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_restore() {
+fn a_reopened_workspace_continues_the_session_of_an_agent_that_exited_on_its_own() {
     let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("quit");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -829,16 +829,16 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
         ),
         "{removed}"
     );
-    let restored = fixture.ok(&["restore", &fixture.id("quit")])["reopened"][0].clone();
-    assert_eq!(restored["warnings"], serde_json::json!([]));
+    // Reopening continues the last session in this terminal.
     let output = fixture
         .command()
-        .current_dir(path)
-        .args(["restore", "--focus"])
+        .args(["restore", &fixture.id("quit"), "--focus"])
         .stdin(Stdio::null())
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("warning:"), "{stderr}");
     assert_eq!(
         fs::read_to_string(path.join("resumed")).unwrap(),
         "quit-session"

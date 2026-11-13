@@ -101,6 +101,7 @@ impl ReopenedExt for Reopened {
                 .and_then(Queued::summary)
                 .map(|summary| format!("; {summary}"))
                 .unwrap_or_default(),
+            _ if !self.agents_saved => String::new(),
             0 => String::new(),
             1 => format!(
                 "; shoal restore {} restores its stopped agent",
@@ -130,7 +131,10 @@ impl ReopenedExt for Reopened {
         }
         let stopped = Stopped::from([(self.workspace.id.clone(), executions)]);
         match super::agents::queue::queue_stopped(ctx, &stopped).await {
-            Ok(queued) => self.queued = Some(queued),
+            Ok(queued) => {
+                self.queued = Some(queued);
+                self.agents_saved = false;
+            }
             Err(error) => eprintln!(
                 "warning: cannot queue the stopped agents; shoal restore {} restores them: {error:#}",
                 self.workspace.number
@@ -176,6 +180,7 @@ pub(in crate::cli::commands) async fn prepare_reopened(
         workspace = crate::opened_pull::link(&ctx.paths, workspace, url.clone()).await?;
     }
     Ok(Some(Reopened {
+        agents_saved: !(removed.agents.is_empty() && removed.last_sessions.is_empty()),
         workspace,
         removed,
         warnings,

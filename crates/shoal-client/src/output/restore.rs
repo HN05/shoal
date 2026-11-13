@@ -83,6 +83,9 @@ pub struct Reopened {
     pub workspace: Workspace,
     pub removed: RemovedWorkspace,
     pub warnings: Vec<String>,
+    /// Its stopped agents stay saved for a later `shoal restore`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub agents_saved: bool,
     /// The restores of its stopped agents, once queued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queued: Option<Queued>,

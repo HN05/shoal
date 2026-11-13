@@ -337,12 +337,10 @@ impl Halt {
 
 /// How to restore the agent by hand: restore it in the workspace `workspace`
 /// selects by ID, since names select nothing, or when it was `removed`,
-/// restore the workspace, which then says how to restore its agent.
+/// restore the workspace, which restores its agent with it.
 fn restore_steps(workspace: &SpaceId, execution: &ExecutionId, removed: bool) -> String {
     if removed {
-        format!(
-            "restore with shoal restore {workspace}, which then names the shoal restore that continues it"
-        )
+        format!("restore with shoal restore {workspace}")
     } else {
         format!("restore with shoal restore {workspace} --execution {execution}")
     }

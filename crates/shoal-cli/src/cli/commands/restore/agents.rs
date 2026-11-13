@@ -4,12 +4,16 @@
 //! at once, a workspace whose setup failed retries it before the agent
 //! waiting for it starts, and `--forget` forgets the stopped work instead.
 use crate::client::execution_ids::ExecutionId;
-use crate::client::output::restore::{Queued, Reopened, StartedRestores};
+use crate::client::output::{
+    batch::Failure,
+    restore::{Queued, Reopened, StartedRestores},
+};
 use crate::client::saved::Queuing;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    cli::{args::SpaceTargets, commands::turns::Continuation, context::Context},
+    cli::{args::SpaceTargets, commands::turns::Continuation, context::Context, ui},
     config::permissions::PermissionChange,
+    execution::recovery::Saved,
     model::PresentSpace,
 };
 use anyhow::{Context as _, Result, ensure};
@@ -22,6 +26,8 @@ pub struct Options {
     pub execution: Option<ExecutionId>,
     /// Forget the stopped work instead of restoring it.
     pub forget: bool,
+    /// Restore everything but the agents, which stay saved.
+    pub no_agents: bool,
     /// Start the restores at once, regardless of the agent limits.
     pub now: bool,
     /// Restore one agent in this terminal.
@@ -33,18 +39,63 @@ pub struct Options {
 
 /// Restore the `selected` spaces, every one with stopped work for `--all`,
 /// and open the removed workspaces among them again once every target is
-/// checked; `named` says the command line named them. Restores queue
-/// unless `now`, or `focus`, which restores one agent in this terminal, and
-/// so do the agents waiting for the failed setups of named workspaces,
-/// which retry them first; a chat's start at once from the queue, which
-/// admits them without a slot. Without a terminal every restore queues,
-/// which `now` starts at once, since this process can start none of them.
-/// Every target, and a change to the permissions given for every selected
-/// agent, is checked before any setup or restore.
+/// checked, whose saved agents then restore with the others; `named` says
+/// the command line named them. Restores queue unless `now`, or `focus`,
+/// which restores one agent in this terminal, and so do the agents waiting
+/// for the failed setups of named workspaces, which retry them first; a
+/// chat's start at once from the queue, which admits them without a slot.
+/// Without a terminal every restore queues, which `now` starts at once,
+/// since this process can start none of them. Every target, and a change to
+/// the permissions given for every selected agent, is checked before any
+/// setup or restore.
 pub(super) async fn restore(
     ctx: &Context,
     mut selected: Selected,
     named: bool,
+    options: Options,
+) -> Result<i32> {
+    let scoped = crate::env::inherits_scope(&ctx.paths.state);
+    ensure!(
+        !scoped || selected.removed.is_empty(),
+        "workspace processes cannot reopen removed workspaces; ask the user to run shoal restore"
+    );
+    let change = options.change.as_ref();
+    let restores_agents = !options.forget && !options.no_agents;
+    let whole = named && !options.forget && options.execution.is_none();
+    if whole {
+        setups::take_failed(ctx, &mut selected).await?;
+    }
+    if whole
+        && !options.no_agents
+        && let Some(code) = continue_turns(ctx, &mut selected, change.is_some()).await?
+    {
+        return Ok(code);
+    }
+    selected.refuse_running()?;
+    if let Some(change) = change {
+        permission_change::check(ctx, &selected, options.execution.as_ref(), change).await?;
+    }
+    if scoped && restores_agents {
+        return queue::queue_below(ctx, selected, options.execution, change).await;
+    }
+    let Some(mut reopened) = super::reopen::reopen_each(ctx, &selected.removed).await? else {
+        return Ok(1);
+    };
+    if options.no_agents {
+        return restore_without_agents(ctx, &selected, reopened).await;
+    }
+    select_reopened(ctx, &mut selected, &mut reopened).await?;
+    restore_selected(ctx, selected, reopened, options).await
+}
+
+/// Restore the agents of the `selected` spaces as `options` says, with the
+/// workspaces `reopened` for them: one space's alone or in this terminal,
+/// the agent waiting for one failed setup in this terminal, or every one
+/// together.
+async fn restore_selected(
+    ctx: &Context,
+    selected: Selected,
+    reopened: Vec<Reopened>,
     options: Options,
 ) -> Result<i32> {
     let Options {
@@ -53,33 +104,9 @@ pub(super) async fn restore(
         now,
         focus,
         change,
+        ..
     } = options;
     let change = change.as_ref();
-    let scoped = crate::env::inherits_scope(&ctx.paths.state);
-    ensure!(
-        !scoped || selected.removed.is_empty(),
-        "workspace processes cannot reopen removed workspaces; ask the user to run shoal restore"
-    );
-    if named && !forget && execution.is_none() {
-        setups::take_failed(ctx, &mut selected).await?;
-    }
-    if named
-        && !forget
-        && execution.is_none()
-        && let Some(code) = continue_turns(ctx, &mut selected, change.is_some()).await?
-    {
-        return Ok(code);
-    }
-    selected.refuse_running()?;
-    if let Some(change) = change {
-        permission_change::check(ctx, &selected, execution.as_ref(), change).await?;
-    }
-    if scoped && !forget {
-        return queue::queue_below(ctx, selected, execution, change).await;
-    }
-    let Some(reopened) = super::reopen::reopen_each(ctx, &selected.removed).await? else {
-        return Ok(1);
-    };
     let queuing = Queuing::of(ctx.on_terminal(), now);
     let setups = selected.setups.as_slice();
     let alone = reopened.is_empty();
@@ -101,15 +128,60 @@ pub(super) async fn restore(
             reports::reopened(ctx, reopened)?;
             setups::retry_here(ctx, setup, change).await
         }
-        _ => {
+        (spaces, _) => {
             ensure!(
-                execution.is_none(),
+                execution.is_none() || matches!(spaces, Some([_])),
                 "--execution selects a stopped execution of one space"
             );
             ensure!(!focus, "--focus restores the agent of one space");
-            restore_each(ctx, selected, reopened, forget, queuing, change).await
+            let restore = Restore {
+                execution,
+                forget,
+                queuing,
+                change,
+            };
+            restore_each(ctx, selected, reopened, restore).await
         }
     }
+}
+
+/// Add each of the `reopened` workspaces with saved agents or last sessions
+/// to the `selected` spaces, whose restore then restores them.
+async fn select_reopened(
+    ctx: &Context,
+    selected: &mut Selected,
+    reopened: &mut [Reopened],
+) -> Result<()> {
+    for opened in reopened.iter_mut().filter(|opened| opened.agents_saved) {
+        let space = SpaceSelector::id(&opened.workspace.id);
+        if crate::client::saved::read(&ctx.paths, space.clone())
+            .await?
+            .is_empty()
+        {
+            continue;
+        }
+        selected.spaces.get_or_insert_default().push(space);
+        opened.agents_saved = false;
+    }
+    Ok(())
+}
+
+/// Restore what the `selected` spaces and the workspaces `reopened` for
+/// them have but their agents, which stay saved: retry the failed setups,
+/// leaving the agents waiting for them to the queue, and report them with
+/// the reopened workspaces, or that there is nothing else to restore.
+async fn restore_without_agents(
+    ctx: &Context,
+    selected: &Selected,
+    reopened: Vec<Reopened>,
+) -> Result<i32> {
+    if selected.setups.is_empty() {
+        reports::nothing(ctx, reopened, false)?;
+        return Ok(0);
+    }
+    let restored = set_up(ctx, selected, reopened, false).await;
+    reports::queued(ctx, &restored)?;
+    Ok(if restored.failed.is_empty() { 0 } else { 1 })
 }
 
 /// Continue the turns an interrupt ended of the agents in the `selected`
@@ -163,6 +235,15 @@ pub(super) fn ensure_below(targets: &SpaceTargets, here: bool) -> Result<()> {
     Ok(())
 }
 
+/// How [`restore_each`] restores the spaces it selects.
+struct Restore<'a> {
+    /// The one stopped execution of the one space selected to restore.
+    execution: Option<ExecutionId>,
+    forget: bool,
+    queuing: Queuing,
+    change: Option<&'a PermissionChange>,
+}
+
 /// Restore the `selected` spaces together, reporting them at once with the
 /// workspaces `reopened` for them: retry the failed setups, and queue the
 /// restores of the stopped agents and the agents waiting for those setups,
@@ -171,12 +252,21 @@ pub(super) fn ensure_below(targets: &SpaceTargets, here: bool) -> Result<()> {
 async fn restore_each(
     ctx: &Context,
     selected: Selected,
-    reopened: Vec<Reopened>,
-    forget: bool,
-    queuing: Queuing,
-    change: Option<&PermissionChange>,
+    mut reopened: Vec<Reopened>,
+    restore: Restore<'_>,
 ) -> Result<i32> {
-    let stopped = saved::stopped(ctx, &selected, forget).await?;
+    let Restore {
+        execution,
+        forget,
+        queuing,
+        change,
+    } = restore;
+    let mut stopped = saved::stopped(ctx, &selected, forget).await?;
+    if let Some(execution) = &execution {
+        for (_, saved) in &mut stopped {
+            saved.retain_execution(execution, true);
+        }
+    }
     if stopped.is_empty() && selected.setups.is_empty() {
         let started = forget || queuing == Queuing::Here { now: true };
         reports::nothing(ctx, reopened, started)?;
@@ -185,12 +275,14 @@ async fn restore_each(
     if forget {
         return forget::forget_each(ctx, &stopped, reopened).await;
     }
+    let mut refused = Vec::new();
     if let Queuing::Daemon { .. } = queuing {
-        queue::ensure_daemon_starts(ctx, &stopped).await?;
+        stopped = daemon_startable(ctx, stopped, &mut reopened, &mut refused).await?;
     }
     permission_change::apply(ctx, &stopped, &selected.setups, change).await?;
     let now = matches!(queuing, Queuing::Here { now } | Queuing::Daemon { now } if now);
-    let restored = set_up(ctx, &selected, reopened, now).await;
+    let mut restored = set_up(ctx, &selected, reopened, now).await;
+    restored.failed.append(&mut refused);
     match queuing {
         Queuing::Here { now: true } => {
             let restored = StartedRestores {
@@ -205,6 +297,34 @@ async fn restore_each(
             queue::queue_all(ctx, stopped, restored, now).await
         }
     }
+}
+
+/// The `stopped` work whose restores the daemon can start from the
+/// background, refusing the rest before any is queued, except that the
+/// agents of a workspace `reopened` for the restore stay saved, reported
+/// among the `failed`, since its reopening stands.
+async fn daemon_startable(
+    ctx: &Context,
+    stopped: Vec<(PresentSpace, Saved)>,
+    reopened: &mut [Reopened],
+    failed: &mut Vec<Failure>,
+) -> Result<Vec<(PresentSpace, Saved)>> {
+    let mut startable = Vec::new();
+    for (space, saved) in stopped {
+        let starts = queue::ensure_daemon_starts_in(ctx, &space, &saved).await;
+        let opened = (reopened.iter_mut()).find(|opened| opened.workspace.id == *space.id());
+        match (starts, opened) {
+            (Err(error), Some(opened)) => {
+                opened.agents_saved = true;
+                failed.push(ui::failure(ctx, "restore", space.name(), &error));
+            }
+            (starts, _) => {
+                starts?;
+                startable.push((space, saved));
+            }
+        }
+    }
+    Ok(startable)
 }
 
 /// Retry the `selected` failed setups, starting the agents waiting for them

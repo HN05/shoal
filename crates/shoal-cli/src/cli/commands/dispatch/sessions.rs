@@ -26,6 +26,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             checkpoint,
             execution,
             forget,
+            no_agents,
             now,
             focus,
             permissions,
@@ -44,6 +45,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
                     let options = agents::Options {
                         execution,
                         forget,
+                        no_agents,
                         now,
                         focus,
                         change: change(&permissions),

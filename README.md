@@ -483,7 +483,8 @@ disposable workspace's, as `shoal checkpoint` does and Shoal does when an
 agent exits or is stopped. Until the checkpoint expires, after 30 days by default,
 `shoal restore` picks a removed workspace among what it restores, and
 `shoal restore <id>` opens one again with its links and the unsaved files the
-checkpoint kept; restoring it again continues the agents the removal stopped. A checkpoint keeps
+checkpoint kept, and restores the agents the removal stopped; `--no-agents` keeps them
+saved for a later `shoal restore`, and `--forget` forgets them. A checkpoint keeps
 HEAD only when the unsaved files are too large or include a nested repository or
 changed submodule; see [Checkpoints and restore](docs/reference.md#checkpoints-and-restore).
 `shoal restore <workspace> --checkpoint <number>` returns an existing workspace

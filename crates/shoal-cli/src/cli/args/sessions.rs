@@ -23,7 +23,8 @@ pub enum SessionsCommand {
     /// such as a Herdr tab or a detached zmx session. A named workspace or running chat whose
     /// agent's turn `shoal stop --interrupt` ended continues that turn instead. A stopped chat
     /// restores at once under its name, continuing its session. A removed workspace, named by its
-    /// ID, opens again with its unsaved files and links.
+    /// ID, opens again with its unsaved files and links, and its agents restore as a stopped
+    /// space's do.
     ///
     /// Without a space, restores the current one when it has something to restore; otherwise
     /// picks among stopped work, stopped chats and removed workspaces, or lists them without a
@@ -37,7 +38,7 @@ pub enum SessionsCommand {
             long,
             value_name = "N",
             num_args = 0..=1,
-            conflicts_with_all = ["all", "execution", "forget", "now", "focus", "permissions"]
+            conflicts_with_all = ["all", "execution", "forget", "no_agents", "now", "focus", "permissions"]
         )]
         checkpoint: Option<Option<CheckpointNumber>>,
         /// Select a stopped execution when the workspace has several records.
@@ -46,6 +47,10 @@ pub enum SessionsCommand {
         /// Forget the saved agents and commands instead of restoring them.
         #[arg(long)]
         forget: bool,
+        /// Restore everything but the agents, which stay saved for a later restore: open a
+        /// removed workspace again, or retry a failed setup, whose waiting agent stays queued.
+        #[arg(long, conflicts_with_all = ["forget", "now", "focus", "permissions"])]
+        no_agents: bool,
         /// Start at once regardless of the agent limits, where each agent
         /// stopped or in the background.
         #[arg(long, conflicts_with = "forget")]

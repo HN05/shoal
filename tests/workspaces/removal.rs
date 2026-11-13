@@ -129,6 +129,17 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
 }
 
 #[test]
+fn restore_without_agents_leaves_a_live_spaces_stopped_work_saved() {
+    let fixture = Fixture::new();
+    let stopped = fixture.add("stopped");
+    fixture.save_stopped_command(&stopped);
+    let restored = fixture.ok(&["restore", &fixture.id("stopped"), "--no-agents"]);
+    assert_eq!(restored["commands"], serde_json::json!([]), "{restored}");
+    let listed = fixture.ok(&["restore"]);
+    assert_eq!(listed["stopped"][0]["saved"]["commands"], 1, "{listed}");
+}
+
+#[test]
 fn restore_without_a_terminal_lists_stopped_work_and_removed_workspaces() {
     let fixture = Fixture::new();
     let stopped = fixture.add("stopped");
@@ -227,79 +238,147 @@ fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoi
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
 }
 
+/// A workspace removed while its agent and a command ran, with the fixture
+/// that removed it, its path, and the execution its removal saved.
+struct RemovedWithAgent {
+    fixture: Fixture,
+    path: PathBuf,
+    execution: String,
+}
+
+impl RemovedWithAgent {
+    fn new() -> Self {
+        let fixture = Fixture::with_config(Some(
+            "[agents.claude]\ncommand = ['sh', './agent.sh']\nresume_command = ['sh', './resume.sh']\n",
+        ));
+        let workspace = fixture.add("removed");
+        let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+        install_fake_agent(&path);
+        fs::write(path.join("resume.sh"), "touch resumed\n").unwrap();
+        let spawn = |args: &[&str]| {
+            fixture
+                .command()
+                .args(args)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap()
+        };
+        let agent = spawn(&[
+            "start",
+            "--in",
+            &fixture.id("removed"),
+            "--here",
+            "--agent",
+            "claude",
+        ]);
+        let command = spawn(&[
+            "run",
+            "--workspace",
+            &fixture.id("removed"),
+            "--",
+            "sh",
+            "-c",
+            "touch command-started; while :; do sleep 1; done",
+        ]);
+        assert!(
+            try_wait_for(|| (path.join("agent-started").exists()
+                && path.join("command-started").exists())
+            .then_some(()))
+            .is_some(),
+            "executions did not start"
+        );
+        fixture.ok(&["rm", "--wait", &fixture.id("removed"), "--yes"]);
+        agent.wait_with_output().unwrap();
+        command.wait_with_output().unwrap();
+        assert!(!path.exists());
+        let removed = fixture.ok(&["restore"])["removed"].clone();
+        let agents = removed[0]["agents"].as_array().unwrap();
+        assert_eq!(agents.len(), 1, "{removed}");
+        assert_eq!(agents[0]["record"]["agent"], "claude");
+        let execution = agents[0]["execution"].as_str().unwrap().to_owned();
+        Self {
+            fixture,
+            path,
+            execution,
+        }
+    }
+
+    /// Restore the removed workspace with `args`, returning the report and
+    /// what its reopening reported.
+    fn restore(&self, args: &[&str]) -> (Value, Value) {
+        let id = self.fixture.id("removed");
+        let restored = self
+            .fixture
+            .ok(&[&["restore", id.as_str()][..], args].concat());
+        let reopened = restored["reopened"][0].clone();
+        assert_eq!(reopened["warnings"], serde_json::json!([]), "{restored}");
+        assert_eq!(reopened["workspace"]["path"], self.path.to_str().unwrap());
+        (restored, reopened)
+    }
+
+    /// The recovery and command records the reopened workspace keeps.
+    fn saved(&self, reopened: &Value) -> Vec<String> {
+        let state = self
+            .fixture
+            .root
+            .path()
+            .join("state/workspaces")
+            .join(reopened["workspace"]["id"].as_str().unwrap());
+        let Ok(entries) = fs::read_dir(&state) else {
+            return Vec::new();
+        };
+        entries
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .filter(|name| name.ends_with(".recovery.json") || name.ends_with(".command.json"))
+            .collect()
+    }
+}
+
 #[test]
-fn resume_continues_the_agent_a_removal_stopped_once_restored() {
-    let fixture = Fixture::with_config(Some(
-        "[agents.claude]\ncommand = ['sh', './agent.sh']\nresume_command = ['sh', './resume.sh']\n",
-    ));
-    let workspace = fixture.add("removed");
-    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
-    install_fake_agent(&path);
-    fs::write(path.join("resume.sh"), "touch resumed\n").unwrap();
-    let spawn = |args: &[&str]| {
-        fixture
-            .command()
-            .args(args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap()
-    };
-    let agent = spawn(&[
-        "start",
-        "--in",
-        &fixture.id("removed"),
-        "--here",
-        "--agent",
-        "claude",
-    ]);
-    let command = spawn(&[
-        "run",
-        "--workspace",
-        &fixture.id("removed"),
-        "--",
-        "sh",
-        "-c",
-        "touch command-started; while :; do sleep 1; done",
-    ]);
-    assert!(
-        try_wait_for(|| (path.join("agent-started").exists()
-            && path.join("command-started").exists())
-        .then_some(()))
-        .is_some(),
-        "executions did not start"
+fn restoring_a_removed_workspace_queues_the_agent_its_removal_stopped() {
+    let removed = RemovedWithAgent::new();
+    let (restored, reopened) = removed.restore(&[]);
+    let queued = restored["queued"].as_array().unwrap();
+    assert_eq!(queued.len(), 1, "{restored}");
+    assert_eq!(queued[0]["kind"], "restore", "{restored}");
+    assert_eq!(
+        queued[0]["execution"],
+        removed.execution.as_str(),
+        "{restored}"
     );
+    assert_eq!(reopened.get("agents_saved"), None, "{restored}");
+}
 
-    fixture.ok(&["rm", "--wait", &fixture.id("removed"), "--yes"]);
-    agent.wait_with_output().unwrap();
-    command.wait_with_output().unwrap();
-    assert!(!path.exists());
-    let removed = fixture.ok(&["restore"])["removed"].clone();
-    let agents = removed[0]["agents"].as_array().unwrap();
-    assert_eq!(agents.len(), 1, "{removed}");
-    assert_eq!(agents[0]["record"]["agent"], "claude");
+#[test]
+fn restoring_a_removed_workspace_without_agents_keeps_them_for_a_later_restore() {
+    let removed = RemovedWithAgent::new();
+    let (restored, reopened) = removed.restore(&["--no-agents"]);
+    assert_eq!(restored["queued"], serde_json::json!([]), "{restored}");
+    assert_eq!(reopened["agents_saved"], true, "{restored}");
+    // The interrupted command is not saved, so only the agent restores.
+    let record = format!("{}.recovery.json", removed.execution);
+    assert_eq!(removed.saved(&reopened), [record]);
+    let restored = removed
+        .fixture
+        .run(&["restore", &removed.fixture.id("removed"), "--focus"]);
+    assert!(restored.status.success(), "{restored:?}");
+    assert!(removed.path.join("resumed").exists());
+    assert!(removed.saved(&reopened).is_empty());
+}
 
-    let restored = fixture.ok(&["restore", &fixture.id("removed")])["reopened"][0].clone();
-    assert_eq!(restored["warnings"], serde_json::json!([]));
-    assert_eq!(restored["workspace"]["path"], workspace["path"]);
-    let execution = agents[0]["execution"].as_str().unwrap();
-    let state = fixture
-        .root
-        .path()
-        .join("state/workspaces")
-        .join(restored["workspace"]["id"].as_str().unwrap());
-    // The interrupted command is not saved, so only the agent resumes.
-    let saved = fs::read_dir(&state)
-        .unwrap()
-        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
-        .filter(|name| name.ends_with(".recovery.json") || name.ends_with(".command.json"))
-        .collect::<Vec<_>>();
-    assert_eq!(saved, [format!("{execution}.recovery.json")]);
-    let resumed = fixture.run(&["restore", &fixture.id("removed"), "--focus"]);
-    assert!(resumed.status.success(), "{resumed:?}");
-    assert!(path.join("resumed").exists());
-    assert!(!state.join(format!("{execution}.recovery.json")).exists());
+#[test]
+fn restoring_a_removed_workspace_with_forget_drops_its_agents() {
+    let removed = RemovedWithAgent::new();
+    let (restored, reopened) = removed.restore(&["--forget"]);
+    assert_eq!(
+        restored["forgotten"],
+        serde_json::json!([removed.execution]),
+        "{restored}"
+    );
+    assert!(removed.saved(&reopened).is_empty());
+    assert_eq!(removed.fixture.ok(&["queue"]), serde_json::json!([]));
 }
 
 #[test]

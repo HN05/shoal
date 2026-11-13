@@ -131,19 +131,30 @@ pub(super) async fn ensure_daemon_starts(
     stopped: &[(PresentSpace, Saved)],
 ) -> Result<()> {
     for (space, saved) in stopped {
-        if !saved.restores_outside_wrappers() {
-            continue;
-        }
-        let target = ConfigTarget::Space(SpaceSelector::id(space.id()));
-        let settings = crate::config::settings(&ctx.paths, target).await?;
-        crate::cli::terminal::ensure_background(&settings).with_context(|| {
-            format!(
-                "cannot restore the agents of {} in the background; pass --focus to restore one here",
-                space.name()
-            )
-        })?;
+        ensure_daemon_starts_in(ctx, space, saved).await?;
     }
     Ok(())
+}
+
+/// Refuse the restores of the agents `saved` keeps of `space` that the
+/// daemon would start from the background when no host can take them
+/// there.
+pub(super) async fn ensure_daemon_starts_in(
+    ctx: &Context,
+    space: &PresentSpace,
+    saved: &Saved,
+) -> Result<()> {
+    if !saved.restores_outside_wrappers() {
+        return Ok(());
+    }
+    let target = ConfigTarget::Space(SpaceSelector::id(space.id()));
+    let settings = crate::config::settings(&ctx.paths, target).await?;
+    crate::cli::terminal::ensure_background(&settings).with_context(|| {
+        format!(
+            "cannot restore the agents of {} in the background; pass --focus to restore one here",
+            space.name()
+        )
+    })
 }
 
 /// Queue the restore of every agent and last session `stopped` saves,
