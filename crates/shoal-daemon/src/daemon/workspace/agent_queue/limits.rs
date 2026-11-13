@@ -32,6 +32,9 @@ pub(crate) struct Limits {
     pub repositories: HashMap<RepositoryId, Option<u32>>,
     /// The machine-wide limit free disk space sets while a fixed limit applies.
     pub disk: Option<u32>,
+    /// The one-shot runs admitted, which hold no slot but count toward the
+    /// disk limit beside the slots.
+    pub oneshots: usize,
     pub jobs: JobLimits,
 }
 
@@ -153,6 +156,8 @@ pub(crate) fn admit(
     mut recovered: bool,
 ) -> Admission {
     let mut total = occupied.len();
+    // What the disk limit counts: the slots and the one-shot runs.
+    let mut writing = total + limits.oneshots;
     // Whether an agent or a job was admitted this pass, by measured memory
     // or a fixed limit: measured memory admits nothing beside it, since the
     // sample predates it.
@@ -196,9 +201,12 @@ pub(crate) fn admit(
             Work::Restore { waiting: true, .. } => 1,
         };
         if entry.light {
-            match light_hold(limits, total) {
+            match light_hold(limits, writing) {
                 Some(held) => admission.hold(entry, Some(held)),
-                None => admission.admitted.push(entry.id.clone()),
+                None => {
+                    writing += 1;
+                    admission.admitted.push(entry.id.clone());
+                }
             }
             continue;
         }
@@ -210,8 +218,8 @@ pub(crate) fn admit(
         // A one-shot run, such as a review, holds no agent slot, so of the
         // fixed limits only the disk's applies to it.
         let held = match entry.work {
-            Work::OneShot { .. } => full_disk(limits, total),
-            _ => full_limit(limits, &entry.repository, total, *used, own),
+            Work::OneShot { .. } => full_disk(limits, writing),
+            _ => full_limit(limits, &entry.repository, [total, writing, *used], own),
         };
         if let Some(held) = held {
             admission.hold(entry, Some(held));
@@ -221,6 +229,7 @@ pub(crate) fn admit(
             *used += 1 - own;
             total += 1 - own;
         }
+        writing += 1 - own;
         started = true;
         // Each healthy interval restarts one stopped agent or one-shot run.
         recovered &= own == 0 && entry.work != Work::OneShot { after_stop: true };
@@ -231,17 +240,18 @@ pub(crate) fn admit(
 
 /// What holds back a light agent, which needs no slot and no memory room:
 /// only a critical or missing reading, or disk past the limit it sets beside
-/// the `total` slots used.
-fn light_hold(limits: &Limits, total: usize) -> Option<HeldBy> {
+/// the `writing` slots and one-shot runs.
+fn light_hold(limits: &Limits, writing: usize) -> Option<HeldBy> {
     if let Some(capacity::Room::Held(held)) = limits.room {
         return Some(held);
     }
-    full_disk(limits, total)
+    full_disk(limits, writing)
 }
 
-/// The disk limit a start beside the `total` slots used would exceed.
-fn full_disk(limits: &Limits, total: usize) -> Option<HeldBy> {
-    let full = limits.disk.is_some_and(|limit| total >= limit as usize);
+/// The disk limit a start beside the `writing` slots and one-shot runs
+/// would exceed.
+fn full_disk(limits: &Limits, writing: usize) -> Option<HeldBy> {
+    let full = limits.disk.is_some_and(|limit| writing >= limit as usize);
     full.then_some(HeldBy::Disk)
 }
 
@@ -273,13 +283,13 @@ fn full_job_limit(limits: &JobLimits, running: u32) -> Option<HeldBy> {
 }
 
 /// The fixed limit an agent's start in `repository` would exceed, with
-/// `total` slots used on the machine and `used` in the repository, `own` of
-/// them its own already.
+/// `total` slots used on the machine, `writing` slots and one-shot runs on
+/// its disk and `used` slots in the repository, `own` of them its own
+/// already.
 fn full_limit(
     limits: &Limits,
     repository: &RepositoryId,
-    total: usize,
-    used: usize,
+    [total, writing, used]: [usize; 3],
     own: usize,
 ) -> Option<HeldBy> {
     let full = |count: usize, limit: Option<u32>| {
@@ -287,7 +297,7 @@ fn full_limit(
     };
     if full(total, limits.global) {
         Some(HeldBy::MaxAgents)
-    } else if full(total, limits.disk) {
+    } else if full(writing, limits.disk) {
         Some(HeldBy::Disk)
     } else if full(used, limits.repository(repository)) {
         Some(HeldBy::RepositoryLimit)
@@ -336,12 +346,13 @@ impl Manager {
         let global = config.machine.max_agents;
         let max_jobs = config.machine.max_jobs;
         // A one-shot run holds no slot, but uses the machine's memory.
-        let oneshots = self.agent_queue.admitted_oneshots().into_iter();
+        let admitted = self.agent_queue.admitted_oneshots();
+        let oneshots = admitted.len();
         let activities: Vec<Activity> = slots
             .iter()
             .map(|slot| slot.activity)
             .chain(jobs.iter().copied())
-            .chain(oneshots.map(|(_, held)| Activity::Running {
+            .chain(admitted.into_iter().map(|(_, held)| Activity::Running {
                 age: held,
                 memory: None,
             }))
@@ -355,6 +366,7 @@ impl Manager {
             room: measured.filter(|_| global == RunLimit::Dynamic),
             repositories: HashMap::new(),
             disk: None,
+            oneshots,
             jobs: JobLimits {
                 running: jobs.len().try_into().unwrap_or(u32::MAX),
                 fixed: fixed_limit(max_jobs),

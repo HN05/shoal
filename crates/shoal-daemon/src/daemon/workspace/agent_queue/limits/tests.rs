@@ -56,6 +56,7 @@ fn limits(global: Option<u32>, repositories: &[(&str, Option<u32>)]) -> Limits {
             .map(|(id, limit)| ((*id).into(), *limit))
             .collect(),
         disk: None,
+        oneshots: 0,
         jobs: JobLimits::default(),
     }
 }
@@ -453,4 +454,19 @@ fn a_oneshot_run_holds_no_slot_but_waits_for_memory_room_and_low_disk() {
         ..limits(Some(2), &[])
     };
     assert!(!admitted(&low_disk));
+    // With nothing else running, low disk lets one review through, and none
+    // beside one already running.
+    let reviews: Vec<Waiting> = ["first", "second"]
+        .map(|id| Waiting {
+            id: id.into(),
+            ..review[0].clone()
+        })
+        .into();
+    let started = admit(&[], &reviews, &low_disk, false);
+    assert_eq!(started, [QueueEntryId::from("first")]);
+    let beside = Limits {
+        oneshots: 1,
+        ..low_disk
+    };
+    assert!(admit(&[], &reviews, &beside, false).is_empty());
 }
