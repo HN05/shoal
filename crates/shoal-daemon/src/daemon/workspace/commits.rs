@@ -499,7 +499,7 @@ async fn pull_head(repo: &Repository, head: &PullHead) -> Result<Start> {
 /// `main-84d4405`; a bare commit is made for nothing and named by its short
 /// commit.
 fn named_start(commit: CommitId, base: Option<&str>, reference: &str) -> Start {
-    let short = commit.as_str()[..commit.as_str().len().min(7)].to_owned();
+    let short = commit.abbreviated(7).to_owned();
     let branch = reference.strip_prefix(git::LOCAL_REFS).or_else(|| {
         reference
             .strip_prefix("refs/remotes/")

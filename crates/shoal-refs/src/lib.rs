@@ -142,7 +142,12 @@ text_ref!(
 impl CommitId {
     /// The first 12 characters, as a reader sees the commit.
     pub fn short(&self) -> &str {
-        self.0.get(..12).unwrap_or(&self.0)
+        self.abbreviated(12)
+    }
+
+    /// The first `len` characters, or the whole name when it is shorter.
+    pub fn abbreviated(&self, len: usize) -> &str {
+        self.0.get(..len).unwrap_or(&self.0)
     }
 }
 

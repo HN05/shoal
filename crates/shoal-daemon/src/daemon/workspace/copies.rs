@@ -64,8 +64,7 @@ impl Source {
     /// for a workspace at a commit its short HEAD, with `-copy` added;
     /// nothing is built from the copied workspace's name.
     fn copy_name(&self) -> String {
-        let head = self.head.as_str();
-        let short = &head[..head.len().min(7)];
+        let short = self.head.abbreviated(7);
         format!(
             "{}-copy",
             self.branch.as_ref().map_or(short, BranchName::as_str)

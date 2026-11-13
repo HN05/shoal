@@ -2,7 +2,6 @@
 //! once it closes, a PR once it merges or closes, and a CI run once it, or a
 //! run of its workflow on the default branch that started after it, passes.
 use crate::items::reference::ItemRef;
-use shoal_refs::CommitId;
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -109,10 +108,8 @@ impl ForgeRepo {
 fn later_run_clearance(run: &Run, branch: &str, later: Option<&Run>) -> Clearance {
     match later {
         Some(later) if later.passed() && later.started_after(run) => {
-            let at = (later.commit.as_ref().map(CommitId::as_str))
-                .map_or_else(String::new, |commit| {
-                    format!(" at {}", commit.get(..12).unwrap_or(commit))
-                });
+            let at = (later.commit.as_ref())
+                .map_or_else(String::new, |commit| format!(" at {}", commit.short()));
             Clearance::Cleared(format!("run {} passed on {branch}{at}", later.url))
         }
         _ => Clearance::Open,

@@ -408,7 +408,7 @@ impl Manager {
         // since nothing is built from the workspace's name.
         let head = checkpoint.head.as_str();
         let branch = (checkpoint.branch.clone())
-            .unwrap_or_else(|| BranchName::from(&head[..head.len().min(7)]));
+            .unwrap_or_else(|| BranchName::from(checkpoint.head.abbreviated(7)));
         if let Some(workspace) = self.list_workspaces().await?.into_iter().find(|workspace| {
             workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&branch)
         }) {
