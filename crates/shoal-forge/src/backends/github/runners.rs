@@ -210,7 +210,9 @@ fn job_run(value: &Value) -> Result<JobRun> {
         )?,
         workflow: text(&value["path"])
             .map(|path| path.rsplit('/').next().unwrap_or_default().to_owned()),
-        commit: text(&value["head_sha"]).context("Actions run has no commit")?,
+        commit: text(&value["head_sha"])
+            .context("Actions run has no commit")?
+            .into(),
         trigger,
         reference,
     })

@@ -152,7 +152,7 @@ fn job_run(repo: &ForgeRepo, value: &Value) -> Result<JobRun> {
     Ok(JobRun {
         url: ItemRef::numbered(repo, LinkKind::Ci, number)?,
         workflow: value["workflow_id"].as_str().map(str::to_owned),
-        commit: field(value, "commit_sha")?,
+        commit: field(value, "commit_sha")?.into(),
         trigger,
         reference,
     })

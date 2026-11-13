@@ -4,6 +4,7 @@
 //! one job. Shoal decides which job runs when; the forge's runner runs its
 //! steps.
 use crate::items::{link::LinkKind, reference::ItemRef};
+use shoal_refs::CommitId;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -55,7 +56,7 @@ pub struct JobRun {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow: Option<String>,
     /// The commit it runs on.
-    pub commit: String,
+    pub commit: CommitId,
     pub trigger: Trigger,
     /// The ref the repository's remote serves the commit under, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]

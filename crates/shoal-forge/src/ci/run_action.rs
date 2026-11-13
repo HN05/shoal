@@ -3,6 +3,7 @@
 //! on through [`crate::ci::CiAction`] on its head instead.
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
+use shoal_refs::CommitId;
 
 use crate::{
     ForgeRepo,
@@ -30,7 +31,7 @@ pub struct Run {
     pub workflow: Option<String>,
     /// The commit it ran on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub commit: Option<String>,
+    pub commit: Option<CommitId>,
     pub state: JobState,
     /// The forge reports it succeeded, which a finished run that was
     /// skipped or waits for manual action has not.

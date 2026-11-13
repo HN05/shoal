@@ -2,6 +2,7 @@
 //! newest runs of a branch or workflow, as the workspace's agent account.
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
+use shoal_refs::CommitId;
 
 use crate::{
     ForgeRepo,
@@ -62,7 +63,7 @@ pub struct RunFilter {
     pub workflow: Option<String>,
     /// The commit the runs ran on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub commit: Option<String>,
+    pub commit: Option<CommitId>,
     pub limit: usize,
 }
 
@@ -73,12 +74,12 @@ pub fn validate_filter(filter: &RunFilter) -> Result<()> {
         "limit must be between 1 and {MAX_RUNS}"
     );
     for (field, value) in [
-        ("branch", &filter.branch),
-        ("workflow", &filter.workflow),
-        ("commit", &filter.commit),
+        ("branch", filter.branch.as_deref()),
+        ("workflow", filter.workflow.as_deref()),
+        ("commit", filter.commit.as_ref().map(CommitId::as_str)),
     ] {
         ensure!(
-            value.as_ref().is_none_or(|value| !value.trim().is_empty()),
+            value.is_none_or(|value| !value.trim().is_empty()),
             "{field} must be nonempty"
         );
     }

@@ -139,7 +139,11 @@ fn runs_read_their_branch_workflow_commit_and_state_from_the_forge() -> Result<(
                 "ref": "v1", "tag": true, "sha": "def", "status": "running"}),
     )?;
     assert_eq!(
-        (tag.branch, tag.commit.as_deref(), tag.state),
+        (
+            tag.branch,
+            tag.commit.as_ref().map(CommitId::as_str),
+            tag.state
+        ),
         (None, Some("def"), JobState::Running)
     );
     let forgejo = read(

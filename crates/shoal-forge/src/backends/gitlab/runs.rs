@@ -2,6 +2,7 @@
 //! and acting on them.
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
+use shoal_refs::CommitId;
 
 use super::{GitLab, status_state};
 use crate::{
@@ -69,7 +70,7 @@ impl Runs for GitLab {
             url: text(&value["web_url"]).context("pipeline has no URL")?,
             branch: text(&value["ref"]).filter(|_| value["tag"] != true),
             workflow: None,
-            commit: text(&value["sha"]),
+            commit: text(&value["sha"]).map(CommitId::from),
             state: status_state(&value["status"])?.into(),
             succeeded: value["status"] == "success",
             waiting: false,
@@ -86,7 +87,7 @@ impl Runs for GitLab {
             path.push_str(&format!("&ref={}", encode(branch, false)));
         }
         if let Some(commit) = &filter.commit {
-            path.push_str(&format!("&sha={}", encode(commit, false)));
+            path.push_str(&format!("&sha={}", encode(commit.as_str(), false)));
         }
         Ok(path)
     }

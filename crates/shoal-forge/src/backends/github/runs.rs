@@ -2,6 +2,7 @@
 //! and acting on them.
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
+use shoal_refs::CommitId;
 
 use super::{GitHub, actions};
 use crate::{
@@ -50,7 +51,7 @@ impl Runs for GitHub {
             url: text(&value["html_url"]).context("Actions run has no URL")?,
             branch: text(&value["head_branch"]),
             workflow: path.map(|path| path.rsplit('/').next().unwrap_or_default().into()),
-            commit: text(&value["head_sha"]),
+            commit: text(&value["head_sha"]).map(CommitId::from),
             state: actions::state(value)?,
             succeeded: value["conclusion"] == "success",
             waiting: value["conclusion"] == "action_required",
@@ -67,7 +68,7 @@ impl Runs for GitHub {
             path.push_str(&format!("&branch={}", encode(branch, false)));
         }
         if let Some(commit) = &filter.commit {
-            path.push_str(&format!("&head_sha={}", encode(commit, false)));
+            path.push_str(&format!("&head_sha={}", encode(commit.as_str(), false)));
         }
         Ok(path)
     }

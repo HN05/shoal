@@ -2,6 +2,7 @@
 //! and acting on them.
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
+use shoal_refs::CommitId;
 
 use super::{Forgejo, actions};
 use crate::{
@@ -60,7 +61,7 @@ impl Runs for Forgejo {
             url: format!("{}/actions/runs/{number}", repo.repository_url()),
             branch: text(&value["prettyref"]),
             workflow: text(&value["workflow_id"]),
-            commit: text(&value["commit_sha"]),
+            commit: text(&value["commit_sha"]).map(CommitId::from),
             state: actions::state(&value["status"])?,
             succeeded: value["status"] == "success",
             waiting: value["need_approval"] == true,
@@ -78,7 +79,7 @@ impl Runs for Forgejo {
             path.push_str(&format!("&workflow_id={}", encode(workflow, false)));
         }
         if let Some(commit) = &filter.commit {
-            path.push_str(&format!("&head_sha={}", encode(commit, false)));
+            path.push_str(&format!("&head_sha={}", encode(commit.as_str(), false)));
         }
         Ok(path)
     }

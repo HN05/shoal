@@ -130,7 +130,7 @@ impl Manager {
             .create_job_workspace(
                 &entry.repository_id,
                 (entry.name.as_str(), SpaceName::derive(&job.job.name, "ci")),
-                &job.run.commit.as_str().into(),
+                &job.run.commit,
                 job.run.reference.as_deref(),
             )
             .await?;

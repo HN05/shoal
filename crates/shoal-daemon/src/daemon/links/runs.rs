@@ -194,7 +194,7 @@ impl Manager {
                     .pull_head(account, &pull)
                     .await
                     .with_context(|| format!("could not read the head of {pull}"))?;
-                filter.commit = Some(head.into());
+                filter.commit = Some(head);
             }
             None => filter.branch = Some(place.run_branch(filter.branch.take()).await?),
         }
