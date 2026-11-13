@@ -1,5 +1,6 @@
 //! Issues and PRs: reading, opening and changing them.
 pub mod action;
+pub mod assignment;
 pub mod attach;
 pub mod comment;
 pub mod create;

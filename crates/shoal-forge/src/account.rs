@@ -126,13 +126,18 @@ impl Account {
     /// host, saying which token is missing: an agent's changes never go out
     /// with the user's login it reads with.
     pub(crate) fn require_login(&self, repo: &ForgeRepo) -> Result<()> {
-        if self.logins.get(&repo.host).is_some() {
+        if self.has_login(repo) {
             return Ok(());
         }
         match &self.missing {
             Some(missing) => bail!("{}", missing(&repo.host)),
             None => bail!("no token for {}", repo.host),
         }
+    }
+
+    /// Whether the account has a login of its own for `repo`'s host.
+    pub(crate) fn has_login(&self, repo: &ForgeRepo) -> bool {
+        self.logins.get(&repo.host).is_some()
     }
 
     /// The login for `host`: the account's own, else the user's.
