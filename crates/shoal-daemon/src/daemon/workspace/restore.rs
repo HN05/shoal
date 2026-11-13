@@ -3,6 +3,7 @@
 //! record expires.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
+use crate::daemon::links::issue::Assigner;
 use crate::execution::recovery::LastSessionExt;
 use shoal_refs::{BranchName, CommitId};
 use std::path::Path;
@@ -372,8 +373,11 @@ impl Manager {
         let mut warnings = Vec::new();
         for issue in &links.issues {
             let (selector, input) = (SpaceSelector::id(workspace_id), issue.url.clone().into());
-            if let Err(error) = self.set_issue(&selector, &input, issue.title.clone()).await {
-                warnings.push(format!("cannot link issue {}: {error:#}", issue.url));
+            // Only the user restores a removed workspace.
+            let title = issue.title.clone();
+            match (self.set_issue(&selector, &input, title, Assigner::User)).await {
+                Ok(assigned) => warnings.extend(assigned),
+                Err(error) => warnings.push(format!("cannot link issue {}: {error:#}", issue.url)),
             }
         }
         if let Err(error) = self.record_items(workspace_id, recorded(links)).await {

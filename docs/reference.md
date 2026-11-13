@@ -4603,6 +4603,11 @@ Linking an issue or PR records its title, which later reads of the item on its
 forge keep current, and workspace lists show the first assigned issue's; when
 the forge cannot be read, the link is recorded without one and a warning names
 the error.
+Linking an open issue as assigned, however the link is made, also adds the
+account the space acts as to its assignees on the forge: the agent account for a
+scoped caller, the user's own login for the user's terminal, unless
+[`[issue] assign`](config.md#issues) is off or that account has no token of its
+own for the forge. The link stands whether or not the forge assigns it.
 Assigned PRs accumulate without duplicates, and any PR of the repository can be
 assigned whatever its head branch, such as one pushed from the worktree on
 another branch. Assigned items suppress idle cleanup.

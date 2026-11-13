@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail};
 use shoal_refs::BranchName;
 
 use super::{
+    issue::Assigner,
     proposals::OpenOutcome,
     space::LinkSpace,
     wait::{OwnChange, record_received_change},
@@ -493,11 +494,17 @@ impl Manager {
         let created = body.is_some();
         let (linked, warning) = if created {
             ensure_branch_head(&workspace, &item)?;
-            self.keep_created(&workspace.id, ItemKind::Pr, &item, true)
-                .await?
+            (self.keep_created(
+                &workspace.id,
+                ItemKind::Pr,
+                &item,
+                true,
+                Assigner::of(caller),
+            ))
+            .await?
         } else {
             self.link_open_pull(&workspace, &item).await?;
-            (true, None)
+            (true, Vec::new())
         };
         let checked = conventions::warnings(
             &forge,
@@ -570,30 +577,32 @@ impl Manager {
     /// as opened without, or when assigning it fails. A removal that starts
     /// after the caller's check leaves it unrecorded with a warning, so
     /// nothing fails once the item exists and a retry cannot create a
-    /// duplicate. Returns whether it was assigned, and the warning.
+    /// duplicate. An assigned issue is assigned on the forge to the account
+    /// of `assigner`. Returns whether it was assigned, and the warnings.
     pub(super) async fn keep_created(
         &self,
         space: &SpaceId,
         kind: ItemKind,
         item: &Item,
         link: bool,
-    ) -> Result<(bool, Option<String>)> {
+        assigner: Assigner,
+    ) -> Result<(bool, Vec<String>)> {
         self.journal_created(space, kind, item).await?;
         let failure = match link {
-            true => match self.assign_created(space, kind, item).await {
-                Ok(()) => return Ok((true, None)),
+            true => match self.assign_created(space, kind, item, assigner).await {
+                Ok(warnings) => return Ok((true, warnings)),
                 Err(error) => Some(error),
             },
             false => None,
         };
         if !self.record_created(space, kind, item).await? {
-            return Ok((false, Some(removal_warning(&item.url))));
+            return Ok((false, vec![removal_warning(&item.url)]));
         }
         match failure {
             Some(error) => {
                 Err(error.context(format!("{} was opened, but linking it failed", item.url)))
             }
-            None => Ok((false, None)),
+            None => Ok((false, Vec::new())),
         }
     }
 
@@ -606,14 +615,20 @@ impl Manager {
             .with_context(|| format!("{} was opened, but recording it failed", item.url))
     }
 
-    /// Assign `item`, which the space just created.
-    async fn assign_created(&self, space: &SpaceId, kind: ItemKind, item: &Item) -> Result<()> {
+    /// Assign `item`, which the space just created, returning what
+    /// assigning an issue on the forge warns of.
+    async fn assign_created(
+        &self,
+        space: &SpaceId,
+        kind: ItemKind,
+        item: &Item,
+        assigner: Assigner,
+    ) -> Result<Vec<String>> {
         let url = item.url.clone();
         match kind {
             ItemKind::Issue => {
-                let title = Some(item.title.clone());
-                self.set_issue_gated(&SpaceSelector::id(space), &url.into(), title)
-                    .await
+                let (selector, title) = (SpaceSelector::id(space), Some(item.title.clone()));
+                (self.set_issue_gated(&selector, &url.into(), title, assigner)).await
             }
             ItemKind::Pr => {
                 let check = super::pr::WatchCheck::Known;
@@ -623,7 +638,8 @@ impl Manager {
                     title,
                 };
                 self.set_pr_gated(&SpaceSelector::id(space), watch, check)
-                    .await
+                    .await?;
+                Ok(Vec::new())
             }
         }
     }

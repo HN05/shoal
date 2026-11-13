@@ -732,13 +732,16 @@ takes a free port instead of suggesting one. See
 required_labels = ["type/"]  # Default: []
 plan_label = "needs-plan"    # Default: unset
 planned_label = "planned"    # Default: unset
+assign = true                # Assign linked issues on the forge
 ```
 
 `required_labels` names entries that every new issue's labels must each start
 with, so `area/` takes any area label; see
 [repository conventions](reference.md#repository-conventions). `plan_label`
 marks issues that need a plan and `planned_label` those whose plan is settled;
-see [planning issues](reference.md#planning-issues).
+see [planning issues](reference.md#planning-issues). `assign` adds the account
+a space acts as to the assignees of each issue it links as assigned; see
+[linked items](reference.md#linked-items-and-cleanup).
 
 ```toml
 [priority.labels]   # Default: none

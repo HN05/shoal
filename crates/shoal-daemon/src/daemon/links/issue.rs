@@ -7,6 +7,8 @@ use std::path::Path;
 use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
 
+mod assignees;
+
 pub(crate) use crate::client::links::issue::Registration;
 use crate::{
     daemon::{
@@ -22,6 +24,7 @@ use crate::{
         },
     },
 };
+pub(crate) use assignees::Assigner;
 
 /// An open issue a new workspace is assigned.
 #[derive(Debug, Clone)]
@@ -50,16 +53,19 @@ impl Manager {
 
     /// Association is part of opening a workspace, before tracked setup starts.
     /// The issue joins the space's assigned issues; linking an assigned one
-    /// again records a newly known title.
+    /// again records a newly known title. A newly linked issue is assigned on
+    /// the forge to the account of `assigner`; returns the warnings that
+    /// gives.
     pub async fn set_issue(
         &self,
         selector: &SpaceSelector,
         input: &ItemInput,
         title: Option<String>,
-    ) -> Result<()> {
+        assigner: Assigner,
+    ) -> Result<Vec<String>> {
         let id = self.link_space(selector).await?.id().to_owned();
         let _guard = self.gates.lock_prs([&id]).await;
-        self.set_issue_gated(&SpaceSelector::id(&id), input, title)
+        self.set_issue_gated(&SpaceSelector::id(&id), input, title, assigner)
             .await
     }
 
@@ -69,20 +75,29 @@ impl Manager {
         selector: &SpaceSelector,
         input: &ItemInput,
         title: Option<String>,
-    ) -> Result<()> {
+        assigner: Assigner,
+    ) -> Result<Vec<String>> {
         let space = self.link_space(selector).await?;
         self.verify_space(&space).await?;
-        let (_, url) = self.issue_forge(space.origin_path(), input).await?;
-        self.persist_issue_assignment(space.id(), url, title).await
+        let (forge, url) = self.issue_forge(space.origin_path(), input).await?;
+        if !self
+            .persist_issue_assignment(space.id(), &url, title)
+            .await?
+        {
+            return Ok(Vec::new());
+        }
+        Ok(self.assign_on_forge(&space, &forge, &url, assigner).await)
     }
 
+    /// Record the issue `url` as assigned to the space `id`, returning
+    /// whether it is newly linked.
     async fn persist_issue_assignment(
         &self,
         id: &SpaceId,
-        url: ItemRef,
+        url: &ItemRef,
         title: Option<String>,
-    ) -> Result<()> {
-        let id = id.to_owned();
+    ) -> Result<bool> {
+        let (id, url) = (id.to_owned(), url.clone());
         self.store
             .write(move |tx| assign(tx, &id, url.url(), title.as_deref()))
             .await
@@ -160,8 +175,8 @@ impl Manager {
 /// Assign an issue within the caller's transaction, after those already
 /// assigned and in place of its opened or related link, retaining a known
 /// title when none is supplied and recording only a new association as
-/// linked.
-fn assign(db: &Connection, id: &SpaceId, url: &str, title: Option<&str>) -> Result<()> {
+/// linked. Returns whether the association is new.
+fn assign(db: &Connection, id: &SpaceId, url: &str, title: Option<&str>) -> Result<bool> {
     super::ensure_accepts_links(db, id)?;
     let assigned = assigned_urls(db, id)?
         .iter()
@@ -182,7 +197,7 @@ fn assign(db: &Connection, id: &SpaceId, url: &str, title: Option<&str>) -> Resu
             url,
         )?;
     }
-    Ok(())
+    Ok(!assigned)
 }
 
 /// Remove the space's issue `selected` names, which must be assigned, or

@@ -289,7 +289,8 @@ does not show refuses the whole review before anything is posted. These
 commands act on the linked item, or on the number or URL given.
 
 `issue open` records the issue as opened by the space, or with `--link`
-assigns it instead. `--repo OWNER/NAME`, or a repository URL on another forge, opens it
+assigns it instead. Linking an issue as assigned, by any command, adds the
+account the space acts as to its assignees on the forge. `--repo OWNER/NAME`, or a repository URL on another forge, opens it
 in another repository, as the space's `issue_other_repositories` permission
 allows;
 `issue ls` and `pr ls` take `--repo` too. `shoal pr revert [<number>]`

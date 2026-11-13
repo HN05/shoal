@@ -18,7 +18,7 @@ use crate::{
                 PushSpecification, Recorded,
             },
         },
-        links::LinkSpace,
+        links::{LinkSpace, issue::Assigner},
         workspace::Manager,
     },
     forge::{
@@ -495,8 +495,9 @@ impl Manager {
         let Some(space) = space.filter(|space| space.keeps_links()) else {
             return false;
         };
+        // Only a scoped caller proposes, and it acts as the agent account.
         let recorded = async {
-            self.keep_created(space.id(), ItemKind::Issue, item, link)
+            self.keep_created(space.id(), ItemKind::Issue, item, link, Assigner::Agent)
                 .await
         };
         match recorded.await {
@@ -553,7 +554,7 @@ impl Manager {
             .finish_proposed(request, &forge, &account, ItemKind::Pr)
             .await?;
         let (linked, _) = self
-            .keep_created(&workspace.id, ItemKind::Pr, &item, true)
+            .keep_created(&workspace.id, ItemKind::Pr, &item, true, Assigner::Agent)
             .await?;
         Ok((item, linked))
     }

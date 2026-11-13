@@ -63,12 +63,17 @@ impl Manager {
             (Some(kind), None) => self.item_title(selector, kind, input, caller).await,
             (_, title) => (title, None),
         };
-        self.record_link(selector, kind, input, relation, title, caller)
+        let warnings = self
+            .record_link(selector, kind, input, relation, title, caller)
             .await?;
-        Ok(Linked { title_error })
+        Ok(Linked {
+            title_error,
+            warnings,
+        })
     }
 
-    /// Record the link [`Self::link_item`] makes, with `title`.
+    /// Record the link [`Self::link_item`] makes, with `title`, returning
+    /// what assigning an issue on the forge warns of.
     async fn record_link(
         &self,
         selector: &SpaceSelector,
@@ -77,9 +82,12 @@ impl Manager {
         relation: Relation,
         title: Option<String>,
         caller: Option<&Caller>,
-    ) -> Result<()> {
+    ) -> Result<Vec<String>> {
+        let assigner = issue::Assigner::of(caller);
         match (relation, kind) {
-            (Relation::Assigned, LinkKind::Issue) => self.set_issue(selector, input, title).await,
+            (Relation::Assigned, LinkKind::Issue) => {
+                return self.set_issue(selector, input, title, assigner).await;
+            }
             (Relation::Assigned, LinkKind::Pr) => {
                 let url = input.clone();
                 self.set_pr(selector, Action::Watch { url, title }).await
@@ -93,7 +101,8 @@ impl Manager {
                 self.record_item(selector, relation, kind, input, title)
                     .await
             }
-        }
+        }?;
+        Ok(Vec::new())
     }
 
     /// The title of the issue or PR `input` names, which lists show for the

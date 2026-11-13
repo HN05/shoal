@@ -28,6 +28,7 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
             &SpaceSelector::id(&workspace.id),
             &url.parse().unwrap(),
             None,
+            Assigner::User,
         )
         .await
         .unwrap();
@@ -36,6 +37,7 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
             &SpaceSelector::id(&workspace.id),
             &"316".parse().unwrap(),
             Some("Show titles".into()),
+            Assigner::User,
         )
         .await
         .unwrap();
@@ -44,6 +46,7 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
             &SpaceSelector::id(&workspace.id),
             &"316".parse().unwrap(),
             None,
+            Assigner::User,
         )
         .await
         .unwrap();
@@ -72,6 +75,7 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
             &SpaceSelector::id(&workspace.id),
             &"317".parse().unwrap(),
             None,
+            Assigner::User,
         )
         .await
         .unwrap();
@@ -80,7 +84,8 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
             .set_issue(
                 &SpaceSelector::id(&workspace.id),
                 &"https://github.com/other/repo/issues/316".parse().unwrap(),
-                None
+                None,
+                Assigner::User,
             )
             .await
             .is_err()
@@ -135,6 +140,7 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
             &SpaceSelector::id(&workspace.id),
             &"316".parse().unwrap(),
             None,
+            Assigner::User,
         )
         .await
         .unwrap();

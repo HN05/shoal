@@ -29,6 +29,10 @@ pub struct Linked {
     /// link without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title_error: Option<String>,
+    /// What assigning an issue on the forge reports: who else it is
+    /// assigned to, or why it was not assigned.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 /// Whether a push may go ahead, or waits for the user's approval of the

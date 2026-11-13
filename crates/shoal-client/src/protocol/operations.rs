@@ -178,6 +178,9 @@ pub struct StartedWorkspace {
     pub workspace: Box<Workspace>,
     #[serde(default)]
     pub reused: bool,
+    /// What assigning its issue on the forge warns of.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 /// What the daemon hands an operation's worker on its standard input.

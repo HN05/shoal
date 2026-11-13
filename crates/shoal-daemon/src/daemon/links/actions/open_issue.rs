@@ -16,6 +16,7 @@ use crate::{
     daemon::{
         links::{
             LinkSpace,
+            issue::Assigner,
             proposals::{OpenOutcome, Proposer},
         },
         scope::Caller,
@@ -136,7 +137,13 @@ impl Manager {
         };
         if space.keeps_links() {
             let (linked, warning) = self
-                .keep_created(space.id(), ItemKind::Issue, &opened.item, link)
+                .keep_created(
+                    space.id(),
+                    ItemKind::Issue,
+                    &opened.item,
+                    link,
+                    Assigner::of(caller),
+                )
                 .await?;
             opened.linked = linked;
             opened.warnings.extend(warning);
@@ -247,7 +254,13 @@ impl Manager {
         conventions::require(forge, &account, ItemKind::Issue, required, &issue.labels).await?;
         let Created { item, unfinished } = forge.create_issue(&account, &issue).await?;
         let (linked, warning) = self
-            .keep_created(&workspace.id, ItemKind::Issue, &item, link)
+            .keep_created(
+                &workspace.id,
+                ItemKind::Issue,
+                &item,
+                link,
+                Assigner::of(caller),
+            )
             .await?;
         let checked = destination
             .warnings(&account, &workspace.path, &item, &issue, required)

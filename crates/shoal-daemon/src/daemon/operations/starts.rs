@@ -4,6 +4,7 @@
 use crate::client::queue::QueueEntryId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
+use crate::daemon::links::issue::Assigner;
 use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context as _, Result, ensure};
@@ -366,16 +367,7 @@ impl Manager {
         preparing: Preparing,
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
-        if let Some(OpenIssue { url, title, .. }) = issue
-            && let Err(error) = self
-                .set_issue(&SpaceSelector::id(&workspace.id), &url.into(), Some(title))
-                .await
-        {
-            if !reused {
-                self.discard_new(&workspace).await;
-            }
-            return Err(error);
-        }
+        let warnings = (self.assign_start_issue(&workspace, reused, issue, caller)).await?;
         // The entry is the workspace's before its setup can fail, so a
         // waiting launch frees its slot even once the caller is gone.
         if let Some(entry) = &preparing.queue_entry {
@@ -397,7 +389,31 @@ impl Manager {
             operation,
             workspace: Box::new(self.workspace_by_id(&workspace.id).await?),
             reused,
+            warnings,
         })
+    }
+
+    /// Assign `issue` to the `workspace` a start opened, as `caller`'s
+    /// account on the forge, returning what that warns of. A new workspace
+    /// whose issue cannot be assigned is removed, since nothing ran in it.
+    async fn assign_start_issue(
+        &self,
+        workspace: &Workspace,
+        reused: bool,
+        issue: Option<OpenIssue>,
+        caller: Option<&Caller>,
+    ) -> Result<Vec<String>> {
+        let Some(OpenIssue { url, title, .. }) = issue else {
+            return Ok(Vec::new());
+        };
+        let selector = SpaceSelector::id(&workspace.id);
+        let assigned = self
+            .set_issue(&selector, &url.into(), Some(title), Assigner::of(caller))
+            .await;
+        if assigned.is_err() && !reused {
+            self.discard_new(workspace).await;
+        }
+        assigned
     }
 
     /// Give the start's queue `entry` the `workspace` it opened, refusing

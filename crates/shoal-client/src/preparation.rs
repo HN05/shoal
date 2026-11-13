@@ -210,6 +210,7 @@ pub async fn prepare<'d, D: Daemon>(
         operation,
         workspace: Box::new(workspace.clone()),
         reused: true,
+        warnings: Vec::new(),
     };
     Preparing::follow(daemon, started).await
 }
@@ -219,6 +220,8 @@ pub struct Preparing<'d, D> {
     daemon: &'d D,
     workspace: Box<Workspace>,
     reused: bool,
+    /// What assigning its issue on the forge warned of.
+    warnings: Vec<String>,
     operation: String,
     following: Following,
     /// The failure it ended with, kept until the workspace it left is read.
@@ -233,12 +236,14 @@ impl<'d, D: Daemon> Preparing<'d, D> {
             operation,
             workspace,
             reused,
+            warnings,
         } = started;
         let following = Following::open(daemon, operation.clone(), 0).await?;
         Ok(Self {
             daemon,
             workspace,
             reused,
+            warnings,
             operation,
             following,
             failed: None,
@@ -254,6 +259,11 @@ impl<'d, D: Daemon> Preparing<'d, D> {
     /// created.
     pub fn reused(&self) -> bool {
         self.reused
+    }
+
+    /// What assigning the workspace's issue on the forge warned of.
+    pub fn warnings(&self) -> &[String] {
+        &self.warnings
     }
 
     /// The preparation's operation, to cancel it.

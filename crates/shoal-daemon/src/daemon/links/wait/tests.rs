@@ -3169,6 +3169,7 @@ async fn the_background_poll_reads_spaces_together() {
                 &SpaceSelector::id(&workspace.id),
                 &issue.parse().unwrap(),
                 Some("Fix".into()),
+                crate::daemon::links::issue::Assigner::Agent,
             )
             .await
             .unwrap();

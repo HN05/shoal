@@ -2,6 +2,7 @@
 //! worktree and its setup, after which its agent restarts there when its
 //! turn ends.
 use crate::client::space_ids::SpaceId;
+use crate::daemon::links::issue::Assigner;
 use crate::forge::items::reference::ItemInput;
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -49,9 +50,10 @@ impl Manager {
             !conversion.options.disposable,
             "a converted chat's workspace keeps its work; leave out --disposable"
         );
-        if let Some(input) = &conversion.issue {
-            self.link_converted_issue(&chat, input).await?;
-        }
+        let warnings = match &conversion.issue {
+            Some(input) => (self.link_converted_issue(&chat, input, caller)).await?,
+            None => Vec::new(),
+        };
         let converting = Converting {
             chat,
             mode: conversion.mode.clone(),
@@ -59,10 +61,11 @@ impl Manager {
         // Held until the preparation is recorded, which the relocation then
         // waits for.
         let making = self.make_converted(converting, conversion, env, caller);
-        let started = self.conversion_handovers.hold(making).await?;
+        let mut started = self.conversion_handovers.hold(making).await?;
         // The relocation waits for the agent's turn to end, which it may
         // have already.
         self.signals.agent_changed();
+        started.warnings.extend(warnings);
         Ok(started)
     }
 
@@ -140,12 +143,18 @@ impl Manager {
     }
 
     /// Assign `chat` the open issue `input` names in its repository, which
-    /// the workspace it becomes keeps.
-    async fn link_converted_issue(&self, chat: &Chat, input: &ItemInput) -> Result<()> {
+    /// the workspace it becomes keeps, as `caller`'s account on the forge,
+    /// returning what that warns of.
+    async fn link_converted_issue(
+        &self,
+        chat: &Chat,
+        input: &ItemInput,
+        caller: Option<&Caller>,
+    ) -> Result<Vec<String>> {
         let checkout = self.chat_checkout_path(chat).await?;
         let OpenIssue { url, title, .. } = self.read_open_issue(&checkout, input).await?;
-        self.set_issue(&SpaceSelector::id(&chat.id), &url.into(), Some(title))
-            .await
+        let selector = SpaceSelector::id(&chat.id);
+        (self.set_issue(&selector, &url.into(), Some(title), Assigner::of(caller))).await
     }
 
     /// Refuse a conversion of the space `id`, named `name`, whose agent has

@@ -4,7 +4,7 @@
 use crate::daemon::links::proposals::OpenOutcomeExt;
 use anyhow::{Result, ensure};
 
-use super::{proposals::OpenOutcome, space::LinkSpace};
+use super::{issue::Assigner, proposals::OpenOutcome, space::LinkSpace};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::{Opening, Pushes},
@@ -79,7 +79,13 @@ impl Manager {
         let revert = NewRevert::new(options, settings.pr.draft);
         let created = forge.revert_pull(&account, &current, &revert).await?;
         let (_, warning) = self
-            .keep_created(space.id(), ItemKind::Pr, &created.item, false)
+            .keep_created(
+                space.id(),
+                ItemKind::Pr,
+                &created.item,
+                false,
+                Assigner::of(caller),
+            )
             .await?;
         let checked = conventions::warnings(
             &forge,

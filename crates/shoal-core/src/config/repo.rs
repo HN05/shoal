@@ -641,8 +641,8 @@ pub struct PrConfig {
     pub progress: Option<bool>,
 }
 
-/// The labels a new issue needs and the labels that say whether an issue's
-/// plan is settled.
+/// The labels a new issue needs, the labels that say whether an issue's
+/// plan is settled, and whether a space's issues are assigned on the forge.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Issue)]
@@ -655,6 +655,10 @@ pub struct IssueConfig {
     pub plan_label: Option<String>,
     /// Marks an issue whose body holds a settled plan.
     pub planned_label: Option<String>,
+    /// Whether linking an issue as assigned adds the account the space acts
+    /// as to its assignees on the forge.
+    #[option(default = true)]
+    pub assign: Option<bool>,
 }
 
 /// The priorities a space takes from the labels of the issues it works on.

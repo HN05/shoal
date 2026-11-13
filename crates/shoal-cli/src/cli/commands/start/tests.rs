@@ -204,6 +204,7 @@ fn an_issues_labels_name_its_mode() {
         required_labels: Vec::new(),
         plan_label: Some("needs-plan".into()),
         planned_label: Some("planned".into()),
+        assign: true,
     };
     let mode = |labels: &[&str]| {
         let labels: Vec<String> = labels.iter().map(|label| (*label).into()).collect();

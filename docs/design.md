@@ -2375,6 +2375,11 @@ returns the item as the forge reports it afterwards and records an
 assigned only on request: a workspace's assigned issues are its work, while an issue
 an agent opens is usually follow-up work. Browsing across repositories and review
 tooling stay with clients.
+An assigned issue shows on the forge as being worked on through its assignees,
+since every forge has them and a label would need one per repository: the link
+path every `assigned` issue link goes through adds the account the space acts
+as. Assigning never refuses or undoes the link: other assignees and forge
+failures come back as warnings.
 
 `shoal pr open` pushes to the branch's push remote, then finds or opens the branch's
 PR and assigns it in one daemon request; a push remote on the origin's forge host
