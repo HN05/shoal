@@ -6232,6 +6232,47 @@ fn issues_open_from_a_registered_checkout_under_its_settings() {
     );
 }
 
+/// The output of the user's comment from the registered checkout under
+/// `config`, and the authorization of each comment the forge received.
+fn checkout_comment(config: &str) -> (std::process::Output, Vec<Value>) {
+    let fixture = Fixture::new(Forge::Forgejo, config);
+    fixture.respond(json!({
+        "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Flaky",
+            "state": "open", "labels": []}},
+        "POST repos/team/project/issues/40/comments": {"status": 201, "body": {"id": 1}},
+    }));
+    let output = fixture
+        .command()
+        .current_dir(&fixture.repo)
+        .args(["--json", "issue", "comment", "40", "--body", "Seen"])
+        .output()
+        .unwrap();
+    let posts = (fixture.requests().into_iter())
+        .filter(|request| request[0] == "POST repos/team/project/issues/40/comments")
+        .map(|request| request[2].clone())
+        .collect();
+    (output, posts)
+}
+
+/// The user's own change from a registered checkout uses the user's login,
+/// though an agent token is set.
+#[test]
+fn the_users_checkout_changes_use_the_users_login() {
+    let (output, posts) = checkout_comment(AGENT_TOKEN);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(posts, [json!("token usertoken")]);
+}
+
+/// The user's own change from a registered checkout needs no agent token.
+#[test]
+fn the_users_checkout_changes_need_no_agent_token() {
+    let (output, posts) = checkout_comment(
+        "[machine.forges.\"{forge}\"]\ntype = \"{type}\"\nuser_token = \"usertoken\"\n",
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(posts, [json!("token usertoken")]);
+}
+
 #[test]
 fn item_commands_act_from_a_registered_checkout() {
     let fixture = Fixture::new(Forge::GitHub, "");

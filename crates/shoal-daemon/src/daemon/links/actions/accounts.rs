@@ -170,6 +170,21 @@ impl Manager {
         }
     }
 
+    /// The forge of the place's `origin`, with the account that changes
+    /// items there: the agent account in a space, and the user's own logins
+    /// in a registered checkout, where only the user acts.
+    pub(in crate::daemon::links) async fn place_change_account(
+        &self,
+        place: &Place,
+    ) -> Result<(ForgeRepo, Account)> {
+        match place {
+            Place::Checkout(checkout) => {
+                Ok((self.checkout_forge(checkout).await?, self.user_account()))
+            }
+            Place::Workspace(_) | Place::Chat { .. } => self.place_forge_account(place).await,
+        }
+    }
+
     /// The forge of the place's `origin`.
     pub(in crate::daemon::links) async fn place_forge(&self, place: &Place) -> Result<ForgeRepo> {
         match place {

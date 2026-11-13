@@ -87,7 +87,7 @@ impl Manager {
             None => None,
         };
         if let Some(place) = &origin {
-            let (own, account) = self.place_forge_account(place).await?;
+            let (own, account) = self.place_change_account(place).await?;
             if named.as_ref().is_none_or(|named| *named == own) {
                 return Ok(RunPlace {
                     origin,

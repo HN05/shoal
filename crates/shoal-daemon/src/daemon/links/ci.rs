@@ -26,7 +26,7 @@ impl Manager {
             validate_check_name(check)?;
         }
         let place = self.place(context).await?;
-        let (forge, account) = self.place_forge_account(&place).await?;
+        let (forge, account) = self.place_change_account(&place).await?;
         let pull = (self.named_or_linked(item, place.space_id(), &forge, ItemKind::Pr)).await?;
         let (number, url) = (pull.pull()?, pull.to_string());
         let plan = forge

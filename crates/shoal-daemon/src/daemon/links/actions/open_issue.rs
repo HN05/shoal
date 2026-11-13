@@ -65,7 +65,7 @@ impl Manager {
             }
             ItemContext::Checkout(id) => {
                 anyhow::ensure!(!link, "{LINK_NEEDS_SPACE}");
-                self.open_checkout_issue(id, issue, repository).await
+                (self.open_checkout_issue(id, issue, repository, self.user_account())).await
             }
         }
     }
@@ -133,7 +133,8 @@ impl Manager {
             }
         }
         let OpenOutcome::Opened(mut opened) =
-            (self.open_checkout_issue(&checkout.id, issue, repository)).await?
+            (self.open_checkout_issue(&checkout.id, issue, repository, self.agent_account()))
+                .await?
         else {
             bail!("a chat opens issues without a proposal");
         };
@@ -295,17 +296,18 @@ impl Manager {
     }
 
     /// Open the issue from the repository's registered checkout, under the
-    /// repository's settings. Only unscoped callers open from a checkout, so
-    /// nothing is proposed.
+    /// repository's settings, as `account`. Only unscoped callers and chats
+    /// open from a checkout, so nothing is proposed.
     async fn open_checkout_issue(
         &self,
         id: &RepositoryId,
         issue: NewIssue,
         repository: Option<String>,
+        account: Account,
     ) -> Result<OpenOutcome> {
         let checkout = self.repository(id).await?;
         let settings = self.repository_settings(&checkout.id).await?;
-        let (own, account) = self.checkout_forge_account(&checkout).await?;
+        let own = self.checkout_forge(&checkout).await?;
         let destination = self.issue_destination(own, repository.as_deref()).await?;
         let (forge, required) = (&destination.forge, destination.required(&settings));
         conventions::require(forge, &account, ItemKind::Issue, required, &issue.labels).await?;

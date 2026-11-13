@@ -2151,7 +2151,8 @@ chat use the agent account: the host's [`agent_token`](config.md#forges), with
 `agent_email` for a Bitbucket API token. Without an `agent_token`, Shoal
 refuses the change and names `agent_token`; set
 `agent_token = { same_as = "user_token" }` for agents to make changes with your
-login. Processes inside a workspace and a chat's agent read issues, PRs,
+login. Changes you make from a registered checkout use your `user_token`.
+Processes inside a workspace and a chat's agent read issues, PRs,
 labels, reactions and the forge's capabilities as the agent account, with your
 `user_token` on a host without an `agent_token`; anyone else reads with your
 own logins.

@@ -120,7 +120,8 @@ impl Manager {
     }
 
     /// Apply `action` from the repository's registered checkout, which no
-    /// workspace watches.
+    /// workspace watches, with the user's own logins: only the user acts
+    /// there.
     async fn checkout_item_action(
         &self,
         id: &RepositoryId,
@@ -132,13 +133,8 @@ impl Manager {
         let forge = self.checkout_forge(&checkout).await?;
         let url = ItemRef::in_repository(&forge, kind.into(), input)?;
         let number = url.number().get();
-        let account = if users_decision(&action) {
-            self.user_account()
-        } else {
-            self.agent_account()
-        };
         let item = forge
-            .apply(&account, kind, number, &action)
+            .apply(&self.user_account(), kind, number, &action)
             .await
             .with_context(|| format!("could not {} {url}", action.name()))?
             .item;
