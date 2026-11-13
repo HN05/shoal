@@ -47,6 +47,20 @@ fn configured_providers_add_launchers_and_skill_directories() {
 }
 
 #[test]
+fn skill_delivery_follows_the_machines_references() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = crate::paths::Paths::for_test(root.path());
+    crate::test_support::write_global_config(
+        &paths,
+        "[machine.agents]\ncodex = { same_as = \"claude\" }\n\
+         [machine.agents.claude]\nskill_dir = '/skills'\n",
+    );
+    let tools = load(&paths.home).unwrap();
+    let directories = skill_dirs(&tools, &paths.home).unwrap();
+    assert_eq!(directories["codex"], Some("/skills".into()));
+}
+
+#[test]
 fn instruction_arguments_preserve_empty_and_literal_text() {
     let agents = built_in();
     for name in ["claude", "codex"] {

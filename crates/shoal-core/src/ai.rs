@@ -94,8 +94,9 @@ pub fn load(home: &Path) -> Result<Tools> {
     let text = crate::fsutil::read_optional(&path)
         .with_context(|| format!("read {}", path.display()))?
         .unwrap_or_default();
-    let config = crate::config::Config::from_toml(&text)
+    let mut config = crate::config::Config::from_toml(&text)
         .with_context(|| format!("parse {}", path.display()))?;
+    config.machine.follow_references()?;
     validate::skill_dirs(&config.machine.agents, home)?;
     config.tools()
 }
