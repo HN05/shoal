@@ -695,6 +695,15 @@ async fn a_chat_without_a_repository_watches_a_number_in_the_named_repository() 
         updates.updates[0].url,
         format!("{}/issues/4", served.origin)
     );
+    // A kind selects what is queued below the chat, in any repository.
+    let issues = Selection {
+        kind: Some(LinkKind::Issue),
+        input: None,
+    };
+    let refused = manager
+        .wait_items(chat, &issues, repository, Some(60))
+        .await;
+    assert!(refused.unwrap_err().to_string().contains("item number"));
 }
 
 #[tokio::test]

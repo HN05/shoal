@@ -3,7 +3,7 @@
 use crate::forge::items::reference::ItemRef;
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures_util::{StreamExt, TryStreamExt, stream};
 
 use super::{
@@ -77,7 +77,8 @@ impl Manager {
             None => self.delegated_spaces(id).await?,
         };
         let guard = self.gates.lock_prs(receiving(id, &children)).await;
-        let space = self.watching_space(id, repository).await?;
+        let space = (self.find_link_space(id, repository).await?)
+            .with_context(|| format!("space {id} no longer exists"))?;
         let items = self.watched_items(&space, selection).await?;
         let report = branch_report(&items);
         let branch = watches_branch(selection).then(|| space.branch().map(str::to_owned));
@@ -123,20 +124,6 @@ impl Manager {
                 }
                 Ok(updates)
             }
-        }
-    }
-
-    /// The space `id` whose items a watch looks up, acting in the registered
-    /// `repository` when it is a chat without a repository.
-    async fn watching_space(
-        &self,
-        id: &SpaceId,
-        repository: Option<&RepositoryId>,
-    ) -> Result<LinkSpace> {
-        let space = SpaceSelector::id(id);
-        match repository {
-            Some(repository) => self.chat_in(&space, repository).await,
-            None => self.link_space(&space).await,
         }
     }
 

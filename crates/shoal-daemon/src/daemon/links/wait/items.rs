@@ -61,14 +61,17 @@ impl Manager {
         selection: &Selection,
         named: Option<&RepositoryId>,
     ) -> Result<Option<RepositoryId>> {
-        let Some(input) = selection
-            .input
-            .as_ref()
-            .filter(|_| space.repository_id().is_none())
-        else {
+        if space.repository_id().is_some() {
             ensure!(
                 named.is_none(),
-                "only a chat without a repository names the repository of one item it watches"
+                "only a chat without a repository names the repository of an item it watches"
+            );
+            return Ok(None);
+        }
+        let Some(input) = &selection.input else {
+            ensure!(
+                named.is_none(),
+                "--repo names the repository of an item number, not of a kind"
             );
             return Ok(None);
         };
