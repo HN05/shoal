@@ -62,9 +62,11 @@ impl Marks {
         }
     }
 
-    /// Whether a workspace or one of its executions owns the process.
+    /// Whether a workspace owns the process: every process of a
+    /// workspace's execution carries its marker, while a chat's agent's
+    /// carries the chat's with its execution's.
     pub(super) fn of_workspace(&self) -> bool {
-        self.workspace.is_some() || self.execution.is_some()
+        self.workspace.is_some()
     }
 
     pub(super) fn is_empty(&self) -> bool {
@@ -214,7 +216,7 @@ pub(super) fn visibility_with(
 
 /// Whether the process `identity` names belongs to a workspace: it is one of
 /// the execution `wrappers`, or its own environment, read rather than
-/// hidden, carries a workspace's or an execution's marker.
+/// hidden, carries a workspace's marker.
 pub fn owned_by_workspace(identity: &Identity, wrappers: &[Identity]) -> Result<bool> {
     if wrappers.contains(identity) {
         return Ok(true);

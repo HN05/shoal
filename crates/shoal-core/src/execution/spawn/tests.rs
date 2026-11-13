@@ -257,3 +257,52 @@ fn prompt_cache_1h(
         .find(|(name, _)| *name == "ENABLE_PROMPT_CACHING_1H")
         .map(|(_, value)| value.map(ToOwned::to_owned))
 }
+
+/// What `command` sets and removes of its environment.
+fn environment_of(command: &Command) -> BTreeMap<String, Option<OsString>> {
+    (command.as_std().get_envs())
+        .map(|(name, value)| {
+            (
+                name.to_string_lossy().into_owned(),
+                value.map(std::ffi::OsStr::to_owned),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn a_chats_agent_runs_with_its_chats_identity_and_scope() {
+    let paths = Paths::for_test("/fixture");
+    let plan = ExecutionPlan {
+        id: "execution".into(),
+        space: crate::model::ExecutionSpace {
+            id: "chat".into(),
+            number: Default::default(),
+            kind: crate::model::SpaceKind::Chat,
+            path: "/checkout".into(),
+        },
+        scope_token: crate::client::scope_tokens::ScopeToken::from("chat-token"),
+        setup_cmd: None,
+        copy_ignored: None,
+        ports: Vec::new(),
+        environment: BTreeMap::from([(env::TMPDIR.to_owned(), "/tmp/chat".into())]),
+        merge: None,
+        unmerge: None,
+    };
+    let mut command = Command::new("agent");
+    configure_environment(&mut command, &paths, &plan);
+    export_execution(&mut command, &paths, &plan);
+
+    let environment = environment_of(&command);
+    let set = |name: &str| environment.get(name).cloned().flatten();
+    assert_eq!(set(env::CHAT), Some("chat".into()));
+    assert_eq!(set(env::EXECUTION_ID), Some("execution".into()));
+    assert_eq!(
+        set(env::SCOPE_TOKEN),
+        Some(plan.scope_token.expose().into())
+    );
+    assert_eq!(set(env::TMPDIR), Some("/tmp/chat".into()));
+    for workspace in [env::WORKSPACE_ID, env::WORKSPACE_PATH] {
+        assert_eq!(environment.get(workspace), Some(&None), "{workspace}");
+    }
+}

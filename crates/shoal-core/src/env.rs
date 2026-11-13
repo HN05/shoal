@@ -14,7 +14,7 @@ use tokio::process::Command;
 pub use crate::client::env::*;
 use crate::{
     config::placeholders,
-    model::{ExecutionSpace, PortReservation, Workspace},
+    model::{ExecutionSpace, PortReservation, SpaceKind, Workspace},
     paths::Paths,
 };
 
@@ -259,13 +259,38 @@ fn workspace_identity(space: &ExecutionSpace, paths: &Paths) -> BTreeMap<String,
     ])
 }
 
-/// Give `command` the identity of `chat`: the chat and the state directory
-/// whose daemon recorded it, as its hooks receive them.
-pub(crate) fn apply_chat_identity(command: &mut Command, chat: &crate::model::Chat, paths: &Paths) {
+/// Give `command` the identity of the chat `chat`: the chat and the state
+/// directory whose daemon recorded it, as its hooks and its agent receive
+/// them.
+pub(crate) fn apply_chat_identity(command: &mut Command, chat: &SpaceId, paths: &Paths) {
     for name in not_chat_identity() {
         command.env_remove(name);
     }
-    command.env(CHAT, &chat.id).env(STATE_DIR, &paths.state);
+    command.env(CHAT, chat).env(STATE_DIR, &paths.state);
+}
+
+/// Give `command` the identity of the space an execution runs in: a
+/// workspace's, or a chat's, which leaves a workspace's out.
+pub(crate) fn apply_space_identity(command: &mut Command, space: &ExecutionSpace, paths: &Paths) {
+    match space.kind {
+        SpaceKind::Workspace => apply_workspace_identity(command, space, paths),
+        SpaceKind::Chat => apply_chat_identity(command, &space.id, paths),
+    }
+}
+
+/// What an execution's processes get last, so no configured variable
+/// replaces or removes it: the scope `token` of its space, and a
+/// workspace's path and `ports`.
+pub fn execution_environment(
+    space: &ExecutionSpace,
+    paths: &Paths,
+    ports: &[PortReservation],
+    token: &ScopeToken,
+) -> BTreeMap<String, OsString> {
+    match space.kind {
+        SpaceKind::Workspace => workspace_environment(space, paths, ports, token),
+        SpaceKind::Chat => BTreeMap::from([(SCOPE_TOKEN.into(), token.expose().into())]),
+    }
 }
 
 /// What a chat's processes leave out of this process's environment: a

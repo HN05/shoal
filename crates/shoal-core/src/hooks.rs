@@ -45,7 +45,7 @@ impl<'a> HookSpace<'a> {
                 command.env(env::WORKSPACE_PATH, &workspace.path);
             }
             Self::Chat { chat, .. } => {
-                env::apply_chat_identity(command, chat, paths);
+                env::apply_chat_identity(command, &chat.id, paths);
                 command.env_remove(env::WORKSPACE_PATH);
             }
         }

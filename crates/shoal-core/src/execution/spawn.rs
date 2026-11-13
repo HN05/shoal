@@ -376,10 +376,10 @@ fn restore_terminal_stops(process: &mut Command) {
     }
 }
 
-/// Export the workspace's identity and `[env]`, dropping stale port variables
-/// inherited from an enclosing execution.
+/// Export the space's identity and the environment it gives the execution,
+/// dropping stale port variables inherited from an enclosing execution.
 fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) {
-    env::apply_workspace_identity(process, &plan.space, paths);
+    env::apply_space_identity(process, &plan.space, paths);
     env::apply_configured(process, &plan.environment);
 }
 
@@ -387,7 +387,7 @@ fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionP
 /// variable replaces or removes them.
 fn export_execution(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) {
     process
-        .envs(env::workspace_environment(
+        .envs(env::execution_environment(
             &plan.space,
             paths,
             &plan.ports,
