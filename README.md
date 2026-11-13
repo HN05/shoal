@@ -233,8 +233,9 @@ shoal rm 3                    # Remove the workspace
 shoal rm 3 6                  # Remove several; the picker selects them with Tab or Ctrl-A
 shoal cleanup                 # Pick leftover workspaces, kept branches and caches to remove
 shoal checkpoint 3            # Keep HEAD and unsaved files to return to later
-shoal restore 3               # Pick a checkpoint, or open a removed workspace again
-shoal restore 3 3             # Return the workspace to checkpoint 3
+shoal restore <id>            # Open a removed workspace again
+shoal restore 3 --checkpoint  # Pick one of the workspace's checkpoints
+shoal restore 3 --checkpoint 3 # Return the workspace to checkpoint 3
 shoal move ssh other 3 # Move the workspace or chat to another machine; its agents continue there
 shoal move export 3 | ssh other shoal move import # The same through any pipe
 shoal move export --repo app --all -o moving # Export every workspace and chat of app, a file each
@@ -484,8 +485,8 @@ opens one again with its links and the unsaved files the checkpoint kept;
 `shoal resume` then continues the agents the removal stopped. A checkpoint keeps
 HEAD only when the unsaved files are too large or include a nested repository or
 changed submodule; see [Checkpoints and restore](docs/reference.md#checkpoints-and-restore).
-`shoal restore <workspace> <number>` returns an existing workspace to one of
-its checkpoints. `shoal move export <workspace> -o <file>`
+`shoal restore <workspace> --checkpoint <number>` returns an existing workspace
+to one of its checkpoints. `shoal move export <workspace> -o <file>`
 removes a workspace and writes its removal checkpoint and record to a file, and `shoal
 move import <file>` opens it on another machine or the same one, where `shoal resume`
 continues its agents' sessions from the transcripts the file carries;

@@ -49,31 +49,32 @@ pub(super) async fn checkpoint(
     Ok(0)
 }
 
-/// `shoal restore`: return an existing workspace to a checkpoint or choose
-/// one, open a removed workspace again, or choose a removed one. Without a
-/// terminal, the choices are listed instead.
+/// `shoal restore`: open a removed workspace again, or choose a removed
+/// one, or with `checkpoint` return a workspace to one of its checkpoints,
+/// or choose one when it names none. Without a terminal, the choices are
+/// listed instead.
 pub(super) async fn run(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
-    checkpoint: Option<CheckpointNumber>,
+    checkpoint: Option<Option<CheckpointNumber>>,
 ) -> Result<i32> {
-    let scoped = crate::env::inherits_scope(&ctx.paths.state);
-    let Some(workspace) = workspace else {
-        ensure!(
-            !scoped,
-            "workspace processes cannot reopen removed workspaces; shoal restore <workspace> lists your workspace's checkpoints"
-        );
-        return choose_removed(ctx).await;
-    };
     if let Some(checkpoint) = checkpoint {
-        return restore_checkpoint(ctx, workspace, checkpoint).await;
-    }
-    if let Some(checkpoints) = checkpoints(ctx, &workspace).await? {
-        return choose_checkpoint(ctx, workspace, checkpoints).await;
+        let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+        return match checkpoint {
+            Some(checkpoint) => restore_checkpoint(ctx, workspace, checkpoint).await,
+            None => choose_checkpoint(ctx, workspace).await,
+        };
     }
     ensure!(
-        !scoped,
-        "workspace processes cannot reopen removed workspaces; ask the user to run shoal restore"
+        !crate::env::inherits_scope(&ctx.paths.state),
+        "workspace processes cannot reopen removed workspaces; shoal restore --checkpoint lists your workspace's checkpoints"
+    );
+    let Some(workspace) = workspace else {
+        return choose_removed(ctx).await;
+    };
+    ensure!(
+        checkpoints(ctx, &workspace).await?.is_none(),
+        "{workspace} is not removed; shoal restore {workspace} --checkpoint lists its checkpoints"
     );
     reopen(ctx, workspace).await
 }
@@ -97,11 +98,9 @@ async fn choose_removed(ctx: &Context) -> Result<i32> {
 
 /// Return the workspace to the checkpoint the user picks, or list its
 /// checkpoints when there is no terminal or none to pick.
-async fn choose_checkpoint(
-    ctx: &Context,
-    workspace: SpaceSelector,
-    checkpoints: Vec<Checkpoint>,
-) -> Result<i32> {
+async fn choose_checkpoint(ctx: &Context, workspace: SpaceSelector) -> Result<i32> {
+    let checkpoints = (checkpoints(ctx, &workspace).await?)
+        .with_context(|| format!("no workspace {workspace}"))?;
     if checkpoints.is_empty() || !ctx.interactive() {
         ctx.show(&checkpoints, |checkpoints| print_checkpoints(checkpoints))?;
         return Ok(0);

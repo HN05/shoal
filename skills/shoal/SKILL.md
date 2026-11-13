@@ -526,7 +526,8 @@ agents placed.
 ```sh
 shoal rm <space>
 shoal checkpoint --name "<what comes next>"
-shoal restore <workspace> [<number>]
+shoal restore <workspace>
+shoal restore [workspace] --checkpoint [<number>]
 shoal cleanup spaces
 shoal cleanup --dry-run
 shoal cleanup caches
@@ -539,9 +540,9 @@ asks what to do with unmerged work. `rm` returns once its checks pass and
 removes a workspace in the background; a later failure arrives as a message,
 and `--wait` waits for the removal. A checkpoint keeps HEAD and unsaved files;
 Shoal also takes one when an agent exits or is stopped. `restore` reopens
-a removed workspace, or lists an existing one's checkpoints, and with a number
-returns to one after keeping the current state in a new checkpoint; it refuses
-while another command runs in the workspace. `cleanup spaces` removes every
+a removed workspace; `restore --checkpoint` lists a workspace's checkpoints,
+and with a number returns to one after keeping the current state in a new
+checkpoint, refusing while another command runs in the workspace. `cleanup spaces` removes every
 space automatic cleanup would remove without waiting for its idle delay;
 `--dry-run` lists those, kept branches and shared caches, and why each other
 space stays. `move ssh` moves a workspace to another machine and queues its

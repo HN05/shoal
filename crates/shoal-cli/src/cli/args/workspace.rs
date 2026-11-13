@@ -136,15 +136,16 @@ pub enum WorkspaceCommand {
         #[arg(long)]
         name: Option<String>,
     },
-    /// Return a workspace to a checkpoint, or open a removed workspace again with its unsaved files and links.
+    /// Open a removed workspace again with its unsaved files and links, or return a workspace to a checkpoint.
     ///
-    /// Without a workspace, picks a removed workspace to open again. With an existing workspace,
-    /// picks one of its checkpoints; with a checkpoint number as well, returns to it after
-    /// keeping the current state in a new checkpoint. Without a terminal, the choices are listed.
+    /// Without a workspace, picks a removed workspace to open again. With --checkpoint, picks one
+    /// of the workspace's checkpoints, or with its number returns to it after keeping the current
+    /// state in a new checkpoint. Without a terminal, the choices are listed.
     Restore {
         workspace: Option<SpaceSelector>,
-        #[arg(requires = "workspace")]
-        checkpoint: Option<CheckpointNumber>,
+        /// Return the workspace to this checkpoint; without a number, pick one or list them.
+        #[arg(long, value_name = "N", num_args = 0..=1)]
+        checkpoint: Option<Option<CheckpointNumber>>,
     },
 }
 

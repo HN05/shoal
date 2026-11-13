@@ -95,7 +95,7 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
 
     // The restored workspace keeps the removal's checkpoint, and returns to
     // any checkpoint after keeping the state it replaces.
-    let checkpoints = fixture.ok(&["restore", &fixture.id("Scratch notes")]);
+    let checkpoints = fixture.ok(&["restore", &fixture.id("Scratch notes"), "--checkpoint"]);
     assert_eq!(checkpoints[0]["number"], 1);
     assert_eq!(checkpoints[0]["cause"], "removal");
     let checkpoint = fixture.ok(&[
@@ -106,7 +106,7 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
     ]);
     assert_eq!(checkpoint["number"], 2);
     fs::write(path.join("notes"), "rewritten\n").unwrap();
-    let restored = fixture.ok(&["restore", &fixture.id("Scratch notes"), "2"]);
+    let restored = fixture.ok(&["restore", &fixture.id("Scratch notes"), "--checkpoint", "2"]);
     assert_eq!(restored["replaced"]["number"], 3);
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
 }
@@ -174,7 +174,7 @@ fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoi
 
     fixture.ok(&["checkpoint", &fixture.id("picked"), "--name", "draft"]);
     fs::write(path.join("notes"), "rewritten\n").unwrap();
-    let (output, rows) = fixture.pick(&["restore", &fixture.id("picked")], "2", "");
+    let (output, rows) = fixture.pick(&["restore", &fixture.id("picked"), "--checkpoint"], "2", "");
     assert!(output.status.success(), "{output:?}");
     let rows = rows.lines().collect::<Vec<_>>();
     assert_eq!(rows.len(), 2, "{rows:?}");

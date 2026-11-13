@@ -374,8 +374,8 @@ pub struct CopyArgs {
     #[arg(long, num_args = 0..=1, value_name = "WORKSPACE", conflicts_with = "base")]
     pub copy: Option<Option<SpaceSelector>>,
     /// Start from this checkpoint of the --copy workspace, live or removed,
-    /// instead of its current files; shoal restore <workspace> lists
-    /// them.
+    /// instead of its current files; shoal restore <workspace> --checkpoint
+    /// lists them.
     #[arg(long, value_name = "NUMBER", conflicts_with = "base")]
     pub checkpoint: Option<CheckpointNumber>,
 }

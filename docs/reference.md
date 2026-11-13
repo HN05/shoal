@@ -3526,10 +3526,10 @@ Workspace processes cannot list or delete kept branches.
 
 ```sh
 shoal checkpoint --name "before migration"  # keep the current workspace's state
-shoal restore 7        # pick one of workspace 7's checkpoints
-shoal restore <id>     # open the removed workspace with that ID again
-shoal restore 7 3      # return workspace 7 to checkpoint 3
-shoal restore          # pick a removed workspace to open again
+shoal restore <id>                # open the removed workspace with that ID again
+shoal restore                     # pick a removed workspace to open again
+shoal restore 7 --checkpoint      # pick one of workspace 7's checkpoints
+shoal restore 7 --checkpoint 3    # return workspace 7 to checkpoint 3
 ```
 
 A checkpoint is a commit of HEAD plus the uncommitted and untracked files, without
@@ -3546,7 +3546,7 @@ keeps every file whatever their size. Checkpoints expire after
 `retention_days`, a copy's starting checkpoint only once the copy is gone; their
 numbers are never reused, so a number names one checkpoint for good.
 
-`shoal restore <workspace> <number>` keeps the current state in a new checkpoint,
+`shoal restore [workspace] --checkpoint <number>` keeps the current state in a new checkpoint,
 then moves the workspace's branch to the checkpoint's HEAD and puts its files back
 as uncommitted changes, deleting tracked changes and untracked files it lacks.
 It refuses while an execution other than the caller's own runs in the workspace,
@@ -3556,12 +3556,11 @@ inside or around an ignored file, which it would delete or overwrite and no
 checkpoint keeps. Workspace processes may list and
 restore their own workspace's checkpoints.
 
-`shoal restore` and `shoal restore <workspace>` open a picker of the removed
-workspaces or of an existing workspace's checkpoints and restore the one picked;
+`shoal restore` and `--checkpoint` without a number open a picker of the
+removed workspaces or of the workspace's checkpoints and restore the one picked;
 without a terminal, or with `--json`, they list them instead, each removed
 workspace led by its ID, which selects it, with the number of its removal's
-checkpoint. When
-`<workspace>` is a removed one's ID, it opens that removed workspace on its branch and recorded base, which restores its stack link while the base
+checkpoint. `shoal restore <id>` of a removed workspace opens that removed workspace on its branch and recorded base, which restores its stack link while the base
 workspace exists, recreating the branch at the removed HEAD when it was deleted,
 puts its unsaved files back as uncommitted changes, links its issue and its
 opened and related items, saves the agents stopped by the removal or before it
