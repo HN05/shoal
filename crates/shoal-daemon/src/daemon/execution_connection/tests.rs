@@ -456,22 +456,20 @@ async fn no_agent_starts_in_a_workspace_a_chats_agent_moves_to() {
     assert!(refused.contains("moves there"), "{refused}");
 }
 
-#[tokio::test]
-async fn an_exit_that_waits_refuses_commands_that_would_stop_with_it() {
-    let (root, manager) = manager().await;
-    let path = repository(root.path(), "repo");
-    let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "held".into(), None, None, None)
-        .await
-        .unwrap();
+/// The daemon's first answer to a command in `workspace` whose wrapper
+/// cannot reattach, as `shoal setup` and merges register, and the task
+/// serving it.
+async fn register_unattachable(
+    manager: &Arc<Manager>,
+    workspace: &crate::model::Workspace,
+) -> (
+    Body,
+    BufReader<UnixStream>,
+    tokio::task::JoinHandle<Result<()>>,
+) {
     let wrapper = crate::process::identity::capture(std::process::id())
         .unwrap()
         .unwrap();
-    let _held = manager.gates.hold_back(crate::protocol::Exit::Restart);
     let (client, server) = UnixStream::pair().unwrap();
     let executing = tokio::spawn(execute(
         server,
@@ -492,11 +490,41 @@ async fn an_exit_that_waits_refuses_commands_that_would_stop_with_it() {
         },
         manager.gates.owned_operation().await,
     ));
-    let response: Response = read(&mut BufReader::new(client)).await;
-    let Body::Error { code, .. } = response.body else {
+    let mut client = BufReader::new(client);
+    let response: Response = read(&mut client).await;
+    (response.body, client, executing)
+}
+
+#[tokio::test]
+async fn an_exit_that_waits_refuses_commands_that_would_stop_with_it() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "held".into(), None, None, None)
+        .await
+        .unwrap();
+    let _held = manager.gates.hold_back(crate::protocol::Exit::Restart);
+    let (body, _client, executing) = register_unattachable(&manager, &workspace).await;
+    let Body::Error { code, .. } = body else {
         panic!("the command was registered");
     };
     assert_eq!(code, ErrorCode::Exiting);
     assert!(!manager.executions.has_unattachable());
     let _ = bounded(executing).await;
+
+    // The setup of an operation the exit waits for still registers.
+    let spec = crate::protocol::operations::OperationSpec::Prepare {
+        workspace: SpaceSelector::id(&workspace.id),
+        steps: Default::default(),
+    };
+    let operation = manager.start_operation(spec, None, None).await.unwrap();
+    let (body, _client, executing) = register_unattachable(&manager, &workspace).await;
+    assert!(matches!(body, Body::Execution(_)), "{body:?}");
+    assert!(manager.executions.has_unattachable());
+    executing.abort();
+    crate::daemon::operations::fake::take(&operation).exit(0);
 }

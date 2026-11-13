@@ -75,13 +75,17 @@ pub(super) async fn register(
             format!("{error:#}"),
         ))
     };
+    let target = manager.space(&space).await.map_err(refused)?;
     // A command that cannot reattach would stop with the daemon, so an exit
-    // that waits for such commands holds new ones back.
-    if !reattach && let Err(exiting) = manager.gates.admit() {
+    // that waits for such commands holds new ones back, except the setup or
+    // merge of an operation it already waits for.
+    if !reattach
+        && !manager.operation_runs_in(target.id())
+        && let Err(exiting) = manager.gates.admit()
+    {
         return Err(Box::new(Body::error(exiting.code(), &exiting)));
     }
     let tracks_agent = kind == ExecutionKind::Command && agent.is_some();
-    let target = manager.space(&space).await.map_err(refused)?;
     if let (true, Some(workspace)) = (tracks_agent, target.worktree()) {
         Manager::ensure_holds_agents(workspace).map_err(refused)?;
     }

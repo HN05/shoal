@@ -262,6 +262,11 @@ impl Manager {
         Ok(id)
     }
 
+    /// Whether an operation in the workspace `id` still runs.
+    pub(crate) fn operation_runs_in(&self, id: &SpaceId) -> bool {
+        (self.operations.running().iter()).any(|entry| &entry.workspace == id)
+    }
+
     /// Whether operation `id` still runs.
     pub(crate) fn operation_running(&self, id: &str) -> bool {
         self.operations.get(id).is_some_and(|entry| entry.running())
