@@ -42,12 +42,7 @@ impl Manager {
                 continue;
             }
             let chat = upgraded.chat.clone();
-            (self.store)
-                .write(move |tx| {
-                    tx.execute("DELETE FROM upgraded_chat_agents WHERE chat_id=?1", [chat])?;
-                    Ok(())
-                })
-                .await?;
+            (self.store).write(move |tx| forget(tx, &chat)).await?;
         }
         Ok(())
     }
@@ -124,6 +119,12 @@ fn upgraded(db: &mut Connection) -> Result<Vec<Upgraded>> {
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+/// Forget what the upgrade kept of the agent of `chat`.
+fn forget(tx: &rusqlite::Transaction<'_>, chat: &SpaceId) -> Result<()> {
+    tx.execute("DELETE FROM upgraded_chat_agents WHERE chat_id=?1", [chat])?;
+    Ok(())
 }
 
 #[cfg(test)]
