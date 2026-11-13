@@ -38,9 +38,7 @@ pub(super) use removal::{ensure_batch_removable, leaving};
 pub(super) use remove::remove;
 pub(super) use rename::rename;
 pub(super) use run::{edit, exec};
-pub(super) use setup::{
-    SetUp, copy_ignored_worker, follow_setup, run_post_setup, setup, setup_workspace, skip_setup,
-};
+pub(super) use setup::{SetUp, follow_setup, run_post_setup, setup, setup_workspace, skip_setup};
 pub(super) use status::status;
 pub(super) use unmerge::unmerge;
 pub(super) use waiting::awaits_setup;

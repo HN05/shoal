@@ -6,6 +6,7 @@
 mod attachment;
 mod cancellation;
 mod completion;
+mod copy_ignored;
 mod demo;
 mod detached;
 mod launch;
@@ -27,6 +28,7 @@ use std::{ffi::OsString, path::PathBuf};
 use crate::{env, paths::CommandPaths};
 pub use cancellation::{cancel, cancellation};
 pub use completion::SetupVerificationFailure;
+pub use copy_ignored::copy_ignored_worker;
 pub use detached::{DetachedLaunch, launch_detached};
 use launch::{run_taken_over, run_tracked};
 use mode::Mode;

@@ -1,6 +1,4 @@
 //! Workspace setup: starting it, handling its failure and starting the post-setup hook.
-use std::path::{Path, PathBuf};
-
 use anyhow::{Result, bail, ensure};
 
 use super::recovery::{issues, reconcile};
@@ -15,46 +13,13 @@ use crate::{
     },
     client::preparation::{self, Preparing, Unprepared},
     client::recovery::ReconcileOptions,
-    env, git,
+    env,
     model::{QueueEntry, Workspace},
     paths::CommandPaths,
     protocol::operations::{Failure, OperationSpec, Preparation, Prepared, QueuedLaunch},
     removal::UnsavedWork,
     state::WorkspaceState,
 };
-
-/// Copy the main checkout's ignored files but those `exclude` matches inside
-/// tracked setup, then become the setup command so its exit status and
-/// signals are the execution's.
-pub(in crate::cli::commands) async fn copy_ignored_worker(
-    exclude: &[String],
-    setup_cmd: Option<PathBuf>,
-) -> Result<i32> {
-    ensure!(
-        env::is_scoped(),
-        "copy-ignored worker requires a tracked execution"
-    );
-    // Tracked setup runs in the workspace root.
-    let workspace = std::env::current_dir()?;
-    let copied = git::ignored::copy(&workspace, exclude).await?;
-    if copied > 0 {
-        eprintln!(
-            "Copied {copied} ignored file{} from the repository checkout",
-            if copied == 1 { "" } else { "s" }
-        );
-    }
-    match setup_cmd {
-        Some(setup_cmd) => Err(become_setup(&setup_cmd)),
-        None => Ok(0),
-    }
-}
-
-/// Replace this process with `setup_cmd`; returns only the error when that fails.
-fn become_setup(setup_cmd: &Path) -> anyhow::Error {
-    let error =
-        std::os::unix::process::CommandExt::exec(&mut std::process::Command::new(setup_cmd));
-    anyhow::Error::new(error).context(format!("run {}", setup_cmd.display()))
-}
 
 pub(in crate::cli::commands) async fn setup(
     ctx: &Context,
