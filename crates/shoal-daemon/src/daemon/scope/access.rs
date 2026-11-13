@@ -14,6 +14,7 @@ use crate::{
         workspace::Manager,
     },
     model::{Chat, PresentSpace, QueueEntry, QueueRequest, Repository, RunningAgent, SpaceTarget},
+    protocol::operations::WorkspaceStart,
     repository::Selector,
 };
 
@@ -316,6 +317,75 @@ impl Manager {
         Ok(entries)
     }
 
+    /// Refuse the queue entry `id` unless `caller` may act on it, as
+    /// [`Self::reachable_queue`] says, such as a launch it starts itself.
+    pub(in crate::daemon) async fn ensure_entry_reached(
+        &self,
+        caller: &Caller,
+        id: &QueueEntryId,
+    ) -> Result<()> {
+        let reachable = self.reachable_queue(Some(caller)).await?;
+        ensure!(
+            reachable.iter().any(|entry| entry.id == *id),
+            "queue entry {id} is outside this space's scope"
+        );
+        Ok(())
+    }
+
+    /// Refuse the queue entry `id` that `caller`'s `start` names unless it
+    /// is the caller's own launch there: one it queued of a new space, or
+    /// one of the existing workspace `start` reopens, so a start never
+    /// takes another launch's slot.
+    pub(in crate::daemon) async fn ensure_own_launch(
+        &self,
+        caller: &Caller,
+        id: &QueueEntryId,
+        start: &WorkspaceStart,
+    ) -> Result<()> {
+        let entry = (self.reachable_queue(Some(caller)).await?.into_iter())
+            .find(|entry| entry.id == *id)
+            .with_context(|| format!("queue entry {id} is outside this space's scope"))?;
+        let own = match start {
+            WorkspaceStart::Workspace(workspace) => {
+                entry.opens.as_ref() == Some(self.space(workspace).await?.id())
+            }
+            _ => entry.opens.is_none() && entry.queued_by.as_ref() == Some(&caller.space_id),
+        };
+        ensure!(own, "queue entry {id} is another launch's");
+        Ok(())
+    }
+
+    /// Refuse the workspace the launch `entry`, which left the queue,
+    /// started its agent in unless `caller`'s scope reaches it.
+    pub(in crate::daemon) async fn ensure_started_launch_reached(
+        &self,
+        caller: &Caller,
+        entry: &QueueEntryId,
+    ) -> Result<()> {
+        let Some(started) = self.started_launch(entry).await? else {
+            return Ok(());
+        };
+        let space = self.space(&SpaceSelector::id(&started)).await?;
+        self.ensure_reaches(caller, &space).await
+    }
+
+    /// Name by ID the existing workspace `workspace` that `caller`'s launch
+    /// reopens for its agent, which must be one its scope reaches other
+    /// than its own.
+    pub(in crate::daemon) async fn reopened_below(
+        &self,
+        caller: &Caller,
+        workspace: &mut SpaceSelector,
+    ) -> Result<()> {
+        let workspace = self
+            .workspace_below(caller, workspace, WORKER_REFUSAL)
+            .await?;
+        let space = self.space(workspace).await?;
+        self.ensure_reaches(caller, &space).await?;
+        *workspace = SpaceSelector::id(space.id());
+        Ok(())
+    }
+
     /// The workspace `request` starts an agent in, which must be one below
     /// the caller's, or none for the launch of a new workspace in the
     /// caller's repository, which opens it in the caller's scope; a start
@@ -326,12 +396,6 @@ impl Manager {
         request: &'a mut QueueRequest,
     ) -> Result<Option<&'a mut SpaceSelector>> {
         ensure!(!request.now, NOT_NOW);
-        // The daemon starts a scoped caller's agents detached, so none
-        // inherits the caller's scope.
-        ensure!(
-            !request.starts_in_caller,
-            "workspace processes start agents detached; the daemon starts the agent"
-        );
         if request.workspace.is_none() {
             self.confine_new_launch(caller, request).await?;
             return Ok(None);

@@ -108,12 +108,23 @@ impl Scoped for QueueMethod {
                 ensure!(!*now, NOT_NOW);
                 Some(manager.stopped_below(caller, workspace).await?)
             }
-            QueueMethod::QueuedPlan { .. }
-            | QueueMethod::QueueStart { .. }
-            | QueueMethod::StartedLaunch { .. }
-            | QueueMethod::QueueHold { .. }
-            | QueueMethod::QueueAttach { .. }
-            | QueueMethod::QueueFail { .. } => return Err(denied()),
+            // A caller holds, fails and attaches the launches it starts
+            // itself, which its scope reaches.
+            QueueMethod::QueueHold { entry } | QueueMethod::QueueFail { entry, .. } => {
+                manager.ensure_entry_reached(caller, entry).await?;
+                None
+            }
+            QueueMethod::QueueAttach { entry, workspace } => {
+                manager.ensure_entry_reached(caller, entry).await?;
+                Some(workspace)
+            }
+            QueueMethod::StartedLaunch { entry } => {
+                manager.ensure_started_launch_reached(caller, entry).await?;
+                None
+            }
+            QueueMethod::QueuedPlan { .. } | QueueMethod::QueueStart { .. } => {
+                return Err(denied());
+            }
         })
     }
 }

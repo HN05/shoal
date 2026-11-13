@@ -532,21 +532,36 @@ async fn an_existing_branch_reopens_its_workspace_without_its_post_setup_hook() 
 }
 
 #[tokio::test]
-async fn only_the_user_reopens_a_recorded_workspace_for_a_launch() {
+async fn a_scoped_start_reopens_only_a_workspace_below_its_own() {
     let daemon = TestDaemon::start().await;
     let existing = daemon.workspace("api").await;
-    let mut reopen = start_workspace(
-        &daemon,
-        WorkspaceStart::Workspace(SpaceSelector::id(&existing.id)),
-    );
-    if let OperationMethod::StartWorkspace { base, .. } = &mut reopen {
-        *base = None;
-    }
+    let child = daemon
+        .manager
+        .split_workspace(
+            &SpaceSelector::id(&existing.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    let reopen = |workspace: &Workspace| {
+        let mut reopen = start_workspace(
+            &daemon,
+            WorkspaceStart::Workspace(SpaceSelector::id(&workspace.id)),
+        );
+        if let OperationMethod::StartWorkspace { base, .. } = &mut reopen {
+            *base = None;
+        }
+        reopen
+    };
     let agent = daemon.scoped(&existing).await;
-    assert_eq!(
-        code(connection::request::<StartedWorkspace>(&agent, reopen).await),
-        ErrorCode::ScopeDenied
-    );
+    let own = connection::request::<StartedWorkspace>(&agent, reopen(&existing)).await;
+    assert!(own.is_err());
+    let started: StartedWorkspace = connection::request(&agent, reopen(&child)).await.unwrap();
+    assert!(started.reused);
+    assert_eq!(started.workspace.id, child.id);
+    fake::take(&started.operation).exit(1);
     let app = daemon.connector();
     let based = start_workspace(
         &daemon,
@@ -1008,9 +1023,64 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
     if let OperationMethod::StartWorkspace { queue_entry, .. } = &mut create {
         *queue_entry = Some(theirs.id.clone());
     }
-    let started: StartedWorkspace = connection::request(&agent, create).await.unwrap();
-    fake::take(&started.operation).exit(1);
+    let refused = connection::request::<StartedWorkspace>(&agent, create).await;
+    assert!(refused.is_err());
     let entries = daemon.manager.queue_entries().await.unwrap();
     let entry = entries.iter().find(|entry| entry.id == theirs.id).unwrap();
     assert_eq!(entry.space_id, None, "{entry:?}");
+}
+
+#[tokio::test]
+async fn a_scoped_start_takes_the_queue_entry_of_the_launch_it_starts_itself() {
+    let daemon = TestDaemon::start().await;
+    daemon
+        .manager
+        .publish_config(crate::daemon::test_support::global_config(
+            "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false",
+        ));
+    let chat = daemon
+        .manager
+        .start_chat(
+            daemon.repository.id.clone().into(),
+            "planner".into(),
+            "claude".into(),
+            None,
+        )
+        .await
+        .unwrap();
+    let token = daemon.manager.chat_scope(&chat.id).await.unwrap();
+    let agent = daemon.connector().scope(token);
+    let request = crate::model::QueueRequest {
+        issue_labels: Vec::new(),
+        priority: None,
+        narrowing: Default::default(),
+        mode: None,
+        repository: daemon.repository.id.clone().into(),
+        name: "api".into(),
+        agent: "claude".into(),
+        issue_title: None,
+        plan: "{}".into(),
+        env: Default::default(),
+        now: false,
+        workspace: None,
+        starts_in_caller: true,
+        blockers: Vec::new(),
+    };
+    let add = QueueMethod::QueueAdd {
+        request: Box::new(request),
+    };
+    let admission: crate::model::QueueAdmission = connection::request(&agent, add).await.unwrap();
+    assert!(admission.start);
+    let own = admission.entry.unwrap();
+    let mut create = start_workspace(&daemon, WorkspaceStart::Name("api".into()));
+    if let OperationMethod::StartWorkspace { queue_entry, .. } = &mut create {
+        *queue_entry = Some(own.id.clone());
+    }
+    let started: StartedWorkspace = connection::request(&agent, create).await.unwrap();
+    let entries = daemon.manager.queue_entries().await.unwrap();
+    let entry = entries.iter().find(|entry| entry.id == own.id).unwrap();
+    assert_eq!(entry.space_id.as_ref(), Some(&started.workspace.id));
+    let parent = started.workspace.parent.as_ref().map(|parent| &parent.id);
+    assert_eq!(parent, Some(&chat.id));
+    fake::take(&started.operation).exit(0);
 }

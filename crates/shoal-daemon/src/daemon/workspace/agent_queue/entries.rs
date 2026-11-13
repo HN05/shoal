@@ -38,7 +38,8 @@ impl Manager {
 
     /// [`Self::queue_add`] for `caller`. A scoped caller's launch of a new
     /// workspace opens it in the caller's scope, and the daemon starts it,
-    /// as it starts a launch in an existing workspace.
+    /// as it starts a launch in an existing workspace, unless its caller
+    /// starts it.
     pub(in crate::daemon) async fn queue_add_as(
         &self,
         mut request: QueueRequest,
@@ -67,7 +68,7 @@ impl Manager {
         let limits = self
             .agent_limits(vec![repository.id.clone()], &[], &[])
             .await?;
-        let detached = (target.is_some() && !request.starts_in_caller) || scope.is_some();
+        let detached = (target.is_some() || scope.is_some()) && !request.starts_in_caller;
         // A launch in an existing workspace keeps its entry, which holds the
         // workspace's one agent until it registers, as does one on an
         // existing branch, which may reopen the branch's workspace.

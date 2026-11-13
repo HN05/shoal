@@ -976,6 +976,71 @@ async fn a_launch_in_an_existing_workspace_its_caller_starts_is_left_to_it() {
 }
 
 #[tokio::test]
+async fn a_scoped_launch_its_caller_starts_is_left_to_it() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let parent = create(&manager, &repo, "parent").await;
+    let caller = crate::daemon::scope::Caller {
+        space_id: parent.id.clone(),
+        execution: None,
+    };
+    let starts = |starts_in_caller: bool, name: &str| QueueRequest {
+        starts_in_caller,
+        ..request(&repo, name, false)
+    };
+    let admission = (manager.queue_add_as(starts(true, "here"), Some(&caller)))
+        .await
+        .unwrap();
+    // The entry opens the new space in the caller's scope as the caller
+    // starts it.
+    let entry = admission.entry.unwrap();
+    assert!(admission.start);
+    assert_eq!(entry.queued_by.as_ref(), Some(&parent.id));
+    assert!(!started(&entry.id));
+    let admission = (manager.queue_add_as(starts(false, "detached"), Some(&caller)))
+        .await
+        .unwrap();
+    assert!(!admission.start);
+    assert!(started(&admission.entry.unwrap().id));
+}
+
+#[tokio::test]
+async fn a_scoped_caller_holds_and_fails_only_the_launches_it_reaches() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let parent = create(&manager, &repo, "parent").await;
+    let caller = crate::daemon::scope::Caller {
+        space_id: parent.id.clone(),
+        execution: None,
+    };
+    let own = QueueRequest {
+        starts_in_caller: true,
+        ..request(&repo, "own", false)
+    };
+    let own = manager.queue_add_as(own, Some(&caller)).await.unwrap();
+    let theirs = add(&manager, &repo, "theirs").await;
+    manager.executions.issue_scope("scope".into(), caller).await;
+    for (entry, allowed) in [(own.entry.unwrap(), true), (theirs.entry.unwrap(), false)] {
+        let methods = [
+            crate::protocol::QueueMethod::QueueHold {
+                entry: entry.id.clone(),
+            },
+            crate::protocol::QueueMethod::QueueFail {
+                entry: entry.id.clone(),
+                error: "failed".into(),
+            },
+        ];
+        for mut method in methods {
+            let authorized =
+                crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
+            assert_eq!(authorized.is_ok(), allowed, "{}", entry.name);
+        }
+    }
+}
+
+#[tokio::test]
 async fn a_launch_in_an_existing_workspace_started_now_starts_beyond_the_limit() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
@@ -1066,13 +1131,18 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
         let authorized =
             crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
         assert_eq!(authorized.is_ok(), allowed, "{workspace:?}");
-    } // Only the user starts one regardless of the limits, or in its own process.
-    for request in [
-        request(&repo, "launch", true),
-        QueueRequest {
-            starts_in_caller: true,
-            ..request(&repo, "launch", false)
-        },
+    }
+    // It starts one in its own process, but only the user starts one
+    // regardless of the limits.
+    for (request, allowed) in [
+        (request(&repo, "launch", true), false),
+        (
+            QueueRequest {
+                starts_in_caller: true,
+                ..request(&repo, "launch", false)
+            },
+            true,
+        ),
     ] {
         let mut method = crate::protocol::QueueMethod::QueueAdd {
             request: Box::new(QueueRequest {
@@ -1082,7 +1152,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
         };
         let authorized =
             crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
-        assert!(authorized.is_err());
+        assert_eq!(authorized.is_ok(), allowed);
     }
     // Nor does it open one in another repository.
     let other = register(&manager, &temp, "other").await;

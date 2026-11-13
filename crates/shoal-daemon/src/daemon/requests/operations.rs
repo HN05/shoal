@@ -12,7 +12,7 @@ use super::super::{
         Entry,
         starts::{Opening, Preparing, Split},
     },
-    scope::{Caller, Scoped, denied},
+    scope::{Caller, Scoped},
     workspace::{Manager, NewWorkspace},
 };
 use crate::client::{queue::QueueEntryId, space_names::SpaceSelector};
@@ -74,9 +74,6 @@ pub(super) async fn handle(
             env,
             queue_entry,
         } => {
-            // Only the user's process, which starts a queued launch, names
-            // the entry the workspace takes.
-            let queue_entry = queue_entry.filter(|_| caller.is_none());
             let queued = match caller {
                 Some(_) => None,
                 None => queued_start(manager, queue_entry.clone(), &mut parent, &mut start).await?,
@@ -188,8 +185,16 @@ impl Scoped for OperationMethod {
                 }
                 Some(workspace)
             }
-            OperationMethod::StartWorkspace { parent, start, .. } => {
+            OperationMethod::StartWorkspace {
+                parent,
+                start,
+                queue_entry,
+                ..
+            } => {
                 confine_start(manager, caller, parent, start).await?;
+                if let Some(entry) = queue_entry {
+                    manager.ensure_own_launch(caller, entry, start).await?;
+                }
                 None
             }
             OperationMethod::ConvertToWorkspace { chat, .. } => Some(chat),
@@ -224,7 +229,7 @@ async fn queued_start(
 
 /// Confine a workspace start of `caller` to its own tree: below its own
 /// space unless `parent` names one below it, from a copy of a workspace it
-/// reaches. Only the user reopens a recorded workspace for a launch.
+/// reaches, or reopening a workspace below its own, which keeps its place.
 async fn confine_start(
     manager: &Manager,
     caller: &Caller,
@@ -232,7 +237,9 @@ async fn confine_start(
     start: &mut WorkspaceStart,
 ) -> Result<()> {
     match start {
-        WorkspaceStart::Workspace(_) => return Err(denied()),
+        WorkspaceStart::Workspace(workspace) => {
+            return manager.reopened_below(caller, workspace).await;
+        }
         WorkspaceStart::Copy { source, .. } => manager.copy_within(caller, source).await?,
         _ => {}
     }
