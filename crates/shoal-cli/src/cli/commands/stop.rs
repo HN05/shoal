@@ -167,9 +167,8 @@ pub(super) async fn stop(
 
 /// Stop `space` as [`stop`] does, and once the daemon refuses the stop as
 /// unproven, repeat it acknowledging that when `confirm` accepts the
-/// refusal, or else fail with it. A stop the daemon can prove, which scoped
-/// callers may make, so never carries the acknowledgement only the user may
-/// give.
+/// refusal, or else fail with it. A stop the daemon can prove so never
+/// carries an acknowledgement.
 pub(super) async fn stop_confirming(
     ctx: &Context,
     space: &SpaceSelector,

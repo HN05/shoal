@@ -461,8 +461,8 @@ fn a_parent_forgets_only_the_stopped_work_of_its_children() {
     assert!(records[..2].iter().all(|record| record.exists()));
 }
 
-/// `--yes` acknowledges only a stop the daemon cannot prove, which only the
-/// user may, so a parent's `--yes` stops a child whose stop it proves.
+/// `--yes` acknowledges only a stop the daemon cannot prove, so a parent's
+/// `--yes` stops a child whose stop it proves.
 #[test]
 fn a_parents_stop_with_yes_acknowledges_nothing_the_daemon_proves() {
     let fixture = Fixture::new();
