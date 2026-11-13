@@ -258,6 +258,7 @@ impl Config {
             overload::swap(),
             overload.unwrap_or(&toml::Table::new()),
         );
+        machine.follow_references()?;
         config.validate(paths)?;
         // A global file is complete with the mode and rule files beside it:
         // its bounds must combine with the built-in defaults, so

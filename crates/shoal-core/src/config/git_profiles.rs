@@ -3,13 +3,13 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, bail, ensure};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::validate;
 
 /// `[machine.git_profiles]`: the profiles a repository config or
 /// `add --git-profile` may select by name.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct Git {
     pub profiles: BTreeMap<String, Profile>,
@@ -45,7 +45,7 @@ impl Git {
 
 /// Git settings as TOML: `user.email = "…"` or an `email` key in a `[user]`
 /// table both name `user.email`. Values are strings, integers or booleans.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct Profile(toml::Table);
 

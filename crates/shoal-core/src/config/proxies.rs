@@ -3,13 +3,13 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, ensure};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::config::value::Value;
 
 pub type Proxies = BTreeMap<String, Proxy>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Proxy {
     /// The `http` or `https` server root requests go to, such as

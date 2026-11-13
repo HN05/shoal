@@ -68,7 +68,7 @@ pub struct AgentToolConfig {
 }
 
 /// What an AI tool needs of this machine.
-#[derive(Debug, Default, Clone, Deserialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct MachineAgent {
     /// Parent directory in which Shoal installs `<skill>/SKILL.md`.

@@ -2,9 +2,10 @@
 //! which no repository overrides.
 use std::path::PathBuf;
 
-use serde::Deserialize;
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
-use super::{RunLimit, forges, overload};
+use super::{RunLimit, forges, overload, same_as};
 
 shoal_states::states! {
     /// What the agent queue starts first within a priority.
@@ -22,7 +23,7 @@ shoal_states::states! {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Machine {
     /// Parent of every repository directory.
@@ -49,4 +50,24 @@ pub struct Machine {
     /// Named Git settings a repository or agent selects.
     pub git_profiles: crate::config::git_profiles::Git,
     pub simulators: crate::sim::SimConfig,
+    /// The options of `[machine]` that take another's value.
+    #[serde(skip)]
+    pub same_as: same_as::References,
+}
+
+impl Machine {
+    /// Give each key a `same_as` reference names its target's value, over
+    /// the defaults of what the file leaves out.
+    pub fn follow_references(&mut self) -> Result<()> {
+        let mut layers = [std::mem::take(self)];
+        same_as::follow(
+            &mut layers,
+            |machine| &machine.same_as,
+            |layers| Ok(serde_json::to_value(&layers[0])?),
+            "machine",
+        )?;
+        let [machine] = layers;
+        *self = machine;
+        Ok(())
+    }
 }

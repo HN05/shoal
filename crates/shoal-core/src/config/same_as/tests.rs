@@ -1,5 +1,5 @@
 use crate::config::{
-    Config,
+    Config, RunLimit,
     repo::{ConfigLayer, ConfigLayers, parse},
     resolve::Stack,
 };
@@ -75,6 +75,32 @@ fn cycles_missing_keys_and_other_types_name_both_keys() {
             assert!(error.contains(key), "{text}: {error}");
         }
     }
+}
+
+#[test]
+fn machine_options_take_values_over_their_defaults() {
+    let paths = crate::paths::Paths::for_test("/home/test");
+    let config = Config::parse(
+        "[machine]\nmax_jobs = { same_as = \"max_agents\" }\nmax_agents = 3\n\
+         [machine.forges.\"git.example.com\"]\nuser_token = \"user\"\n\
+         agent_token = { same_as = \"user_token\" }\n",
+        &paths,
+    )
+    .unwrap();
+    assert!(matches!(config.machine.max_jobs, RunLimit::Fixed(jobs) if jobs.get() == 3));
+    assert!(config.machine.forges.has_agent_token("git.example.com"));
+    let defaulted = Config::parse(
+        "[machine]\nmax_jobs = { same_as = \"max_agents\" }\n",
+        &paths,
+    );
+    assert_eq!(defaulted.unwrap().machine.max_jobs, RunLimit::Dynamic);
+    let unset =
+        "[machine.forges.\"git.example.com\"]\nagent_token = { same_as = \"user_token\" }\n";
+    let error = format!("{:#}", Config::parse(unset, &paths).unwrap_err());
+    assert!(
+        error.contains("machine.forges.\"git.example.com\".user_token is not set"),
+        "{error}"
+    );
 }
 
 #[test]

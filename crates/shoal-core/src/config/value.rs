@@ -6,11 +6,11 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// A setting's value: as written, `{ env = "<variable>" }` or
 /// `{ cmd = ["<program>", ...] }`.
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(
     untagged,
     deny_unknown_fields,

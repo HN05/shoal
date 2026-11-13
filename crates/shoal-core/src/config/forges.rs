@@ -3,7 +3,7 @@
 use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::{Context, Result, ensure};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::value::Value;
 use crate::forge::{
@@ -17,11 +17,11 @@ const TOKEN_TIMEOUT: Duration = Duration::from_secs(60);
 /// The most a token command may print.
 const MAX_TOKEN_BYTES: usize = 64 * 1024;
 
-#[derive(Debug, Default, PartialEq, Deserialize)]
+#[derive(Debug, Default, PartialEq, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct Forges(BTreeMap<String, Forge>);
 
-#[derive(Debug, Default, PartialEq, Deserialize)]
+#[derive(Debug, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Forge {
     /// The forge's API, pinned so the host is never asked.

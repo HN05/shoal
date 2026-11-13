@@ -1,6 +1,6 @@
 //! Machine-wide protection for the daemon's tracked agents.
 use anyhow::{Result, ensure};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 shoal_states::states! {
     /// How hard Shoal may load this machine: a computer someone works on, or
@@ -56,7 +56,7 @@ impl Load {
     }
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Overload {
     pub memory: Memory,
@@ -82,7 +82,7 @@ impl Default for Overload {
     }
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Memory {
     pub enabled: bool,
@@ -101,7 +101,7 @@ impl Default for Memory {
     }
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Cpu {
     pub enabled: bool,
@@ -120,7 +120,7 @@ impl Default for Cpu {
 }
 
 /// Free space, in GiB, on filesystems holding workspaces or daemon state.
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Disk {
     pub enabled: bool,
@@ -150,7 +150,7 @@ impl Disk {
     }
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Recovery {
     pub enabled: bool,
@@ -172,7 +172,7 @@ impl Default for Recovery {
 
 /// Thresholds, normally below each enabled protection's stop threshold, at
 /// which Shoal messages running agents before anything stops.
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Warning {
     pub enabled: bool,

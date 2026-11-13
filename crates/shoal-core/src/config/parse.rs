@@ -72,8 +72,14 @@ pub fn global(text: &str) -> Result<(Machine, RepoConfig), Error> {
         .and_then(|()| refuse_root_same_as(&root))
         .map_err(positioned)?;
     let machine = match root.get_mut().remove(MACHINE) {
-        Some(value) => {
-            serde::Deserialize::deserialize(ValueDeserializer::from(value)).map_err(positioned)?
+        Some(mut value) => {
+            let same_as = match value.get_mut() {
+                DeValue::Table(table) => References::take(table),
+                _ => References::default(),
+            };
+            let machine: Machine = serde::Deserialize::deserialize(ValueDeserializer::from(value))
+                .map_err(positioned)?;
+            Machine { same_as, ..machine }
         }
         None => Machine::default(),
     };
