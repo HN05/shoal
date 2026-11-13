@@ -183,7 +183,15 @@ instead of the PR delivery guidance below.
   messages and queued item activity, replacing a running watch, and a Claude Code
   hook wakes the idle agent; an agent idle as long as its mode's
   `idle_wake_minutes` gets a message asking it to continue, again each period,
-  unless its space is done or `shoal sleep` holds it; a chat's hooks deliver its own queue of its workers'
+  unless its space is done or `shoal sleep` holds it. An agent Shoal stopped and
+  brings back on its own is asleep; one that waits for `shoal restore` is
+  stopped. The sweep puts an idle agent to sleep after `shoal sleep`, and to
+  make room for an entry waiting for a slot or memory (lowest rank first, no
+  higher priority than the entry, only one something will wake, a slot only
+  from an agent that holds one), once the stop costs no prompt cache under the
+  machine's schedule; light and attended agents never sleep for room. `shoal
+  attach` wakes an asleep or stopped agent at once through its restore, never
+  beside a waiting wrapper; a chat's hooks deliver its own queue of its workers'
   events, which the user receives as notifications if the chat is removed first; a workspace's own Shoal comments, thread replies,
   closing and reopening are not reported back to it. The only terminal input Shoal writes is
   the tracked wrapper's fixed prompt into an idle Codex's terminal session, or an
@@ -497,9 +505,10 @@ instead of the PR delivery guidance below.
   opt-in. The machine-only `load` level sets the CPU and memory thresholds the
   file leaves out; explicit values win. Stop one connected tracked
   agent of a mode that is not `light`, in a space the user does not attend
-  as a chat, at a time through its wrapper: agents no terminal shows before shown ones,
-  which still stop once no other is left, then the one idle longest first and
-  otherwise the newest, with configurable thresholds
+  as a chat, at a time through its wrapper, in the agent queue's rank reversed:
+  agents no terminal shows before shown ones, which still stop once no other is
+  left, idle before working ones, then the space the queue would start last;
+  within a space the one idle longest, otherwise the newest; with configurable thresholds
   and timing; retain work and leases, notify with the pressure reason and recovery
   path, distinguish automatic recovery from manual or unavailable recovery, and never select disconnected
   executions. Failed readings reset the sustained timer and authorize no stop.
