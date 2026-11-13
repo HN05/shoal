@@ -55,6 +55,14 @@ struct WaitingWork {
 }
 
 impl WaitingWork {
+    /// The entries that still wait once `admitted` start.
+    fn unstarted(&self, admitted: &[QueueEntryId]) -> HashSet<QueueEntryId> {
+        (self.entries.iter())
+            .map(|entry| entry.id.clone())
+            .filter(|id| !admitted.contains(id))
+            .collect()
+    }
+
     /// Whether `admitted` holds an entry whose work is of `kind`.
     fn admits(&self, admitted: &[QueueEntryId], kind: fn(&Work) -> bool) -> bool {
         self.entries
@@ -132,12 +140,7 @@ impl Manager {
         let bases = self.hold_back_blocked(&mut work.entries).await?;
         let published = self.overload_recovery.published();
         let admission = self.fitting_entries(&work, published.is_some()).await?;
-        let unstarted = (work.entries.iter())
-            .map(|entry| entry.id.clone())
-            .filter(|id| !admission.admitted.contains(id))
-            .collect();
-        let now = std::time::Instant::now();
-        (self.agent_queue).record_held_back(admission.held, &unstarted, now);
+        self.record_held_back(&work, &admission);
         if admission.admitted.is_empty() {
             return Ok(false);
         }
@@ -146,6 +149,14 @@ impl Manager {
         };
         let starts = self.mark_starting(admitted, bases).await?;
         self.start_launches(starts, caller).await
+    }
+
+    /// Record what held back the entries of `work` that `admission` passed
+    /// over, now.
+    fn record_held_back(&self, work: &WaitingWork, admission: &Admission) {
+        let unstarted = work.unstarted(&admission.admitted);
+        let held = admission.held.clone();
+        (self.agent_queue).record_held_back(held, &unstarted, std::time::Instant::now());
     }
 
     /// The entries of `work` that fit beside the slots in use, and what
