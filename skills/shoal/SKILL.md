@@ -401,7 +401,8 @@ failed check on the linked PR's current head, and without `--check` every
 failed one; `ci cancel` cancels running and waiting ones. With a run URL both act on one run. `ci run` starts
 a workflow, by its file name or its link, on the space's branch, or for a chat
 on the default branch, or on `--branch`. A space's agent acts on the runs of
-the default branch and of the branches of the workspaces below it. It is a new run, not a rerun: on Forgejo a failed
+the default branch and of the branches of the workspaces below it, and of
+their PRs on any commit. It is a new run, not a rerun: on Forgejo a failed
 check on the PR stays failed. When `ci run` links the run as opened, a watch
 reports when it finishes. Runs of other repositories are the user's to read,
 link and act on. A PR from a fork or first-time contributor can show runs that

@@ -12,7 +12,7 @@ use crate::{
     capability::{self, Capability},
     ci::{CiAction, JobState, id},
     items::reference::ItemRef,
-    numbers::{JobId, RunId, RunNumber},
+    numbers::{JobId, PullNumber, RunId, RunNumber},
     transport::api::{HttpMethod, Request},
 };
 
@@ -32,6 +32,9 @@ pub struct Run {
     /// The commit it ran on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub commit: Option<CommitId>,
+    /// The PR of this repository it ran for, where the forge says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pull: Option<PullNumber>,
     pub state: JobState,
     /// The forge reports it succeeded, which a finished run that was
     /// skipped or waits for manual action has not.

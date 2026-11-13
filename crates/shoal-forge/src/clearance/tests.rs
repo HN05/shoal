@@ -8,6 +8,7 @@ fn run(id: u64, state: JobState) -> Run {
         branch: Some("main".into()),
         workflow: Some("ci.yml".into()),
         commit: Some("0123456789abcdef".into()),
+        pull: None,
         state,
         succeeded: state == JobState::Finished,
         waiting: false,

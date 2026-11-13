@@ -17,7 +17,7 @@ use crate::{
         run_view::{RunFilter, RunJob},
     },
     items::item::text,
-    numbers::{JobId, RunId, RunNumber},
+    numbers::{JobId, PullNumber, RunId, RunNumber},
     transport::api::{HttpMethod, Request, encode},
 };
 
@@ -62,6 +62,7 @@ impl Runs for Forgejo {
             branch: text(&value["prettyref"]),
             workflow: text(&value["workflow_id"]),
             commit: text(&value["commit_sha"]).map(CommitId::from),
+            pull: pull_of(value),
             state: actions::state(&value["status"])?,
             succeeded: value["status"] == "success",
             waiting: value["need_approval"] == true,
@@ -137,4 +138,16 @@ impl Runs for Forgejo {
             (CiAction::Cancel, _) => RunOperation::Post(format!("actions/runs/{id}/cancel")),
         })
     }
+}
+
+/// The PR a run ran for, which only a PR event's payload names.
+pub(super) fn pull_of(run: &Value) -> Option<PullNumber> {
+    if !run["event"].as_str()?.starts_with("pull_request") {
+        return None;
+    }
+    let payload: Value = serde_json::from_str(run["event_payload"].as_str()?).ok()?;
+    payload["pull_request"]["number"]
+        .as_u64()
+        .or_else(|| payload["number"].as_u64())
+        .map(PullNumber::new)
 }

@@ -15,7 +15,7 @@ use crate::{
         JobCommand, JobLaunch, JobRun, RegisteredRunner, Trigger, WaitingJob, file_url,
         registration,
     },
-    numbers::{JobId, PullNumber, RunId, RunnerId},
+    numbers::{JobId, RunId, RunnerId},
     transport::api::{HttpMethod, Request, encode},
 };
 
@@ -132,11 +132,7 @@ fn job_run(repo: &ForgeRepo, value: &Value) -> Result<JobRun> {
         .filter(|reference| reference.starts_with("refs/"));
     let (trigger, reference) = match (value["event"].as_str(), pushed) {
         (Some("pull_request"), _) => {
-            let number = payload["pull_request"]["number"]
-                .as_u64()
-                .or_else(|| payload["number"].as_u64())
-                .map(PullNumber::new)
-                .context("the PR run names no PR")?;
+            let number = super::runs::pull_of(value).context("the PR run names no PR")?;
             let reference = format!("refs/pull/{number}/head");
             (Trigger::Pull { number }, Some(reference))
         }

@@ -5166,6 +5166,57 @@ fn forgejo_ci_run_actions_cancel_by_run_number_and_rerun_from_release_17() {
 }
 
 #[test]
+fn forgejo_workspace_processes_cancel_runs_of_their_own_prs_on_any_head() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    // Forgejo names a PR run's branch as the PR, and the commit it recorded
+    // need not be the PR's head.
+    let run = |id: u64, number: u64, pull: u64| {
+        let payload = json!({"number": pull, "pull_request": {"number": pull}});
+        json!({"body": {"workflow_runs": [{"id": id, "index_in_repo": number,
+            "prettyref": format!("#{pull}"), "event": "pull_request",
+            "event_payload": payload.to_string(), "commit_sha": "old", "status": "waiting"}]}})
+    };
+    let mut other = pull(9, "open", "Other", &[]);
+    other["head"]["ref"] = json!("other");
+    let mut fork = pull(10, "open", "Fork", &[]);
+    fork["head"]["repo"]["full_name"] = json!("someone/project");
+    fixture.respond(json!({
+        "GET repos/team/project/actions/runs?run_number=2765": run(9331, 2765, 8),
+        "GET repos/team/project/actions/runs?run_number=2766": run(9332, 2766, 9),
+        "GET repos/team/project/actions/runs?run_number=2767": run(9333, 2767, 10),
+        "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &[])},
+        "GET repos/team/project/pulls/9": {"body": other},
+        "GET repos/team/project/pulls/10": {"body": fork},
+        "POST repos/team/project/actions/runs/9331/cancel": {"status": 204},
+    }));
+    let exported = fixture.ok(&["internal", "env", &fixture.id("topic")]);
+    let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
+    let cancel = |run: &str| {
+        fixture.request_as(
+            json!({"ci_run_action": {"workspace": fixture.id("topic"), "run": run,
+                "action": "cancel", "failed": false}}),
+            Some(scope),
+        )
+    };
+    let cancelled = cancel("2765");
+    assert_eq!(cancelled["type"], "ci_run_acted", "{cancelled}");
+    assert_eq!(
+        writes(&fixture),
+        [json!([
+            "POST repos/team/project/actions/runs/9331/cancel",
+            null
+        ])]
+    );
+    // Another branch's PR, and a fork's PR of a branch of the same name,
+    // are not the workspace's.
+    for run in ["2766", "2767"] {
+        let refused = cancel(run);
+        assert_eq!(refused["type"], "error", "{refused}");
+        assert!(writes(&fixture).is_empty());
+    }
+}
+
+#[test]
 fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     let mut head_pull = pull(8, "open", "Fix", &[]);

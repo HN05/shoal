@@ -18,7 +18,7 @@ use crate::{
         run_view::{JOBS_PAGE, RunFilter, RunJob},
     },
     items::item::text,
-    numbers::{JobId, RunId, RunNumber},
+    numbers::{JobId, PullNumber, RunId, RunNumber},
     transport::api::{HttpMethod, Request, encode},
 };
 
@@ -44,7 +44,7 @@ impl Runs for GitHub {
     }
 
     /// A run names its workflow by the file's path in the repository.
-    fn run_item(&self, _repo: &ForgeRepo, value: &Value) -> Result<Run> {
+    fn run_item(&self, repo: &ForgeRepo, value: &Value) -> Result<Run> {
         let path = text(&value["path"]);
         Ok(Run {
             id: RunId::new(value["id"].as_u64().context("Actions run has no ID")?),
@@ -52,6 +52,7 @@ impl Runs for GitHub {
             branch: text(&value["head_branch"]),
             workflow: path.map(|path| path.rsplit('/').next().unwrap_or_default().into()),
             commit: text(&value["head_sha"]).map(CommitId::from),
+            pull: pull_of(repo, value),
             state: actions::state(value)?,
             succeeded: value["conclusion"] == "success",
             waiting: value["conclusion"] == "action_required",
@@ -130,4 +131,18 @@ impl Runs for GitHub {
     fn approve_endpoint(&self, run: &Run) -> Result<String> {
         Ok(format!("actions/runs/{}/approve", run.id))
     }
+}
+
+/// The PR of `repo` a run ran for. GitHub lists the PRs whose head is the
+/// run's, which may belong to another repository.
+fn pull_of(repo: &ForgeRepo, run: &Value) -> Option<PullNumber> {
+    let prefix = format!("/repos/{}/pulls/", repo.path).to_ascii_lowercase();
+    run["pull_requests"]
+        .as_array()?
+        .iter()
+        .filter(|pull| {
+            (pull["url"].as_str()).is_some_and(|url| url.to_ascii_lowercase().contains(&prefix))
+        })
+        .find_map(|pull| pull["number"].as_u64())
+        .map(PullNumber::new)
 }

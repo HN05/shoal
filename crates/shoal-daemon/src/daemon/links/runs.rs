@@ -92,7 +92,7 @@ impl Manager {
 
     /// Rerun or cancel the run `input` names in the repository of `context`,
     /// or of its URL; scoped processes act only on the runs of the branches
-    /// their scope reaches.
+    /// their scope reaches and of PRs from them.
     pub async fn ci_run_action(
         &self,
         context: Option<&ItemContext>,
@@ -108,7 +108,8 @@ impl Manager {
             .await
             .with_context(|| format!("could not {action} CI run {run}"))?;
         if let Some(caller) = caller {
-            (self.ensure_run_branch_in_reach(caller, &place, run.branch.as_deref())).await?;
+            let branch = reach::run_branch(&place, &run).await?;
+            (self.ensure_run_branch_in_reach(caller, &place, branch.as_deref())).await?;
         }
         forge
             .act_on_run(account, &run, action, failed)

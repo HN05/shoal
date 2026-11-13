@@ -1,4 +1,4 @@
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::*;
 use crate::backends::Runs;
@@ -10,6 +10,7 @@ fn run(id: u64) -> Run {
         branch: None,
         workflow: None,
         commit: None,
+        pull: None,
         state: JobState::Finished,
         succeeded: true,
         waiting: false,
@@ -127,6 +128,7 @@ fn runs_read_their_branch_workflow_commit_and_state_from_the_forge() -> Result<(
             branch: Some("topic".into()),
             workflow: Some("ci.yml".into()),
             commit: Some("abc".into()),
+            pull: None,
             state: JobState::Failed,
             succeeded: false,
             waiting: false,
@@ -159,6 +161,7 @@ fn runs_read_their_branch_workflow_commit_and_state_from_the_forge() -> Result<(
             branch: Some("topic".into()),
             workflow: Some("deps.yml".into()),
             commit: Some("123".into()),
+            pull: None,
             state: JobState::Finished,
             succeeded: true,
             waiting: false,
@@ -171,6 +174,35 @@ fn runs_read_their_branch_workflow_commit_and_state_from_the_forge() -> Result<(
         )
         .is_err()
     );
+    Ok(())
+}
+
+#[test]
+fn runs_name_the_pr_of_their_repository_they_ran_for() -> Result<()> {
+    let pull = |remote: &str, value| -> Result<Option<u64>> {
+        let repo = ForgeRepo::parse(remote)?;
+        let run = repo.kind.run(&repo, RunNumber::new(12), &value)?;
+        Ok(run.pull.map(PullNumber::get))
+    };
+    // Forgejo names a PR run's branch as the PR, and its PR only in the
+    // event's payload.
+    let forgejo = |event: &str, payload: Value| {
+        json!({"workflow_runs": [{"id": 9331, "index_in_repo": 12, "prettyref": "#8",
+            "event": event, "event_payload": payload.to_string(), "status": "running"}]})
+    };
+    let codeberg = "https://codeberg.org/team/repo";
+    let opened = json!({"number": 8, "pull_request": {"number": 8}});
+    assert_eq!(pull(codeberg, forgejo("pull_request", opened))?, Some(8));
+    let issue = json!({"number": 3, "issue": {"number": 3}});
+    assert_eq!(pull(codeberg, forgejo("issues", issue))?, None);
+    // GitHub lists the PRs whose head the run ran on, also another
+    // repository's.
+    let github = json!({"id": 12, "html_url": "https://github.com/team/repo/actions/runs/12",
+    "head_branch": "topic", "status": "in_progress", "pull_requests": [
+        {"number": 4, "url": "https://api.github.com/repos/upstream/repo/pulls/4"},
+        {"number": 9, "url": "https://api.github.com/repos/Team/Repo/pulls/9"}
+    ]});
+    assert_eq!(pull("https://github.com/team/repo", github)?, Some(9));
     Ok(())
 }
 

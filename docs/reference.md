@@ -4442,8 +4442,9 @@ job of a finished run, or with `--failed` only its failed jobs; GitLab retries
 only failed and cancelled jobs either way, Forgejo with `--failed` reruns each
 failed job and the jobs that need it, also while the run is running, and
 Forgejo before 17, Gitea and Bitbucket cannot rerun. `cancel` cancels a running run on every forge but Bitbucket.
-A scoped process acts only on runs of the branches it starts them on, so a
-PR's checks, whose runs may name the PR instead, are acted on through the PR.
+A scoped process acts only on runs of the branches it starts them on, and on
+runs of a PR in its repository whose head is one of those branches, on any
+commit of the PR.
 `--json` returns the run's `url` and the `action`.
 
 A run's URL may name another repository than that of the workspace or

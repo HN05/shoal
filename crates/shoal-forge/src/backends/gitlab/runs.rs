@@ -73,6 +73,7 @@ impl Runs for GitLab {
             branch: text(&value["ref"]).filter(|_| value["tag"] != true),
             workflow: None,
             commit: text(&value["sha"]).map(CommitId::from),
+            pull: None,
             state: status_state(&value["status"])?.into(),
             succeeded: value["status"] == "success",
             waiting: false,
