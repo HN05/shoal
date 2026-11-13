@@ -157,11 +157,11 @@ instead of the PR delivery guidance below.
   for the same state directory); without a target a scoped command acts on the child
   whose directory it runs in, while agent hooks always report for the own workspace.
   Workspace allocation other than a child of their own space, removal other than of a space below their own
-  the user holds nothing below, recovery and shared repository/service administration other than `config reload` stay denied. For the workspaces below their own, scoped callers hold them, queue agents,
-  which the daemon starts detached so they never inherit the caller's scope, cancel their queue
+  the user holds nothing below, recovery and shared repository/service administration other than `config reload` stay denied. For the spaces their scope reaches but their own, scoped callers hold them, queue agents,
+  which the daemon starts detached so they never inherit the caller's scope, cancel and prioritize their queue
   entries, send agent messages,
-  answer questions, stop their executions and the chats below their own, restart their agents and those of the chats below their own,
-  queue restores of the agents, a workspace's or a chat's, they or the spaces below them stopped or whose restart by them left them stopped,
+  answer questions, stop their executions and agents, confirming a stop Shoal cannot prove, restart their agents, convert them,
+  queue restores of the agents, a workspace's or a chat's, whoever stopped them,
   which the daemon starts a chat's in the place it ran in, and forget stopped work; the nearest space above with an agent, of either kind, receives a child agent's messages,
   questions, completion and ready marks and its agent's exits and stops instead of the user,
   except what a process causes in a child without an agent of its own. Own-workspace setup, rename, base workspace, PR registration,
@@ -169,7 +169,7 @@ instead of the PR delivery guidance below.
   merge acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks,
   assignment completion and its withdrawal, listing issues and PRs of any repository, opening and changing
   those of the own repository except merging, deleting a PR's branch, approving or requesting changes, rerunning or cancelling their CI jobs,
-  starting, rerunning or cancelling CI runs of their own branch and reading the own repository's,
+  starting, rerunning or cancelling CI runs of the default branch and of the branches of the workspaces their scope reaches, and reading the own repository's,
   GET requests to any repository's forge API, or other methods to the own repository's where
   their `api_writes` permission allows them, own-repository sync and
   effective-configuration reads are allowed, but approving CI runs that wait for approval is not;

@@ -326,15 +326,16 @@ of cannot be proven ended even then, so stop asks you to confirm it did, and
 `--yes`, it reports such a workspace as failed. Stopping cancels a waiting
 restore and requires explicit resume even with a `resume_command` configured;
 a stop that fails keeps the agents it stopped as stopped work.
-Run stop, restart and restore outside scoped executions, except that a scoped
-process, a workspace's or a chat's agent, may stop the spaces below its own,
-workspaces and chats alike, with `shoal stop <space>`, without `--yes`, restart the agents of the
-spaces below its own, workspaces and chats alike, with `shoal restart <space>`,
-forget their stopped work with `shoal restore <space> --forget`, and queue with
-`shoal restore <space>` the restores of the agents that it or a space below
-it stopped, or whose restart by one of them left them stopped, which the daemon
-starts detached. An agent the user or Shoal stopped, or that exited on its own,
-is the user's to restore.
+A scoped process, a workspace's or a chat's agent, stops, restarts and
+restores the spaces its scope reaches but its own, workspaces and chats alike:
+its own space and those below it, or every space for a [master
+session](#master-session). It stops them with `shoal stop <space>` or `--all`,
+`--yes` included, restarts their agents with `shoal restart <space>`, `--all`
+or a picker, forgets their stopped work with `shoal restore --forget`, and
+queues with `shoal restore <space>`, `--all` or the current space the restores
+of their stopped agents, whoever stopped them, which the daemon starts
+detached. Starting regardless of the limits, with `--now` or `--focus`, stays
+yours. A space outside the scope is refused with an error naming it.
 
 `shoal stop --interrupt [space...]` cancels the current turn of each agent
 in the selected workspaces and running chats and keeps the agent running with
@@ -1882,13 +1883,13 @@ a background place. Its first message says what the space is now, with its path,
 and its branch for a workspace, followed by the mode's instructions. A restart
 that fails leaves the agent for `shoal restore` and records a `recovery_blocked`
 notification. A stop of the agent before then, such as `shoal stop`, keeps it
-down until the space that stopped it, or you, resume it: the space still
+down until it is resumed: the space still
 converts, a workspace becoming a chat that stays stopped, and a chat's agent
 keeping its session as the workspace's last session. No new agent starts in
 a converting space's workspace until its agent has moved: `shoal restore` of a
 workspace that becomes a chat is refused until it is the chat, which
 `shoal restore` then continues, and another agent's start in a chat's new
-workspace is refused until the chat's agent runs there. A space's agent converts only its own space; your terminal
+workspace is refused until the chat's agent runs there. A space's agent converts the spaces its scope reaches; your terminal
 converts any space, by `--space` with its number or ID, or the current
 workspace, else a picker.
 
@@ -2140,8 +2141,10 @@ attaches to it as `shoal attach` does. `queue cancel` removes a waiting entry: a
 cancelled restore stops the waiting wrapper as `shoal stop` does and leaves the
 agent for `shoal restore`. `shoal rm` also removes a waiting launch by its ID;
 a starting entry belongs to its workspace. Every caller sees every entry.
-Scoped callers may cancel the entries for the workspaces below their own;
-starting an entry is for the user.
+Scoped callers may cancel the entries their scope reaches: those of its
+spaces but their own, a CI job's through the spaces its run is for, and a new
+space's launch through the parent it goes below; starting an entry is for the
+user.
 
 `shoal priority` sets a space's priority, which ranks its queued work and the
 work it waits on (see [Queue order](#queue-order)): `low`, `normal` or
@@ -2633,8 +2636,8 @@ have reported its session through its hooks. The agent copies the session when
 it starts, so a queued fork includes what the parent did meanwhile. An agent
 without [`fork`](#agents) arguments, or one an app such as Happy runs,
 refuses it before the child is created.
-Workspace processes may queue agents only in the workspaces below their own,
-and cancel or move back only those agents' entries.
+Workspace processes may queue agents only in the workspaces their scope
+reaches but their own.
 
 Claude Code launched in a workspace runs `shoal internal worktree-create` and
 `worktree-remove` as its `WorktreeCreate` and `WorktreeRemove` hooks, so a
@@ -4392,9 +4395,10 @@ which needs a `workflow_dispatch` trigger; GitLab runs the branch's pipeline,
 taking no workflow and passing inputs to its `spec:inputs`; Bitbucket runs the named
 custom pipeline, or the branch's own without one, with the inputs as its
 variables. The daemon starts it as the [agent account](#agent-accounts), or in
-another repository with the user's own logins, and processes inside a workspace
-may start runs only on that workspace's branch. A chat's agent, which has no
-branch, starts them on the branch of a workspace below it that `--space` names.
+another repository with the user's own logins. A scoped process, a
+workspace's or a chat's agent, starts runs only on the default branch and on
+the branches of the workspaces its scope reaches, in the repository it acts
+in.
 `--json` returns `workflow`, `branch` and the run's `url` where the forge
 reports it, which GitHub and Gitea do not. Inside a workspace, a run with a URL
 is [linked](#linked-items-and-cleanup) as opened where Shoal reads runs, which
@@ -4407,10 +4411,8 @@ job of a finished run, or with `--failed` only its failed jobs; GitLab retries
 only failed and cancelled jobs either way, Forgejo with `--failed` reruns each
 failed job and the jobs that need it, also while the run is running, and
 Forgejo before 17, Gitea and Bitbucket cannot rerun. `cancel` cancels a running run on every forge but Bitbucket.
-Processes inside a workspace act only on runs of that workspace's branch, and a
-chat's agent only on runs of the branch of a workspace below it that `--space`
-names, so a PR's checks, whose runs may name the PR instead, are acted on
-through the PR.
+A scoped process acts only on runs of the branches it starts them on, so a
+PR's checks, whose runs may name the PR instead, are acted on through the PR.
 `--json` returns the run's `url` and the `action`.
 
 A run's URL may name another repository than that of the workspace or
@@ -5610,8 +5612,8 @@ effective configuration for their own workspace and their space's repository,
 and make the daemon reread it with `config reload`, but cannot change
 configuration.
 They `merge` only with [approval](#merge-into-the-default-branch) and cannot
-reach spaces other than the ones below theirs, create spaces other than below
-theirs, remove spaces other than those below theirs without holds, read
+reach spaces outside their scope, create spaces other than below the spaces
+their scope reaches, remove spaces other than those below theirs without holds, read
 notifications, or administer repositories or the daemon service; nested commands
 keep the scope. A command whose ancestor carries scope for the same state directory
 gets the CLI's scoped refusals even after the token is removed from its

@@ -67,8 +67,8 @@ the same URLs for a repository the user does not maintain: it clones it, forks
 it when the user cannot push there, and removes the clone once nothing of it is
 left.
 
-Run inside a space, `start` creates a child of it, or of a space below it that
-`--parent` names, in its repository, or for a master session in any registered
+Run inside a space, `start` creates a child of it, or of a space its scope
+reaches that `--parent` names, in its repository, or for a master session in any registered
 one, on a branch from the default branch;
 a chat-kind mode starts a child chat in a background place and returns once the chat
 has started, and `--here` is refused. Outside any space it creates top-level
@@ -130,8 +130,8 @@ and releases its ports, resources, simulators and secrets; the user's holds and
 a workspace building on its branch refuse it. Once the agent's turn ends,
 Shoal restarts it in the new place from a fork of its session, told what the
 space is now and its mode's instructions; `--mode` picks that mode, `worker`
-for a workspace and `chat` for a chat by default. An agent converts only its
-own space.
+for a workspace and `chat` for a chat by default. An agent converts its own
+space and the spaces below it.
 
 ## Coordinate spaces below
 
@@ -155,10 +155,12 @@ shoal files <child>
 keeping their sessions, and cancels agents queued to start there; `restart` stops the child's agent and
 starts its session again at once; `stop --interrupt` cancels the current
 turn of the child's agent, a workspace's or a chat's, which stays running;
-`restore` continues a turn an interrupt ended and queues the agents, a
-workspace's or a chat's, that the caller stopped or its restart left
-stopped, while the user restores the ones the user stopped; for a workspace
-whose setup failed, it retries the setup, and the agent waiting for it starts.
+`restore` continues a turn an interrupt ended and queues the stopped agents,
+a workspace's or a chat's, whoever stopped them; for a workspace whose setup
+failed, it retries the setup, and the agent waiting for it starts. `--all`
+acts on every space below the caller's, and `stop --yes` confirms that an
+execution Shoal cannot prove ended did. A space outside the caller's scope is
+refused with an error naming it.
 
 A child's approval request comes to its coordinator first.
 `shoal approvals --approve <S.N>` works for a request to hold a workspace
@@ -391,9 +393,10 @@ shoal ci run <workflow> [--input NAME=VALUE] [--branch B]
 `view ci` lists a run's jobs with the log tails of its failed ones; `--job`
 prints one job's whole log, by its name or listed ID, whatever its result. `ci rerun --check` reruns a
 failed check on the linked PR's current head, and without `--check` every
-failed one; `ci cancel` cancels running and waiting ones. With a run URL both act on one run of the space's branch. `ci run` starts
+failed one; `ci cancel` cancels running and waiting ones. With a run URL both act on one run. `ci run` starts
 a workflow, by its file name or its link, on the space's branch, or for a chat
-on the default branch or `--branch`. It is a new run, not a rerun: on Forgejo a failed
+on the default branch, or on `--branch`. A space's agent acts on the runs of
+the default branch and of the branches of the workspaces below it. It is a new run, not a rerun: on Forgejo a failed
 check on the PR stays failed. When `ci run` links the run as opened, a watch
 reports when it finishes. Runs of other repositories are the user's to read,
 link and act on. A PR from a fork or first-time contributor can show runs that

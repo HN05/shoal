@@ -438,7 +438,7 @@ again after the move, keeps them. User commands
 save their arguments, which a restore reports once, as the restored agent's first
 prompt or else to the user, and never reruns, because replaying an arbitrary
 command is not known to be safe. Scoped callers stop only the executions of the
-workspaces below theirs. A hangup
+spaces their scope reaches but their own. A hangup
 or terminate signal to an agent's wrapper or agent saves the agent as manual stop
 does: closing a terminal, logging out and shutting down end the agent's session
 without the agent choosing to quit, and the daemon may already be gone. The
@@ -836,9 +836,9 @@ branches or creating worktrees Shoal does not own. Splitting creates a new
 branch in the parent's repository, from the default branch or a `--base` that
 stacks it as usual, records the parent, and links an `--issue`. Any space opens
 a child of either kind the same way: `shoal start` run inside a space puts the
-new workspace or chat below it, or below a space under it that `--parent`
-names, in its repository, and a scoped caller creates nothing else, while the
-user's terminal creates top-level spaces.
+new workspace or chat below it, or below a space its scope reaches that
+`--parent` names, in its repository, and a scoped caller creates nothing else,
+while the user's terminal creates top-level spaces.
 A chat an agent starts opens in a background place, since the agent cannot
 hand over its terminal, and keeps the agent's scope until it records the chat
 below the agent's space. Every start in a background place waits for the place
@@ -897,8 +897,10 @@ queue, and `start --fork` gives it the parent's agent
 from a fork of its session, the one the caller's agent or else the parent's only
 agent reported last, so the parent need not restate what it learned; the daemon starts every launch in an existing
 workspace itself, detached, so the agent never inherits the caller's scope, and
-scoped callers may queue only for the workspaces below theirs, and cancel those
-entries. A scoped caller's
+scoped callers may queue only for the workspaces their scope reaches but their
+own, and cancel and prioritize the entries their scope reaches: those of such
+spaces, a CI job's through the spaces its run is for, and a new space's launch
+through its parent. A scoped caller's
 launch that a blocker holds queues before its workspace exists, so the
 workspace can start from the done blocker's branch: the entry records the
 caller's space, which the daemon starts it for and whose scope the user's
@@ -912,12 +914,15 @@ messages instead, falling back to the user without a coordinator or when its
 messages are full. Events a process causes in a child without an agent of its
 own are the coordinator's own work and reach the user. The coordinator answers
 questions asked below it or passes them up with its own question, and may
-stop or restart the agents below it and forget their stopped work, since only it knows
-whether a child agent still has work. It resumes only what it or a space
-below it stopped, which the stopped session or chat records: agents through
+stop, restart, resume and convert the spaces below it and forget their stopped
+work, since only it knows whether a child agent still has work. It resumes a
+stopped agent whoever stopped it, the user, Shoal or a crash: agents through
 the queue, so the daemon starts them detached, and chats in a background
-place, as it starts them; resuming what the user or Shoal stopped, and
-confirming that an execution Shoal cannot prove ended did, stay the user's.
+place, as it starts them. It confirms that an execution Shoal cannot prove
+ended did as the user does, while the check of a survivor's birth identity
+still keeps unknown ownership from authorizing a kill. Every such check asks
+whether the caller's scope reaches the target, and a refusal names the space
+outside it.
 Stopping a space stops the spaces below it, workspaces and chats, unless
 `--skip-children` says otherwise, since their agents work for it. Approval
 requests go up the same tree: to the nearest space above with an agent, of
@@ -3091,15 +3096,17 @@ action recorded as an `item_changed` event. Each forge's own job API carries the
 out; Forgejo's API reruns jobs only from release 17, which Shoal reads from the
 server's version, and Shoal does not sign in to its web UI, so earlier Forgejo
 releases and Gitea only cancel, and Shoal acts on no Bitbucket Pipelines job.
-Agents may also start a workflow run on their own workspace's branch, on every
-forge including Bitbucket. A started run is not a rerun of a PR's checks: on
+Agents may also start a workflow run on the branches whose runs they act on, on
+every forge including Bitbucket. A started run is not a rerun of a PR's checks: on
 Forgejo it has no head commit or event, so it cannot replace the rerun Forgejo
 lacks before 17, while elsewhere only a run on the PR's head commit reports checks there.
 `ci` gathers both: it reruns and cancels one run by its URL, or the checks on a
 PR's head without one, and `view ci` reads a run as `view` reads an issue or PR.
 Run numbers overlap issue and PR numbers, so only a number after `ci` names a
-run. Workspace processes act only on runs of their own branch, which
-the daemon reads from the run before acting, and read any run of their repository.
+run. Workspace processes act only on runs of the default branch and of the
+branches of the workspaces their scope reaches, in the repository they act in,
+which the daemon reads from the run before acting, and read any run of their
+repository.
 A run or workflow URL of another repository is the user's to act on: the
 daemon starts, reads, links, reruns and cancels runs there with the user's own
 logins, as it merges, also outside a workspace, and refuses workspace
