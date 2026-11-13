@@ -3,10 +3,7 @@
 use crate::cli::availability::NeedExt;
 use crate::cli::list_status::ListStatusExt;
 use crate::client::space_ids::SpaceId;
-use std::{
-    collections::{HashMap, HashSet},
-    io,
-};
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, ensure};
 
@@ -55,13 +52,7 @@ impl std::fmt::Display for NoCurrentWorkspace {
 
 impl std::error::Error for NoCurrentWorkspace {}
 
-pub(in crate::cli) fn current_directory() -> io::Result<Option<std::path::PathBuf>> {
-    match std::env::current_dir().and_then(std::fs::canonicalize) {
-        Ok(cwd) => Ok(Some(cwd)),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error),
-    }
-}
+pub(in crate::cli) use crate::fsutil::current_dir::current_directory;
 
 pub async fn select_workspace(
     ctx: &Context,

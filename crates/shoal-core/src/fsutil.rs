@@ -4,6 +4,7 @@ pub use crate::client::executions::FileIdentity;
 pub use crate::client::fsutil::read_optional;
 pub mod atomic;
 pub mod copy;
+pub mod current_dir;
 pub(crate) mod descriptors;
 pub mod disk_space;
 pub mod executables;
