@@ -1350,6 +1350,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "shoal-client",
+ "shoal-config-derive",
  "shoal-forge",
  "shoal-proxy",
  "shoal-refs",

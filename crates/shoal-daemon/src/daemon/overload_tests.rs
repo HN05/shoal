@@ -91,9 +91,7 @@ async fn built_in_restore_child() {
         // The restored session is told its mode's rules again, after its
         // resume arguments.
         let target = crate::protocol::ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
-        let settings = crate::client::workspaces::settings(&paths, target)
-            .await
-            .unwrap();
+        let settings = crate::config::settings(&paths, target).await.unwrap();
         let rules = crate::agents::restored_instruction_args(
             &settings,
             &agent.into(),

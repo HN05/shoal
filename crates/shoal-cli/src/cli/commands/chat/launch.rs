@@ -105,7 +105,7 @@ impl Launch {
         let home = topic.home(&repo).path().to_owned();
         let topic = restored(ctx, topic, options.restore.as_ref(), &home).await?;
         let name = initial_name(&topic, options.name.clone());
-        let settings = crate::client::workspaces::settings(&ctx.paths, repo.config()).await?;
+        let settings = crate::config::settings(&ctx.paths, repo.config()).await?;
         let chat = command::chat_launch(settings, &agent, repo, &topic, &options, name)?;
         Ok(Self {
             agent,

@@ -17,9 +17,6 @@ use crate::{
     repository::Selector,
 };
 
-mod failure;
-pub mod output;
-
 states!(
     /// Where a review is in its run.
     ReviewState {

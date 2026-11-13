@@ -11,7 +11,7 @@ use serde::de::DeserializeOwned;
 use crate::space_names::SpaceSelector;
 use crate::{
     chats,
-    config::{Config, Effective, hooks::HookKind, repo::ConfigLayers},
+    config::hooks::HookKind,
     connection::{Daemon, call, pages, request},
     model::{
         Blocker, ConflictCheck, DiffBase, Inspection, MergePreview, OwnedPlace, PresentSpace,
@@ -377,26 +377,6 @@ pub async fn config_layers<L: DeserializeOwned>(
     let layers: RepositoryLayers =
         request(daemon, WorkspaceMethod::LayeredConfig { target }).await?;
     layers.read()
-}
-
-/// The settings that apply to `target` after every layer. The global config
-/// is read now, so launch defaults follow it without a daemon restart.
-pub async fn settings(daemon: &impl Daemon, target: ConfigTarget) -> Result<Effective> {
-    Ok(configuration(daemon, target).await?.1)
-}
-
-/// The global config read at launch and the settings it yields for `target`.
-pub async fn configuration(
-    daemon: &impl Daemon,
-    target: ConfigTarget,
-) -> Result<(Config, Effective)> {
-    let layers: ConfigLayers = config_layers(daemon, target).await?;
-    let config = Config::load_with_templates(daemon.paths())?;
-    let settings = config.resolve(&layers)?;
-    // With every layer's mode and rule files read, a launch refuses a mode
-    // naming a rule none defines before it creates anything.
-    crate::config::modes::check(&settings.modes, &settings.rules)?;
-    Ok((config, settings))
 }
 
 /// The commit `workspace`'s changes are counted from.

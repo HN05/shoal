@@ -195,7 +195,7 @@ async fn start_copied(
     records: Vec<PathBuf>,
 ) -> Result<i32> {
     let agent = &session.agent;
-    let settings = crate::client::workspaces::settings(
+    let settings = crate::config::settings(
         &ctx.paths,
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
@@ -226,7 +226,7 @@ async fn start_converted(
         .name()
         .parse()
         .with_context(|| format!("cannot start agent {agent} of {}", workspace.name))?;
-    let settings = crate::client::workspaces::settings(
+    let settings = crate::config::settings(
         &ctx.paths,
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
@@ -297,7 +297,7 @@ async fn launch(
             recovery.agent
         );
     }
-    let settings = crate::client::workspaces::settings(
+    let settings = crate::config::settings(
         &ctx.paths,
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )

@@ -8,10 +8,7 @@ use serde::{Deserialize, Serialize};
 use shoal_states::states;
 
 use crate::{
-    config::{
-        Settings, modes,
-        options::{Merge, Options},
-    },
+    config::options::{Merge, Options},
     model::SpaceKind,
 };
 
@@ -57,7 +54,7 @@ states!(
 );
 
 /// What a scoped agent may do at once, after approval, or not at all, as
-/// one layer writes it; [`resolve`] fills what no layer sets.
+/// one layer writes it; resolving the config fills what no layer sets.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Self)]
@@ -83,7 +80,7 @@ pub struct PermissionsConfig {
 
 impl PermissionsConfig {
     /// Each key's value where no mode or config sets one.
-    const KEY_DEFAULTS: Self = Self {
+    pub const KEY_DEFAULTS: Self = Self {
         issue_open: Some(Opening::Direct),
         pr_open: Some(Opening::Direct),
         issue_other_repositories: Some(OtherRepositories::Propose),
@@ -94,7 +91,7 @@ impl PermissionsConfig {
 
     /// The defaults of a mode that coordinates rather than edits: it decides
     /// its children's merges and issues elsewhere.
-    pub(crate) const COORDINATING: Self = Self {
+    pub const COORDINATING: Self = Self {
         issue_other_repositories: Some(OtherRepositories::Direct),
         merge: Some(Opening::Direct),
         ..Self::KEY_DEFAULTS
@@ -473,7 +470,8 @@ impl Permissions {
         })
     }
 
-    fn of_mode(layered: PermissionsConfig) -> Self {
+    /// The permissions `layered` gives, as a mode's.
+    pub fn of_mode(layered: PermissionsConfig) -> Self {
         Self {
             issue_open: Permission::of_mode(layered.issue_open),
             pr_open: Permission::of_mode(layered.pr_open),
@@ -493,23 +491,3 @@ pub struct SpaceMode<'a> {
     pub kind: SpaceKind,
     pub repository: bool,
 }
-
-/// The permissions of a space in `mode` under `settings`, before the tree
-/// narrows them; a space without a recorded mode has `[permissions]` and
-/// the keys' defaults. Each key resolves, highest first, from
-/// `[modes.NAME.permissions]`, `[permissions]`, the built-in mode's
-/// defaults, then the key's default.
-pub fn resolve(settings: &Settings, mode: Option<SpaceMode>) -> Result<Permissions> {
-    let (configured, built_in) = match mode {
-        Some(mode) => modes::permission_layers(&settings.modes, mode)?,
-        None => Default::default(),
-    };
-    let mut layered = PermissionsConfig::KEY_DEFAULTS;
-    for layer in [built_in, settings.permissions, configured] {
-        layered.merge(layer, Merge::SameLevel);
-    }
-    Ok(Permissions::of_mode(layered))
-}
-
-#[cfg(test)]
-mod tests;

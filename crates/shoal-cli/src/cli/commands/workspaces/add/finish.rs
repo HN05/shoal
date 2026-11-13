@@ -288,7 +288,7 @@ async fn enters_added(
     let Some(chosen) = agent.and_then(|agent| agent.agent.as_ref()) else {
         return Ok(true);
     };
-    let settings = crate::client::workspaces::settings(
+    let settings = crate::config::settings(
         &ctx.paths,
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )

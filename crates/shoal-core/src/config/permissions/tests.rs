@@ -3,6 +3,7 @@ use crate::config::{
     Config, Effective,
     repo::{ConfigLayers, parse},
 };
+use crate::model::SpaceKind;
 
 /// The settings of a repository whose local config is `repository`, under
 /// the global config `global`.

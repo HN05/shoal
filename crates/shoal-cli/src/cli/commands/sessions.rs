@@ -179,7 +179,7 @@ impl Target {
     /// The target's open sessions, each where an agent Shoal stopped waits
     /// marked with why.
     async fn sessions(&self, ctx: &Context) -> Result<Vec<Session>> {
-        let settings = crate::client::workspaces::settings(&ctx.paths, self.config()).await?;
+        let settings = crate::config::settings(&ctx.paths, self.config()).await?;
         terminal::sessions(&settings, &self.places()).await
     }
 

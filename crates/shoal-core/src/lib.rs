@@ -7,8 +7,10 @@ pub mod stdout;
 
 pub mod agent_git;
 pub mod agents;
+pub mod ai;
 pub mod build;
 pub mod caches;
+pub mod config;
 pub mod config_file;
 pub mod daemon_handoff;
 pub mod daemon_owner;
@@ -34,6 +36,7 @@ pub mod refusal;
 pub mod releases;
 pub mod removal;
 pub mod repository;
+pub mod reviews;
 pub mod secrets;
 pub mod service;
 pub mod sessions;
@@ -49,7 +52,10 @@ pub mod workers;
 
 use shoal_client as client;
 use shoal_client::time;
-use shoal_client::{agent, ai, config, demos, model, protocol, state};
+use shoal_client::{
+    agent, approvals, connection, demos, model, priority, protocol, resources, sim, space_names,
+    state, validate,
+};
 use shoal_forge as forge;
 use shoal_subprocess as subprocess;
 

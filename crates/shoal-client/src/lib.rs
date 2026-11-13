@@ -4,7 +4,6 @@
 pub mod agent;
 pub mod agent_messages;
 pub mod agents;
-pub mod ai;
 pub mod approvals;
 pub mod assignments;
 pub mod chats;
@@ -20,7 +19,6 @@ pub mod execution_ids;
 pub mod executions;
 pub mod files;
 pub mod forge_reads;
-pub mod fsutil;
 mod ids;
 pub mod integrations;
 pub mod item_numbers;

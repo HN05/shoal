@@ -43,7 +43,7 @@ pub(in crate::cli::commands) async fn open(
 /// `app.default`, else the only one installed, else one the user picks.
 async fn default_app(ctx: &Context, workspace: &Workspace) -> Result<DesktopApp> {
     let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
-    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
+    let settings = crate::config::settings(&ctx.paths, target).await?;
     match settings.app.default {
         Some(name) => Ok(name),
         None => choose(ctx),

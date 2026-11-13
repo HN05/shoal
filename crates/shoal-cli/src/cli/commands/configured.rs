@@ -164,7 +164,7 @@ pub(in crate::cli) fn current_workspace(workspaces: &[Workspace]) -> Result<Opti
 
 async fn defines(ctx: &Context, workspace: &SpaceId, name: &str) -> Result<bool> {
     let target = ConfigTarget::Workspace(SpaceSelector::id(workspace));
-    Ok(crate::client::workspaces::settings(&ctx.paths, target)
+    Ok(crate::config::settings(&ctx.paths, target)
         .await?
         .commands
         .contains_key(name))
@@ -214,8 +214,7 @@ async fn run_defined(
     };
     recent::record(ctx, &workspace).await;
     let settings =
-        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
-            .await?;
+        crate::config::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
     let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
     let command = expand(
         &ctx.paths,
@@ -276,7 +275,7 @@ async fn not_configured(ctx: &Context, name: &str, target: ConfigTarget) -> anyh
         ConfigTarget::Global => {
             Config::load(&ctx.paths).and_then(|config| config.resolve(&ConfigLayers::default()))
         }
-        target => crate::client::workspaces::settings(&ctx.paths, target).await,
+        target => crate::config::settings(&ctx.paths, target).await,
     };
     let is_agent = settings.is_ok_and(|settings| {
         agents::names(&settings)

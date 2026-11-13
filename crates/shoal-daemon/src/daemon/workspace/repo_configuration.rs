@@ -3,6 +3,7 @@
 use super::Manager;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
+use crate::config::hooks::HookCommand;
 use crate::{
     config::{
         self, Config, Effective,

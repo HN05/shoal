@@ -21,7 +21,7 @@ its own from the first file that sets it:
    ignored, with a warning in `shoal config show` and a notification.
 3. The **global config**, `~/.config/shoal/config.toml` (or
    `$XDG_CONFIG_HOME/shoal/config.toml`), which `shoal daemon install` creates
-   from [default.toml](../crates/shoal-client/configs/default.toml).
+   from [default.toml](../crates/shoal-core/configs/default.toml).
 4. The **built-in default**.
 
 The global file's `[machine]` table holds the settings that describe this

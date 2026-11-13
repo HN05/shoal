@@ -15,7 +15,7 @@ pub async fn configured_environment(
     paths: &CommandPaths,
     workspace: &Workspace,
 ) -> Result<BTreeMap<String, OsString>> {
-    let settings = crate::client::workspaces::settings(
+    let settings = crate::config::settings(
         paths,
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )

@@ -1,4 +1,5 @@
 use super::*;
+use crate::config::hooks::HookCommand;
 use crate::config::hooks::HookKind;
 use crate::config::{self, named_commands, repo::parse};
 use serde_json::Value;

@@ -98,7 +98,8 @@ async fn diff_base(
     if !uses_diff_base(argv) {
         return Ok(None);
     }
-    let base = crate::workspaces::diff_base(daemon, SpaceSelector::id(&workspace.id)).await?;
+    let base =
+        crate::client::workspaces::diff_base(daemon, SpaceSelector::id(&workspace.id)).await?;
     Ok(Some(base.commit))
 }
 

@@ -28,6 +28,7 @@ serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
 shoal-client = { workspace = true, features = ["clap", "rusqlite"] }
+shoal-config-derive.workspace = true
 shoal-forge = { workspace = true, features = ["clap", "rusqlite"] }
 shoal-proxy.workspace = true
 shoal-refs = { workspace = true, features = ["rusqlite"] }

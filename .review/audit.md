@@ -58,7 +58,7 @@ by these areas, giving any path not listed to the closest one:
   `crates/shoal-daemon/src/daemon/questions`,
   `crates/shoal-daemon/src/daemon/chats`
 - CLI and configuration: `crates/shoal-cli/src/cli`,
-  `crates/shoal-client/src/config`, `crates/shoal-core/src/presets`,
+  `crates/shoal-core/src/config`, `crates/shoal-core/src/presets`,
   `crates/shoal-daemon/src/seed`, `crates/shoal-core/src/transfer`
 - Tests, CI and release tooling: `tests`, `crates/shoal-subprocess`,
   `.forgejo`, `scripts`

@@ -551,7 +551,7 @@ async fn prepare_agent_launch(
     if !has_agent && !matches!(mode, Mode::Publish) {
         return Ok(None);
     }
-    let (config, settings) = crate::client::workspaces::configuration(
+    let (config, settings) = crate::config::configuration(
         paths,
         crate::protocol::ConfigTarget::Workspace(workspace.clone()),
     )

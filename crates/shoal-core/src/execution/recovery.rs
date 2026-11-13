@@ -306,7 +306,7 @@ impl Recovery {
         handoff: Option<&str>,
         stop: Option<&Stop>,
     ) -> Result<Self> {
-        let settings = crate::client::workspaces::settings(
+        let settings = crate::config::settings(
             paths,
             ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
         )

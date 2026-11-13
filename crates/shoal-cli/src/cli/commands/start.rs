@@ -298,7 +298,7 @@ async fn picked_mode(ctx: &Context, args: &mut StartArgs) -> Result<modes::ModeN
     let settings = match (&selector, &args.in_workspace) {
         (Some(selector), None) => {
             let target = ConfigTarget::Repository(selector.clone());
-            crate::client::workspaces::settings(&ctx.paths, target).await?
+            crate::config::settings(&ctx.paths, target).await?
         }
         _ => mode_settings(ctx, args).await?,
     };
@@ -451,7 +451,7 @@ fn asked_kind(args: &StartArgs) -> Option<SpaceKind> {
 async fn mode_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
     if let Some(Some(workspace)) = &args.in_workspace {
         let target = ConfigTarget::Workspace(workspace.clone());
-        return crate::client::workspaces::settings(&ctx.paths, target).await;
+        return crate::config::settings(&ctx.paths, target).await;
     }
     match mode_repository(ctx, args).await? {
         Some(id) => {
@@ -459,7 +459,7 @@ async fn mode_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
                 Some(workspace) => ConfigTarget::Workspace(SpaceSelector::Id(workspace)),
                 None => ConfigTarget::Repository(id.into()),
             };
-            crate::client::workspaces::settings(&ctx.paths, target).await
+            crate::config::settings(&ctx.paths, target).await
         }
         None => {
             crate::config::Config::load_with_templates(&ctx.paths)?.resolve(&Default::default())
@@ -721,7 +721,7 @@ async fn forked(
         None => running.name().parse()?,
     };
     let target = ConfigTarget::Workspace(parent.clone());
-    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
+    let settings = crate::config::settings(&ctx.paths, target).await?;
     crate::agents::ensure_forks(&settings, &agent)?;
     Ok((parent, agent, session))
 }

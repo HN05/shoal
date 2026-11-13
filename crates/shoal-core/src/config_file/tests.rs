@@ -1,7 +1,7 @@
 use super::*;
 use crate::config::{edit, repo::ConfigLayers};
 
-const TEMPLATE: &str = include_str!("../../../shoal-client/configs/default.toml");
+const TEMPLATE: &str = include_str!("../../configs/default.toml");
 
 #[test]
 fn install_writes_the_template_once_and_keeps_edits() {

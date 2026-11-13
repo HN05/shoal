@@ -11,7 +11,7 @@ use std::{
 };
 
 pub use crate::client::secrets::Secret;
-pub(crate) use crate::client::secrets::{Secrets, validate};
+pub(crate) use crate::client::secrets::Secrets;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     client::approvals::SecretSpecification,
@@ -286,6 +286,33 @@ async fn fetch(name: &str, secret: &Secret, path: Option<&OsStr>) -> Result<OsSt
     crate::config::value::command_output(&secret.command, path)
         .await
         .with_context(|| format!("secrets.{name}"))
+}
+
+/// Configured secrets name variables Shoal may set, with commands it can run.
+pub fn validate(secrets: &Secrets) -> Result<()> {
+    for (name, secret) in secrets {
+        crate::env::validate_configured_name("[secrets]", name)?;
+        ensure!(
+            !crate::env::PROTECTED.contains(&name.as_str()),
+            "[secrets] cannot set {name}"
+        );
+        crate::config::value::validate_command(
+            &format!("secrets.{name}.command"),
+            &secret.command,
+        )?;
+        // Environment secrets are fetched before the agent can ask for them.
+        ensure!(
+            !secret.requires_approval || !secret.tools.is_empty(),
+            "secrets.{name}.requires_approval needs tools: an agent's environment is fetched before it can ask"
+        );
+        for tool in &secret.tools {
+            ensure!(
+                !tool.is_empty() && !tool.starts_with('.') && !tool.contains(['/', '\0']),
+                "secrets.{name}.tools: {tool:?} is not a program name"
+            );
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

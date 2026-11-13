@@ -62,8 +62,7 @@ async fn running_turns(ctx: &Context, spaces: &[PresentSpace]) -> Result<Vec<Int
     let mut interruptions = Vec::new();
     for space in spaces {
         let agents = agents_in(ctx, space).await?;
-        let settings =
-            crate::client::workspaces::settings(&ctx.paths, ConfigTarget::space(space)).await?;
+        let settings = crate::config::settings(&ctx.paths, ConfigTarget::space(space)).await?;
         for agent in agents.into_iter().filter(|agent| runs_turn(agent.state)) {
             let target = Target::of(space, agent)?;
             let key = (target.agent.as_ref())

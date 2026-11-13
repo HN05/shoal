@@ -138,7 +138,7 @@ async fn start_saved(
     change: Option<&PermissionChange>,
 ) -> Result<Started> {
     let repo = saved_repository(ctx, chat).await?;
-    let settings = crate::client::workspaces::settings(&ctx.paths, repo.config()).await?;
+    let settings = crate::config::settings(&ctx.paths, repo.config()).await?;
     // The restored agent keeps its mode's rules; its subject was sent once.
     let topic = match (&chat.workspace, &repo) {
         (Some(workspace), _) => chat::Topic::workspace(

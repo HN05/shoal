@@ -33,8 +33,7 @@ pub(in crate::cli::commands) async fn edit(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let settings =
-        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
-            .await?;
+        crate::config::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
     if settings.commands.contains_key(EDIT) {
         return configured::run(ctx, EDIT, Some(workspace.clone()), args).await;
     }

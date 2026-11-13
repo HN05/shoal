@@ -138,7 +138,7 @@ async fn start_session(
         queue::queue(ctx, workspace, &session.id, true).await?;
         return Ok(Started::InWrapper);
     }
-    let settings = crate::client::workspaces::settings(
+    let settings = crate::config::settings(
         &ctx.paths,
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )

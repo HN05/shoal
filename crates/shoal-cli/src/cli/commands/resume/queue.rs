@@ -143,7 +143,7 @@ pub(super) async fn ensure_daemon_starts(
         if !saved.restores_outside_wrappers() {
             continue;
         }
-        let settings = crate::client::workspaces::settings(
+        let settings = crate::config::settings(
             &ctx.paths,
             ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
         )

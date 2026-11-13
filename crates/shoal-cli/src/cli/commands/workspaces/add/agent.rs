@@ -55,9 +55,7 @@ impl<'a> AddSettings<'a> {
 
     pub(super) async fn get(&self) -> Result<&crate::config::Effective> {
         self.effective
-            .get_or_try_init(|| {
-                crate::client::workspaces::settings(&self.ctx.paths, self.target.clone())
-            })
+            .get_or_try_init(|| crate::config::settings(&self.ctx.paths, self.target.clone()))
             .await
     }
 }

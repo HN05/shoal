@@ -118,7 +118,7 @@ without an installed service offers to run `shoal daemon install` in an interact
 current `PATH` for the service, so install runtime dependencies and any hook
 tools first. It also creates `~/.config/shoal/config.toml` (or
 `$XDG_CONFIG_HOME/shoal/config.toml`) from
-[default.toml](../crates/shoal-client/configs/default.toml), which states every default,
+[default.toml](../crates/shoal-core/configs/default.toml), which states every default,
 never touching an existing file; `--dry-run` writes
 nothing. Installation prints
 the shell initialization hint only when neither `.bashrc` nor `.zshrc` (under
@@ -2218,16 +2218,16 @@ Shoal ships these modes:
 
 | Mode | Kind | Rules | Instructions | Focus | Idle wake |
 |---|---|---|---|---|---|
-| `worker` | workspace | `work`, `worker` | [implement the subject](../crates/shoal-client/src/config/modes/worker.md) | unset | 60 |
+| `worker` | workspace | `work`, `worker` | [implement the subject](../crates/shoal-core/src/config/modes/worker.md) | unset | 60 |
 | `chat` | chat | `work`, `chat` | none | `true` | unset |
-| `plan` | chat | `work`, `chat` | [settle the issue's plan](../crates/shoal-client/src/config/modes/plan.md) | `true` | unset |
-| `orchestrate` | chat without a repository | `work`, `chat`, [`orchestrate`](../crates/shoal-client/src/config/rules/orchestrate.md) | none | `true` | unset |
+| `plan` | chat | `work`, `chat` | [settle the issue's plan](../crates/shoal-core/src/config/modes/plan.md) | `true` | unset |
+| `orchestrate` | chat without a repository | `work`, `chat`, [`orchestrate`](../crates/shoal-core/src/config/rules/orchestrate.md) | none | `true` | unset |
 
 The built-in `setup` mode is apart from these: [`repo setup` and `config
 setup`](#set-up-config) start it, and a space records it as its mode. It takes
 the kind, reach, rules and permissions of `worker` in a workspace and of
 `orchestrate` in a chat without a repository, as config sets them, and [its own
-instructions](../crates/shoal-client/src/config/modes/setup.md) after its subject.
+instructions](../crates/shoal-core/src/config/modes/setup.md) after its subject.
 Its agent waits for the user, so Shoal never wakes it while it is idle. Config
 cannot change it: `[modes.setup]` in any layer and a `modes/setup.md` file are
 errors that ask for another name, and `shoal start --mode setup` is refused.
@@ -2254,7 +2254,7 @@ new agent in an existing space may start in another mode; a running agent's mode
 latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
 `shoal status` names it, and the rows of `shoal list`, `shoal inbox`, the
 queue and the menu name a mode other than `worker` for a workspace or `chat`
-for a chat in a column of its own. The built-in [`work` rule](../crates/shoal-client/src/config/rules/work.md)
+for a chat in a column of its own. The built-in [`work` rule](../crates/shoal-core/src/config/rules/work.md)
 holds the practices of Shoal's workflow. A user's own modes may list it or
 leave it out, and a `rules/work.md` or `[rules.work]` replaces or extends it as
 for any rule. `review` holds the style of a [local review](#local-reviews), and
@@ -2273,12 +2273,12 @@ An agent is told, in order: the [`shoal` skill](#agent-skill-outside-project-rep
 which describes Shoal's commands; the facts of its space; the space rules; its
 mode's rules; and its subject with its mode's instructions. Every agent's system
 text, in any mode, starts with Shoal's guidance: the facts of the kind of space
-it runs in, a [workspace](../crates/shoal-client/src/config/templates/facts/workspace.md), a
-[chat in the checkout](../crates/shoal-client/src/config/templates/facts/checkout_chat.md),
-a [chat in a workspace's worktree](../crates/shoal-client/src/config/templates/facts/workspace_chat.md)
-or a [chat without a repository](../crates/shoal-client/src/config/templates/facts/root_chat.md),
+it runs in, a [workspace](../crates/shoal-core/src/config/templates/facts/workspace.md), a
+[chat in the checkout](../crates/shoal-core/src/config/templates/facts/checkout_chat.md),
+a [chat in a workspace's worktree](../crates/shoal-core/src/config/templates/facts/workspace_chat.md)
+or a [chat without a repository](../crates/shoal-core/src/config/templates/facts/root_chat.md),
 which describe the space and state no practices; then the
-[space rules](../crates/shoal-client/src/config/templates/space_rules.md), to load the
+[space rules](../crates/shoal-core/src/config/templates/space_rules.md), to load the
 `shoal` skill, or read what `shoal skill` prints, before any other action, to run `shoal done` only when it has no
 further work to do and it and its work are completely finished, to name its space with `shoal rename`, and,
 when a call that combines a `shoal` command with other commands is refused, to
@@ -2345,7 +2345,7 @@ gives the recorded ones as `narrowing`, beside the effective `permissions`,
 where a given key's `from` is `given`.
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the
-[review template](../crates/shoal-client/src/config/templates/review.md), its task,
+[review template](../crates/shoal-core/src/config/templates/review.md), its task,
 read-only rules, output contract and treatment of history, which no layer
 replaces, followed by the `review` rule's text. `{workspace}`, `{branch}`,
 `{path}`, the review's checkout, and `{base}`, the commit it compares against,

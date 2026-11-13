@@ -2533,11 +2533,11 @@ pub(crate) fn strip_shoal_arguments(text: &str, separator: char) -> String {
 pub(crate) const GUIDANCE_START: &str = "You are working in Shoal workspace ";
 
 const SPACE_RULES: &str =
-    include_str!("../../crates/shoal-client/src/config/templates/space_rules.md");
+    include_str!("../../crates/shoal-core/src/config/templates/space_rules.md");
 
 /// The built-in `work` rule, which the built-in modes list right after the
 /// guidance.
-const WORK_RULE: &str = include_str!("../../crates/shoal-client/src/config/rules/work.md");
+const WORK_RULE: &str = include_str!("../../crates/shoal-core/src/config/rules/work.md");
 
 /// Where the guidance that starts at `start` in `text` ends, with the
 /// built-in `work` rule when it follows.

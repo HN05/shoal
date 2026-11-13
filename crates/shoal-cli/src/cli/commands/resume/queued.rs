@@ -59,7 +59,7 @@ pub(in crate::cli::commands) async fn start_queued(
     let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace))
         .await?
         .workspace;
-    let settings = crate::client::workspaces::settings(
+    let settings = crate::config::settings(
         &ctx.paths,
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )

@@ -108,7 +108,7 @@ async fn sessions(ctx: &Context, space: &SpaceDetail) -> Result<Vec<crate::termi
         ),
         SpaceDetail::Chat { chat } => (ConfigTarget::chat(chat), Recorded::chat(chat)),
     };
-    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
+    let settings = crate::config::settings(&ctx.paths, target).await?;
     terminal::sessions(&settings, &places).await
 }
 

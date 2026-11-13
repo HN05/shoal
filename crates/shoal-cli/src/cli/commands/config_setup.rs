@@ -24,7 +24,7 @@ pub(super) async fn start(ctx: &Context, mut args: ConfigSetupArgs) -> Result<i3
 /// Start the setup chat `args` ask for.
 async fn setup(ctx: &Context, mut args: ConfigSetupArgs) -> Result<i32> {
     // Chosen before the config is written, so a refused agent leaves none.
-    let settings = crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Global).await?;
+    let settings = crate::config::settings(&ctx.paths, ConfigTarget::Global).await?;
     let agent = chat::chat_agent(ctx, &settings, args.agent.take())?;
     let model = std::mem::take(&mut args.model).into();
     chat::check_model(&settings, &agent, &model)?;

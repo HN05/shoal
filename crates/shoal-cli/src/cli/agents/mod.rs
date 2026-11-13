@@ -270,7 +270,7 @@ pub(super) async fn launch_agent(
     args: Vec<OsString>,
     options: LaunchOptions,
 ) -> Result<i32> {
-    let settings = crate::client::workspaces::settings(
+    let settings = crate::config::settings(
         &ctx.paths,
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
@@ -323,7 +323,7 @@ pub(super) async fn default_agent(
     target: ConfigTarget,
     agent: Option<Agent>,
 ) -> Result<Option<Agent>> {
-    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
+    let settings = crate::config::settings(&ctx.paths, target).await?;
     match agent.or(settings.agent.default.clone()) {
         Some(agent) => {
             ensure_available(&agent, &settings)?;
@@ -588,7 +588,7 @@ pub(in crate::cli) async fn trust_saved(ctx: &Context, workspace: &Workspace) {
 /// Trust the path of `workspace` for each of `agents` as a tracked launch
 /// does. Failures only warn.
 async fn trust_for(ctx: &Context, workspace: &Workspace, agents: Vec<Agent>) {
-    let settings = match crate::client::workspaces::settings(
+    let settings = match crate::config::settings(
         &ctx.paths,
         ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )

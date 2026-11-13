@@ -1,8 +1,18 @@
 //! The user's home directory.
-use std::{ffi::OsStr, path::PathBuf};
+use std::{
+    ffi::OsStr,
+    path::{Path, PathBuf},
+};
 
-pub use crate::client::fsutil::expand_home;
 pub use crate::client::paths::home_dir;
+
+/// Expand a leading `~` path component, without resolving users or symlinks.
+pub fn expand_home(path: &Path, home: &Path) -> PathBuf {
+    match path.strip_prefix("~") {
+        Ok(relative) => home.join(relative),
+        Err(_) => path.to_owned(),
+    }
+}
 
 /// The home directory of the user this process runs as, from the password
 /// database rather than `HOME`.

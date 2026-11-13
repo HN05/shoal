@@ -20,7 +20,7 @@ pub(super) async fn list(ctx: &Context, workspace: Option<SpaceSelector>) -> Res
     let workspace = scope(ctx, workspace).await?;
     let configured = match &workspace {
         Some(workspace) => {
-            crate::client::workspaces::settings(
+            crate::config::settings(
                 &ctx.paths,
                 ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
             )

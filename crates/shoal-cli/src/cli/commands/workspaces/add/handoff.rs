@@ -54,7 +54,7 @@ pub(in crate::cli) async fn start_queued(
         Some(workspace) => ConfigTarget::Workspace(SpaceSelector::id(workspace)),
         None => ConfigTarget::Repository(plan.repository.clone()),
     };
-    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
+    let settings = crate::config::settings(&ctx.paths, target).await?;
     let own_way =
         (plan.agent_name()).is_some_and(|agent| agents::runs_its_own_way(&agent, &settings));
     if own_way {

@@ -491,7 +491,7 @@ has no head channel, so every Homebrew installation runs a CI-signed release.
 leaves Homebrew installations to Homebrew, so one package manager owns each
 installation. A shared release-target table drives cross-builds,
 archive names and Homebrew platform selectors.
-Named configuration templates in `crates/shoal-client/configs/` are embedded at build time, so
+Named configuration templates in `crates/shoal-core/configs/` are embedded at build time, so
 installation needs no source checkout or network access.
 Shoal owns the generated formula. One Forgejo Actions workflow releases: it
 bumps versions, validates, creates and merges a version PR under normal branch

@@ -2,6 +2,7 @@
 //! commit. Integrations read them from the event journal; they neither notify
 //! the user nor affect completion or cleanup.
 use crate::client::space_ids::SpaceId;
+use crate::config::hooks::HookCommand;
 use crate::forge::items::reference::ItemRef;
 use std::{collections::BTreeMap, ffi::OsString, path::Path, time::Duration};
 
