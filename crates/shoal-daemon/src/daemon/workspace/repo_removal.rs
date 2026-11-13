@@ -113,6 +113,9 @@ impl Manager {
             .filter(|w| w.repository_id == repo.id)
             .collect();
         self.check_repository_boundaries(&repo, &workspaces).await?;
+        // A run its review left may still have its reviewer's processes in
+        // the directory `.reviews` would delete.
+        self.ensure_no_review_runs_left(&repo.id).await?;
         self.delete_runner_of_removed(&repo).await?;
         let progress = match self.removal_progress(&repo.id).await? {
             Some(progress) => progress,
@@ -145,7 +148,6 @@ impl Manager {
         self.remove_seed(&repo).await?;
         delete_caches(&repo).await?;
         delete_shoal_dir(&repo, Contents::TmpDirs).await?;
-        // Every run of the repository's reviews was stopped and removed.
         delete_shoal_dir(&repo, Contents::ReviewRuns).await?;
         self.delete_proposal_files(&repo).await?;
         super::imported_sessions::remove_imported_sessions(&repo).await?;

@@ -317,10 +317,8 @@ impl Manager {
         }
     }
 
-    /// Refuse while a review of the repository is queued or running, or a
-    /// review that ended, even with its workspace, still has a checkout, a
-    /// worktree of the repository, or left its run in the repository's
-    /// directory.
+    /// Refuse while a review of the repository is queued or running, or
+    /// [`Self::ensure_no_review_runs_left`] refuses.
     pub(crate) async fn ensure_no_reviews_in(&self, repository_id: &RepositoryId) -> Result<()> {
         let id = repository_id.to_owned();
         let active = self.store.run(move |db| store::active_in(db, &id)).await?;
@@ -328,6 +326,17 @@ impl Manager {
             active.is_empty() && !self.reviews.holds_checkout_of(repository_id, false),
             "a review of the repository is queued or running; wait for it or cancel it"
         );
+        self.ensure_no_review_runs_left(repository_id).await
+    }
+
+    /// Refuse while a review that ended, even with its workspace, still has
+    /// a checkout, a worktree of the repository, or left its run in the
+    /// repository's directory, as one whose reviewer's processes may still
+    /// run, which only a restarted daemon removes.
+    pub(crate) async fn ensure_no_review_runs_left(
+        &self,
+        repository_id: &RepositoryId,
+    ) -> Result<()> {
         let left = self.review_runs_left(repository_id).await?;
         ensure!(
             !self.reviews.holds_checkout_of(repository_id, true) && !left,

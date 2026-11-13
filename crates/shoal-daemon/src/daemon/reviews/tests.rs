@@ -1069,7 +1069,7 @@ async fn recovery_removes_the_runs_an_earlier_version_left_in_the_state_director
 }
 
 #[tokio::test]
-async fn a_run_left_in_the_repository_directory_holds_back_its_move() {
+async fn a_run_left_in_the_repository_directory_holds_back_its_move_and_removal() {
     let fixture = fixture(&[], "").await;
     let manager = &fixture.manager;
     let repository = fixture.workspace.repository_id.clone();
@@ -1078,6 +1078,8 @@ async fn a_run_left_in_the_repository_directory_holds_back_its_move() {
     let run = fixture.run(ReviewId(7));
     std::fs::create_dir_all(run.join("checkout")).unwrap();
     assert!(manager.ensure_no_reviews_in(&repository).await.is_err());
+    assert!(manager.remove_repository(&repository).await.is_err());
+    assert!(run.exists());
     std::fs::remove_dir_all(&run).unwrap();
     manager.ensure_no_reviews_in(&repository).await.unwrap();
 }
