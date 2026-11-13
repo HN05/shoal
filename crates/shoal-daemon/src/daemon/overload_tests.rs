@@ -38,6 +38,98 @@ async fn built_in_agents_resume_without_configuration_or_a_session_picker() {
 }
 
 #[tokio::test]
+async fn a_chats_agent_resumes_with_its_chats_rules_hooks_and_directories() {
+    let root = tempfile::tempdir().unwrap();
+    let mut command = crate::daemon::test_support::isolated_test(
+        root.path(),
+        "daemon::overload_tests::chat_restore_child",
+    );
+    assert!(bounded(command.status()).await.unwrap().success());
+}
+
+#[tokio::test]
+#[ignore = "isolated recovery lookup launched by the chat restore test"]
+async fn chat_restore_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    use crate::execution::recovery::Recovery;
+    let (_root, manager, workspace, serving) = fixture().await;
+    let paths = CommandPaths::from(manager.paths.clone());
+    let checkout = manager
+        .repository(&workspace.repository_id)
+        .await
+        .unwrap()
+        .path;
+    fs::write(
+        checkout.join(".shoal.toml"),
+        "[agents.claude]\ncommand = ['claude-fixture', '{args}']\n",
+    )
+    .unwrap();
+    let chat = manager
+        .start_chat(
+            workspace.repository_id.clone().into(),
+            "talk".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let records = crate::agents::HomeRecords::read(&paths, &SpaceSelector::id(&chat.id))
+        .await
+        .unwrap();
+    let home = records.home().unwrap();
+    assert_eq!(home.path(), checkout);
+
+    let session = "s1".into();
+    let restored = crate::execution::recovery::Restored {
+        mode: &crate::model::chat_mode(),
+        ..restored("claude", Some(&session))
+    };
+    let recovery = Recovery::resolve(&paths, home, restored, None, None)
+        .await
+        .unwrap();
+
+    // It continues its session, told the chat's rules again, with the
+    // hooks of a chat and its directories: `/tmp`, the default agent
+    // directory, and its temporary directory.
+    let settings = crate::config::settings(
+        &paths,
+        crate::protocol::ConfigTarget::Space(SpaceSelector::id(&chat.id)),
+    )
+    .await
+    .unwrap();
+    let rules = crate::agents::restored_instruction_args(
+        &settings,
+        &"claude".into(),
+        home,
+        &crate::model::chat_mode(),
+    );
+    assert!(!rules.is_empty());
+    let tool = &crate::ai::tools(&Default::default())["claude"];
+    let hooks =
+        crate::agents::hook_args(tool.integration, crate::agents::AgentSpace::Chat, false).unwrap();
+    let tmp_dir = fs::canonicalize(chat.tmp_dir.unwrap()).unwrap();
+    let directories = [fs::canonicalize("/tmp").unwrap(), tmp_dir];
+    let expected: Vec<std::ffi::OsString> = ["claude-fixture", "--resume", "s1"]
+        .into_iter()
+        .map(std::ffi::OsString::from)
+        .chain(rules)
+        .chain(hooks)
+        .chain(
+            directories
+                .iter()
+                .flat_map(|directory| tool.launch.arguments.add_dir_args(directory)),
+        )
+        .collect();
+    let (_prompt, arguments) = recovery.command.split_last().unwrap();
+    assert_eq!(arguments, expected);
+    serving.abort();
+}
+
+#[tokio::test]
 #[ignore = "isolated recovery lookup launched by built-in restore test"]
 async fn built_in_restore_child() {
     if std::env::var_os("SHOAL_TEST_HELPER").is_none() {

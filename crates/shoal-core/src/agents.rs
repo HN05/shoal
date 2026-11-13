@@ -12,6 +12,7 @@ mod claude;
 mod codex;
 pub mod detached;
 pub(crate) mod happy;
+mod homes;
 pub mod hook_reports;
 pub mod hooks;
 mod proxy;
@@ -31,12 +32,14 @@ use crate::{
 
 pub(crate) use args::insert_options;
 pub use args::{
-    dir_args, model_args, restored_instruction_args, workspace_args, workspace_dir_args,
+    chat_dir_args, dir_args, model_args, restored_instruction_args, workspace_args,
+    workspace_dir_args, writable_config_dir,
 };
 pub use checks::{
     NO_AGENT, check_model, check_queued_launch, checked_agent, ensure_available, ensure_forks,
     named_agent, programs, resolve_launch, resolve_model,
 };
+pub use homes::{AgentHome, HomeRecords};
 pub(crate) use proxy::{
     Routing, agent_url, launch_proxy, proxy_defaults, proxy_ends_turns, proxy_environment,
     route_through_proxy, upstream, with_proxy_args,

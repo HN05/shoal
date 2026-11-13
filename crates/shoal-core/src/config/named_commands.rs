@@ -95,6 +95,22 @@ pub async fn expand_with_fields(
     Ok(substitute(argv, &fields, args))
 }
 
+/// `name`'s command `argv` outside a workspace, with `fields`, refusing one
+/// that uses a placeholder only a workspace has a value for.
+pub fn substitute_outside_workspace(
+    name: &str,
+    argv: &[String],
+    fields: &[(&str, &OsStr)],
+    args: Vec<OsString>,
+) -> Result<Vec<OsString>> {
+    if let Some(placeholder) = workspace_only_placeholder(argv) {
+        anyhow::bail!(
+            "the {name} command uses {placeholder}, which has no value outside a workspace"
+        );
+    }
+    Ok(substitute(argv, fields, args))
+}
+
 /// The workspace's diff base commit when `argv` uses it.
 async fn diff_base(
     daemon: &impl Daemon,

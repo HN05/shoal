@@ -20,12 +20,12 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::{Agent, ModelChoice},
     agents::{
-        ADDED, Added, added, agent_integration, agent_off, dir_args, ensure_available,
-        ensure_forks, integration, programs, resolve_model,
+        ADDED, Added, added, agent_integration, agent_off, ensure_available, ensure_forks,
+        integration, programs, resolve_model,
     },
     ai::IntegrationKind,
     cli::{context::Context, ui},
-    config::{Config, Effective, modes, named_commands::Commands, templates},
+    config::{Effective, modes, named_commands::Commands, templates},
     model::{Chat, ChatHome, LinkedItem, Relation, RemovedWorkspace, Repository, Workspace},
     protocol::ConfigTarget,
     tools::{ensure_program, program_available},
@@ -460,54 +460,6 @@ pub(in crate::cli) fn fork_args(
         .arguments
         .fork_args(session, directory)
         .unwrap_or_default())
-}
-
-/// The arguments that give agent `name` of `chat` the configured agent
-/// directories and the chat's temporary directory as other working
-/// directories; for a setup chat without a repository also the directory
-/// of the global config beside `home`, which it may write.
-pub(in crate::cli) fn chat_dir_args(
-    settings: &Effective,
-    name: &Agent,
-    home: &Path,
-    chat: &Chat,
-) -> Vec<OsString> {
-    let tmp_dir = chat
-        .tmp_dir
-        .as_ref()
-        .map(|directory| std::fs::canonicalize(directory).unwrap_or_else(|_| directory.clone()));
-    let extra: Vec<_> = tmp_dir
-        .into_iter()
-        .chain(global_config_dir(chat, home))
-        .collect();
-    dir_args(settings, name, home, &extra)
-}
-
-/// The directory of the global config beside `home` when `chat` sets it up,
-/// as a setup chat without a repository does.
-fn global_config_dir(chat: &Chat, home: &Path) -> Option<PathBuf> {
-    let sets_up_global = chat.mode == modes::ModeName::SETUP && chat.repository_id.is_none();
-    sets_up_global
-        .then(|| launch_config_dir(&Config::path_for_home(home)))
-        .flatten()
-}
-
-/// The directory of the config file `file`, created when missing and
-/// resolved as agents compare paths, so a setup agent may write there.
-pub(in crate::cli) fn writable_config_dir(file: &Path) -> Result<PathBuf> {
-    crate::config_file::refuse_user_config(file)?;
-    let directory = file.parent().context("the config file has no directory")?;
-    std::fs::create_dir_all(directory)
-        .and_then(|()| std::fs::canonicalize(directory))
-        .with_context(|| format!("create {}", directory.display()))
-}
-
-/// [`writable_config_dir`] for a launch, which starts without it, with a
-/// warning, when it cannot be created.
-fn launch_config_dir(file: &Path) -> Option<PathBuf> {
-    writable_config_dir(file)
-        .map_err(|error| eprintln!("warning: the agent may not write its config: {error:#}"))
-        .ok()
 }
 
 /// Start a chat of agent `name` its integration's own way; `None` leaves it

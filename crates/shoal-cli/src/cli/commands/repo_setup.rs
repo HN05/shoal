@@ -88,7 +88,7 @@ fn add_options(options: &Options, prompt: String, on_terminal: bool) -> workspac
 /// where a checkout lies before the agent is told to write there.
 async fn local_config(ctx: &Context, repository: repository::Selector) -> Result<PathBuf> {
     let path = repositories::local_config_path(ctx, repository).await?;
-    let directory = agents::writable_config_dir(&path)?;
+    let directory = crate::agents::writable_config_dir(&path)?;
     Ok(directory.join(
         path.file_name()
             .context("the local config has no file name")?,

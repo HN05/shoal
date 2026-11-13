@@ -263,7 +263,8 @@ impl Launch {
             None => waiting_prompt(ctx, self.options.restore.as_ref()).await?,
         };
         let home = repository.home(workspace.as_ref());
-        let directories = agents::chat_dir_args(&settings, &self.agent, &ctx.paths.home, chat);
+        let directories =
+            crate::agents::chat_dir_args(&settings, &self.agent, &ctx.paths.home, chat);
         let command = command::command(
             &settings,
             [model_args, directories].concat(),

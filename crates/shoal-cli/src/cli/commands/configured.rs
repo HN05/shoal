@@ -259,12 +259,7 @@ pub(super) fn expand_outside_workspace(
     args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
     let argv = commands.get(name).ok_or_else(|| unknown_command(name))?;
-    if let Some(placeholder) = named_commands::workspace_only_placeholder(argv) {
-        anyhow::bail!(
-            "the {name} command uses {placeholder}, which has no value outside a workspace"
-        );
-    }
-    Ok(named_commands::substitute(argv, fields, args))
+    named_commands::substitute_outside_workspace(name, argv, fields, args)
 }
 
 /// The error for `name`, which no configuration it could run from defines

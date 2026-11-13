@@ -264,7 +264,7 @@ async fn workspace_dir_args(
 /// works in, when it takes arguments.
 fn chat_dir_args(app: &dyn App, settings: &Effective, home: &Path, chat: &Chat) -> Vec<OsString> {
     if app.takes_agent_args() {
-        super::chat_dir_args(settings, &app.agent(), home, chat)
+        crate::agents::chat_dir_args(settings, &app.agent(), home, chat)
     } else {
         Vec::new()
     }

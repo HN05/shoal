@@ -15,11 +15,9 @@ pub async fn configured_environment(
     paths: &CommandPaths,
     workspace: &Workspace,
 ) -> Result<BTreeMap<String, OsString>> {
-    let settings = crate::config::settings(
-        paths,
-        ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
-    )
-    .await?;
+    let settings =
+        crate::config::settings(paths, ConfigTarget::Space(SpaceSelector::id(&workspace.id)))
+            .await?;
     let repo = crate::client::repositories::list(paths)
         .await?
         .into_iter()

@@ -23,7 +23,7 @@ pub use crate::client::saved::{Saved, SavedCommand, SavedSession};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::{Agent, ModelChoice},
-    config::named_commands,
+    agents::AgentHome,
     fsutil::atomic::{Permissions, ReplaceOptions},
     model::{ExecutionSpace, Workspace},
     paths::{CommandPaths, Paths},
@@ -171,14 +171,14 @@ pub fn converted_subject(
     }
 }
 
-/// What a restore command of agent `name` in `workspace` is built from:
-/// the message it continues with and the arguments that keep its model and
+/// What a restore command of agent `name` in `home` is built from: the
+/// message it continues with and the arguments that keep its model and
 /// effort.
 struct RestoreCommand<'a> {
     paths: &'a CommandPaths,
     settings: &'a crate::config::Effective,
     name: &'a Agent,
-    workspace: &'a Workspace,
+    home: AgentHome<'a>,
     prompt: &'a std::ffi::OsStr,
     model_args: Vec<OsString>,
     /// The arguments that give the agent its mode's rules again, which only
@@ -191,15 +191,15 @@ impl RestoreCommand<'_> {
     /// and proxy arguments, and whether it carries the prompt. It is the
     /// user's own, so Shoal adds no rules to it.
     async fn configured(self, argv: &[String]) -> Result<(Vec<OsString>, bool)> {
-        let mut command = named_commands::expand_with_fields(
-            self.paths,
-            &self.settings.resume_commands,
-            self.name.name(),
-            self.workspace,
-            vec![],
-            &[("{prompt}", self.prompt)],
-        )
-        .await?;
+        let mut command = (self.home)
+            .expand(
+                self.paths,
+                &self.settings.resume_commands,
+                self.name.name(),
+                vec![],
+                &[("{prompt}", self.prompt)],
+            )
+            .await?;
         crate::agents::insert_options(&mut command, self.model_args);
         // Without Shoal's hooks it still goes through the agent's proxy.
         crate::agents::with_proxy_args(self.settings, self.name, &mut command);
@@ -207,14 +207,11 @@ impl RestoreCommand<'_> {
     }
 
     /// The agent's launcher with `resume_args`, its model, effort, rules and
-    /// workspace arguments, and the prompt.
+    /// its space's arguments, and the prompt.
     async fn resumed(self, mut args: Vec<OsString>) -> Result<Vec<OsString>> {
         args.extend(self.model_args);
         args.extend(self.instruction_args);
-        args.extend(
-            crate::agents::workspace_args(self.paths, self.settings, self.name, self.workspace)
-                .await?,
-        );
+        args.extend(self.home.args(self.paths, self.settings, self.name).await?);
         let takes_field = self
             .settings
             .launchers
@@ -223,15 +220,15 @@ impl RestoreCommand<'_> {
         if !takes_field {
             args.push(self.prompt.to_owned());
         }
-        named_commands::expand_with_fields(
-            self.paths,
-            &self.settings.launchers,
-            self.name.name(),
-            self.workspace,
-            args,
-            &[("{prompt}", self.prompt)],
-        )
-        .await
+        (self.home)
+            .expand(
+                self.paths,
+                &self.settings.launchers,
+                self.name.name(),
+                args,
+                &[("{prompt}", self.prompt)],
+            )
+            .await
     }
 }
 
@@ -285,37 +282,34 @@ impl Recovery {
         })
     }
 
-    /// [`Self::resolve`] in the workspace `space` as the daemon records it
-    /// now.
+    /// [`Self::resolve`] in the space `space` as the daemon records it now.
     async fn resolve_in(
         paths: &CommandPaths,
         space: &SpaceSelector,
         restored: Restored<'_>,
         stop: Option<&Stop>,
     ) -> Result<Self> {
-        let workspace = crate::client::workspaces::inspect(paths, space.clone())
-            .await?
-            .workspace;
-        Self::resolve(paths, &workspace, restored, None, stop).await
+        let records = crate::agents::HomeRecords::read(paths, space).await?;
+        Self::resolve(paths, records.home()?, restored, None, stop).await
     }
 
     /// Ask the `restored` session to continue, telling it about its `stop`
     /// and including `handoff` where the command accepts a prompt: agents
     /// with resume arguments and `{prompt}` in its `resume_command`. Resume
     /// arguments restore its session when known, otherwise the workspace's
-    /// latest session, with its model and effort.
-    pub async fn resolve(
+    /// latest session, with its model and effort, in `home`, a workspace or
+    /// a chat.
+    pub async fn resolve<'a>(
         paths: &CommandPaths,
-        workspace: &Workspace,
+        home: impl Into<AgentHome<'a>>,
         restored: Restored<'_>,
         handoff: Option<&str>,
         stop: Option<&Stop>,
     ) -> Result<Self> {
-        let settings = crate::config::settings(
-            paths,
-            ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
-        )
-        .await?;
+        let home = home.into();
+        let settings =
+            crate::config::settings(paths, ConfigTarget::Space(SpaceSelector::id(home.id())))
+                .await?;
         let name = restored.agent.normalized();
         // A restore of an agent config turned off waits, as one it cannot
         // run with its model does.
@@ -334,7 +328,7 @@ impl Recovery {
             paths,
             settings: &settings,
             name: &name,
-            workspace,
+            home,
             prompt: std::ffi::OsStr::new(&message),
             // A restore runs with what the agent ran with, or not at all, so
             // the record stays for once its templates take the values again.
@@ -342,7 +336,7 @@ impl Recovery {
             instruction_args: crate::agents::restored_instruction_args(
                 &settings,
                 &name,
-                workspace,
+                home,
                 restored.mode,
             ),
         };

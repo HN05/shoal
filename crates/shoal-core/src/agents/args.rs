@@ -9,12 +9,12 @@ use std::{
 
 use anyhow::{Context as _, Result};
 
-use super::{agent_integration, delivery, hook_args};
+use super::{AgentHome, hook_args};
 use crate::{
     agent::{Agent, ModelChoice},
-    config::{Effective, modes, templates},
+    config::{Config, Effective, modes},
     fsutil,
-    model::Workspace,
+    model::{Chat, Workspace},
     paths::CommandPaths,
 };
 
@@ -40,28 +40,24 @@ fn missing_template(name: &Agent, template: &str) -> anyhow::Error {
     )
 }
 
-/// The arguments that give agent `name`, restored in `workspace`, the
-/// system text of `mode` again, which a restored session started without;
-/// none for an agent that takes it only in its first message, which its
-/// session already has. A mode no config defines anymore gives the default
-/// mode's, with a warning, so a restore never waits on config.
-pub fn restored_instruction_args(
+/// The arguments that give agent `name`, restored in `home`, the system
+/// text of `mode` again, which a restored session started without; none
+/// for an agent that takes it only in its first message, which its session
+/// already has. A mode no config defines anymore gives the default mode's,
+/// with a warning, so a restore never waits on config.
+pub fn restored_instruction_args<'a>(
     settings: &Effective,
     name: &Agent,
-    workspace: &Workspace,
+    home: impl Into<AgentHome<'a>>,
     mode: &crate::config::modes::ModeName,
 ) -> Vec<OsString> {
-    let place = templates::Place::Workspace {
-        workspace,
-        delivery: delivery(agent_integration(settings, name), settings),
-    };
-    let issue = templates::IssueFields::linked(&workspace.links);
-    let system = templates::system(settings, mode, place, issue.as_ref()).or_else(|error| {
+    let home = home.into();
+    let system = home.system(settings, name, mode).or_else(|error| {
         eprintln!(
             "warning: the restored agent is told the rules of mode {} instead: {error:#}",
             modes::ModeName::DEFAULT
         );
-        templates::system(settings, &modes::ModeName::DEFAULT, place, issue.as_ref())
+        home.system(settings, name, &modes::ModeName::DEFAULT)
     });
     match system {
         Ok(system) => (settings.launch(name).arguments)
@@ -139,6 +135,54 @@ pub fn dir_args(
             .flat_map(|directory| arguments.add_dir_args(directory)),
     );
     args
+}
+
+/// The arguments that give agent `name` of `chat` the configured agent
+/// directories and the chat's temporary directory as other working
+/// directories; for a setup chat without a repository also the directory
+/// of the global config beside `home`, which it may write.
+pub fn chat_dir_args(
+    settings: &Effective,
+    name: &Agent,
+    home: &Path,
+    chat: &Chat,
+) -> Vec<OsString> {
+    let tmp_dir = chat
+        .tmp_dir
+        .as_ref()
+        .map(|directory| std::fs::canonicalize(directory).unwrap_or_else(|_| directory.clone()));
+    let extra: Vec<_> = tmp_dir
+        .into_iter()
+        .chain(global_config_dir(chat, home))
+        .collect();
+    dir_args(settings, name, home, &extra)
+}
+
+/// The directory of the global config beside `home` when `chat` sets it up,
+/// as a setup chat without a repository does.
+fn global_config_dir(chat: &Chat, home: &Path) -> Option<PathBuf> {
+    let sets_up_global = chat.mode == modes::ModeName::SETUP && chat.repository_id.is_none();
+    sets_up_global
+        .then(|| launch_config_dir(&Config::path_for_home(home)))
+        .flatten()
+}
+
+/// The directory of the config file `file`, created when missing and
+/// resolved as agents compare paths, so a setup agent may write there.
+pub fn writable_config_dir(file: &Path) -> Result<PathBuf> {
+    crate::config_file::refuse_user_config(file)?;
+    let directory = file.parent().context("the config file has no directory")?;
+    std::fs::create_dir_all(directory)
+        .and_then(|()| std::fs::canonicalize(directory))
+        .with_context(|| format!("create {}", directory.display()))
+}
+
+/// [`writable_config_dir`] for a launch, which starts without it, with a
+/// warning, when it cannot be created.
+fn launch_config_dir(file: &Path) -> Option<PathBuf> {
+    writable_config_dir(file)
+        .map_err(|error| eprintln!("warning: the agent may not write its config: {error:#}"))
+        .ok()
 }
 
 /// The configured agent directories, `~/` naming a path under `home`,
