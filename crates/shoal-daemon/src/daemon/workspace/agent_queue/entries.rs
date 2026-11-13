@@ -12,7 +12,7 @@ use super::{
     blockers,
     dispatch::Start,
     rank::Ranked,
-    store::{ENTRY_COLUMNS, Launch, entry, insert_launch, opens_existing_branch},
+    store::{self, ENTRY_COLUMNS, Launch, entry, insert_launch, opens_existing_branch},
 };
 use crate::client::{
     queue::QueueEntryId,
@@ -154,6 +154,27 @@ impl Manager {
                 .map(|(_, blocker)| blocker.name.clone())
                 .collect(),
         ))
+    }
+
+    /// The spaces the launches of new spaces go below, by entry: the
+    /// present one `--parent` names, else the space that queued the launch,
+    /// in whose scope it opens; none for a launch the user queued without a
+    /// parent, which opens a top-level space.
+    pub(in crate::daemon) async fn launch_parents(
+        &self,
+        entries: &[QueueEntry],
+    ) -> Result<HashMap<QueueEntryId, SpaceId>> {
+        let named = self.store.read(|tx| store::planned_parents(tx)).await?;
+        let mut parents: HashMap<_, _> = (entries.iter())
+            .filter(|entry| entry.kind == QueueKind::Launch && entry.space().is_none())
+            .filter_map(|entry| Some((entry.id.clone(), entry.queued_by.clone()?)))
+            .collect();
+        for (id, parent) in named {
+            if let Ok(parent) = self.space(&parent).await {
+                parents.insert(id, parent.id().clone());
+            }
+        }
+        Ok(parents)
     }
 
     /// Entries, the starting ones first and then the waiting ones in rank

@@ -145,6 +145,28 @@ pub(super) fn opens_existing_branch(plan: &str) -> bool {
         .is_ok_and(|plan| plan["creation"]["existing"].is_string())
 }
 
+/// The parents the launches of new spaces name with `--parent`, by entry.
+pub(super) fn planned_parents(
+    db: &rusqlite::Connection,
+) -> Result<Vec<(QueueEntryId, crate::client::space_names::SpaceSelector)>> {
+    let mut statement =
+        db.prepare("SELECT id,plan FROM agent_queue WHERE kind=?1 AND plan IS NOT NULL")?;
+    let rows = statement.query_map([QueueKind::Launch], |row| {
+        Ok((row.get::<_, QueueEntryId>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut parents = Vec::new();
+    for row in rows {
+        let (id, plan) = row?;
+        let parent = serde_json::from_str::<serde_json::Value>(&plan)
+            .ok()
+            .and_then(|plan| serde_json::from_value(plan["parent"].clone()).ok());
+        if let Some(parent) = parent {
+            parents.push((id, parent));
+        }
+    }
+    Ok(parents)
+}
+
 /// The branch the launch `plan` creates or opens, if it names one.
 fn planned_branch(plan: &str) -> Option<String> {
     let plan: serde_json::Value = serde_json::from_str(plan).ok()?;

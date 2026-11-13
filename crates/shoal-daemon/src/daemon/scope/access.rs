@@ -2,8 +2,9 @@
 //! scope allows.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use anyhow::{Context, Result, ensure};
+use std::collections::HashMap;
 
 use super::Caller;
 use crate::{
@@ -289,24 +290,26 @@ impl Manager {
         self.queue_entries().await
     }
 
-    /// The agent queue entries `caller` may act on: those for the
-    /// workspaces its scope reaches but its own, where it may queue agents,
-    /// and the launches of new workspaces that spaces it reaches queued.
+    /// The agent queue entries `caller` may act on: those its scope reaches
+    /// but its own space's, where it may queue agents. An entry without a
+    /// space of its own is reached through the spaces it is for: a CI job
+    /// through the spaces its run is for, a launch of a new space through
+    /// its parent.
     pub(in crate::daemon) async fn reachable_queue(
         &self,
         caller: Option<&Caller>,
     ) -> Result<Vec<QueueEntry>> {
         let mut entries = self.queue_entries().await?;
-        if let Some(caller) = caller {
-            let reached = self.reached_spaces(Some(caller)).await?;
-            let reaches = |space: &SpaceId| {
-                (reached.as_ref()).is_none_or(|reached| reached.iter().any(|id| id == space))
-            };
-            entries.retain(|entry| match entry.space() {
-                Some(workspace) => workspace != &caller.space_id && reaches(workspace),
-                None => entry.queued_by.as_ref().is_some_and(reaches),
-            });
-        }
+        let Some(caller) = caller else {
+            return Ok(entries);
+        };
+        entries.retain(|entry| entry.space() != Some(&caller.space_id));
+        let Some(reached) = self.reached_spaces(Some(caller)).await? else {
+            return Ok(entries);
+        };
+        let parents = self.launch_parents(&entries).await?;
+        entries
+            .retain(|entry| reached_through(entry, &parents).any(|space| reached.contains(space)));
         Ok(entries)
     }
 
@@ -412,3 +415,20 @@ impl Manager {
         Ok(selected.into())
     }
 }
+
+/// The spaces through which a scope reaches `entry`: its own, the spaces a
+/// CI job's run is for, or a new space's launch's parent among `parents`.
+fn reached_through<'a>(
+    entry: &'a QueueEntry,
+    parents: &'a HashMap<QueueEntryId, SpaceId>,
+) -> impl Iterator<Item = &'a SpaceId> {
+    let spaces: Vec<&SpaceId> = match (entry.space(), &entry.job) {
+        (Some(space), _) => vec![space],
+        (None, Some(job)) => job.space_ids.iter().collect(),
+        (None, None) => parents.get(&entry.id).into_iter().collect(),
+    };
+    spaces.into_iter()
+}
+
+#[cfg(test)]
+mod tests;
