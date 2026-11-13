@@ -3,6 +3,7 @@ use crate::space_ids::SpaceId;
 use crate::space_names::SpaceName;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use shoal_states::states;
 use tokio::{io::BufReader, net::UnixStream};
 
 use crate::space_names::SpaceSelector;
@@ -10,7 +11,6 @@ use crate::{
     connection::{Daemon, open_buffered, pages, reconnect, request, stream_closed},
     files::NewFile,
     protocol::{self, NotificationMethod, Response},
-    state::states,
 };
 
 states!(NotificationKind {

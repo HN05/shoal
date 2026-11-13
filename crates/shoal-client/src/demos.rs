@@ -9,12 +9,12 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
+use shoal_states::states;
 
 use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, request},
     protocol::DemoMethod,
-    state::states,
 };
 
 /// The variable a serving demo's port reaches its command as.

@@ -1311,6 +1311,7 @@ dependencies = [
  "shoal-config-derive",
  "shoal-forge",
  "shoal-refs",
+ "shoal-states",
  "shoal-subprocess",
  "shoal-time",
  "tempfile",
@@ -1352,6 +1353,7 @@ dependencies = [
  "shoal-forge",
  "shoal-proxy",
  "shoal-refs",
+ "shoal-states",
  "shoal-subprocess",
  "tempfile",
  "tokio",
@@ -1438,6 +1440,17 @@ name = "shoal-refs"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "rusqlite",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "shoal-states"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
  "rusqlite",
  "serde",
  "serde_json",

@@ -1,0 +1,23 @@
+[package]
+name = "shoal-states"
+version = "0.1.0"
+description = "The macros that give Shoal's typed names their stable spellings"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+# Store typed names in SQLite columns.
+rusqlite = ["dep:rusqlite"]
+# Take typed names as CLI values.
+clap = ["dep:clap"]
+
+[dependencies]
+clap = { workspace = true, optional = true }
+rusqlite = { workspace = true, optional = true }
+
+[dev-dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true

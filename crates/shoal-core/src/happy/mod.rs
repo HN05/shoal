@@ -6,12 +6,11 @@
 pub(crate) mod client;
 mod crypto;
 
+use shoal_states::states;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
 };
-
-use crate::state::states;
 
 states!(
     /// The agents Happy runs.

@@ -3,6 +3,7 @@
 //! journal holds them.
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use shoal_states::states;
 
 use crate::{
     connection::{self, Daemon},
@@ -10,7 +11,6 @@ use crate::{
     forge::updates::UpdateKind,
     protocol::WorkspaceMethod,
     space_names::SpaceSelector,
-    state::states,
     time::UnixTime,
 };
 

@@ -5,8 +5,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-
-use crate::state::states;
+use shoal_states::states;
 
 states!(
     /// The terminal hosts Shoal runs work in, in the order they claim a

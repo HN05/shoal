@@ -7,6 +7,7 @@ use std::{fmt, str::FromStr};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use shoal_refs::{BranchName, CommitId};
+use shoal_states::states;
 
 use crate::space_names::{SpaceName, SpaceSelector};
 use crate::{
@@ -14,7 +15,6 @@ use crate::{
     connection::{Daemon, await_reply, pages, request},
     protocol::{ReviewMethod, ReviewPiece},
     repository::Selector,
-    state::states,
 };
 
 mod failure;

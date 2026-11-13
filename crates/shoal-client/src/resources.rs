@@ -5,12 +5,9 @@ use std::{collections::BTreeMap, fmt, path::PathBuf, str::FromStr};
 
 use anyhow::{Result, bail, ensure};
 use serde::{Deserialize, Serialize};
+use shoal_states::{states, text_key};
 
-use crate::{
-    approvals::Lifetime,
-    state::{states, text_key},
-    validate,
-};
+use crate::{approvals::Lifetime, validate};
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct RepositoryView {

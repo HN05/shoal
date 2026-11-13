@@ -1,9 +1,9 @@
 use crate::agent::Agent;
 use crate::config::{modes, options::Options};
 use crate::sessions::HostName;
-use crate::state::states;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
+use shoal_states::states;
 use std::{
     collections::BTreeMap,
     fs,

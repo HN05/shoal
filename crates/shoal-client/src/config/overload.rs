@@ -2,7 +2,7 @@
 use anyhow::{Result, ensure};
 use serde::Deserialize;
 
-crate::state::states! {
+shoal_states::states! {
     /// How hard Shoal may load this machine: a computer someone works on, or
     /// one that only runs agents. It sets the CPU and memory thresholds that
     /// `[machine.overload]` leaves out.

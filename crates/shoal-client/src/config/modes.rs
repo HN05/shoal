@@ -78,7 +78,7 @@ pub struct ModeConfig {
     pub weight: Option<Weight>,
 }
 
-crate::state::states!(
+shoal_states::states!(
     /// How much of the machine a mode's agents take.
     Weight {
         /// They start at once, hold no agent slot and are never stopped

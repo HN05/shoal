@@ -5,6 +5,7 @@
 //! given to its agent sets, as given.
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
+use shoal_states::states;
 
 use crate::{
     config::{
@@ -12,7 +13,6 @@ use crate::{
         options::{Merge, Options},
     },
     model::SpaceKind,
-    state::states,
 };
 
 states!(

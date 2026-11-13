@@ -61,7 +61,7 @@ impl Response {
     }
 }
 
-crate::state::open_enum! {
+shoal_states::open_enum! {
     /// Open on receipt so newer daemons can still explain failures.
     ErrorCode {
         InvalidRequest => "invalid_request",

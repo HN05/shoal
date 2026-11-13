@@ -5,7 +5,7 @@ use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
 use shoal_refs::{BranchName, CommitId};
 
-crate::state::states!(
+shoal_states::states!(
     /// Why a checkpoint was taken.
     CheckpointCause {
         Manual => "manual",

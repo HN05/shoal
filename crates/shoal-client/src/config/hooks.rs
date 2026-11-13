@@ -26,7 +26,7 @@ impl HookDirectory {
 // structs retain their existing TOML keys and strict parsing.
 macro_rules! hook_kinds {
     ($($kind:ident => ($($field:ident).+, $name:literal, $directory:ident)),+ $(,)?) => {
-        crate::state::states!(HookKind { $($kind => $name),+ });
+        shoal_states::states!(HookKind { $($kind => $name),+ });
 
         impl HookKind {
             pub const ALL: &[Self] = &[$(Self::$kind),+];

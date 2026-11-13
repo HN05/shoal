@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use shoal_states::states;
 
 use crate::space_names::SpaceSelector;
 use crate::{
@@ -11,7 +12,7 @@ use crate::{
     model::{Checkpoint, CheckpointNumber, RestoredCheckpoint, Workspace},
     processes::Identity,
     protocol::RecoveryMethod,
-    state::{ExecutionState, states},
+    state::ExecutionState,
 };
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]

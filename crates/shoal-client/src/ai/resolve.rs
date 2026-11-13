@@ -86,7 +86,7 @@ impl LaunchProfile {
     }
 }
 
-crate::state::states!(
+shoal_states::states!(
     /// The Shoal integration a tool runs with: that of the built-in tool its
     /// lineage ends at. Agent hooks name it to the commands they run.
     IntegrationKind: ValueEnum {

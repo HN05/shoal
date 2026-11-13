@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use shoal_refs::CommitId;
+use shoal_states::states;
 
 use crate::{
     approvals::ApprovalRequest,
@@ -16,7 +17,6 @@ use crate::{
     model::{Relation, Repository, Workspace},
     notifications::Notification,
     questions::Question,
-    state::states,
     transcripts::ReportedSession,
 };
 

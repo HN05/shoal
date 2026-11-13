@@ -7,8 +7,9 @@ use std::collections::BTreeMap;
 
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
+use shoal_states::states;
 
-use crate::{approvals::Lifetime, state::states, validate};
+use crate::{approvals::Lifetime, validate};
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

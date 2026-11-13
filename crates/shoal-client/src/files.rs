@@ -6,12 +6,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
+use shoal_states::states;
 
 use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, pages},
     protocol::FileMethod,
-    state::states,
 };
 
 states!(FileSource {

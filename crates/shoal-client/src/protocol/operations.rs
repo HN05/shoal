@@ -370,7 +370,7 @@ impl OperationSpec {
     }
 }
 
-crate::state::states!(Step {
+shoal_states::states!(Step {
     SetupStarted => "setup_started",
     PostSetupStarted => "post_setup_started",
     /// What preparation runs after setup and its hook may start now.
@@ -384,7 +384,7 @@ crate::state::states!(Step {
     UnmergeStarted => "unmerge_started",
 });
 
-crate::state::states!(Stream {
+shoal_states::states!(Stream {
     Stdout => "stdout",
     Stderr => "stderr",
 });

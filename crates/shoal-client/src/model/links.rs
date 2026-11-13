@@ -80,7 +80,7 @@ impl SpaceLinks {
     }
 }
 
-crate::state::states!(
+shoal_states::states!(
     /// How an issue or PR relates to a workspace.
     Relation: ValueEnum {
         /// The work the workspace exists for; it drives completion and cleanup.

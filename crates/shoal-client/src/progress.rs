@@ -4,13 +4,14 @@
 //! steps, which `shoal progress --add-blocker` records.
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use shoal_states::states;
 
 use crate::{
     connection::{Daemon, request},
     model::Blocker,
     protocol::AgentMethod,
     space_names::SpaceSelector,
-    state::{BlockerKind, states},
+    state::BlockerKind,
     time::UnixTime,
 };
 

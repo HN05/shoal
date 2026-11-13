@@ -8,12 +8,12 @@ use std::{fmt, path::PathBuf, str::FromStr};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use shoal_states::states;
 use tokio::{io::BufReader, net::UnixStream};
 
 use crate::{
     connection::{Daemon, open_buffered, reconnect, stream_closed},
     protocol::{self, Body, Response, WorkspaceMethod},
-    state::states,
     time::UnixTime,
 };
 

@@ -8,6 +8,7 @@ use std::{collections::BTreeMap, fmt, str::FromStr};
 use anyhow::{Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use shoal_refs::{BranchName, CommitId};
+use shoal_states::{states, text_key};
 
 use crate::space_names::SpaceSelector;
 use crate::{
@@ -23,7 +24,6 @@ use crate::{
     protocol::ApprovalMethod,
     resources::{Definition, LockMode, RepositoryView, Scope},
     sim::Profile,
-    state::{states, text_key},
 };
 
 states!(

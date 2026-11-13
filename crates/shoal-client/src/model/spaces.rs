@@ -16,7 +16,7 @@ pub struct SpaceRef {
     pub branch: Option<String>,
 }
 
-crate::state::states!(
+shoal_states::states!(
     /// Whether a space is a workspace, with a worktree, or a chat.
     SpaceKind {
         Workspace => "workspace",

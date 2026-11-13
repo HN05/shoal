@@ -13,7 +13,7 @@ pub struct WorkspaceHold {
     pub placed_by: HoldPlacer,
 }
 
-crate::state::states!(
+shoal_states::states!(
     /// Who placed a hold, which decides who may release it.
     #[derive(Default)]
     HoldPlacer {

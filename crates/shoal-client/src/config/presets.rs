@@ -5,11 +5,9 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Result, ensure};
+use shoal_states::states;
 
-use crate::{
-    config::repo::{Cache, CacheScope},
-    state::states,
-};
+use crate::config::repo::{Cache, CacheScope};
 
 /// The shared cache the `cargo` preset keeps its files in.
 pub const CARGO_CACHE: &str = "preset.cargo";

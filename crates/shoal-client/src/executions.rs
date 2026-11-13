@@ -7,6 +7,7 @@ use crate::space_names::SpaceName;
 use std::{collections::BTreeMap, fs, io, path::Path, time::Duration};
 
 use serde::{Deserialize, Serialize};
+use shoal_states::states;
 
 use crate::{
     agent::{AgentSessionId, ModelChoice},
@@ -14,7 +15,7 @@ use crate::{
     processes::Identity,
     protocol::{ExecutionMethod, timing},
     sessions::{HostName, Origin},
-    state::{AgentState, TurnFailure, states},
+    state::{AgentState, TurnFailure},
 };
 
 states!(

@@ -50,7 +50,7 @@ impl<T: Leased> Acquisition<T> {
     }
 }
 
-crate::states!(
+shoal_states::states!(
     /// Why a request was not granted, as output names it.
     RefusalCode {
         /// A resource pool's capacity is taken.

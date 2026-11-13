@@ -175,7 +175,7 @@ impl UnsavedWork {
     }
 }
 
-crate::state::open_enum! {
+shoal_states::open_enum! {
     /// What removing a worktree did with its branch. Other values decode as
     /// `Unknown` without claiming confirmed deletion.
     BranchOutcome {

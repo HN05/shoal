@@ -100,11 +100,12 @@ for delivering a PR, under Committing near the end, decide when work is done.
   a named operation of the client module for its subject and never builds one
   itself. What the CLI alone needs, such as parsing, prompting and printing,
   stays in `shoal-cli`, and `shoal-client` depends on no Shoal crate but
-  `shoal-forge`, `shoal-refs`, `shoal-subprocess`, `shoal-time` and
-  `shoal-config-derive`.
-- `crates/shoal-time` holds the wall-clock timestamp type, and
-  `crates/shoal-refs` the commit and branch name types, that every crate
-  shares; neither depends on a Shoal crate.
+  `shoal-forge`, `shoal-refs`, `shoal-states`, `shoal-subprocess`,
+  `shoal-time` and `shoal-config-derive`.
+- `crates/shoal-time` holds the wall-clock timestamp type,
+  `crates/shoal-refs` the commit and branch name types, and
+  `crates/shoal-states` the macros that define typed names, that every crate
+  shares; none depends on a Shoal crate.
 - The CLI lives in `crates/shoal-cli` and the daemon in `crates/shoal-daemon`,
   neither of which depends on the other, so an edit in one rebuilds neither
   the other nor its tests. The `shoal` package is only `main`, which runs the
@@ -112,9 +113,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   or through code they call, lives in `crates/shoal-core`, in a top-level
   module named for what it does; it names neither the CLI nor the daemon and
   depends on no Shoal crate but `shoal-client`, `shoal-forge`, `shoal-proxy`,
-  `shoal-refs` and `shoal-subprocess`. Its items are `pub` only where another
-  Shoal crate uses them, and fixtures the other crates' tests share sit behind
-  its `test-support` feature.
+  `shoal-refs`, `shoal-states` and `shoal-subprocess`. Its items are `pub`
+  only where another Shoal crate uses them, and fixtures the other crates'
+  tests share sit behind its `test-support` feature.
 - `crates/shoal-cli` serves only the CLI. Code that the daemon, the execution
   wrapper, the proxy or the workers use lives outside it.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both

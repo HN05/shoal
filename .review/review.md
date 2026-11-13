@@ -23,13 +23,13 @@ instead of the PR delivery guidance below.
   that crate's connection and client-side logic; the CLI sends each daemon
   request through a named client operation and never builds one itself.
   `shoal-client` depends on no Shoal crate but `shoal-forge`, `shoal-refs`,
-  `shoal-subprocess`, `shoal-time` and `shoal-config-derive`.
+  `shoal-states`, `shoal-subprocess`, `shoal-time` and `shoal-config-derive`.
 - The CLI (`crates/shoal-cli`) and the daemon (`crates/shoal-daemon`) depend
   on neither each other; the `shoal` package's `main` joins them. Code they
   share lives in `crates/shoal-core`, which names neither and depends on no
-  Shoal crate but `shoal-client`, `shoal-forge`, `shoal-proxy`, `shoal-refs`
-  and `shoal-subprocess`. Flag an item there made `pub` that no other Shoal crate
-  uses, and test fixtures outside its `test-support` feature that other
+  Shoal crate but `shoal-client`, `shoal-forge`, `shoal-proxy`, `shoal-refs`,
+  `shoal-states` and `shoal-subprocess`. Flag an item there made `pub` that no
+  other Shoal crate uses, and test fixtures outside its `test-support` feature that other
   crates' tests need.
 - `crates/shoal-cli` serves only the CLI: flag code there that the daemon, the
   execution wrapper, the proxy or the workers need.
