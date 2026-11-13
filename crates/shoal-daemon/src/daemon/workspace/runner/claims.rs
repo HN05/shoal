@@ -367,7 +367,7 @@ impl Manager {
             .iter()
             .map(|(name, value)| (name.as_str(), value.clone()))
             .collect();
-        let launch = crate::execution::launch_detached(
+        let execution = crate::execution::launch_detached(
             &self.paths,
             &workspace.into(),
             log,
@@ -377,7 +377,7 @@ impl Manager {
             None,
         )
         .await?;
-        Ok(launch.execution_id)
+        Ok(execution.launch.execution_id)
     }
 
     /// Tests run no command; they record it with an execution they end.

@@ -38,9 +38,39 @@ pub async fn launch_detached(
     clear: &[&str],
     env: &[(&str, String)],
     agent: Option<&super::TrackedAgent>,
-) -> Result<DetachedLaunch> {
+) -> Result<DetachedExecution> {
     let launch = DetachedCommand::prepare(paths, space, log, command, clear, env, agent)?;
     launch.start().await
+}
+
+/// A detached execution this process launched, whose wrapper it can still
+/// stop.
+pub struct DetachedExecution {
+    pub launch: DetachedLaunch,
+    wrapper: Child,
+}
+
+impl DetachedExecution {
+    /// Interrupt the execution as Ctrl-C interrupts a command, which stops
+    /// it without saving it for `shoal restore`, and wait until its wrapper
+    /// reported the end and exited. The wrapper is this process's child, not
+    /// yet reaped, so its ID names no other process.
+    pub async fn interrupt(mut self) -> Result<()> {
+        let pid = self
+            .wrapper
+            .id()
+            .context("the execution wrapper was reaped")?;
+        let pid = libc::pid_t::try_from(pid).context("wrapper process ID out of range")?;
+        // SAFETY: kill takes no pointers.
+        if unsafe { libc::kill(pid, libc::SIGINT) } == -1 {
+            return Err(std::io::Error::last_os_error()).context("interrupt the execution wrapper");
+        }
+        self.wrapper
+            .wait()
+            .await
+            .context("wait for the execution wrapper")?;
+        Ok(())
+    }
 }
 
 /// What a detached wrapper reports on stdout once the daemon has recorded the
@@ -98,7 +128,7 @@ impl DetachedCommand {
         Ok(Self { log, child })
     }
 
-    async fn start(mut self) -> Result<DetachedLaunch> {
+    async fn start(mut self) -> Result<DetachedExecution> {
         let stdout = self
             .child
             .stdout
@@ -111,7 +141,10 @@ impl DetachedCommand {
         .await
         .context("detached launch was not recorded in time")??;
         match report {
-            Some(line) => serde_json::from_str(&line).context("unexpected detached launch report"),
+            Some(line) => Ok(DetachedExecution {
+                launch: serde_json::from_str(&line).context("unexpected detached launch report")?,
+                wrapper: self.child,
+            }),
             None => Err(detached_launch_failure(&self.log, &mut self.child).await),
         }
     }

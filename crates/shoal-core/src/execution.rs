@@ -29,7 +29,7 @@ use crate::{env, paths::CommandPaths};
 pub use cancellation::{cancel, cancellation};
 pub use completion::SetupVerificationFailure;
 pub use copy_ignored::copy_ignored_worker;
-pub use detached::{DetachedLaunch, launch_detached};
+pub use detached::{DetachedExecution, DetachedLaunch, launch_detached};
 use launch::{run_taken_over, run_tracked};
 use mode::Mode;
 pub use supervise::exit_code;
