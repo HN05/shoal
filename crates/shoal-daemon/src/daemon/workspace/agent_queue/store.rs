@@ -28,13 +28,16 @@ pub(super) struct QueuedRow {
     pub job: Option<String>,
     /// The mode a launch's agent starts in.
     pub mode: Option<crate::config::modes::ModeName>,
+    /// When it was queued.
+    pub queued_at: UnixTime,
 }
 
 /// The waiting rows of the queue, in order.
 pub(super) fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
     Ok(db
         .prepare(
-            "SELECT id,repository_id,kind,execution_id,space_id,env IS NOT NULL,automatic,job,mode
+            "SELECT id,repository_id,kind,execution_id,space_id,env IS NOT NULL,automatic,job,mode,
+                created_at
              FROM agent_queue WHERE state=?1 ORDER BY seq",
         )?
         .query_map([QueueState::Queued], |row| {
@@ -48,6 +51,7 @@ pub(super) fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
                 automatic: row.get(6)?,
                 job: row.get(7)?,
                 mode: row.get(8)?,
+                queued_at: row.get(9)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?)

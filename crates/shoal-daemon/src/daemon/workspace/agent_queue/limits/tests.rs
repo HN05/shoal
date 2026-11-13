@@ -22,6 +22,7 @@ fn job(id: &str, memory: u64) -> Waiting {
             },
         },
         light: false,
+        waited: Duration::ZERO,
     }
 }
 
@@ -76,6 +77,7 @@ fn waiting(entries: &[(&str, &str)]) -> Vec<Waiting> {
                 Work::Launch
             },
             light: id.starts_with('l'),
+            waited: Duration::ZERO,
         })
         .collect()
 }
@@ -439,6 +441,7 @@ fn a_oneshot_run_holds_no_slot_but_waits_for_memory_room_and_low_disk() {
         repository: "a".into(),
         work: Work::OneShot { after_stop: false },
         light: false,
+        waited: Duration::ZERO,
     }];
     let admitted = |limits: &Limits| !admit(&["a".into()], &review, limits, false).is_empty();
     // The machine's and the repository's one slot is taken.
@@ -469,4 +472,50 @@ fn a_oneshot_run_holds_no_slot_but_waits_for_memory_room_and_low_disk() {
         ..low_disk
     };
     assert!(admit(&[], &reviews, &beside, false).is_empty());
+}
+
+#[test]
+fn work_that_fits_starts_ahead_until_the_entry_waiting_for_memory_waited_its_limit() {
+    // An agent needs 2 GiB where 1 GiB is left, and a small job fits.
+    let room = free(GIB);
+    let limits = Limits {
+        room,
+        jobs: JobLimits {
+            room,
+            ..JobLimits::default()
+        },
+        ..Limits::default()
+    };
+    let queue = |waited| {
+        let mut queue = waiting(&[("agent", "a")]);
+        queue[0].waited = waited;
+        queue.push(job("job", GIB / 2));
+        queue
+    };
+    let backfilled = admit(
+        &[],
+        &queue(BACKFILL_FOR - Duration::from_secs(1)),
+        &limits,
+        false,
+    );
+    assert_eq!(backfilled, ["job"]);
+    assert_eq!(
+        held(&[], &queue(BACKFILL_FOR), &limits),
+        [
+            (
+                "agent".into(),
+                HeldBy::Memory {
+                    needed: 2 * GIB,
+                    left: GIB
+                }
+            ),
+            (
+                "job".into(),
+                HeldBy::Memory {
+                    needed: 2 * GIB,
+                    left: GIB
+                }
+            ),
+        ]
+    );
 }

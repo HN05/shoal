@@ -1565,7 +1565,11 @@ average with a floor, until its own is measured. The target is the warning
 thresholds that `load` sets, so the user picks how hard to push the machine
 rather than the mechanism's windows and intervals, and memory protection
 stays the safety net when settled agents grow later. An idle machine always
-admits one agent; critical readings admit none. Dynamic is machine-wide, so a
+admits one agent; critical readings admit none. When memory is short, work
+that fits, such as a small CI job, starts ahead of higher-ranked work that
+does not, so the machine stays busy; once that work has waited 15 minutes, a
+fixed value, nothing it outranks starts until it fits, so a large start is
+not passed over for good. Dynamic is machine-wide, so a
 repository's `dynamic` adds no limit. A positive number fixes a limit and `none` disables it
 for that layer. Fixed limits keep dynamic admission's disk rule, since an agent
 started on a nearly full disk is soon stopped by disk protection. Per-agent

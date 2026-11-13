@@ -1976,7 +1976,9 @@ caller's opens its workspace below the caller, or the space `--parent` names,
 with the checks the caller's own start would meet, and queue `--json` names
 the caller's space in its `queued_by`. The daemon starts waiting entries
 in [rank order](#queue-order) as slots free, passing over an entry whose
-repository is full, and records a `queue_started` notification. An entry queued from another host's pane, block
+repository is full or that does not fit in memory, and records a
+`queue_started` notification. Once an entry has waited 15 minutes for memory,
+nothing it outranks that needs memory starts until it fits. An entry queued from another host's pane, block
 or tab opens a background tab or window where it was queued; otherwise it runs where
 `terminal.default_host` puts it, by default a detached zmx session that `shoal attach`
 reaches. A start keeps its slot through setup until

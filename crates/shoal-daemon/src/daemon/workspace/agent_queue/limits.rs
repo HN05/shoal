@@ -5,6 +5,7 @@ use crate::client::repository_ids::RepositoryId;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use anyhow::Result;
@@ -118,7 +119,14 @@ pub(crate) struct Waiting {
     pub work: Work,
     /// Whether it starts a light agent, which needs neither a slot nor room.
     pub light: bool,
+    /// How long it has waited in the queue.
+    pub waited: Duration,
 }
+
+/// How long work that fits in memory may start ahead of a higher-ranked
+/// entry that does not: from then on nothing it outranks starts until it
+/// fits, so a large start cannot be passed over for good.
+pub(crate) const BACKFILL_FOR: Duration = Duration::from_secs(15 * 60);
 
 /// What one admission pass decided.
 #[derive(Debug, Default)]
@@ -167,6 +175,9 @@ pub(crate) fn admit(
         *used.entry(repository.as_str()).or_default() += 1;
     }
     let mut jobs = limits.jobs.running;
+    // What holds the entry waiting for memory past `BACKFILL_FOR`, which
+    // then holds every start it outranks that needs memory.
+    let mut starved: Option<HeldBy> = None;
     let mut admission = Admission::default();
     for entry in waiting {
         if let Work::Job { cost } = entry.work {
@@ -174,7 +185,12 @@ pub(crate) fn admit(
                 admission.hold(entry, Some(held));
                 continue;
             }
+            if let Some(held) = starved {
+                admission.hold(entry, Some(held));
+                continue;
+            }
             if let Err(held) = measured_fit(limits.jobs.room, started, |room| room.fits_job(cost)) {
+                starved = starved.or(overdue_for_memory(entry, held));
                 admission.hold(entry, held);
                 continue;
             }
@@ -210,7 +226,12 @@ pub(crate) fn admit(
             }
             continue;
         }
+        if let Some(held) = starved {
+            admission.hold(entry, Some(held));
+            continue;
+        }
         if let Err(held) = measured_fit(limits.room, started, capacity::Room::fits_agent) {
+            starved = starved.or(overdue_for_memory(entry, held));
             admission.hold(entry, held);
             continue;
         }
@@ -236,6 +257,15 @@ pub(crate) fn admit(
         admission.admitted.push(entry.id.clone());
     }
     admission
+}
+
+/// What holds `entry`, which did not fit for `held`, once it has waited for
+/// memory past `BACKFILL_FOR`.
+fn overdue_for_memory(entry: &Waiting, held: Unfit) -> Option<HeldBy> {
+    match held {
+        Some(held @ HeldBy::Memory { .. }) if entry.waited >= BACKFILL_FOR => Some(held),
+        _ => None,
+    }
 }
 
 /// What holds back a light agent, which needs no slot and no memory room:
@@ -317,6 +347,7 @@ pub(crate) fn room_for_a_job(occupied: &[RepositoryId], limits: &Limits) -> bool
             cost: capacity::JobCost { memory: Some(0) },
         },
         light: false,
+        waited: Duration::ZERO,
     }];
     !admit(occupied, &probe, limits, false).admitted.is_empty()
 }
