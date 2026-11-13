@@ -2636,7 +2636,7 @@ have reported its session through its hooks. The agent copies the session when
 it starts, so a queued fork includes what the parent did meanwhile. An agent
 without [`fork`](#agents) arguments, or one an app such as Happy runs,
 refuses it before the child is created.
-Workspace processes may queue agents only in the workspaces their scope
+Scoped processes may queue agents only in the workspaces their scope
 reaches but their own.
 
 Claude Code launched in a workspace runs `shoal internal worktree-create` and

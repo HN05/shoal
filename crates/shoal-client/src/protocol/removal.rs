@@ -42,7 +42,7 @@ pub enum RemovalMethod {
     /// saving them for `shoal restore`.
     StopSpace {
         space: SpaceSelector,
-        /// The user checked that executions Shoal cannot prove ended did.
+        /// The caller confirmed that executions Shoal cannot prove ended did.
         #[serde(default)]
         acknowledge_unproven: bool,
         /// What becomes of the agent launches waiting to start in it, which

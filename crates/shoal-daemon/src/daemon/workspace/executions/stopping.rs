@@ -278,7 +278,7 @@ impl Manager {
     /// something resumes them, recording the space `stopped_by` whose process
     /// stopped them. With `acknowledge_unproven`, executions whose launch
     /// identity was never recorded count as ended once nothing of them is
-    /// visible, because the user checked. Returns the waiting launches it
+    /// visible, because the caller confirmed it. Returns the waiting launches it
     /// cancelled as `launches` says. A CI job's workspace cancels the job's
     /// run on the forge instead, whose runner then stops it.
     pub async fn stop_space_manually(

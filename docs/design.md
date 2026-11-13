@@ -3103,7 +3103,7 @@ lacks before 17, while elsewhere only a run on the PR's head commit reports chec
 `ci` gathers both: it reruns and cancels one run by its URL, or the checks on a
 PR's head without one, and `view ci` reads a run as `view` reads an issue or PR.
 Run numbers overlap issue and PR numbers, so only a number after `ci` names a
-run. Workspace processes act only on runs of the default branch and of the
+run. Scoped processes act only on runs of the default branch and of the
 branches of the workspaces their scope reaches, in the repository they act in,
 which the daemon reads from the run before acting, and read any run of their
 repository.
