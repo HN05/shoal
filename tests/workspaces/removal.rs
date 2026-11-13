@@ -30,7 +30,11 @@ fn cleanup_removes_idle_candidates_on_request() {
     fixture.end_chat_agent(&parked_id);
     parked.wait().unwrap();
     let preview = fixture.ok(&["cleanup", "--dry-run"]);
-    assert_eq!(preview["removed"], serde_json::json!(["clean", "parked"]));
+    assert_eq!(
+        preview["removed"],
+        serde_json::json!(["clean", "parked"]),
+        "{preview}"
+    );
     assert_eq!(
         preview["kept"],
         serde_json::json!([

@@ -82,6 +82,51 @@ async fn own_git_commands_are_told_from_other_processes() {
     other.kill().await.unwrap();
 }
 
+#[tokio::test]
+async fn processes_that_exit_after_the_listing_are_no_activity() {
+    let root = tempfile::tempdir().unwrap();
+    let mut child = Command::new("sleep")
+        .arg("60")
+        .current_dir(root.path())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let users = DirectoryUsers::default();
+    users.of(root.path()).await.unwrap();
+    child.kill().await.unwrap();
+    child.wait().await.unwrap();
+    let active = users.activity_except(root.path(), &[]).await.unwrap();
+    assert_eq!(active, Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn own_git_commands_are_no_activity_in_the_directory() {
+    let root = tempfile::tempdir().unwrap();
+    let mut git = waiting_git(root.path());
+    let mut other = Command::new("sleep")
+        .arg("60")
+        .current_dir(root.path())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let active = (DirectoryUsers::default().activity_except(root.path(), &[]))
+        .await
+        .unwrap();
+    let named = |child: &tokio::process::Child| format!("(PID {})", child.id().unwrap());
+    assert!(
+        !active.iter().any(|process| process.ends_with(&named(&git))),
+        "{active:?}"
+    );
+    assert!(
+        active
+            .iter()
+            .any(|process| process.ends_with(&named(&other))),
+        "{active:?}"
+    );
+    git.kill().await.unwrap();
+    other.kill().await.unwrap();
+}
+
 #[tokio::test(start_paused = true)]
 async fn own_git_commands_count_once_the_wait_for_them_ends() {
     let root = tempfile::tempdir().unwrap();

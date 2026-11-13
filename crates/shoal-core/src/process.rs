@@ -88,6 +88,24 @@ impl DirectoryUsers {
             .collect())
     }
 
+    /// The processes whose use of the directory is activity in it: those
+    /// listed that still run, besides `excluded` and the Git commands this
+    /// process runs there, such as the daemon's status reads, and what they
+    /// started.
+    pub async fn activity_except(&self, root: &Path, excluded: &[u32]) -> Result<Vec<String>> {
+        let users = self.of(root).await?;
+        let own = self.own_git(&users).await?;
+        let mut active = Vec::new();
+        for (pid, name) in users {
+            let own = own.iter().any(|process| process.pid == pid);
+            if excluded.contains(&pid) || own || identity::capture(pid)?.is_none() {
+                continue;
+            }
+            active.push(format!("{name} (PID {pid})"));
+        }
+        Ok(active)
+    }
+
     /// The processes whose working directory is in the directory, with
     /// their command names.
     async fn of(&self, root: &Path) -> Result<Vec<(u32, String)>> {

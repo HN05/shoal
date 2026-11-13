@@ -49,14 +49,14 @@ impl std::ops::DerefMut for Inspection {
 }
 
 impl Inspection {
-    /// The processes `users` finds in the worktree, besides the wrappers
-    /// waiting to restore idle agents.
+    /// The processes `users` finds active in the worktree, besides the
+    /// wrappers waiting to restore idle agents.
     pub async fn load_directory_processes(
         &mut self,
         users: &process::DirectoryUsers,
     ) -> Result<()> {
         self.processes = users
-            .in_directory_except(&self.workspace.path, &wrappers(&self.idle_restores))
+            .activity_except(&self.workspace.path, &wrappers(&self.idle_restores))
             .await?;
         Ok(())
     }

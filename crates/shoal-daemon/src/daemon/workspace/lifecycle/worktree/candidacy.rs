@@ -45,15 +45,15 @@ async fn worktree_cleanup_reason(check: &RemovalCheck) -> Result<Option<CleanupR
     })
 }
 
-/// Whether a process `users` finds uses the directory, besides the wrappers
-/// waiting to restore the idle agents of `executions`.
+/// Whether a process `users` finds is active in the directory, besides the
+/// wrappers waiting to restore the idle agents of `executions`.
 async fn directory_in_use(
     path: &Path,
     executions: &CleanupExecutions,
     users: &process::DirectoryUsers,
 ) -> Result<bool> {
     let wrappers = removal::wrappers(&executions.idle);
-    Ok(!users.in_directory_except(path, &wrappers).await?.is_empty())
+    Ok(!users.activity_except(path, &wrappers).await?.is_empty())
 }
 
 /// The workspace's executions as cleanup sees them.
