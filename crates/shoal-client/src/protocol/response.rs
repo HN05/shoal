@@ -95,6 +95,9 @@ shoal_states::open_enum! {
         /// The daemon is about to exit and holds back new work; the request
         /// runs once the next daemon answers.
         Exiting => "exiting",
+        /// An import failed before it recorded anything of the space, which
+        /// this machine then does not have.
+        NotImported => "not_imported",
     }
 }
 
@@ -114,6 +117,7 @@ impl ErrorCode {
                 | Self::SetupFailed
                 | Self::HookFailed
                 | Self::PushFailed
+                | Self::NotImported
         )
     }
 }

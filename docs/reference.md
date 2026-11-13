@@ -3755,7 +3755,9 @@ a chat starts, in the mode it ran in, under its name, with its agent's `resume` 
 session for an agent without them or a session not kept. A single chat imported
 on a terminal opens beside it; with `--restore`, without a terminal, or among
 several files, it starts in a background place of the host that starts queued
-agents, which the report names. Workspace processes can neither export nor import.
+agents, which the report names. An import that fails before it records
+anything of the space reports the error code `not_imported`. Workspace
+processes can neither export nor import.
 
 `shoal move ssh <host> [space]...`, or `--repo <repository> --all`, moves each
 space with `ssh <host> shoal --json move import --restore`, after
@@ -3766,12 +3768,13 @@ start in the background there. It checks the spaces as a batch export does and
 asks once before ending them. Each space then moves on its own, after the
 spaces below it: Shoal stops its agents, saving their sessions, exports it
 while it stays here, and imports it there, and only once that import succeeds
-ends it here through the export's removal. When the export fails or Shoal
-there refuses the import, the space stays here, its stopped agents' restores are queued, and the
-report gives the other machine's error. When how the import ended is
-unknown, as when the connection drops, the space stays here with its agents
-stopped, since the other machine may have it, and the report names the
-`shoal restore` that continues it here. A workspace with a space below it
+ends it here through the export's removal. When the export fails, or the
+import never reaches Shoal there or fails with `not_imported`, the space stays
+here, its stopped agents' restores are queued, and the report gives the other
+machine's error. When the import fails otherwise, as when setup there fails or
+the connection drops, the space stays here with its agents stopped, since the
+other machine may have it, and the report names the `shoal restore` that
+continues it here. A workspace with a space below it
 that stayed is not exported and stays here. When the import succeeds but the
 space cannot end here, as for a workspace whose HEAD or unsaved files changed
 since its export or a failing `hooks.pre_remove`, it stays here too, and the

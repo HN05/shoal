@@ -4,6 +4,7 @@ use std::fs;
 
 use super::transfer::{exporter, import, importer, packaged_workspace};
 use crate::client::space_names::SpaceSelector;
+use crate::refusal::Reason;
 use crate::{
     daemon::{test_support::commit, workspace::Manager},
     execution::recovery,
@@ -140,4 +141,22 @@ async fn a_workspace_with_a_space_below_that_stays_is_not_exported() {
     // Its agent's record stays as it was, not restored by a move.
     let saved = recovery::Saved::load(&exporting.paths, &workspace.id).unwrap();
     assert_eq!(saved.agents.len(), 1);
+}
+
+#[tokio::test]
+async fn an_import_that_records_nothing_says_so() {
+    let (source, exporting, source_repo, origin) = exporter().await;
+    let (_target, importing, _) = importer(&origin).await;
+    let workspace = stopped_workspace(&exporting, &source_repo).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    let (exported, _) = export_moving(&exporting, &selector, source.path()).await;
+    let packaged = packaged_workspace(&exported.manifest);
+
+    let unknown = crate::repository::Selector::from("no-such-repository");
+    let error = importing
+        .import_workspace(&unknown, None, None, packaged.workspace.clone(), false, &[])
+        .await
+        .unwrap_err();
+    assert_eq!(Reason::of(&error), Some(Reason::NotImported));
+    assert!(importing.removed_workspaces().await.unwrap().is_empty());
 }

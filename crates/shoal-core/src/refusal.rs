@@ -15,6 +15,8 @@ pub enum Reason {
     NotReady,
     /// Removal would delete unsaved work the caller did not confirm.
     UnsavedWork,
+    /// An import failed before it recorded anything of the space.
+    NotImported,
 }
 
 #[derive(Debug)]
@@ -64,6 +66,7 @@ impl Reason {
             Self::NameTaken => ErrorCode::NameTaken,
             Self::NotReady => ErrorCode::NotReady,
             Self::UnsavedWork => ErrorCode::UnsavedWork,
+            Self::NotImported => ErrorCode::NotImported,
         }
     }
 

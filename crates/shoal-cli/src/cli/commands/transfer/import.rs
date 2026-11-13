@@ -27,6 +27,7 @@ use crate::{
     },
     execution::recovery::Copied,
     model::RestoredWorkspace,
+    refusal::{Reason, Refusal},
     transfer::{
         CarriedSessionFile, Import, ImportedSessionFile, Manifest, PackagedChat, PackagedWorkspace,
         Sessions, Space,
@@ -66,7 +67,10 @@ pub(super) async fn import(
     if let [file] = files.as_slice()
         && !file.is_dir()
     {
-        let package = Package::read(file, &options)?;
+        // Nothing is recorded yet, so a program that moves the space knows
+        // it is not here.
+        let package = Package::read(file, &options)
+            .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
         return match package.space {
             Space::Workspace(_) => {
                 let restored = package.open_workspace(ctx).await?;

@@ -4,13 +4,16 @@
 use std::path::Path;
 
 use anyhow::{Context as _, Result, ensure};
-use serde_json::Value;
 
 mod copy;
 mod moving;
 
 use super::export;
-use crate::client::output::transfer::Imported;
+use crate::client::output::{
+    error::{CommandError, ErrorDetail},
+    transfer::Imported,
+};
+use crate::protocol::ErrorCode;
 use crate::{
     cli::{args::transfer::SshArgs, context::Context},
     subprocess::{Run, diagnostic},
@@ -134,9 +137,11 @@ impl Remote {
                 self.host,
                 error_message(&output)
             );
-            return Err(match reported_error(&output) {
-                Some(_) => ImportFailure::Refused(anyhow::anyhow!(failed)),
-                None => ImportFailure::Unknown(anyhow::anyhow!(failed)),
+            let nothing_recorded = reported_error(&output)
+                .is_some_and(|error| error.code == ErrorCode::NotImported.to_string());
+            return Err(match nothing_recorded {
+                true => ImportFailure::Refused(anyhow::anyhow!(failed)),
+                false => ImportFailure::Unknown(anyhow::anyhow!(failed)),
             });
         }
         serde_json::from_slice(&output.stdout)
@@ -160,11 +165,13 @@ impl Remote {
 
 /// Why an import on the other machine failed.
 enum ImportFailure {
-    /// Shoal there refused it, or it never reached Shoal there, which then
-    /// has nothing of the space.
+    /// It never reached Shoal there, or failed before it recorded anything,
+    /// as its `not_imported` error says, so that machine has nothing of the
+    /// space.
     Refused(anyhow::Error),
-    /// It ran, but how it ended is unknown, as when the connection dropped
-    /// or its report cannot be read, so the other machine may have the space.
+    /// It may have recorded the space there, as when setup there failed
+    /// after the import, the connection dropped or its report cannot be
+    /// read.
     Unknown(anyhow::Error),
 }
 
@@ -176,13 +183,13 @@ impl From<ImportFailure> for anyhow::Error {
     }
 }
 
-/// The message of the JSON error Shoal wrote to standard error when the
-/// remote command failed there; none when ssh or the remote shell failed.
-fn reported_error(output: &std::process::Output) -> Option<String> {
+/// The JSON error Shoal wrote to standard error when the remote command
+/// failed there; none when ssh or the remote shell failed.
+fn reported_error(output: &std::process::Output) -> Option<ErrorDetail> {
     let stderr = String::from_utf8_lossy(&output.stderr);
     stderr.lines().rev().find_map(|line| {
-        let error: Value = serde_json::from_str(line).ok()?;
-        error["error"]["message"].as_str().map(str::to_owned)
+        let failed: CommandError = serde_json::from_str(line).ok()?;
+        Some(failed.error)
     })
 }
 
@@ -190,9 +197,8 @@ fn reported_error(output: &std::process::Output) -> Option<String> {
 /// Shoal writes to standard error, or what ssh or the remote shell wrote.
 fn error_message(output: &std::process::Output) -> String {
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let reported = reported_error(output);
-    match reported {
-        Some(message) => diagnostic(message.as_bytes()),
+    match reported_error(output) {
+        Some(error) => diagnostic(error.message.as_bytes()),
         None if stderr.trim().is_empty() => output.status.to_string(),
         None => diagnostic(stderr.trim().as_bytes()),
     }

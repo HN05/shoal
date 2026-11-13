@@ -504,6 +504,27 @@ fn a_move_whose_import_may_have_arrived_stays_here_stopped() {
 }
 
 #[test]
+fn a_move_whose_setup_fails_there_stays_here_stopped() {
+    let (here, there) = two_machines(None);
+    let workspace = here.add("unready");
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    // Its post-setup hook fails on the other machine, once the import there
+    // recorded the workspace.
+    install_test_script(
+        path.join("post-setup.sh"),
+        "#!/bin/sh\nif [ -e \"$HOME/fail-post-setup\" ]; then exit 3; fi\n",
+    );
+    commit_resource_config(&path, "hooks.post_setup = 'post-setup.sh'\n");
+    fs::write(there.root.path().join("fail-post-setup"), "").unwrap();
+
+    let failure = failed_move(&here, "unready");
+    assert!(failure.contains("may already have it"), "{failure}");
+    assert!(path.exists());
+    let listed = there.ok(&["list"]);
+    assert_eq!(listed[0]["name"], "unready", "{listed}");
+}
+
+#[test]
 fn move_ssh_keep_copies_workspaces_there_and_leaves_them_here() {
     let (here, there) = two_machines(None);
     let paths: Vec<_> = ["first", "second"]

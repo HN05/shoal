@@ -13,6 +13,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::Manager;
 use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
+use crate::refusal::{Reason, Refusal};
 use crate::{
     daemon::events::EventCause,
     git,
@@ -216,6 +217,32 @@ impl Manager {
         copy: bool,
         session_files: &[CarriedSessionFile],
     ) -> Result<RestoredWorkspace> {
+        let removed = self
+            .record_package(selector, bundle, prerequisite, removed, copy, session_files)
+            .await
+            .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
+        self.restore_workspace(&SpaceSelector::id(&removed.workspace_id))
+            .await
+            .with_context(|| {
+                format!(
+                    "the imported workspace is recorded as removed; shoal restore {} retries",
+                    removed.workspace_id
+                )
+            })
+    }
+
+    /// Record the packaged `removed` as a removed workspace of the
+    /// repository `selector` names, as [`Self::import_workspace`] does
+    /// before opening it; an error leaves no record.
+    async fn record_package(
+        &self,
+        selector: &crate::repository::Selector,
+        bundle: Option<&Path>,
+        prerequisite: Option<&str>,
+        removed: RemovedWorkspace,
+        copy: bool,
+        session_files: &[CarriedSessionFile],
+    ) -> Result<RemovedWorkspace> {
         let repo = self.repository(selector).await?;
         ensure!(
             removed.checkpoint.workspace_id == removed.workspace_id,
@@ -225,20 +252,10 @@ impl Manager {
             self.fetch_missing(&repo, &commit.into()).await?;
         }
         let removed = self.imported_record(&repo, removed).await?;
-        let removed = {
-            // A repository move holds this gate; the checkout may have moved.
-            let (repo, _git) = self.lock_repository(&repo.id).await?;
-            self.record_import(&repo, bundle, removed, copy, session_files)
-                .await?
-        };
-        self.restore_workspace(&SpaceSelector::id(&removed.workspace_id))
+        // A repository move holds this gate; the checkout may have moved.
+        let (repo, _git) = self.lock_repository(&repo.id).await?;
+        self.record_import(&repo, bundle, removed, copy, session_files)
             .await
-            .with_context(|| {
-                format!(
-                    "the imported workspace is recorded as removed; shoal restore {} retries",
-                    removed.workspace_id
-                )
-            })
     }
 
     /// Fetch the default branch when the repository lacks `commit`, which
