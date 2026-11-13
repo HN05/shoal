@@ -4,7 +4,10 @@ use anyhow::Result;
 use futures_util::{FutureExt, future::BoxFuture};
 use tokio::{io::AsyncWrite, net::UnixStream, sync::OwnedRwLockReadGuard};
 
-use super::workspace::{self, Manager};
+use super::{
+    approvals::Undecided,
+    workspace::{self, Manager},
+};
 use crate::{
     protocol::{self, Body, ErrorCode, Response},
     refusal::Reason,
@@ -95,9 +98,25 @@ impl Answer {
     }
 }
 
-/// The error body of an operation that failed with `error`.
+/// The error body of an operation that failed with `error`: the approval
+/// request it waits for or was refused by, else its code and message.
 pub(super) fn failure(error: &anyhow::Error) -> Body {
-    Body::error(error_code(error), format!("{error:#}"))
+    match error.downcast_ref::<Undecided>() {
+        Some(Undecided(request)) => Body::Undecided(request.clone()),
+        None => Body::error(error_code(error), format!("{error:#}")),
+    }
+}
+
+/// The reply to a request its caller's scope refused with `error`: a
+/// target that does not exist is refused as such, not as outside the scope,
+/// and an action a permission holds back for approval answers with the
+/// request.
+pub(super) fn refusal(error: &anyhow::Error) -> Body {
+    match Reason::of(error) {
+        _ if error.downcast_ref::<Undecided>().is_some() => failure(error),
+        Some(Reason::NotFound) => Body::error(ErrorCode::NotFound, format!("{error:#}")),
+        _ => Body::error(ErrorCode::ScopeDenied, format!("{error:#}")),
+    }
 }
 
 /// The code of an operation's failure: specific where the caller can act on

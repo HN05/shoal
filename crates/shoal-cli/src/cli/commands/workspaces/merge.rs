@@ -4,11 +4,10 @@ use anyhow::Result;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
-        commands::{approvals, operations},
+        commands::operations,
         context::Context,
         ui::{self, Fallback},
     },
-    client::approvals::Undecided,
     env,
     model::{MergeConfirmation, MergeOptions, MergedBranch},
     protocol::{ConfigTarget, operations::OperationSpec},
@@ -45,16 +44,9 @@ pub(in crate::cli::commands) async fn merge(
         workspace: workspace.clone(),
         options,
     };
-    match operations::run(ctx, spec).await {
-        Ok(merged) => {
-            show_merged(ctx, &merged)?;
-            Ok(0)
-        }
-        Err(error) => match error.downcast::<Undecided>() {
-            Ok(Undecided(request)) => approvals::declined(ctx, &request),
-            Err(error) => Err(error),
-        },
-    }
+    let merged = operations::run(ctx, spec).await?;
+    show_merged(ctx, &merged)?;
+    Ok(0)
 }
 
 /// Whether a merge pushes the default branch, and whether it asks the user

@@ -6,14 +6,14 @@ use tokio::net::UnixStream;
 
 use super::super::{
     Server,
-    answer::{Answer, OperationGuard},
+    answer::{self, Answer, OperationGuard},
     exit_wait::{self, Quiet},
     scope::{self, Caller, Scoped, denied},
     workspace::{Ending, Manager},
 };
 use crate::client::space_names::SpaceSelector;
 use crate::protocol::{
-    self, Body, DaemonMethod, DaemonStatus, ErrorCode, ExitRequest, ExitWhen, Exited, Response,
+    self, Body, DaemonMethod, DaemonStatus, ExitRequest, ExitWhen, Exited, Response,
 };
 
 /// The daemon's own requests, which read how it runs.
@@ -71,7 +71,7 @@ pub(in crate::daemon) async fn exit(
     guard: OperationGuard,
 ) -> Result<()> {
     if let Err(error) = scope::authorize(&server.manager, scope, &mut request).await {
-        let body = Body::error(ErrorCode::ScopeDenied, format!("{error:#}"));
+        let body = answer::refusal(&error);
         // The reply is written under the operation, as every reply is.
         return protocol::write(&mut stream, &Response::new(request_id, body)).await;
     }

@@ -4,11 +4,10 @@ use anyhow::Result;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
-        commands::{approvals, operations},
+        commands::operations,
         context::Context,
         ui::{self, Fallback},
     },
-    client::approvals::Undecided,
     model::Unmerged,
     protocol::operations::OperationSpec,
 };
@@ -19,23 +18,10 @@ pub(in crate::cli::commands) async fn unmerge(
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    match operations::run(
-        ctx,
-        OperationSpec::Unmerge {
-            workspace: workspace.clone(),
-        },
-    )
-    .await
-    {
-        Ok(unmerged) => {
-            show_unmerged(ctx, &unmerged)?;
-            Ok(0)
-        }
-        Err(error) => match error.downcast::<Undecided>() {
-            Ok(Undecided(request)) => approvals::declined(ctx, &request),
-            Err(error) => Err(error),
-        },
-    }
+    let spec = OperationSpec::Unmerge { workspace };
+    let unmerged = operations::run(ctx, spec).await?;
+    show_unmerged(ctx, &unmerged)?;
+    Ok(0)
 }
 
 fn show_unmerged(ctx: &Context, unmerged: &Unmerged) -> Result<()> {

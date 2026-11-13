@@ -35,3 +35,28 @@ fn refusals_keep_their_codes_under_context() {
         ErrorCode::OperationFailed
     );
 }
+
+#[test]
+fn an_action_held_for_approval_reaches_the_client_as_its_request() {
+    use crate::daemon::approvals::{
+        ApprovalRequest, ApprovalRequestExt, HoldSpecification, Lifetime, Specification, Target,
+    };
+
+    let space = crate::client::space_ids::SpaceId::from("space");
+    let request = ApprovalRequest::new(
+        &space,
+        Target::Hold("review".into()),
+        "review",
+        Specification::Hold(HoldSpecification {
+            hold: "review".into(),
+        }),
+        Lifetime::Lease,
+        Some("hold it"),
+    );
+    let error = anyhow::Error::new(Undecided(Box::new(request))).context("request");
+    for body in [failure(&error), refusal(&error)] {
+        let error = body.into_result().unwrap_err();
+        let Undecided(request) = error.downcast_ref::<Undecided>().unwrap();
+        assert_eq!(request.space_id, space);
+    }
+}

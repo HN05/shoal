@@ -299,6 +299,25 @@ pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
         !(command.is_administrative() && env::inherits_scope(&ctx.paths.state)),
         "workspace processes cannot administer Shoal; ask the user to run this command"
     );
+    let reporting = ctx.reporting();
+    let daemon = Daemon {
+        run: daemon,
+        handoff: cli.daemon_handoff,
+    };
+    match dispatch(ctx, command, daemon).await {
+        // An action a permission holds back waits for its approval request.
+        Err(error) => match error.downcast::<crate::client::approvals::Undecided>() {
+            Ok(crate::client::approvals::Undecided(request)) => {
+                approvals::declined(&reporting, &request)
+            }
+            Err(error) => Err(error),
+        },
+        result => result,
+    }
+}
+
+/// Run `command` through its group's dispatcher.
+async fn dispatch(ctx: Context, command: Command, daemon: Daemon) -> Result<i32> {
     match command {
         Command::Run {
             name,
@@ -318,13 +337,7 @@ pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
         Command::Resources(command) => dispatch::resources::run(ctx, command).await,
         Command::Diagnostics(command) => dispatch::diagnostics::run(ctx, command).await,
         Command::Lifecycle(command) => dispatch::lifecycle::run(ctx, command).await,
-        Command::Service(command) => {
-            let daemon = Daemon {
-                run: daemon,
-                handoff: cli.daemon_handoff,
-            };
-            dispatch::service::run(ctx, command, daemon).await
-        }
+        Command::Service(command) => dispatch::service::run(ctx, command, daemon).await,
     }
 }
 

@@ -131,6 +131,9 @@ macro_rules! response_bodies {
             Ok,
             Error { code: ErrorCode, message: String },
             Busy { message: String },
+            /// The request waits for, or was refused by, the decision on the
+            /// approval request it made, which a permission asked for.
+            Undecided(Box<crate::approvals::ApprovalRequest>),
             /// The daemon still prepares what the request asked for, as it
             /// sends while it registers an execution.
             Keepalive,
@@ -143,6 +146,7 @@ macro_rules! response_bodies {
                     Self::Ok => "Ok",
                     Self::Error { .. } => "Error",
                     Self::Busy { .. } => "Busy",
+                    Self::Undecided(_) => "Undecided",
                     Self::Keepalive => "Keepalive",
                     $(Self::$variant(_) => stringify!($variant),)*
                 }
@@ -431,6 +435,7 @@ impl Body {
     pub fn into_result(self) -> Result<Self> {
         match self {
             Self::Error { code, message } => Err(RemoteError { code, message }.into()),
+            Self::Undecided(request) => Err(crate::approvals::Undecided(request).into()),
             body => Ok(body),
         }
     }

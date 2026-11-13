@@ -61,6 +61,19 @@ impl Context {
         }
     }
 
+    /// A context that reports as this one does, for what follows once the
+    /// command has taken this one.
+    pub(in crate::cli) fn reporting(&self) -> Self {
+        Self {
+            paths: self.paths.clone(),
+            json: self.json,
+            place: None,
+            need: Need::Any,
+            recent: None,
+            command: self.command.clone(),
+        }
+    }
+
     /// Prompts are allowed: a human is on both stdin and stderr, and the caller
     /// did not ask for JSON. It decides only whether to ask or pick; what the
     /// command does follows [`Self::on_terminal`], since JSON changes only
