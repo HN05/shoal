@@ -55,7 +55,7 @@ pub(crate) mod runner;
 mod sessions;
 mod shutdown_stop;
 mod signals;
-mod space_kinds;
+mod space_removal;
 pub(crate) mod spotlight;
 mod stack;
 mod status;

@@ -1,7 +1,7 @@
 //! Cleanup candidacy of any space: what keeps it from cleanup, and the
 //! snapshot of a candidate, which its worktree's stage completes where it
 //! has one.
-use super::super::{Manager, space_kinds::AgentState, space_kinds::SpaceAgent};
+use super::super::{Manager, space_removal::AgentState, space_removal::SpaceAgent};
 use super::Retention;
 use crate::client::space_ids::SpaceId;
 use crate::{
