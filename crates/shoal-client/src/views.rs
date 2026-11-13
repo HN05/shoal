@@ -146,12 +146,7 @@ async fn run_with_jobs(
         },
     )
     .await?;
-    Ok(RunView {
-        run,
-        jobs,
-        logs: Vec::new(),
-        errors: Vec::new(),
-    })
+    Ok(RunView::new(run, jobs))
 }
 
 /// Add the logs of the run's failed jobs, recording those it cannot read.

@@ -1,6 +1,7 @@
 //! Reading CI workflow runs: one run with its jobs and their logs, or the
 //! newest runs of a branch or workflow, as the workspace's agent account.
 use anyhow::{Context, Result, bail, ensure};
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use shoal_refs::CommitId;
 
@@ -22,6 +23,8 @@ pub const MAX_RUNS: usize = 100;
 const FINISHED_LOOKUP: usize = 20;
 /// The jobs one page of a run's jobs holds.
 pub(crate) const JOBS_PAGE: usize = 100;
+/// How many listed failed runs have their jobs read at once.
+const JOB_READS: usize = 8;
 
 /// A job of a run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,6 +48,21 @@ pub struct RunView {
     /// The logs that could not be read, and why.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<String>,
+}
+
+impl RunView {
+    /// `run` with its `jobs`, in the state they show.
+    pub fn new(mut run: Run, jobs: Vec<RunJob>) -> Self {
+        if run.state == JobState::Failed {
+            run.state = stopped_run_state(&jobs);
+        }
+        Self {
+            run,
+            jobs,
+            logs: Vec::new(),
+            errors: Vec::new(),
+        }
+    }
 }
 
 /// A job of a run, by its ID or by a name no other job of the run has.
@@ -182,7 +200,7 @@ impl ForgeRepo {
         let mut snapshot = Snapshot::of(SnapshotKind::Run, Some(state));
         if state == SnapshotState::Failed {
             let jobs = self.jobs_of(account, &run).await?;
-            snapshot.state = Some(stopped_run_state(&jobs));
+            snapshot.state = Some(stopped_run_state(&jobs).into());
             snapshot.failed_jobs = self.failed_jobs(account, &run, &jobs).await;
         }
         Ok(snapshot)
@@ -237,8 +255,32 @@ impl ForgeRepo {
         Ok(jobs)
     }
 
-    /// The newest runs `filter` selects, newest first.
+    /// The newest runs `filter` selects, newest first, each failed one in
+    /// the state its jobs show.
     pub async fn list_runs(&self, account: &Account, filter: &RunFilter) -> Result<Vec<Run>> {
+        let runs = self.read_runs(account, filter).await?;
+        Ok(futures_util::stream::iter(runs)
+            .map(|run| self.settled(account, run))
+            .buffered(JOB_READS)
+            .collect()
+            .await)
+    }
+
+    /// `run`, once failed, in the state its jobs show; one whose jobs cannot
+    /// be read stays failed.
+    async fn settled(&self, account: &Account, run: Run) -> Run {
+        if run.state != JobState::Failed {
+            return run;
+        }
+        match self.jobs_of(account, &run).await {
+            Ok(jobs) => RunView::new(run, jobs).run,
+            Err(_) => run,
+        }
+    }
+
+    /// The newest runs `filter` selects, newest first, as the forge lists
+    /// them.
+    async fn read_runs(&self, account: &Account, filter: &RunFilter) -> Result<Vec<Run>> {
         self.require(Capability::ReadRuns)?;
         validate_filter(filter)?;
         let read = Request::get(self.repo_endpoint(&self.kind.runs_path(filter)?));
@@ -268,18 +310,18 @@ impl ForgeRepo {
             commit: None,
             limit: FINISHED_LOOKUP,
         };
-        Ok(newest_finished(self.list_runs(account, &filter).await?))
+        Ok(newest_finished(self.read_runs(account, &filter).await?))
     }
 }
 
 /// The state of a run the forge reports as failed, from its `jobs`: one
 /// whose jobs only stopped short by being cancelled was cancelled.
-fn stopped_run_state(jobs: &[RunJob]) -> SnapshotState {
+fn stopped_run_state(jobs: &[RunJob]) -> JobState {
     let failed = jobs.iter().any(|job| job.state == JobState::Failed);
     let cancelled = jobs.iter().any(|job| job.state == JobState::Cancelled);
     match (failed, cancelled) {
-        (false, true) => SnapshotState::Cancelled,
-        _ => SnapshotState::Failed,
+        (false, true) => JobState::Cancelled,
+        _ => JobState::Failed,
     }
 }
 

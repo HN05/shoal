@@ -262,15 +262,15 @@ fn a_failed_run_whose_only_stopped_jobs_were_cancelled_was_cancelled() {
     let states = |states: &[JobState]| states.iter().copied().map(job).collect::<Vec<_>>();
     assert_eq!(
         stopped_run_state(&states(&[JobState::Finished, JobState::Cancelled])),
-        SnapshotState::Cancelled
+        JobState::Cancelled
     );
     assert_eq!(
         stopped_run_state(&states(&[JobState::Failed, JobState::Cancelled])),
-        SnapshotState::Failed
+        JobState::Failed
     );
     assert_eq!(
         stopped_run_state(&states(&[JobState::Finished])),
-        SnapshotState::Failed
+        JobState::Failed
     );
 }
 
@@ -329,5 +329,60 @@ async fn a_run_whose_jobs_were_cancelled_reports_it_and_keeps_their_logs() -> Re
         .run_job_log(&account, &run, &JobRef::Name("rust".into()))
         .await?;
     assert!(log.text.contains("context canceled"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_listed_failed_run_takes_the_state_its_jobs_show() -> Result<()> {
+    use crate::{
+        backends::ForgeKind,
+        test_support::{Server, agent_on, repo_on},
+    };
+    let run = |id: u64, status: &str| {
+        json!({"id": id, "index_in_repo": id, "status": status, "prettyref": "main",
+            "workflow_id": "ci.yml", "commit_sha": "abc"})
+    };
+    let server = Server::start(move |request| {
+        let body = match request.line.as_str() {
+            "GET /api/v1/repos/team/repo/actions/runs?limit=10&page=1&ref=refs%2Fheads%2Fmain" => {
+                json!({"workflow_runs": [
+                    run(4, "failure"), run(3, "cancelled"), run(2, "failure"), run(1, "success")
+                ]})
+            }
+            "GET /api/v1/repos/team/repo/actions/runs/4/jobs" => json!([
+                {"id": 1, "name": "gate", "status": "success"},
+                {"id": 2, "name": "rust", "status": "cancelled"}
+            ]),
+            "GET /api/v1/repos/team/repo/actions/runs/3/jobs" => json!([
+                {"id": 3, "name": "rust", "status": "failure"},
+                {"id": 4, "name": "musl", "status": "cancelled"}
+            ]),
+            _ => return (404, Vec::new(), Vec::new()),
+        };
+        (200, Vec::new(), body.to_string().into())
+    });
+    let forgejo = repo_on(&server, ForgeKind::Forgejo, "team/repo");
+    let account = agent_on(&server, "agent");
+    let runs = forgejo
+        .list_runs(&account, &filter(Some("main"), None))
+        .await?;
+    let states = runs.iter().map(|run| run.state).collect::<Vec<_>>();
+    // Run 2's jobs cannot be read, so it stays as the forge lists it.
+    assert_eq!(
+        states,
+        [
+            JobState::Cancelled,
+            JobState::Failed,
+            JobState::Failed,
+            JobState::Finished
+        ]
+    );
+    assert!(
+        !server
+            .received()
+            .iter()
+            .any(|request| request.line.contains("runs/1/jobs")),
+        "a run that passed has no jobs to read"
+    );
     Ok(())
 }
