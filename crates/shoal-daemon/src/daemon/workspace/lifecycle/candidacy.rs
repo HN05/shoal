@@ -241,8 +241,7 @@ impl Manager {
     }
 
     /// When `space` was last used: the later of its recorded activity and
-    /// its agent's last stop, or `None` while neither is recorded, as while
-    /// a chat's agent runs.
+    /// its agent's last stop, or `None` while neither is recorded.
     pub(crate) async fn last_used(
         &self,
         space: &PresentSpace,

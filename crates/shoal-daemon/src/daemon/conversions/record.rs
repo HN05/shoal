@@ -335,6 +335,7 @@ pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) ->
         [id],
     )?;
     tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
+    forget_completion(tx, id)?;
     if let Some(completion) = &row.space_completion {
         tx.execute(
             "INSERT OR REPLACE INTO space_completion(space_id,record,cause) VALUES (?1,?2,?3)",
