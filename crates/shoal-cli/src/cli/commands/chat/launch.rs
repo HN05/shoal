@@ -19,7 +19,7 @@ use crate::{
         recent, terminal,
     },
     config::Effective,
-    model::Chat,
+    model::{Chat, ChatHome},
 };
 
 mod command;
@@ -98,7 +98,7 @@ impl Launch {
     ) -> Result<Self> {
         let agent = chat_agent(ctx, &settings, options.agent.clone())?;
         check_model(&settings, &agent, &options.model)?;
-        let name = initial_name(&topic, options.name.clone());
+        let name = initial_name(&topic, topic.home(&repo), options.name.clone());
         let settings = crate::config::settings(&ctx.paths, repo.config()).await?;
         let chat = command::chat_launch(settings, &agent, repo, &topic, &options, name)?;
         Ok(Self {
@@ -367,7 +367,10 @@ async fn repository_of(ctx: &Context, chat: &Chat) -> Result<ChatRepository> {
     Ok(ChatRepository::Registered(repo))
 }
 
-/// `--name`, else the topic's name.
-fn initial_name(topic: &Topic, requested: Option<SpaceName>) -> SpaceName {
-    requested.unwrap_or_else(|| SpaceName::derive(&topic.name, "chat"))
+/// `--name`, else the topic's name, else that of the chat's `home`.
+fn initial_name(topic: &Topic, home: ChatHome<'_>, requested: Option<SpaceName>) -> SpaceName {
+    requested.unwrap_or_else(|| {
+        let name = (topic.name.clone()).unwrap_or_else(|| home.chat_name(&topic.mode));
+        SpaceName::derive(&name, "chat")
+    })
 }

@@ -82,7 +82,7 @@ fn installed_config(ctx: &Context) -> Result<PathBuf> {
 pub(in crate::cli::commands) fn topic(config: &Path) -> chat::Topic {
     chat::Topic {
         relaunch: chat::Relaunch::ConfigSetup,
-        name: modes::ModeName::SETUP.into(),
+        name: Some(modes::ModeName::SETUP.into()),
         mode: modes::ModeName::SETUP,
         subject: Some(Subject::told(subject(config))),
         linked_issue: None,

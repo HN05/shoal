@@ -67,7 +67,7 @@ async fn labelled(ctx: &Context, repo: &Repository, labels: &config::Issue) -> R
 /// issue, and reopened in a new tab by the issue's URL.
 pub(super) fn on(topic: Topic, issue: &Issue) -> Topic {
     Topic {
-        name: issue.title.clone(),
+        name: Some(issue.title.clone()),
         relaunch: topic.relaunch.on_issue(&issue.url),
         subject: Some(issue.subject()),
         links: vec![(

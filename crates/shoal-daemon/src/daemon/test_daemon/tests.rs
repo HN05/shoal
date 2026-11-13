@@ -1,7 +1,7 @@
 //! An app's calls through `shoal_client`, as the user and as a
 //! workspace's agent, against a daemon on an isolated state directory.
 use crate::client::space_ids::SpaceId;
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::{
     client::{
@@ -737,6 +737,10 @@ async fn an_app_starts_a_chat_whose_agent_and_mode_the_daemon_resolves() {
     assert_eq!(repository, Some(daemon.repository.id.as_str()));
     assert_eq!(launched.parent, None);
     assert_eq!(launched.args, ["Read the build"]);
+    // Without a name of its own, a chat in the checkout takes its
+    // repository's and its mode's.
+    let named = format!("{} chat", crate::repository::name(&daemon.repository));
+    assert_eq!(launched.name.as_ref().map(SpaceName::as_str), Some(&*named));
 }
 
 #[tokio::test]

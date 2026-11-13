@@ -13,15 +13,15 @@ use crate::{
     config::templates,
     forge::items::reference::ItemRef,
     model::{ChatHome, LinkedItem, Relation, Repository, SpaceLinks, Workspace},
-    repository,
 };
 
 /// What a chat is about beyond its repository, and how it reopens in a new tab.
 pub(in crate::cli::commands) struct Topic {
     /// The command that starts the same chat again in a new place.
     pub relaunch: Relaunch,
-    /// The chat's default name, which `--name` replaces.
-    pub name: String,
+    /// The chat's default name, which `--name` replaces; without one, it
+    /// takes its home's.
+    pub name: Option<String>,
     /// The mode the agent starts in.
     pub mode: crate::config::modes::ModeName,
     /// What the agent starts on, or `None` to wait for the user.
@@ -47,7 +47,7 @@ impl Topic {
     ) -> Self {
         Self {
             relaunch: Relaunch::start(mode, in_checkout(repo)),
-            name: format!("{} {mode}", repository::name(repo)),
+            name: None,
             mode: mode.clone(),
             subject: None,
             linked_issue: None,
@@ -63,7 +63,7 @@ impl Topic {
     ) -> Self {
         Self {
             relaunch: Relaunch::start(mode, StartArgs::default()),
-            name: mode.to_string(),
+            name: None,
             mode: mode.clone(),
             subject: None,
             linked_issue: None,
@@ -84,7 +84,7 @@ impl Topic {
         };
         Self {
             relaunch: Relaunch::start(mode, place),
-            name: format!("{} chat", workspace.name),
+            name: None,
             mode: mode.clone(),
             subject: None,
             linked_issue: None,

@@ -133,6 +133,19 @@ impl<'a> ChatHome<'a> {
         }
     }
 
+    /// The name a new chat here in `mode` takes when neither its start nor
+    /// its issue names it: after the workspace whose worktree it runs in,
+    /// the repository whose checkout it runs in and its mode, or its mode.
+    pub fn chat_name(self, mode: &crate::config::modes::ModeName) -> String {
+        match self {
+            Self::Checkout(repository) => {
+                format!("{} {mode}", crate::repository::name(repository))
+            }
+            Self::Workspace(workspace) => format!("{} chat", workspace.name),
+            Self::Root(_) => mode.to_string(),
+        }
+    }
+
     pub fn workspace(self) -> Option<&'a Workspace> {
         match self {
             Self::Checkout(_) | Self::Root(_) => None,

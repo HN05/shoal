@@ -5,13 +5,15 @@
 //! the chat runs its agent.
 use anyhow::{Context as _, Result, ensure};
 
-use crate::client::{repository_ids::RepositoryId, scope_tokens::ScopeToken};
+use crate::client::{
+    repository_ids::RepositoryId, scope_tokens::ScopeToken, space_names::SpaceName,
+};
 use crate::{
     agents::{NO_AGENT, checked_agent},
     client::output::chat::StartedChat,
-    config::Effective,
+    config::{Effective, modes::ModeName},
     daemon::{scope::Caller, workspace::Manager},
-    model::SpaceKind,
+    model::{ChatHome, SpaceKind},
     protocol::ChatStart,
 };
 
@@ -34,10 +36,10 @@ impl Manager {
         started
     }
 
-    /// `start` with its repository named by ID and the agent and mode it
-    /// names, else `agent.default` and the chat mode, checked under the
-    /// chat's settings, refused where its parent, else `caller`'s own space,
-    /// takes no such child.
+    /// `start` with its repository named by ID and the agent, mode and name
+    /// it names, else `agent.default`, the chat mode and a name of its own,
+    /// checked under the chat's settings, refused where its parent, else
+    /// `caller`'s own space, takes no such child.
     async fn resolve_chat_start(
         &self,
         start: ChatStart,
@@ -60,14 +62,53 @@ impl Manager {
         let mode = (start.mode.clone()).unwrap_or_else(crate::model::chat_mode);
         let in_repository = repository.is_some();
         crate::config::modes::resolve(&settings.modes, &mode, SpaceKind::Chat, in_repository)?;
+        let name = match start.name.clone() {
+            Some(name) => name,
+            None => {
+                self.new_chat_name(&start, repository.as_ref(), &mode)
+                    .await?
+            }
+        };
         // A chat in a workspace's worktree is in that workspace's repository.
         let named = repository.filter(|_| start.workspace.is_none());
         Ok(ChatStart {
             repository: named.map(Into::into),
             agent: Some(agent),
             mode: Some(mode),
+            name: Some(name),
             ..start
         })
+    }
+
+    /// The name of the new chat `start` describes, in `mode` and
+    /// `repository`, when it names none: the title of the open issue it
+    /// starts on, as a new workspace takes it, else the name of where it
+    /// runs.
+    async fn new_chat_name(
+        &self,
+        start: &ChatStart,
+        repository: Option<&RepositoryId>,
+        mode: &ModeName,
+    ) -> Result<SpaceName> {
+        let name = match (&start.workspace, repository, &start.issue) {
+            (_, Some(repository), Some(issue)) => {
+                let checkout = self.repository(repository.clone()).await?.path;
+                self.read_open_issue(&checkout, issue).await?.title
+            }
+            (Some(workspace), ..) => {
+                let workspace = self.chat_workspace(workspace).await?;
+                ChatHome::Workspace(&workspace).chat_name(mode)
+            }
+            (None, Some(repository), None) => {
+                let repository = self.repository(repository.clone()).await?;
+                ChatHome::Checkout(&repository).chat_name(mode)
+            }
+            (None, None, _) => {
+                let root_dir = self.config().root_dir(&self.paths)?;
+                ChatHome::Root(&root_dir).chat_name(mode)
+            }
+        };
+        Ok(SpaceName::derive(&name, "chat"))
     }
 
     /// The repository of the chat `start` describes: that of the ready

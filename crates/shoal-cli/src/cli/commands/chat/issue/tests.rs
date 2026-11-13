@@ -21,11 +21,12 @@ fn a_chat_on_an_issue_is_named_after_its_title_without_asking() {
         labels: Vec::new(),
     };
     let plain = Topic::repository(&repo, &"plan".into());
-    assert_eq!(plain.name, "shoal plan");
+    let home = crate::model::ChatHome::Checkout(&repo);
+    assert_eq!(home.chat_name(&plain.mode), "shoal plan");
     let topic = on(plain, &issue);
     assert_eq!(topic.mode, "plan");
     assert_eq!(topic.subject.unwrap().issue.unwrap().number, 1211);
-    assert_eq!(topic.name, "Attach to chats");
+    assert_eq!(topic.name.as_deref(), Some("Attach to chats"));
     let super::super::Relaunch::Start(start) = topic.relaunch else {
         panic!("expected a start");
     };
