@@ -241,7 +241,8 @@ fn restart_gives_a_chats_agent_permissions() {
 }
 
 /// A workspace's agent restarts the agent of a workspace and of a chat below
-/// its own, and is refused its own and a workspace outside its tree.
+/// its own, one by one or all of them, and is refused its own and a
+/// workspace outside its tree.
 #[test]
 fn a_workspaces_agent_restarts_the_agents_below_its_workspace() {
     let fixture = parent_fixture();
@@ -263,34 +264,33 @@ fn a_chats_agent_restarts_the_agents_below_its_chat() {
     agent.wait().unwrap();
 }
 
-/// A workspace's agent resumes a chat below its own that its restart left
-/// stopped, and is refused one the user's restart left stopped.
+/// A workspace's agent resumes a chat below its own that the user's restart
+/// left stopped.
 #[test]
-fn a_workspaces_agent_resumes_the_chats_it_stopped() {
+fn a_workspaces_agent_resumes_the_chats_below() {
     let fixture = parent_fixture();
     fixture.add("parent");
-    resumes_the_chats_it_stopped(&fixture, &Parent::Workspace("parent"));
+    resumes_the_chats_below(&fixture, &Parent::Workspace("parent"));
 }
 
-/// A chat's agent resumes the chats below its chat that it stopped, as a
-/// workspace's agent does.
+/// A chat's agent resumes the chats below its chat, as a workspace's agent
+/// does.
 #[test]
-fn a_chats_agent_resumes_the_chats_it_stopped() {
+fn a_chats_agent_resumes_the_chats_below() {
     let fixture = parent_fixture();
     let (mut agent, id) = start_test_chat(&fixture, "planning");
     let started = fixture.root.path().join("chat-started");
     wait_until("the parent chat started", || started.exists());
     let parent = Parent::chat(&fixture, "planning", id);
-    resumes_the_chats_it_stopped(&fixture, &parent);
+    resumes_the_chats_below(&fixture, &parent);
     agent.kill().unwrap();
     agent.wait().unwrap();
 }
 
 /// A workspace's agent resumes the agent of a workspace below its own that
-/// its restart left stopped, and is refused one the user's restart left
-/// stopped.
+/// the user's restart left stopped.
 #[test]
-fn a_workspaces_agent_resumes_the_agents_its_restart_stopped() {
+fn a_workspaces_agent_resumes_the_agents_below_whoever_stopped_them() {
     let fixture = parent_fixture();
     fixture.add("parent");
     let parent = Parent::Workspace("parent");
@@ -308,22 +308,11 @@ fn a_workspaces_agent_resumes_the_agents_its_restart_stopped() {
     let agent = Running::start(&fixture, "child", &child);
     let restored = agent.path.join("restored");
     // No new wrapper can start, so the restart leaves the agent stopped.
-    let failed_restart = |restarter: &dyn Fn(&[&str]) -> Output| {
-        install_test_script(&zmx, "#!/bin/sh\nexit 1\n");
-        let output = restarter(&["restart", &fixture.id("child")]);
-        assert!(!output.status.success(), "{output:?}");
-        install_test_script(&zmx, terminal_zmx());
-    };
+    install_test_script(&zmx, "#!/bin/sh\nexit 1\n");
+    let output = fixture.run(&["restart", &fixture.id("child")]);
+    assert!(!output.status.success(), "{output:?}");
+    install_test_script(&zmx, terminal_zmx());
 
-    failed_restart(&|args| fixture.run(args));
-    let output = parent.run(&fixture, &["restore", &fixture.id("child")]);
-    let error = String::from_utf8_lossy(&output.stderr);
-    assert!(error.contains("ask the user"), "{output:?}");
-    fixture.ok(&["restore", &fixture.id("child")]);
-    wait_until("the user's restore", || restored.exists());
-    fs::remove_file(&restored).unwrap();
-
-    failed_restart(&|args| parent.run(&fixture, args));
     parent.ok(&fixture, &["restore", &fixture.id("child")]);
     wait_until("the parent's restore", || restored.exists());
     fixture.ok(&["stop", &fixture.id("child")]);
@@ -430,7 +419,12 @@ fn restarts_the_agents_below(fixture: &Fixture, parent: &Parent) {
         assert!(!output.status.success(), "{refused}: {output:?}");
     }
 
-    let restarted = parent.ok(fixture, &["restart", &fixture.id("child")]);
+    let restarted = parent.ok(fixture, &["restart", "--all"]);
+    assert_eq!(
+        restarted["restarted"].as_array().unwrap().len(),
+        1,
+        "{restarted}"
+    );
     assert_eq!(restarted["restarted"][0]["space"], "child", "{restarted}");
     wait_until("agent to restore", || agent.path.join("restored").exists());
     assert!(
@@ -474,9 +468,9 @@ fn restarts_the_agents_below(fixture: &Fixture, parent: &Parent) {
 /// these failures from others.
 const FAILING_ZMX: &str = "#!/bin/sh\necho 'zmx fails in this test' >&2\nexit 1\n";
 
-/// `parent` resumes the chat `talk` below it once its restart, which no
-/// place could restore, left the chat stopped, but not once the user's did.
-fn resumes_the_chats_it_stopped(fixture: &Fixture, parent: &Parent) {
+/// `parent` resumes the chat `talk` below it once the user's restart, which
+/// no place could restore, left the chat stopped.
+fn resumes_the_chats_below(fixture: &Fixture, parent: &Parent) {
     let home = fixture.root.path().to_owned();
     let zmx = home.join("bin/zmx");
     let restored = home.join("chat-restored");
@@ -506,18 +500,6 @@ fn resumes_the_chats_it_stopped(fixture: &Fixture, parent: &Parent) {
         assert!(!output.status.success(), "{output:?}");
         chat.join().unwrap();
     });
-    install_test_script(&zmx, terminal_zmx());
-    let output = parent.run(fixture, &["restore", &fixture.id("talk")]);
-    let error = String::from_utf8_lossy(&output.stderr);
-    assert!(error.contains("ask the user"), "{output:?}");
-    assert!(!restored.exists());
-
-    fixture.ok(&["restore", &fixture.id("talk")]);
-    wait_until("the user's restore", || restored.exists());
-    fs::remove_file(&restored).unwrap();
-    install_test_script(&zmx, FAILING_ZMX);
-    let output = parent.run(fixture, &["restart", &fixture.id("talk")]);
-    assert!(!output.status.success(), "{output:?}");
     install_test_script(&zmx, terminal_zmx());
     let resumed = parent.ok(fixture, &["restore", &fixture.id("talk")]);
     assert_eq!(resumed["queued"][0]["name"], "talk", "{resumed}");

@@ -19,21 +19,27 @@ use crate::{
 };
 
 /// Queue the restores of the stopped agents and last sessions of the
-/// `selected` workspaces below this process's, only `execution`'s when
-/// given, restore the `selected` chats in a background place and retry the
-/// selected failed setups, under `change` when given; the daemon refuses
-/// those this process or one below it did not stop, before any setup or
-/// restore, and starts the workspaces' agents detached.
+/// `selected` spaces this process's scope reaches, or of every such space
+/// with any, only `execution`'s when given, restore the `selected` chats in
+/// a background place and retry the selected failed setups, under `change`
+/// when given; the daemon refuses a space outside the scope before any
+/// setup or restore, and starts the workspaces' agents detached.
 pub(super) async fn queue_below(
     ctx: &Context,
     selected: Selected,
     execution: Option<ExecutionId>,
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
-    let mut stopped = Vec::new();
-    for selector in selected.spaces.clone().unwrap_or_default() {
-        stopped.push(stopped_agents(ctx, selector, execution.as_ref()).await?);
-    }
+    let stopped = match selected.spaces.clone() {
+        Some(selectors) => {
+            let mut stopped = Vec::new();
+            for selector in selectors {
+                stopped.push(stopped_agents(ctx, selector, execution.as_ref()).await?);
+            }
+            stopped
+        }
+        None => stopped_in_reach(ctx).await?,
+    };
     permission_change::apply(ctx, &stopped, &selected.setups, change).await?;
     let resumed = super::set_up(ctx, &selected, Vec::new(), false).await;
     queue_all(ctx, stopped, resumed, false).await
@@ -63,26 +69,51 @@ pub(in crate::cli::commands) async fn queue_stopped(
 }
 
 /// The stopped agents and last sessions of the workspace `selector` names,
-/// only `execution`'s when given, refusing one without any. Its stopped
-/// commands go to the restored agents.
+/// only `execution`'s when given, refusing one without any.
 async fn stopped_agents(
     ctx: &Context,
     selector: SpaceSelector,
     execution: Option<&ExecutionId>,
 ) -> Result<(PresentSpace, Saved)> {
     let space = super::present_space(ctx, &selector).await?;
-    let mut saved = saved(ctx, &space).await?;
+    let mut saved = unattended(ctx, &space).await?;
     if let Some(execution) = execution {
         saved.retain_execution(execution, true);
     }
-    saved.retain_unattended();
-    saved.commands.clear();
     ensure!(
         !(saved.agents.is_empty() && saved.sessions.is_empty()),
         "{} has no stopped agent to restore",
         space.name()
     );
     Ok((space, saved))
+}
+
+/// The stopped agents and last sessions of every space this process's
+/// scope reaches but its own, leaving out those whose assignment is done,
+/// which need no agent.
+async fn stopped_in_reach(ctx: &Context) -> Result<Vec<(PresentSpace, Saved)>> {
+    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let mut stopped = Vec::new();
+    for space in crate::cli::scoping::reached_below(spaces) {
+        if space.done() {
+            continue;
+        }
+        let saved = unattended(ctx, &space).await?;
+        if !(saved.agents.is_empty() && saved.sessions.is_empty()) {
+            stopped.push((space, saved));
+        }
+    }
+    Ok(stopped)
+}
+
+/// The stopped agents and last sessions of `space` that wait in no wrapper,
+/// which a scoped process queues; its stopped commands go to the restored
+/// agents.
+async fn unattended(ctx: &Context, space: &PresentSpace) -> Result<Saved> {
+    let mut saved = saved(ctx, space).await?;
+    saved.retain_unattended();
+    saved.commands.clear();
+    Ok(saved)
 }
 
 /// Restore `workspace`'s stopped agents, only `execution`'s when given, as

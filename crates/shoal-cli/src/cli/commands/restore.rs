@@ -20,7 +20,7 @@ pub(super) async fn run(
         return checkpoints::run(ctx, targets.space, checkpoint).await;
     }
     if crate::env::inherits_scope(&ctx.paths.state) {
-        agents::ensure_below(&targets, options.now || options.focus)?;
+        agents::ensure_queued(options.now || options.focus)?;
     }
     let named = !targets.space.is_empty();
     match targets::Selected::load(ctx, targets).await? {

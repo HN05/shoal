@@ -40,15 +40,13 @@ async fn stopped_in(
     Ok(stopped)
 }
 
-/// The spaces with stopped work or last sessions, as [`saved_work`] keeps
-/// them for `forget`. A done assignment needs no agent, so its space is
-/// included only to `forget`.
+/// The spaces this process reaches with stopped work or last sessions, as
+/// [`saved_work`] keeps them for `forget`. A done assignment needs no
+/// agent, so its space is included only to `forget`.
 async fn stopped_work(ctx: &Context, forget: bool) -> Result<Vec<(PresentSpace, Saved)>> {
     let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
-    let all = (spaces.workspaces.into_iter().map(PresentSpace::Workspace))
-        .chain(spaces.chats.into_iter().map(PresentSpace::Chat));
     let mut stopped = Vec::new();
-    for space in all {
+    for space in crate::cli::scoping::reached_below(spaces) {
         if space.done() && !forget {
             continue;
         }

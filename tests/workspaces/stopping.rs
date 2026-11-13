@@ -413,10 +413,8 @@ fn a_parent_forgets_only_the_stopped_work_of_its_children() {
         &["restore", &fixture.id("parent"), "--forget"][..],
         &["restore", &fixture.id("other"), "--forget"],
         &["restore", &fixture.id("other")],
-        // A stopped agent the parent did not stop is the user's.
-        &["restore", &fixture.id("child")],
+        // Starting regardless of the limits is the user's.
         &["restore", &fixture.id("child"), "--now"],
-        &["restore", "--all", "--forget"],
         &["restore"],
     ] {
         let output = scoped_command(&fixture, "parent", args);
@@ -439,11 +437,8 @@ fn a_parent_forgets_only_the_stopped_work_of_its_children() {
         .unwrap();
     assert!(!output.status.success(), "{output:?}");
     assert!(records.iter().all(|record| record.exists()));
-    let output = scoped_command(
-        &fixture,
-        "parent",
-        &["restore", &fixture.id("child"), "--forget"],
-    );
+    // Every space below it is the parent's, whoever stopped its agent.
+    let output = scoped_command(&fixture, "parent", &["restore", "--all", "--forget"]);
     assert!(output.status.success(), "{output:?}");
     let forgotten: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(forgotten["forgotten"], serde_json::json!(["child-agent"]));
@@ -465,10 +460,10 @@ fn a_parents_stop_with_yes_acknowledges_nothing_the_daemon_proves() {
 }
 
 /// A parent's stop of its child stops the workspaces below it too, and the
-/// parent resumes what it stopped, which the daemon starts outside the
-/// parent; what the user stopped stays the user's to resume.
+/// parent resumes the agents below it, whoever stopped them, which the
+/// daemon starts outside the parent.
 #[test]
-fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
+fn a_parent_stops_its_children_and_resumes_them_whoever_stopped_them() {
     let fixture = Fixture::with_config(Some(
         "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
     ));
@@ -497,25 +492,23 @@ fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
     let restored = || paths.iter().all(|path| path.join("restored").exists());
     fixture.ok(&["restore", &fixture.id("child"), &fixture.id("grandchild")]);
     wait_until("the user's restores", restored);
-    // The user's stops are not the parent's to resume.
     for workspace in ["parent", "other"] {
         let output = scoped_command(&fixture, "parent", &["stop", &fixture.id(workspace)]);
         assert!(!output.status.success(), "{workspace}: {output:?}");
     }
+    // The parent resumes what the user stopped.
     fixture.ok(&["stop", &fixture.id("child")]);
-    for args in [
-        &["restore", &fixture.id("child")][..],
-        &["restore", &fixture.id("grandchild")],
-    ] {
-        let output = scoped_command(&fixture, "parent", args);
-        assert!(!output.status.success(), "{args:?}: {output:?}");
-    }
-
     for path in &paths {
         fs::remove_file(path.join("restored")).unwrap();
     }
-    fixture.ok(&["restore", &fixture.id("child"), &fixture.id("grandchild")]);
-    wait_until("the user's second restores", restored);
+    let output = scoped_command(
+        &fixture,
+        "parent",
+        &["restore", &fixture.id("child"), &fixture.id("grandchild")],
+    );
+    assert!(output.status.success(), "{output:?}");
+    wait_until("the parent's restores of the user's stops", restored);
+
     let output = scoped_command(&fixture, "parent", &["stop", &fixture.id("child")]);
     assert!(output.status.success(), "{output:?}");
     let stopped: Value = serde_json::from_slice(&output.stdout).unwrap();
@@ -527,11 +520,7 @@ fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
     for path in &paths {
         fs::remove_file(path.join("restored")).unwrap();
     }
-    let output = scoped_command(
-        &fixture,
-        "parent",
-        &["restore", &fixture.id("child"), &fixture.id("grandchild")],
-    );
+    let output = scoped_command(&fixture, "parent", &["restore", "--all"]);
     assert!(output.status.success(), "{output:?}");
     let queued: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(queued["queued"].as_array().unwrap().len(), 2, "{queued}");

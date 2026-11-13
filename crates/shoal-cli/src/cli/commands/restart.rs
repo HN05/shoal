@@ -22,12 +22,8 @@ pub(super) async fn run(
     agent: Option<Agent>,
     options: Options,
 ) -> Result<i32> {
-    let scoped = crate::env::inherits_scope(&ctx.paths.state);
-    if scoped {
-        ensure_named(&targets)?;
-    }
     let selection = selection::load(ctx, targets).await?;
-    if scoped {
+    if crate::env::inherits_scope(&ctx.paths.state) {
         selection::ensure_below(&selection)?;
     }
     let plan = selection.plan(agent.as_ref());
@@ -71,18 +67,6 @@ pub(super) async fn run(
         return progress.interrupted(&agents, agent.as_ref());
     }
     progress.finish()
-}
-
-/// Refuse a restart in a scoped process, a workspace's or a chat's agent,
-/// that does not name the spaces it restarts. The daemon refuses each space
-/// not below the caller's, which needs the scope token: a process that
-/// cleared it stays refused.
-fn ensure_named(targets: &SpaceTargets) -> Result<()> {
-    ensure!(
-        crate::env::is_scoped() && !targets.all && !targets.space.is_empty(),
-        "scoped processes restart only the spaces below their own, by name: shoal restart <space>"
-    );
-    Ok(())
 }
 
 /// Refuse `change` before any agent restarts where this scoped process

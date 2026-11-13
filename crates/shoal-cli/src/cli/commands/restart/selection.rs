@@ -8,13 +8,14 @@ use crate::{
     model::{PresentSpace, Spaces},
 };
 
-/// `--all` selects every workspace and chat, names select theirs, and
-/// neither the picker.
+/// `--all` selects every workspace and chat but the caller's own, names
+/// select theirs, and neither the picker. The daemon lists only the agents
+/// a scoped caller may restart.
 pub(super) async fn load(ctx: &Context, targets: SpaceTargets) -> Result<Selection> {
     let named = !targets.all && !targets.space.is_empty();
     let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
     let spaces = match targets.all {
-        true => every(spaces),
+        true => crate::cli::scoping::reached_below(spaces),
         false => {
             let selected = ui::select_spaces(ctx, targets.space, false).await?;
             in_order(ctx, &spaces, selected).await?
@@ -29,11 +30,14 @@ pub(super) async fn load(ctx: &Context, targets: SpaceTargets) -> Result<Selecti
 }
 
 /// Refuse a selection that includes the scoped caller's own space,
-/// before any restarts, as the daemon would refuse its agent.
+/// before any restarts, as the daemon would refuse its agent. The daemon
+/// refuses each space outside the caller's scope, which needs the scope
+/// token: a process that cleared it stays refused.
 pub(super) fn ensure_below(selection: &Selection) -> Result<()> {
     let own = crate::env::own_space();
     ensure!(
         own.is_some()
+            && crate::env::is_scoped()
             && selection
                 .spaces
                 .iter()
@@ -41,13 +45,6 @@ pub(super) fn ensure_below(selection: &Selection) -> Result<()> {
         "scoped processes restart only the spaces below their own; finish their own with shoal done"
     );
     Ok(())
-}
-
-/// Every workspace and chat of `spaces`.
-fn every(spaces: Spaces) -> Vec<PresentSpace> {
-    let workspaces = spaces.workspaces.into_iter().map(PresentSpace::Workspace);
-    let chats = spaces.chats.into_iter().map(PresentSpace::Chat);
-    workspaces.chain(chats).collect()
 }
 
 /// The spaces `selected` names among `spaces`, in its order, each once. A

@@ -11,7 +11,7 @@ use crate::client::output::{
 use crate::client::saved::Queuing;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    cli::{args::SpaceTargets, commands::turns::Continuation, context::Context, ui},
+    cli::{commands::turns::Continuation, context::Context, ui},
     config::permissions::PermissionChange,
     execution::recovery::Saved,
     model::PresentSpace,
@@ -253,15 +253,15 @@ async fn continue_turns(
 }
 
 /// Refuse a restore in a scoped process, a workspace's or a chat's agent,
-/// that does not name the spaces below its own or restores in this terminal,
-/// `here`: it only queues the restores of the agents it stopped there, which
-/// the daemon starts, or forgets their stopped work.
-pub(super) fn ensure_below(targets: &SpaceTargets, here: bool) -> Result<()> {
-    // The daemon checks that each space is below the caller's, which needs
-    // the scope token: a process that cleared it stays refused.
+/// that restores in this terminal or regardless of the limits, `here`: it
+/// only queues the restores of the agents of the spaces its scope reaches,
+/// which the daemon starts, or forgets their stopped work.
+pub(super) fn ensure_queued(here: bool) -> Result<()> {
+    // The daemon checks that each space is in the caller's scope, which
+    // needs the scope token: a process that cleared it stays refused.
     ensure!(
-        crate::env::is_scoped() && !targets.all && !targets.space.is_empty() && !here,
-        "scoped processes restore only the spaces below theirs, by number and without --now or --focus: shoal restore <space> [--forget]"
+        crate::env::is_scoped() && !here,
+        "scoped processes queue the restores of the spaces their scope reaches, without --now or --focus"
     );
     Ok(())
 }
