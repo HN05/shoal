@@ -47,7 +47,7 @@ pub struct Options {
 /// Without a terminal every restore queues, which `now` starts at once,
 /// since this process can start none of them. Every target, and a change to
 /// the permissions given for every selected agent, is checked before any
-/// setup or restore.
+/// setup, reopening or restore.
 pub(super) async fn restore(
     ctx: &Context,
     mut selected: Selected,
@@ -57,7 +57,7 @@ pub(super) async fn restore(
     let scoped = crate::env::inherits_scope(&ctx.paths.state);
     ensure!(
         !scoped || selected.removed.is_empty(),
-        "workspace processes cannot reopen removed workspaces; ask the user to run shoal restore"
+        "scoped processes cannot reopen removed workspaces; ask the user to run shoal restore"
     );
     let change = options.change.as_ref();
     let restores_agents = !options.forget && !options.no_agents;
@@ -78,14 +78,50 @@ pub(super) async fn restore(
     if scoped && restores_agents {
         return queue::queue_below(ctx, selected, options.execution, change).await;
     }
-    let Some(mut reopened) = super::reopen::reopen_each(ctx, &selected.removed).await? else {
-        return Ok(1);
-    };
+    ensure_one_agent(&selected, &options)?;
+    let reopened = super::reopen::reopen_each(ctx, &selected.removed).await?;
+    let reopening = super::reopen::Reopening::of(&reopened);
+    let restored = restore_reopened(ctx, selected, reopened, options).await;
+    restored.map_err(|error| reopening.explain(error))
+}
+
+/// Restore the `selected` spaces once the workspaces `reopened` for them
+/// are open again: everything but the agents for `--no-agents`, otherwise
+/// their agents too, the reopened workspaces' among them.
+async fn restore_reopened(
+    ctx: &Context,
+    mut selected: Selected,
+    mut reopened: Vec<Reopened>,
+    options: Options,
+) -> Result<i32> {
     if options.no_agents {
         return restore_without_agents(ctx, &selected, reopened).await;
     }
     select_reopened(ctx, &mut selected, &mut reopened).await?;
     restore_selected(ctx, selected, reopened, options).await
+}
+
+/// Refuse `--execution`, which selects an agent of one space, and
+/// `--focus`, which restores one agent here, unless the `selected` spaces
+/// come to one, counting each removed workspace whose removal saved agents,
+/// or for `--focus` to one failed setup, before anything opens again.
+fn ensure_one_agent(selected: &Selected, options: &Options) -> Result<()> {
+    let Some(spaces) = &selected.spaces else {
+        return Ok(());
+    };
+    let reopened = (selected.removed.iter())
+        .filter(|workspace| !(workspace.agents.is_empty() && workspace.last_sessions.is_empty()))
+        .count();
+    let spaces = spaces.len() + reopened;
+    ensure!(
+        options.execution.is_none() || spaces == 1,
+        "--execution selects a stopped execution of one space"
+    );
+    ensure!(
+        !options.focus || spaces + selected.setups.len() == 1,
+        "--focus restores the agent of one space"
+    );
+    Ok(())
 }
 
 /// Restore the agents of the `selected` spaces as `options` says, with the
@@ -128,12 +164,7 @@ async fn restore_selected(
             reports::reopened(ctx, reopened)?;
             setups::retry_here(ctx, setup, change).await
         }
-        (spaces, _) => {
-            ensure!(
-                execution.is_none() || matches!(spaces, Some([_])),
-                "--execution selects a stopped execution of one space"
-            );
-            ensure!(!focus, "--focus restores the agent of one space");
+        _ => {
             let restore = Restore {
                 execution,
                 forget,

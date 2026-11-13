@@ -243,9 +243,7 @@ impl TurnEnd {
 impl AgentMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
-            Self::AwaitAgentWake { .. } | Self::WaitAgentUpdates { .. } => {
-                Lifetime::Resumed
-            }
+            Self::AwaitAgentWake { .. } | Self::WaitAgentUpdates { .. } => Lifetime::Resumed,
             _ => Lifetime::Reply,
         }
     }

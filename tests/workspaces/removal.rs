@@ -129,6 +129,18 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
 }
 
 #[test]
+fn restore_refuses_focus_without_one_agent_before_reopening() {
+    let fixture = Fixture::new();
+    fixture.add("gone");
+    fixture.ok(&["rm", "--wait", &fixture.id("gone"), "--yes"]);
+    // Its removal saved no agent, so --focus has none to restore.
+    let refused = fixture.run(&["restore", &fixture.id("gone"), "--focus"]);
+    assert!(!refused.status.success(), "{refused:?}");
+    let listed = fixture.ok(&["restore"]);
+    assert_eq!(listed["removed"][0]["name"], "gone", "{listed}");
+}
+
+#[test]
 fn restore_without_agents_leaves_a_live_spaces_stopped_work_saved() {
     let fixture = Fixture::new();
     let stopped = fixture.add("stopped");

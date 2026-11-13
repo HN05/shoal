@@ -3,7 +3,7 @@ use crate::cli::commands::restore::agents::reports::QueuedExt;
 use crate::client::execution_ids::ExecutionId;
 use std::collections::BTreeSet;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 
 use super::agents::queue::Stopped;
 use super::checkpoints::branch_label;
@@ -21,28 +21,62 @@ use crate::{
 
 /// Open each of the `removed` workspaces again, set it up, link its PRs
 /// and run its post-setup hook, in which the agents restored for it start;
-/// `None` once a setup did not finish, which it reported. A workspace
+/// an error once one fails names those opened before it. A workspace
 /// opened alone becomes the directory of a shell that follows the caller.
 pub(super) async fn reopen_each(
     ctx: &Context,
-    removed: &[SpaceSelector],
-) -> Result<Option<Vec<Reopened>>> {
+    removed: &[RemovedWorkspace],
+) -> Result<Vec<Reopened>> {
     let mut reopened = Vec::new();
     for workspace in removed {
-        let restore = crate::client::removal::restore(&ctx.paths, workspace.clone());
-        let restored = ctx.progress("Restoring workspace", restore).await?;
-        let Some(opened) = prepare_reopened(ctx, *restored).await? else {
-            return Ok(None);
-        };
-        super::super::workspaces::run_post_setup(ctx, &opened.workspace).await?;
-        reopened.push(opened);
+        let opened = reopen(ctx, workspace).await;
+        reopened.push(opened.map_err(|error| Reopening::of(&reopened).explain(error))?);
     }
     if let [opened] = reopened.as_slice()
         && terminal::follows_caller(ctx)
     {
         shell::navigate(ctx, &opened.workspace.path)?;
     }
-    Ok(Some(reopened))
+    Ok(reopened)
+}
+
+/// Open the removed `workspace` again, set it up, link its PRs and run its
+/// post-setup hook.
+async fn reopen(ctx: &Context, workspace: &RemovedWorkspace) -> Result<Reopened> {
+    let restore =
+        crate::client::removal::restore(&ctx.paths, SpaceSelector::id(&workspace.workspace_id));
+    let restored = ctx.progress("Restoring workspace", restore).await?;
+    let number = restored.opened.workspace.number;
+    let opened = (prepare_reopened(ctx, *restored).await?).with_context(|| {
+        format!(
+            "the setup of {} did not finish; shoal restore {number} retries it",
+            workspace.name
+        )
+    })?;
+    super::super::workspaces::run_post_setup(ctx, &opened.workspace).await?;
+    Ok(opened)
+}
+
+/// The workspaces a restore opened again, which an error that ends it
+/// afterwards names, since it reports them no other way.
+pub(super) struct Reopening(Option<String>);
+
+impl Reopening {
+    pub(super) fn of(reopened: &[Reopened]) -> Self {
+        let names = reopened
+            .iter()
+            .map(|opened| format!("{} as {}", opened.workspace.name, opened.workspace.number))
+            .collect::<Vec<_>>();
+        Self((!names.is_empty()).then(|| names.join(", ")))
+    }
+
+    /// `error`, saying which workspaces opened before it.
+    pub(super) fn explain(&self, error: anyhow::Error) -> anyhow::Error {
+        match &self.0 {
+            Some(names) => error.context(format!("reopened {names}, then stopped")),
+            None => error,
+        }
+    }
 }
 
 /// Set up a workspace the daemon opened again from a removal record, and

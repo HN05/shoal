@@ -21,8 +21,8 @@ pub(super) enum Target {
     /// A space by ID, a workspace or a stopped chat, or a selector no space
     /// has, which the daemon refuses.
     Space(SpaceSelector),
-    /// A removed workspace by its ID, which a restore opens again.
-    Removed(SpaceSelector),
+    /// A removed workspace, which a restore opens again.
+    Removed(Box<RemovedWorkspace>),
 }
 
 /// The space `selector` names among `spaces` and the `removed` workspaces:
@@ -35,13 +35,12 @@ pub(super) fn resolve(
     match spaces.find(&selector) {
         Some(PresentSpace::Chat(chat)) if chat.running => Target::Running(Box::new(chat)),
         Some(space) => Target::Space(SpaceSelector::id(space.id())),
-        None if removed
-            .iter()
-            .any(|workspace| selector.given_id() == Some(&workspace.workspace_id)) =>
+        None => match (removed.iter())
+            .find(|workspace| selector.given_id() == Some(&workspace.workspace_id))
         {
-            Target::Removed(selector)
-        }
-        None => Target::Space(selector),
+            Some(workspace) => Target::Removed(Box::new(workspace.clone())),
+            None => Target::Space(selector),
+        },
     }
 }
 
@@ -58,8 +57,8 @@ pub(super) struct Selected {
     /// it, once [`super::agents::setups::take_failed`] takes them from the
     /// others.
     pub setups: Vec<FailedSetup>,
-    /// The removed workspaces named, by ID, which open again.
-    pub removed: Vec<SpaceSelector>,
+    /// The removed workspaces named, which open again.
+    pub removed: Vec<RemovedWorkspace>,
 }
 
 impl Selected {
@@ -124,10 +123,12 @@ impl Selected {
                     spaces.push(space);
                 }
             }
-            Target::Removed(workspace) if !self.removed.contains(&workspace) => {
-                self.removed.push(workspace);
+            Target::Removed(workspace) => {
+                let id = &workspace.workspace_id;
+                if !self.removed.iter().any(|named| named.workspace_id == *id) {
+                    self.removed.push(*workspace);
+                }
             }
-            Target::Removed(_) => {}
         }
     }
 }
