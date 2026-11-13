@@ -109,9 +109,13 @@ impl Target {
     /// sleeps or is stopped.
     async fn resolve(ctx: &Context, name: Option<SpaceSelector>) -> Result<Self> {
         let chats = crate::client::chats::recorded(&ctx.paths).await?;
+        let running: Vec<Chat> = (chats.iter())
+            .filter(|chat| chat.running)
+            .cloned()
+            .collect();
         if name.as_ref().is_some_and(recent::is_previous) {
-            let id = recent::previous_space(ctx, &chats).await?;
-            return Self::space(ctx, chats, id).await;
+            let id = recent::previous_space(ctx, &running).await?;
+            return Self::space(ctx, running, id).await;
         }
         if let Some(name) = name {
             return match (chats.into_iter()).find(|chat| name.selects(&chat.id, chat.number)) {
@@ -123,10 +127,6 @@ impl Target {
             Err(error) if error.is::<NoCurrentWorkspace>() => {}
             current => return current,
         }
-        let running: Vec<Chat> = (chats.iter())
-            .filter(|chat| chat.running)
-            .cloned()
-            .collect();
         if let Some(chat) = checkout_chat(ctx, &running).await? {
             return Ok(Self::Chat(Box::new(chat)));
         }
@@ -202,12 +202,13 @@ impl Target {
 
     /// The session `named` names, the target's only one or one picked,
     /// taken once the agent there runs. With no session named and none
-    /// showing an agent, an agent that sleeps or is stopped wakes first; a
-    /// session where Shoal stopped the agent wakes it.
+    /// showing an agent, an agent that sleeps wakes first, and a stopped one
+    /// when no session is left to attach to; a session where Shoal stopped
+    /// the agent wakes it.
     async fn awake_session(self, ctx: &Context, named: Option<String>) -> Result<(Self, Session)> {
         let sessions = self.sessions(ctx).await?;
         let shows_agent = sessions.iter().any(|session| session.agent.is_some());
-        if named.is_none() && !shows_agent && self.wake(ctx).await? {
+        if named.is_none() && !shows_agent && self.wake(ctx, sessions.is_empty()).await? {
             return self.awaited(ctx, None).await;
         }
         let chosen = chosen_session(ctx, &self, named, &sessions)?.clone();
@@ -222,9 +223,9 @@ impl Target {
 
     /// Wake the target's agent at once, whatever the agent limits and the
     /// queue's rank: start the restore that waits for it, as for an agent
-    /// that sleeps, or restore its stopped work as `shoal restore --now` does.
-    /// Whether it had either.
-    async fn wake(&self, ctx: &Context) -> Result<bool> {
+    /// that sleeps, or when `stopped` too restore its stopped work as
+    /// `shoal restore --now` does. Whether it woke one.
+    async fn wake(&self, ctx: &Context, stopped: bool) -> Result<bool> {
         let entries = queued_agents::entries(ctx).await?;
         let restore = (entries.into_iter())
             .find(|entry| entry.kind == QueueKind::Restore && entry.space() == Some(self.id()));
@@ -235,9 +236,10 @@ impl Target {
             return Ok(true);
         }
         let space = SpaceSelector::id(self.id());
-        if crate::client::saved::read(&ctx.paths, space.clone())
-            .await?
-            .is_empty()
+        if !stopped
+            || crate::client::saved::read(&ctx.paths, space.clone())
+                .await?
+                .is_empty()
         {
             return Ok(false);
         }

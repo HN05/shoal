@@ -246,8 +246,9 @@ only the stop, so `attach` to it starts its queued restore and attaches once
 the agent runs, under every place recorded for it, and its pickers offer the
 workspace and that session as stopped. `attach` wakes an agent whatever the
 limits and rank, since the user asks for it: without a session showing an
-agent, it starts the restore an asleep agent waits for, or restores a stopped
-agent as `shoal restore --now` does, through that restore, so it never starts a
+agent, it starts the restore an asleep agent waits for, and without any
+session left, where only a restore gives it something to show, it restores a
+stopped agent as `shoal restore --now` does, through that restore, so it never starts a
 second execution beside a waiting one. A daemon update waits for a stop
 and a restore waiting for load, but not through a wait for an update, which
 may last indefinitely; that wrapper reattaches to the updated daemon. Restores wait in the agent queue,

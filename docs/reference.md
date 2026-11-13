@@ -1218,8 +1218,8 @@ attaches once it runs: the session of an agent that sleeps shows only the stop
 while its wrapper waits, the pickers list that session as stopped, and
 attaching to it starts its restore there, as `shoal queue start --attach`
 does. Without a session showing an agent, attaching starts the restore an
-asleep agent waits for, or restores a stopped agent as `shoal restore --now`
-does. Neither starts a second agent beside one whose wrapper waits. A session
+asleep agent waits for, and without any session left it restores a stopped
+agent as `shoal restore --now` does. Neither starts a second agent beside one whose wrapper waits. A session
 whose agent stopped without a restore in the queue says why the agent stopped
 and what restores it. Sessions are named after the workspace's directory, or for a
 chat opaquely, such as `chat-0b9c3a52`, since nothing is built from its name, suffixed `-2`, `-3`, ... when the name
