@@ -2,7 +2,7 @@
 //! registered checkout it comes from as its agent account, or another
 //! repository a run or workflow URL names as the user's own logins, which
 //! workspace processes may not use, and the branch a run starts on there.
-use crate::client::space_ids::SpaceId;
+use crate::client::{repository_ids::RepositoryId, space_ids::SpaceId};
 use anyhow::{Context, Result, ensure};
 
 use crate::client::space_names::SpaceSelector;
@@ -40,6 +40,14 @@ impl RunPlace {
     pub fn own_workspace(&self) -> Option<&Workspace> {
         (self.origin.as_ref())
             .and_then(Place::workspace)
+            .filter(|_| self.own)
+    }
+
+    /// The repository the request acts in when it is the one the request
+    /// came from.
+    pub fn repository_id(&self) -> Option<&RepositoryId> {
+        (self.origin.as_ref())
+            .map(Place::repository_id)
             .filter(|_| self.own)
     }
 

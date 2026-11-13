@@ -2,9 +2,9 @@
 //! workspace's repository as its agent account, or of another repository as
 //! the user.
 mod place;
+mod reach;
 
 use crate::client::space_ids::SpaceId;
-use shoal_refs::BranchName;
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -26,7 +26,7 @@ use crate::{
             reference::{ItemInput, ItemRef},
         },
     },
-    model::{LinkedItem, Relation, Workspace},
+    model::{LinkedItem, Relation},
     protocol::ItemContext,
 };
 
@@ -34,8 +34,8 @@ impl Manager {
     /// Start `workflow`, named by its file or ID or by its web URL, on
     /// `branch`, by default the one the URL names, and link the run as
     /// opened in the workspace where the forge reports it, so watches follow
-    /// it. Scoped processes start runs only on the branch of the workspace
-    /// they act from.
+    /// it. Scoped processes start runs only on the branches their scope
+    /// reaches.
     pub async fn start_ci_run(
         &self,
         context: Option<&ItemContext>,
@@ -46,8 +46,8 @@ impl Manager {
     ) -> Result<StartedRun> {
         let (place, workflow, linked) = self.workflow_place(context, workflow, caller).await?;
         let branch = place.run_branch(branch.or(linked)).await?;
-        if caller.is_some() {
-            on_own_branch_name(place.own_workspace(), &branch)?;
+        if let Some(caller) = caller {
+            (self.ensure_run_branch_in_reach(caller, &place, Some(&branch))).await?;
         }
         let run = NewRun {
             workflow,
@@ -91,8 +91,8 @@ impl Manager {
     }
 
     /// Rerun or cancel the run `input` names in the repository of `context`,
-    /// or of its URL; workspace processes act only on runs of their
-    /// workspace's branch.
+    /// or of its URL; scoped processes act only on the runs of the branches
+    /// their scope reaches.
     pub async fn ci_run_action(
         &self,
         context: Option<&ItemContext>,
@@ -107,9 +107,8 @@ impl Manager {
             .find_run(account, &run, action)
             .await
             .with_context(|| format!("could not {action} CI run {run}"))?;
-        // Scope keeps workspace processes in their workspace.
-        if caller.is_some() {
-            on_own_branch(place.own_workspace(), &run)?;
+        if let Some(caller) = caller {
+            (self.ensure_run_branch_in_reach(caller, &place, run.branch.as_deref())).await?;
         }
         forge
             .act_on_run(account, &run, action, failed)
@@ -230,35 +229,6 @@ fn started_link(forge: &ForgeRepo, started: &StartedRun) -> Option<LinkedItem> {
         url,
         title: started.workflow.clone(),
     })
-}
-
-/// How a chat, which has no branch, acts on the runs of a workspace below it.
-const FROM_A_CHAT: &str = "a chat names a workspace below it with --space";
-
-/// Refuse a run started on any branch but the workspace's, or in another
-/// repository; a chat has no branch.
-fn on_own_branch_name(workspace: Option<&Workspace>, branch: &str) -> Result<()> {
-    ensure!(
-        workspace.is_some_and(
-            |workspace| workspace.branch.as_ref().map(BranchName::as_str) == Some(branch)
-        ),
-        "scoped processes start CI runs only on the branch of the workspace they act from; {FROM_A_CHAT}"
-    );
-    Ok(())
-}
-
-/// Refuse a run on any branch but the workspace's, or of another
-/// repository; a chat has no branch.
-fn on_own_branch(workspace: Option<&Workspace>, run: &Run) -> Result<()> {
-    ensure!(
-        workspace.is_some_and(|workspace| {
-            run.branch.is_some()
-                && run.branch.as_deref() == workspace.branch.as_ref().map(BranchName::as_str)
-        }),
-        "scoped processes act only on CI runs of the branch of the workspace they act from; \
-         {FROM_A_CHAT}, and use --pr for a PR's checks"
-    );
-    Ok(())
 }
 
 #[cfg(test)]

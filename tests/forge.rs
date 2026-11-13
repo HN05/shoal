@@ -4213,7 +4213,8 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
         [json!([dispatch, {"ref": "topic", "inputs": {"level": "full", "note": "a=b"}}])]
     );
 
-    // Workspace processes start runs only on their own branch.
+    // Workspace processes start runs on the branches of the workspaces
+    // their scope reaches and on the default branch.
     let exported = fixture.ok(&["internal", "env", &fixture.id("topic")]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let start = |branch: &str| {
@@ -4223,15 +4224,17 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
             Some(scope),
         )
     };
-    let refused = start("main");
+    let refused = start("elsewhere");
     assert_eq!(refused["type"], "error", "{refused}");
     assert!(fixture.requests().is_empty());
-    let started = start("topic");
-    assert_eq!(started["type"], "ci_run_started", "{started}");
-    assert_eq!(
-        writes(&fixture),
-        [json!([dispatch, {"ref": "topic", "inputs": {}}])]
-    );
+    for branch in ["topic", "main"] {
+        let started = start(branch);
+        assert_eq!(started["type"], "ci_run_started", "{started}");
+        assert_eq!(
+            writes(&fixture),
+            [json!([dispatch, {"ref": branch, "inputs": {}}])]
+        );
+    }
     let unscoped = fixture.request(json!({"start_ci_run": {"workspace": fixture.id("topic"),
         "workflow": "deps.yml", "branch": "main", "inputs": {}}}));
     assert_eq!(unscoped["data"]["branch"], "main", "{unscoped}");
@@ -4924,7 +4927,7 @@ fn ci_run_actions_rerun_and_cancel_runs_of_the_workspace_branch() {
     };
     fixture.respond(json!({
         "GET repos/team/project/actions/runs/12": run(12, "topic"),
-        "GET repos/team/project/actions/runs/13": run(13, "main"),
+        "GET repos/team/project/actions/runs/13": run(13, "elsewhere"),
         "POST repos/team/project/actions/runs/12/rerun-failed-jobs": {"status": 201},
         "POST repos/team/project/actions/runs/12/cancel": {"status": 202},
         "POST repos/team/project/actions/runs/13/rerun": {"status": 201},
@@ -4947,7 +4950,8 @@ fn ci_run_actions_rerun_and_cancel_runs_of_the_workspace_branch() {
         ])]
     );
 
-    // Workspace processes act only on runs of their own branch.
+    // Workspace processes act only on runs of the branches their scope
+    // reaches and of the default branch.
     let exported = fixture.ok(&["internal", "env", &fixture.id("topic")]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let act = |run: &str, action: &str, scope| {

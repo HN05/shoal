@@ -1,6 +1,6 @@
 //! The forge and the accounts item actions go out with: the user's own
 //! logins for reads and the user's decisions, the agent account for the rest.
-use crate::client::space_ids::SpaceId;
+use crate::client::{repository_ids::RepositoryId, space_ids::SpaceId};
 use anyhow::{Context, Result};
 
 use crate::{
@@ -28,6 +28,14 @@ impl Place {
         match self {
             Self::Workspace(workspace) => Some(workspace),
             Self::Chat { .. } | Self::Checkout(_) => None,
+        }
+    }
+
+    /// The repository it acts in.
+    pub(in crate::daemon::links) fn repository_id(&self) -> &RepositoryId {
+        match self {
+            Self::Workspace(workspace) => &workspace.repository_id,
+            Self::Chat { checkout, .. } | Self::Checkout(checkout) => &checkout.id,
         }
     }
 

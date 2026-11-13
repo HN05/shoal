@@ -29,12 +29,6 @@ fn a_started_run_is_linked_only_where_shoal_reads_runs() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn a_chat_starts_runs_only_through_a_workspace_below_it() {
-    // A chat has no branch, so it names a workspace below it instead.
-    assert!(on_own_branch_name(None, "topic").is_err());
-}
-
 #[tokio::test]
 async fn only_a_chat_without_a_repository_watches_runs_beyond_its_own_repository() {
     use crate::{
