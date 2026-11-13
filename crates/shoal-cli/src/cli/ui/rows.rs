@@ -20,7 +20,7 @@ use crate::{
         list_status::ListStatus,
         output::{Palette, Style},
     },
-    client::progress::Progress,
+    client::{executions::ServiceLimit, progress::Progress},
     config::modes::ModeName,
     model::{
         Chat, Dependency, HeldBy, InheritedRank, QueueEntry, QueueRank, Repository, ReviewMark,
@@ -367,7 +367,8 @@ fn inherited_label(inherited: Option<&InheritedRank>) -> String {
 }
 
 /// What holds a waiting entry back: `memory: needs 4.0 GiB, 1.2 GiB left`,
-/// a limit's setting, low disk space or a failed reading.
+/// a limit's setting, low disk space, a failed reading or its tool's
+/// upstream limit.
 pub fn held_by_label(held: HeldBy) -> String {
     match held {
         HeldBy::Memory { needed, left } => format!(
@@ -382,6 +383,13 @@ pub fn held_by_label(held: HeldBy) -> String {
         HeldBy::RepositoryLimit => "agent.max_running".into(),
         HeldBy::Permits => "runner.permit pool".into(),
         HeldBy::Reading => "critical or missing reading".into(),
+        HeldBy::UpstreamLimit { limit, until } => {
+            let limit = match limit {
+                ServiceLimit::RateLimited => "rate limited",
+                ServiceLimit::Exhausted => "out of quota",
+            };
+            format!("upstream {limit} until {}", until.local_minutes())
+        }
     }
 }
 

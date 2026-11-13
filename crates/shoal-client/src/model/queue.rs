@@ -149,6 +149,12 @@ pub enum HeldBy {
     Permits,
     /// A memory or disk reading is critical or missing.
     Reading,
+    /// The proxy of a running agent of the same tool found its upstream
+    /// under `limit`, which stands until `until`.
+    UpstreamLimit {
+        limit: crate::executions::ServiceLimit,
+        until: crate::time::UnixTime,
+    },
 }
 
 /// A CI job of a repository's runner, from the forge's queue, with the run

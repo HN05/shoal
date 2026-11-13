@@ -50,11 +50,29 @@ struct WaitingWork {
     /// The jobs left out of `entries` while their repository's permits are
     /// all held.
     permits_busy: Vec<QueueEntryId>,
+    /// The entries of `entries` whose tool's upstream is under a limit,
+    /// which wait it out.
+    upstream_limited: HashMap<QueueEntryId, HeldBy>,
     /// Which agents are light, read once for the pass while any entry waits.
     light: Light,
 }
 
 impl WaitingWork {
+    /// The entries admission may start: those no upstream limit holds.
+    fn admissible(&self) -> Vec<Waiting> {
+        (self.entries.iter())
+            .filter(|entry| !self.upstream_limited.contains_key(&entry.id))
+            .cloned()
+            .collect()
+    }
+
+    /// What holds back the entries of `entries` that an upstream limit
+    /// holds, leaving out those blockers took away.
+    fn upstream_holds(&self) -> impl Iterator<Item = (QueueEntryId, HeldBy)> + '_ {
+        (self.entries.iter())
+            .filter_map(|entry| Some((entry.id.clone(), *self.upstream_limited.get(&entry.id)?)))
+    }
+
     /// The entries that still wait once `admitted` start.
     fn unstarted(&self, admitted: &[QueueEntryId]) -> HashSet<QueueEntryId> {
         (self.entries.iter())
@@ -160,8 +178,9 @@ impl Manager {
     }
 
     /// The entries of `work` that fit beside the slots in use, and what
-    /// holds back the others, its jobs whose permits are all held among
-    /// them, where `recovered` says whether healthy readings are published.
+    /// holds back the others, its jobs whose permits are all held and its
+    /// entries whose tool's upstream is limited among them, where
+    /// `recovered` says whether healthy readings are published.
     async fn fitting_entries(&self, work: &WaitingWork, recovered: bool) -> Result<Admission> {
         let mut admission = match work.entries.is_empty() {
             true => Admission::default(),
@@ -171,6 +190,7 @@ impl Manager {
         admission
             .held
             .extend(permits.map(|id| (id, HeldBy::Permits)));
+        admission.held.extend(work.upstream_holds());
         Ok(admission)
     }
 
@@ -185,7 +205,7 @@ impl Manager {
         let jobs = self.job_activities().await?;
         let limits = self.agent_limits(repositories, &slots, &jobs).await?;
         let occupied: Vec<RepositoryId> = slots.into_iter().map(|slot| slot.repository).collect();
-        Ok(admit(&occupied, &work.entries, &limits, recovered))
+        Ok(admit(&occupied, &work.admissible(), &limits, recovered))
     }
 
     /// Grant the `admitted` entries of `work` their start: wake the runners
@@ -234,6 +254,7 @@ impl Manager {
             true => Light::default(),
             false => self.light().await?,
         };
+        let upstream_limited = self.upstream_limited(&queued).await?;
         let waiters = self.agent_queue.restore_waiters();
         let mut restores = HashMap::new();
         let mut stopped = HashSet::new();
@@ -250,6 +271,7 @@ impl Manager {
             job,
             mode,
             attended,
+            agent: _,
         } in queued
         {
             let is_light = kind != QueueKind::Job
@@ -321,8 +343,29 @@ impl Manager {
             restores,
             stopped,
             permits_busy,
+            upstream_limited,
             light,
         })
+    }
+
+    /// The agents of `queued` whose tool's upstream stands under a limit,
+    /// with the hold each waits for. An agent the user attends starts
+    /// anyway, as it does on a full machine.
+    async fn upstream_limited(
+        &self,
+        queued: &[QueuedRow],
+    ) -> Result<HashMap<QueueEntryId, HeldBy>> {
+        if queued.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let limits = self.tool_limits(UnixTime::now()).await?;
+        Ok((queued.iter())
+            .filter(|row| row.kind != QueueKind::Job && !row.attended)
+            .filter_map(|row| {
+                let (limit, until) = *limits.get(&row.agent)?;
+                Some((row.id.clone(), HeldBy::UpstreamLimit { limit, until }))
+            })
+            .collect())
     }
 
     /// Sort `waiting` in rank order; an entry that arrived since the rank

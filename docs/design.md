@@ -1559,7 +1559,10 @@ admits one agent; critical readings admit none. When memory is short, work
 that fits, such as a small CI job, starts ahead of higher-ranked work that
 does not, so the machine stays busy; once that work has waited 15 minutes, a
 fixed value, nothing it outranks starts until it fits, so a large start is
-not passed over for good. Dynamic is machine-wide, so a
+not passed over for good. An AI tool whose upstream a proxied agent finds
+rate-limited or out of quota holds that tool's queued agents, which would only
+fail, while other tools' start; a limit without a named end lifts after 15
+minutes, a fixed value, so a new agent finds out whether it still stands. Dynamic is machine-wide, so a
 repository's `dynamic` adds no limit. A positive number fixes a limit and `none` disables it
 for that layer. Fixed limits keep dynamic admission's disk rule, since an agent
 started on a nearly full disk is soon stopped by disk protection. Per-agent

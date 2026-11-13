@@ -1808,3 +1808,99 @@ async fn a_chats_restore_starts_on_a_full_machine() {
     let held = add(&manager, &repo, "held").await;
     assert!(!held.start, "the machine stays full");
 }
+
+/// A running claude agent in a workspace of `repo`, whose proxy found
+/// claude's upstream rate-limited for an hour; the workspace and when the
+/// limit lifts.
+async fn limit_claude(
+    manager: &Manager,
+    repo: &Repository,
+) -> (SpaceSelector, crate::time::UnixTime) {
+    use crate::client::executions::{ServiceLimit, UpstreamLimit};
+    let workspace = manager
+        .create_workspace(&repo.id, "busy".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO executions(id,space_id,state,agent) VALUES ('running',?1,?2,'claude')",
+                params![id, ExecutionState::Running],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let until = crate::time::UnixTime::now() + Duration::from_secs(3600);
+    let selector = SpaceSelector::id(&workspace.id);
+    let limit = UpstreamLimit {
+        limit: ServiceLimit::RateLimited,
+        until: Some(until),
+    };
+    (manager.report_upstream_limit(&selector, "running".into(), Some(limit)))
+        .await
+        .unwrap();
+    (selector, until)
+}
+
+#[tokio::test]
+async fn a_tools_upstream_limit_holds_its_queued_agents_while_others_start() {
+    use crate::client::executions::ServiceLimit;
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 3);
+    let (selector, until) = limit_claude(&manager, &repo).await;
+    let claude = add(&manager, &repo, "claude").await;
+    assert!(!claude.start);
+    let claude = claude.entry.unwrap();
+    let codex = QueueRequest {
+        agent: "codex".into(),
+        ..request(&repo, "codex", false)
+    };
+    assert!(manager.queue_add(codex).await.unwrap().start);
+    let entries = manager.queue_entries().await.unwrap();
+    let waiting = entries.iter().find(|entry| entry.id == claude.id).unwrap();
+    assert_eq!(
+        waiting.held_by,
+        Some(crate::model::HeldBy::UpstreamLimit {
+            limit: ServiceLimit::RateLimited,
+            until
+        })
+    );
+    // Once its upstream answers again, it starts.
+    (manager.report_upstream_limit(&selector, "running".into(), None))
+        .await
+        .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert!(started(&claude.id));
+}
+
+/// The user attends a chat, so its restore starts whatever the limit, and
+/// its agent shows the upstream's failure.
+#[tokio::test]
+async fn a_chats_restore_starts_under_its_tools_upstream_limit() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 3);
+    limit_claude(&manager, &repo).await;
+    let chat = crate::daemon::test_support::chat(&manager, "master", "chat", None, None).await;
+    let execution = ExecutionId::from("stopped");
+    crate::execution::recovery::save_record(
+        &manager.paths,
+        &chat.id,
+        &execution,
+        &crate::execution::TrackedAgent::named("claude"),
+        None,
+        None,
+    )
+    .unwrap();
+    let env = BTreeMap::from([("HERDR_ENV".into(), "1".into())]);
+    let entry = manager
+        .queue_stopped_restore(&SpaceSelector::id(&chat.id), &execution, env)
+        .await
+        .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert!(started(&entry.id));
+}

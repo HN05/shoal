@@ -1969,7 +1969,12 @@ in [rank order](#queue-order) as slots free, passing over an entry whose
 repository is full or that does not fit in memory, and records a
 `queue_started` notification. Once an entry has been held 15 minutes for its
 memory, nothing it outranks that needs measured memory starts until it fits;
-each such entry waits with `memory_kept`. An entry queued from another host's pane, block
+each such entry waits with `memory_kept`. While the [proxy](#agents) of a running
+agent finds its tool's upstream rate-limited or out of quota, queued agents of
+that tool wait with `upstream_limit` and others start ahead: until the reset
+the upstream names, or, without one, 15 minutes after the proxy last met the
+limit, unless a request through it succeeds first. A chat's restore starts
+regardless, since the user attends the chat. An entry queued from another host's pane, block
 or tab opens a background tab or window where it was queued; otherwise it runs where
 `terminal.default_host` puts it, by default a detached zmx session that `shoal attach`
 reaches. A start keeps its slot through setup until
@@ -2062,7 +2067,8 @@ with its run, `blockers` while any remain, the setup of the workspace it opens
 among them,
 `waits_for_update` for a restore of an idle agent, `held_by` with its `reason`
 (`memory` with `needed` and `left` bytes, `memory_kept`, `disk`, `max_agents`, `max_jobs`,
-`repository_limit`, `permits` or `reading`), a waiting entry's `rank` with its
+`repository_limit`, `permits`, `reading`, or `upstream_limit` with the `limit`,
+`rate_limited` or `exhausted`, and the Unix-seconds `until`), a waiting entry's `rank` with its
 `priority` and `tier` and, for each it took from other work, `priority_from`
 or `tier_from` with that work's space number or launch name `from` and the
 `dependency` (`blocked`, `parent`, `question`, `stacked`, `lease` or
