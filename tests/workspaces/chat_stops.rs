@@ -155,9 +155,8 @@ fn stopping_processes_refuses_a_stopped_chat_first() {
 }
 
 /// `parent` is refused its own space and the chat `other` outside its tree,
-/// stops the chat `talk` below it and resumes it, and once the user stopped
-/// `talk`, stops it again without taking it over, so its resume of it is
-/// refused.
+/// stops the chat `talk` below it and resumes it, and resumes it again once
+/// the user stopped it.
 fn stops_and_resumes_the_chats_below(fixture: &Fixture, parent: &Parent) {
     let home = fixture.root.path().to_owned();
     let restored = home.join("chat-restored");
@@ -176,11 +175,12 @@ fn stops_and_resumes_the_chats_below(fixture: &Fixture, parent: &Parent) {
     parent.ok(fixture, &["restore", &talk]);
     wait_until("the parent's restore", || restored.exists());
 
+    fs::remove_file(&restored).unwrap();
     fixture.ok(&["stop", &talk]);
-    parent.ok(fixture, &["stop", &talk]);
-    let output = parent.run(fixture, &["restore", &talk]);
-    let error = String::from_utf8_lossy(&output.stderr);
-    assert!(error.contains("ask the user"), "{output:?}");
+    parent.ok(fixture, &["restore", &talk]);
+    wait_until("the parent's restore of the user's stop", || {
+        restored.exists()
+    });
     fixture.ok(&["rm", &talk, "--yes"]);
     other.kill().unwrap();
     other.wait().unwrap();
