@@ -1,6 +1,6 @@
 //! `shoal move ssh`: hand spaces to another machine's Shoal, ending each
 //! here only once its import there succeeded, so a failed move leaves it
-//! here with its agents running again.
+//! here.
 use anyhow::{Context as _, Result};
 
 use super::{
