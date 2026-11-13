@@ -22,7 +22,7 @@ use crate::{
         log, oneshot,
         workspace::{
             Manager,
-            agent_queue::{self, OneShotSlot, Serving},
+            agent_queue::{self, OneShotAdmission, Serving},
         },
     },
     model::Workspace,
@@ -145,7 +145,10 @@ impl Manager {
             return Ok(Pass::Ended);
         };
         let workspace = self.workspace_by_id(&review.workspace_id).await?;
-        let Some(slot) = self.await_slot(id, &workspace, cancel, cancelled).await? else {
+        let Some(admission) = self
+            .await_admission(id, &workspace, cancel, cancelled)
+            .await?
+        else {
             return Ok(Pass::Ended);
         };
         // The workspace may have moved while the review waited, as a fork
@@ -165,7 +168,7 @@ impl Manager {
             .run_in_checkout(&review, &workspace, &settings, &commits, &files, cancelled)
             .await;
         let left_running = matches!(ended, Ok((_, Ended::LeftRunning)));
-        release_run(id, &files, checkout, slot, left_running).await;
+        release_run(id, &files, checkout, admission, left_running).await;
         let (reviewer, ended) = ended?;
         self.record_end(id, &workspace, &reviewer, ended).await
     }
@@ -179,13 +182,13 @@ impl Manager {
     /// Wait for review `id`'s admission in its workspace's repository, which
     /// protection takes back by sending `cancel`; none once `cancelled`, as a
     /// cancel or the workspace's removal recorded the review's end.
-    async fn await_slot(
+    async fn await_admission(
         &self,
         id: ReviewId,
         workspace: &Workspace,
         cancel: &Arc<watch::Sender<bool>>,
         cancelled: &mut watch::Receiver<bool>,
-    ) -> Result<Option<OneShotSlot<'_>>> {
+    ) -> Result<Option<OneShotAdmission<'_>>> {
         let (after_stop, queued_after) = self
             .store
             .read(move |tx| {
@@ -200,7 +203,7 @@ impl Manager {
             queued_after,
         };
         let stop = cancel.clone();
-        let mut slot = self.agent_queue.request_oneshot(
+        let mut admission = self.agent_queue.request_oneshot(
             &workspace.repository_id,
             serving,
             after_stop,
@@ -209,7 +212,7 @@ impl Manager {
             },
         );
         tokio::select! {
-            () = slot.admitted() => Ok(Some(slot)),
+            () = admission.admitted() => Ok(Some(admission)),
             _ = cancelled.wait_for(|cancelled| *cancelled) => Ok(None),
         }
     }
@@ -568,13 +571,13 @@ async fn release_run(
     id: ReviewId,
     files: &Files,
     checkout: CheckoutHold<'_>,
-    slot: OneShotSlot<'_>,
+    admission: OneShotAdmission<'_>,
     left_running: bool,
 ) {
     if left_running {
         log!("review {id}: its reviewer's processes could not be stopped");
         checkout.keep();
-        slot.keep();
+        admission.keep();
         return;
     }
     if let Err(error) = remove_run(files).await {

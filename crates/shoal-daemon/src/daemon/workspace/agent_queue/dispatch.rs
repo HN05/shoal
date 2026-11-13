@@ -175,8 +175,8 @@ impl Manager {
     }
 
     /// Grant the `admitted` entries of `work` their start: wake the runners
-    /// for a CI job, let each restore's waiting agent go and give one-shot
-    /// runs their slots, using up the recovery epoch `published` for those
+    /// for a CI job, let each restore's waiting agent go and admit one-shot
+    /// runs, using up the recovery epoch `published` for those
     /// that waited for healthy readings. Return the entries left to mark
     /// starting, or none when a stop, reload or unsafe reading withdrew the
     /// readings since; the pass it wakes decides again.

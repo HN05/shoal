@@ -183,7 +183,7 @@ impl AgentQueue {
         serving: Serving,
         after_stop: bool,
         stop: impl FnOnce() + Send + Sync + 'static,
-    ) -> OneShotSlot<'_> {
+    ) -> OneShotAdmission<'_> {
         self.request(repository, Some(serving), after_stop, stop)
     }
 
@@ -193,7 +193,7 @@ impl AgentQueue {
         serving: Option<Serving>,
         after_stop: bool,
         stop: impl FnOnce() + Send + Sync + 'static,
-    ) -> OneShotSlot<'_> {
+    ) -> OneShotAdmission<'_> {
         let (admitted, waiting) = watch::channel(None);
         let mut oneshots = self.oneshots.lock().unwrap();
         let number = oneshots.next;
@@ -211,7 +211,7 @@ impl AgentQueue {
         );
         drop(oneshots);
         self.wake();
-        OneShotSlot {
+        OneShotAdmission {
             queue: self,
             number,
             admitted: waiting,
@@ -221,11 +221,11 @@ impl AgentQueue {
     /// Hold an admission in `repository` until the daemon restarts, for a run a
     /// stopped daemon left whose processes could not be proven stopped.
     pub(crate) fn hold_oneshot(&self, repository: &RepositoryId) {
-        let slot = self.request(repository, None, false, || {});
-        if let Some(run) = self.oneshots.lock().unwrap().runs.get(&slot.number) {
+        let admission = self.request(repository, None, false, || {});
+        if let Some(run) = self.oneshots.lock().unwrap().runs.get(&admission.number) {
             run.admitted.send_replace(Some(Instant::now()));
         }
-        slot.keep();
+        admission.keep();
     }
 
     /// The one-shot requests still waiting, oldest first.
@@ -328,13 +328,13 @@ impl AgentQueue {
 }
 
 /// A one-shot run's place in the queue, then its admission, while it lives.
-pub(crate) struct OneShotSlot<'a> {
+pub(crate) struct OneShotAdmission<'a> {
     queue: &'a AgentQueue,
     number: u64,
     admitted: watch::Receiver<Option<Instant>>,
 }
 
-impl OneShotSlot<'_> {
+impl OneShotAdmission<'_> {
     /// Wait until admission lets the run start.
     pub(crate) async fn admitted(&mut self) {
         // The sender lives as long as this request.
@@ -358,7 +358,7 @@ impl OneShotSlot<'_> {
     }
 }
 
-impl Drop for OneShotSlot<'_> {
+impl Drop for OneShotAdmission<'_> {
     fn drop(&mut self) {
         self.queue
             .oneshots
