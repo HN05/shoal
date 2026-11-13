@@ -4,16 +4,19 @@
 //! each hour it waits. Both flow along the dependency graph, from work that
 //! waits to the work it waits on, so that an entry ranks at least as high as
 //! anything waiting on it; a CI job or review ranks with the spaces it
-//! serves. Within a tier the larger share of a space's plan steps done goes
-//! first, then the space started earliest, then a CI job or review ahead of
-//! an agent, then arrival.
+//! serves. Within a priority the schedule may put other work first: the
+//! work with the longest chain of work waiting on it, or restores whose
+//! prompt cache is still warm. Within a tier the larger share of a space's
+//! plan steps done goes first, then the space started earliest, then a CI
+//! job or review ahead of an agent, then arrival.
 use std::{
     cmp::Ordering,
-    collections::{HashMap, hash_map},
+    collections::{HashMap, HashSet, hash_map},
     time::Duration,
 };
 
 use crate::client::{priority::Priority, queue::QueueEntryId, space_ids::SpaceId, time::UnixTime};
+use crate::config::machine::Schedule;
 use crate::model::{Dependency, InheritedRank, QueueRank, Tier};
 
 /// How long an entry waits to rise one tier.
@@ -27,6 +30,8 @@ pub(crate) struct Snapshot {
     pub spaces: HashMap<SpaceId, Space>,
     pub edges: Vec<Edge>,
     pub now: UnixTime,
+    /// What goes first within a priority.
+    pub schedule: Schedule,
 }
 
 /// A waiting entry.
@@ -42,6 +47,9 @@ pub(crate) struct Entry {
     pub queued_at: UnixTime,
     /// Its place in the order entries arrived in.
     pub arrival: usize,
+    /// When the prompt cache of a restore's agent expires, as its hooks last
+    /// reported it.
+    pub prompt_cache_until: Option<UnixTime>,
 }
 
 /// What a waiting entry starts.
@@ -128,8 +136,15 @@ pub(crate) struct Ranked {
 pub(crate) fn rank(snapshot: &Snapshot) -> Vec<Ranked> {
     let mut standing = own_standing(snapshot);
     inherit(&mut standing, snapshot);
+    let chains = match snapshot.schedule {
+        Schedule::Speed => chains(snapshot),
+        Schedule::Balanced | Schedule::Cache => HashMap::new(),
+    };
     let mut placed: Vec<Placed> = (snapshot.entries.iter())
-        .map(|entry| place(entry, &standing, snapshot))
+        .map(|entry| Placed {
+            lead: lead(entry, &chains, snapshot),
+            ..place(entry, &standing, snapshot)
+        })
         .collect();
     placed.sort_by(Placed::order);
     placed
@@ -334,6 +349,8 @@ fn aged(tier: Tier, entry: &Entry, now: UnixTime) -> Tier {
 struct Placed {
     id: QueueEntryId,
     rank: QueueRank,
+    /// What the schedule puts first within a priority, higher first.
+    lead: Lead,
     steps: Steps,
     started: UnixTime,
     /// A CI job or review, which goes ahead of an agent of its space.
@@ -344,6 +361,7 @@ struct Placed {
 impl Placed {
     fn order(&self, other: &Self) -> Ordering {
         (other.rank.priority.cmp(&self.rank.priority))
+            .then_with(|| other.lead.cmp(&self.lead))
             .then_with(|| other.rank.tier.cmp(&self.rank.tier))
             .then_with(|| other.steps.cmp_share(self.steps))
             .then_with(|| self.started.cmp(&other.started))
@@ -371,11 +389,90 @@ fn place(entry: &Entry, standing: &Standing, snapshot: &Snapshot) -> Placed {
     Placed {
         id: entry.id.clone(),
         rank,
+        lead: Lead::default(),
         steps: space.map(|space| space.steps).unwrap_or_default(),
         started: space.map_or(entry.queued_at, |space| space.created_at),
         serves: matches!(entry.work, Work::Job { .. } | Work::Review { .. }),
         arrival: entry.arrival,
     }
+}
+
+/// What a schedule puts first within a priority: under `speed` the length
+/// of the longest chain of work waiting on the entry, under `cache` when a
+/// restore's warm prompt cache expires.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+enum Lead {
+    #[default]
+    None,
+    Chain(usize),
+    Cache(UnixTime),
+}
+
+/// What `entry` leads with under the snapshot's schedule, from the `chains`
+/// of work waiting on each node.
+fn lead(entry: &Entry, chains: &HashMap<Node, usize>, snapshot: &Snapshot) -> Lead {
+    match snapshot.schedule {
+        Schedule::Balanced => Lead::None,
+        Schedule::Speed => Lead::Chain(chain_behind(entry, chains)),
+        Schedule::Cache => match (&entry.work, entry.prompt_cache_until) {
+            (Work::Restore { .. }, Some(until)) if until > snapshot.now => Lead::Cache(until),
+            _ => Lead::None,
+        },
+    }
+}
+
+/// The longest chain of work waiting on `entry`: on its agent's node, or
+/// for a CI job or review on itself or the spaces it serves, which wait on
+/// it.
+fn chain_behind(entry: &Entry, chains: &HashMap<Node, usize>) -> usize {
+    let chain = |node: &Node| chains.get(node).copied().unwrap_or(0);
+    let served = match &entry.work {
+        Work::Job { spaces, .. } => spaces.clone(),
+        Work::Review { space } => space.iter().cloned().collect(),
+        Work::Launch { .. } | Work::Restore { .. } => Vec::new(),
+    };
+    let own = agent_node(entry).unwrap_or_else(|| Node::Entry(entry.id.clone()));
+    (served.into_iter())
+        .map(|space| 1 + chain(&Node::Space(space)))
+        .fold(chain(&own), usize::max)
+}
+
+/// How much work waits on each node: the length of the longest chain of
+/// waits that ends at it, each node of a cycle counted once.
+fn chains(snapshot: &Snapshot) -> HashMap<Node, usize> {
+    let mut waiting_on: HashMap<&Node, Vec<&Node>> = HashMap::new();
+    for edge in &snapshot.edges {
+        waiting_on.entry(&edge.on).or_default().push(&edge.waiting);
+    }
+    let mut chains = HashMap::new();
+    for node in waiting_on.keys() {
+        chain_to(node, &waiting_on, &mut chains, &mut HashSet::new());
+    }
+    chains
+}
+
+/// The longest chain of waits ending at `node`, through no node of `path`
+/// again, recorded in `chains`.
+fn chain_to<'a>(
+    node: &'a Node,
+    waiting_on: &HashMap<&'a Node, Vec<&'a Node>>,
+    chains: &mut HashMap<Node, usize>,
+    path: &mut HashSet<&'a Node>,
+) -> usize {
+    if let Some(&known) = chains.get(node) {
+        return known;
+    }
+    if !path.insert(node) {
+        return 0;
+    }
+    let waiting = waiting_on.get(node).into_iter().flatten();
+    let length = waiting
+        .map(|waiter| 1 + chain_to(waiter, waiting_on, chains, path))
+        .max()
+        .unwrap_or(0);
+    path.remove(node);
+    chains.insert(node.clone(), length);
+    length
 }
 
 /// The rank of the agent `entry` at its own `tier`: its node's priority,

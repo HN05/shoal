@@ -47,8 +47,9 @@ fn queued(
     let rows = db
         .prepare(
             "SELECT seq,id,kind,name,created_at,COALESCE(space_id,opens_workspace_id),job,
-                priority
-             FROM agent_queue WHERE state=?1 ORDER BY seq",
+                priority,(SELECT prompt_cache_expires_at FROM space_agent_state s
+                    WHERE s.execution_id=q.execution_id)
+             FROM agent_queue q WHERE state=?1 ORDER BY seq",
         )?
         .query_map([QueueState::Queued], |row| {
             Ok((
@@ -60,11 +61,12 @@ fn queued(
                 row.get::<_, Option<SpaceId>>(5)?,
                 row.get::<_, Option<String>>(6)?,
                 row.get::<_, Option<Priority>>(7)?,
+                row.get::<_, Option<UnixTime>>(8)?,
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut entries = Vec::new();
-    for (seq, id, kind, name, queued_at, space, job, priority) in rows {
+    for (seq, id, kind, name, queued_at, space, job, priority, prompt_cache_until) in rows {
         let work = work(kind, space, job.as_deref(), jobs.get(&id))?;
         let entry = Entry {
             id,
@@ -73,6 +75,7 @@ fn queued(
             work,
             queued_at,
             arrival: 0,
+            prompt_cache_until,
         };
         entries.push(((seq, false), entry));
     }
@@ -93,6 +96,7 @@ fn oneshot(oneshot: &WaitingOneShot) -> (Arrived, Entry) {
         },
         queued_at: oneshot.requested_at,
         arrival: 0,
+        prompt_cache_until: None,
     };
     ((after, true), entry)
 }

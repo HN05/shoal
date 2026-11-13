@@ -66,6 +66,7 @@ git_profile = "work"     # Top level: a Git profile for new worktrees; no defaul
 root_dir = "~/shoal"     # Parent of every repository's workspaces and URL clones
 max_agents = "dynamic"   # Or a positive number, or "none"
 max_jobs = "dynamic"     # Or a positive number, or "none"
+schedule = "balanced"    # "balanced", "speed" or "cache"
 load = "balanced"        # "light", "balanced" or "full"
 keep_awake = false       # Keep the machine from sleeping while agents work
 ```
@@ -79,7 +80,11 @@ moves existing ones.
 the [CI jobs](reference.md#runner): `dynamic` starts them one at a time while
 measured memory and disk leave room below the [warning thresholds](#overload),
 a number is a fixed limit, and `none` admits everything. See the
-[agent queue](reference.md#agent-queue).
+[agent queue](reference.md#agent-queue). `schedule` decides what the queue
+starts first within a priority: `balanced` work closest to finished,
+`speed` the work with the longest chain of work waiting on it, and `cache`
+restores of agents whose prompt cache has not expired; see
+[queue order](reference.md#queue-order).
 
 `load` says how hard Shoal may load the machine: `light` for a computer you
 work on, `full` for one that only runs agents. It sets each CPU and memory

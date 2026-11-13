@@ -10,6 +10,7 @@ use super::{
     state::WaitingOneShot,
 };
 use crate::client::{priority::Priority, queue::QueueEntryId, space_ids::SpaceId, time::UnixTime};
+use crate::config::machine::Schedule;
 use crate::daemon::{approvals::Target, workspace::Manager};
 
 mod edges;
@@ -23,10 +24,11 @@ impl Manager {
         let jobs = self.waiting_job_spaces().await?;
         let oneshots = self.agent_queue.waiting_oneshots();
         let leases = self.queues.waiters();
+        let schedule = self.config().machine.schedule;
         let (mut snapshot, labelled) = (self.store)
             .read(move |tx| {
                 Ok((
-                    snapshot(tx, &jobs, &oneshots, &leases)?,
+                    snapshot(tx, &jobs, &oneshots, &leases, schedule)?,
                     spaces::labelled(tx)?,
                 ))
             })
@@ -61,19 +63,21 @@ impl Manager {
 }
 
 /// What ranking reads now, with the spaces each waiting job serves now by
-/// its entry's ID in `jobs`, the `oneshots` waiting for a slot and the
-/// spaces waiting for the `leases` they queue for.
+/// its entry's ID in `jobs`, the `oneshots` waiting for a slot, the spaces
+/// waiting for the `leases` they queue for and the machine's `schedule`.
 fn snapshot(
     tx: &Transaction<'_>,
     jobs: &HashMap<QueueEntryId, Vec<SpaceId>>,
     oneshots: &[WaitingOneShot],
     leases: &[(Target, SpaceId)],
+    schedule: Schedule,
 ) -> Result<Snapshot> {
     Ok(Snapshot {
         entries: entries::waiting(tx, jobs, oneshots)?,
         spaces: spaces::ranked(tx)?,
         edges: edges::waits(tx, leases)?,
         now: UnixTime::now(),
+        schedule,
     })
 }
 

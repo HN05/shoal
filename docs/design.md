@@ -1612,7 +1612,13 @@ issue's labels, goes first, so the user decides what matters. A space's agent
 sets at most its own, as it gives permissions, but a label's priority is the
 repository config's, so the labels an agent edits on its issues are not capped. A queued launch
 carries its own until its space exists.
-Within a priority, its tiers are `finishing` (a space with an open PR or a ready mark, CI
+Within a priority, `machine.schedule` picks what goes first: `balanced` the
+tiers below, `speed` the work with the longest chain of work waiting on it, the
+critical path, so a machine with room finishes sooner, and `cache` restores
+whose prompt cache is still warm, so an agent continues before its cached
+context costs a full read again; the others then follow `balanced`. Limits and
+admission stay with `max_agents`, `max_jobs` and `load`, so a schedule changes
+only the order. Within a priority, its tiers are `finishing` (a space with an open PR or a ready mark, CI
 jobs on PRs and the default branch), `started` (restores of agents that have
 worked) and `new`; an hour's wait raises an entry a tier, so nothing starves
 within its priority, but never a priority: lower-priority work waits while

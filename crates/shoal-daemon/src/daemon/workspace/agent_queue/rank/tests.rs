@@ -28,6 +28,7 @@ fn entry(snapshot: &mut Snapshot, id: &str, work: Work) {
         work,
         queued_at: at(NOW),
         arrival,
+        prompt_cache_until: None,
     });
 }
 
@@ -500,4 +501,51 @@ fn a_launch_ranks_its_space_with_its_priority_until_the_space_has_its_own() {
     }
     assert_eq!(rank_of(&snapshot, "unread").priority, Priority::URGENT);
     assert_eq!(rank_of(&snapshot, "set").priority, Priority::LOW);
+}
+
+#[test]
+fn speed_starts_the_work_with_the_longest_chain_waiting_on_it_first() {
+    let mut snapshot = snapshot();
+    for (id, tier, created) in [
+        ("finishing", Tier::Finishing, 1),
+        ("awaited", Tier::New, 2),
+        ("waiting", Tier::New, 3),
+        ("last", Tier::New, 4),
+    ] {
+        space(&mut snapshot, id, tier, created);
+    }
+    // Two spaces wait on `awaited`, one through the other.
+    edge(&mut snapshot, "waiting", "awaited", Dependency::Blocked);
+    edge(&mut snapshot, "last", "waiting", Dependency::Blocked);
+    for id in ["finishing", "awaited"] {
+        entry(&mut snapshot, id, restore(id));
+    }
+    assert_eq!(order(&snapshot), ["finishing", "awaited"]);
+    snapshot.schedule = Schedule::Speed;
+    assert_eq!(order(&snapshot), ["awaited", "finishing"]);
+}
+
+#[test]
+fn cache_restores_agents_with_a_warm_prompt_cache_first_the_latest_to_expire_first() {
+    let mut snapshot = snapshot();
+    let ids = ["finishing", "expired", "warm", "warmest"];
+    for (created, id) in ids.into_iter().enumerate() {
+        let tier = if id == "finishing" {
+            Tier::Finishing
+        } else {
+            Tier::Started
+        };
+        space(&mut snapshot, id, tier, created as i64);
+        entry(&mut snapshot, id, restore(id));
+    }
+    let caches = [(1, -1), (2, 100), (3, 200)];
+    for (index, offset) in caches {
+        snapshot.entries[index].prompt_cache_until = Some(at(NOW + offset));
+    }
+    assert_eq!(order(&snapshot), ids);
+    snapshot.schedule = Schedule::Cache;
+    assert_eq!(
+        order(&snapshot),
+        ["warmest", "warm", "finishing", "expired"]
+    );
 }

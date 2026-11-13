@@ -2104,7 +2104,12 @@ its own space's when that is below `normal`; you and a master session set any.
 Waiting entries start by priority, highest first: a space's priority, from 0
 to 100, is the one set on it, else the highest its issue's labels map to under
 `[priority.labels]`, else 50, and a queued launch has the one it was queued
-with, or else the highest its issue's labels map to, until its space exists. Within a priority they start by tier, highest first:
+with, or else the highest its issue's labels map to, until its space exists.
+Within a priority, [`machine.schedule`](config.md#machine) may put other work
+first: under `speed`, the work with the longest chain of work waiting on it,
+counted through the waits below; under `cache`, restores of agents whose prompt
+cache, as their hooks last reported it, has not expired, the latest to expire
+first. Then, and under the default `balanced`, they start by tier, highest first:
 `finishing`, the agents of a
 space with an open PR it opened or was assigned or with a ready mark, and CI
 jobs on PRs and on the default branch; `started`, restores of agents that have
