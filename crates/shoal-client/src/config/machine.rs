@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use super::{RunLimit, forges, overload};
 
-crate::state::states! {
+shoal_states::states! {
     /// What the agent queue starts first within a priority.
     #[derive(Default)]
     Schedule {
