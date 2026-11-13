@@ -6,6 +6,22 @@ use serde::Deserialize;
 
 use super::{RunLimit, forges, overload};
 
+crate::state::states! {
+    /// What the agent queue starts first within a priority.
+    #[derive(Default)]
+    Schedule {
+        /// Work closest to finished, then the tie-breaks.
+        #[default]
+        Balanced => "balanced",
+        /// The work with the longest chain of work waiting on it, then as
+        /// `balanced`.
+        Speed => "speed",
+        /// Restores of agents whose prompt cache has not expired, the latest
+        /// to expire first, then as `balanced`.
+        Cache => "cache",
+    }
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Machine {
@@ -21,6 +37,8 @@ pub struct Machine {
     /// CI jobs the runner runs at once on this machine; defaults to measured
     /// load, which agents and jobs share. Use `none` for unlimited admission.
     pub max_jobs: RunLimit,
+    /// What the agent queue starts first after priority.
+    pub schedule: Schedule,
     pub overload: overload::Overload,
     /// What each AI tool needs of this machine.
     pub agents: std::collections::BTreeMap<String, super::agents::MachineAgent>,
