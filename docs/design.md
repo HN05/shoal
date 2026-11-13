@@ -311,16 +311,8 @@ follows the agent to the execution the new wrapper registers, which answers
 it once the agent starts with the place that execution registered, so the run
 can name where the agent runs now. `--in-place` restarts through the same wrapper,
 which keeps the agent in its terminal: the daemon resumes the agent once its
-processes are proven stopped, outside the agent queue. A chat has no wrapper,
-so it restarts as `shoal resume` restores it: the daemon saves its session and
-stops its agent as a save before a daemon stop does, then runs `shoal resume`
-for it detached, as for a chat saved to come back on its own, and the restart
-ends with that restore; a daemon update waits for it, since the next daemon
-would find the chat saved for `shoal resume` with nothing to bring it back. The
-daemon keeps a chat's restarts in the state an
-agent's uses and lists the turn state the chat records, so joining, continuing
-a run and `--wait` work for chats as for agents; `--in-place` skips chats, which have
-no wrapper to keep. A restart outlives the requests that asked for it; a request for an
+processes are proven stopped, outside the agent queue. A chat's agent
+restarts through the same path. A restart outlives the requests that asked for it; a request for an
 agent already restarting joins that restart and is answered as the first one
 is. Each `shoal restart` run names itself in its requests, and the daemon
 lists each pending restart with the run that asked for it and each agent with
@@ -356,11 +348,9 @@ the key through the terminal host of the place the daemon recorded for the
 agent, a workspace's or a chat's, so a client driving Shoal need not know each
 agent's key or each host, and the daemon records the turn's end, which no hook
 reports. The daemon keeps the interruption with the turn state the agent
-reported, or a chat's with its transient metadata, until a turn starts or ends
-again or the chat is restored; `shoal resume`
+reported until a turn starts or ends again; `shoal resume`
 continues the interrupted turn, as it continues stopped work, so a
-client pairs one command with each. A chat's agent has no wrapper to wake it
-after an interrupt, so it receives its updates with its next turn.
+client pairs one command with each.
 The daemon also samples what each workspace's processes use, attributed by
 the workspace identity in their environment, so the user can see which
 workspace loads the machine; admission learns a settled agent's memory from
@@ -975,7 +965,7 @@ temporary directory, program or identity ties to it, with everything it started:
 space keeps it, and the ties cover platform binaries whose hidden environment
 cannot show the identity and programs built in the worktree that run elsewhere.
 Exclusion follows live ancestry, not environment variables: the processes of
-tracked executions and chat agents, those that started them, and terminal
+tracked executions, those that started them, and terminal
 session servers are never untracked. `shoal stop` takes the same processes
 through the same operation after the executions, and `--processes` and
 `--leftovers` take them alone, so an agent stops what its own commands left
@@ -2448,35 +2438,32 @@ chat. Its
 instructions describe the discussion only, from the `chat` rule that
 repositories can extend like the other rules.
 A chat's agent
-is not a tracked execution, though an execution, its recovery records and its
-queue restore entry belong to a space of either kind: queuing and overload
-stops serve unattended agents, while the user attends a chat. It is still a
-daemon record, so lists and integrations can follow it: the agent replaces Shoal's
-process, leaving no wrapper to report its exit, so the chat runs while a
-process with the registered identity lives, checked periodically and before
-chats are listed, and is stopped after, as a workspace stays when its agent
-exits. With no wrapper to save it, the daemon saves a chat itself
-where it saves workspaces' agents, marking its record before stopping its
-processes so the end of the process does not end the chat. A stop records each
-process before signalling it, so a later stop and the check before a restore or
-discard follow the lineage of what it signalled after an interrupted stop
-forgot them. A stop that fails leaves it running only while its agent does: a
-stop before a shutdown or a signal's saves it to come back on its own, and `shoal daemon stop`
-for `shoal resume`, where an agent that exits leaves it too. A stopped chat keeps its record, and with it its name, links, files,
-messages, questions, workspaces and temporary directory, until a restore runs it again in
-a new process. Only removal ends a chat: `shoal rm`, `shoal resume --discard`
-for one with no workspace below it, or space cleanup, which treats a chat as a
+runs under the execution wrapper as a tracked execution of its chat, through
+the path a workspace's agent takes, so launches, stops, restores, wakes, exit
+reports, turn state and restarts are one code path, and the chat runs while
+that execution is recorded. Lifecycle policy differs only by whether the user
+attends the space, as a chat's: its agent takes no slot of the agent queue or
+`max_agents`, memory, CPU and idle stops leave it running, its restore waits
+for no update, only for a blocked space to clear, and its clean exit notifies
+no one, since the user is in that conversation, while disk-space and blocked stops, shutdown, `shoal
+stop`, `shoal resume`, `shoal restart`, interrupts, turn retries and the
+wrapper's wake prompt apply as to a workspace's agent. A stop that keeps the
+wrapper restores the agent in place; one that ends it leaves its stop record
+for `shoal resume`, or for the agent queue when the agent is to come back on
+its own, which starts an attended space's restore in the place the chat ran
+in without admission. Once the chat's agent ends, the requests the chat
+decided go to the user, since no one attends them there. A stopped chat keeps
+its record, and with it its name, links, files, messages, questions,
+workspaces and temporary directory, until a restore runs its agent again. Only
+removal ends a chat: `shoal rm`, or space cleanup, which treats a chat as a
 workspace whose worktree is always clean, pushed and merged, its running agent
-as use, a restore waiting to run as a queued agent and a session Shoal saved as
-saved stopped work, and takes the idle time
-of merged cleanup from when its agent stopped. `shoal resume` resolves each target to a
-stopped chat or a workspace in one lookup over the shared namespace, so its
-picker, `--all` and a list of names act on both. Restores and removals wait for a save
-under way and refuse while a process the chat owns still runs, since two agents
-would write one session and a removal would delete files in use, and a restore
-whose agent does not start leaves the chat stopped and tells the user, who may
-not see the place it opened. Starts, renames, stops, restores and removals
-are journal events. A workspace a chat opens is its child in the one tree of
+as use, a queued restore as a queued agent and its saved stopped work as a
+workspace's, and takes the idle time of merged cleanup from when its agent
+stopped. `shoal resume` resolves each target to a space in one lookup over the
+shared namespace, so its picker, `--all` and a list of names act on chats as on
+workspaces, and `--discard` forgets a chat's stopped work as a workspace's.
+Starts, renames and removals are journal events, and its agent's starts and
+stops are logged as a workspace agent's. A workspace a chat opens is its child in the one tree of
 spaces, unless it was split from a workspace, below which it stays; reopening
 it outside a chat for its issue or a picked branch returns it to the user, so
 Shoal knows which chat coordinates which workers, while a start of its own
@@ -2538,17 +2525,13 @@ A chat's launcher runs where only the checkout's path has a value, so one that
 uses another workspace placeholder is refused rather than given the literal text.
 A Happy chat has no terminal to focus: like a workspace Happy session it starts
 detached, as Happy's daemon would start it, so the user continues it in the
-Happy app, and the process that recorded the chat hands the record to the
-session's process.
+Happy app.
 A chat's agent runs the turn-state hooks a workspace's agent runs, without the
 worktree hooks and lifecycle permission rules, which need a worktree. The
 `agent-state` and `turn-failed` commands act on the space they run in and record
 the chat's state as a workspace's, and the record keeps the session so the chat
-can move. A chat has no tracked execution whose end clears its state, so its
-state ends when the chat stops or is restored. Keep-awake reads it as a
-workspace agent's, and interrupts act on its agent as on a workspace's;
-overload protection and turn retries act on tracked executions, which a chat's
-agent is not.
+can move. Its state ends with its agent's execution, as a workspace agent's
+does; keep-awake reads it as a workspace agent's.
 
 A chat may also belong to no repository: a mode with `repository = false`,
 such as the built-in `orchestrate`, starts it in `root_dir`, with the global

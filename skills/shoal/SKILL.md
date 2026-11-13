@@ -155,9 +155,9 @@ shoal files <child>
 keeping their sessions, and cancels agents queued to start there; `restart` stops the child's agent and
 starts its session again at once; `stop --interrupt` cancels the current
 turn of the child's agent, a workspace's or a chat's, which stays running;
-`resume` continues a turn an interrupt ended, queues the agents the caller
-stopped and restores the chats its restart left stopped in a background
-place, while the user resumes the ones the user stopped; for a workspace
+`resume` continues a turn an interrupt ended and queues the agents, a
+workspace's or a chat's, that the caller stopped or its restart left
+stopped, while the user resumes the ones the user stopped; for a workspace
 whose setup failed, it retries the setup, and the agent waiting for it starts.
 
 A child's approval request comes to its coordinator first.

@@ -148,15 +148,14 @@ How the daemon exits decides what becomes of tracked agents and commands:
 
 - `shoal daemon restart`, `shoal daemon install` when it replaces an
   incompatible daemon, an update, and a crash leave them running.
-- `shoal daemon stop` stops them and the running [chats](#chats) as
+- `shoal daemon stop` stops them, [chats'](#chats) agents included, as
   `shoal stop --all` does, so they stay down until `shoal resume`, then stops
   the daemon. Unlike `shoal stop`, it keeps
   agents waiting in the [agent queue](#agent-queue) to start in existing
   workspaces, which the next daemon starts.
 - SIGTERM or SIGINT, as a shutdown, a logout or a service manager's stop sends,
   stops them as the daemon does before a system shutdown: each wrapper saves its
-  agent first, and restores that need no user wait in the agent queue; running
-  chats are saved and stopped, and come back on their own. The
+  agent first, and restores that need no user wait in the agent queue. The
   service definition's `ExitTimeOut` (launchd) or `TimeoutStopSec` (systemd)
   gives the stop time before the service manager kills the daemon.
 
@@ -272,10 +271,7 @@ finishes waiting agents at once, keeping their records for `shoal resume`.
 which print what stopped them and how to restore them, retaining work and resource leases. It stops
 the spaces below each selected one too, workspaces and chats, unless `--skip-children`; a chat
 started `--in` a workspace is not below it. Without a space it takes the current workspace,
-else a picker of the workspaces and the running chats, never the chat it runs in. It stops a
-chat as `shoal daemon stop` does, saving it and stopping the processes it owns, and the chat
-waits for `shoal resume <chat>`; a chat already stopped stays as it is, except that one
-waiting to come back on its own after a shutdown waits for `shoal resume` instead. Its agents, and those
+else a picker of the workspaces and the running chats, never the chat it runs in. Its agents, and those
 stopped there before, stay down until `shoal resume` continues them: each
 becomes a last session, as an agent that exits on its own leaves, which holds
 no agent slot, keeps nothing from cleanup and nothing restores on its own. To
@@ -327,13 +323,11 @@ Run stop, restart and resume outside scoped executions, except that a scoped
 process, a workspace's or a chat's agent, may stop the spaces below its own,
 workspaces and chats alike, with `shoal stop <space>`, without `--yes`, restart the agents of the
 spaces below its own, workspaces and chats alike, with `shoal restart <space>`,
-discard their stopped work with `shoal resume <space> --discard`, queue with
-`shoal resume <workspace>` the restores of the agents that it or a space below
+discard their stopped work with `shoal resume <space> --discard`, and queue with
+`shoal resume <space>` the restores of the agents that it or a space below
 it stopped, or whose restart by one of them left them stopped, which the daemon
-starts detached, and restore with
-`shoal resume <chat>`, in a background place, the chats below its own that it
-or a space below it stopped, or whose restart by one of them left them stopped. An agent or chat the user
-or Shoal stopped, or that exited on its own, is the user's to resume.
+starts detached. An agent the user or Shoal stopped, or that exited on its own,
+is the user's to resume.
 
 `shoal stop --interrupt [space...]` cancels the current turn of each agent
 in the selected workspaces and running chats and keeps the agent running with
@@ -345,8 +339,7 @@ idle. An agent without a running turn, including one whose turn Shoal has not
 heard of since a daemon restart, is left alone. An agent that runs outside a
 terminal host, such as in Happy, or that Shoal knows no interrupt key for
 fails the command. Messages and item activity reach an interrupted
-workspace's agent as they reach any idle one; a chat's interrupted agent
-receives them with its next turn. `shoal resume <space>` continues the turn:
+agent as they reach any idle one. `shoal resume <space>` continues the turn:
 it submits `Continue where you left off.` in the session, until the agent
 starts another turn. A resume that names spaces with interrupted turns and
 others with stopped work refuses both; resume them separately, and one that
@@ -368,11 +361,7 @@ start the agent again in the same terminal, as an automatic restore does; a
 wrapper whose Shoal binary an upgrade replaced continues from the installed one
 in the same process, and wrappers of 0.13.0 and earlier keep their binary until
 the agent is stopped and resumed. Either way the restore command finds the
-agent through `PATH` again, so an updated agent binary runs. A chat's agent
-restarts as `shoal resume <chat>` restores a stopped chat: Shoal saves the chat's
-session, stops its agent and restores it in a background place, where
-`shoal attach` reaches it. A restart skips a chat whose agent cannot resume
-its session, as when it reported none, and with `--in-place` every chat. `--all` selects every workspace and chat, and
+agent through `PATH` again, so an updated agent binary runs. `--all` selects every workspace and chat, and
 `--agent <name>` only agents of that name. Agents restart
 together; `--sequential` restarts one at a time, idle ones first, each once the
 previous one runs again and at least 10 seconds after it started. With
@@ -391,7 +380,7 @@ caller does not hold is refused before any agent stops, and so is
 `--permission` with `--in-place`, whose wrapper keeps the push rules it
 launched with, or for an agent another run is restarting. An agent protection stopped waits
 for its restore and is left out; a named space whose only agent waits is
-reported with why it stopped and that `shoal queue start` restores it now. An agent or chat that does not start
+reported with why it stopped and that `shoal queue start` restores it now. An agent that does not start
 again, as when no terminal host can open its new place, stays stopped for
 `shoal resume`, with the permissions `--permission` gave it, and the exit
 status is 1. One whose stopped
@@ -423,8 +412,8 @@ Stopped commands are included in the continuation prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
 and resume commands through `{prompt}`. Otherwise, and when no agent was
 stopped, resume prints them as `shoal run` commands. Either way they are reported once.
-Several spaces, each workspace among them with stopped work or a last session, or `--all` for every
-stopped chat and every workspace whose assignment is not done, resume together and report commands without an agent,
+Several spaces, each with stopped work or a last session, or `--all` for every
+space whose assignment is not done, resume together and report commands without an agent,
 skipping agents whose wrapper still waits to restore them; a done workspace's
 agent restores only when its workspace is named. Resuming it says the work is
 not finished, so it withdraws the workspace's completion, as `shoal done
@@ -442,7 +431,7 @@ this terminal where its config lets it open places, such as `terminal.herdr.new_
 or of `terminal.default_host` on a terminal no host serves, such as a detached zmx
 session. Where nothing can
 start in the background, it restores a single agent
-here, unless the run also restores a chat or fails for a space, and otherwise lists
+here, unless the run also fails for a space, and otherwise lists
 the agents as `shoal resume --focus` commands to run in separate terminals.
 Without a terminal, such as from another agent's tool call, `--now` queues every
 restore instead, a workspace's last session included, and the daemon starts each
@@ -453,18 +442,16 @@ is restored, naming `--focus` to restore one agent here. `-f`/`--focus` restores
 regardless of the limits.
 Use `--discard` to forget the workspace's stopped agents, last sessions and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
-`--permission KEY=VALUE`, repeatable, restores each selected agent and chat
+`--permission KEY=VALUE`, repeatable, restores each selected agent
 with that [permission](#mode-permissions) given, `KEY=mode` dropping one
 given before, while the keys it leaves out keep theirs; its records keep them
 from then on. It needs the spaces named or picked. A value the caller does not
 hold is refused before anything is restored, and so is an agent its waiting
 wrapper restores or one whose interrupted turn continues, since both keep the
 launch they run under.
-A stopped [chat](#chats) restores at once under its name, continuing
-its session, in a background place where a restored agent opens, once the
-chat is about to run its agent there or with the error that stopped it, or in
-this terminal with `--focus`; `--discard` removes it instead, unless workspaces are
-below it, which only `shoal rm` takes. A running chat has nothing to resume.
+A stopped [chat's](#chats) agent restores as a workspace's does, without
+waiting for an agent slot, and `--discard` forgets its stopped work. A running
+chat has nothing to resume.
 When a stopped agent's execution is unknown, after a daemon restart or a stop
 Shoal could not prove, the daemon forgets it once its wrapper has exited and none
 of its processes remain, keeping the record for `shoal resume`, which repeats the
@@ -1707,21 +1694,24 @@ session, which the calling process starts itself. Such an agent's
 `--here` is refused, so the chat's processes are never the agent's. A
 workspace process that cleared its scope token cannot run `shoal start` or
 `shoal rename --request`.
-Chats are not tracked executions, so they are never queued or stopped under
-pressure. The daemon records each chat under its
-name, with the session the agent's session-start
-hook last reported, which [`shoal move`](#move-a-space-to-another-machine)
-continues on another machine. The chat runs while its agent process runs, and
-stops when it exits: it waits for `shoal resume <chat>`, as does one
-[`shoal stop`](#recovery) or `shoal daemon stop` saved or whose restore failed, which records a
-`chat_restore_failed` notification. A chat running when the daemon stops for a
-shutdown, a logout or a signal is saved and stopped, and comes back on its own
-once the daemon runs again: under its name, in a background place where a
-restored agent opens, continuing its session. A stopped chat keeps its links,
-files, messages, questions, workspaces and `TMPDIR`, and `shoal list` shows it
-as `stopped`. A chat ends only when it is removed: by `shoal rm <chat>`, which
-first removes the spaces below it and stops its agent, by
-`shoal resume <chat> --discard`, or by [cleanup](#automatic-cleanup), as a workspace is.
+A chat's agent runs as a tracked agent of the chat, as a workspace's agent
+does, except that you attend it: it takes no slot of the
+[agent queue](#agent-queue), memory, CPU and idle stops leave it running, its
+restore waits for no update, only for a blocked chat to clear, and its agent
+exiting cleanly sends no notification, while disk-space protection, `shoal stop`, `shoal restart`, `shoal resume`,
+interrupts and the daemon's stops act on it as on a workspace's agent. The
+daemon records each chat under its name, with the session the agent's
+session-start hook last reported, which
+[`shoal move`](#move-a-space-to-another-machine) continues on another machine.
+The chat runs while its agent runs, and stops when it exits or
+[`shoal stop`](#recovery) stops it: it waits for `shoal resume <chat>`, while
+one the daemon stopped for a shutdown, a logout or a signal comes back on its
+own once the daemon runs again, where it ran or in a background place. Once a
+chat's agent stops, the approval requests the chat decided come to you. A
+stopped chat keeps its links, files, messages, questions, workspaces and
+`TMPDIR`, and `shoal list` shows it as `stopped`. A chat ends only when it is
+removed: by `shoal rm <chat>`, which first removes the spaces below it and
+stops its agent, or by [cleanup](#automatic-cleanup), as a workspace is.
 A chat's name is a label like a workspace's: chats and workspaces may share one,
 and commands select a chat by its number or ID.
 
@@ -5080,13 +5070,12 @@ setup or cleanup failures. Branch changes are observed during daemon sweeps;
 detached HEAD has a null branch, and the recorded workspace branch remains
 unchanged.
 
-A `type: "chat"` line records a chat's start, rename, stop, restore or removal:
-its `id`, `created_at`, `kind` (`chat_started`, `chat_renamed`, `chat_saved`
-when it stops, whether Shoal saved it or its agent exited, `chat_restored`, or
-`chat_ended` when it is removed) and a `chat` object with its `id`,
-`repository_id` (null for a chat without a repository), `name` (the new one
-after a rename), `agent`, `pid` and
-Unix-seconds `started_at`, and on a stop its `restore`: `automatic` or `resume`.
+A `type: "chat"` line records a chat's start, rename or removal: its `id`,
+`created_at`, `kind` (`chat_started`, `chat_renamed`, or `chat_ended` when it
+is removed) and a `chat` object with its `id`, `repository_id` (null for a
+chat without a repository), `name` (the new one after a rename), `agent` and
+Unix-seconds `started_at`. Its agent's starts and stops are recorded as a
+workspace agent's.
 
 A `type: "file"` line records a file [attached](#attached-files) to a workspace
 or chat by any route (`kind: "file_added"`) or deleted by any route, including
