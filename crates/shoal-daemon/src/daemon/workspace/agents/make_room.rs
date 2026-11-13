@@ -1,7 +1,8 @@
 //! Put idle agents to sleep to make room for queued work: while an entry
 //! waits for a slot or memory, an idle agent that something will wake and
 //! whose priority is no higher than the entry's goes to sleep, lowest rank
-//! first, once that costs nothing. One that nothing would wake stays
+//! first, once that costs nothing, and only one that holds a slot for an
+//! entry waiting for one. One that nothing would wake stays
 //! running, as do light agents and those the user attends. A woken agent
 //! reports no idle turn until it has worked one, so it finishes that turn
 //! before it can sleep for room again.
@@ -23,11 +24,19 @@ use crate::{
     daemon::links::wait::watches_open_pr, model::HeldBy, state::QueueState, time::UnixTime,
 };
 
-/// A queued entry waiting for room, with its priority and, while its
-/// repository's limit holds it, that repository.
+/// A queued entry waiting for room, with its priority and what it needs.
 struct Waiting {
     priority: Priority,
-    repository: Option<RepositoryId>,
+    needs: Room,
+}
+
+/// What a queued entry waits for.
+enum Room {
+    /// A slot of the machine, or of the repository whose limit holds it.
+    Slot {
+        repository: Option<RepositoryId>,
+    },
+    Memory,
 }
 
 /// An idle agent that may sleep to make room.
@@ -35,18 +44,26 @@ struct Sleeper<'a> {
     candidate: &'a Candidate,
     /// Its space's repository; none for a chat without one.
     repository: Option<RepositoryId>,
+    /// Whether it holds a slot, which an agent of a done space does not.
+    holds_slot: bool,
     priority: Priority,
     free: Free,
 }
 
 impl Sleeper<'_> {
     /// Whether sleeping makes room for `entry`: its priority is no higher,
-    /// and it frees a slot of the entry's repository when that is what the
-    /// entry waits for.
+    /// and it frees what the entry waits for, a slot of the entry's
+    /// repository when that repository's limit holds it.
     fn serves(&self, entry: &Waiting) -> bool {
-        self.priority <= entry.priority
-            && (entry.repository.as_ref())
-                .is_none_or(|repository| self.repository.as_ref() == Some(repository))
+        let frees = match &entry.needs {
+            Room::Memory => true,
+            Room::Slot { repository } => {
+                self.holds_slot
+                    && (repository.as_ref())
+                        .is_none_or(|repository| self.repository.as_ref() == Some(repository))
+            }
+        };
+        self.priority <= entry.priority && frees
     }
 }
 
@@ -87,16 +104,16 @@ impl Manager {
         Ok((entries.into_iter())
             .filter(|entry| entry.state == QueueState::Queued)
             .filter_map(|entry| {
-                let repository = match entry.held_by? {
-                    HeldBy::RepositoryLimit => Some(entry.repository_id?),
-                    HeldBy::MaxAgents | HeldBy::Memory { .. } | HeldBy::MemoryKept => None,
+                let needs = match entry.held_by? {
+                    HeldBy::RepositoryLimit => Room::Slot {
+                        repository: Some(entry.repository_id?),
+                    },
+                    HeldBy::MaxAgents => Room::Slot { repository: None },
+                    HeldBy::Memory { .. } | HeldBy::MemoryKept => Room::Memory,
                     _ => return None,
                 };
                 let priority = entry.rank.map(|rank| rank.priority).unwrap_or_default();
-                Some(Waiting {
-                    priority,
-                    repository,
-                })
+                Some(Waiting { priority, needs })
             })
             .collect())
     }
@@ -141,6 +158,7 @@ impl Manager {
             sleepers.push(Sleeper {
                 candidate,
                 repository: space.repository_id().cloned(),
+                holds_slot: !space.done(),
                 priority,
                 free,
             });
@@ -173,3 +191,6 @@ fn watches_or_asks(db: &Connection, id: &SpaceId) -> Result<bool> {
     let chat = crate::daemon::links::space::is_chat(db, id)?;
     Ok(crate::daemon::approvals::pending_count(db, id, chat)? > 0)
 }
+
+#[cfg(test)]
+mod tests;

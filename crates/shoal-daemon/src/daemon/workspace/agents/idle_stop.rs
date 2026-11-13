@@ -20,7 +20,7 @@ use crate::time::UnixTime;
 pub(super) struct Candidate {
     pub(super) execution: ExecutionId,
     pub(super) workspace_id: SpaceId,
-    workspace: SpaceName,
+    pub(super) workspace: SpaceName,
     /// Whether the user attends its space.
     pub(super) attended: bool,
     /// The idle turn it was found in.

@@ -543,7 +543,9 @@ While an entry in the [agent queue](#agent-queue) waits for a slot or memory,
 each [cleanup sweep](#automatic-cleanup) makes room for it: for each such
 entry in queue order, it puts to sleep the lowest-ranked idle agent whose
 priority is no higher than the entry's, of the entry's repository when that
-repository's `agent.max_running` holds it, once that costs no prompt cache, as
+repository's `agent.max_running` holds it, and for an entry that waits for a
+slot one that holds one, which a done space's agent does not, once that costs
+no prompt cache, as
 for [`shoal sleep`](#idle-wakes). Only an agent something will wake sleeps for
 this: one whose space watches an open PR, is blocked, or has an open question
 or a request waiting for a decision. Light agents and those the user attends
