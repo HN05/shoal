@@ -19,13 +19,12 @@ use crate::{
 };
 
 /// A new PR's description: a supplied `body` verbatim, otherwise a line
-/// that closes the linked `issue` when the PR merges.
-pub fn pull_description(body: Option<String>, issue: Option<IssueNumber>) -> String {
-    let Some(number) = issue else {
-        return body.unwrap_or_default();
-    };
-    let closing = format!("Closes #{number}");
-    body.unwrap_or(closing)
+/// for each of the linked `issues` that closes it when the PR merges.
+pub fn pull_description(body: Option<String>, issues: &[IssueNumber]) -> String {
+    body.unwrap_or_else(|| {
+        let closing = issues.iter().map(|number| format!("Closes #{number}"));
+        closing.collect::<Vec<_>>().join("\n")
+    })
 }
 
 /// Refuse a new item of `kind` whose labels leave a required entry unmet,

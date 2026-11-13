@@ -125,14 +125,9 @@ fn a_template_without_headings_still_takes_precedence() {
 }
 
 #[test]
-fn linked_issue_closes_only_without_a_description() {
-    assert_eq!(pull_description(None, None), "");
-    assert_eq!(
-        pull_description(None, Some(IssueNumber::new(7))),
-        "Closes #7"
-    );
-    assert_eq!(
-        pull_description(Some("".into()), Some(IssueNumber::new(7))),
-        ""
-    );
+fn linked_issues_close_only_without_a_description() {
+    let issues = [IssueNumber::new(7), IssueNumber::new(9)];
+    assert_eq!(pull_description(None, &[]), "");
+    assert_eq!(pull_description(None, &issues), "Closes #7\nCloses #9");
+    assert_eq!(pull_description(Some("".into()), &issues), "");
 }

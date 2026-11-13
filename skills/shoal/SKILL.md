@@ -266,8 +266,9 @@ shoal issue ls <words> [--state all] [--label L] [--author A] [--limit N]
 shoal repo labels
 ```
 
-`pr open` pushes the branch, then links the branch's open PR or opens one. A
-linked issue supplies the default title and, without a body, `Closes #<number>`;
+`pr open` pushes the branch, then links the branch's open PR or opens one. The
+first assigned issue supplies the default title, and without a body each
+assigned issue gets a `Closes #<number>` line;
 a supplied body is used verbatim. Opening refuses an item without a label
 `required_labels` asks for; `pr open`, `issue open` and `ready` report
 `warnings` for missing labels or template headings. `repo labels` lists each

@@ -4003,9 +4003,9 @@ branch in the repository the push remote names, or opens one in the `origin`
 repository and links it. A push remote on the same forge host other than
 `origin` is a fork the PR comes from; GitLab merge requests from a fork are
 refused. A new PR's title is
-`--title`, else the linked issue's title, else the last commit's subject; its
-description is the supplied `--body` or `--body-file`, or `Closes #<number>`
-when no body is supplied for a linked issue; its base is `--base`, else the base
+`--title`, else the first assigned issue's title, else the last commit's
+subject; its description is the supplied `--body` or `--body-file`, or else a
+`Closes #<number>` line for each assigned issue; its base is `--base`, else the base
 workspace's branch, else the default branch. It is a draft with `--draft` or
 [`[pr] draft = true`](config.md#prs), which `--no-draft` overrides. Draft state, repeated
 `--label`, repeated `--reviewer`, repeated `--assignee` and `--milestone TITLE`

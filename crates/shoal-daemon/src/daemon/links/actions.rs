@@ -672,8 +672,8 @@ fn removal_warning(url: &ItemRef) -> String {
     format!("{url} was opened, but removal started first, so the workspace does not link it")
 }
 
-/// Fill what the caller left unset: the title from the linked issue, then
-/// the last commit; a closing reference to the linked issue; the base
+/// Fill what the caller left unset: the title from the first linked issue,
+/// then the last commit; a closing reference to each linked issue; the base
 /// workspace's branch, then the default branch; draft state from
 /// `default_draft`.
 async fn new_pull(
@@ -683,16 +683,14 @@ async fn new_pull(
     options: PullOptions,
     default_draft: bool,
 ) -> Result<NewPull> {
-    let linked = workspace.links.issue();
-    let issue = match linked {
-        Some(linked) => {
+    let issues = (workspace.links.issues.iter())
+        .map(|linked| {
             linked.url.belongs_to(forge)?;
-            Some(linked.url.issue()?)
-        }
-        None => None,
-    };
-    let linked_title = linked.and_then(|linked| linked.title.clone());
-    let title = match (options.title, linked_title, issue) {
+            linked.url.issue()
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let linked_title = (workspace.links.issue()).and_then(|linked| linked.title.clone());
+    let title = match (options.title, linked_title, issues.first()) {
         (Some(title), _, _) => title,
         (None, Some(title), _) => title,
         (None, None, Some(number)) => {
@@ -724,7 +722,7 @@ async fn new_pull(
     };
     Ok(NewPull {
         title,
-        body: conventions::pull_description(options.body, issue),
+        body: conventions::pull_description(options.body, &issues),
         head: workspace.require_branch("shoal pr open")?.clone(),
         head_repository: None,
         base,

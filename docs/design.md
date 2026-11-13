@@ -2372,7 +2372,7 @@ created the PR and assigning it failed. A new PR is ready
 unless `--draft` or `[pr] draft` asks for one, because opening a ready PR is
 what requests review.
 An explicitly supplied description is preserved verbatim; when no description
-is supplied, a linked issue is referenced with `Closes #<number>`.
+is supplied, each assigned issue is referenced with `Closes #<number>`.
 Repository conventions reach agents where they open and mark items, not only in
 instructions read at launch: `shoal repo labels` serves the forge's label scheme with
 its descriptions, repositories may require label prefixes, which refuse a new item
