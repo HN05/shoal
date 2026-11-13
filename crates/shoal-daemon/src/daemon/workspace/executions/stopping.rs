@@ -565,7 +565,7 @@ impl Manager {
         ties: WorktreeTies,
     ) -> Result<()> {
         if ties != WorktreeTies::None {
-            self.verify_worktree(workspace).await?;
+            self.verify_removed_worktree(workspace).await?;
         }
         let space = self.workspace_space(workspace, ties).await?;
         self.stop_untracked(space, Selection::Processes, None)

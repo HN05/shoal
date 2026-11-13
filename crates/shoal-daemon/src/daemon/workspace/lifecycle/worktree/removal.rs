@@ -34,6 +34,18 @@ struct PostRemoveHook {
     env: BTreeMap<String, OsString>,
 }
 
+/// What Git records of a worktree being removed.
+#[derive(Debug, Clone, Copy)]
+enum Registration {
+    /// Git lists it, so Git removes it.
+    Listed,
+    /// Its directory stays though Git no longer lists it, and the workspace
+    /// is disposable, so removal deletes what is left.
+    Disowned,
+    /// Git no longer lists it, and its directory is gone.
+    Unlisted,
+}
+
 /// The worktree a removal takes, as the removal found it once it reserved
 /// the workspace.
 pub(in crate::daemon::workspace) struct WorktreeStage {
@@ -315,13 +327,16 @@ impl Manager {
             }
             None => {
                 // Prune only this owned registration.
-                let registered = self.is_registered_worktree(workspace).await?;
+                let registration = match self.is_registered_worktree(workspace).await? {
+                    true => Registration::Listed,
+                    false => Registration::Unlisted,
+                };
                 (self.remove_worktree(
                     &repo.path,
                     workspace,
                     FileRemoval::Force,
                     BranchRemoval::Keep,
-                    registered,
+                    registration,
                 ))
                 .await?
             }
@@ -466,7 +481,11 @@ impl Manager {
         let record = self.save_restore_record(workspace, removal).await?;
         ensure_checkpoint_keeps_files(check, removal, record.as_ref())?;
         let (files, branch) = removal_options(check, removal);
-        self.remove_worktree(repo, workspace, files, branch, true)
+        let registration = match removal::disowned(workspace).await? {
+            true => Registration::Disowned,
+            false => Registration::Listed,
+        };
+        self.remove_worktree(repo, workspace, files, branch, registration)
             .await
     }
 
@@ -491,27 +510,32 @@ impl Manager {
 
     /// Release live resources immediately before removing the worktree. Failed
     /// cleanup retains their ownership records so removal can be retried.
+    /// Git cannot tell which branch a worktree it no longer lists was on, so
+    /// the recorded one stays.
     async fn remove_worktree(
         &self,
         repo: &Path,
         workspace: &Workspace,
         files: FileRemoval,
         branch: BranchRemoval,
-        registered: bool,
+        registration: Registration,
     ) -> Result<WorktreeRemoval> {
         self.remove_simulators(&workspace.id).await?;
-        if registered {
-            self.destroy_seed_outputs(workspace).await;
-            let removed = git::worktree::remove(repo, &workspace.path, files, branch).await?;
-            Ok(removed.into())
-        } else {
-            Ok(WorktreeRemoval {
-                removed: true,
-                branch: workspace.branch.clone(),
-                branch_outcome: BranchOutcome::Retained,
-                hook_error: None,
-            })
+        match registration {
+            Registration::Listed => {
+                self.destroy_seed_outputs(workspace).await;
+                let removed = git::worktree::remove(repo, &workspace.path, files, branch).await?;
+                return Ok(removed.into());
+            }
+            Registration::Disowned => git::worktree::delete_disowned(&workspace.path).await?,
+            Registration::Unlisted => {}
         }
+        Ok(WorktreeRemoval {
+            removed: true,
+            branch: workspace.branch.clone(),
+            branch_outcome: BranchOutcome::Retained,
+            hook_error: None,
+        })
     }
 
     /// Refuse a removal that [skips stalled](Removal::skips_stalled) spaces

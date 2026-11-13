@@ -155,6 +155,16 @@ impl Manager {
             .map_err(|error| Refusal::wrap(Reason::NotReady, error))
     }
 
+    /// Verify the worktree a removal deletes as [`Self::verify_worktree`]
+    /// does, except one Git disowned, whose admin directory is gone and
+    /// whose `.git` link, if left, still names the recorded one.
+    pub(crate) async fn verify_removed_worktree(&self, workspace: &Workspace) -> Result<()> {
+        if crate::removal::disowned(workspace).await? {
+            return Ok(());
+        }
+        self.verify_worktree(workspace).await
+    }
+
     async fn verify_worktree_identity(&self, workspace: &Workspace) -> Result<()> {
         let actual_git_dir = self.linked_git_dir(workspace).await?;
         let workspace = workspace.clone();

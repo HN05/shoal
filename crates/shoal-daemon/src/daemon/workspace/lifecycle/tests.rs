@@ -1503,3 +1503,75 @@ async fn the_log_shows_a_removal_that_failed_once_however_often_it_fails() {
         ]
     );
 }
+
+/// A workspace, disposable or not, whose worktree Git disowned as a
+/// `worktree remove` that failed partway leaves it: the directory stays
+/// without the admin directory its `.git` names.
+async fn disowned_workspace(disposable: bool) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let new = super::super::NewWorkspace {
+        options: crate::protocol::CreationOptions {
+            disposable,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let workspace = manager
+        .create_workspace_with(&repo.id, "scratch".into(), None, new)
+        .await
+        .unwrap();
+    let admin_dir = git(&workspace.path, &["rev-parse", "--absolute-git-dir"]);
+    fs::remove_dir_all(admin_dir.trim_end()).unwrap();
+    (root, manager, workspace)
+}
+
+#[tokio::test]
+async fn removal_deletes_a_disposable_worktree_git_disowned() {
+    let (_root, manager, workspace) = disowned_workspace(true).await;
+    let removed = manager
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert!(!workspace.path.exists());
+    assert!(
+        manager
+            .find_workspace(&workspace.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    // Git can no longer tell whether the worktree was still on it.
+    assert!(!removed.branch_outcome.is_deleted(), "{removed:?}");
+}
+
+/// Git can no longer read what the worktree holds, so nothing proves it
+/// holds nothing worth keeping.
+#[tokio::test]
+async fn removal_retains_a_kept_worktree_git_disowned() {
+    let (_root, manager, workspace) = disowned_workspace(false).await;
+    manager
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap_err();
+    assert!(workspace.path.exists());
+    assert!(
+        manager
+            .find_workspace(&workspace.id)
+            .await
+            .unwrap()
+            .is_some()
+    );
+}

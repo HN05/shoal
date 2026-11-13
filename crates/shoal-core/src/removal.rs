@@ -153,10 +153,12 @@ pub async fn inspect(
 /// Fill in what Git says removing the existing worktree would discard.
 /// Nothing in a disposable workspace is worth keeping, so nothing is
 /// inspected for unsaved work; which branch it is on, which removal may
-/// delete, still is.
+/// delete, still is, unless Git disowned it.
 async fn inspect_git(check: &mut RemovalCheck, default_branch: Option<&str>) -> Result<()> {
     if check.workspace.disposable {
-        check.branch = git::checked_out_branch(&check.workspace.path).await?;
+        if !disowned(&check.workspace).await? {
+            check.branch = git::checked_out_branch(&check.workspace.path).await?;
+        }
         return Ok(());
     }
     let path = &check.workspace.path;
@@ -186,6 +188,16 @@ async fn inspect_git(check: &mut RemovalCheck, default_branch: Option<&str>) -> 
             check.unpushed_commits > 0 && only_starting_commits(&check.workspace, &kept).await?;
     }
     Ok(())
+}
+
+/// Whether Git disowned the worktree of `workspace`, as a removal it
+/// could not finish leaves it, and the workspace is disposable, so that
+/// removal deletes what is left without Git, whatever it holds.
+pub async fn disowned(workspace: &Workspace) -> Result<bool> {
+    match (&workspace.git_dir, workspace.disposable) {
+        (Some(admin_dir), true) => git::worktree::disowned(&workspace.path, admin_dir).await,
+        _ => Ok(false),
+    }
 }
 
 /// Whether the workspace is a copy still at its starting HEAD with the

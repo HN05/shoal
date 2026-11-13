@@ -3485,7 +3485,9 @@ without a branch at the checkpoint's HEAD.
 nothing worth keeping, such as one a CI job runs in: every removal, `shoal rm`,
 its parent's removal and idle or other cleanup, deletes it without inspecting its
 unsaved work or asking, keeps no checkpoint, and deletes its branch whatever
-commits only it has while the worktree is still on it. It applies only to a new
+commits only it has while the worktree is still on it; a removal Git could not
+finish leaves the directory without Git's record of it, and the next removal
+deletes the rest and keeps the branch. It applies only to a new
 branch, never to an existing one that removal would then delete. Holds, open questions and running commands keep it from
 unattended removal as they keep any workspace. `status` shows `Disposable: yes`
 and `--json` `disposable`.
