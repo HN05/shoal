@@ -349,7 +349,7 @@ pub(crate) async fn job_log(repo: &ForgeRepo, account: &Account, endpoint: &str)
 
 fn run_id(runs: &Value, number: RunNumber, head: Option<&str>) -> Result<RunId> {
     let run = numbered_run(runs, number)?;
-    if head.is_some_and(|head| super::runs::commit_of(run).as_deref() != Some(head)) {
+    if head.is_some_and(|head| super::runs::status_commit(run).as_deref() != Some(head)) {
         return Err(OlderRun { number }.into());
     }
     run["id"]

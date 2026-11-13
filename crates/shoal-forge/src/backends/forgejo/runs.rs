@@ -153,8 +153,17 @@ pub(super) fn pull_of(run: &Value) -> Option<PullNumber> {
 /// payload names, where Forgejo posts its statuses: its `commit_sha` can
 /// name an earlier head when the PR's branch is force-pushed.
 pub(super) fn commit_of(run: &Value) -> Option<String> {
-    let head = (pull_payload(run).filter(|_| on_pull_head(run)))
-        .and_then(|payload| text(&payload["pull_request"]["head"]["sha"]));
+    if on_pull_head(run) {
+        status_commit(run)
+    } else {
+        text(&run["commit_sha"])
+    }
+}
+
+/// The commit a run posts its statuses on: a PR event's run's on the PR's
+/// head its payload names, whatever commit it ran on.
+pub(super) fn status_commit(run: &Value) -> Option<String> {
+    let head = pull_payload(run).and_then(|payload| text(&payload["pull_request"]["head"]["sha"]));
     head.or_else(|| text(&run["commit_sha"]))
 }
 
