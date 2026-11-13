@@ -81,6 +81,27 @@ async fn a_moving_workspace_stays_until_its_import_ends_it() {
 }
 
 #[tokio::test]
+async fn files_written_before_the_export_end_with_the_workspace_the_caller_saw_clean() {
+    let (source, exporting, source_repo, _origin) = exporter().await;
+    let workspace = stopped_workspace(&exporting, &source_repo).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    // As an agent writes when it stops, after the caller's check.
+    fs::write(workspace.path.join("notes"), "notes\n").unwrap();
+    let (exported, _) = export_moving(&exporting, &selector, source.path()).await;
+    let checkpoint = packaged_workspace(&exported.manifest)
+        .workspace
+        .checkpoint
+        .number;
+
+    let ended = exporting
+        .end_moved_space(&selector, UnsavedWork::default(), Some(checkpoint))
+        .await
+        .unwrap();
+    assert!(ended.is_some());
+    assert!(!workspace.path.exists());
+}
+
+#[tokio::test]
 async fn a_workspace_that_changed_after_its_export_stays() {
     let (source, exporting, source_repo, _origin) = exporter().await;
     let workspace = stopped_workspace(&exporting, &source_repo).await;

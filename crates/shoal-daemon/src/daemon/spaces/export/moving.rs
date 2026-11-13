@@ -7,12 +7,13 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, ensure};
 
 use super::{Prepared, ensure_exportable, packaged_record};
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::transfer::ManifestExt;
 use crate::{
     daemon::workspace::{Manager, StopRequest, kept_session_sources},
     execution::recovery,
-    model::{Chat, CheckpointNumber, PresentSpace, Workspace},
+    model::{Chat, Checkpoint, CheckpointNumber, PresentSpace, Workspace},
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
     transfer::{ExportedSpace, Manifest, Source},
 };
@@ -36,9 +37,10 @@ impl Manager {
     }
 
     /// End the space `selector` names, which another machine imported,
-    /// through the export's removal, deleting only the `unsaved` work the
-    /// caller saw: a workspace once it still has what its checkpoint
-    /// `exported` keeps and no space below it stays here, or a chat.
+    /// through the export's removal: a workspace once it still has what its
+    /// checkpoint `exported` keeps, which the other machine now has, and no
+    /// space below it stays here, taking only the spaces below it that
+    /// `unsaved` names, or a chat.
     pub async fn end_moved_space(
         &self,
         selector: &SpaceSelector,
@@ -54,10 +56,12 @@ impl Manager {
         };
         let exported =
             exported.context("ending a moved workspace needs the checkpoint its package holds")?;
-        self.ensure_unchanged_since_export(&workspace, exported)
+        let checkpoint = self
+            .ensure_unchanged_since_export(&workspace, exported)
             .await?;
+        let moved = moved_work(&checkpoint, unsaved.children());
         let removal = self
-            .remove_exported(&workspace, unsaved, InspectionPolicy::GitOnly)
+            .remove_exported(&workspace, moved, InspectionPolicy::GitOnly)
             .await?;
         Ok(Some(removal))
     }
@@ -113,21 +117,22 @@ impl Manager {
         })
     }
 
-    /// Refuse to end `workspace` once it differs from its checkpoint
-    /// `exported`, as after a commit made here since its export, or while a
-    /// space below it stays here, which joined it since.
+    /// The checkpoint `exported` of `workspace`, refusing to end it once it
+    /// differs from it, as after a commit made here since its export, or
+    /// while a space below it stays here, which joined it since.
     async fn ensure_unchanged_since_export(
         &self,
         workspace: &Workspace,
         exported: CheckpointNumber,
-    ) -> Result<()> {
+    ) -> Result<Checkpoint> {
         let checkpoint = self.numbered_checkpoint(workspace, exported).await?;
         ensure!(
             self.unchanged_since(workspace, &checkpoint).await?,
             "workspace {} changed here after its export: its HEAD or unsaved files differ from checkpoint {exported}",
             workspace.name
         );
-        self.ensure_nothing_below_stays(workspace).await
+        self.ensure_nothing_below_stays(workspace).await?;
+        Ok(checkpoint)
     }
 
     /// Refuse to move `workspace` while a space below it stays here, as one
@@ -144,5 +149,18 @@ impl Manager {
             staying.join(", ")
         );
         Ok(())
+    }
+}
+
+/// Consent to delete what `checkpoint` keeps, which the other machine
+/// imported: its unsaved files, including those the agents wrote as they
+/// stopped after the caller's check, and the commits of its detached HEAD,
+/// taking only the spaces below that `children` names.
+fn moved_work(checkpoint: &Checkpoint, children: Option<&[SpaceId]>) -> UnsavedWork {
+    UnsavedWork::Confirmed {
+        files: checkpoint.commit != checkpoint.head,
+        detached_head: checkpoint.branch.is_none().then(|| checkpoint.head.clone()),
+        files_restorable: false,
+        children: children.map(<[SpaceId]>::to_vec),
     }
 }
