@@ -28,7 +28,7 @@ pub(in crate::daemon) const NOT_NOW: &str =
 
 impl Manager {
     /// Put a space `caller` starts below the space `parent` names, which
-    /// must be its own or one below it, else below its own space.
+    /// its scope must reach, else below its own space.
     pub(in crate::daemon) async fn parent_below(
         &self,
         caller: &Caller,
@@ -36,12 +36,9 @@ impl Manager {
     ) -> Result<()> {
         let id = match parent.as_ref() {
             Some(named) => {
-                let id = self.space(named).await?.id().to_owned();
-                ensure!(
-                    self.within_subtree(&caller.space_id, &id).await?,
-                    "workspace processes start spaces only below their own space and those below it"
-                );
-                id
+                let space = self.space(named).await?;
+                self.ensure_reaches(caller, &space).await?;
+                space.id().to_owned()
             }
             None => caller.space_id.clone(),
         };

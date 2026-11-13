@@ -512,7 +512,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         .await
         .unwrap_err();
     assert!(
-        format!("{error:#}").contains("only below their own space and those below it"),
+        format!("{error:#}").contains("outside this space's scope"),
         "{error:#}"
     );
     // The check before a workspace start takes the parent the same way.

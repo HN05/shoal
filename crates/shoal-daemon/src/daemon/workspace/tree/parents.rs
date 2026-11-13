@@ -25,8 +25,8 @@ impl Manager {
     }
 
     /// [`Self::open_branch`] below `parent`, where and as `new` says,
-    /// returning the workspace with its parent. For a scoped `caller`,
-    /// `parent` takes over no existing workspace outside its subtree.
+    /// returning the workspace with its parent. A scoped `caller` takes
+    /// over no existing workspace outside its scope.
     pub async fn open_branch_below(
         &self,
         repository: crate::repository::Selector,
@@ -44,7 +44,7 @@ impl Manager {
         };
         let mut opened = self.open_branch_with(repository, branch, base, new).await?;
         if opened.reused {
-            (self.ensure_takes_over(parent.as_ref(), &opened.workspace, caller)).await?;
+            (self.ensure_takes_over(&opened.workspace, caller)).await?;
         }
         opened.workspace = self
             .give_to_parent(&SpaceSelector::id(&opened.workspace.id), parent)
@@ -52,23 +52,17 @@ impl Manager {
         Ok(opened)
     }
 
-    /// Refuse a scoped `caller` the existing `workspace` outside the
-    /// subtree of `parent`, the space it opens it below.
+    /// Refuse a scoped `caller` the existing `workspace` outside its scope.
     pub(in crate::daemon) async fn ensure_takes_over(
         &self,
-        parent: Option<&SpaceId>,
         workspace: &Workspace,
         caller: Option<&Caller>,
     ) -> Result<()> {
-        let (Some(parent), Some(_)) = (parent, caller) else {
+        let Some(caller) = caller else {
             return Ok(());
         };
-        ensure!(
-            self.within_subtree(parent, &workspace.id).await?,
-            "{} is outside the space opening it; ask the user to open it",
-            workspace.name
-        );
-        Ok(())
+        let space = crate::model::PresentSpace::Workspace(workspace.clone());
+        self.ensure_reaches(caller, &space).await
     }
 
     /// [`Self::create_workspace`] below `parent`, returning the workspace with

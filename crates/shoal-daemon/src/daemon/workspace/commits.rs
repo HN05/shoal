@@ -79,8 +79,8 @@ impl Manager {
     /// Open PR `url`'s `head` in a workspace at a commit in `repository`:
     /// the one made for or linked to the PR, moved to `head` when the PR's
     /// head moved, so there is at most one per PR, or else a new one below
-    /// the space `parent`, or a top-level one of the user's. For a scoped
-    /// `caller`, `parent` takes over no workspace outside its subtree.
+    /// the space `parent`, or a top-level one of the user's. A scoped
+    /// `caller` takes over no workspace outside its scope.
     pub async fn open_pull_head(
         &self,
         repository: crate::repository::Selector,
@@ -94,7 +94,7 @@ impl Manager {
             .await?;
         let (repo, git) = self.lock_repository(repository).await?;
         if let Some(workspace) = self.pull_workspace(&repo.id, &url, head.number).await? {
-            (self.ensure_takes_over(parent.as_ref(), &workspace, caller)).await?;
+            (self.ensure_takes_over(&workspace, caller)).await?;
             self.move_to_pull_head(&repo, &workspace, &head).await?;
             if let Some(base) = head.base {
                 self.record_diff_ref(&workspace.id, base).await?;
