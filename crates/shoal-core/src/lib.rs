@@ -26,6 +26,7 @@ pub mod operations;
 pub mod paths;
 pub mod presets;
 pub mod process;
+pub mod profile;
 pub mod proxy;
 pub mod push_gate;
 pub mod queued_launches;

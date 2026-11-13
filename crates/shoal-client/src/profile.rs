@@ -1,6 +1,6 @@
 //! Timing lines for profiling Shoal itself. With `SHOAL_PROFILE=1`, a process
-//! prints to stderr how long each of its daemon requests and subprocess runs
-//! took; the daemon's stderr is its log.
+//! prints to stderr how long each of its daemon requests took; the daemon's
+//! stderr is its log.
 use std::{
     io::Write,
     sync::OnceLock,
@@ -10,13 +10,6 @@ use std::{
 pub fn enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
     *ENABLED.get_or_init(|| std::env::var_os(crate::env::PROFILE).is_some_and(|value| value == "1"))
-}
-
-/// Time every subprocess run from now on, when profiling.
-pub fn start() {
-    if enabled() {
-        shoal_subprocess::observe(|command, elapsed| line("run", elapsed, command));
-    }
 }
 
 /// Prints a `kind` timing line for `subject` when dropped.
@@ -41,7 +34,8 @@ impl Drop for Span {
     }
 }
 
-fn line(kind: &str, elapsed: Duration, subject: &str) {
+/// Print one `kind` timing line for `subject`.
+pub fn line(kind: &str, elapsed: Duration, subject: &str) {
     let millis = elapsed.as_secs_f64() * 1000.0;
     // One write per line keeps concurrent tasks from interleaving within it.
     let text = format!("profile {kind} {millis:.1}ms {subject}\n");

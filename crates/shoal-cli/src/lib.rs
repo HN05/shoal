@@ -12,14 +12,14 @@ mod cli;
 use shoal_core::test_support;
 use shoal_core::{
     agent_git, agents, build, config_file, daemon_handoff, daemon_owner, env, execution, fsutil,
-    git, git_credential, installed, opened_pull, operations, paths, process, proxy, push_gate,
-    queued_launches, refusal, releases, removal, repository, secrets, service, sessions, shell,
-    start_plan, stdout, terminal, tools, transfer, workers,
+    git, git_credential, installed, opened_pull, operations, paths, process, profile, proxy,
+    push_gate, queued_launches, refusal, releases, removal, repository, secrets, service, sessions,
+    shell, start_plan, stdout, terminal, tools, transfer, workers,
 };
 
 use shoal_client as client;
 use shoal_client::time;
-use shoal_client::{agent, ai, config, demos, model, profile, protocol, reviews, state, validate};
+use shoal_client::{agent, ai, config, demos, model, protocol, reviews, state, validate};
 use shoal_core::WORKER_STACK;
 use shoal_forge as forge;
 use shoal_subprocess as subprocess;
