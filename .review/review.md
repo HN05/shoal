@@ -466,7 +466,9 @@ instead of the PR delivery guidance below.
   It accepts a positive fixed value or `none`; the global value limits the
   machine while a repository's fixed value limits that repository. Slots derive from tracked
   agents, executions awaiting reattachment, resume records and starting queue
-  entries, excluding done workspaces, never from a separate counter. A starting
+  entries, excluding done workspaces and agents of a `light` mode, never from a
+  separate counter. A light agent starts past the agent limits and memory room,
+  but not past critical or failed readings or low disk. A starting
   entry keeps its slot only while its launch holds it or within the grace
   period, until its agent registers; queued entries create no worktree.
   A launch with blockers queues without a limit and starts only once each
@@ -487,7 +489,7 @@ instead of the PR delivery guidance below.
 - Machine-wide memory overload protection is opt-out; sustained CPU protection is
   opt-in. The machine-only `load` level sets the CPU and memory thresholds the
   file leaves out; explicit values win. Stop one connected tracked
-  agent at a time through its wrapper: agents no terminal shows before shown ones,
+  agent of a mode that is not `light` at a time through its wrapper: agents no terminal shows before shown ones,
   which still stop once no other is left, then the one idle longest first and
   otherwise the newest, with configurable thresholds
   and timing; retain work and leases, notify with the pressure reason and recovery

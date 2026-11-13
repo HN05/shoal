@@ -370,7 +370,7 @@ rules = ["work", "worker"]
 instructions = "Fix the findings of the latest review."
 focus = true             # Over terminal.focus for its launches; unset follows it
 idle_wake_minutes = 60   # Unset or 0 never wakes its agent
-weight = "heavy"         # "light": no agent slot; default "heavy", "light" for chat modes
+weight = "heavy"         # "light": no agent slot; default "heavy", "light" for the built-in chat modes
 
 [modes.review-fixer.permissions]
 push = "propose"
