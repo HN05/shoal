@@ -46,7 +46,7 @@ async fn stopped_in(
 async fn stopped_work(ctx: &Context, forget: bool) -> Result<Vec<(PresentSpace, Saved)>> {
     let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
     let mut stopped = Vec::new();
-    for space in crate::cli::scoping::reached_below(spaces) {
+    for space in crate::cli::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces) {
         if space.done() && !forget {
             continue;
         }

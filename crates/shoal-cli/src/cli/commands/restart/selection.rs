@@ -15,7 +15,7 @@ pub(super) async fn load(ctx: &Context, targets: SpaceTargets) -> Result<Selecti
     let named = !targets.all && !targets.space.is_empty();
     let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
     let spaces = match targets.all {
-        true => crate::cli::scoping::reached_below(spaces),
+        true => crate::cli::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces),
         false => {
             let selected = ui::select_spaces(ctx, targets.space, false).await?;
             in_order(ctx, &spaces, selected).await?

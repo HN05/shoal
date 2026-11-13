@@ -25,26 +25,35 @@ impl Scoping {
         Self::when(crate::env::workspace_scoped())
     }
 
+    /// The spaces among `spaces`, those this process sees, that it acts on
+    /// together: every one unscoped, and scoped those its scope reaches but
+    /// its own, since a chat also sees the workspace it runs in, which it
+    /// only reads.
+    pub fn reached_below(self, spaces: Spaces) -> Vec<PresentSpace> {
+        let workspaces = spaces
+            .workspaces
+            .iter()
+            .cloned()
+            .map(PresentSpace::Workspace);
+        let chats = spaces.chats.iter().cloned().map(PresentSpace::Chat);
+        let every = workspaces.chain(chats);
+        if self == Self::Unscoped {
+            return every.collect();
+        }
+        let own = crate::env::own_space();
+        let home = (spaces.chats.iter())
+            .find(|chat| own.as_ref() == Some(&chat.id))
+            .and_then(|chat| chat.workspace.as_ref())
+            .map(|workspace| workspace.id.clone());
+        every
+            .filter(|space| Some(space.id()) != own.as_ref() && Some(space.id()) != home.as_ref())
+            .collect()
+    }
+
     fn when(scoped: bool) -> Self {
         match scoped {
             true => Self::Scoped,
             false => Self::Unscoped,
         }
     }
-}
-
-/// The spaces among `spaces`, those this process sees, that its scope
-/// reaches but its own: a chat also sees the workspace it runs in, which it
-/// only reads.
-pub fn reached_below(spaces: Spaces) -> Vec<PresentSpace> {
-    let own = crate::env::own_space();
-    let home = (spaces.chats.iter())
-        .find(|chat| own.as_ref() == Some(&chat.id))
-        .and_then(|chat| chat.workspace.as_ref())
-        .map(|workspace| workspace.id.clone());
-    let workspaces = spaces.workspaces.into_iter().map(PresentSpace::Workspace);
-    let chats = spaces.chats.into_iter().map(PresentSpace::Chat);
-    (workspaces.chain(chats))
-        .filter(|space| Some(space.id()) != own.as_ref() && Some(space.id()) != home.as_ref())
-        .collect()
 }
