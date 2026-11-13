@@ -10,11 +10,12 @@ mod store;
 mod text;
 
 pub(crate) use crate::client::approvals::{
-    ApprovalRequest, DecisionStatus, HoldSpecification, Lifetime, MERGE, MergeSpecification,
-    PortSpecification, PushSpecification, ResourceSpecification, SecretSpecification,
-    SimulatorSpecification, Specification, Target, Undecided, UnmergeSpecification,
+    ActionSpecification, ApprovalRequest, DecisionStatus, HoldSpecification, Lifetime, MERGE,
+    MergeSpecification, PortSpecification, PushSpecification, ResourceSpecification,
+    SecretSpecification, SimulatorSpecification, Specification, Target, Undecided,
+    UnmergeSpecification,
 };
-pub use store::{ReasonRequired, check, current, release};
+pub use store::{ReasonRequired, check, current, release, request_action};
 pub(crate) use store::{pending_count, release_decided_by};
 
 /// Operations on the client type [`ApprovalRequest`] that only the `shoal` command uses.

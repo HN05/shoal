@@ -8,12 +8,16 @@ use super::super::{
     Server,
     answer::{self, Answer, OperationGuard},
     exit_wait::{self, Quiet},
-    scope::{self, Caller, Scoped, denied},
+    permissions::Action,
+    scope::{self, Caller, Scoped},
     workspace::{Ending, Manager},
 };
 use crate::client::space_names::SpaceSelector;
-use crate::protocol::{
-    self, Body, DaemonMethod, DaemonStatus, ExitRequest, ExitWhen, Exited, Response,
+use crate::{
+    config::permissions::PermissionKey,
+    protocol::{
+        self, Body, DaemonMethod, DaemonStatus, Exit, ExitRequest, ExitWhen, Exited, Response,
+    },
 };
 
 /// The daemon's own requests, which read how it runs.
@@ -37,10 +41,31 @@ impl Scoped for DaemonMethod {
     }
 }
 
+/// Stopping or restarting the daemon is the `daemon` permission's.
 impl Scoped for ExitRequest {
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut SpaceSelector>> {
-        Err(denied())
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
+        let action = Action::new(PermissionKey::Daemon, exit_command(self));
+        manager.authorize_action(Some(caller), action).await?;
+        Ok(None)
     }
+}
+
+/// The command that sends `request`, which an approval of it names.
+fn exit_command(request: &ExitRequest) -> String {
+    let exit = match request.exit {
+        Exit::Stop => "stop",
+        Exit::Restart => "restart",
+    };
+    let when = match request.when {
+        ExitWhen::Now => " --force",
+        ExitWhen::Idle => "",
+        ExitWhen::IfIdle => " --no-wait",
+    };
+    format!("shoal daemon {exit}{when}")
 }
 
 /// How the daemon runs.

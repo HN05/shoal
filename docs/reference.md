@@ -112,6 +112,8 @@ directory is in, `shoal status` warns and shows the daemon's status.
 `daemon stop` and `restart` send a daemon that does not answer SIGTERM, through
 the service manager or directly for a foreground daemon, as while it starts.
 Both first [wait for the work the daemon runs itself](#daemon-restarts).
+A scoped process runs the service commands and `shoal update` as its space's
+`daemon` [permission](#permitted-actions) allows.
 `daemon start`
 without an installed service offers to run `shoal daemon install` in an interactive terminal.
 
@@ -2382,8 +2384,9 @@ subject). Desktop handoffs receive neither. User prompt arguments are preserved.
 [`[permissions]`](config.md#permissions) and `[modes.<name>.permissions]` set
 what a mode's agents may do, under the keys the sections on
 [issues and PRs](#approval-for-agent-issues-and-prs),
-[pushes](#approval-for-agent-pushes), [merges](#merge-into-the-default-branch)
-and [forge API requests](#forge-api-requests) describe.
+[pushes](#approval-for-agent-pushes), [merges](#merge-into-the-default-branch),
+[forge API requests](#forge-api-requests) and [actions](#permitted-actions)
+describe.
 
 Each space has its own permissions. A top-level space has those of its
 agent's mode; a space below another has, for each key, the narrower of its
@@ -2424,6 +2427,18 @@ rest. A dropped key takes the value its space has without one, which a space's
 agent must hold too. Nothing changes them while the agent runs. `shoal status --json`
 gives the recorded ones as `narrowing`, beside the effective `permissions`,
 where a given key's `from` is `given`.
+
+#### Permitted actions
+
+A key that governs an action lets a scoped process take it at once with
+`"direct"`, as the user would, and refuses it with `"deny"`, citing the
+permission. With `"propose"` the action becomes an
+[approval request](#approvals) bound to what it does, such as the command
+with its arguments, which the command reports with exit 2 and
+`code: "approval_pending"`, or `"approval_denied"` once denied. Once the
+request is approved, the same action proceeds once under every other check,
+and taking it again asks again. `daemon` governs installing, starting,
+stopping and restarting the daemon, and `shoal update`.
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the
 [review template](../crates/shoal-core/src/config/templates/review.md), its task,
@@ -5924,7 +5939,8 @@ approves a request a permission governs, an issue or PR proposal, a push, a
 merge or an unmerge, where its own effective [permission](#mode-permissions)
 for it is `direct`: `issue_open` for an issue, or `issue_other_repositories`
 for one in another repository, `pr_open` for a PR, `push` for a push and for
-a PR that pushes first, and `merge` and `push` for a merge or unmerge. It
+a PR that pushes first, `merge` and `push` for a merge or unmerge, and the
+key that governs an [action](#permitted-actions) for it. It
 approves anything else only where it holds an approved grant for it, with the
 same target and settings, or a request to hold the workspace, which needs
 none. Otherwise `--approve` is refused, citing the permission or the missing

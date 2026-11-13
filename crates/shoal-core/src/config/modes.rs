@@ -285,13 +285,14 @@ pub fn permission_layers(
 }
 
 /// The permissions Shoal's mode `name` has where config sets none: a
-/// worker's are the keys' defaults, and the modes that coordinate decide
-/// their children's merges and issues elsewhere; a mode Shoal does not ship
-/// has none.
+/// worker's are the keys' defaults, the modes that coordinate decide their
+/// children's merges and issues elsewhere, and a master session does what
+/// the user would; a mode Shoal does not ship has none.
 fn built_in_permissions(name: &ModeName) -> PermissionsConfig {
-    match [ModeName::CHAT, ModeName::PLAN, ModeName::ORCHESTRATE].contains(name) {
-        true => PermissionsConfig::COORDINATING,
-        false => PermissionsConfig::default(),
+    match name {
+        name if *name == ModeName::ORCHESTRATE => PermissionsConfig::ORCHESTRATING,
+        name if [ModeName::CHAT, ModeName::PLAN].contains(name) => PermissionsConfig::COORDINATING,
+        _ => PermissionsConfig::default(),
     }
 }
 

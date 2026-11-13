@@ -53,6 +53,17 @@ states!(
     }
 );
 
+states!(
+    #[derive(PartialOrd, Ord)]
+    /// Whether a scoped caller takes an action at once, after approval, or
+    /// not at all.
+    Acting: Variants {
+        Deny => "deny",
+        Propose => "propose",
+        Direct => "direct",
+    }
+);
+
 /// Every permission key, once: its field, its [`PermissionKey`] variant, the
 /// name config gives it and its type of value. It defines
 /// [`PermissionsConfig`], [`PermissionKey`] and [`Permissions`] and what
@@ -162,6 +173,9 @@ permission_keys! {
     push: Push => "push", Pushes;
     /// Forge API requests through `shoal forge api` that are not reads.
     api_writes: ApiWrites => "api_writes", ApiWrites;
+    /// Installing, starting, stopping and restarting the daemon, and
+    /// updating Shoal.
+    daemon: Daemon => "daemon", Acting;
 }
 
 /// Refuse `value` of `key` where it is wider than `held`.
@@ -188,6 +202,7 @@ impl PermissionsConfig {
         merge: Some(Opening::Propose),
         push: Some(Pushes::Direct),
         api_writes: Some(ApiWrites::Deny),
+        daemon: Some(Acting::Deny),
     };
 
     /// The defaults of a mode that coordinates rather than edits: it decides
@@ -196,6 +211,13 @@ impl PermissionsConfig {
         issue_other_repositories: Some(OtherRepositories::Direct),
         merge: Some(Opening::Direct),
         ..Self::KEY_DEFAULTS
+    };
+
+    /// The defaults of a master session, which reaches every space and does
+    /// what the user would, but proposes what stops every agent.
+    pub const ORCHESTRATING: Self = Self {
+        daemon: Some(Acting::Propose),
+        ..Self::COORDINATING
     };
 
     /// The narrowing `--permission KEY=VALUE` gives with each of
@@ -427,10 +449,23 @@ impl Permissions {
     /// The first of `keys` these permissions hold below `direct`, cited;
     /// none when every one is `direct`.
     pub fn withheld(&self, keys: &[PermissionKey]) -> Option<String> {
-        keys.iter().find_map(|&key| {
-            let (value, from) = self.get(key);
-            (value != Opening::Direct.as_str()).then(|| cite(key.as_str(), &value, from))
-        })
+        (keys.iter())
+            .find(|&&key| self.acting(key) != Acting::Direct)
+            .map(|&key| self.cited(key))
+    }
+
+    /// What `key` lets the space do, whichever of its values the key takes.
+    pub fn acting(&self, key: PermissionKey) -> Acting {
+        let (value, _) = self.get(key);
+        (Acting::ALL.iter().copied())
+            .find(|acting| acting.as_str() == value)
+            .expect("every value is deny, propose or direct")
+    }
+
+    /// The permission `key` as a refusal cites it, with where it comes from.
+    pub fn cited(&self, key: PermissionKey) -> String {
+        let (value, from) = self.get(key);
+        cite(key.as_str(), &value, from)
     }
 }
 

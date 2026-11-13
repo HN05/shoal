@@ -223,6 +223,7 @@ const REQUESTS: &[&str] = &[
     r#"{"branch_push":{"workspace":"fix"}}"#,
     r#"{"request_push":{"workspace":"fix","push":{"remote":"origin","destination":"refs/heads/fix","commit":"abc"}}}"#,
     r#"{"finish_push":{"key":"key","failure":"rejected"}}"#,
+    r#"{"authorize_action":{"key":"daemon","action":"shoal daemon restart"}}"#,
     // Ports.
     r#"{"port_acquire":{"workspace":"fix","name":"web","request":{"port":8080,"env_var":null,"reason":null,"on_conflict":null}}}"#,
     r#"{"port_release":{"workspace":"fix","name":"web"}}"#,

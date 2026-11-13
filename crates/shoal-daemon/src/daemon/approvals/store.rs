@@ -357,6 +357,24 @@ pub fn request_merge(
     check(tx, request)
 }
 
+/// Record `request` for an action a permission held back, or find the one
+/// recorded for the same action. Returns the request still awaiting or
+/// refused a decision; an approval lets the action proceed once, so taking
+/// it releases the request.
+pub fn request_action(
+    tx: &Transaction<'_>,
+    request: ApprovalRequest,
+) -> Result<Option<ApprovalRequest>> {
+    if let Some(existing) = current(tx, &request.space_id, &request.target, &request.name)?
+        && existing.status == DecisionStatus::Approved
+        && existing.specification == request.specification
+    {
+        release(tx, &existing.space_id, &existing.target, &existing.name)?;
+        return Ok(None);
+    }
+    check(tx, request)
+}
+
 impl Manager {
     /// [`check`] in its own transaction, for allocations that claim nothing else.
     pub async fn request_approval(

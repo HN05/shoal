@@ -7,6 +7,7 @@ use super::super::{
     answer::Answer,
     approvals::ApprovalRequest,
     item_numbers::ItemNumber,
+    permissions::Action,
     scope::{Caller, Scoped, denied, inspect_owner},
     workspace::Manager,
 };
@@ -55,6 +56,11 @@ pub(super) async fn handle(
         ApprovalMethod::RequestPush { workspace, push } => {
             Body::Push(manager.request_push(&workspace, push, caller).await?)
         }
+        ApprovalMethod::AuthorizeAction { key, action } => {
+            let action = Action::new(key, action);
+            manager.authorize_action(caller, action).await?;
+            Body::Ok
+        }
         ApprovalMethod::FinishPush { key, failure } => {
             Body::ApprovalRequest(Box::new(manager.finish_approved_push(&key, failure).await?))
         }
@@ -98,6 +104,8 @@ impl Scoped for ApprovalMethod {
             ApprovalMethod::WithdrawApproval { space, .. } => Some(space),
             ApprovalMethod::BranchPush { workspace }
             | ApprovalMethod::RequestPush { workspace, .. } => Some(workspace),
+            // The caller's own permission decides it.
+            ApprovalMethod::AuthorizeAction { .. } => None,
             // Only the push the user approved, which runs unscoped, ends it.
             ApprovalMethod::FinishPush { .. } => return Err(denied()),
         })

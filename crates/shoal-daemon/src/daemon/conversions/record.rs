@@ -358,8 +358,8 @@ pub(crate) struct ConvertedChat {
 
 /// Replace the workspace `id` with the stopped chat `chat` under its ID,
 /// number and name, which restores in its repository's checkout: its
-/// questions and unread messages become the chat's, and what only a
-/// workspace has goes with its row. Returns the requests the workspace
+/// questions, unread messages and requests to take actions become the
+/// chat's, and what only a workspace has goes with its row. Returns the requests the workspace
 /// decided, given back to the user, since a stopped chat decides none.
 pub(crate) fn replace_workspace(
     tx: &Transaction<'_>,
@@ -385,6 +385,12 @@ pub(crate) fn replace_workspace(
     )?;
     tx.execute(
         "UPDATE questions SET chat_id=workspace_id,workspace_id=NULL WHERE workspace_id=?1",
+        [id],
+    )?;
+    // Requests bound to the worktree, its branch or its leases go with them.
+    tx.execute(
+        "UPDATE access_requests SET chat_id=workspace_id,workspace_id=NULL
+         WHERE workspace_id=?1 AND target_key LIKE 'action/%'",
         [id],
     )?;
     let released = release_decided_by(tx, id)?;

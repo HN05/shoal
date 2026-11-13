@@ -25,21 +25,22 @@ use crate::{
 /// as `direct` to approve it instead of a grant; none for a request a grant
 /// governs. They are those whose value made the space ask instead of act: an
 /// issue in another repository is governed by `issue_other_repositories`
-/// alone, and what pushes by `push` too.
-fn governing(request: &ApprovalRequest) -> &'static [PermissionKey] {
+/// alone, what pushes by `push` too, and an action by its own key.
+fn governing(request: &ApprovalRequest) -> Vec<PermissionKey> {
     use PermissionKey::{IssueOpen, IssueOtherRepositories, Merge, PrOpen, Push};
     match request.target {
         Target::IssueOpen
             if (request.proposed_issue()).is_some_and(|issue| issue.repository.is_some()) =>
         {
-            &[IssueOtherRepositories]
+            vec![IssueOtherRepositories]
         }
-        Target::IssueOpen => &[IssueOpen],
-        Target::PrOpen if request.pending_push().is_some() => &[PrOpen, Push],
-        Target::PrOpen => &[PrOpen],
-        Target::Push => &[Push],
-        Target::Merge | Target::Unmerge => &[Merge, Push],
-        _ => &[],
+        Target::IssueOpen => vec![IssueOpen],
+        Target::PrOpen if request.pending_push().is_some() => vec![PrOpen, Push],
+        Target::PrOpen => vec![PrOpen],
+        Target::Push => vec![Push],
+        Target::Merge | Target::Unmerge => vec![Merge, Push],
+        Target::Action(key) => vec![key],
+        _ => Vec::new(),
     }
 }
 
@@ -51,16 +52,16 @@ fn needed(
     request: &ApprovalRequest,
     approve: bool,
     details: &proposals::ProposalDecision,
-) -> &'static [PermissionKey] {
+) -> Vec<PermissionKey> {
     if approve {
         return governing(request);
     }
     let elsewhere = (request.proposed_issue()).is_some_and(|issue| issue.repository.is_some());
     match &details.duplicate_of {
         Some(proposals::Duplicate::Issue(_)) if elsewhere => {
-            &[PermissionKey::IssueOtherRepositories]
+            vec![PermissionKey::IssueOtherRepositories]
         }
-        _ => &[],
+        _ => Vec::new(),
     }
 }
 
@@ -249,7 +250,8 @@ impl Manager {
             shown.is_none_or(|shown| request.is_same(&shown)),
             format_args!("approval request {number}"),
         )?;
-        self.ensure_permitted(coordinator, &request, needed(&request, approve, &details))
+        let needed = needed(&request, approve, &details);
+        self.ensure_permitted(coordinator, &request, &needed)
             .await?;
         if let Some(proposals::Duplicate::Approval(original)) = &details.duplicate_of {
             self.ensure_reaches_proposal(coordinator, *original).await?;

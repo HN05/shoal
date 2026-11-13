@@ -162,12 +162,25 @@ fn config_show_and_reference_are_available_to_workspace_processes() {
 }
 
 #[test]
-fn only_reloading_the_config_is_available_to_workspace_processes() {
+fn the_daemon_permission_governs_what_the_cli_does_to_the_daemon_itself() {
     let reload = Cli::try_parse_from(["shoal", "config", "reload"]).unwrap();
     assert!(!reload.command.unwrap().is_administrative());
-    for verb in ["start", "stop", "restart"] {
+    for args in [
+        vec!["shoal", "daemon", "start"],
+        vec!["shoal", "daemon", "install"],
+        vec!["shoal", "update"],
+    ] {
+        let command = Cli::try_parse_from(&args).unwrap().command.unwrap();
+        assert_eq!(
+            command.permission(),
+            Some(PermissionKey::Daemon),
+            "{args:?}"
+        );
+    }
+    // The daemon checks the exit request itself.
+    for verb in ["stop", "restart"] {
         let command = Cli::try_parse_from(["shoal", "daemon", verb]).unwrap();
-        assert!(command.command.unwrap().is_administrative(), "{verb}");
+        assert_eq!(command.command.unwrap().permission(), None, "{verb}");
     }
 }
 
@@ -206,12 +219,6 @@ fn registering_a_contribution_is_administrative() {
     let args = ["shoal", "contribute", "https://github.com/owner/repo"];
     let command = Cli::try_parse_from(args).unwrap().command.unwrap();
     assert!(command.is_administrative());
-}
-
-#[test]
-fn update_is_administrative() {
-    let update = Cli::try_parse_from(["shoal", "update"]).unwrap();
-    assert!(update.command.unwrap().is_administrative());
 }
 
 #[test]

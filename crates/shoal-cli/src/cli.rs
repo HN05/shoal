@@ -42,6 +42,7 @@ use crate::cli::args::{
     workspace::WorkspaceCommand,
 };
 use crate::client::space_names::SpaceSelector;
+use crate::config::permissions::PermissionKey;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -276,18 +277,30 @@ impl Command {
                 })
                 | Command::Workspace(WorkspaceCommand::Setup { skip: true, .. })
                 | Command::Lifecycle(LifecycleCommand::Cleanup { .. })
-                | Command::Service(
-                    ServiceCommand::Update
-                        | ServiceCommand::Config {
-                            command: ConfigCommand::Install { .. }
-                                | ConfigCommand::Reset
-                                | ConfigCommand::Set { .. }
-                                | ConfigCommand::Setup(_)
-                                | ConfigCommand::Unset { .. }
-                        }
-                        | ServiceCommand::Daemon { .. }
-                )
+                | Command::Service(ServiceCommand::Config {
+                    command: ConfigCommand::Install { .. }
+                        | ConfigCommand::Reset
+                        | ConfigCommand::Set { .. }
+                        | ConfigCommand::Setup(_)
+                        | ConfigCommand::Unset { .. }
+                })
         )
+    }
+
+    /// The permission that governs what the command does itself, without a
+    /// daemon request that the daemon checks: a scoped process takes it as
+    /// its space's permission for it allows.
+    pub fn permission(&self) -> Option<PermissionKey> {
+        match self {
+            Command::Service(
+                ServiceCommand::Update
+                | ServiceCommand::Daemon {
+                    command:
+                        DaemonCommand::Install { .. } | DaemonCommand::Start | DaemonCommand::Run { .. },
+                },
+            ) => Some(PermissionKey::Daemon),
+            _ => None,
+        }
     }
 }
 

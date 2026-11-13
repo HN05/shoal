@@ -757,6 +757,10 @@ fn targets_keep_their_stored_spelling() -> Result<()> {
         (Target::Secret("TOKEN".into()), "secret/TOKEN"),
         (Target::Hold("review".into()), "hold/review"),
         (Target::Merge, "merge"),
+        (
+            Target::Action(crate::config::permissions::PermissionKey::Daemon),
+            "action/daemon",
+        ),
     ] {
         assert_eq!(target.to_string(), text);
         assert_eq!(text.parse::<Target>()?, target);

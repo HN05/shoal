@@ -12,7 +12,7 @@ use shoal_states::{states, text_key};
 
 use crate::space_names::SpaceSelector;
 use crate::{
-    config::repo::ConflictPolicy,
+    config::{permissions::PermissionKey, repo::ConflictPolicy},
     connection::{Daemon, request},
     forge::items::{
         action::Edit,
@@ -44,10 +44,10 @@ states!(DecisionStatus {
     Withdrawn => "withdrawn",
 });
 
-/// What a decision authorizes; one active request per workspace, target and
+/// What a decision authorizes; one active request per space, target and
 /// name. Keyed as `resource/<scope>/<pool>`, `port/<name>`, `simulator`,
-/// `secret/<name>`, `hold/<name>`, `merge`, `unmerge`, `issue_open`, `pr_open`
-/// or `push`.
+/// `secret/<name>`, `hold/<name>`, `merge`, `unmerge`, `issue_open`, `pr_open`,
+/// `push` or `action/<permission>`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Target {
     Resource {
@@ -72,6 +72,9 @@ pub enum Target {
     /// A hold an agent asks to place on its own workspace, which approval
     /// places.
     Hold(String),
+    /// An action a permission makes wait for approval, which lets the same
+    /// action proceed once.
+    Action(PermissionKey),
 }
 
 /// The name of a workspace's single merge request, and of its single
@@ -91,6 +94,7 @@ impl fmt::Display for Target {
             Self::PrOpen => f.write_str("pr_open"),
             Self::Push => f.write_str("push"),
             Self::Hold(name) => write!(f, "hold/{name}"),
+            Self::Action(key) => write!(f, "action/{key}"),
         }
     }
 }
@@ -122,6 +126,13 @@ impl FromStr for Target {
             && !name.is_empty()
         {
             return Ok(Self::Hold(name.into()));
+        }
+        if let Some(key) = text.strip_prefix("action/")
+            && let Some(key) = PermissionKey::ALL
+                .iter()
+                .find(|known| known.as_str() == key)
+        {
+            return Ok(Self::Action(*key));
         }
         // The scope may itself contain a slash; pool names cannot.
         if let Some((scope, pool)) = text
@@ -171,6 +182,7 @@ pub enum Specification {
     Pull(PullSpecification),
     Push(PushSpecification),
     Hold(HoldSpecification),
+    Action(ActionSpecification),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -253,6 +265,14 @@ pub struct SecretSpecification {
 #[serde(deny_unknown_fields)]
 pub struct HoldSpecification {
     pub hold: String,
+}
+
+/// An action a permission held back, bound to what it does, such as a
+/// command with its arguments: another action needs another decision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionSpecification {
+    pub action: String,
 }
 
 impl fmt::Display for Specification {
@@ -650,6 +670,7 @@ impl ApprovalRequest {
                 )
             }
             (Target::Push, Specification::Push(push)) => push.subject(),
+            (Target::Action(_), Specification::Action(action)) => action.action.clone(),
             _ => format!("{} ({})", self.access(), self.lifetime),
         }
     }
@@ -751,6 +772,13 @@ pub async fn withdraw(
     number: ItemNumber,
 ) -> Result<Box<ApprovalRequest>> {
     request(daemon, ApprovalMethod::WithdrawApproval { space, number }).await
+}
+
+/// Let this process take `action`, which the permission `key` governs, as
+/// its space's permission allows: at once, once approved, or not at all,
+/// failing with the approval request it waits for.
+pub async fn authorize(daemon: &impl Daemon, key: PermissionKey, action: String) -> Result<()> {
+    request(daemon, ApprovalMethod::AuthorizeAction { key, action }).await
 }
 
 /// Whether the `push` permission holds back the push of `workspace`'s branch.

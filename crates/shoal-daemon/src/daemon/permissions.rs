@@ -238,5 +238,9 @@ fn recorded_agent(space: &PresentSpace) -> Option<RecordedAgent<'_>> {
     Some((space.mode()?, narrowing))
 }
 
+mod actions;
+
+pub(crate) use actions::Action;
+
 #[cfg(test)]
 mod tests;

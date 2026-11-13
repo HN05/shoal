@@ -224,8 +224,8 @@ async fn select_held(
 }
 
 /// Release cancels a pending or denied request even without a lease. Merge
-/// and unmerge requests, proposals, push requests and hold requests belong to
-/// merging, opening, pushing and holding, not to a lease.
+/// and unmerge requests, proposals, push requests, hold requests and
+/// requests to take an action belong to what they ask for, not to a lease.
 fn requested(request: ApprovalRequest) -> Option<Held> {
     let name = request.name;
     Some(match (request.target, request.specification) {
@@ -244,7 +244,8 @@ fn requested(request: ApprovalRequest) -> Option<Held> {
             | Target::IssueOpen
             | Target::PrOpen
             | Target::Push
-            | Target::Hold(_),
+            | Target::Hold(_)
+            | Target::Action(_),
             _,
         ) => {
             return None;

@@ -53,6 +53,13 @@ pub enum ApprovalMethod {
         workspace: SpaceSelector,
         push: crate::approvals::PushSpecification,
     },
+    /// Let the caller take `action`, which the permission `key` governs and
+    /// which the caller takes itself, as its space's permission allows: at
+    /// once, once approved, or not at all.
+    AuthorizeAction {
+        key: crate::config::permissions::PermissionKey,
+        action: String,
+    },
     /// The push approval `key` started has ended, failed with `failure`
     /// or done; a done push decides the request.
     FinishPush {

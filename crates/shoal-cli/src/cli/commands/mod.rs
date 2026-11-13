@@ -295,10 +295,7 @@ pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
         },
     };
     ctx.recent = command.recent_name();
-    ensure!(
-        !(command.is_administrative() && env::inherits_scope(&ctx.paths.state)),
-        "workspace processes cannot administer Shoal; ask the user to run this command"
-    );
+    authorize(&ctx, &command).await?;
     let reporting = ctx.reporting();
     let daemon = Daemon {
         run: daemon,
@@ -314,6 +311,36 @@ pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
         },
         result => result,
     }
+}
+
+/// Refuse a scoped process `command` where its space's permissions do not
+/// let it take what the command does itself, asking the daemon, which
+/// records the approval request a permission asks for.
+async fn authorize(ctx: &Context, command: &Command) -> Result<()> {
+    if !env::inherits_scope(&ctx.paths.state) {
+        return Ok(());
+    }
+    ensure!(
+        !command.is_administrative(),
+        "workspace processes cannot administer Shoal; ask the user to run this command"
+    );
+    let Some(key) = command.permission() else {
+        return Ok(());
+    };
+    // Without its scope token, the process would act as the user.
+    ensure!(
+        env::is_scoped(),
+        "this process runs below a scoped one without its scope; run it where the agent runs"
+    );
+    crate::client::approvals::authorize(&ctx.paths, key, command_line()).await
+}
+
+/// This command as the user typed it, which an approval of it names.
+fn command_line() -> String {
+    let words: Vec<String> = std::iter::once("shoal".to_owned())
+        .chain(std::env::args().skip(1))
+        .collect();
+    crate::shell::quote(&words)
 }
 
 /// Run `command` through its group's dispatcher.

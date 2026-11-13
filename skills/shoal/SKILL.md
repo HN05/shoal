@@ -314,11 +314,9 @@ from the forge with the same login.
 
 ### Proposals and pushes
 
-A space's permissions (`issue_open`, `pr_open`, `issue_other_repositories`,
-`merge`, `push`, `api_writes`) are its agent's mode's under config, each no
-wider than the space above it, then each key a `--permission` given to its
-agent sets; `shoal status` lists them,
-each with where it comes from. A command acting on a space below uses the
+A space's permissions are its agent's mode's under config, each no wider
+than the space above it, then each key a `--permission` given to its agent
+sets; `shoal status` lists them, each with where it comes from. A command acting on a space below uses the
 caller's own. `shoal start --permission KEY=VALUE`, repeatable, gives a child
 a permission whatever its mode allows, such as `--permission push=propose`;
 you give only what your own space holds, and a value above that is refused.
@@ -711,7 +709,10 @@ process of the workspace Shoal does not track, never the agent or its shells.
 
 ## Daemon
 
-The daemon, its service and the Shoal installation belong to the user.
+Installing, starting, stopping and restarting the daemon and `shoal update`
+follow the space's `daemon` permission: `deny` for agents, and `propose` for
+a master session, whose command then returns `approval_pending` until the
+user approves, after which the same command proceeds once.
 Stopping the daemon stops every agent. While a stop or restart waits for the
 work the daemon runs itself, commands that would start more, such as `shoal rm`,
 wait and run on the next daemon, or fail for a stop; while it restarts, every agent's other `shoal`
