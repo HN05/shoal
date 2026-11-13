@@ -229,11 +229,8 @@ impl Manager {
             mode,
         } in queued
         {
-            let is_light = match (kind, &execution) {
-                (QueueKind::Job, _) => false,
-                (_, Some(execution)) => light.execution(execution),
-                (_, None) => light.mode(&repository, mode.as_ref()),
-            };
+            let is_light = kind != QueueKind::Job
+                && light.entry(execution.as_ref(), &repository, mode.as_ref());
             let work = match (kind, execution, workspace) {
                 // A job waits while its repository's permits are all held.
                 (QueueKind::Job, ..) if self.runners.permits_busy(&repository) => {

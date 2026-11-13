@@ -405,3 +405,28 @@ fn a_light_agent_starts_beside_full_limits_and_takes_no_slot() {
     let admitted = admit(&["a".into()], &queue, &limits, false);
     assert_eq!(admitted, [QueueEntryId::from("light"), "lighter".into()]);
 }
+
+#[test]
+fn a_light_agent_needs_no_memory_room_but_waits_out_critical_readings_and_low_disk() {
+    let queue = waiting(&[("light", "a")]);
+    let room = |room| Limits {
+        room: Some(room),
+        ..limits(None, &[])
+    };
+    let admitted = |limits: &Limits| !admit(&["a".into()], &queue, limits, false).is_empty();
+    assert!(admitted(&room(capacity::Room::Free {
+        memory: 0,
+        agent: 2 * GIB,
+    })));
+    assert!(admitted(&room(capacity::Room::Staggered)));
+    for held in [HeldBy::Reading, HeldBy::Disk] {
+        assert!(!admitted(&room(capacity::Room::Held(held))), "{held:?}");
+    }
+    // Under a fixed limit, low disk lets a start through only beside no slot.
+    let low_disk = |disk| Limits {
+        disk: Some(disk),
+        ..limits(Some(1), &[])
+    };
+    assert!(admitted(&low_disk(2)));
+    assert!(!admitted(&low_disk(1)));
+}

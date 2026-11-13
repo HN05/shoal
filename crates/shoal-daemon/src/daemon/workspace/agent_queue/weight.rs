@@ -32,6 +32,21 @@ impl Light {
     pub(crate) fn execution(&self, execution: &ExecutionId) -> bool {
         self.executions.contains(execution)
     }
+
+    /// Whether a queue entry starts a light agent: a restore one of the
+    /// light agent of its `execution`, a launch one of a light `mode` in
+    /// `repository`.
+    pub(crate) fn entry(
+        &self,
+        execution: Option<&ExecutionId>,
+        repository: &RepositoryId,
+        mode: Option<&ModeName>,
+    ) -> bool {
+        match execution {
+            Some(execution) => self.execution(execution),
+            None => self.mode(repository, mode),
+        }
+    }
 }
 
 /// A workspace agent's execution with its repository and the mode it
@@ -61,20 +76,6 @@ impl Manager {
             }
         }
         Ok(light)
-    }
-
-    /// Whether an agent of `mode` is light in `repository`.
-    pub(crate) async fn light_mode(
-        &self,
-        repository: &RepositoryId,
-        mode: Option<&ModeName>,
-    ) -> bool {
-        let modes = self.light_modes(HashSet::from([repository.clone()])).await;
-        let light = Light {
-            modes,
-            ..Light::default()
-        };
-        light.mode(repository, mode)
     }
 
     /// The light modes of each of `repositories`. A repository whose

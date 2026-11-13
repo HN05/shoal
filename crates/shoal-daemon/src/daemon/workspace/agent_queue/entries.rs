@@ -73,10 +73,7 @@ impl Manager {
         // existing branch, which may reopen the branch's workspace.
         let opens_new =
             target.is_none() && scope.is_none() && !opens_existing_branch(&request.plan);
-        // A light agent holds no slot, so no limit applies to it.
-        let unlimited = !limits.apply_to(&repository.id)
-            || (self.light_mode(&repository.id, request.mode.as_ref())).await;
-        if opens_new && request.blockers.is_empty() && unlimited {
+        if opens_new && request.blockers.is_empty() && !limits.apply_to(&repository.id) {
             return Ok(QueueAdmission {
                 start: true,
                 entry: None,

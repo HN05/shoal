@@ -194,7 +194,10 @@ pub(crate) fn admit(
             Work::Restore { waiting: true, .. } => 1,
         };
         if entry.light {
-            admission.admitted.push(entry.id.clone());
+            match light_hold(limits, total) {
+                Some(held) => admission.hold(entry, Some(held)),
+                None => admission.admitted.push(entry.id.clone()),
+            }
             continue;
         }
         if let Err(held) = measured_fit(limits.room, started, capacity::Room::fits_agent) {
@@ -214,6 +217,17 @@ pub(crate) fn admit(
         admission.admitted.push(entry.id.clone());
     }
     admission
+}
+
+/// What holds back a light agent, which needs no slot and no memory room:
+/// only a critical or missing reading, or disk past the limit it sets beside
+/// the `total` slots used.
+fn light_hold(limits: &Limits, total: usize) -> Option<HeldBy> {
+    if let Some(capacity::Room::Held(held)) = limits.room {
+        return Some(held);
+    }
+    let full = limits.disk.is_some_and(|limit| total >= limit as usize);
+    full.then_some(HeldBy::Disk)
 }
 
 /// Whether a start fits what measured memory and disk leave, when `room`

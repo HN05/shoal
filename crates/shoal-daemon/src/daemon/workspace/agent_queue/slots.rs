@@ -7,7 +7,6 @@ use std::collections::{HashMap, HashSet};
 use anyhow::Result;
 use rusqlite::params;
 
-use super::weight::Light;
 use crate::client::space_ids::SpaceId;
 use crate::client::time::UnixTime;
 use crate::{
@@ -95,15 +94,6 @@ fn persisted_slots(db: &rusqlite::Connection) -> Result<PersistedSlots> {
     })
 }
 
-/// Whether the starting `entry` starts a light agent: a restore of one, or
-/// a launch in a light mode.
-fn is_light(entry: &StartingEntry, light: &Light) -> bool {
-    match &entry.execution {
-        Some(execution) => light.execution(execution),
-        None => light.mode(&entry.repository, entry.mode.as_ref()),
-    }
-}
-
 impl Manager {
     /// The used slots. Each agent in a workspace that is not done uses one
     /// while it runs, awaits reattachment or waits for resume, counted once by
@@ -138,7 +128,11 @@ impl Manager {
         agents.retain(|execution, _| !dormant.contains(execution) && !light.execution(execution));
         let mut launches = Vec::new();
         for entry in starting {
-            if is_light(&entry, &light) {
+            if light.entry(
+                entry.execution.as_ref(),
+                &entry.repository,
+                entry.mode.as_ref(),
+            ) {
                 continue;
             }
             match entry.execution.as_ref().and_then(|id| agents.get_mut(id)) {

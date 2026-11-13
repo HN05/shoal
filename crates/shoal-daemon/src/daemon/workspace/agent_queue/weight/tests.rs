@@ -45,9 +45,8 @@ async fn a_light_agent_holds_no_slot_and_starts_beside_full_limits() {
         ..request(&repo, name, false)
     };
     assert!(!add(&manager, &repo, "heavy").await.start);
-    // A light launch of a new workspace starts at once, untracked.
-    let admission = manager.queue_add(triage("new")).await.unwrap();
-    assert!(admission.start && admission.entry.is_none());
+    // A light launch of a new workspace starts at once.
+    assert!(manager.queue_add(triage("new")).await.unwrap().start);
     // One in an existing workspace is admitted past the waiting heavy one.
     let free = create(&manager, &repo, "free").await;
     let admission = manager
