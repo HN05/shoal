@@ -366,6 +366,7 @@ enum Ended {
         stopped_work: Option<bool>,
     },
     Refused(Vec<Work>),
+    Gone(Vec<Work>),
 }
 
 /// Ask a daemon to exit as `when` says, while it answers with `bodies`:
@@ -398,6 +399,7 @@ async fn exit_answering(when: ExitWhen, bodies: Vec<Body>) -> Result<(Ended, Vec
             stopped_work: exiting.stopped_work().await,
         },
         ExitAnswer::Refused(work) => Ended::Refused(work),
+        ExitAnswer::Gone(work) => Ended::Gone(work),
         ExitAnswer::Unanswered => anyhow::bail!("the daemon answered"),
     };
     daemon.await??;
@@ -427,5 +429,15 @@ async fn an_exit_that_does_not_wait_reports_the_work_that_keeps_the_daemon() -> 
     let (ended, reported) = exit_answering(ExitWhen::IfIdle, bodies).await?;
     assert_eq!(ended, Ended::Refused(vec![Work::Other]));
     assert!(reported.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_daemon_that_goes_while_its_exit_waits_is_told_apart_from_one_that_never_answered()
+-> Result<()> {
+    let bodies = vec![Body::ExitWaits(vec![Work::Other])];
+    let (ended, reported) = exit_answering(ExitWhen::Idle, bodies).await?;
+    assert_eq!(ended, Ended::Gone(vec![Work::Other]));
+    assert_eq!(reported, [vec![Work::Other]]);
     Ok(())
 }

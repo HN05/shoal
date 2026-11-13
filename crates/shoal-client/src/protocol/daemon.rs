@@ -15,7 +15,7 @@ pub enum DaemonMethod {
 
 /// Ask the daemon to exit. Daemons answer it before their protocol check, so
 /// service commands reach a daemon of another release; keep its spelling.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ExitRequest {
     pub exit: Exit,
     #[serde(default)]

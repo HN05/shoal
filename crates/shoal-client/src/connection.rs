@@ -491,11 +491,11 @@ pub async fn exit(
             } => return Ok(ExitAnswer::Unanswered),
             body => return body.into_result().map(|_| ExitAnswer::Unanswered),
         }
-        // The work waited for may take long; a daemon that went meanwhile
-        // answers nothing.
+        // The work waited for may take long, and the daemon may go meanwhile,
+        // as for an update or another exit.
         body = match protocol::read_buffered::<Response>(&mut stream).await {
             Ok(response) => response.body,
-            Err(_) => return Ok(ExitAnswer::Unanswered),
+            Err(_) => return Ok(ExitAnswer::Gone(waited_for)),
         };
     }
 }
@@ -506,6 +506,9 @@ pub enum ExitAnswer {
     Exiting(Exiting),
     /// It runs the work, which its exit would cut off, and stays.
     Refused(Vec<Work>),
+    /// It went while it waited for the work, which a daemon that follows
+    /// may still run.
+    Gone(Vec<Work>),
     /// No daemon answered the request, as when none runs, it is still
     /// starting, or its release predates the request.
     Unanswered,

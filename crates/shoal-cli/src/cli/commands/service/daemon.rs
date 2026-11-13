@@ -214,30 +214,67 @@ pub(super) enum Stopping {
 /// Ask the daemon to exit as `request` says, then unload its service; what
 /// it left, or the work that keeps it running when it refuses. `waiting`
 /// hears the work in progress it waits for each time that changes. A daemon
-/// that does not answer gets SIGTERM, which stops its work saved first.
+/// that does not answer gets SIGTERM, which stops its work saved first; one
+/// that went while it waited, as for an update, is asked again once the
+/// daemon that follows it answers.
 pub(super) async fn stop_daemon(
     paths: &CommandPaths,
     request: ExitRequest,
-    waiting: impl FnMut(&[Work]),
+    mut waiting: impl FnMut(&[Work]),
 ) -> Result<Stopping> {
-    let exiting = match client::exit(paths, request, waiting).await? {
-        ExitAnswer::Exiting(exiting) => exiting,
-        ExitAnswer::Refused(work) => return Ok(Stopping::Refused(work)),
-        ExitAnswer::Unanswered => {
-            terminate(paths).await?;
-            return Ok(Stopping::Stopped {
-                stopped_work: None,
-                waited_for: Vec::new(),
-            });
+    let mut waited_for = Vec::new();
+    let exiting = loop {
+        match client::exit(paths, request, &mut waiting).await? {
+            ExitAnswer::Exiting(exiting) => break exiting,
+            ExitAnswer::Refused(work) => return Ok(Stopping::Refused(work)),
+            ExitAnswer::Unanswered => {
+                terminate(paths).await?;
+                let stopped_work = None;
+                return Ok(Stopping::Stopped {
+                    stopped_work,
+                    waited_for,
+                });
+            }
+            ExitAnswer::Gone(work) => {
+                waited_also(&mut waited_for, work);
+                if client::wait(paths, true).await.is_err() {
+                    return stopped_without_successor(paths, waited_for).await;
+                }
+            }
         }
     };
-    let waited_for = exiting.waited_for.clone();
+    waited_also(&mut waited_for, exiting.waited_for.clone());
     let stopped_work = exiting.stopped_work().await;
     client::wait(paths, false).await?;
     // The service manager keeps a daemon's service loaded after it exits.
     if service::installed(paths) {
         service::stop(paths).await?;
     }
+    Ok(Stopping::Stopped {
+        stopped_work,
+        waited_for,
+    })
+}
+
+/// Add each piece of `work` to `waited_for` that it does not list yet.
+fn waited_also(waited_for: &mut Vec<Work>, work: Vec<Work>) {
+    for work in work {
+        if !waited_for.contains(&work) {
+            waited_for.push(work);
+        }
+    }
+}
+
+/// The stop of a daemon that went while it waited and that no daemon
+/// followed, with its service unloaded so none starts.
+async fn stopped_without_successor(
+    paths: &CommandPaths,
+    waited_for: Vec<Work>,
+) -> Result<Stopping> {
+    if service::installed(paths) {
+        service::stop(paths).await?;
+    }
+    let stopped_work = None;
     Ok(Stopping::Stopped {
         stopped_work,
         waited_for,
