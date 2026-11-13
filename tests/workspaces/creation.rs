@@ -1264,6 +1264,7 @@ fn add_from_issue_reads_the_forge_and_passes_context_to_agents() {
             0o700,
         );
     }
+    install_fake_agents(&fixture, &["codex", "claude"]);
     let agent_args = fixture.root.path().join("agent-args");
     let title = "Fix API timeout; $(false)";
     let body = "Reproduce with two clients.\nKeep the connection alive.";
@@ -1413,6 +1414,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
             0o700,
         );
     }
+    install_fake_agents(&fixture, &["codex", "claude"]);
     let agent_args = fixture.root.path().join("agent-args");
     let body = "Paste the URL and go.";
     for (number, agent, expected) in [

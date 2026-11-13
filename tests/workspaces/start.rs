@@ -321,6 +321,7 @@ exit 7
             0o700,
         );
     }
+    install_fake_agents(&fixture, &["codex", "claude"]);
     let config_dir = fixture.root.path().join(".config/shoal");
     fs::create_dir_all(&config_dir).unwrap();
     for (name, agent) in [("add-codex", "codex"), ("add-claude", "claude")] {
@@ -474,6 +475,7 @@ fn start_in_forwards_arguments_without_starting_real_agents() {
     let fixture = Fixture::new();
     let workspace = fixture.add("shortcut");
     let bin = fixture.root.path().join("stub-bin");
+    install_fake_agents(&fixture, &["claude", "codex"]);
     for agent in ["claude", "codex"] {
         let path = bin.join(agent);
         install_test_script_with_mode(
@@ -571,6 +573,7 @@ fn start_in_starts_an_existing_workspaces_worker_on_its_task() {
         "#!/bin/sh\nprintf '%s\\n' \"$SHOAL_WORKSPACE\" \"$@\"\n",
         0o700,
     );
+    install_fake_agents(&fixture, &["claude"]);
     let start = |args: &[&str]| {
         fixture
             .command()
@@ -657,6 +660,7 @@ fn an_issue_start_reopening_a_busy_workspace_is_refused() {
     let repo = fixture.repo.to_str().unwrap();
     let bin = fixture.root.path().join("stub-bin");
     let claude = bin.join("claude");
+    install_fake_agents(&fixture, &["claude"]);
     let start = |args: &[&str]| {
         let mut command = fixture.command();
         command
@@ -706,6 +710,7 @@ fn start_in_starts_the_worker_on_its_workspaces_closed_issue() {
         "#!/bin/sh\nprintf '%s\\n' \"$@\"\n",
         0o700,
     );
+    install_fake_agents(&fixture, &["claude"]);
     let start = |args: &[&str]| {
         fixture
             .command()
@@ -762,6 +767,7 @@ fn start_in_refuses_a_second_worker_beside_a_running_one() {
         ),
         0o700,
     );
+    install_fake_agents(&fixture, &["claude"]);
     let start = || {
         let mut command = fixture.command();
         command
@@ -803,13 +809,11 @@ fn workspace_agents_get_the_agent_and_workspaces_directories_ahead_of_their_prom
     let directory = fs::canonicalize(path.parent().unwrap()).unwrap();
     let directory = directory.to_str().unwrap();
     let bin = fixture.root.path().join("directory-bin");
-    for agent in ["codex", &fixture.id("claude"), "pi"] {
+    for agent in ["codex", "claude", "pi"] {
         let stub = bin.join(agent);
         install_test_script_with_mode(&stub, "#!/bin/sh\nprintf '%s\\0' \"$@\"\n", 0o700);
     }
-    // The daemon, which would start an agent left waiting for setup, checks
-    // the agents on its own PATH.
-    install_fake_agents(&fixture, &["codex", "pi"]);
+    install_fake_agents(&fixture, &["codex", "claude", "pi"]);
     let claude_dir = format!("--add-dir={directory}");
     // Every agent may also read `/tmp`, the default agent directory.
     let tmp_dir = format!("--add-dir={}", fs::canonicalize("/tmp").unwrap().display());
@@ -864,13 +868,14 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
     )
     .unwrap();
     let bin = fixture.root.path().join("model-bin");
-    for agent in ["codex", &fixture.id("claude"), "pi"] {
+    for agent in ["codex", "claude", "pi"] {
         install_test_script_with_mode(
             bin.join(agent),
             "#!/bin/sh\nprintf '%s\\0' \"$@\" \"effort=${CLAUDE_CODE_EFFORT_LEVEL-unset}\"\n",
             0o700,
         );
     }
+    install_fake_agents(&fixture, &["codex", "claude", "pi"]);
     let launch = |args: &[&str]| {
         fixture
             .command()
@@ -970,10 +975,11 @@ fn worker_rules_resolve_per_launch_and_reach_native_instruction_options() {
     )
     .unwrap();
     let bin = fixture.root.path().join("template-bin");
-    for agent in ["codex", &fixture.id("claude")] {
+    for agent in ["codex", "claude"] {
         let stub = bin.join(agent);
         install_test_script_with_mode(&stub, "#!/bin/sh\nprintf '%s\\0' \"$@\"\n", 0o700);
     }
+    install_fake_agents(&fixture, &["codex", "claude"]);
     for (index, expected) in [
         "global instructions instructions".to_owned(),
         format!("repo {}", path.display()),
@@ -1010,7 +1016,7 @@ fn worker_rules_resolve_per_launch_and_reach_native_instruction_options() {
         } else {
             format!("global instructions instructions\n\n{expected}")
         };
-        for agent in ["codex", &fixture.id("claude")] {
+        for agent in ["codex", "claude"] {
             let output = fixture
                 .command()
                 .args([

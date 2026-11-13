@@ -477,6 +477,7 @@ fn a_title_request_reaches_only_a_running_agent() {
         ),
         0o700,
     );
+    install_fake_agents(&fixture, &["claude"]);
     let mut agent = fixture
         .command()
         .args([

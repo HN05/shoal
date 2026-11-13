@@ -509,8 +509,9 @@ pub(crate) fn set_repository_toml(fixture: &Fixture, text: &str) {
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &config);
 }
 
-/// Agent launches need their executables on PATH, which interactive commands
-/// limit to the fixture's `bin`.
+/// Agent launches need their executables on PATH: interactive commands limit
+/// theirs to the fixture's `bin`, and the daemon, which checks a launch's
+/// agents before it starts, has that `bin` but not a test's own stubs.
 pub(crate) fn install_fake_agents(fixture: &Fixture, agents: &[&str]) {
     for agent in agents {
         install_test_script(fixture.root.path().join("bin").join(agent), "#!/bin/sh\n");
