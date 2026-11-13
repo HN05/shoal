@@ -27,6 +27,11 @@ root_dir = "~/shoal"
 # or `none` for unlimited admission.
 # max_jobs = 2
 
+# What the agent queue starts first within a priority: "balanced" work closest
+# to finished, "speed" the work the most other work waits on, or "cache"
+# restores of agents whose prompt cache is still warm.
+# schedule = "balanced"
+
 # How hard Shoal may load this machine: "light" for a computer you work on,
 # "balanced", or "full" for one that only runs agents. It sets the default
 # CPU and memory thresholds in [machine.overload] and dynamic agent admission.
