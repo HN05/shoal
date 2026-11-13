@@ -31,7 +31,7 @@ pub enum AssignmentMethod {
     },
     /// Forget the workspace's stopped work, only `execution`'s when given,
     /// or else its last session.
-    DiscardStoppedWork {
+    ForgetStoppedWork {
         workspace: SpaceSelector,
         execution: Option<ExecutionId>,
     },

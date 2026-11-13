@@ -3,7 +3,7 @@
 //! so does a signal that ended an agent's session, through a request beside
 //! its record. Each is admitted like a launch and leaves the queue once its
 //! agent registers, or while waiting once what it restores is gone, as after
-//! `shoal resume --now` or a discard. A restart's restore starts at once, in
+//! `shoal resume --now` or `--forget`. A restart's restore starts at once, in
 //! the slot its agent kept.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
@@ -436,7 +436,7 @@ impl Manager {
 
     /// Queue the restore requested for the agent stopped as `execution` in
     /// `space`, which starts with `env`, then forget the request. One whose
-    /// record is gone, resumed or discarded, is only forgotten; one that
+    /// record is gone, resumed or forgotten, is only forgotten; one that
     /// cannot be queued stays without holding back the others.
     async fn queue_requested_restore(
         &self,
@@ -456,7 +456,7 @@ impl Manager {
     }
 
     /// Forget the waiting restores whose stopped agent's record is gone, as
-    /// after `shoal resume --now` or a discard.
+    /// after `shoal resume --now` or `--forget`.
     pub(super) async fn forget_resolved_restores(&self) -> Result<()> {
         let waiting = self.store.run(|db| waiting_restores(db)).await?;
         let resolved = resolved_restores(&self.paths, waiting);

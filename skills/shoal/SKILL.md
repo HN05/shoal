@@ -147,7 +147,7 @@ shoal questions <S.N> --answer "<answer or choice number>"
 shoal stop <child>                  # --skip-children stops only the child
 shoal stop --interrupt <child>      # Cancel its agent's turn, keeping it running
 shoal restart <child>               # Its agent, a workspace's or a chat's
-shoal resume <child>                # --discard forgets the saved session
+shoal resume <child>                # --forget forgets the saved session
 shoal files <child>
 ```
 

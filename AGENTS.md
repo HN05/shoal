@@ -162,7 +162,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   in the daemon and deny workspace allocation/removal/recovery other than creating a child of their own space and removing a space below it the user holds nothing below, and shared
   repository/service administration other than `config reload`. For the workspaces below their own, scoped callers may hold them, queue
   agents and the restores of agents, a workspace's or a chat's, they or the spaces below them stopped or whose restart by them left them stopped, which the daemon starts detached, a chat's in the place it ran in, restart their agents and those of the chats below their own, stop the chats below their own, cancel their queue
-  entries, send agent messages, answer questions, stop their executions, and discard stopped work; they may also stop the untracked processes and leftovers of their own workspace and those below it; the agent
+  entries, send agent messages, answer questions, stop their executions, and forget stopped work; they may also stop the untracked processes and leftovers of their own workspace and those below it; the agent
   of the nearest ancestor with one receives a child's agent-caused and agent-lifecycle events
   instead of the user. Own-workspace setup, rename, base workspace, issue, PR and own-repository CI run links and watches, merge
   acknowledgements, their demos, messages to the user, asking the user questions and waiting for answers, reading their own agent messages, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository

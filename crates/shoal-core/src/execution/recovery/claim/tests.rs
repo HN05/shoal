@@ -31,7 +31,7 @@ fn a_claim_follows_a_record_replaced_while_it_was_opened() {
 }
 
 #[test]
-fn discard_leaves_command_records_another_resume_is_reporting() {
+fn forget_leaves_command_records_another_resume_is_reporting() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("execution.command.json");
     std::fs::write(&path, r#"{"argv":["true"]}"#).unwrap();
@@ -47,9 +47,9 @@ fn discard_leaves_command_records_another_resume_is_reporting() {
     let reporting = claim(&path).unwrap();
     // Model a concurrent fork retaining the open file description until exec.
     let _inherited = reporting.0.try_clone().unwrap();
-    assert!(discard_saved(&saved, |_| false).is_err());
+    assert!(forget_saved(&saved, |_| false).is_err());
     assert!(path.exists());
     drop(reporting);
-    assert_eq!(discard_saved(&saved, |_| false).unwrap(), ["execution"]);
+    assert_eq!(forget_saved(&saved, |_| false).unwrap(), ["execution"]);
     assert!(!path.exists());
 }

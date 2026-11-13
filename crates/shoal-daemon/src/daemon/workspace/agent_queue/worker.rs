@@ -38,7 +38,7 @@ impl Manager {
         }
         if !recovery::agent_records(&self.paths, &workspace.id)?.is_empty() {
             bail!(HasAgent(format!(
-                "workspace {space} has a stopped agent; resume it with `shoal resume {space}` or discard it with `shoal resume --discard {space}`"
+                "workspace {space} has a stopped agent; resume it with `shoal resume {space}` or forget it with `shoal resume --forget {space}`"
             )));
         }
         Ok(())

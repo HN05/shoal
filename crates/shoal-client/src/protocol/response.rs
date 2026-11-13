@@ -214,7 +214,7 @@ response_bodies! {
     Push(crate::links::PushOutcome),
     BranchPush(crate::links::BranchPush),
     Completion(crate::model::Completion),
-    Discarded(crate::executions::Discarded),
+    Forgotten(crate::executions::Forgotten),
     ReviewMarks(Vec<crate::model::ReviewMark>),
     ReadyOutcomes(Vec<crate::model::ReadyOutcome>),
     AgentStatus(crate::model::AgentStatus),

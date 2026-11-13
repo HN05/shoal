@@ -20,10 +20,10 @@ pub(super) async fn handle(
         AssignmentMethod::UndoDone { space } => {
             Body::Completion(manager.undo_space_done(&space).await?)
         }
-        AssignmentMethod::DiscardStoppedWork {
+        AssignmentMethod::ForgetStoppedWork {
             workspace,
             execution,
-        } => Body::Discarded(manager.discard_stopped_work(&workspace, execution).await?),
+        } => Body::Forgotten(manager.forget_stopped_work(&workspace, execution).await?),
         AssignmentMethod::ChangeStoppedPermissions {
             agents,
             launches,
@@ -67,12 +67,12 @@ impl Scoped for AssignmentMethod {
             | AssignmentMethod::UndoDone { space }
             | AssignmentMethod::MarkReady { space, .. }
             | AssignmentMethod::ClearReady { space, .. } => Some(space),
-            AssignmentMethod::DiscardStoppedWork { workspace, .. } => Some(
+            AssignmentMethod::ForgetStoppedWork { workspace, .. } => Some(
                 manager
                     .workspace_below(
                         caller,
                         workspace,
-                        "workspace processes discard stopped work only in the workspaces below theirs",
+                        "workspace processes forget stopped work only in the workspaces below theirs",
                     )
                     .await?,
             ),

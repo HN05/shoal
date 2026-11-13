@@ -64,15 +64,11 @@ impl Selected {
     }
 
     /// The stopped work and last sessions of the selected spaces, or of
-    /// every space with any, as [`saved_work`] keeps them for `discard`.
-    pub async fn stopped(
-        &self,
-        ctx: &Context,
-        discard: bool,
-    ) -> Result<Vec<(PresentSpace, Saved)>> {
+    /// every space with any, as [`saved_work`] keeps them for `forget`.
+    pub async fn stopped(&self, ctx: &Context, forget: bool) -> Result<Vec<(PresentSpace, Saved)>> {
         match &self.spaces {
-            None => stopped_work(ctx, discard).await,
-            Some(spaces) => stopped_in(ctx, spaces, discard).await,
+            None => stopped_work(ctx, forget).await,
+            Some(spaces) => stopped_in(ctx, spaces, forget).await,
         }
     }
 
@@ -123,17 +119,17 @@ fn stopped_chats(spaces: &Spaces) -> Vec<Chat> {
 }
 
 /// The stopped work and last sessions of the spaces `selectors` name, as
-/// [`saved_work`] keeps them for `discard`, refusing one with nothing to
+/// [`saved_work`] keeps them for `forget`, refusing one with nothing to
 /// resume.
 async fn stopped_in(
     ctx: &Context,
     selectors: &[SpaceSelector],
-    discard: bool,
+    forget: bool,
 ) -> Result<Vec<(PresentSpace, Saved)>> {
     let mut stopped = Vec::new();
     for selector in selectors {
         let space = super::present_space(ctx, selector).await?;
-        let saved = saved_work(ctx, &space, discard).await?;
+        let saved = saved_work(ctx, &space, forget).await?;
         ensure!(
             !saved.is_empty(),
             "{} has no stopped agents or commands to resume",
@@ -145,18 +141,18 @@ async fn stopped_in(
 }
 
 /// The spaces with stopped work or last sessions, as [`saved_work`] keeps
-/// them for `discard`. A done assignment needs no agent, so its space is
-/// included only to `discard`.
-async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(PresentSpace, Saved)>> {
+/// them for `forget`. A done assignment needs no agent, so its space is
+/// included only to `forget`.
+async fn stopped_work(ctx: &Context, forget: bool) -> Result<Vec<(PresentSpace, Saved)>> {
     let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
     let all = (spaces.workspaces.into_iter().map(PresentSpace::Workspace))
         .chain(spaces.chats.into_iter().map(PresentSpace::Chat));
     let mut stopped = Vec::new();
     for space in all {
-        if space.done() && !discard {
+        if space.done() && !forget {
             continue;
         }
-        let saved = saved_work(ctx, &space, discard).await?;
+        let saved = saved_work(ctx, &space, forget).await?;
         if !saved.is_empty() {
             stopped.push((space, saved));
         }
@@ -165,11 +161,11 @@ async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(PresentSpace,
 }
 
 /// The stopped work and last sessions of `space`: with the agents waiting
-/// in their wrappers, which a resume starts there, except to `discard`,
+/// in their wrappers, which a resume starts there, except to `forget`,
 /// which leaves them to their wrappers.
-async fn saved_work(ctx: &Context, space: &PresentSpace, discard: bool) -> Result<Saved> {
+async fn saved_work(ctx: &Context, space: &PresentSpace, forget: bool) -> Result<Saved> {
     let mut saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(space.id())).await?;
-    if discard {
+    if forget {
         saved.retain_unattended();
     }
     Ok(saved)

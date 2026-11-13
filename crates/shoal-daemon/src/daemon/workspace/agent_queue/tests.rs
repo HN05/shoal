@@ -616,8 +616,8 @@ pub(super) async fn queue(manager: &Manager) -> Vec<(String, QueueKind, QueueSta
         .collect()
 }
 
-/// Forget a stopped agent as `shoal resume --discard` does once its wrapper ended.
-async fn discard(manager: &Manager, workspace: &crate::model::Workspace, execution: &ExecutionId) {
+/// Forget a stopped agent as `shoal resume --forget` does once its wrapper ended.
+async fn forget(manager: &Manager, workspace: &crate::model::Workspace, execution: &ExecutionId) {
     // No marked process belongs to the agent. A host scan would also count
     // every same-user process whose environment it cannot read, such as
     // ssh-agent on Linux, as a survivor and keep the slot.
@@ -683,7 +683,7 @@ async fn stopped_agents_restore_in_queue_order_before_later_launches() {
         ]
     );
     // The restored agent registers and takes over the slot it kept. Its group
-    // must not exist, or discarding it later finds survivors and keeps the slot.
+    // must not exist, or forgetting it later finds survivors and keeps the slot.
     let register = |execution: &ExecutionId| {
         manager.record_execution_child(execution.to_owned(), None, ABSENT_GROUP)
     };
@@ -695,7 +695,7 @@ async fn stopped_agents_restore_in_queue_order_before_later_launches() {
     // Both agents have their slots back, so the launch keeps waiting.
     manager.dispatch_queue().await.unwrap();
     assert_eq!(queue(&manager).await, [("later".into(), Launch, Queued)]);
-    discard(&manager, &first, &agents[0].0).await;
+    forget(&manager, &first, &agents[0].0).await;
     manager.dispatch_queue().await.unwrap();
     assert!(started(&launch.id));
 }
@@ -760,7 +760,7 @@ async fn admission_consumes_only_the_published_recovery_epoch() {
 }
 
 #[tokio::test]
-async fn lowered_limits_hold_restores_until_a_stopped_agent_is_discarded() {
+async fn lowered_limits_hold_restores_until_a_stopped_agent_is_forgotten() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 2);
@@ -778,7 +778,7 @@ async fn lowered_limits_hold_restores_until_a_stopped_agent_is_discarded() {
     assert!(manager.overload_recovery.published().is_some());
 
     // `shoal stop` cancels the second restore; its wrapper ends with the
-    // recovery record, which still holds the slot until it is discarded.
+    // recovery record, which still holds the slot until it is forgotten.
     manager.remove_restore(&agents[1].0).await;
     manager
         .finish_execution(

@@ -244,7 +244,7 @@ workspace and that session as stopped. A daemon update waits for a stop
 and a restore waiting for load, but not through a wait for an update, which
 may last indefinitely; that wrapper reattaches to the updated daemon. Restores wait in the agent queue,
 and manual recovery persists across restarts. Saved recovery represents
-unfinished work until restored or explicitly discarded, except that a done
+unfinished work until restored or explicitly forgotten, except that a done
 assignment needs no agent, so a done workspace's agent is restored neither
 automatically nor by `shoal resume --all`, only by resuming that workspace.
 Resuming it says the work is not finished, so `shoal resume` withdraws the
@@ -870,7 +870,7 @@ messages instead, falling back to the user without a coordinator or when its
 messages are full. Events a process causes in a child without an agent of its
 own are the coordinator's own work and reach the user. The coordinator answers
 questions asked below it or passes them up with its own question, and may
-stop or restart the agents below it and discard their stopped work, since only it knows
+stop or restart the agents below it and forget their stopped work, since only it knows
 whether a child agent still has work. It resumes only what it or a space
 below it stopped, which the stopped session or chat records: agents through
 the queue, so the daemon starts them detached, and chats in a background
@@ -2464,7 +2464,7 @@ as use, a queued restore as a queued agent and its saved stopped work as a
 workspace's, and takes the idle time of merged cleanup from when its agent
 stopped. `shoal resume` resolves each target to a space in one lookup over the
 shared namespace, so its picker, `--all` and a list of names act on chats as on
-workspaces, and `--discard` forgets a chat's stopped work as a workspace's.
+workspaces, and `--forget` forgets a chat's stopped work as a workspace's.
 Starts, renames and removals are journal events, and its agent's starts and
 stops are logged as a workspace agent's. A workspace a chat opens is its child in the one tree of
 spaces, unless it was split from a workspace, below which it stays; reopening

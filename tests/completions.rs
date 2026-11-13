@@ -65,7 +65,7 @@ COMP_WORDS=(shoal open --a); COMP_CWORD=2; COMP_LINE='shoal open --a'; COMP_POIN
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
 COMP_WORDS=(shoal open --app t); COMP_CWORD=3; COMP_LINE='shoal open --app t'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
-COMP_WORDS=(shoal resume --di); COMP_CWORD=2; COMP_LINE='shoal resume --di'; COMP_POINT=${#COMP_LINE}
+COMP_WORDS=(shoal resume --fo); COMP_CWORD=2; COMP_LINE='shoal resume --fo'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
 "#, "completion-test"])
         .arg(&script).output().unwrap();
@@ -75,7 +75,7 @@ _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORD
         String::from_utf8_lossy(&output.stderr)
     );
     let output = String::from_utf8(output.stdout).unwrap();
-    for expected in ["codex", "--app", "t3", "--discard"] {
+    for expected in ["codex", "--app", "t3", "--forget"] {
         assert!(
             output.lines().any(|line| line == expected),
             "missing {expected}: {output}"

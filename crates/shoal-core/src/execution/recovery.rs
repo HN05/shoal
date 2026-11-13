@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod claim;
 
-pub use claim::{RecoveryClaim, claim, claim_last_session, claim_record, discard_saved};
+pub use claim::{RecoveryClaim, claim, claim_last_session, claim_record, forget_saved};
 
 pub(crate) use crate::client::executions::unnamed_execution;
 pub use crate::client::executions::{Copied, LastSession, Record, Stage, Stop, StoppedAgent};

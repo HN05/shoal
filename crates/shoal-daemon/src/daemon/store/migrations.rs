@@ -794,7 +794,7 @@ pub(super) const ENDED_CHATS: &str = "CREATE TABLE ended_chats (
 
 /// The processes a stop of each chat was about to signal, with the
 /// never-reused ID, as JSON, where the platform reports one, so a later stop
-/// and the check before a restore or discard follow what they started once
+/// and the check before a restore or forget follow what they started once
 /// an interrupted stop forgot them.
 pub(super) const STOPPED_CHAT_PROCESSES: &str =
     "CREATE TABLE IF NOT EXISTS chat_stopped_processes (

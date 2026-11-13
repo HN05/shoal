@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Bounds how long a freed slot can wait when nothing wakes the dispatcher,
-/// such as a stopped agent's discarded record.
+/// such as a stopped agent's forgotten record.
 const SWEEP_INTERVAL: Duration = Duration::from_secs(15);
 /// Lets a burst of state changes settle into one pass.
 const SETTLE: Duration = Duration::from_millis(500);

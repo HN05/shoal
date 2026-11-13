@@ -342,12 +342,12 @@ fn resume_all_skips_the_agents_of_done_workspaces() {
     assert_eq!(queued.len(), 1, "{all}");
     assert_eq!(queued[0]["name"], "active", "{all}");
     assert_eq!(queued[0]["state"], "starting", "{all}");
-    // Discarding still forgets the done workspace's stopped agent.
-    let discarded = fixture.ok(&["resume", "--all", "--discard"]);
+    // Forgetting still forgets the done workspace's stopped agent.
+    let forgotten = fixture.ok(&["resume", "--all", "--forget"]);
     assert_eq!(
-        discarded["discarded"],
+        forgotten["forgotten"],
         serde_json::json!(["active-agent", "finished-agent"]),
-        "{discarded}"
+        "{forgotten}"
     );
 }
 
@@ -391,7 +391,7 @@ fn resuming_several_goes_on_after_one_fails() {
 }
 
 #[test]
-fn a_parent_discards_only_the_stopped_work_of_its_children() {
+fn a_parent_forgets_only_the_stopped_work_of_its_children() {
     let fixture = Fixture::new();
     fixture.add("parent");
     fixture.add("other");
@@ -410,13 +410,13 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
     };
     let records = ["parent", "other", "child"].map(save_agent);
     for args in [
-        &["resume", &fixture.id("parent"), "--discard"][..],
-        &["resume", &fixture.id("other"), "--discard"],
+        &["resume", &fixture.id("parent"), "--forget"][..],
+        &["resume", &fixture.id("other"), "--forget"],
         &["resume", &fixture.id("other")],
         // A stopped agent the parent did not stop is the user's.
         &["resume", &fixture.id("child")],
         &["resume", &fixture.id("child"), "--now"],
-        &["resume", "--all", "--discard"],
+        &["resume", "--all", "--forget"],
         &["resume"],
     ] {
         let output = scoped_command(&fixture, "parent", args);
@@ -433,7 +433,7 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
             "sh",
             "-c",
         ])
-        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" resume other --discard; exit $?"#)
+        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" resume other --forget; exit $?"#)
         .arg(support::shoal_binary())
         .output()
         .unwrap();
@@ -442,11 +442,11 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
     let output = scoped_command(
         &fixture,
         "parent",
-        &["resume", &fixture.id("child"), "--discard"],
+        &["resume", &fixture.id("child"), "--forget"],
     );
     assert!(output.status.success(), "{output:?}");
-    let discarded: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(discarded["discarded"], serde_json::json!(["child-agent"]));
+    let forgotten: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(forgotten["forgotten"], serde_json::json!(["child-agent"]));
     assert!(!records[2].exists());
     assert!(records[..2].iter().all(|record| record.exists()));
 }

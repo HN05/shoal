@@ -95,7 +95,7 @@ const REQUESTS: &[&str] = &[
     // Assignments and agents.
     r#"{"mark_done":{"space":"fix","cleanup":true,"summary":"No leak"}}"#,
     r#"{"undo_done":{"space":"fix"}}"#,
-    r#"{"discard_stopped_work":{"workspace":"part","execution":null}}"#,
+    r#"{"forget_stopped_work":{"workspace":"part","execution":null}}"#,
     r#"{"change_stopped_permissions":{"agents":[{"workspace":"part","execution":"e1"}],"change":{"set":{"push":"propose"},"dropped":["merge"]}}}"#,
     r#"{"mark_ready":{"space":"fix","selection":{"kind":"pr","input":null}}}"#,
     r#"{"clear_ready":{"space":"fix","selection":{"kind":null,"input":null},"draft":true}}"#,

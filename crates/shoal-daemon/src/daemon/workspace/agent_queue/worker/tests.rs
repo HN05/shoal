@@ -56,7 +56,7 @@ async fn a_queued_agent_refuses_another_worker() {
 }
 
 #[tokio::test]
-async fn a_stopped_agent_refuses_another_worker_until_it_is_resumed_or_discarded() {
+async fn a_stopped_agent_refuses_another_worker_until_it_is_resumed_or_forgotten() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     let workspace = create(&manager, &repo, "stopped").await;
@@ -71,7 +71,7 @@ async fn a_stopped_agent_refuses_another_worker_until_it_is_resumed_or_discarded
     )
     .unwrap();
     let refused = refusal(launch_in(&manager, &repo, &workspace).await);
-    assert!(refused.contains("shoal resume --discard"), "{refused}");
+    assert!(refused.contains("shoal resume --forget"), "{refused}");
     std::fs::remove_file(record).unwrap();
     launch_in(&manager, &repo, &workspace).await.unwrap();
 }

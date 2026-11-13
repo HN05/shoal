@@ -2,7 +2,7 @@
 //! sessions after `shoal stop`, and forgetting them, which the daemon does so
 //! it can confine coordinating agents to the workspaces below theirs.
 use crate::client::execution_ids::ExecutionId;
-pub use crate::client::executions::Discarded;
+pub use crate::client::executions::Forgotten;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, ensure};
 
@@ -135,11 +135,11 @@ impl Manager {
 
     /// Forget the space's stopped agents, last sessions and commands, only
     /// the one of `execution` when given.
-    pub async fn discard_stopped_work(
+    pub async fn forget_stopped_work(
         &self,
         selector: &SpaceSelector,
         execution: Option<ExecutionId>,
-    ) -> Result<Discarded> {
+    ) -> Result<Forgotten> {
         let space = self.space(selector).await?;
         let mut saved = Saved::load(&self.paths, space.id())?;
         if let Some(execution) = &execution {
@@ -152,10 +152,10 @@ impl Manager {
         );
         let executions = self.workspace_executions(space.id()).await?;
         let active = |id: &ExecutionId| executions.iter().any(|e| e.id == *id);
-        let executions = recovery::discard_saved(&saved, active)?;
+        let executions = recovery::forget_saved(&saved, active)?;
         // The saved sessions are files, so no stored change announces it.
         self.signals.agent_changed();
-        Ok(Discarded {
+        Ok(Forgotten {
             space: space.name().clone(),
             executions,
         })

@@ -1,5 +1,5 @@
 //! What a stop saves of a workspace's agents and commands, and how
-//! `shoal resume` restores it or `--discard` forgets it.
+//! `shoal resume` restores it or `--forget` forgets it.
 use super::creation::{WAITER, fail_setup, require_fix};
 use super::*;
 
@@ -339,27 +339,27 @@ fn resume_continues_an_agent_that_exited_on_its_own() {
 }
 
 #[test]
-fn discard_clears_pending_recovery_without_launching_an_agent() {
+fn forget_clears_pending_recovery_without_launching_an_agent() {
     let fixture = Fixture::with_config(Some(AGENT));
     let workspace = Stopped::new(&fixture, "stopped");
     let agent = workspace.start_agent(&fixture);
     let execution = workspace.agent_execution(&fixture);
     // Protection keeps the record of an agent it stopped while the wrapper
-    // still runs; discard leaves an agent whose execution is active.
+    // still runs; forgetting leaves an agent whose execution is active.
     workspace.save_record(&execution, "test memory pressure");
-    assert!(!workspace.resume(&fixture, &["--discard"]).status.success());
+    assert!(!workspace.resume(&fixture, &["--forget"]).status.success());
     assert!(workspace.record(&execution).exists());
     fs::remove_file(workspace.record(&execution)).unwrap();
     workspace.stop(&fixture, vec![agent]);
     workspace.keep_as_stopped_work(&execution, "test memory pressure");
-    // Discard does not depend on valid current restore configuration.
+    // Forgetting does not depend on valid current restore configuration.
     fs::write(
         workspace.path.join(".shoal.toml"),
         "[agents.claude]\nresume_command = ['./missing', '{diff_base}']\n",
     )
     .unwrap();
 
-    let output = workspace.resume(&fixture, &["--discard"]);
+    let output = workspace.resume(&fixture, &["--forget"]);
     assert!(output.status.success(), "{output:?}");
     assert!(!workspace.pending());
     assert!(!workspace.path.join("restored").exists());

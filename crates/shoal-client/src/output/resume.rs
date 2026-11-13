@@ -47,10 +47,10 @@ pub struct Resumed {
     pub failed: Vec<Failure>,
 }
 
-/// The executions a discard forgot.
+/// The executions a restore forgot instead.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DiscardedWork {
-    pub discarded: Vec<ExecutionId>,
+pub struct ForgottenWork {
+    pub forgotten: Vec<ExecutionId>,
     pub failed: Vec<Failure>,
 }
 
@@ -82,7 +82,7 @@ outputs!(
     StoppedCommands,
     SetUp,
     Resumed,
-    DiscardedWork,
+    ForgottenWork,
     Queued,
     Reopened
 );

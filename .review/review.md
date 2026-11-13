@@ -162,7 +162,7 @@ instead of the PR delivery guidance below.
   entries, send agent messages,
   answer questions, stop their executions and the chats below their own, restart their agents and those of the chats below their own,
   queue restores of the agents, a workspace's or a chat's, they or the spaces below them stopped or whose restart by them left them stopped,
-  which the daemon starts a chat's in the place it ran in, and discard stopped work; the nearest space above with an agent, of either kind, receives a child agent's messages,
+  which the daemon starts a chat's in the place it ran in, and forget stopped work; the nearest space above with an agent, of either kind, receives a child agent's messages,
   questions, completion and ready marks and its agent's exits and stops instead of the user,
   except what a process causes in a child without an agent of its own. Own-workspace setup, rename, base workspace, PR registration,
   linking and watching CI runs of the own repository,

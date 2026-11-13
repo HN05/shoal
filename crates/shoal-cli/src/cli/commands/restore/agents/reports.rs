@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::fmt::Display;
 
 use crate::client::execution_ids::ExecutionId;
-use crate::client::output::resume::{DiscardedWork, Queued, Resumed, SetUp, StoppedCommands};
+use crate::client::output::resume::{ForgottenWork, Queued, Resumed, SetUp, StoppedCommands};
 use crate::{
     cli::context::Context, execution::recovery::SavedCommand, model::PresentSpace,
     state::QueueState,
@@ -103,12 +103,12 @@ pub(super) fn started(
     })
 }
 
-/// Report the `discarded` work of the workspaces `names` lists.
-pub(super) fn discarded(ctx: &Context, discarded: &DiscardedWork, names: &[&str]) -> Result<()> {
-    ctx.show(discarded, |_| {
+/// Report the `forgotten` work of the workspaces `names` lists.
+pub(super) fn forgotten(ctx: &Context, forgotten: &ForgottenWork, names: &[&str]) -> Result<()> {
+    ctx.show(forgotten, |_| {
         if !names.is_empty() {
             outln!(
-                "Discarded stopped agents and commands for {}",
+                "Forgot stopped agents and commands for {}",
                 names.join(", ")
             );
         }

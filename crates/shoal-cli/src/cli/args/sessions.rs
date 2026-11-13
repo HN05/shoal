@@ -30,16 +30,16 @@ pub enum SessionsCommand {
         /// Select a stopped execution when the workspace has several records.
         #[arg(long, conflicts_with = "all")]
         execution: Option<ExecutionId>,
-        /// Forget the saved agents and commands instead of resuming them.
+        /// Forget the saved agents and commands instead of restoring them.
         #[arg(long)]
-        discard: bool,
+        forget: bool,
         /// Start at once regardless of the agent limits, where each agent
         /// stopped or in the background.
-        #[arg(long, conflicts_with = "discard")]
+        #[arg(long, conflicts_with = "forget")]
         now: bool,
         /// Restore one agent in this terminal at once, regardless of the
         /// agent limits.
-        #[arg(short = 'f', long, conflicts_with_all = ["discard", "all"])]
+        #[arg(short = 'f', long, conflicts_with_all = ["forget", "all"])]
         focus: bool,
         /// Set a permission of the restored agents and chats, as KEY=VALUE
         /// such as push=direct, whatever their mode allows; KEY=mode drops
@@ -49,7 +49,7 @@ pub enum SessionsCommand {
             long = "permission",
             value_name = "KEY=VALUE",
             value_parser = permission_assignment,
-            conflicts_with_all = ["discard", "all", "queue_entry"]
+            conflicts_with_all = ["forget", "all", "queue_entry"]
         )]
         permissions: Vec<crate::config::permissions::PermissionChange>,
         /// The queue entry whose slot the restored agent takes, for the

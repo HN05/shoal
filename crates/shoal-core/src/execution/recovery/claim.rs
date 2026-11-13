@@ -1,5 +1,5 @@
 //! Exclusive claims on saved records, so only one `shoal resume` restores,
-//! reports or discards each.
+//! reports or forgets each.
 use super::{
     LastSession, LastSessionExt as _, Record, RecordExt as _, Saved, SavedSession, consume,
 };
@@ -69,7 +69,7 @@ pub fn claim_last_session(path: &std::path::Path) -> Result<(RecoveryClaim, Last
 }
 
 /// Forget saved records, returning their execution IDs.
-pub fn discard_saved(
+pub fn forget_saved(
     saved: &Saved,
     active: impl Fn(&ExecutionId) -> bool,
 ) -> Result<Vec<ExecutionId>> {

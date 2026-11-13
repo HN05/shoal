@@ -655,7 +655,7 @@ mod streams {
         snapshot(&mut subscription).await;
         daemon
             .manager
-            .discard_stopped_work(&SpaceSelector::id(&workspace.id), None)
+            .forget_stopped_work(&SpaceSelector::id(&workspace.id), None)
             .await
             .unwrap();
         until(

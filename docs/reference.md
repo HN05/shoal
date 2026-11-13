@@ -323,7 +323,7 @@ Run stop, restart and resume outside scoped executions, except that a scoped
 process, a workspace's or a chat's agent, may stop the spaces below its own,
 workspaces and chats alike, with `shoal stop <space>`, without `--yes`, restart the agents of the
 spaces below its own, workspaces and chats alike, with `shoal restart <space>`,
-discard their stopped work with `shoal resume <space> --discard`, and queue with
+forget their stopped work with `shoal resume <space> --forget`, and queue with
 `shoal resume <space>` the restores of the agents that it or a space below
 it stopped, or whose restart by one of them left them stopped, which the daemon
 starts detached. An agent the user or Shoal stopped, or that exited on its own,
@@ -440,7 +440,7 @@ at once regardless of the limits; resume reports the entries as a resume without
 background, such a resume, with or without `--now`, is refused before anything
 is restored, naming `--focus` to restore one agent here. `-f`/`--focus` restores one agent in the current terminal at once,
 regardless of the limits.
-Use `--discard` to forget the workspace's stopped agents, last sessions and commands, every
+Use `--forget` to forget the workspace's stopped agents, last sessions and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
 `--permission KEY=VALUE`, repeatable, restores each selected agent
 with that [permission](#mode-permissions) given, `KEY=mode` dropping one
@@ -450,7 +450,7 @@ hold is refused before anything is restored, and so is an agent its waiting
 wrapper restores or one whose interrupted turn continues, since both keep the
 launch they run under.
 A stopped [chat's](#chats) agent restores as a workspace's does, without
-waiting for an agent slot, and `--discard` forgets its stopped work. A running
+waiting for an agent slot, and `--forget` forgets its stopped work. A running
 chat has nothing to resume.
 When a stopped agent's execution is unknown, after a daemon restart or a stop
 Shoal could not prove, the daemon forgets it once its wrapper has exited and none
@@ -1939,7 +1939,7 @@ done, its restore waits in the queue or its mode is
 [light](config.md#modes-and-rules), which starts it at once beside the agent
 limits and whatever memory is in use, though critical or missing readings and
 low disk hold it as they hold every start; `shoal done`, the agent's exit,
-`resume --discard` and removal free it.
+`resume --forget` and removal free it.
 A [local review](#local-reviews)'s reviewer uses no slot, so no count limits
 reviews, but its memory counts while it runs and a queued review waits for
 room and disk as an agent's start does, ranked with the workspace it reviews.
@@ -2030,7 +2030,7 @@ config lets it open places, such as `terminal.herdr.new_tab`, otherwise where
 `terminal.default_host` puts it. A restore whose
 agent has not started within two minutes records a `queue_failed` notification
 and leaves the agent stopped. Stopping the workspace or marking its assignment
-done cancels a pending one, and resuming or discarding the agent another way
+done cancels a pending one, and resuming or forgetting the agent another way
 removes it.
 
 `--add-blocker` names what blocks the launch: a workspace or chat of the

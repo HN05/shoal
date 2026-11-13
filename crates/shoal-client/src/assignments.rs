@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, request},
-    executions::Discarded,
+    executions::Forgotten,
     files::NewFile,
     forge::items::link::Selection,
     model::{Completion, ReadyOutcome, ReviewMark},
@@ -96,12 +96,12 @@ pub async fn clear_ready(
 
 /// Forget `workspace`'s stopped work and last sessions, only `execution`'s
 /// when given.
-pub async fn discard_stopped_work(
+pub async fn forget_stopped_work(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
     execution: Option<ExecutionId>,
-) -> Result<Discarded> {
-    let method = AssignmentMethod::DiscardStoppedWork {
+) -> Result<Forgotten> {
+    let method = AssignmentMethod::ForgetStoppedWork {
         workspace,
         execution,
     };

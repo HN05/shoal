@@ -2,7 +2,7 @@
 //! modules below carry out. Restores use saved agent identity and today's
 //! restore configuration; they queue unless asked to start now, a chat's
 //! starting at once, a workspace whose setup failed retries it before the
-//! agent waiting for it starts, and `--discard` forgets the stopped work
+//! agent waiting for it starts, and `--forget` forgets the stopped work
 //! instead.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::output::resume::{Queued, Resumed};
@@ -21,7 +21,7 @@ pub struct Options {
     /// The one stopped execution of a space to restore.
     pub execution: Option<ExecutionId>,
     /// Forget the stopped work instead of restoring it.
-    pub discard: bool,
+    pub forget: bool,
     /// Start the restores at once, regardless of the agent limits.
     pub now: bool,
     /// Restore one agent in this terminal.
@@ -43,7 +43,7 @@ pub struct Options {
 pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> Result<i32> {
     let Options {
         execution,
-        discard,
+        forget,
         now,
         focus,
         change,
@@ -55,11 +55,11 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
     }
     let named = !targets.space.is_empty();
     let mut selected = Selected::load(ctx, targets).await?;
-    if named && !discard && execution.is_none() {
+    if named && !forget && execution.is_none() {
         setups::take_failed(ctx, &mut selected).await?;
     }
     if named
-        && !discard
+        && !forget
         && execution.is_none()
         && let Some(code) = continue_turns(ctx, &mut selected, change.is_some()).await?
     {
@@ -69,15 +69,13 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
     if let Some(change) = change {
         permission_change::check(ctx, &selected, execution.as_ref(), change).await?;
     }
-    if scoped && !discard {
+    if scoped && !forget {
         return queue::queue_below(ctx, selected, execution, change).await;
     }
     let queuing = Queuing::of(ctx.on_terminal(), now);
     let setups = selected.setups.as_slice();
     match (selected.spaces.as_deref(), setups) {
-        (Some([space]), []) if discard => {
-            discard::discard_work(ctx, space.clone(), execution).await
-        }
+        (Some([space]), []) if forget => forget::forget_work(ctx, space.clone(), execution).await,
         (Some([space]), []) if focus || queuing == Queuing::Here { now: true } => {
             space::run(ctx, space.clone(), execution, focus, change).await
         }
@@ -91,7 +89,7 @@ pub async fn select(ctx: &Context, targets: SpaceTargets, options: Options) -> R
                 "--execution selects a stopped execution of one space"
             );
             ensure!(!focus, "--focus restores the agent of one space");
-            resume_each(ctx, selected, discard, queuing, change).await
+            resume_each(ctx, selected, forget, queuing, change).await
         }
     }
 }
@@ -136,13 +134,13 @@ async fn continue_turns(
 /// Refuse a resume in a scoped process, a workspace's or a chat's agent,
 /// that does not name the spaces below its own or restores in this terminal,
 /// `here`: it only queues the restores of the agents it stopped there, which
-/// the daemon starts, or discards their stopped work.
+/// the daemon starts, or forgets their stopped work.
 fn ensure_below(targets: &SpaceTargets, here: bool) -> Result<()> {
     // The daemon checks that each space is below the caller's, which needs
     // the scope token: a process that cleared it stays refused.
     ensure!(
         crate::env::is_scoped() && !targets.all && !targets.space.is_empty() && !here,
-        "scoped processes resume only the spaces below theirs, by name and without --now or --focus: shoal resume <space> [--discard]"
+        "scoped processes resume only the spaces below theirs, by name and without --now or --focus: shoal resume <space> [--forget]"
     );
     Ok(())
 }
@@ -150,21 +148,21 @@ fn ensure_below(targets: &SpaceTargets, here: bool) -> Result<()> {
 /// Resume the `selected` spaces together, reporting them at once: retry
 /// the failed setups, and queue the restores of the stopped agents and the
 /// agents waiting for those setups, making `change` when given, start them
-/// as `queuing` says, or forget the stopped work for `discard`.
+/// as `queuing` says, or forget the stopped work for `forget`.
 async fn resume_each(
     ctx: &Context,
     selected: Selected,
-    discard: bool,
+    forget: bool,
     queuing: Queuing,
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
-    let stopped = selected.stopped(ctx, discard).await?;
+    let stopped = selected.stopped(ctx, forget).await?;
     if stopped.is_empty() && selected.setups.is_empty() {
-        reports::nothing(ctx, discard || queuing == Queuing::Here { now: true })?;
+        reports::nothing(ctx, forget || queuing == Queuing::Here { now: true })?;
         return Ok(0);
     }
-    if discard {
-        return discard::discard_each(ctx, &stopped).await;
+    if forget {
+        return forget::forget_each(ctx, &stopped).await;
     }
     if let Queuing::Daemon { .. } = queuing {
         queue::ensure_daemon_starts(ctx, &stopped).await?;
@@ -205,7 +203,7 @@ async fn present_space(ctx: &Context, selector: &SpaceSelector) -> Result<Presen
 }
 
 mod commands;
-mod discard;
+mod forget;
 pub(in crate::cli::commands) mod permission_change;
 mod picker;
 mod places;

@@ -20,7 +20,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
         SessionsCommand::Resume {
             targets,
             execution,
-            discard,
+            forget,
             now,
             focus,
             permissions,
@@ -38,7 +38,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
                 None => {
                     let options = resume::Options {
                         execution,
-                        discard,
+                        forget,
                         now,
                         focus,
                         change: change(&permissions),
