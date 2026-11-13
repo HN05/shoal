@@ -92,7 +92,6 @@ use crate::{
         args::{
             integration::{IntegrationCommand, ShellCommand},
             repository::RepositoryCommand,
-            service::{DaemonCommand, ServiceCommand},
             workspace::WorkspaceCommand,
         },
         context::Context,
@@ -238,14 +237,14 @@ fn print_help(path: &[&str]) -> Result<()> {
 pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
     // The service runs without the user's tool configuration environment, and
     // skill installation does this work itself.
-    if !matches!(
-        cli.command,
-        Some(
-            Command::Service(ServiceCommand::Daemon {
-                command: DaemonCommand::Run { .. }
-            }) | Command::Integration(IntegrationCommand::Skill { command: Some(_) })
+    if !cli.command.as_ref().is_some_and(Command::runs_daemon)
+        && !matches!(
+            cli.command,
+            Some(Command::Integration(IntegrationCommand::Skill {
+                command: Some(_)
+            }))
         )
-    ) && let Ok(state) = Paths::command_state_dir(cli.state_dir.clone())
+        && let Ok(state) = Paths::command_state_dir(cli.state_dir.clone())
     {
         skill::refresh_installed(&state, cli.json);
     }
