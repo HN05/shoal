@@ -221,8 +221,9 @@ pub(super) async fn run(manager: Arc<Manager>) {
     let mut reconciled: Option<Instant> = None;
     loop {
         {
-            // A daemon update waits for the pass, as for any background operation.
-            let _operation = manager.gates.operation().await;
+            // A daemon update waits for the pass, as for any background
+            // operation, and an exit that waits holds it back.
+            let _operation = manager.gates.background_pass().await;
             let changed = manager.runners.take_changed();
             if changed {
                 // A changed setting deserves a try at once.

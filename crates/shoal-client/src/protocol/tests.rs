@@ -164,12 +164,17 @@ fn pr_actions_reject_conflicting_wire_fields() {
 #[test]
 fn exit_requests_keep_their_wire_spelling() {
     for (exit, wire) in [(Exit::Stop, "stop"), (Exit::Restart, "restart")] {
-        let method = serde_json::to_value(Method::from(exit)).unwrap();
-        assert_eq!(method, json!({"exit": wire}));
-        let Method::Exit(request) = serde_json::from_value(method).unwrap() else {
+        // Daemons of earlier releases read it without `when`, and exit at once.
+        let Method::Exit(request) = serde_json::from_value(json!({"exit": wire})).unwrap() else {
             panic!("an exit request must keep its method name");
         };
-        assert_eq!(request.exit, exit);
+        assert_eq!((request.exit, request.when), (exit, ExitWhen::Now));
+        let waiting = ExitRequest {
+            exit,
+            when: ExitWhen::IfIdle,
+        };
+        let method = serde_json::to_value(Method::from(waiting)).unwrap();
+        assert_eq!(method, json!({"exit": wire, "when": "if_idle"}));
     }
 }
 

@@ -1,7 +1,7 @@
 //! The request envelope and the method each request carries.
 use super::{
     AgentMethod, ApprovalMethod, AssignmentMethod, ChatMethod, CiMethod, DaemonMethod, DemoMethod,
-    ExecutionMethod, Exit, ExitRequest, FileMethod, HoldMethod, ItemMethod, NotificationMethod,
+    ExecutionMethod, ExitRequest, FileMethod, HoldMethod, ItemMethod, NotificationMethod,
     OperationMethod, PortMethod, QuestionMethod, QueueMethod, Reattach, RecoveryMethod,
     RemovalMethod, RepositoryMethod, ResourceMethod, ReviewMethod, SecretMethod, SimulatorMethod,
     SubscriptionMethod, VERSION, WorkspaceMethod,
@@ -162,9 +162,9 @@ impl Operation {
     }
 }
 
-impl From<Exit> for Method {
-    fn from(exit: Exit) -> Self {
-        Self::Exit(ExitRequest { exit })
+impl From<ExitRequest> for Method {
+    fn from(exit: ExitRequest) -> Self {
+        Self::Exit(exit)
     }
 }
 

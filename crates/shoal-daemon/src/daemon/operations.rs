@@ -21,7 +21,8 @@ use uuid::Uuid;
 use super::{scope::Caller, workspace::Manager};
 use crate::client::space_names::SpaceSelector;
 use crate::protocol::operations::{
-    Ended, Failure, OperationEvent, OperationSpec, Order, Progress, Report, Step, Stream,
+    Ended, Failure, OperationEvent, OperationKind, OperationSpec, Order, Progress, Report, Step,
+    Stream,
 };
 use crate::refusal::{Reason, Refusal};
 #[cfg(test)]
@@ -45,6 +46,7 @@ pub(crate) struct Operations {
 pub(crate) struct Entry {
     /// The ID of the workspace it works in.
     pub workspace: SpaceId,
+    pub kind: OperationKind,
     state: Mutex<State>,
     changed: watch::Sender<()>,
 }
@@ -61,11 +63,12 @@ struct State {
 }
 
 impl Operations {
-    /// Record a new operation in `workspace`.
-    fn register(&self, workspace: SpaceId) -> (String, Arc<Entry>) {
+    /// Record a new operation of `kind` in `workspace`.
+    fn register(&self, workspace: SpaceId, kind: OperationKind) -> (String, Arc<Entry>) {
         let id = Uuid::new_v4().to_string();
         let entry = Arc::new(Entry {
             workspace,
+            kind,
             state: Default::default(),
             changed: watch::Sender::new(()),
         });
@@ -86,6 +89,16 @@ impl Operations {
         (entries.values())
             .filter(|entry| entry.running())
             .map(|entry| entry.workspace.clone())
+            .collect()
+    }
+
+    /// The operations whose worker has yet to end them.
+    pub(crate) fn running(&self) -> Vec<Arc<Entry>> {
+        let entries = self.entries.lock().unwrap_or_else(PoisonError::into_inner);
+        entries
+            .values()
+            .filter(|entry| entry.running())
+            .cloned()
             .collect()
     }
 
@@ -214,7 +227,7 @@ impl Manager {
         .id;
         *spec.workspace_mut() = SpaceSelector::id(&workspace);
         let token = caller.map(|caller| self.operations.issue(caller));
-        let (id, entry) = self.operations.register(workspace.clone());
+        let (id, entry) = self.operations.register(workspace.clone(), spec.kind());
         let order = Order {
             id: id.clone(),
             spec,

@@ -129,7 +129,7 @@ pub(super) async fn register(
         }
     };
     if !reattach {
-        manager.executions.mark_unattachable(&plan.id);
+        (manager.executions).mark_unattachable(&plan.id, &plan.space.id);
     }
     if kind == ExecutionKind::Command
         && let Some(agent) = &agent

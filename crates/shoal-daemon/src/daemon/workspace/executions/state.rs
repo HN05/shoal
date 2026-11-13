@@ -66,7 +66,7 @@ pub(crate) struct Executions {
     stop_requests: Mutex<HashMap<ExecutionId, StopRequest>>,
     /// Connected executions whose wrapper stops instead of reattaching when
     /// the daemon shuts down.
-    unattachable: StdMutex<HashSet<ExecutionId>>,
+    unattachable: StdMutex<HashMap<ExecutionId, SpaceId>>,
     /// Connected executions whose wrapper reported its exit, by the
     /// completion step the daemon is on.
     completing: StdMutex<HashMap<ExecutionId, Completing>>,
@@ -168,12 +168,21 @@ impl Executions {
         f(&mut agents, &mut renewals)
     }
 
-    /// Record that a restart would stop this connected execution.
-    pub(crate) fn mark_unattachable(&self, id: &ExecutionId) {
+    /// Record that a restart would stop this connected execution in `space`.
+    pub(crate) fn mark_unattachable(&self, id: &ExecutionId, space: &SpaceId) {
         self.unattachable
             .lock()
             .expect("unattachable executions lock")
-            .insert(id.to_owned());
+            .insert(id.to_owned(), space.clone());
+    }
+
+    /// The space of each connected execution a restart would stop.
+    pub(crate) fn unattachable_spaces(&self) -> Vec<SpaceId> {
+        let unattachable = self
+            .unattachable
+            .lock()
+            .expect("unattachable executions lock");
+        unattachable.values().cloned().collect()
     }
 
     /// Whether a restart would stop a connected execution. Disconnected

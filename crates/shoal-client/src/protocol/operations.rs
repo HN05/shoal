@@ -368,7 +368,28 @@ impl OperationSpec {
             | Self::Push { workspace, .. } => workspace,
         }
     }
+
+    pub fn kind(&self) -> OperationKind {
+        match self {
+            Self::Prepare { .. } => OperationKind::Prepare,
+            Self::OpenPull { .. } => OperationKind::OpenPull,
+            Self::Merge { .. } => OperationKind::Merge,
+            Self::Unmerge { .. } => OperationKind::Unmerge,
+            Self::Push { .. } => OperationKind::Push,
+        }
+    }
 }
+
+shoal_states::states!(
+    /// What an operation does, as its [`OperationSpec`] says.
+    OperationKind {
+        Prepare => "prepare",
+        OpenPull => "open_pull",
+        Merge => "merge",
+        Unmerge => "unmerge",
+        Push => "push",
+    }
+);
 
 shoal_states::states!(Step {
     SetupStarted => "setup_started",

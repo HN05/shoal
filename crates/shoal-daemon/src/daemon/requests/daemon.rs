@@ -7,12 +7,13 @@ use tokio::net::UnixStream;
 use super::super::{
     Server,
     answer::{Answer, OperationGuard},
+    exit_wait::{self, Quiet},
     scope::{self, Caller, Scoped, denied},
     workspace::{Ending, Manager},
 };
 use crate::client::space_names::SpaceSelector;
 use crate::protocol::{
-    self, Body, DaemonMethod, DaemonStatus, ErrorCode, ExitRequest, Exited, Response,
+    self, Body, DaemonMethod, DaemonStatus, ErrorCode, ExitRequest, ExitWhen, Exited, Response,
 };
 
 /// The daemon's own requests, which read how it runs.
@@ -57,7 +58,10 @@ async fn status(server: &Server) -> Result<DaemonStatus> {
 
 /// Reply to an exit request the caller's scope allows, then end the daemon
 /// with what the request asks of running work, which answers again once that
-/// work has ended. The daemon ends even when the client hung up first.
+/// work has ended. An exit that waits first holds back new work until
+/// nothing it would cut off runs, telling the client what runs meanwhile,
+/// and ends nothing once the client hangs up or `when` refuses to wait. The
+/// daemon ends even when the client hung up after its reply.
 pub(in crate::daemon) async fn exit(
     mut stream: UnixStream,
     request_id: u64,
@@ -66,39 +70,60 @@ pub(in crate::daemon) async fn exit(
     mut request: ExitRequest,
     guard: OperationGuard,
 ) -> Result<()> {
-    // The reply is written under the operation, as every reply is.
-    let _operation = guard;
-    let authorized = scope::authorize(&server.manager, scope, &mut request).await;
-    let body = match &authorized {
-        Ok(_) => Body::Ok,
-        Err(error) => Body::error(ErrorCode::ScopeDenied, format!("{error:#}")),
-    };
-    let replied = protocol::write(&mut stream, &Response::new(request_id, body)).await;
-    if authorized.is_ok() {
-        let requested = RequestedExit {
-            ending: request.exit.into(),
-            stream,
-            request_id,
-        };
-        // A full channel already holds an earlier request, which wins.
-        let _ = server.exit.try_send(requested);
+    if let Err(error) = scope::authorize(&server.manager, scope, &mut request).await {
+        let body = Body::error(ErrorCode::ScopeDenied, format!("{error:#}"));
+        // The reply is written under the operation, as every reply is.
+        return protocol::write(&mut stream, &Response::new(request_id, body)).await;
     }
+    let (quiet, _operation) = match request.when {
+        ExitWhen::Now => (None, Some(guard)),
+        when => {
+            // The exit's own request would keep the daemon from quiescing.
+            drop(guard);
+            match exit_wait::wait(&server.manager, &mut stream, request_id, when).await? {
+                Some(quiet) => (Some(quiet), None),
+                None => return Ok(()),
+            }
+        }
+    };
+    let replied = protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await;
+    let requested = RequestedExit {
+        ending: request.exit.into(),
+        stream,
+        request_id,
+        quiet,
+    };
+    // A full channel already holds an earlier request, which wins.
+    let _ = server.exit.try_send(requested);
     replied
 }
 
 /// An exit a client asked for, with the connection that hears what the
-/// daemon left once its work has ended.
+/// daemon left once its work has ended, and for an exit that waited, the
+/// work it holds off until the daemon has exited.
 pub(in crate::daemon) struct RequestedExit {
     pub ending: Ending,
     stream: UnixStream,
     request_id: u64,
+    quiet: Option<Quiet>,
 }
 
 impl RequestedExit {
+    /// Let the work a stop ends take operations, which the exit's wait held
+    /// off, once the daemon accepts no more requests: stopped executions
+    /// record their ends under one. A restart keeps them held off, so an
+    /// execution that changes meanwhile detaches for the next daemon, as for
+    /// an update.
+    pub fn ending_work(&mut self) {
+        if let (Ending::Stop, Some(quiet)) = (self.ending, &mut self.quiet) {
+            quiet.release_operations();
+        }
+    }
+
     /// Tell the client whether ending work left stopped work for `shoal
     /// resume`, after the reply to its request, which every release reads
     /// alone.
-    pub async fn answer(mut self, manager: &Manager) {
+    pub async fn answer(&mut self, manager: &Manager) {
         let exited = Exited {
             stopped_work: crate::execution::recovery::any_pending(&manager.paths),
         };

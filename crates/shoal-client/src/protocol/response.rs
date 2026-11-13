@@ -1,7 +1,7 @@
 //! The response envelope, its bodies and the errors they carry.
 use super::{
     ChatScope, DaemonStatus, DownloadPiece, Exited, MAX_FRAME, ReviewPiece, VERSION, ViewPiece,
-    WokenTurn, chats, frame_pages, operations,
+    WokenTurn, Work, chats, frame_pages, operations,
 };
 use crate::events::EventItem;
 use crate::model::{
@@ -161,6 +161,7 @@ macro_rules! response_bodies {
 response_bodies! {
     Status(DaemonStatus),
     Exited(Exited),
+    ExitWaits(Vec<Work>),
     Repositories(Vec<Repository>),
     Repository(Repository),
     LocalConfigPath(std::path::PathBuf),

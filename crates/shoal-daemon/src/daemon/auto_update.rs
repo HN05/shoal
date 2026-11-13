@@ -1,8 +1,6 @@
 //! Restart a managed daemon after its installed executable is replaced.
-use super::workspace::Manager;
 use crate::fsutil::FileIdentity;
 use std::path::PathBuf;
-use tokio::sync::RwLockWriteGuard;
 
 pub(super) struct Update {
     pub(super) path: PathBuf,
@@ -27,15 +25,3 @@ impl Update {
             && self.original.replaced_at(&self.path)
     }
 }
-
-/// Admission is paused in the server while checking. Background readers cover
-/// requests, hooks and mutations; execution connections hold one only while
-/// their execution changes or their wrapper cannot reattach. Connected
-/// executions that never reattach block restart.
-pub(super) fn quiesce(manager: &Manager) -> Option<RwLockWriteGuard<'_, ()>> {
-    let guard = manager.gates.try_quiesce()?;
-    (!manager.executions.has_unattachable()).then_some(guard)
-}
-
-#[cfg(test)]
-mod tests;

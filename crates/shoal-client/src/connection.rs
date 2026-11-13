@@ -19,8 +19,8 @@ use crate::{
     paths::Paths,
     processes::Identity,
     protocol::{
-        self, Body, DaemonMethod, DaemonStatus, ErrorCode, Exit, Method, Request, Response,
-        ViewPiece, timing,
+        self, Body, DaemonMethod, DaemonStatus, ErrorCode, Exit, ExitRequest, ExitWhen, Method,
+        Request, Response, ViewPiece, timing,
     },
     scope_tokens::ScopeToken,
 };
@@ -449,7 +449,8 @@ pub async fn reload_config(daemon: &impl Daemon) -> Result<bool> {
 /// when none runs, it is still starting, or its release predates the request.
 /// A refusal fails.
 pub async fn exit(daemon: &impl Daemon, exit: Exit) -> Result<Option<Exiting>> {
-    let request = request_to(daemon, exit);
+    let when = ExitWhen::Now;
+    let request = request_to(daemon, ExitRequest { exit, when });
     let asked = async {
         let stream = UnixStream::connect(&daemon.paths().socket).await.ok()?;
         let mut stream = BufReader::new(stream);

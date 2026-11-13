@@ -8,7 +8,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use tokio::sync::{
     Mutex, MutexGuard, OwnedMutexGuard, OwnedRwLockReadGuard, OwnedRwLockWriteGuard, RwLock,
-    RwLockReadGuard, RwLockWriteGuard,
+    RwLockReadGuard, watch,
 };
 
 use keyed::Keyed;
@@ -20,6 +20,8 @@ mod tests;
 #[derive(Default)]
 pub(crate) struct Gates {
     background_operations: Arc<RwLock<()>>,
+    /// Whether an exit that waits for work in progress holds back new work.
+    held_back: Arc<watch::Sender<bool>>,
     registry: Mutex<()>,
     checkpoints: Mutex<()>,
     simulators: Mutex<()>,
@@ -54,10 +56,44 @@ pub(crate) enum ResourceGuard {
     Hook { _guard: OwnedRwLockWriteGuard<()> },
 }
 
+/// The daemon holds back new work until it exits; the request runs once the
+/// next daemon answers.
+#[derive(Debug)]
+pub struct Exiting;
+
+impl std::fmt::Display for Exiting {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the daemon is about to exit and starts no new work; send the request again once it is back")
+    }
+}
+
+impl std::error::Error for Exiting {}
+
+/// New work held back for an exit that waits, until it drops.
+pub(crate) struct HeldBack {
+    held_back: Arc<watch::Sender<bool>>,
+}
+
+impl Drop for HeldBack {
+    fn drop(&mut self) {
+        self.held_back.send_replace(false);
+    }
+}
+
 impl Gates {
     /// Cover a background operation, so a daemon update can quiesce
     /// operations without cancelling hooks or mutations already in progress.
     pub(crate) async fn operation(&self) -> RwLockReadGuard<'_, ()> {
+        self.background_operations.read().await
+    }
+
+    /// [`Self::operation`] for a background pass that starts work an exit
+    /// would cut off, such as a cleanup sweep, which waits to start while an
+    /// exit holds such work back.
+    pub(crate) async fn background_pass(&self) -> RwLockReadGuard<'_, ()> {
+        let mut held_back = self.held_back.subscribe();
+        // The sender lives as long as the gates.
+        let _ = held_back.wait_for(|held| !held).await;
         self.background_operations.read().await
     }
 
@@ -78,13 +114,31 @@ impl Gates {
 
     /// Hold off every background operation once those in progress finish.
     #[cfg(test)]
-    pub(crate) async fn quiesce(&self) -> RwLockWriteGuard<'_, ()> {
-        self.background_operations.write().await
+    pub(crate) async fn quiesce(&self) -> OwnedRwLockWriteGuard<()> {
+        self.background_operations.clone().write_owned().await
     }
 
     /// [`Self::quiesce`] when no background operation is in progress.
-    pub(crate) fn try_quiesce(&self) -> Option<RwLockWriteGuard<'_, ()>> {
-        self.background_operations.try_write().ok()
+    pub(crate) fn try_quiesce(&self) -> Option<OwnedRwLockWriteGuard<()>> {
+        self.background_operations.clone().try_write_owned().ok()
+    }
+
+    /// Hold back the background passes and requests that start work an
+    /// exit would cut off, until the guard drops, so that work in progress
+    /// can end before the daemon exits.
+    pub(crate) fn hold_back(&self) -> HeldBack {
+        self.held_back.send_replace(true);
+        HeldBack {
+            held_back: self.held_back.clone(),
+        }
+    }
+
+    /// Refuse, as [`Exiting`], to start work while an exit holds it back.
+    pub(crate) fn admit(&self) -> Result<(), Exiting> {
+        match *self.held_back.borrow() {
+            true => Err(Exiting),
+            false => Ok(()),
+        }
     }
 
     /// Serialize repository registration, removal, and local config changes.

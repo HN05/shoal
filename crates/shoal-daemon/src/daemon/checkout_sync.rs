@@ -238,7 +238,7 @@ impl Manager {
     /// A scheduled or requested sync: logged when it fails, and told to the
     /// user once it has failed long enough.
     async fn sync_in_background(&self, repository_id: &RepositoryId) {
-        let _operation = self.gates.operation().await;
+        let _operation = self.gates.background_pass().await;
         if let Some(error) = self.sync(repository_id).await.error() {
             log!("sync of repository {repository_id}: {error:#}");
         }

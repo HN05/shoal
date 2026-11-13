@@ -18,11 +18,34 @@ use crate::{
     removal::InspectionPolicy,
 };
 
+/// Whether `method` moves a space through a lifecycle state that an exit
+/// would interrupt, which an exit that waits for work in progress holds back.
+fn changes_lifecycle(method: &RemovalMethod) -> bool {
+    match method {
+        RemovalMethod::StopSpace { .. }
+        | RemovalMethod::RemoveWorkspace { .. }
+        | RemovalMethod::StartRemoval { .. }
+        | RemovalMethod::RestoreWorkspace { .. }
+        | RemovalMethod::ExportSpace { .. }
+        | RemovalMethod::ImportWorkspace { .. } => true,
+        RemovalMethod::Cleanup { dry_run, .. } => !dry_run,
+        RemovalMethod::StopTargets
+        | RemovalMethod::CheckStop { .. }
+        | RemovalMethod::StopProcesses { .. }
+        | RemovalMethod::CheckRemoval { .. }
+        | RemovalMethod::RemovedWorkspaces
+        | RemovalMethod::DropRestoredSessions { .. } => false,
+    }
+}
+
 pub(super) async fn handle(
     manager: &Arc<Manager>,
     method: RemovalMethod,
     caller: Option<&Caller>,
 ) -> Result<Answer> {
+    if changes_lifecycle(&method) {
+        manager.gates.admit()?;
+    }
     Ok(Answer::Body(match method {
         RemovalMethod::RemovedWorkspaces => {
             let listed = manager.removed_workspaces().await;

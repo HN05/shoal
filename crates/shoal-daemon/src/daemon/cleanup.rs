@@ -657,7 +657,7 @@ pub async fn run(manager: Arc<Manager>) {
     let mut logged = LoggedFailures::default();
     loop {
         {
-            let _operation = manager.gates.operation().await;
+            let _operation = manager.gates.background_pass().await;
             let result = sweep(&manager, &mut timers).await;
             let failed = logged.new_failures(&result);
             if let Some(failed) = &failed {

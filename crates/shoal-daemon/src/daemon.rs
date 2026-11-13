@@ -18,6 +18,7 @@ pub mod environment;
 pub mod events;
 mod execution_connection;
 mod execution_recovery;
+mod exit_wait;
 pub(crate) mod file_access;
 mod file_copies;
 pub(crate) mod forge_hosts;
@@ -231,7 +232,7 @@ pub async fn run(
             }
             _ = update_tick.tick(), if update.is_some() => {
                 if update.as_ref().is_some_and(auto_update::Update::pending)
-                    && let Some(guard) = auto_update::quiesce(&manager)
+                    && let Some(guard) = exit_wait::quiesce(&manager)
                 {
                     quiescence = Some(guard);
                     break Ok(Ending::Detach);
@@ -247,7 +248,12 @@ pub async fn run(
                     }
                 };
                 let server = server.clone();
-                let operation = server.manager.gates.owned_operation().await;
+                // An exit that waited holds operations off until the daemon
+                // has exited, so the loop must not wait for one.
+                let Some(operation) = server.manager.gates.try_owned_operation() else {
+                    clients.spawn(connections::refuse_while_exiting(stream));
+                    continue;
+                };
                 clients.spawn(async move {
                     if let Err(error) = serve(stream, server, operation).await {
                         log!("client connection: {error:#}");
@@ -260,6 +266,9 @@ pub async fn run(
     // running for the next daemon the service manager starts. Background
     // loops run on meanwhile, so a stop the shutdown lock started finishes.
     let ending = *result.as_ref().unwrap_or(&Ending::Detach);
+    if let Some(requested) = &mut requested_exit {
+        requested.ending_work();
+    }
     manager.end_work(ending).await;
     manager.record_exit(ending, result.as_ref().err()).await;
     background.shutdown().await;
@@ -267,7 +276,7 @@ pub async fn run(
     // carries its marker.
     manager.oneshot_runs.stop_all().await;
     manager.stop_for_shutdown().await;
-    if let Some(requested) = requested_exit {
+    if let Some(requested) = &mut requested_exit {
         requested.answer(&manager).await;
     }
     clients.shutdown().await;
@@ -377,7 +386,7 @@ where
 async fn expire_simulators(manager: Arc<Manager>) {
     loop {
         tokio::time::sleep(SIMULATOR_SWEEP_INTERVAL).await;
-        let _operation = manager.gates.operation().await;
+        let _operation = manager.gates.background_pass().await;
         if let Err(error) = manager.expire_simulators().await {
             log!("simulator cleanup: {error:#}");
         }

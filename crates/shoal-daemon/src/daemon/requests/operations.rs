@@ -21,12 +21,30 @@ use crate::protocol::{
     operations::{Started, WorkspaceStart},
 };
 
+/// Whether `method` starts a workspace or an operation, whose worker an
+/// exit would cut off, which an exit that waits for work in progress holds
+/// back.
+fn starts_work(method: &OperationMethod) -> bool {
+    match method {
+        OperationMethod::StartOperation { .. }
+        | OperationMethod::StartWorkspace { .. }
+        | OperationMethod::StartSplit { .. }
+        | OperationMethod::ConvertToWorkspace { .. } => true,
+        OperationMethod::FollowOperation { .. }
+        | OperationMethod::CancelOperation { .. }
+        | OperationMethod::ReportProgress { .. } => false,
+    }
+}
+
 pub(super) async fn handle(
     manager: &Arc<Manager>,
     method: OperationMethod,
     caller: Option<&Caller>,
     scope: Option<&ScopeToken>,
 ) -> Result<Answer> {
+    if starts_work(&method) {
+        manager.gates.admit()?;
+    }
     Ok(Answer::Body(match method {
         OperationMethod::StartOperation { spec, env } => Body::OperationStarted(Started {
             id: manager.start_operation(spec, env, caller).await?,
