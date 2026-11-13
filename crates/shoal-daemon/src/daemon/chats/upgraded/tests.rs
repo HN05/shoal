@@ -10,8 +10,8 @@ async fn upgrade(manager: &Manager, chat: &Chat, saved: bool, automatic: bool) {
     (manager.store)
         .write(move |tx| {
             tx.execute(
-                "INSERT INTO upgraded_chat_agents(chat_id,saved,automatic,stopped_by,turn)
-                 VALUES (?1,?2,?3,NULL,'idle')",
+                "INSERT INTO upgraded_chat_agents(chat_id,saved,automatic,turn)
+                 VALUES (?1,?2,?3,'idle')",
                 rusqlite::params![id, saved, automatic],
             )?;
             Ok(())

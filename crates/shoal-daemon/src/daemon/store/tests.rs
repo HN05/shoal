@@ -539,6 +539,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 170 {
         db.execute_batch(include_str!("space_issues.sql"))?;
     }
+    if version >= 171 {
+        db.execute_batch(include_str!("agent_stoppers.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -2189,37 +2192,24 @@ fn chats_keep_their_agents_to_restore_once_they_record_no_process() -> Result<()
     )?;
     migrate(&mut db)?;
     let mut statement = db.prepare(
-        "SELECT chat_id,saved,automatic,stopped_by,turn FROM upgraded_chat_agents ORDER BY chat_id",
+        "SELECT chat_id,saved,automatic,turn FROM upgraded_chat_agents ORDER BY chat_id",
     )?;
-    type Row = (String, bool, bool, Option<String>, Option<String>);
+    type Row = (String, bool, bool, Option<String>);
     let upgraded: Vec<Row> = statement
         .query_map([], |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get(4)?,
-            ))
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
         })?
         .collect::<rusqlite::Result<_>>()?;
-    let row = |chat: &str, saved, automatic, stopped_by: Option<&str>, turn: Option<&str>| {
-        let owned = |text: Option<&str>| text.map(str::to_owned);
-        (
-            chat.to_owned(),
-            saved,
-            automatic,
-            owned(stopped_by),
-            owned(turn),
-        )
+    let row = |chat: &str, saved, automatic, turn: Option<&str>| {
+        (chat.to_owned(), saved, automatic, turn.map(str::to_owned))
     };
     assert_eq!(
         upgraded,
         [
-            row("automatic", true, true, None, None),
-            row("exited", false, false, None, None),
-            row("resume", true, false, Some("running"), None),
-            row("running", true, true, None, Some("working")),
+            row("automatic", true, true, None),
+            row("exited", false, false, None),
+            row("resume", true, false, None),
+            row("running", true, true, Some("working")),
         ]
     );
     let left: i64 = db.query_row(
@@ -2229,6 +2219,37 @@ fn chats_keep_their_agents_to_restore_once_they_record_no_process() -> Result<()
         |row| row.get(0),
     )?;
     assert_eq!(left, 0);
+    Ok(())
+}
+
+#[test]
+fn migrated_stops_and_conversions_forget_which_space_stopped_the_agent() -> Result<()> {
+    let mut db = historical_database(170)?;
+    db.execute_batch(
+        r#"INSERT INTO agent_stops(execution_id,reason,resumes_when,stopped_by)
+             VALUES ('execution','memory','memory','lead');
+         INSERT INTO space_conversions(space_id,record) VALUES
+             ('workspace','{"to":"chat","held":true,"chat":{"agent":"claude","stopped_by":"lead"}}'),
+             ('other','{"to":"workspace"}');"#,
+    )?;
+    migrate(&mut db)?;
+    let reason: String = db.query_row(
+        "SELECT reason FROM agent_stops WHERE execution_id='execution'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(reason, "memory");
+    let records: Vec<String> = db
+        .prepare("SELECT record FROM space_conversions ORDER BY space_id")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(
+        records,
+        [
+            r#"{"to":"workspace"}"#,
+            r#"{"to":"chat","held":true,"chat":{"agent":"claude"}}"#,
+        ]
+    );
     Ok(())
 }
 
