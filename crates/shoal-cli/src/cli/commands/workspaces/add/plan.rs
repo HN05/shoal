@@ -105,9 +105,10 @@ async fn opened_branch(
     }
     let repo = target.repository(ctx).await?;
     let remote = git::remote_branch(&repo.path, selector).await?;
-    Ok(Some(
-        remote.map_or_else(|| selector.clone(), |(_, branch)| branch),
-    ))
+    Ok(Some(remote.map_or_else(
+        || selector.clone(),
+        |(_, branch)| branch.into(),
+    )))
 }
 
 /// The existing workspace `plan` reopens: the one it names, else the one on

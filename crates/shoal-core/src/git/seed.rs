@@ -7,16 +7,17 @@ use std::{
 };
 
 use anyhow::Result;
+use shoal_refs::{BranchName, CommitId};
 
 use super::{run, run_isolated, run_without_submodules};
 
 /// The commit a local branch points at.
-pub async fn branch_commit(repo: &Path, branch: &str) -> Result<String> {
+pub async fn branch_commit(repo: &Path, branch: &BranchName) -> Result<CommitId> {
     let reference = format!("{}^{{commit}}", super::local_ref(branch));
     Ok(run(repo, &["rev-parse", "--verify", "--quiet", &reference])
         .await?
         .trim()
-        .to_owned())
+        .into())
 }
 
 pub async fn add_worktree(repo: &Path, path: &Path, commit: &str, reason: &str) -> Result<()> {
@@ -50,11 +51,11 @@ pub async fn remove_worktree(repo: &Path, path: &Path) -> Result<()> {
     .map(drop)
 }
 
-pub async fn head(worktree: &Path) -> Result<String> {
+pub async fn head(worktree: &Path) -> Result<CommitId> {
     Ok(run(worktree, &["rev-parse", "--verify", "HEAD"])
         .await?
         .trim()
-        .to_owned())
+        .into())
 }
 
 /// Tracked files whose content differs between two commits.

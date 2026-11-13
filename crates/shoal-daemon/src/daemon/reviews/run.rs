@@ -441,7 +441,7 @@ impl Manager {
                     .with_context(|| format!("the PR base {base} is not fetched"))?;
                 Ok(Commits {
                     head: head.into(),
-                    base: base.into(),
+                    base,
                 })
             }
         }
@@ -458,6 +458,7 @@ impl Manager {
         let head_ref = crate::git::remote_ref("origin", head.as_str());
         crate::git::resolve_commit(&workspace.path, &head_ref, crate::git::run)
             .await
+            .map(String::from)
             .with_context(|| format!("the PR head {head} is not fetched"))
     }
 

@@ -50,9 +50,8 @@ impl Manager {
     pub async fn prepare_unmerge(&self, selector: &SpaceSelector) -> Result<UnmergePlan> {
         let workspace = self.workspace(selector).await?;
         let repo = self.repository(&workspace.repository_id).await?;
-        let default = BranchName::from(
-            git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?,
-        );
+        let default =
+            git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
         let branch = BranchName::from(workspace.require_branch("unmerging")?);
         let held = self.held_merges(&repo, &default).await?;
         let (merge, later) = latest_merge_of(&held, &branch)
@@ -114,7 +113,7 @@ async fn ensure_unpushed(
         merge.merge.previous.as_str(),
         merge.merge.result.as_str(),
     );
-    if !pushed(&repo.path, default.as_str(), result).await? {
+    if !pushed(&repo.path, default, result).await? {
         return Ok(());
     }
     // A merge commit made on the default branch reverts as one; a
@@ -164,14 +163,14 @@ async fn ensure_replayable(
         }
     }
     for commit in &chain {
-        let parents = merged_parents(path, commit).await?;
-        if !parents.is_empty() && merge_has_own_changes(path, commit).await? {
+        let parents = merged_parents(path, commit.as_str()).await?;
+        if !parents.is_empty() && merge_has_own_changes(path, commit.as_str()).await? {
             bail!(
                 "the later merge commit {commit} has changes of its own, such as a conflict resolution, which replaying it would drop; undo it first"
             );
         }
         for parent in parents {
-            if holds_commits_of(path, &parent, source, previous).await? {
+            if holds_commits_of(path, parent.as_str(), source, previous).await? {
                 bail!(
                     "the later merge commit {commit} brings in {branch}'s commits, so replaying it would bring them back; undo it first"
                 );

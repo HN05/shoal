@@ -177,7 +177,7 @@ impl Manager {
         let (head, _) = crate::git::head_and_branch(&checkout.path)
             .await
             .context("cannot read the checkout's HEAD")?;
-        let mut ready = (self.record_marks(space.id(), kind, explicit, head, pulls)).await?;
+        let mut ready = (self.record_marks(space.id(), kind, explicit, head.into(), pulls)).await?;
         let undrafted = match settings.pr.undraft_on_ready {
             true => self.set_draft(space, &pr_urls(&ready.marks), false).await,
             false => Ok(()),

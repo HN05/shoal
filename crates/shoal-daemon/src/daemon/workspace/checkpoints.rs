@@ -7,7 +7,7 @@ use std::collections::HashSet;
 
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
-use shoal_refs::{BranchName, CommitId};
+use shoal_refs::BranchName;
 
 use super::Manager;
 use crate::client::space_names::SpaceSelector;
@@ -128,9 +128,9 @@ impl Manager {
             number: CheckpointNumber::default(),
             name,
             cause,
-            branch: snapshot.branch.map(BranchName::from),
-            head: CommitId::from(snapshot.head),
-            commit: CommitId::from(snapshot.commit),
+            branch: snapshot.branch,
+            head: snapshot.head,
+            commit: snapshot.commit,
             files_omitted,
             created_at,
             expires_at: created_at + retention,
@@ -144,9 +144,8 @@ impl Manager {
     async fn save_checkpoint(&self, mut checkpoint: Checkpoint) -> Result<Checkpoint> {
         let repo = self.repository(&checkpoint.repository_id).await?;
         let _refs = self.gates.lock_checkpoints().await;
-        let commit = checkpoint.commit.as_str();
-        let reference = git::checkpoint::reference(commit);
-        git::checkpoint::save(&repo.path, &reference, commit).await?;
+        let reference = git::checkpoint::reference(&checkpoint.commit);
+        git::checkpoint::save(&repo.path, &reference, &checkpoint.commit).await?;
         let record = checkpoint.clone();
         checkpoint.number = self
             .store
@@ -433,7 +432,7 @@ impl Manager {
     /// write that failed between the record and the ref.
     async fn delete_unowned_refs(&self, repo: &Repository, kept: &HashSet<String>) -> Result<()> {
         for (reference, commit) in git::checkpoint::saved_refs(&repo.path).await? {
-            if !kept.contains(&commit) {
+            if !kept.contains(commit.as_str()) {
                 git::checkpoint::delete_at(&repo.path, &reference, &commit).await?;
             }
         }
@@ -445,7 +444,7 @@ impl Manager {
     /// deleting the rest.
     async fn adopt_legacy_refs(&self, repo: &Repository, kept: &HashSet<String>) -> Result<()> {
         for (legacy, commit) in git::checkpoint::legacy_refs(&repo.path).await? {
-            if kept.contains(&commit) {
+            if kept.contains(commit.as_str()) {
                 let reference = git::checkpoint::reference(&commit);
                 git::checkpoint::save(&repo.path, &reference, &commit).await?;
             }

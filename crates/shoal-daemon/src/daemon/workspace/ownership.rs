@@ -13,6 +13,7 @@ use crate::refusal::{Reason, Refusal};
 use crate::{fsutil::off_runtime, git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;
+use shoal_refs::BranchName;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -123,7 +124,7 @@ impl Manager {
         };
         let actual = git::head_branch(&workspace.path, false, git::run_isolated).await?;
         ensure!(
-            actual.as_deref() == Some(expected_branch),
+            actual.as_ref().map(BranchName::as_str) == Some(expected_branch),
             "workspace {} is no longer on its recorded branch",
             workspace.name
         );
@@ -186,7 +187,7 @@ impl Manager {
                     .await
                     .context("worktree HEAD must be on the recorded branch")?;
                 ensure!(
-                    branch.as_deref() == Some(recorded.as_str()),
+                    branch.as_ref().map(BranchName::as_str) == Some(recorded.as_str()),
                     "worktree is not on its recorded branch {recorded}; check it out before reclaiming"
                 );
             }
@@ -195,7 +196,7 @@ impl Manager {
                 ensure!(
                     branch.is_none(),
                     "worktree is on branch {}, but its workspace is at a commit; detach it before reclaiming",
-                    branch.unwrap_or_default()
+                    branch.as_ref().map_or("", BranchName::as_str)
                 );
             }
         }
@@ -301,7 +302,7 @@ impl Manager {
         off_runtime::run(move || {
             Ok(trees
                 .into_iter()
-                .find(|tree| tree.is_branch(&branch) && tree.path.is_dir())
+                .find(|tree| tree.is_branch(&branch.as_str().into()) && tree.path.is_dir())
                 .map(|tree| tree.path))
         })
         .await

@@ -422,7 +422,11 @@ impl Manager {
             }
         };
         let reference = git::symbolic_revision(&repo.path, &revision, git::run_isolated).await?;
-        Ok(named_start(commit, base, reference.trim_end_matches('\n')))
+        Ok(named_start(
+            commit.into(),
+            base,
+            reference.trim_end_matches('\n'),
+        ))
     }
 }
 
@@ -478,7 +482,7 @@ async fn pull_head(repo: &Repository, head: &PullHead) -> Result<Start> {
     );
     Ok(Start {
         at: StartingCommit {
-            commit: fetched,
+            commit: fetched.into(),
             made_for: Some(MadeFor::Pr(head.number)),
         },
         directory: format!("pr-{}", head.number),

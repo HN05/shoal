@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail, ensure};
+use shoal_refs::BranchName;
 use tokio::{process::Command, sync::watch};
 
 use crate::{
@@ -43,7 +44,7 @@ const BUILD_TIMEOUT: Duration = Duration::from_secs(2 * 60 * 60);
 
 /// What one repository's seed builds, from its resolved `[setup.seed]` table.
 struct Plan {
-    branch: String,
+    branch: BranchName,
     build: Build,
     paths: Vec<String>,
     environment: BTreeMap<String, OsString>,
@@ -65,7 +66,7 @@ impl Plan {
             environment: crate::env::render_seed_environment(
                 &settings.env,
                 &layout.worktree(),
-                &branch,
+                branch.as_str(),
                 crate::repository::name(repo),
                 &crate::caches::locate(repo, &settings.caches),
             ),
@@ -135,7 +136,7 @@ impl Manager {
             return self.discard_seed(repo, &layout).await;
         };
         let tip = git::seed::branch_commit(&repo.path, &plan.branch).await?;
-        let build = (tip, plan.settings()?);
+        let build = (String::from(tip), plan.settings()?);
         let current = Snapshot::open(&layout)?
             .is_some_and(|snapshot| (snapshot.commit, snapshot.settings) == build);
         // Checked first: seeing any other build, a current one included,

@@ -419,7 +419,7 @@ impl Bundle {
         let bundle = Self {
             directory: tempfile::tempdir()?,
         };
-        let reference = git::checkpoint::reference(packaged.workspace.checkpoint.commit.as_str());
+        let reference = git::checkpoint::reference(&packaged.workspace.checkpoint.commit);
         let exclude = packaged.prerequisite.as_deref();
         git::bundle::create(repo, &bundle.path(), &reference, exclude).await?;
         Ok(bundle)
@@ -580,7 +580,7 @@ async fn shared_commit(repo: &Path) -> Result<Option<String>> {
     let Ok(branch) = git::default_branch::resolve(repo, DefaultBranchLookup::Cached).await else {
         return Ok(None);
     };
-    let reference = git::remote_ref(&remote, &branch);
+    let reference = git::remote_ref(&remote, branch.as_str());
     if !git::ref_exists(repo, &reference, git::isolated_command).await? {
         return Ok(None);
     }

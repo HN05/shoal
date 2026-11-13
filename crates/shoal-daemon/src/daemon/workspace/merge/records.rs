@@ -83,11 +83,11 @@ impl Manager {
         let repo = &plan.repo.path;
         let default = &plan.default_refresh.branch;
         let previous = &plan.default_refresh.commit;
-        let Some(tip) = git::status::local_branch_commit(repo, default.as_str()).await? else {
+        let Some(tip) = git::status::local_branch_commit(repo, default).await? else {
             return Ok(());
         };
-        let merged = merge_result(repo, &tip, previous.as_str(), plan.source.as_str()).await?;
-        let Some(result) = merged.map(CommitId::from) else {
+        let merged = merge_result(repo, tip.as_str(), previous, &plan.source).await?;
+        let Some(result) = merged else {
             return Ok(());
         };
         let merge = LocalMerge {
@@ -112,12 +112,12 @@ impl Manager {
         repo: &Repository,
         default: &BranchName,
     ) -> Result<Vec<RecordedMerge>> {
-        let tip = git::unmerge::tip_commit(&repo.path, &git::local_ref(default.as_str())).await?;
+        let tip = git::unmerge::tip_commit(&repo.path, &git::local_ref(default)).await?;
         let mut held = Vec::new();
         let mut gone = Vec::new();
         for recorded in self.recorded_merges(repo, default).await? {
             let result = recorded.merge.result.as_str();
-            match git::is_ancestor(&repo.path, result, &tip, git::isolated_command).await? {
+            match git::is_ancestor(&repo.path, result, tip.as_str(), git::isolated_command).await? {
                 true => held.push(recorded),
                 false => gone.push(recorded.id),
             }
@@ -131,8 +131,8 @@ impl Manager {
     /// A default branch the unmerge left as it was changes nothing.
     async fn record_unmerge(&self, plan: &UnmergePlan) -> Result<()> {
         let repo = &plan.repo.path;
-        let now = git::status::local_branch_commit(repo, plan.default_branch.as_str()).await?;
-        let Some(now) = now.map(CommitId::from) else {
+        let now = git::status::local_branch_commit(repo, &plan.default_branch).await?;
+        let Some(now) = now else {
             return Ok(());
         };
         if now == plan.tip {
@@ -160,7 +160,7 @@ impl Manager {
     /// The merges into `repo`'s `default` that its upstream holds, as the
     /// last fetch saw it.
     async fn pushed_merges(&self, repo: &Repository, default: &BranchName) -> Result<Vec<i64>> {
-        let Some(tracking) = tracking_ref(&repo.path, default.as_str()).await? else {
+        let Some(tracking) = tracking_ref(&repo.path, default).await? else {
             return Ok(Vec::new());
         };
         let mut pushed = Vec::new();
@@ -213,13 +213,12 @@ async fn replayed_commits(
         return Ok(None);
     }
     for (old, new) in replayed.iter().zip(&replays) {
-        if replay_identity(repo, old).await? != replay_identity(repo, new).await? {
+        if replay_identity(repo, old.as_str()).await? != replay_identity(repo, new.as_str()).await?
+        {
             return Ok(None);
         }
     }
-    let mut rewritten: HashMap<CommitId, CommitId> = (replayed.into_iter().map(CommitId::from))
-        .zip(replays.into_iter().map(CommitId::from))
-        .collect();
+    let mut rewritten: HashMap<CommitId, CommitId> = replayed.into_iter().zip(replays).collect();
     rewritten.insert(plan.result.clone(), plan.previous.clone());
     Ok(Some(rewritten))
 }

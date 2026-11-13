@@ -8,6 +8,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
+use shoal_refs::BranchName;
 
 use super::Manager;
 use crate::client::space_names::SpaceName;
@@ -289,7 +290,12 @@ impl Manager {
         let name = match &checkpoint.branch {
             Some(branch) => {
                 let branch = self.copy_branch(repo, branch.as_str()).await?;
-                git::branch::create(&repo.path, &branch, checkpoint.head.as_str()).await?;
+                git::branch::create(
+                    &repo.path,
+                    &branch.as_str().into(),
+                    checkpoint.head.as_str(),
+                )
+                .await?;
                 checkpoint.branch = Some(branch.as_str().into());
                 SpaceName::derive(&branch, "workspace")
             }
@@ -317,7 +323,7 @@ impl Manager {
         session_files: &[CarriedSessionFile],
     ) -> Result<RemovedWorkspace> {
         let _refs = self.gates.lock_checkpoints().await;
-        let commit = removed.checkpoint.commit.as_str();
+        let commit = &removed.checkpoint.commit;
         let reference = git::checkpoint::reference(commit);
         match bundle {
             Some(bundle) => git::bundle::fetch(&repo.path, bundle, &reference).await?,
@@ -411,9 +417,10 @@ impl Manager {
         }) {
             bail!("workspace {} already uses branch {branch}", workspace.name);
         }
-        let local = git::local_ref(&branch);
+        let name = BranchName::from(branch.as_str());
+        let local = git::local_ref(&name);
         if !git::ref_exists(&repo.path, &local, git::isolated_command).await? {
-            git::branch::create(&repo.path, &branch, head).await?;
+            git::branch::create(&repo.path, &name, head).await?;
             return Ok(branch);
         }
         let tip = git::verify_revision(

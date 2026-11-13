@@ -29,7 +29,7 @@ async fn snapshot_keeps_changes_and_untracked_files_without_touching_the_worktre
     let commit = snapshot(&repo, "checkpoint", true).await.unwrap().commit;
     assert_eq!(git(&repo, &["status", "--porcelain"]), status);
     assert_eq!(git(&repo, &["rev-parse", &format!("{commit}^")]), head);
-    let files = git(&repo, &["ls-tree", "-r", "--name-only", &commit]);
+    let files = git(&repo, &["ls-tree", "-r", "--name-only", commit.as_str()]);
     assert_eq!(
         files,
         ".gitignore\nforced\nscratch/notes\nstaged\ntracked\n"
@@ -46,13 +46,21 @@ async fn snapshot_keeps_changes_and_untracked_files_without_touching_the_worktre
     assert!(
         same_files(
             &repo,
-            &commit,
-            &snapshot(&repo, "again", true).await.unwrap().commit
+            commit.as_str(),
+            snapshot(&repo, "again", true)
+                .await
+                .unwrap()
+                .commit
+                .as_str()
         )
         .await
         .unwrap()
     );
-    assert!(!same_files(&repo, &commit, head.trim()).await.unwrap());
+    assert!(
+        !same_files(&repo, commit.as_str(), head.trim())
+            .await
+            .unwrap()
+    );
 
     let reference = reference(&commit);
     save(&repo, &reference, &commit).await.unwrap();
@@ -83,7 +91,9 @@ async fn rewind_replaces_head_and_unsaved_files_but_keeps_ignored_ones() {
     fs::write(repo.join("untracked"), "later\n").unwrap();
     fs::write(repo.join("ignored"), "build output\n").unwrap();
 
-    rewind(&repo, head.trim(), &checkpoint).await.unwrap();
+    rewind(&repo, head.trim(), checkpoint.as_str())
+        .await
+        .unwrap();
     assert_eq!(git(&repo, &["rev-parse", "HEAD"]), head);
     assert_eq!(git(&repo, &["status", "--porcelain"]), status);
     assert_eq!(
@@ -110,7 +120,7 @@ async fn rewind_keeps_files_ignored_only_after_the_checkpoint() {
     fs::create_dir(repo.join("build")).unwrap();
     fs::write(repo.join("build/out"), "output\n").unwrap();
     let collisions = async || {
-        ignored_collisions(&repo, head.trim(), &checkpoint)
+        ignored_collisions(&repo, head.trim(), checkpoint.as_str())
             .await
             .unwrap()
     };
@@ -124,7 +134,9 @@ async fn rewind_keeps_files_ignored_only_after_the_checkpoint() {
     assert_eq!(collisions().await, ["generated"]);
     fs::remove_dir_all(repo.join("generated")).unwrap();
 
-    rewind(&repo, head.trim(), &checkpoint).await.unwrap();
+    rewind(&repo, head.trim(), checkpoint.as_str())
+        .await
+        .unwrap();
     assert_eq!(
         fs::read_to_string(repo.join("build/out")).unwrap(),
         "output\n"

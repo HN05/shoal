@@ -133,7 +133,10 @@ impl Manager {
                     "remote branches of {} not listed: {error:#}",
                     repo.path.display()
                 );
-                let mut names = git::branch::names_in_use(&repo.path).await?;
+                let mut names: Vec<String> = (git::branch::names_in_use(&repo.path).await?)
+                    .into_iter()
+                    .map(String::from)
+                    .collect();
                 if git::remote_branch(&repo.path, branch).await?.is_some() {
                     names.push(branch.to_owned());
                 }

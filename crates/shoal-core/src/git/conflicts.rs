@@ -49,8 +49,8 @@ pub async fn changed_on_both_sides(
         return Ok(Vec::new());
     }
     let base = git::diff::merge_base_of(repo, head, target).await?;
-    let theirs = changed_paths(repo, &base, target, patterns).await?;
-    let ours = changed_paths(repo, &base, head, patterns).await?;
+    let theirs = changed_paths(repo, base.as_str(), target, patterns).await?;
+    let ours = changed_paths(repo, base.as_str(), head, patterns).await?;
     Ok(ours
         .into_iter()
         .filter(|path| theirs.contains(path))

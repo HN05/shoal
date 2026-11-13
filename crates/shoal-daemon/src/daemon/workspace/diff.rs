@@ -32,14 +32,13 @@ impl Manager {
                 .context("workspace base is unknown")?;
             git::diff::merge_base(&workspace.path, base).await?
         };
-        let commit = commit.trim().to_owned();
         ensure!(
-            !commit.is_empty() && !commit.contains('\n'),
+            !commit.as_str().is_empty() && !commit.as_str().contains('\n'),
             "Git returned an ambiguous fork point"
         );
         Ok(DiffBase {
             workspace_id: workspace.id,
-            commit: commit.into(),
+            commit,
             path: workspace.path,
         })
     }

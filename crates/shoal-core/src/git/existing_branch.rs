@@ -1,5 +1,6 @@
 //! Existing branches a workspace can open, and the checkout rule for them.
 use anyhow::{Context, Result};
+use shoal_refs::BranchName;
 
 use crate::git;
 pub use crate::model::Branch;
@@ -14,13 +15,13 @@ impl BranchExt for Branch {
     fn selector(&self) -> String {
         match &self.remote {
             Some(remote) => git::remote_ref(remote, &self.name),
-            None => git::local_ref(&self.name),
+            None => git::local_ref(&BranchName::from(self.name.as_str())),
         }
     }
 }
 
 /// A worktree for `name` can be created only where no checkout already has it.
-pub async fn ensure_not_checked_out(repo: &std::path::Path, name: &str) -> Result<()> {
+pub async fn ensure_not_checked_out(repo: &std::path::Path, name: &BranchName) -> Result<()> {
     if let Some(tree) = git::checkout_of(repo, name, git::run).await? {
         anyhow::bail!(
             "branch {name} is already checked out at {}; Shoal cannot create another worktree for it; use shoal adopt for an unmanaged linked worktree",
@@ -61,7 +62,7 @@ pub async fn list(repo: &Path) -> Result<Vec<Branch>> {
     Ok(branches)
 }
 
-pub async fn upstream_ref(repo: &Path, name: &str) -> Result<String> {
+pub async fn upstream_ref(repo: &Path, name: &BranchName) -> Result<String> {
     git::run_isolated(
         repo,
         &[
@@ -75,7 +76,7 @@ pub async fn upstream_ref(repo: &Path, name: &str) -> Result<String> {
 
 /// The remote-tracking ref of `default`'s upstream as its remote's fetch
 /// refspec maps it, when a fetch has stored it.
-pub async fn tracking_ref(path: &Path, default: &str) -> Result<Option<String>> {
+pub async fn tracking_ref(path: &Path, default: &BranchName) -> Result<Option<String>> {
     let tracking = upstream_ref(path, default).await?;
     let tracking = tracking.trim();
     if tracking.is_empty() {
@@ -89,6 +90,7 @@ pub async fn tracking_ref(path: &Path, default: &str) -> Result<Option<String>> 
     )
 }
 
-pub async fn track(repo: &Path, branch: &str, tracking: &str) -> Result<String> {
-    git::run_isolated(repo, &["branch", "--track", "--", branch, tracking]).await
+pub async fn track(repo: &Path, branch: &BranchName, tracking: &str) -> Result<String> {
+    let args = ["branch", "--track", "--", branch.as_str(), tracking];
+    git::run_isolated(repo, &args).await
 }

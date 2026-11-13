@@ -130,21 +130,19 @@ impl Manager {
             workspace.path.display()
         );
         self.verify_worktree(&workspace).await?;
-        let default = BranchName::from(
-            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?,
-        );
+        let default =
+            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
         let branch = BranchName::from(workspace.require_branch("merging")?);
         ensure!(
             branch != default,
             "workspace {} is on the default branch {default}; nothing to merge",
             workspace.name
         );
-        clean_branch(&workspace.path, branch.as_str())
+        clean_branch(&workspace.path, &branch)
             .await
             .with_context(|| format!("workspace {} is not ready to merge", workspace.name))?;
-        let source = CommitId::from(
-            git::resolve_commit(&workspace.path, &git::local_ref(branch.as_str()), git_run).await?,
-        );
+        let source =
+            git::resolve_commit(&workspace.path, &git::local_ref(&branch), git_run).await?;
         self.ensure_unmanaged_checkout(&repo, default.as_str(), "merge")
             .await?;
         let push = match push {
@@ -178,10 +176,7 @@ impl Manager {
         repo: &Repository,
         default: &BranchName,
     ) -> Result<PulledBranch> {
-        if upstream(repo, &git::local_ref(default.as_str()))
-            .await?
-            .is_none()
-        {
+        if upstream(repo, &git::local_ref(default)).await?.is_none() {
             return Ok(PulledBranch::unchanged(
                 repo,
                 default,
@@ -250,7 +245,7 @@ impl Manager {
 
     /// The managed workspace that has `branch` checked out, if any.
     async fn managed_checkout(&self, repo: &Repository, branch: &str) -> Result<Option<String>> {
-        let Some(checkout) = git::checkout_of(&repo.path, branch, git::run).await? else {
+        let Some(checkout) = git::checkout_of(&repo.path, &branch.into(), git::run).await? else {
             return Ok(None);
         };
         let Ok(path) = std::fs::canonicalize(&checkout.path) else {
@@ -303,7 +298,7 @@ async fn synced_to(
     if merge.push.is_none() {
         return Ok(false);
     }
-    let Some(tracking) = tracking_ref(path, merge.default.as_str()).await? else {
+    let Some(tracking) = tracking_ref(path, &merge.default).await? else {
         return Ok(false);
     };
     Ok(git::is_ancestor(
@@ -319,11 +314,11 @@ async fn synced_to(
 /// The checkout of `repo`'s `default` branch, if it has one, which must be
 /// clean and between Git operations before a merge or unmerge moves it.
 async fn clean_checkout(repo: &Repository, default: &BranchName) -> Result<Option<PathBuf>> {
-    let checkout = git::checkout_of(&repo.path, default.as_str(), git::run)
+    let checkout = git::checkout_of(&repo.path, default, git::run)
         .await?
         .map(|tree| tree.path);
     if let Some(checkout) = &checkout {
-        clean_branch(checkout, default.as_str()).await?;
+        clean_branch(checkout, default).await?;
         if let Some(marker) = unfinished_operation(checkout).await? {
             bail!("{default} has an unfinished Git operation ({marker})");
         }
@@ -335,7 +330,7 @@ async fn clean_checkout(repo: &Repository, default: &BranchName) -> Result<Optio
 /// merge pushes to, lacks as the last fetch saw it; all of them when nothing
 /// was fetched from it yet.
 async fn unpushed(path: &Path, default: &BranchName, default_commit: &CommitId) -> Result<u64> {
-    match tracking_ref(path, default.as_str()).await? {
+    match tracking_ref(path, default).await? {
         Some(tracking) => {
             git::status::commits_between(path, &tracking, default_commit.as_str()).await
         }
@@ -346,7 +341,7 @@ async fn unpushed(path: &Path, default: &BranchName, default_commit: &CommitId) 
 /// The commit of `repo`'s local `branch`.
 async fn local_commit(repo: &Repository, branch: &BranchName) -> Result<CommitId> {
     Ok(
-        git::verify_revision(&repo.path, &git::local_ref(branch.as_str()), git_run)
+        git::verify_revision(&repo.path, &git::local_ref(branch), git_run)
             .await
             .with_context(|| format!("repository has no local {branch} branch"))?
             .trim()
@@ -356,7 +351,7 @@ async fn local_commit(repo: &Repository, branch: &BranchName) -> Result<CommitId
 
 /// The upstream a merge pushes `default` to, refused when it has none.
 async fn push_target(repo: &Repository, default: &str) -> Result<MergePush> {
-    let (remote, reference) = upstream(repo, &git::local_ref(default))
+    let (remote, reference) = upstream(repo, &git::local_ref(&default.into()))
         .await?
         .with_context(|| format!("{default} has no upstream to push to"))?;
     Ok(MergePush { remote, reference })

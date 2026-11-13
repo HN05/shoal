@@ -10,6 +10,7 @@ use crate::{daemon::store, git, model::Workspace, state::WorkspaceState};
 use anyhow::{Result, bail, ensure};
 use intent::RenameIntent;
 use rusqlite::params;
+use shoal_refs::BranchName;
 
 impl Manager {
     pub async fn rename_workspace(
@@ -42,8 +43,14 @@ impl Manager {
         if branch == current {
             return Ok(workspace);
         }
+        let (old_name, new_name) = (BranchName::from(current.as_str()), BranchName::from(branch));
         ensure!(
-            !git::ref_exists(&repo.path, &git::local_ref(branch), git::isolated_command).await?,
+            !git::ref_exists(
+                &repo.path,
+                &git::local_ref(&new_name),
+                git::isolated_command
+            )
+            .await?,
             Refusal::new(
                 Reason::NameTaken,
                 format!("local branch already exists: {branch}")
@@ -51,7 +58,7 @@ impl Manager {
         );
         self.reserve_workspace_rename(&workspace, branch, caller_execution)
             .await?;
-        let result = git::branch::rename(&workspace.path, &current, branch).await;
+        let result = git::branch::rename(&workspace.path, &old_name, &new_name).await;
         // Git may have completed even if capturing its output failed. Inspect
         // the owned worktree instead of blindly rolling back a ref mutation.
         if let Err(error) = self.finish_workspace_rename(&workspace, false).await {
@@ -85,7 +92,7 @@ impl Manager {
         let recorded = workspace.require_branch("renaming a branch")?;
         let actual = git::head_branch(&workspace.path, true, git::run_isolated).await?;
         ensure!(
-            actual.as_deref() == Some(recorded),
+            actual.as_ref().map(BranchName::as_str) == Some(recorded),
             "worktree is not on its recorded branch"
         );
         let default = git::default_branch::resolve(
@@ -101,7 +108,7 @@ impl Manager {
             !git::worktrees(checkout, git::run_isolated)
                 .await?
                 .iter()
-                .any(|tree| tree.is_branch(recorded) && tree.path != workspace.path),
+                .any(|tree| tree.is_branch(&recorded.into()) && tree.path != workspace.path),
             "branch is also checked out in another worktree"
         );
         Ok(())
@@ -244,7 +251,7 @@ impl Manager {
                 workspace.path.display()
             );
             let candidate = Workspace {
-                branch: Some(actual.clone()),
+                branch: Some(actual.clone().into()),
                 ..workspace.clone()
             };
             self.reclaim_worktree(&candidate).await?;

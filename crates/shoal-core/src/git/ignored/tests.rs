@@ -17,7 +17,7 @@ impl Fixture {
         fs::write(checkout.join(".gitignore"), ignored).unwrap();
         crate::test_support::commit(&checkout, ".gitignore");
         let workspace = root.path().join("topic");
-        super::super::worktree::add(&checkout, &workspace, "topic", Some("main"))
+        super::super::worktree::add(&checkout, &workspace, &"topic".into(), Some("main"))
             .await
             .unwrap();
         Self {
@@ -159,7 +159,7 @@ async fn directories_holding_another_worktree_are_not_copied() {
     fixture.write(".env", "KEY=1\n");
     let nested = fixture.checkout.join("nested").join("other");
     fs::create_dir_all(nested.parent().unwrap()).unwrap();
-    super::super::worktree::add(&fixture.checkout, &nested, "other", Some("main"))
+    super::super::worktree::add(&fixture.checkout, &nested, &"other".into(), Some("main"))
         .await
         .unwrap();
     assert_eq!(fixture.copy(&[]).await.unwrap(), 1);

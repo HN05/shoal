@@ -8,6 +8,7 @@ use std::collections::HashSet;
 
 use anyhow::Result;
 use rusqlite::params;
+use shoal_refs::BranchName;
 
 use super::{Registration, runner_labels};
 use crate::client::space_names::SpaceName;
@@ -87,7 +88,8 @@ impl Manager {
             }
             let run = forge.job_run(&account, job.run).await?;
             let mut job = self.link_job(&forge, &repository.id, job, run).await?;
-            job.default_branch = on_branch(&job.run, default_branch.as_deref());
+            job.default_branch =
+                on_branch(&job.run, default_branch.as_ref().map(BranchName::as_str));
             let id = repository.id.clone();
             self.store.write(move |tx| queue_job(tx, &id, &job)).await?;
         }

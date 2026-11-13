@@ -2,17 +2,18 @@
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context, Result, ensure};
+use shoal_refs::CommitId;
 
 use crate::{git, tools::Tool};
 
 /// The merged PR's facts that tell what its merge left on the base branch.
 pub struct Merged<'a> {
     /// The commit the merge left at the tip of the base branch.
-    pub merge_commit: &'a str,
+    pub merge_commit: &'a CommitId,
     /// The commit the PR's head branch pointed to when it merged.
-    pub head: &'a str,
+    pub head: &'a CommitId,
     /// The PR's own commits.
-    pub commits: &'a [String],
+    pub commits: &'a [CommitId],
     /// Where `origin` keeps the PR's head, when the forge keeps it.
     pub head_ref: Option<&'a str>,
 }
@@ -21,10 +22,10 @@ pub struct Merged<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Merge {
     /// A merge commit, reverted against its first parent.
-    Commit(String),
+    Commit(CommitId),
     /// The commits the merge added, newest first: a squashed commit, or the
     /// PR's commits rebased or fast-forwarded onto the base.
-    Commits(Vec<String>),
+    Commits(Vec<CommitId>),
 }
 
 impl Merge {
@@ -45,7 +46,7 @@ impl Merge {
                 merges_head(repo, merged_in, merged.head).await?,
                 "{merge_commit} merges commits other than the PR's head, so Shoal cannot tell which changes are the PR's; revert it by hand"
             );
-            return Ok(Self::Commit(merge_commit.to_owned()));
+            return Ok(Self::Commit(merge_commit.clone()));
         }
         if let Some(rebased) = rebased(repo, merged).await? {
             return Ok(Self::Commits(rebased));
@@ -54,7 +55,7 @@ impl Merge {
             squashed(repo, merged, &parents).await?,
             "Shoal cannot tell which commits on the base branch merged the PR; revert it by hand"
         );
-        Ok(Self::Commits(vec![merge_commit.to_owned()]))
+        Ok(Self::Commits(vec![merge_commit.clone()]))
     }
 
     /// The `git revert` command that applies the merge's inverse to the
@@ -68,7 +69,7 @@ impl Merge {
         ];
         match self {
             Self::Commit(commit) => args.extend(["-m", "1", commit.as_str()]),
-            Self::Commits(commits) => args.extend(commits.iter().map(String::as_str)),
+            Self::Commits(commits) => args.extend(commits.iter().map(CommitId::as_str)),
         }
         args.into_iter().map(OsString::from).collect()
     }
@@ -152,17 +153,21 @@ async fn conflicted_paths(repo: &Path) -> Result<Vec<String>> {
 }
 
 /// The parents of `commit`, first parent first.
-async fn parents(repo: &Path, commit: &str) -> Result<Vec<String>> {
-    let line = git::run(repo, &["rev-list", "--parents", "-n", "1", commit])
+async fn parents(repo: &Path, commit: &CommitId) -> Result<Vec<CommitId>> {
+    let line = git::run(repo, &["rev-list", "--parents", "-n", "1", commit.as_str()])
         .await
         .with_context(|| format!("the merge commit {commit} is not in the repository"))?;
     // The commit itself comes first.
-    Ok(line.split_whitespace().skip(1).map(str::to_owned).collect())
+    Ok(line
+        .split_whitespace()
+        .skip(1)
+        .map(CommitId::from)
+        .collect())
 }
 
 /// Whether one of `merged_in`, a merge commit's later parents, has the PR
 /// head's tree: the head itself, or the commit a forge squashed it into.
-async fn merges_head(repo: &Path, merged_in: &[String], head: &str) -> Result<bool> {
+async fn merges_head(repo: &Path, merged_in: &[CommitId], head: &CommitId) -> Result<bool> {
     let head_tree = tree(repo, head).await?;
     for parent in merged_in {
         if tree(repo, parent).await? == head_tree {
@@ -174,7 +179,7 @@ async fn merges_head(repo: &Path, merged_in: &[String], head: &str) -> Result<bo
 
 /// The base's latest first-parent commits up to the merge commit, newest
 /// first, when they are copies of the PR's several commits.
-async fn rebased(repo: &Path, merged: &Merged<'_>) -> Result<Option<Vec<String>>> {
+async fn rebased(repo: &Path, merged: &Merged<'_>) -> Result<Option<Vec<CommitId>>> {
     if merged.commits.len() < 2 {
         return Ok(None);
     }
@@ -186,23 +191,24 @@ async fn rebased(repo: &Path, merged: &Merged<'_>) -> Result<Option<Vec<String>>
 /// Whether the single-parent merge commit holds exactly the PR's changes:
 /// its tree is the PR's head merged onto its parent, and it is not one of
 /// several PR commits a rebase copied, whose revert would leave the others.
-async fn squashed(repo: &Path, merged: &Merged<'_>, parents: &[String]) -> Result<bool> {
+async fn squashed(repo: &Path, merged: &Merged<'_>, parents: &[CommitId]) -> Result<bool> {
     let [parent] = parents else {
         return Ok(false);
     };
     let merge_commit = merged.merge_commit;
-    if merged_tree(repo, parent, merged.head).await? != Some(tree(repo, merge_commit).await?) {
+    let merged_onto_parent = merged_tree(repo, parent.as_str(), merged.head.as_str()).await?;
+    if merged_onto_parent != Some(tree(repo, merge_commit).await?) {
         return Ok(false);
     }
     if merged.commits.len() < 2 {
         return Ok(true);
     }
-    let own = patch_ids(repo, &[merge_commit.to_owned()]).await?;
+    let own = patch_ids(repo, std::slice::from_ref(merge_commit)).await?;
     let copied = patch_ids(repo, merged.commits).await?;
     Ok(!own.iter().any(|id| copied.contains(id)))
 }
 
-async fn tree(repo: &Path, commit: &str) -> Result<String> {
+async fn tree(repo: &Path, commit: &CommitId) -> Result<String> {
     let tree = git::run(repo, &["rev-parse", &format!("{commit}^{{tree}}")]).await?;
     Ok(tree.trim().to_owned())
 }
@@ -228,11 +234,11 @@ async fn merged_tree(repo: &Path, ours: &str, theirs: &str) -> Result<Option<Str
 /// Fetch the PR's head from `origin` when it or the PR's commits are
 /// missing, as once its branch is gone.
 async fn ensure_present(repo: &Path, merged: &Merged<'_>) -> Result<()> {
-    let needed: Vec<String> = merged
+    let needed: Vec<CommitId> = merged
         .commits
         .iter()
         .cloned()
-        .chain([merged.head.to_owned()])
+        .chain([merged.head.clone()])
         .collect();
     if has_all(repo, &needed).await? {
         return Ok(());
@@ -252,9 +258,9 @@ async fn ensure_present(repo: &Path, merged: &Merged<'_>) -> Result<()> {
     Ok(())
 }
 
-async fn has_all(repo: &Path, commits: &[String]) -> Result<bool> {
+async fn has_all(repo: &Path, commits: &[CommitId]) -> Result<bool> {
     for commit in commits {
-        if !git::has_commit(repo, commit).await? {
+        if !git::has_commit(repo, commit.as_str()).await? {
             return Ok(false);
         }
     }
@@ -262,15 +268,23 @@ async fn has_all(repo: &Path, commits: &[String]) -> Result<bool> {
 }
 
 /// The latest `count` first-parent commits up to `commit`, newest first.
-async fn first_parent_commits(repo: &Path, commit: &str, count: usize) -> Result<Vec<String>> {
+async fn first_parent_commits(
+    repo: &Path,
+    commit: &CommitId,
+    count: usize,
+) -> Result<Vec<CommitId>> {
     let count = format!("--max-count={count}");
-    let log = git::run(repo, &["rev-list", "--first-parent", &count, commit]).await?;
-    Ok(log.lines().map(str::to_owned).collect())
+    let log = git::run(
+        repo,
+        &["rev-list", "--first-parent", &count, commit.as_str()],
+    )
+    .await?;
+    Ok(log.lines().map(CommitId::from).collect())
 }
 
 /// The stable patch IDs of `commits`' changes, sorted, so copies of the same
 /// changes compare equal whatever their order and commit IDs.
-async fn patch_ids(repo: &Path, commits: &[String]) -> Result<Vec<String>> {
+async fn patch_ids(repo: &Path, commits: &[CommitId]) -> Result<Vec<String>> {
     let mut show = git::isolated_command(repo);
     show.args([
         "show",
@@ -279,7 +293,7 @@ async fn patch_ids(repo: &Path, commits: &[String]) -> Result<Vec<String>> {
         "--patch",
         "--format=commit %H",
     ])
-    .args(commits);
+    .args(commits.iter().map(CommitId::as_str));
     let patches = git::bounded(show).output().await?;
     let mut patch_id = git::isolated_command(repo);
     patch_id.args(["patch-id", "--stable"]);

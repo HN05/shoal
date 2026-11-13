@@ -38,6 +38,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
+use shoal_refs::{BranchName, CommitId};
 use tokio::process::Command;
 
 use crate::subprocess;
@@ -68,7 +69,7 @@ pub(crate) const FETCH_SAFE_ARGS: &[&str] = &[
 ];
 
 /// Spell a literal local branch as a full ref, without validating its name.
-pub fn local_ref(name: &str) -> String {
+pub fn local_ref(name: &BranchName) -> String {
     format!("{LOCAL_REFS}{name}")
 }
 
@@ -90,7 +91,7 @@ pub fn strip_remote(reference: &str) -> Option<&str> {
 /// including a branch never fetched. Revision expressions, `HEAD`, and local
 /// branches or tags that Git would resolve first are not remote branches.
 /// The longest remote wins, since remote names may contain slashes.
-pub async fn remote_branch(repo: &Path, base: &str) -> Result<Option<(String, String)>> {
+pub async fn remote_branch(repo: &Path, base: &str) -> Result<Option<(String, BranchName)>> {
     let short = base.strip_prefix("remotes/");
     let qualified = strip_remote(base).or(short);
     if qualified.is_none() {
@@ -110,7 +111,7 @@ pub async fn remote_branch(repo: &Path, base: &str) -> Result<Option<(String, St
     remotes.sort_by_key(|remote| std::cmp::Reverse(remote.len()));
     Ok(remotes.into_iter().find_map(|remote| {
         let branch = qualified.strip_prefix(&format!("{remote}/"))?;
-        (!branch.is_empty() && branch != "HEAD").then(|| (remote.to_owned(), branch.to_owned()))
+        (!branch.is_empty() && branch != "HEAD").then(|| (remote.to_owned(), branch.into()))
     }))
 }
 
@@ -119,7 +120,7 @@ pub async fn remote_branch(repo: &Path, base: &str) -> Result<Option<(String, St
 pub struct RemoteHead {
     /// The full ref on the remote, such as `refs/heads/main`.
     pub(crate) name: String,
-    pub(crate) commit: String,
+    pub(crate) commit: CommitId,
 }
 
 /// The branches `remote` itself advertises now, whatever the local
@@ -132,7 +133,7 @@ pub async fn remote_heads(repo: &Path, remote: &str) -> Result<Vec<RemoteHead>> 
             let (commit, name) = line.split_once('\t')?;
             Some(RemoteHead {
                 name: name.to_owned(),
-                commit: commit.to_owned(),
+                commit: commit.into(),
             })
         })
         .collect())
@@ -151,12 +152,12 @@ pub async fn remote_tags(repo: &Path, remote: &str) -> Result<Vec<RemoteHead>> {
         match name.strip_suffix("^{}") {
             Some(tag) => {
                 if let Some(listed) = tags.iter_mut().find(|listed| listed.name == tag) {
-                    listed.commit = commit.to_owned();
+                    listed.commit = commit.into();
                 }
             }
             None => tags.push(RemoteHead {
                 name: name.to_owned(),
-                commit: commit.to_owned(),
+                commit: commit.into(),
             }),
         }
     }
@@ -180,7 +181,7 @@ pub async fn present_heads(repo: &Path, heads: &[RemoteHead]) -> Result<Vec<Remo
 }
 
 /// Whether `remote` itself advertises `branch`, which need not be fetched yet.
-pub async fn remote_has_branch(repo: &Path, remote: &str, branch: &str) -> Result<bool> {
+pub async fn remote_has_branch(repo: &Path, remote: &str, branch: &BranchName) -> Result<bool> {
     let heads = run_isolated(
         repo,
         &["ls-remote", "--heads", "--", remote, &local_ref(branch)],
@@ -191,7 +192,11 @@ pub async fn remote_has_branch(repo: &Path, remote: &str, branch: &str) -> Resul
 
 /// The commit `remote`'s push destination has for `branch`: what a push from
 /// this repository updated, even where it differs from the fetch URL.
-pub async fn pushed_commit(repo: &Path, remote: &str, branch: &str) -> Result<Option<String>> {
+pub async fn pushed_commit(
+    repo: &Path,
+    remote: &str,
+    branch: &BranchName,
+) -> Result<Option<CommitId>> {
     let url = run_isolated(repo, &["remote", "get-url", "--push", remote]).await?;
     let heads = run_isolated(
         repo,
@@ -200,7 +205,7 @@ pub async fn pushed_commit(repo: &Path, remote: &str, branch: &str) -> Result<Op
     .await?;
     Ok(heads
         .split_once('\t')
-        .map(|(commit, _)| commit.trim().to_owned()))
+        .map(|(commit, _)| commit.trim().into()))
 }
 
 /// `git -C <repo>` with the caller's normal configuration and hooks. Queries
@@ -237,7 +242,7 @@ pub(crate) async fn run_without_submodules(repo: &Path, args: &[&str]) -> Result
 }
 
 /// Merge a resolved source, allowing a fast-forward or a named merge commit.
-pub(crate) fn merge_commit(repo: &Path, branch: &str, commit: &str) -> Command {
+pub(crate) fn merge_commit(repo: &Path, branch: &BranchName, rev: &str) -> Command {
     let mut command = isolated_command_without_submodules(repo);
     command.args([
         "merge",
@@ -250,17 +255,17 @@ pub(crate) fn merge_commit(repo: &Path, branch: &str, commit: &str) -> Command {
         "-m",
         &format!("Merge branch '{branch}'"),
         "--",
-        commit,
+        rev,
     ]);
     command
 }
 
 /// Native fetch refuses a checked-out destination and a non-fast-forward,
 /// including a branch that became checked out since discovery.
-pub async fn fast_forward_local(repo: &Path, commit: &str, reference: &str) -> Result<String> {
+pub async fn fast_forward_local(repo: &Path, rev: &str, reference: &str) -> Result<String> {
     run_isolated(
         repo,
-        &[FETCH_SAFE_ARGS, &[".", &format!("{commit}:{reference}")]].concat(),
+        &[FETCH_SAFE_ARGS, &[".", &format!("{rev}:{reference}")]].concat(),
     )
     .await
 }
@@ -279,15 +284,15 @@ pub async fn run_isolated(repo: &Path, args: &[&str]) -> Result<String> {
 
 /// Build the tracked command used by `shoal diff`, preserving the caller's
 /// Git configuration, pager, and external diff settings.
-pub fn diff_command(commit: &str) -> Vec<OsString> {
-    [Tool::Git.program(), "diff", commit, "--"]
+pub fn diff_command(rev: &str) -> Vec<OsString> {
+    [Tool::Git.program(), "diff", rev, "--"]
         .into_iter()
         .map(OsString::from)
         .collect()
 }
 
 /// Build the tracked command used when opening a pull request for a workspace.
-pub fn push_command(remote: &str, branch: &str) -> Vec<OsString> {
+pub fn push_command(remote: &str, branch: &BranchName) -> Vec<OsString> {
     let branch = local_ref(branch);
     [
         Tool::Git.program(),
@@ -344,9 +349,9 @@ pub fn push_urls_args(remote: &str) -> Vec<String> {
         .to_vec()
 }
 
-/// The arguments that resolve `revision` to its object name.
-pub fn resolve_args(revision: &str) -> Vec<String> {
-    ["rev-parse", "--verify", "--end-of-options", revision]
+/// The arguments that resolve `rev` to its object name.
+pub fn resolve_args(rev: &str) -> Vec<String> {
+    ["rev-parse", "--verify", "--end-of-options", rev]
         .map(String::from)
         .to_vec()
 }
@@ -371,7 +376,7 @@ pub fn porcelain_push_args(url: &str, refspecs: &[String], leases: &[(&str, &str
 /// Make `remote`'s `branch` the upstream of the local `branch` once a push
 /// created it there, as `git push --set-upstream` does, unless the branch
 /// has one or the push went to a URL rather than a configured remote.
-pub async fn track_pushed_branch(repo: &Path, branch: &str, remote: &str) -> Result<()> {
+pub async fn track_pushed_branch(repo: &Path, branch: &BranchName, remote: &str) -> Result<()> {
     let remotes = remotes(repo, run_isolated).await?;
     if !remotes.lines().any(|name| name.trim() == remote) {
         return Ok(());
@@ -422,30 +427,30 @@ pub async fn head_branch(
     repo: &Path,
     quiet: bool,
     run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
-) -> Result<Option<String>> {
+) -> Result<Option<BranchName>> {
     let args: &[&str] = if quiet {
         &["symbolic-ref", "--quiet", "HEAD"]
     } else {
         &["symbolic-ref", "HEAD"]
     };
     let head = run(repo, args).await?;
-    Ok(strip_local(head.trim_end_matches('\n')).map(str::to_owned))
+    Ok(strip_local(head.trim_end_matches('\n')).map(BranchName::from))
 }
 
 /// Resolve and peel a revision to a commit, using the caller's Git runner.
 /// Plain ref/object queries must not use this: `^{commit}` changes their meaning.
 pub async fn resolve_commit(
     repo: &Path,
-    reference: &str,
+    rev: &str,
     run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
-) -> Result<String> {
+) -> Result<CommitId> {
     Ok(run(
         repo,
-        &["rev-parse", "--verify", &format!("{reference}^{{commit}}")],
+        &["rev-parse", "--verify", &format!("{rev}^{{commit}}")],
     )
     .await?
     .trim()
-    .to_owned())
+    .into())
 }
 
 /// Ask Git whether `name` is acceptable branch syntax, independently of the
@@ -480,7 +485,7 @@ pub struct Worktree {
 }
 
 impl Worktree {
-    pub fn is_branch(&self, name: &str) -> bool {
+    pub fn is_branch(&self, name: &BranchName) -> bool {
         self.branch.as_deref() == Some(&local_ref(name))
     }
 }
@@ -516,7 +521,7 @@ pub async fn repair_worktrees(checkout: &Path, moved: &[PathBuf]) -> Result<()> 
 /// locked or prunable entries. The caller decides whether it is usable.
 pub async fn checkout_of(
     repo: &Path,
-    branch: &str,
+    branch: &BranchName,
     run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
 ) -> Result<Option<Worktree>> {
     Ok(worktrees(repo, run)

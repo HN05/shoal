@@ -157,7 +157,7 @@ impl Manager {
             Some(target) => (target.clone(), target),
             None => {
                 let branch = self.conflict_target(workspace).await?;
-                let reference = git::local_ref(&branch);
+                let reference = git::local_ref(&branch.as_str().into());
                 (branch, reference)
             }
         };
@@ -165,15 +165,16 @@ impl Manager {
         let target_commit = git::resolve_commit(&workspace.path, &reference, git::run_isolated)
             .await
             .with_context(|| format!("cannot resolve {target}"))?;
-        let files = merge_conflicts(&workspace.path, &head, &target_commit).await?;
+        let (head_rev, target_rev) = (head.as_str(), target_commit.as_str());
+        let files = merge_conflicts(&workspace.path, head_rev, target_rev).await?;
         let changed_on_both_sides = self
-            .sensitive_changes(workspace, &head, &target_commit)
+            .sensitive_changes(workspace, head_rev, target_rev)
             .await?;
         Ok(ConflictCheck {
             workspace_id: workspace.id.clone(),
             target,
-            target_commit: target_commit.into(),
-            head: head.into(),
+            target_commit,
+            head,
             conflicts: !files.is_empty(),
             files,
             changed_on_both_sides,
@@ -189,7 +190,9 @@ impl Manager {
             return Ok(branch);
         }
         let repo = self.repository(&workspace.repository_id).await?;
-        git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await
+        git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
+            .await
+            .map(String::from)
     }
 }
 

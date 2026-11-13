@@ -1,6 +1,7 @@
 //! `shoal pr open`'s operation: the push of the workspace's branch, then
 //! the PR the daemon finds or opens.
 use anyhow::Result;
+use shoal_refs::BranchName;
 
 use super::{Failed, Reporter};
 use crate::{
@@ -37,7 +38,7 @@ pub(super) async fn push_and_open(
 /// Push to the branch's push remote as a tracked command under the agent
 /// account, with the user's Git configuration and hooks.
 async fn push(paths: &CommandPaths, workspace: &Workspace) -> Result<()> {
-    let branch = workspace.require_branch("shoal pr open")?;
+    let branch = &BranchName::from(workspace.require_branch("shoal pr open")?);
     let remote = git::push_remote(&workspace.path, branch).await?;
     let code = crate::execution::publish(
         paths,

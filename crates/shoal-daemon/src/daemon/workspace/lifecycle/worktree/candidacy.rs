@@ -13,6 +13,7 @@ use crate::{
     state::WorkspaceState,
 };
 use anyhow::Result;
+use shoal_refs::BranchName;
 use std::{collections::HashMap, path::Path};
 
 /// Why cleanup leaves `workspace` alone whatever else it finds: its worktree
@@ -88,7 +89,7 @@ impl Manager {
             executions.running,
             executions.idle,
             policy,
-            default_branch.as_deref(),
+            default_branch.as_ref().map(BranchName::as_str),
         )
         .await
     }

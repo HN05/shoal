@@ -2,6 +2,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
+use shoal_refs::BranchName;
 
 use crate::git;
 
@@ -31,7 +32,7 @@ pub async fn remote(repo: &Path) -> Result<Option<String>> {
 
 /// Read cached remote HEAD. Branch refresh may discover and cache a missing one;
 /// cleanup only reads local metadata and never contacts a remote.
-pub async fn resolve(repo: &Path, lookup: DefaultBranchLookup) -> Result<String> {
+pub async fn resolve(repo: &Path, lookup: DefaultBranchLookup) -> Result<BranchName> {
     let Some(remote) = remote(repo).await? else {
         let head = git::head_branch(repo, true, git::run)
             .await
@@ -44,7 +45,7 @@ pub async fn resolve(repo: &Path, lookup: DefaultBranchLookup) -> Result<String>
     if let Ok(target) = git::run(repo, &["symbolic-ref", "--quiet", &head]).await
         && let Some(branch) = target.trim_end_matches('\n').strip_prefix(&prefix)
     {
-        return Ok(branch.to_owned());
+        return Ok(branch.into());
     }
     ensure!(
         matches!(lookup, DefaultBranchLookup::Discover),
@@ -68,5 +69,5 @@ pub async fn resolve(repo: &Path, lookup: DefaultBranchLookup) -> Result<String>
         &["symbolic-ref", &head, &git::remote_ref(remote, branch)],
     )
     .await?;
-    Ok(branch.to_owned())
+    Ok(branch.into())
 }

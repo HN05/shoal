@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
+use shoal_refs::BranchName;
 
 use super::{Manager, NewWorkspace, creation::Configured, restore::RestoredFiles};
 use crate::client::space_names::SpaceName;
@@ -148,7 +149,7 @@ impl Manager {
         );
         let head = git::resolve_commit(path, "HEAD", git::run_isolated).await?;
         let files = SourceFiles::Worktree(workspace.path.clone());
-        Ok(live_source(workspace, head, files))
+        Ok(live_source(workspace, head.into(), files))
     }
 
     /// Checkpoint `number` of the existing `workspace`.
@@ -337,11 +338,12 @@ impl Manager {
         git_profile: Option<&str>,
     ) -> Result<Configured> {
         let path = &workspace.path;
-        git::copy::add_worktree(&repo.path, path, workspace.branch.as_deref(), head).await?;
+        let branch = workspace.branch.as_deref().map(BranchName::from);
+        git::copy::add_worktree(&repo.path, path, branch.as_ref(), head).await?;
         // Recorded before the files are cloned, so a restart can verify and
         // remove the worktree.
         self.record_worktree_identity(workspace).await?;
-        git::copy::fill(source, path, head).await?;
+        git::copy::fill(source, path, &head.into()).await?;
         let config = self.config();
         if let Some(name) = git_profile {
             crate::git_profile::apply(path, config.machine.git_profiles.profile(name)?).await?;
@@ -365,7 +367,8 @@ impl Manager {
         match &workspace.branch {
             Some(branch) => {
                 let head = Some(files.head.as_str());
-                git::worktree::add(&repo.path, &workspace.path, branch, head).await?
+                git::worktree::add(&repo.path, &workspace.path, &branch.as_str().into(), head)
+                    .await?
             }
             None => git::detached::add_workspace(&repo.path, &workspace.path, &files.head).await?,
         }

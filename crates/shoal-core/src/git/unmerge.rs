@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail, ensure};
+use shoal_refs::{BranchName, CommitId};
 
 use crate::{
     fsutil::{self, off_runtime},
@@ -13,13 +14,17 @@ use crate::{
 /// The commits of `tip`'s first-parent history down to `base`, newest
 /// first and without `base`; `None` when that history does not pass
 /// through `base`.
-pub async fn first_parent_chain(repo: &Path, tip: &str, base: &str) -> Result<Option<Vec<String>>> {
+pub async fn first_parent_chain(
+    repo: &Path,
+    tip: &str,
+    base: &str,
+) -> Result<Option<Vec<CommitId>>> {
     let listed = git_run(
         repo,
         &["rev-list", "--first-parent", tip, &format!("^{base}"), "--"],
     )
     .await?;
-    let chain: Vec<String> = listed.lines().map(str::to_owned).collect();
+    let chain: Vec<CommitId> = listed.lines().map(CommitId::from).collect();
     let Some(oldest) = chain.last() else {
         return Ok(
             (tip_commit(repo, tip).await? == tip_commit(repo, base).await?).then_some(chain),
@@ -31,21 +36,17 @@ pub async fn first_parent_chain(repo: &Path, tip: &str, base: &str) -> Result<Op
     )
     .await
     .unwrap_or_default();
-    Ok((parent.trim() == tip_commit(repo, base).await?).then_some(chain))
+    Ok((tip_commit(repo, base).await? == parent.trim()).then_some(chain))
 }
 
-/// The parents of `commit` other than its first, which a merge commit
-/// brought in.
-pub async fn merged_parents(repo: &Path, commit: &str) -> Result<Vec<String>> {
-    let listed = git_run(
-        repo,
-        &["rev-list", "--parents", "--max-count=1", commit, "--"],
-    )
-    .await?;
+/// The parents of `rev`'s commit other than its first, which a merge
+/// commit brought in.
+pub async fn merged_parents(repo: &Path, rev: &str) -> Result<Vec<CommitId>> {
+    let listed = git_run(repo, &["rev-list", "--parents", "--max-count=1", rev, "--"]).await?;
     Ok(listed
         .split_whitespace()
         .skip(2)
-        .map(str::to_owned)
+        .map(CommitId::from)
         .collect())
 }
 
@@ -76,25 +77,33 @@ pub async fn merge_has_own_changes(repo: &Path, commit: &str) -> Result<bool> {
 pub async fn merge_result(
     repo: &Path,
     tip: &str,
-    previous: &str,
-    source: &str,
-) -> Result<Option<String>> {
+    previous: &CommitId,
+    source: &CommitId,
+) -> Result<Option<CommitId>> {
     // A fast-forward needs `source` on the tip's first-parent history and
     // `previous` among its ancestors, though not on its first parents: a
     // branch that merged the default branch in holds it as a second parent.
     let fast_forward = source != previous
-        && git::is_ancestor(repo, previous, source, git::isolated_command).await?
-        && first_parent_chain(repo, tip, source).await?.is_some();
+        && git::is_ancestor(
+            repo,
+            previous.as_str(),
+            source.as_str(),
+            git::isolated_command,
+        )
+        .await?
+        && first_parent_chain(repo, tip, source.as_str())
+            .await?
+            .is_some();
     if fast_forward {
-        return Ok(Some(source.to_owned()));
+        return Ok(Some(source.clone()));
     }
-    let Some(chain) = first_parent_chain(repo, tip, previous).await? else {
+    let Some(chain) = first_parent_chain(repo, tip, previous.as_str()).await? else {
         return Ok(None);
     };
     let Some(first) = chain.last() else {
         return Ok(None);
     };
-    let merged = merged_parents(repo, first).await?;
+    let merged = merged_parents(repo, first.as_str()).await?;
     Ok(merged
         .iter()
         .any(|parent| parent == source)
@@ -103,7 +112,7 @@ pub async fn merge_result(
 
 /// Whether the upstream of `default`, as the last fetch saw it, holds
 /// `commit`, so others may have it.
-pub async fn pushed(repo: &Path, default: &str, commit: &str) -> Result<bool> {
+pub async fn pushed(repo: &Path, default: &BranchName, commit: &str) -> Result<bool> {
     let Some(tracking) = git::existing_branch::tracking_ref(repo, default).await? else {
         return Ok(false);
     };
@@ -147,12 +156,12 @@ pub async fn finish_unmerge(plan: UnmergePlan) -> Result<Unmerged> {
     ensure_unchanged(&plan).await?;
     let replayed = match plan.tip == plan.result {
         true => {
-            move_default(&plan, plan.previous.as_str()).await?;
+            move_default(&plan, &plan.previous).await?;
             0
         }
         false => replay(&plan).await?,
     };
-    let commit = tip_commit(&plan.repo.path, &git::local_ref(default.as_str())).await?;
+    let commit = tip_commit(&plan.repo.path, &git::local_ref(default)).await?;
     let branch_recreated = recreate_branch(&plan).await?;
     Ok(Unmerged {
         workspace_id: plan.workspace.id,
@@ -161,7 +170,7 @@ pub async fn finish_unmerge(plan: UnmergePlan) -> Result<Unmerged> {
         default_branch: plan.default_branch,
         source: plan.source,
         previous_commit: plan.tip,
-        commit: commit.into(),
+        commit,
         replayed,
         branch_recreated,
     })
@@ -174,11 +183,11 @@ pub async fn finish_unmerge(plan: UnmergePlan) -> Result<Unmerged> {
 async fn ensure_unchanged(plan: &UnmergePlan) -> Result<()> {
     let (repo, default) = (&plan.repo.path, &plan.default_branch);
     ensure!(
-        !pushed(repo, default.as_str(), plan.result.as_str()).await?,
+        !pushed(repo, default, plan.result.as_str()).await?,
         "{default}'s upstream got the merge of {} during the unmerge, so nothing changed; retry to see how to revert it",
         plan.branch
     );
-    let current = tip_commit(repo, &git::local_ref(default.as_str())).await?;
+    let current = tip_commit(repo, &git::local_ref(default)).await?;
     ensure!(
         current == plan.tip,
         "{default} changed during the unmerge, so nothing changed; retry"
@@ -189,11 +198,15 @@ async fn ensure_unchanged(plan: &UnmergePlan) -> Result<()> {
 /// Whether `checkout` is on `branch` at `commit`, read last before moving
 /// it: a commit made or a branch switched there meanwhile would otherwise
 /// be dropped or rewound.
-pub(crate) async fn checkout_at(checkout: &Path, branch: &str, commit: &str) -> Result<bool> {
+pub(crate) async fn checkout_at(
+    checkout: &Path,
+    branch: &BranchName,
+    commit: &CommitId,
+) -> Result<bool> {
     let head = git::head_branch(checkout, true, git_run)
         .await
         .unwrap_or_default();
-    Ok(head.as_deref() == Some(branch) && tip_commit(checkout, "HEAD").await? == commit)
+    Ok(head.as_ref() == Some(branch) && tip_commit(checkout, "HEAD").await? == *commit)
 }
 
 /// What a replay keeps of `commit`, which a rebase carries over to the
@@ -213,7 +226,10 @@ pub async fn replay_identity(repo: &Path, commit: &str) -> Result<String> {
         ],
     )
     .await?;
-    let merged = merged_parents(repo, commit).await?.join(" ");
+    let merged = (merged_parents(repo, commit).await?.iter())
+        .map(CommitId::as_str)
+        .collect::<Vec<_>>()
+        .join(" ");
     let mut show = git::isolated_command(repo);
     show.args([
         "show",
@@ -245,24 +261,24 @@ pub async fn merges_between(repo: &Path, base: &str, tip: &str) -> Result<bool> 
 /// Move the default branch from the tip the unmerge planned for to `target`:
 /// in its checkout when it has one, which first refuses ignored files there
 /// that `target`'s files would overwrite, since Git overwrites them unasked.
-async fn move_default(plan: &UnmergePlan, target: &str) -> Result<()> {
+async fn move_default(plan: &UnmergePlan, target: &CommitId) -> Result<()> {
     let default = &plan.default_branch;
     let Some(checkout) = &plan.checkout else {
         ensure_unchanged(plan).await?;
         // Moving the ref under a checkout would leave its files behind.
         ensure!(
-            git::checkout_of(&plan.repo.path, default.as_str(), git_run)
+            git::checkout_of(&plan.repo.path, default, git_run)
                 .await?
                 .is_none(),
             "{default} was checked out during the unmerge, so nothing changed; retry"
         );
-        let reference = git::local_ref(default.as_str());
+        let reference = git::local_ref(default);
         let args = [
             "update-ref",
             "-m",
             "shoal unmerge",
             &reference,
-            target,
+            target.as_str(),
             plan.tip.as_str(),
         ];
         git_run(&plan.repo.path, &args)
@@ -270,8 +286,9 @@ async fn move_default(plan: &UnmergePlan, target: &str) -> Result<()> {
             .with_context(|| format!("move {default} to {target}"))?;
         return Ok(());
     };
-    clean_branch(checkout, default.as_str()).await?;
-    let collisions = git::checkpoint::ignored_collisions(checkout, target, target).await?;
+    clean_branch(checkout, default).await?;
+    let collisions =
+        git::checkpoint::ignored_collisions(checkout, target.as_str(), target.as_str()).await?;
     ensure!(
         collisions.is_empty(),
         "undoing the merge would overwrite ignored files in {default}'s checkout: {}; move them away first, nothing changed",
@@ -279,10 +296,10 @@ async fn move_default(plan: &UnmergePlan, target: &str) -> Result<()> {
     );
     ensure_unchanged(plan).await?;
     ensure!(
-        checkout_at(checkout, default.as_str(), plan.tip.as_str()).await?,
+        checkout_at(checkout, default, &plan.tip).await?,
         "{default}'s checkout changed during the unmerge, so nothing changed; retry"
     );
-    git_run(checkout, &["reset", "--keep", target])
+    git_run(checkout, &["reset", "--keep", target.as_str()])
         .await
         .with_context(|| format!("move {default} to {target}"))?;
     Ok(())
@@ -296,7 +313,7 @@ async fn move_default(plan: &UnmergePlan, target: &str) -> Result<()> {
 /// were.
 async fn replay(plan: &UnmergePlan) -> Result<u64> {
     let repo = &plan.repo.path;
-    let worktree = add_replay_worktree(repo, plan.tip.as_str()).await?;
+    let worktree = add_replay_worktree(repo, &plan.tip).await?;
     let replayed = replay_in(plan, &worktree).await;
     remove_replay_worktree(repo).await?;
     let (commit, replayed) = replayed?;
@@ -306,7 +323,7 @@ async fn replay(plan: &UnmergePlan) -> Result<u64> {
 
 /// Replay the history after the merge in `worktree`, detached at the tip:
 /// the commit it makes and how many first-parent commits it replayed.
-async fn replay_in(plan: &UnmergePlan, worktree: &Path) -> Result<(String, u64)> {
+async fn replay_in(plan: &UnmergePlan, worktree: &Path) -> Result<(CommitId, u64)> {
     let default = &plan.default_branch;
     let output = git::bounded(rebase_command(
         worktree,
@@ -327,7 +344,7 @@ async fn replay_in(plan: &UnmergePlan, worktree: &Path) -> Result<(String, u64)>
     let commit = tip_commit(worktree, "HEAD").await?;
     if holds_commits_of(
         worktree,
-        &commit,
+        commit.as_str(),
         plan.source.as_str(),
         plan.previous.as_str(),
     )
@@ -338,7 +355,7 @@ async fn replay_in(plan: &UnmergePlan, worktree: &Path) -> Result<(String, u64)>
             plan.branch
         );
     }
-    let replayed = first_parent_chain(worktree, &commit, plan.previous.as_str())
+    let replayed = first_parent_chain(worktree, commit.as_str(), plan.previous.as_str())
         .await?
         .map_or(0, |chain| chain.len());
     Ok((commit, replayed as u64))
@@ -357,7 +374,7 @@ async fn replay_directory(repo: &Path) -> Result<PathBuf> {
 
 /// Create a worktree detached at `tip` to replay in, in a directory marked
 /// as Shoal's, after removing one an earlier replay left; its path.
-async fn add_replay_worktree(repo: &Path, tip: &str) -> Result<PathBuf> {
+async fn add_replay_worktree(repo: &Path, tip: &CommitId) -> Result<PathBuf> {
     remove_replay_worktree(repo).await?;
     let directory = replay_directory(repo).await?;
     let marked = directory.clone();
@@ -374,7 +391,14 @@ async fn add_replay_worktree(repo: &Path, tip: &str) -> Result<PathBuf> {
     let path = worktree.to_string_lossy();
     git_run(
         repo,
-        &["worktree", "add", "--quiet", "--detach", &path, tip],
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "--detach",
+            &path,
+            tip.as_str(),
+        ],
     )
     .await
     .context("create the worktree the replay runs in")?;
@@ -442,11 +466,11 @@ fn rebase_command(worktree: &Path, onto: &str, upstream: &str) -> tokio::process
 /// Recreate the merged branch at its merged commit when cleanup deleted it,
 /// so its commits stay on a branch; whether it did.
 async fn recreate_branch(plan: &UnmergePlan) -> Result<bool> {
-    let reference = git::local_ref(plan.branch.as_str());
+    let reference = git::local_ref(&plan.branch);
     if git::ref_exists(&plan.repo.path, &reference, git::isolated_command).await? {
         return Ok(false);
     }
-    git::branch::create(&plan.repo.path, plan.branch.as_str(), plan.source.as_str()).await?;
+    git::branch::create(&plan.repo.path, &plan.branch, plan.source.as_str()).await?;
     Ok(true)
 }
 
@@ -459,15 +483,9 @@ pub(crate) async fn rollback_unmerge(plan: &UnmergePlan) -> Result<()> {
         .context("could not remove the interrupted unmerge's replay worktree")
 }
 
-/// The commit `revision` names.
-pub async fn tip_commit(repo: &Path, revision: &str) -> Result<String> {
-    Ok(git_run(
-        repo,
-        &["rev-parse", "--verify", &format!("{revision}^{{commit}}")],
-    )
-    .await?
-    .trim()
-    .to_owned())
+/// The commit `rev` names.
+pub async fn tip_commit(repo: &Path, rev: &str) -> Result<CommitId> {
+    git::resolve_commit(repo, rev, git_run).await
 }
 
 #[cfg(test)]

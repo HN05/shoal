@@ -98,8 +98,12 @@ async fn local_config(ctx: &Context, repository: repository::Selector) -> Result
 /// The setup branch, which opens its workspace or the branch an earlier
 /// setup left, else a new branch.
 async fn creation(repo: &Repository) -> Result<Creation> {
-    let exists =
-        git::ref_exists(&repo.path, &git::local_ref(BRANCH), git::isolated_command).await?;
+    let exists = git::ref_exists(
+        &repo.path,
+        &git::local_ref(&BRANCH.into()),
+        git::isolated_command,
+    )
+    .await?;
     Ok(Creation {
         branch: (!exists).then(|| BRANCH.to_owned()),
         existing: exists.then(|| BRANCH.to_owned()),

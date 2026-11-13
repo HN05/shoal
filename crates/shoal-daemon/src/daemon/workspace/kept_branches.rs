@@ -7,6 +7,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
+use shoal_refs::{BranchName, CommitId};
 
 use super::Manager;
 use crate::{
@@ -70,16 +71,18 @@ impl Manager {
         let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
             .await
             .ok();
-        if default.as_deref() == Some(branch.as_str()) {
+        if default.as_ref().map(BranchName::as_str) == Some(branch.as_str()) {
             return Ok(());
         }
-        let Some(head) = git::status::local_branch_commit(&repo.path, &branch).await? else {
+        let Some(head) =
+            git::status::local_branch_commit(&repo.path, &branch.as_str().into()).await?
+        else {
             return Ok(());
         };
         self.save_kept_branch(Record {
             repository_id: repo.id,
             branch,
-            head,
+            head: head.into(),
             kept_at: UnixTime::now(),
         })
         .await
@@ -119,9 +122,13 @@ impl Manager {
         };
         let present = git::present_heads(&repo.path, heads).await?;
         let evidence = Evidence::Advertised(&present);
-        for (record, status) in self.kept_statuses(&repo, Some(&default), evidence).await? {
+        for (record, status) in self
+            .kept_statuses(&repo, Some(default.as_str()), evidence)
+            .await?
+        {
             if status == (Status::Kept { unkept_commits: 0 }) {
-                git::branch::delete_at(&repo.path, &record.branch, &record.head).await?;
+                let (name, head) = (record.branch.as_str().into(), record.head.as_str().into());
+                git::branch::delete_at(&repo.path, &name, &head).await?;
                 self.forget_kept_branch(&record).await?;
                 log!(
                     "deleted kept branch {}: a remote or the default branch has its commits",
@@ -152,7 +159,11 @@ impl Manager {
                 .await
                 .ok();
             let statuses = self
-                .kept_statuses(&repo, default.as_deref(), Evidence::TrackingRefs)
+                .kept_statuses(
+                    &repo,
+                    default.as_ref().map(BranchName::as_str),
+                    Evidence::TrackingRefs,
+                )
                 .await?;
             for (record, status) in statuses {
                 if let Status::Kept { unkept_commits } = status {
@@ -189,7 +200,7 @@ impl Manager {
                 .await
                 .context("the default branch is unknown, and could be any kept branch")?;
             let statuses = self
-                .kept_statuses(&repo, Some(&default), Evidence::TrackingRefs)
+                .kept_statuses(&repo, Some(default.as_str()), Evidence::TrackingRefs)
                 .await?;
             for target in targets.iter().filter(|t| &t.repository_id == repository_id) {
                 let (record, status) = statuses
@@ -217,7 +228,8 @@ impl Manager {
         let mut deleted = Vec::new();
         for (repo, record, unkept_commits) in chosen {
             let branch = kept_branch(&repo, record.clone(), unkept_commits).await?;
-            git::branch::delete_at(&repo.path, &record.branch, &record.head).await?;
+            let (name, head) = (record.branch.as_str().into(), record.head.as_str().into());
+            git::branch::delete_at(&repo.path, &name, &head).await?;
             self.forget_kept_branch(&record).await?;
             deleted.push(branch);
         }
@@ -323,25 +335,24 @@ async fn kept_status(
     if default == Some(record.branch.as_str()) || workspaces.contains(&record.branch) {
         return Ok(Status::Released);
     }
-    let commit = git::status::local_branch_commit(repo, &record.branch).await?;
-    if commit.as_deref() != Some(record.head.as_str())
-        || git::branch::is_symbolic(repo, &record.branch).await?
+    let branch = BranchName::from(record.branch.as_str());
+    let commit = git::status::local_branch_commit(repo, &branch).await?;
+    if commit.as_ref().map(CommitId::as_str) != Some(record.head.as_str())
+        || git::branch::is_symbolic(repo, &branch).await?
     {
         return Ok(Status::Released);
     }
-    if git::checkout_of(repo, &record.branch, git::run)
-        .await?
-        .is_some()
-        || git::branch::in_operation(repo, &record.branch).await?
+    if git::checkout_of(repo, &branch, git::run).await?.is_some()
+        || git::branch::in_operation(repo, &branch).await?
     {
         return Ok(Status::CheckedOut);
     }
     let unkept_commits = match (default, evidence) {
         (Some(default), Evidence::Advertised(heads)) => {
-            git::status::unkept_commits_by(repo, &record.head, default, heads).await?
+            git::status::unkept_commits_by(repo, &record.head, &default.into(), heads).await?
         }
         (Some(default), Evidence::TrackingRefs) => {
-            git::status::unkept_commits(repo, &record.head, default).await?
+            git::status::unkept_commits(repo, &record.head, &default.into()).await?
         }
         (None, _) => git::status::unretained_commits(repo, &record.head, &[]).await?,
     };

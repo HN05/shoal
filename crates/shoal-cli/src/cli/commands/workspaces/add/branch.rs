@@ -2,6 +2,7 @@
 //! an existing local or remote branch opens, in the workspace that already
 //! has it, and any other name is a new branch under exactly that name.
 use anyhow::{Context as _, Result, ensure};
+use shoal_refs::BranchName;
 
 use super::target::AddTarget;
 use crate::{
@@ -38,7 +39,7 @@ pub(super) async fn settle(
         }
         return Ok(Some(workspace.clone()));
     }
-    if remote.is_some() || taken.contains(&name) {
+    if remote.is_some() || taken.contains(&name.as_str().into()) {
         ensure!(
             creation.copy.is_none(),
             "a copy starts a new branch, and branch {name} exists; name another"
@@ -49,7 +50,8 @@ pub(super) async fn settle(
     taken.extend(
         workspaces
             .into_iter()
-            .filter_map(|workspace| workspace.branch),
+            .filter_map(|workspace| workspace.branch)
+            .map(BranchName::from),
     );
     ensure!(
         git::repo::allocate_branch(&name, &taken) == name,
@@ -85,9 +87,9 @@ async fn repository_workspaces(ctx: &Context, repo: &Repository) -> Result<Vec<W
 fn on_branch<'a>(
     workspaces: &'a [Workspace],
     name: &str,
-    remote: Option<&(String, String)>,
+    remote: Option<&(String, BranchName)>,
 ) -> Option<&'a Workspace> {
-    let local = remote.map_or(name, |(_, branch)| branch);
+    let local = remote.map_or(name, |(_, branch)| branch.as_str());
     (workspaces.iter()).find(|workspace| workspace.branch.as_deref() == Some(local))
 }
 
@@ -96,7 +98,7 @@ fn on_branch<'a>(
 async fn branches(
     repo: &Repository,
     name: &str,
-) -> Result<(Option<(String, String)>, Vec<String>)> {
+) -> Result<(Option<(String, BranchName)>, Vec<BranchName>)> {
     let remote = git::remote_branch(&repo.path, name).await?;
     Ok((remote, git::branch::names_in_use(&repo.path).await?))
 }

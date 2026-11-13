@@ -115,7 +115,7 @@ impl Manager {
         let (head, _) = crate::git::head_and_branch(&checkout.path)
             .await
             .context("cannot read the checkout's HEAD")?;
-        Ok(head)
+        Ok(head.into())
     }
 }
 

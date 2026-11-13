@@ -28,7 +28,7 @@ async fn a_clone_with_a_fork_pushes_there_and_counts_the_push() {
         .env("GIT_CONFIG_NOSYSTEM", "1");
     subprocess::output(cloning).await.unwrap();
     assert_eq!(
-        push_remote(&clone_path, "topic").await.unwrap(),
+        push_remote(&clone_path, &"topic".into()).await.unwrap(),
         FORK_REMOTE
     );
     git(&clone_path, &["switch", "-c", "topic"]);
@@ -40,7 +40,7 @@ async fn a_clone_with_a_fork_pushes_there_and_counts_the_push() {
             .unwrap(),
         1
     );
-    let push = push_command(FORK_REMOTE, "topic");
+    let push = push_command(FORK_REMOTE, &"topic".into());
     let args: Vec<&str> = push[1..].iter().map(|arg| arg.to_str().unwrap()).collect();
     git(&clone_path, &args);
     assert_eq!(
@@ -50,7 +50,7 @@ async fn a_clone_with_a_fork_pushes_there_and_counts_the_push() {
         0
     );
     assert!(
-        !remote_has_branch(&clone_path, "origin", "topic")
+        !remote_has_branch(&clone_path, "origin", &"topic".into())
             .await
             .unwrap()
     );
@@ -81,10 +81,8 @@ async fn repair_reconnects_a_moved_checkout_and_worktree() -> Result<()> {
     );
     assert!(trees.iter().all(|tree| !tree.prunable));
     assert_eq!(
-        head_branch(&new.join("feature"), false, run)
-            .await?
-            .as_deref(),
-        Some("feature")
+        head_branch(&new.join("feature"), false, run).await?,
+        Some("feature".into())
     );
     Ok(())
 }
@@ -102,7 +100,7 @@ async fn value_queries_distinguish_branches_tags_and_detached_head() {
         expected
     );
     assert_eq!(
-        resolve_commit(&repo, &local_ref("feature/nested"), run_isolated)
+        resolve_commit(&repo, &local_ref(&"feature/nested".into()), run_isolated)
             .await
             .unwrap(),
         expected
@@ -114,37 +112,39 @@ async fn value_queries_distinguish_branches_tags_and_detached_head() {
             .is_err()
     );
     assert_eq!(
-        head_branch(&repo, true, run).await.unwrap().as_deref(),
-        Some("feature/nested")
+        head_branch(&repo, true, run).await.unwrap(),
+        Some("feature/nested".into())
     );
     assert_eq!(
-        head_branch(&repo, false, run_isolated)
-            .await
-            .unwrap()
-            .as_deref(),
-        Some("feature/nested")
+        head_branch(&repo, false, run_isolated).await.unwrap(),
+        Some("feature/nested".into())
     );
     assert_eq!(
-        checkout_of(&repo, "feature/nested", run)
+        checkout_of(&repo, &"feature/nested".into(), run)
             .await
             .unwrap()
             .unwrap()
             .path,
         repo.canonicalize().unwrap()
     );
-    assert!(checkout_of(&repo, "feature", run).await.unwrap().is_none());
+    assert!(
+        checkout_of(&repo, &"feature".into(), run)
+            .await
+            .unwrap()
+            .is_none()
+    );
     git(&repo, &["checkout", "--detach"]);
     assert!(head_branch(&repo, true, run).await.is_err());
     assert!(
-        checkout_of(&repo, "feature/nested", run)
+        checkout_of(&repo, &"feature/nested".into(), run)
             .await
             .unwrap()
             .is_none()
     );
     git(&repo, &["symbolic-ref", "HEAD", "refs/heads/unborn"]);
     assert_eq!(
-        head_branch(&repo, true, run).await.unwrap().as_deref(),
-        Some("unborn")
+        head_branch(&repo, true, run).await.unwrap(),
+        Some("unborn".into())
     );
     git(&repo, &["symbolic-ref", "HEAD", "refs/tags/v1"]);
     assert_eq!(head_branch(&repo, true, run).await.unwrap(), None);
@@ -212,7 +212,7 @@ fn parses_porcelain_worktree_records() {
             worktree /repo/.wt/detached\0HEAD 123\0detached\0\0";
     let trees = parse_worktrees(listing);
     assert_eq!(trees.len(), 3);
-    assert!(trees[0].is_branch("main") && !trees[0].locked && !trees[0].prunable);
+    assert!(trees[0].is_branch(&"main".into()) && !trees[0].locked && !trees[0].prunable);
     assert_eq!(trees[1].path, PathBuf::from("/repo/.wt/feature"));
     assert!(trees[1].locked && trees[1].prunable);
     assert_eq!(trees[2].branch, None);

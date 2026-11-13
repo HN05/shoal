@@ -397,7 +397,7 @@ pub(in crate::cli::commands) async fn fetch_pull_branch(
     git::check_branch_name(None, branch)
         .await
         .with_context(|| format!("PR {role} {branch:?} is not a branch name"))?;
-    git::fetch::review_branch(path, branch)
+    git::fetch::review_branch(path, &branch.into())
         .await
         .with_context(|| format!("could not fetch the PR {role} {branch}"))
 }

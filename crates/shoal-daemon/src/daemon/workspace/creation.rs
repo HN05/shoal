@@ -421,7 +421,9 @@ impl Manager {
         git::worktree::add(
             &repo.path,
             &workspace.path,
-            workspace.require_branch("creating a branch worktree")?,
+            &workspace
+                .require_branch("creating a branch worktree")?
+                .into(),
             matches!(&source, WorkspaceSource::New { .. }).then_some(commit.as_str()),
         )
         .await?;
@@ -609,7 +611,7 @@ pub(super) async fn recorded_base(
     let reference = git::symbolic_revision(&repo.path, base, git::run_isolated).await?;
     let reference = reference.trim_end_matches('\n');
     Ok((
-        commit,
+        commit.into(),
         reference.starts_with("refs/").then(|| reference.to_owned()),
     ))
 }
@@ -673,12 +675,14 @@ pub(super) async fn existing_base(repo: &crate::model::Repository, branch: &str)
             return Ok(default);
         }
     }
-    Ok(
-        git::verify_revision(&repo.path, &git::local_ref(branch), git::run_isolated)
-            .await?
-            .trim()
-            .to_owned(),
+    Ok(git::verify_revision(
+        &repo.path,
+        &git::local_ref(&branch.into()),
+        git::run_isolated,
     )
+    .await?
+    .trim()
+    .to_owned())
 }
 
 #[cfg(test)]

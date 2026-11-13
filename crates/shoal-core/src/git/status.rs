@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
+use shoal_refs::{BranchName, CommitId};
 
 use super::run;
 use crate::fsutil::off_runtime;
@@ -58,32 +59,32 @@ pub async fn commits_since(repo: &Path, base: &str) -> Result<u64> {
     commits_between(repo, base, "HEAD").await
 }
 
-/// Commits reachable from `revision`.
-pub async fn commits_of(repo: &Path, revision: &str) -> Result<u64> {
-    Ok(run(repo, &["rev-list", "--count", revision])
+/// Commits reachable from `rev`.
+pub async fn commits_of(repo: &Path, rev: &str) -> Result<u64> {
+    Ok(run(repo, &["rev-list", "--count", rev])
         .await?
         .trim()
         .parse()?)
 }
 
-/// Commits on `revision` that `base` does not contain.
-pub async fn commits_between(repo: &Path, base: &str, revision: &str) -> Result<u64> {
-    let range = format!("{base}..{revision}");
+/// Commits on `rev` that `base` does not contain.
+pub async fn commits_between(repo: &Path, base: &str, rev: &str) -> Result<u64> {
+    let range = format!("{base}..{rev}");
     Ok(run(repo, &["rev-list", "--count", &range])
         .await?
         .trim()
         .parse()?)
 }
 
-/// Commits on `revision` that are reachable from neither a remote nor the given ref.
-pub async fn unretained_commits(repo: &Path, revision: &str, retained: &[&str]) -> Result<u64> {
-    let mut args = vec!["rev-list", "--count", revision, "--not", "--remotes"];
+/// Commits on `rev` that are reachable from neither a remote nor the given ref.
+pub async fn unretained_commits(repo: &Path, rev: &str, retained: &[&str]) -> Result<u64> {
+    let mut args = vec!["rev-list", "--count", rev, "--not", "--remotes"];
     args.extend(retained);
     Ok(run(repo, &args).await?.trim().parse()?)
 }
 
 /// The full ref of a local branch, when it exists.
-pub(crate) async fn local_branch(repo: &Path, name: &str) -> Result<Option<String>> {
+pub(crate) async fn local_branch(repo: &Path, name: &BranchName) -> Result<Option<String>> {
     let reference = super::local_ref(name);
     Ok(super::ref_exists(repo, &reference, super::command)
         .await?
@@ -92,7 +93,7 @@ pub(crate) async fn local_branch(repo: &Path, name: &str) -> Result<Option<Strin
 
 /// The commit a local branch points at, or `None` when the branch is gone.
 /// A broken ref or failed lookup stays an error.
-pub async fn local_branch_commit(repo: &Path, name: &str) -> Result<Option<String>> {
+pub async fn local_branch_commit(repo: &Path, name: &BranchName) -> Result<Option<CommitId>> {
     let reference = super::local_ref(name);
     if !super::ref_exists(repo, &reference, super::isolated_command).await? {
         return Ok(None);
@@ -130,14 +131,14 @@ pub async fn operation_in_progress(repo: &Path) -> Result<bool> {
 /// The default branch's refs that exist, local first: the local branch, its
 /// upstream, and the default remote's remote-tracking branch, which a clone
 /// keeps even without a local branch.
-pub(crate) async fn default_refs(repo: &Path, name: &str) -> Result<Vec<String>> {
+pub(crate) async fn default_refs(repo: &Path, name: &BranchName) -> Result<Vec<String>> {
     let local = super::local_ref(name);
     let mut candidates = Vec::new();
     if let Some(upstream) = upstream_of(repo, &local).await? {
         candidates.extend([local, upstream]);
     }
     if let Some(remote) = super::default_branch::remote(repo).await? {
-        candidates.push(super::remote_ref(&remote, name));
+        candidates.push(super::remote_ref(&remote, name.as_str()));
     }
     let mut refs: Vec<String> = Vec::new();
     for reference in candidates {
@@ -198,18 +199,16 @@ async fn existing_refs(repo: &Path, references: &[String]) -> Result<Vec<String>
     Ok(existing)
 }
 
-/// Whether any of `references` retains `revision`, whose tree is `tree`, by
+/// Whether any of `references` retains `rev`, whose tree is `tree`, by
 /// recording that tree or already having its changes.
 pub(crate) async fn retains(
     repo: &Path,
     references: &[String],
-    revision: &str,
+    rev: &str,
     tree: &str,
 ) -> Result<bool> {
     for reference in references {
-        if records_tree(repo, reference, tree).await
-            || merged_into(repo, revision, reference).await?
-        {
+        if records_tree(repo, reference, tree).await || merged_into(repo, rev, reference).await? {
             return Ok(true);
         }
     }
@@ -217,14 +216,14 @@ pub(crate) async fn retains(
 }
 
 /// Whether any of the default branch `name`'s refs retains HEAD.
-pub async fn default_branch_retains_head(repo: &Path, name: &str) -> Result<bool> {
+pub async fn default_branch_retains_head(repo: &Path, name: &BranchName) -> Result<bool> {
     let references = default_refs(repo, name).await?;
     retains(repo, &references, "HEAD", &head_tree(repo).await?).await
 }
 
 /// Commits of `commit` that neither a remote nor the default branch `default`
 /// keeps; none once the default branch has its changes.
-pub async fn unkept_commits(repo: &Path, commit: &str, default: &str) -> Result<u64> {
+pub async fn unkept_commits(repo: &Path, commit: &str, default: &BranchName) -> Result<u64> {
     let references = default_refs(repo, default).await?;
     let tree = super::revision(repo, &format!("{commit}^{{tree}}"), run).await?;
     if retains(repo, &references, commit, &tree).await? {
@@ -241,7 +240,7 @@ pub async fn unkept_commits(repo: &Path, commit: &str, default: &str) -> Result<
 pub async fn unkept_commits_by(
     repo: &Path,
     commit: &str,
-    default: &str,
+    default: &BranchName,
     present: &[super::RemoteHead],
 ) -> Result<u64> {
     let default_name = super::local_ref(default);
@@ -250,7 +249,7 @@ pub async fn unkept_commits_by(
         present
             .iter()
             .filter(|head| head.name == default_name)
-            .map(|head| head.commit.clone()),
+            .map(|head| head.commit.to_string()),
     );
     let tree = super::revision(repo, &format!("{commit}^{{tree}}"), run).await?;
     if retains(repo, &defaults, commit, &tree).await? {
@@ -262,7 +261,7 @@ pub async fn unkept_commits_by(
     Ok(run(repo, &args).await?.trim().parse()?)
 }
 
-/// Whether `target` already has `revision`'s changes: it is an ancestor, a
+/// Whether `target` already has `rev`'s changes: it is an ancestor, a
 /// trial merge of it leaves the target's tree unchanged (squash merges), or every
 /// commit since the fork point, none of them a merge, has an equivalent patch
 /// on it (rebase merges).
@@ -270,14 +269,14 @@ pub async fn unkept_commits_by(
 /// The answer depends only on the two commits, so it is remembered by their
 /// IDs: cleanup asks again on every pass, and `git cherry` reads every commit
 /// since the fork point.
-pub async fn merged_into(repo: &Path, revision: &str, target: &str) -> Result<bool> {
+pub async fn merged_into(repo: &Path, rev: &str, target: &str) -> Result<bool> {
     pub(crate) static ANSWERS: LazyLock<Mutex<HashMap<(String, String), bool>>> =
         LazyLock::new(Mutex::default);
     let commits = run(
         repo,
         &[
             "rev-parse",
-            &format!("{revision}^{{commit}}"),
+            &format!("{rev}^{{commit}}"),
             &format!("{target}^{{commit}}"),
         ],
     )
@@ -337,9 +336,9 @@ pub(crate) async fn trial_merge_tree(
     Ok(Some(stdout.trim().to_owned()))
 }
 
-/// Whether `revision` records `tree`, given with or without Git's newline.
-async fn records_tree(repo: &Path, revision: &str, tree: &str) -> bool {
-    super::verify_revision(repo, &format!("{revision}^{{tree}}"), run)
+/// Whether `rev` records `tree`, given with or without Git's newline.
+async fn records_tree(repo: &Path, rev: &str, tree: &str) -> bool {
+    super::verify_revision(repo, &format!("{rev}^{{tree}}"), run)
         .await
         .is_ok_and(|other| other.trim() == tree.trim())
 }

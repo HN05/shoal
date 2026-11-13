@@ -4,39 +4,40 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
+use shoal_refs::{BranchName, CommitId};
 
-/// Create a linked worktree of `repo` at `path` at `commit`, on the new
+/// Create a linked worktree of `repo` at `path` at `rev`, on the new
 /// branch `branch` or without one, with no file checked out and an empty
 /// index. No hooks run.
 pub async fn add_worktree(
     repo: &Path,
     path: &Path,
-    branch: Option<&str>,
-    commit: &str,
+    branch: Option<&BranchName>,
+    rev: &str,
 ) -> Result<()> {
     let mut command = super::isolated_command_without_submodules(repo);
     command.args(["worktree", "add", "--no-checkout"]);
     match branch {
-        Some(branch) => command.args(["-b", branch]),
+        Some(branch) => command.args(["-b", branch.as_str()]),
         None => command.arg("--detach"),
     };
-    command.arg("--").arg(path).arg(commit);
+    command.arg("--").arg(path).arg(rev);
     super::output(command)
         .await
-        .with_context(|| format!("create a worktree at {commit} in {}", path.display()))
+        .with_context(|| format!("create a worktree at {rev} in {}", path.display()))
         .map(drop)
 }
 
 /// Give the worktree at `copy`, which [`add_worktree`] created at `head`,
 /// the index, worktree config and files of the worktree at `source`, which
 /// must still be at `head` once its index is read; its `.git` file stays.
-pub async fn fill(source: &Path, copy: &Path, head: &str) -> Result<()> {
+pub async fn fill(source: &Path, copy: &Path, head: &CommitId) -> Result<()> {
     for file in ["index", "config.worktree"] {
         copy_admin_file(source, copy, file).await?;
     }
     let current = super::resolve_commit(source, "HEAD", super::run_isolated).await?;
     ensure!(
-        current == head,
+        current == *head,
         "the workspace's HEAD moved while it was copied; copy it again"
     );
     crate::fsutil::copy::clone_worktree(source, copy).await

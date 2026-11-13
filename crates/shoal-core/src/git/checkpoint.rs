@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
+use shoal_refs::{BranchName, CommitId};
 
 use crate::fsutil::off_runtime;
 
@@ -14,21 +15,21 @@ const LEGACY_REFS: &str = "refs/shoal/removed/";
 
 /// The ref that keeps a checkpoint's commit reachable. It is named by the
 /// commit, so whichever checkpoints keep that commit own it.
-pub fn reference(commit: &str) -> String {
+pub fn reference(commit: &CommitId) -> String {
     format!("{REFS}{commit}")
 }
 
 /// Every checkpoint ref in the repository, with the commit it keeps.
-pub async fn saved_refs(repo: &Path) -> Result<Vec<(String, String)>> {
+pub async fn saved_refs(repo: &Path) -> Result<Vec<(String, CommitId)>> {
     refs(repo, REFS).await
 }
 
 /// The refs removals kept before checkpoints, with the commit each keeps.
-pub async fn legacy_refs(repo: &Path) -> Result<Vec<(String, String)>> {
+pub async fn legacy_refs(repo: &Path) -> Result<Vec<(String, CommitId)>> {
     refs(repo, LEGACY_REFS).await
 }
 
-async fn refs(repo: &Path, prefix: &str) -> Result<Vec<(String, String)>> {
+async fn refs(repo: &Path, prefix: &str) -> Result<Vec<(String, CommitId)>> {
     let refs = run_isolated(
         repo,
         &["for-each-ref", "--format=%(refname) %(objectname)", prefix],
@@ -37,7 +38,7 @@ async fn refs(repo: &Path, prefix: &str) -> Result<Vec<(String, String)>> {
     Ok(refs
         .lines()
         .filter_map(|line| line.split_once(' '))
-        .map(|(reference, commit)| (reference.to_owned(), commit.to_owned()))
+        .map(|(reference, commit)| (reference.to_owned(), commit.into()))
         .collect())
 }
 
@@ -107,10 +108,10 @@ async fn changed_submodule(worktree: &Path) -> Result<bool> {
 /// The branch and HEAD a snapshot was taken at, and its commit.
 pub struct Snapshot {
     /// `None` for a detached HEAD.
-    pub branch: Option<String>,
-    pub head: String,
+    pub branch: Option<BranchName>,
+    pub head: CommitId,
     /// HEAD, or a commit on top of it with the unsaved files.
-    pub commit: String,
+    pub commit: CommitId,
 }
 
 /// A commit on top of HEAD with the worktree's files, ignored ones excepted
@@ -133,36 +134,36 @@ pub async fn snapshot(worktree: &Path, message: &str, files: bool) -> Result<Sna
 }
 
 /// The branch checked out, `None` when detached, and the commit HEAD names.
-async fn head_state(worktree: &Path) -> Result<(Option<String>, String)> {
+async fn head_state(worktree: &Path) -> Result<(Option<BranchName>, CommitId)> {
     let branch = run_isolated(worktree, &["branch", "--show-current"]).await?;
     let branch = branch.trim();
     let head = run_isolated(worktree, &["rev-parse", "--verify", "HEAD^{commit}"]).await?;
     Ok((
-        (!branch.is_empty()).then(|| branch.to_owned()),
-        head.trim().to_owned(),
+        (!branch.is_empty()).then(|| branch.into()),
+        head.trim().into(),
     ))
 }
 
 async fn snapshot_commit(
     worktree: &Path,
-    head: &str,
+    head: &CommitId,
     message: &str,
     files: bool,
-) -> Result<String> {
+) -> Result<CommitId> {
     let status = run_isolated(
         worktree,
         &["status", "--porcelain", "--untracked-files=all"],
     )
     .await?;
     if !files || status.is_empty() {
-        return Ok(head.to_owned());
+        return Ok(head.clone());
     }
     let index = WorktreeIndex::new(worktree).await?;
     let tree = index.tree().await?;
     let commit = index
-        .run(&["commit-tree", &tree, "-p", head, "-m", message])
+        .run(&["commit-tree", &tree, "-p", head.as_str(), "-m", message])
         .await?;
-    Ok(commit.trim().to_owned())
+    Ok(commit.trim().into())
 }
 
 /// Whether the worktree's files are those `snapshot` keeps, as a snapshot
@@ -333,20 +334,20 @@ pub async fn ignored_collisions(
 }
 
 /// Point `reference` at `commit`, keeping it reachable.
-pub async fn save(repo: &Path, reference: &str, commit: &str) -> Result<()> {
-    run_isolated(repo, &["update-ref", reference, commit]).await?;
+pub async fn save(repo: &Path, reference: &str, commit: &CommitId) -> Result<()> {
+    run_isolated(repo, &["update-ref", reference, commit.as_str()]).await?;
     Ok(())
 }
 
 /// Delete `reference` only while it names `commit`; `false` when it names
 /// another commit by then. A missing ref counts as deleted.
-pub async fn delete_at(repo: &Path, reference: &str, commit: &str) -> Result<bool> {
-    let deleted = run_isolated(repo, &["update-ref", "-d", reference, commit]).await;
+pub async fn delete_at(repo: &Path, reference: &str, commit: &CommitId) -> Result<bool> {
+    let deleted = run_isolated(repo, &["update-ref", "-d", reference, commit.as_str()]).await;
     if deleted.is_ok() || !super::ref_exists(repo, reference, super::isolated_command).await? {
         return Ok(true);
     }
     let current = super::verify_revision(repo, reference, run_isolated).await?;
-    if current.trim() != commit {
+    if *commit != current.trim() {
         return Ok(false);
     }
     deleted.map(|_| true)

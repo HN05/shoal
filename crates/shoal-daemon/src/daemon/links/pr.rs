@@ -558,7 +558,7 @@ pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {
         .context("cannot check the workspace's branch")?;
     match &workspace.branch {
         Some(recorded) => ensure!(
-            branch.as_ref() == Some(recorded),
+            branch.is_some_and(|branch| branch == *recorded),
             "workspace is not on its recorded branch"
         ),
         None => ensure!(
@@ -566,7 +566,7 @@ pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {
             "workspace is at a commit but its worktree is on a branch"
         ),
     }
-    Ok(head)
+    Ok(head.into())
 }
 
 /// Look up each watched PR concurrently from the workspace's origin

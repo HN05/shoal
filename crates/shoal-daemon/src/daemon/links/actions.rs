@@ -703,12 +703,13 @@ async fn new_pull(
     let base = match (options.base, base_branch) {
         (Some(base), _) => base,
         (None, Some(branch)) => branch.into(),
-        (None, None) => crate::git::default_branch::resolve(
-            &workspace.path,
-            crate::git::default_branch::DefaultBranchLookup::Discover,
-        )
-        .await?
-        .into(),
+        (None, None) => {
+            crate::git::default_branch::resolve(
+                &workspace.path,
+                crate::git::default_branch::DefaultBranchLookup::Discover,
+            )
+            .await?
+        }
     };
     Ok(NewPull {
         title,
@@ -733,7 +734,7 @@ pub(super) async fn head_repository(
     branch: &BranchName,
     forge: &ForgeRepo,
 ) -> Result<Option<String>> {
-    let remote = crate::git::push_remote(worktree, branch.as_str()).await?;
+    let remote = crate::git::push_remote(worktree, branch).await?;
     let url = crate::git::remote_url(worktree, &remote).await?;
     let pushed = ForgeRepo::parse(url.trim())
         .with_context(|| format!("the branch's push remote {remote} is not a forge repository"))?;

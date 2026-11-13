@@ -155,8 +155,8 @@ impl Manager {
         git::worktree::add(
             &repo.path,
             &workspace.path,
-            workspace.require_branch("copying a worktree")?,
-            Some(&commit),
+            &workspace.require_branch("copying a worktree")?.into(),
+            Some(commit.as_str()),
         )
         .await
         .context("create copied workspace")?;

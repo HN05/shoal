@@ -2,6 +2,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use shoal_refs::{BranchName, CommitId};
 use uuid::Uuid;
 
 use super::{FETCH_SAFE_ARGS, resolve_commit};
@@ -33,7 +34,7 @@ pub async fn fetch_commit(
     source: &str,
     destination: &str,
     run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
-) -> Result<String> {
+) -> Result<CommitId> {
     let refspec = format!("{source}:{destination}");
     let mut args = FETCH_SAFE_ARGS.to_vec();
     args.extend(["--", remote, &refspec]);
@@ -53,16 +54,16 @@ pub async fn remote(repo: &Path, remote: &str) -> Result<String> {
 }
 
 /// Refresh a branch using the remote's configured tracking-ref mapping.
-pub async fn configured_branch(repo: &Path, remote: &str, branch: &str) -> Result<String> {
-    let tracking = super::remote_ref(remote, branch);
+pub async fn configured_branch(repo: &Path, remote: &str, branch: &BranchName) -> Result<String> {
+    let tracking = super::remote_ref(remote, branch.as_str());
     let refspec = format!("+{}:{tracking}", super::local_ref(branch));
     super::run_isolated(repo, &[FETCH_SAFE_ARGS, &["--", remote, &refspec]].concat()).await?;
     Ok(tracking)
 }
 
 /// Fetch a branch for a new worktree, preserving unrelated tracking refs.
-pub async fn materialize_branch(repo: &Path, remote: &str, branch: &str) -> Result<String> {
-    let tracking = super::remote_ref(remote, branch);
+pub async fn materialize_branch(repo: &Path, remote: &str, branch: &BranchName) -> Result<String> {
+    let tracking = super::remote_ref(remote, branch.as_str());
     super::run_isolated(
         repo,
         &[
@@ -92,7 +93,7 @@ pub async fn with_tags(repo: &Path, remote: &str) -> Result<()> {
 
 /// Fetch `reference` from `remote`, such as the ref a forge serves a PR's
 /// head under, and return the commit it names, without keeping a ref.
-pub async fn reference(repo: &Path, remote: &str, reference: &str) -> Result<String> {
+pub async fn reference(repo: &Path, remote: &str, reference: &str) -> Result<CommitId> {
     with_temporary_ref(repo, "pull", super::run_isolated, async |fetched| {
         fetch_commit(repo, remote, reference, fetched, super::run_isolated).await
     })
@@ -101,8 +102,8 @@ pub async fn reference(repo: &Path, remote: &str, reference: &str) -> Result<Str
 }
 
 /// Fetch only a review's branch, retaining the caller's normal Git policy.
-pub async fn review_branch(repo: &Path, branch: &str) -> Result<String> {
-    let tracking = super::remote_ref("origin", branch);
+pub async fn review_branch(repo: &Path, branch: &BranchName) -> Result<String> {
+    let tracking = super::remote_ref("origin", branch.as_str());
     super::run(
         repo,
         &[

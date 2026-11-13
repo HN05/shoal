@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, anyhow, bail};
+use shoal_refs::{BranchName, CommitId};
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -54,10 +55,10 @@ impl Manager {
         let pushed = git::pushed_commit(
             &workspace.path,
             &push.remote,
-            workspace.require_branch("pushing")?,
+            &workspace.require_branch("pushing")?.into(),
         )
         .await?;
-        if pushed == push.commit {
+        if pushed.as_ref().map(CommitId::as_str) == push.commit.as_deref() {
             return Ok(false);
         }
         if pushes.value == Pushes::Deny {
@@ -332,11 +333,11 @@ async fn branch_push(
     workspace: &Workspace,
     agent: Option<crate::agent::Agent>,
 ) -> Result<PushSpecification> {
-    let branch = workspace.require_branch("pushing")?;
+    let branch = BranchName::from(workspace.require_branch("pushing")?);
     Ok(PushSpecification {
-        remote: git::push_remote(&workspace.path, branch).await?,
+        remote: git::push_remote(&workspace.path, &branch).await?,
         url: None,
-        destination: git::local_ref(branch),
+        destination: git::local_ref(&branch),
         commit: Some(super::pr::current_head(workspace).await?),
         replaces: None,
         agent,
@@ -358,7 +359,7 @@ async fn push_current(workspace: &Workspace, request: &ApprovalRequest) -> Resul
         return Ok(false);
     }
     match &push.commit {
-        Some(commit) if push.destination == git::local_ref(branch) => {
+        Some(commit) if push.destination == git::local_ref(&branch.into()) => {
             Ok(super::pr::current_head(workspace).await? == *commit)
         }
         _ => Ok(true),
@@ -369,13 +370,13 @@ async fn push_current(workspace: &Workspace, request: &ApprovalRequest) -> Resul
 /// upstream, as `git push --set-upstream` would have, when it has none.
 /// Failure only logs; the push is done.
 async fn track_pushed_branch(workspace: &Workspace, push: &PushSpecification) {
-    let Some(branch) = workspace.branch.as_deref() else {
+    let Some(branch) = workspace.branch.as_deref().map(BranchName::from) else {
         return;
     };
-    if push.commit.is_none() || push.destination != git::local_ref(branch) {
+    if push.commit.is_none() || push.destination != git::local_ref(&branch) {
         return;
     }
-    if let Err(error) = git::track_pushed_branch(&workspace.path, branch, &push.remote).await {
+    if let Err(error) = git::track_pushed_branch(&workspace.path, &branch, &push.remote).await {
         log!("upstream of {branch} not set: {error:#}");
     }
 }

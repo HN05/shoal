@@ -866,16 +866,15 @@ async fn head_commit(
     account: &Account,
     head_repository: Option<&str>,
 ) -> Result<Option<CommitId>> {
-    let branch = workspace.require_branch("opening a PR")?;
+    let branch = BranchName::from(workspace.require_branch("opening a PR")?);
     match head_repository {
         Some(fork) => {
             let fork = forge.sibling(fork);
-            fork.branch_commit(account, &branch.into()).await.map(Some)
+            fork.branch_commit(account, &branch).await.map(Some)
         }
         None => {
-            let remote = crate::git::push_remote(&workspace.path, branch).await?;
-            let pushed = crate::git::pushed_commit(&workspace.path, &remote, branch).await?;
-            Ok(pushed.map(CommitId::from))
+            let remote = crate::git::push_remote(&workspace.path, &branch).await?;
+            crate::git::pushed_commit(&workspace.path, &remote, &branch).await
         }
     }
 }

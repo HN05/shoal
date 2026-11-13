@@ -1087,7 +1087,11 @@ async fn branch_removal_uses_the_inspected_default_branch() {
     ] {
         git(
             &repo.path,
-            &["symbolic-ref", "HEAD", &git::local_ref(inspected_default)],
+            &[
+                "symbolic-ref",
+                "HEAD",
+                &git::local_ref(&inspected_default.into()),
+            ],
         );
         let check = manager
             .check_removal(&SpaceSelector::id(&workspace.id), InspectionPolicy::GitOnly)
@@ -1097,7 +1101,11 @@ async fn branch_removal_uses_the_inspected_default_branch() {
         assert!(check.branch_preserved());
         git(
             &repo.path,
-            &["symbolic-ref", "HEAD", &git::local_ref(later_default)],
+            &[
+                "symbolic-ref",
+                "HEAD",
+                &git::local_ref(&later_default.into()),
+            ],
         );
 
         let (_, branch) = removal_options(&check, Removal::Deleted);

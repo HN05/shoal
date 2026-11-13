@@ -155,7 +155,7 @@ pub async fn inspect(
 /// delete, still is.
 async fn inspect_git(check: &mut RemovalCheck, default_branch: Option<&str>) -> Result<()> {
     if check.workspace.disposable {
-        check.branch = git::checked_out_branch(&check.workspace.path).await?;
+        check.branch = (git::checked_out_branch(&check.workspace.path).await?).map(String::from);
         return Ok(());
     }
     let path = &check.workspace.path;
@@ -167,11 +167,11 @@ async fn inspect_git(check: &mut RemovalCheck, default_branch: Option<&str>) -> 
     let changed = !git::status::porcelain(path).await?.is_empty();
     check.starting_files = changed && holds_starting_files(&check.workspace).await?;
     check.dirty = changed && !check.starting_files;
-    check.branch = branch;
-    check.head = Some(commit);
+    check.branch = branch.map(String::from);
+    check.head = Some(commit.into());
     // The default branch may be absent locally (workspaces created from another ref).
     let default_refs = match default_branch {
-        Some(name) => git::status::default_refs(path, name).await?,
+        Some(name) => git::status::default_refs(path, &name.into()).await?,
         None => Vec::new(),
     };
     check.matches_default_branch = git::status::retains(path, &default_refs, "HEAD", &tree).await?;
@@ -246,7 +246,7 @@ async fn start_branch_retains_head(
     let Some(name) = start_branch(workspace).filter(|name| Some(*name) != default_branch) else {
         return Ok(false);
     };
-    let Some(reference) = git::status::local_branch(&workspace.path, name).await? else {
+    let Some(reference) = git::status::local_branch(&workspace.path, &name.into()).await? else {
         return Ok(false);
     };
     git::status::retains(&workspace.path, &[reference], "HEAD", tree).await

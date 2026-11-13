@@ -2,7 +2,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
-use shoal_refs::CommitId;
+use shoal_refs::{BranchName, CommitId};
 
 use crate::{
     fsutil::off_runtime,
@@ -34,7 +34,7 @@ pub async fn upstream(repo: &Repository, local_ref: &str) -> Result<Option<(Stri
 /// Suffix conflicting components with `-2`, `-3`, ... A branch at an ancestor
 /// blocks all its descendants, so that component is suffixed rather than
 /// repeatedly suffixing an unreachable leaf.
-pub fn allocate_branch(name: &str, taken: &[String]) -> String {
+pub fn allocate_branch(name: &str, taken: &[BranchName]) -> BranchName {
     let mut prefix = String::new();
     let mut components = name.split('/').peekable();
     while let Some(component) = components.next() {
@@ -44,7 +44,8 @@ pub fn allocate_branch(name: &str, taken: &[String]) -> String {
         let last = components.peek().is_none();
         while (last && git::branch::is_reserved_name(&candidate))
             || taken.iter().any(|existing| {
-                existing == &candidate || (last && existing.starts_with(&format!("{candidate}/")))
+                *existing == candidate
+                    || (last && existing.as_str().starts_with(&format!("{candidate}/")))
             })
         {
             candidate = format!("{base}-{suffix}");
@@ -55,18 +56,18 @@ pub fn allocate_branch(name: &str, taken: &[String]) -> String {
             prefix.push('/');
         }
     }
-    prefix
+    prefix.into()
 }
 
 /// A branch's checkout must be exactly on that branch and clean before Shoal
 /// moves it.
-pub async fn clean_branch(path: &Path, branch: &str) -> Result<()> {
+pub async fn clean_branch(path: &Path, branch: &BranchName) -> Result<()> {
     // A detached HEAD has no symbolic ref; that is the same refusal.
     let head = git::head_branch(path, true, git_run)
         .await
         .unwrap_or_default();
     ensure!(
-        head.as_deref() == Some(branch),
+        head.as_ref() == Some(branch),
         "checkout at {} is not on {branch}",
         path.display()
     );
@@ -149,8 +150,8 @@ async fn merge_branch(plan: MergePlan) -> Result<MergedBranch> {
         push: _,
     } = plan;
     let default = default_refresh.branch.clone();
-    let default_ref = git::local_ref(default.as_str());
-    clean_branch(&workspace.path, branch.as_str()).await?;
+    let default_ref = git::local_ref(&default);
+    clean_branch(&workspace.path, &branch).await?;
     ensure!(
         git_run(&workspace.path, &["rev-parse", "HEAD"])
             .await?
@@ -197,15 +198,11 @@ async fn merge_branch(plan: MergePlan) -> Result<MergedBranch> {
     .await?;
     match checkout {
         Some(checkout) => {
-            clean_branch(&checkout, default.as_str()).await?;
-            let output = git::bounded(git::merge_commit(
-                &checkout,
-                branch.as_str(),
-                source.as_str(),
-            ))
-            .capture()
-            .await
-            .context("merge into default branch")?;
+            clean_branch(&checkout, &default).await?;
+            let output = git::bounded(git::merge_commit(&checkout, &branch, source.as_str()))
+                .capture()
+                .await
+                .context("merge into default branch")?;
             if !output.status.success() {
                 // Leave the checkout as it was; conflicts belong in the workspace.
                 let _ = git_run(&checkout, &["merge", "--abort"]).await;
@@ -239,7 +236,7 @@ pub(crate) async fn rollback_merge(plan: &MergePlan) -> Result<()> {
     };
     let branch = &plan.default_refresh.branch;
     ensure!(
-        git::head_branch(checkout, true, git_run).await?.as_deref() == Some(branch.as_str()),
+        git::head_branch(checkout, true, git_run).await?.as_ref() == Some(branch),
         "default checkout changed branches during the merge; recover it manually"
     );
     let head = git_run(checkout, &["rev-parse", "HEAD"]).await?;

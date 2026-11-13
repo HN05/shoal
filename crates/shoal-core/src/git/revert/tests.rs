@@ -1,5 +1,6 @@
 use super::*;
 use crate::test_support::{git, isolated_test, repository};
+use shoal_refs::CommitId;
 use std::fs;
 
 /// The production Git calls use the caller's configuration and hooks, so the
@@ -56,21 +57,25 @@ fn add(repo: &Path, file: &str, message: &str) {
 }
 
 /// The topic's commits, oldest first, as the forge lists them.
-fn topic_commits(repo: &Path) -> Vec<String> {
+fn topic_commits(repo: &Path) -> Vec<CommitId> {
     git(repo, &["rev-list", "--reverse", "main..topic"])
         .lines()
-        .map(str::to_owned)
+        .map(CommitId::from)
         .collect()
 }
 
-fn head(repo: &Path) -> String {
-    git(repo, &["rev-parse", "HEAD"]).trim().to_owned()
+fn head(repo: &Path) -> CommitId {
+    rev(repo, "HEAD")
 }
 
-fn merged<'a>(merge_commit: &'a str, commits: &'a [String]) -> Merged<'a> {
+fn rev(repo: &Path, rev: &str) -> CommitId {
+    git(repo, &["rev-parse", rev]).trim().into()
+}
+
+fn merged<'a>(merge_commit: &'a CommitId, commits: &'a [CommitId]) -> Merged<'a> {
     Merged {
         merge_commit,
-        head: commits.last().map_or("", String::as_str),
+        head: commits.last().expect("a PR has commits"),
         commits,
         head_ref: None,
     }
@@ -120,7 +125,7 @@ async fn rebased_commits_revert_together_and_a_squash_alone() {
     git(&repo, &["cherry-pick", "main..topic"]);
     let rebased = head(&repo);
     let merge = Merge::of(&repo, &merged(&rebased, &commits)).await.unwrap();
-    let first = git(&repo, &["rev-parse", "HEAD~1"]).trim().to_owned();
+    let first = rev(&repo, "HEAD~1");
     assert_eq!(merge, Merge::Commits(vec![rebased, first]));
     assert_eq!(
         reverted(&repo, &merge, "Revert").await.unwrap(),
@@ -129,7 +134,7 @@ async fn rebased_commits_revert_together_and_a_squash_alone() {
     assert!(!repo.join("a").exists() && !repo.join("b").exists());
 
     // The same PR squashed onto the base instead.
-    git(&repo, &["reset", "--hard", &before]);
+    git(&repo, &["reset", "--hard", before.as_str()]);
     git(&repo, &["merge", "--squash", "topic"]);
     git(&repo, &["commit", "-m", "Topic (#7)"]);
     let squashed = head(&repo);
@@ -216,7 +221,7 @@ async fn missing_pr_commits_are_fetched_from_the_head_ref() {
         ],
     );
     let rebased = head(&local);
-    assert!(!git::has_commit(&local, &commits[0]).await.unwrap());
+    assert!(!git::has_commit(&local, commits[0].as_str()).await.unwrap());
     assert!(
         Merge::of(&local, &merged(&rebased, &commits))
             .await
@@ -228,7 +233,7 @@ async fn missing_pr_commits_are_fetched_from_the_head_ref() {
         ..merged(&rebased, &commits)
     };
     let merge = Merge::of(&local, &facts).await.unwrap();
-    let first = git(&local, &["rev-parse", "HEAD~1"]).trim().to_owned();
+    let first = rev(&local, "HEAD~1");
     assert_eq!(merge, Merge::Commits(vec![rebased, first]));
     // The temporary ref it fetched into is gone.
     assert_eq!(git(&local, &["for-each-ref", "refs/shoal"]), "");

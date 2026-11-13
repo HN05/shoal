@@ -186,7 +186,7 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceRef> {
 /// workspace may own. Unresolvable bases infer nothing; creation reports them.
 pub(super) async fn base_branch(repo: &Path, base: &str) -> Result<Option<String>> {
     if let Some((_, branch)) = git::remote_branch(repo, base).await? {
-        return Ok(Some(branch));
+        return Ok(Some(branch.into()));
     }
     let Ok(reference) = git::symbolic_revision(repo, base, git::run_isolated).await else {
         return Ok(None);

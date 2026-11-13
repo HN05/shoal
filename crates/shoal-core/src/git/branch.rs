@@ -2,11 +2,12 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use shoal_refs::{BranchName, CommitId};
 
 use crate::{fsutil::off_runtime, git, time::UnixTime};
 
 /// Local and remote branch names that can conflict with a new local branch.
-pub async fn names_in_use(repo: &Path) -> Result<Vec<String>> {
+pub async fn names_in_use(repo: &Path) -> Result<Vec<BranchName>> {
     let refs = branch_refs(repo).await?;
     Ok(refs
         .lines()
@@ -17,7 +18,7 @@ pub async fn names_in_use(repo: &Path) -> Result<Vec<String>> {
                     .map(|(_, branch)| branch)
             })
         })
-        .map(str::to_owned)
+        .map(BranchName::from)
         .collect())
 }
 
@@ -72,9 +73,10 @@ pub fn is_reserved_name(name: &str) -> bool {
         || (matches!(name.len(), 40 | 64) && name.bytes().all(|c| c.is_ascii_hexdigit()))
 }
 
-/// Create a local branch at `commit`; an existing branch is an error.
-pub async fn create(repo: &Path, name: &str, commit: &str) -> Result<String> {
-    git::run_isolated(repo, &["branch", "--no-track", "--", name, commit]).await
+/// Create a local branch at `rev`; an existing branch is an error.
+pub async fn create(repo: &Path, name: &BranchName, rev: &str) -> Result<String> {
+    let args = ["branch", "--no-track", "--", name.as_str(), rev];
+    git::run_isolated(repo, &args).await
 }
 
 /// Delete a local branch only while it still points at `commit`, so a
@@ -82,7 +84,7 @@ pub async fn create(repo: &Path, name: &str, commit: &str) -> Result<String> {
 /// target. Its configuration goes too, as `git branch -D` removes it, so a
 /// branch created later under the name does not inherit its upstream. The
 /// caller checks that no worktree has it checked out.
-pub async fn delete_at(repo: &Path, name: &str, commit: &str) -> Result<()> {
+pub async fn delete_at(repo: &Path, name: &BranchName, commit: &CommitId) -> Result<()> {
     git::run_isolated(
         repo,
         &[
@@ -90,7 +92,7 @@ pub async fn delete_at(repo: &Path, name: &str, commit: &str) -> Result<()> {
             "--no-deref",
             "-d",
             &git::local_ref(name),
-            commit,
+            commit.as_str(),
         ],
     )
     .await?;
@@ -98,7 +100,7 @@ pub async fn delete_at(repo: &Path, name: &str, commit: &str) -> Result<()> {
 }
 
 /// Remove the branch's configuration section, when it has one.
-async fn remove_config(repo: &Path, name: &str) -> Result<()> {
+async fn remove_config(repo: &Path, name: &BranchName) -> Result<()> {
     let prefix = format!("branch.{name}.");
     let keys = git::run_isolated(repo, &["config", "--local", "--list", "--name-only"]).await?;
     // A longer branch name with this one as a dotted prefix has its own section.
@@ -114,7 +116,7 @@ async fn remove_config(repo: &Path, name: &str) -> Result<()> {
 }
 
 /// Whether the local branch is a symbolic ref to another one.
-pub async fn is_symbolic(repo: &Path, name: &str) -> Result<bool> {
+pub async fn is_symbolic(repo: &Path, name: &BranchName) -> Result<bool> {
     let reference = git::local_ref(name);
     let listing = git::run(
         repo,
@@ -135,15 +137,15 @@ pub async fn is_symbolic(repo: &Path, name: &str) -> Result<bool> {
 /// Whether a rebase or bisect in some worktree started from the branch, or a
 /// rebase will update it. Git shows that worktree's HEAD as detached, but the
 /// operation returns to or rewrites the branch, so the branch is in use.
-pub async fn in_operation(repo: &Path, name: &str) -> Result<bool> {
+pub async fn in_operation(repo: &Path, name: &BranchName) -> Result<bool> {
     let common = git::common_dir(repo).await?;
-    let name = name.to_owned();
+    let name = name.clone();
     off_runtime::run(move || operation_on(common, &name)).await
 }
 
 /// Whether a rebase or bisect that the common Git directory `common` or one
 /// of its linked worktrees' directories records is on the branch `name`.
-fn operation_on(common: PathBuf, name: &str) -> Result<bool> {
+fn operation_on(common: PathBuf, name: &BranchName) -> Result<bool> {
     let linked = match std::fs::read_dir(common.join("worktrees")) {
         Ok(entries) => entries
             .map(|entry| entry.map(|entry| entry.path()))
@@ -162,7 +164,7 @@ fn operation_on(common: PathBuf, name: &str) -> Result<bool> {
             || read("rebase-apply/head-name").is_ok_and(|head| head == reference)
             || read("rebase-merge/update-refs")
                 .is_ok_and(|refs| refs.lines().any(|line| line == reference))
-            || read("BISECT_START").is_ok_and(|start| start == name)
+            || read("BISECT_START").is_ok_and(|start| start == *name)
         {
             return Ok(true);
         }
@@ -170,9 +172,9 @@ fn operation_on(common: PathBuf, name: &str) -> Result<bool> {
     Ok(false)
 }
 
-/// When `commit` was made, and its subject line.
-pub async fn commit_summary(repo: &Path, commit: &str) -> Result<(UnixTime, String)> {
-    let output = git::run(repo, &["log", "-1", "--format=%ct%x00%s", commit, "--"]).await?;
+/// When `rev`'s commit was made, and its subject line.
+pub async fn commit_summary(repo: &Path, rev: &str) -> Result<(UnixTime, String)> {
+    let output = git::run(repo, &["log", "-1", "--format=%ct%x00%s", rev, "--"]).await?;
     let (time, subject) = output
         .trim_end_matches('\n')
         .split_once('\0')
@@ -180,12 +182,12 @@ pub async fn commit_summary(repo: &Path, commit: &str) -> Result<(UnixTime, Stri
     Ok((UnixTime::from_seconds(time.parse()?), subject.to_owned()))
 }
 
-pub async fn rename(repo: &Path, from: &str, to: &str) -> Result<String> {
-    git::run_isolated(repo, &["branch", "-m", "--", from, to]).await
+pub async fn rename(repo: &Path, from: &BranchName, to: &BranchName) -> Result<String> {
+    git::run_isolated(repo, &["branch", "-m", "--", from.as_str(), to.as_str()]).await
 }
 
 /// Fast-forward a checkout without recursive submodule updates.
-pub async fn fast_forward(repo: &Path, commit: &str) -> Result<String> {
+pub async fn fast_forward(repo: &Path, rev: &str) -> Result<String> {
     git::run_without_submodules(
         repo,
         &[
@@ -194,7 +196,7 @@ pub async fn fast_forward(repo: &Path, commit: &str) -> Result<String> {
             "--no-edit",
             "--no-stat",
             "--no-overwrite-ignore",
-            commit,
+            rev,
         ],
     )
     .await

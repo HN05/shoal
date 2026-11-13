@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
+use shoal_refs::BranchName;
 
 use crate::{
     fsutil::off_runtime,
@@ -11,14 +12,17 @@ use crate::{
 };
 
 /// Create a linked worktree of `repo` at `path` on `branch`: a new branch at
-/// `base` when given, otherwise the existing branch, which Git refuses when
-/// another worktree has it checked out.
-pub async fn add(repo: &Path, path: &Path, branch: &str, base: Option<&str>) -> Result<()> {
+/// revision `base` when given, otherwise the existing branch, which Git
+/// refuses when another worktree has it checked out.
+pub async fn add(repo: &Path, path: &Path, branch: &BranchName, base: Option<&str>) -> Result<()> {
     let mut command = super::isolated_command_without_submodules(repo);
     command.args(["worktree", "add"]);
     match base {
-        Some(base) => command.args(["-b", branch, "--"]).arg(path).arg(base),
-        None => command.arg("--").arg(path).arg(branch),
+        Some(base) => command
+            .args(["-b", branch.as_str(), "--"])
+            .arg(path)
+            .arg(base),
+        None => command.arg("--").arg(path).arg(branch.as_str()),
     };
     super::output(command)
         .await
@@ -59,7 +63,7 @@ pub async fn remove(
     };
     Ok(RemovalResult {
         removed: true,
-        branch: checked_out,
+        branch: checked_out.map(String::from),
         branch_outcome,
         hook_error: None,
         children: Vec::new(),
@@ -67,7 +71,7 @@ pub async fn remove(
 }
 
 /// The branch Git lists the worktree at `path` on; `None` when detached.
-async fn registered_branch(repo: &Path, path: &Path) -> Result<Option<String>> {
+async fn registered_branch(repo: &Path, path: &Path) -> Result<Option<BranchName>> {
     let path = resolved(path).await;
     for worktree in super::worktrees(repo, super::run_isolated).await? {
         if resolved(&worktree.path).await == path {
@@ -75,7 +79,7 @@ async fn registered_branch(repo: &Path, path: &Path) -> Result<Option<String>> {
                 .branch
                 .as_deref()
                 .and_then(super::strip_local)
-                .map(str::to_owned));
+                .map(BranchName::from));
         }
     }
     anyhow::bail!("Git lists no worktree at {}", path.display())
@@ -145,8 +149,8 @@ async fn has_submodules(path: &Path) -> Result<bool> {
 }
 
 /// Delete `branch`, saying why it stayed when Git refused.
-async fn delete_branch(repo: &Path, branch: &str) -> Result<BranchOutcome> {
-    if super::run_isolated(repo, &["branch", "-D", "--", branch])
+async fn delete_branch(repo: &Path, branch: &BranchName) -> Result<BranchOutcome> {
+    if super::run_isolated(repo, &["branch", "-D", "--", branch.as_str()])
         .await
         .is_ok()
     {

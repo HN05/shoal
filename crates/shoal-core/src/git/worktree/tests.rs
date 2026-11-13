@@ -45,7 +45,7 @@ async fn check_literal_branch(format: &str, name: &str, existing: bool) {
     }
     let workspace = root.path().join("workspace");
     let base = (!existing).then_some("main");
-    add(&repo, &workspace, name, base).await.unwrap();
+    add(&repo, &workspace, &name.into(), base).await.unwrap();
     assert_eq!(
         git(&workspace, &["symbolic-ref", "HEAD"]).await,
         format!("refs/heads/{name}\n")
@@ -107,7 +107,7 @@ async fn the_default_branch_opens_at_a_literal_path() {
     let repo = repository(root.path(), "sha1");
     git(&repo, &["switch", "-c", "other"]).await;
     let workspace = root.path().join("main {{ branch }}");
-    add(&repo, &workspace, "main", None).await.unwrap();
+    add(&repo, &workspace, &"main".into(), None).await.unwrap();
     assert_eq!(
         git(&workspace, &["symbolic-ref", "HEAD"]).await,
         "refs/heads/main\n"
@@ -120,21 +120,31 @@ async fn a_new_branch_that_exists_is_refused() {
     let repo = repository(root.path(), "sha1");
     git(&repo, &["branch", "topic"]).await;
     let workspace = root.path().join("topic");
-    assert!(add(&repo, &workspace, "topic", Some("main")).await.is_err());
+    assert!(
+        add(&repo, &workspace, &"topic".into(), Some("main"))
+            .await
+            .is_err()
+    );
 }
 
 /// A repository with a worktree on `topic` at `<root>/topic`.
 async fn with_topic(root: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
     let repo = repository(root, "sha1");
     let workspace = root.join("topic");
-    add(&repo, &workspace, "topic", Some("main")).await.unwrap();
+    add(&repo, &workspace, &"topic".into(), Some("main"))
+        .await
+        .unwrap();
     (repo, workspace)
 }
 
 async fn has_branch(repo: &Path, name: &str) -> bool {
-    crate::git::ref_exists(repo, &crate::git::local_ref(name), crate::git::command)
-        .await
-        .unwrap()
+    crate::git::ref_exists(
+        repo,
+        &crate::git::local_ref(&name.into()),
+        crate::git::command,
+    )
+    .await
+    .unwrap()
 }
 
 /// Remove a worktree that was switched from `topic` to `moved` with
@@ -276,7 +286,9 @@ async fn a_clean_worktree_with_a_submodule_is_removed() {
     )
     .await;
     let workspace = root.path().join("topic");
-    add(&repo, &workspace, "topic", Some("main")).await.unwrap();
+    add(&repo, &workspace, &"topic".into(), Some("main"))
+        .await
+        .unwrap();
     git(
         &workspace,
         &[&file[..], &["submodule", "update", "--init"]].concat(),
@@ -304,7 +316,7 @@ async fn a_clean_worktree_with_a_submodule_is_removed() {
     assert!(!workspace.exists());
     // Git still refuses once the submodule is deinitialized, since its
     // repository stays in the worktree's Git directory.
-    add(&repo, &workspace, "deinit", Some("main"))
+    add(&repo, &workspace, &"deinit".into(), Some("main"))
         .await
         .unwrap();
     git(

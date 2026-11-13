@@ -1,5 +1,7 @@
 use std::fs;
 
+use shoal_refs::CommitId;
+
 use crate::test_support::{commit, git, repository};
 
 fn rev(repo: &std::path::Path, revision: &str) -> String {
@@ -36,7 +38,8 @@ async fn the_first_parent_chain_stops_at_its_base_or_misses_it() {
     let chain = super::first_parent_chain(&repo, "main", "main~2")
         .await
         .unwrap();
-    assert_eq!(chain, Some(vec![rev(&repo, "main"), rev(&repo, "main~1")]));
+    let expected = [rev(&repo, "main"), rev(&repo, "main~1")].map(CommitId::from);
+    assert_eq!(chain, Some(expected.to_vec()));
     let empty = super::first_parent_chain(&repo, "main", "main")
         .await
         .unwrap();
@@ -98,7 +101,9 @@ async fn a_replay_stopped_while_merging_leaves_only_its_worktree_to_remove() {
     commit(&repo, "shared");
     git(&repo, &["switch", "-q", "main"]);
     let tip = rev(&repo, "main");
-    let worktree = super::add_replay_worktree(&repo, &tip).await.unwrap();
+    let worktree = super::add_replay_worktree(&repo, &tip.as_str().into())
+        .await
+        .unwrap();
     // Replaying the merge of side onto onto conflicts in the merge itself,
     // as a cancelled replay can stop.
     let replay = super::rebase_command(&worktree, "onto", "main~1")
@@ -129,7 +134,9 @@ async fn a_replay_directory_shoal_did_not_create_is_left_alone() {
     fs::write(directory.join("notes"), "someone else's\n").unwrap();
     for error in [
         super::remove_replay_worktree(&repo).await.unwrap_err(),
-        super::add_replay_worktree(&repo, "main").await.unwrap_err(),
+        super::add_replay_worktree(&repo, &"main".into())
+            .await
+            .unwrap_err(),
     ] {
         assert!(
             error.to_string().contains("Shoal did not create it"),
@@ -146,11 +153,11 @@ async fn a_replay_directory_shoal_did_not_create_is_left_alone() {
 async fn a_checkout_moved_by_a_commit_or_a_switch_is_not_at_its_planned_tip() {
     let root = tempfile::tempdir().unwrap();
     let repo = repository(root.path(), "repo");
-    let tip = rev(&repo, "main");
-    assert!(super::checkout_at(&repo, "main", &tip).await.unwrap());
+    let (main, tip) = ("main".into(), CommitId::from(rev(&repo, "main")));
+    assert!(super::checkout_at(&repo, &main, &tip).await.unwrap());
     fs::write(repo.join("later"), "later\n").unwrap();
     commit(&repo, "later");
-    assert!(!super::checkout_at(&repo, "main", &tip).await.unwrap());
-    git(&repo, &["switch", "-q", "-c", "other", &tip]);
-    assert!(!super::checkout_at(&repo, "main", &tip).await.unwrap());
+    assert!(!super::checkout_at(&repo, &main, &tip).await.unwrap());
+    git(&repo, &["switch", "-q", "-c", "other", tip.as_str()]);
+    assert!(!super::checkout_at(&repo, &main, &tip).await.unwrap());
 }

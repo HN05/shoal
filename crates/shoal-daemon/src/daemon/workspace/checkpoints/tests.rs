@@ -402,7 +402,7 @@ async fn expiry_deletes_expired_and_unowned_checkpoints_and_adopts_removal_refs(
     f.set_expiry(first.number, crate::time::UnixTime::from_seconds(0))
         .await;
     manager.expire_checkpoints().await.unwrap();
-    let kept = [git::checkpoint::reference(second.commit.as_str())];
+    let kept = [git::checkpoint::reference(&second.commit)];
     assert_eq!(checkpoint_refs(&f.checkout), kept);
 
     // A removal snapshot from before checkpoints moves to the checkpoint the
@@ -476,7 +476,7 @@ async fn a_starting_checkpoint_outlives_its_expiry_while_its_workspace_exists() 
     assert_eq!(numbers, [start.number]);
     assert_eq!(
         checkpoint_refs(&f.checkout),
-        [git::checkpoint::reference(start.commit.as_str())]
+        [git::checkpoint::reference(&start.commit)]
     );
     let copied = manager
         .workspace(&manager.named("topic").await)

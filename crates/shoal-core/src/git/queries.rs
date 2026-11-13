@@ -2,6 +2,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use shoal_refs::{BranchName, CommitId};
 
 use super::run;
 use crate::fsutil::off_runtime;
@@ -9,32 +10,32 @@ use crate::fsutil::off_runtime;
 /// Read an object or revision without peeling it to a commit.
 pub async fn revision(
     repo: &Path,
-    reference: &str,
+    rev: &str,
     run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
 ) -> Result<String> {
-    run(repo, &["rev-parse", reference]).await
+    run(repo, &["rev-parse", rev]).await
 }
 
 /// Require one revision, without changing its object type.
 pub async fn verify_revision(
     repo: &Path,
-    reference: &str,
+    rev: &str,
     run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
 ) -> Result<String> {
-    run(repo, &["rev-parse", "--verify", reference]).await
+    run(repo, &["rev-parse", "--verify", rev]).await
 }
 
 pub async fn symbolic_revision(
     repo: &Path,
-    reference: &str,
+    rev: &str,
     run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
 ) -> Result<String> {
-    run(repo, &["rev-parse", "--symbolic-full-name", reference]).await
+    run(repo, &["rev-parse", "--symbolic-full-name", rev]).await
 }
 
 /// HEAD's commit and the branch it is on, `None` when detached, read with
 /// one Git process instead of two.
-pub async fn head_and_branch(repo: &Path) -> Result<(String, Option<String>)> {
+pub async fn head_and_branch(repo: &Path) -> Result<(CommitId, Option<BranchName>)> {
     let output = run(repo, &["rev-parse", "HEAD", "--symbolic-full-name", "HEAD"]).await?;
     parse_head_and_branch(&output)
 }
@@ -42,10 +43,10 @@ pub async fn head_and_branch(repo: &Path) -> Result<(String, Option<String>)> {
 /// The commit HEAD names, its tree, and the branch it is on.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct HeadState {
-    pub(crate) commit: String,
+    pub(crate) commit: CommitId,
     pub(crate) tree: String,
     /// `None` when HEAD is detached.
-    pub(crate) branch: Option<String>,
+    pub(crate) branch: Option<BranchName>,
 }
 
 /// HEAD's commit and tree come from one Git run, its branch from another:
@@ -56,7 +57,7 @@ pub(crate) async fn head_state(repo: &Path) -> Result<HeadState> {
     let tree = lines.next().context("git rev-parse printed no tree")?;
     let commit = lines.next().context("git rev-parse printed no commit")?;
     Ok(HeadState {
-        commit: commit.to_owned(),
+        commit: commit.into(),
         tree: tree.to_owned(),
         branch: checked_out_branch(repo).await?,
     })
@@ -65,14 +66,14 @@ pub(crate) async fn head_state(repo: &Path) -> Result<HeadState> {
 /// Git prints `HEAD` as the name of a detached HEAD, and nothing when it
 /// could not read the name, which leaves the branch unknown rather than
 /// detached.
-fn parse_head_and_branch(output: &str) -> Result<(String, Option<String>)> {
+fn parse_head_and_branch(output: &str) -> Result<(CommitId, Option<BranchName>)> {
     let mut lines = output.lines();
     let commit = lines.next().context("git rev-parse printed no commit")?;
     let name = lines
         .next()
         .context("git rev-parse printed no name for HEAD")?;
     let branch = name.strip_prefix("refs/heads/");
-    Ok((commit.to_owned(), branch.map(str::to_owned)))
+    Ok((commit.into(), branch.map(BranchName::from)))
 }
 
 /// Detached HEAD returns an empty branch name.
@@ -81,10 +82,10 @@ pub async fn current_branch(repo: &Path) -> Result<String> {
 }
 
 /// The branch the worktree at `repo` is on; `None` when detached.
-pub(crate) async fn checked_out_branch(repo: &Path) -> Result<Option<String>> {
+pub(crate) async fn checked_out_branch(repo: &Path) -> Result<Option<BranchName>> {
     let branch = current_branch(repo).await?;
     let branch = branch.trim_end_matches('\n');
-    Ok((!branch.is_empty()).then(|| branch.to_owned()))
+    Ok((!branch.is_empty()).then(|| branch.into()))
 }
 
 pub async fn worktree_root(repo: &Path) -> Result<String> {
@@ -213,7 +214,7 @@ pub async fn remote_url(repo: &Path, remote: &str) -> Result<String> {
 
 /// The remote a push of `branch` goes to: `branch.<name>.pushRemote`, else
 /// `remote.pushDefault`, else `origin`.
-pub async fn push_remote(repo: &Path, branch: &str) -> Result<String> {
+pub async fn push_remote(repo: &Path, branch: &BranchName) -> Result<String> {
     for key in [
         format!("branch.{branch}.pushRemote"),
         "remote.pushDefault".into(),

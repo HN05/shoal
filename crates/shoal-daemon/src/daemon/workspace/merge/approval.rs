@@ -3,6 +3,7 @@
 //! a merge's once the branch moved.
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Context, Result, bail};
+use shoal_refs::CommitId;
 
 use crate::{
     daemon::{
@@ -87,11 +88,11 @@ impl Manager {
             );
         };
         let workspace = self.workspace_by_id(&request.space_id).await?;
-        let head = git::status::local_branch_commit(&workspace.path, merge.branch.as_str())
+        let head = git::status::local_branch_commit(&workspace.path, &merge.branch)
             .await
             .with_context(|| format!("could not check {} for approval", merge.branch))?;
         if workspace.branch.as_deref() == Some(merge.branch.as_str())
-            && head.as_deref() == Some(merge.head.as_str())
+            && head.as_ref().map(CommitId::as_str) == Some(merge.head.as_str())
         {
             return Ok(());
         }

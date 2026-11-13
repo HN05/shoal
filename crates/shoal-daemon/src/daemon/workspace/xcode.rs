@@ -196,7 +196,7 @@ impl Manager {
             pins.extend(worktree_pins(&worktree).await?);
         }
         let branch = default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await?;
-        let tip = git::files::at_revision(&repo.path, &branch, xcode::PINS).await?;
+        let tip = git::files::at_revision(&repo.path, branch.as_str(), xcode::PINS).await?;
         pins.extend(tip.into_iter().map(String::into_bytes));
         Ok(pins.iter().map(|pins| xcode::checkouts_key(pins)).collect())
     }

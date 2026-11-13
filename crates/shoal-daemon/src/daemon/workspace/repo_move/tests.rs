@@ -194,10 +194,8 @@ async fn a_copied_move_reconnects_worktrees_before_deleting_the_original() -> Re
     );
     manager.verify_worktree(&workspace).await?;
     assert_eq!(
-        git::head_branch(&workspace.path, false, git::run)
-            .await?
-            .as_deref(),
-        Some("feature")
+        git::head_branch(&workspace.path, false, git::run).await?,
+        Some("feature".into())
     );
     let checkout = manager.repository(&repo.id).await?.path;
     let trees = git::worktrees(&checkout, git::run).await?;
