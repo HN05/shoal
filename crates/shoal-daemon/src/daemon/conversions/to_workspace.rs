@@ -41,7 +41,7 @@ impl Manager {
         env: Option<BTreeMap<String, String>>,
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
-        let chat = self.convertible_chat(selector, caller).await?;
+        let chat = self.convertible_chat(selector).await?;
         let repository = (chat.repository_id.clone()).context("the chat has no repository")?;
         let settings = self.repository_settings_with_templates(&repository).await?;
         super::ensure_mode(&settings, &conversion.mode)?;
@@ -104,20 +104,15 @@ impl Manager {
         Ok(started)
     }
 
-    /// The chat `selector` names, refusing a workspace, a chat that cannot
-    /// become one, and a space other than the one `caller` runs in.
-    async fn convertible_chat(
-        &self,
-        selector: &SpaceSelector,
-        caller: Option<&Caller>,
-    ) -> Result<Chat> {
+    /// The chat `selector` names, refusing a workspace and a chat that
+    /// cannot become one.
+    async fn convertible_chat(&self, selector: &SpaceSelector) -> Result<Chat> {
         let chat = match self.space(selector).await? {
             PresentSpace::Chat(chat) => chat,
             PresentSpace::Workspace(workspace) => {
                 bail!("{} is a workspace already", workspace.name)
             }
         };
-        self.ensure_own_space(&chat.id, &chat.name, caller)?;
         self.ensure_not_converting(&chat.id, &chat.name).await?;
         ensure!(
             chat.running,
@@ -151,23 +146,6 @@ impl Manager {
         let OpenIssue { url, title, .. } = self.read_open_issue(&checkout, input).await?;
         self.set_issue(&SpaceSelector::id(&chat.id), &url.into(), Some(title))
             .await
-    }
-
-    /// Refuse a conversion of the space `id`, named `name`, by the process of
-    /// a space other than it: an agent converts only its own space.
-    pub(super) fn ensure_own_space(
-        &self,
-        id: &SpaceId,
-        name: &str,
-        caller: Option<&Caller>,
-    ) -> Result<()> {
-        if let Some(caller) = caller {
-            ensure!(
-                caller.space_id == *id,
-                "an agent converts only its own space; ask the user to convert {name}"
-            );
-        }
-        Ok(())
     }
 
     /// Refuse a conversion of the space `id`, named `name`, whose agent has

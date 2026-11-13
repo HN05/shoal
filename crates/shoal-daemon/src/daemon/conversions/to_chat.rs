@@ -9,7 +9,7 @@ use crate::client::{execution_ids::ExecutionId, space_ids::SpaceId};
 use crate::execution::recovery;
 use crate::{
     config::modes::ModeName,
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::workspace::Manager,
     model::{HoldPlacer, PresentSpace, Workspace},
     removal::InspectionPolicy,
     state::WorkspaceState,
@@ -17,15 +17,14 @@ use crate::{
 
 impl Manager {
     /// Record that the workspace `selector` names becomes a chat in `mode`,
-    /// for the space `caller` runs in, once its agent's turn ends; the
-    /// checks of the removal it makes then come first.
+    /// once its agent's turn ends; the checks of the removal it makes then
+    /// come first.
     pub(crate) async fn convert_to_chat(
         &self,
         selector: &SpaceSelector,
         mode: ModeName,
-        caller: Option<&Caller>,
     ) -> Result<Workspace> {
-        let workspace = self.convertible_workspace(selector, caller).await?;
+        let workspace = self.convertible_workspace(selector).await?;
         // The chat runs in the checkout, under its settings, not the worktree's.
         let settings = (self.repository_settings_with_templates(&workspace.repository_id)).await?;
         super::ensure_mode(&settings, &mode)?;
@@ -111,18 +110,12 @@ impl Manager {
 
     /// The workspace `selector` names, refusing a chat, and a workspace that
     /// cannot become one now: one the user holds, another builds on, whose
-    /// unsaved files no checkpoint can keep, or another space's for
-    /// `caller`.
-    async fn convertible_workspace(
-        &self,
-        selector: &SpaceSelector,
-        caller: Option<&Caller>,
-    ) -> Result<Workspace> {
+    /// unsaved files no checkpoint can keep.
+    async fn convertible_workspace(&self, selector: &SpaceSelector) -> Result<Workspace> {
         let workspace = match self.space(selector).await? {
             PresentSpace::Workspace(workspace) => workspace,
             PresentSpace::Chat(chat) => bail!("{} is a chat already", chat.name),
         };
-        self.ensure_own_space(&workspace.id, &workspace.name, caller)?;
         self.ensure_not_converting(&workspace.id, &workspace.name)
             .await?;
         ensure!(

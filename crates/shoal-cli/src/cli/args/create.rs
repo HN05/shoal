@@ -59,7 +59,7 @@ pub enum CreateCommand {
     /// The space stays the same: it keeps its number, name, parent,
     /// children, links, questions, files and progress. Its agent restarts
     /// in the new place once its current turn ends, carrying on with its
-    /// conversation. A space's agent converts only its own space.
+    /// conversation. A space's agent converts the spaces its scope reaches.
     Convert {
         #[command(subcommand)]
         command: ConvertCommand,

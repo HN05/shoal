@@ -186,11 +186,7 @@ pub(super) async fn handle(
         ),
         WorkspaceMethod::ConvertToChat { workspace, mode } => Body::Workspace(
             manager
-                .convert_to_chat(
-                    &workspace,
-                    mode.unwrap_or_else(crate::model::chat_mode),
-                    caller,
-                )
+                .convert_to_chat(&workspace, mode.unwrap_or_else(crate::model::chat_mode))
                 .await?,
         ),
         WorkspaceMethod::ListWorkspaces => {

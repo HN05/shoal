@@ -23,7 +23,7 @@ async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
 /// The refusal of converting the workspace `id` into a chat.
 async fn refusal(manager: &Manager, id: &crate::client::space_ids::SpaceId) -> String {
     let refused = manager
-        .convert_to_chat(&SpaceSelector::id(id), crate::model::chat_mode(), None)
+        .convert_to_chat(&SpaceSelector::id(id), crate::model::chat_mode())
         .await
         .unwrap_err();
     format!("{refused:#}")

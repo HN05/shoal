@@ -8,6 +8,7 @@ use crate::{
         workspace::Manager,
     },
     model::Repository,
+    protocol::OperationMethod,
 };
 
 async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
@@ -55,21 +56,41 @@ async fn a_workspace_is_a_workspace_already() {
     assert!(refused.contains("is a workspace already"), "{refused}");
 }
 
+/// An agent converts the spaces its scope reaches, its own and those below
+/// it, and is refused one outside, which the refusal names.
 #[tokio::test]
-async fn an_agent_converts_only_its_own_chat() {
+async fn an_agent_converts_the_spaces_its_scope_reaches() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
     let lead = chat(&manager, "lead", "chat", Some(&repo), None).await;
     let talk = chat(&manager, "talk", "worker", Some(&repo), Some(&lead.id)).await;
+    let other = chat(&manager, "other", "worker", Some(&repo), None).await;
     let caller = Caller {
         space_id: lead.id.clone(),
         execution: None,
     };
+    manager.executions.issue_scope("lead".into(), caller).await;
 
-    let refused = refusal(&manager, SpaceSelector::id(&talk.id), Some(&caller)).await;
-
-    assert!(refused.contains("only its own space"), "{refused}");
-    assert!(manager.chat_by_id(&talk.id).await.unwrap().is_some());
+    for (chat, allowed) in [(&lead, true), (&talk, true), (&other, false)] {
+        let mut convert = OperationMethod::ConvertToWorkspace {
+            chat: SpaceSelector::id(&chat.id),
+            branch: "fix-login".into(),
+            issue: None,
+            base: None,
+            options: Default::default(),
+            mode: None,
+            env: None,
+        };
+        let authorized =
+            crate::daemon::scope::authorize(&manager, Some(&"lead".into()), &mut convert).await;
+        match authorized {
+            Ok(_) => assert!(allowed, "{}", chat.name),
+            Err(error) => {
+                assert!(!allowed, "{}: {error:#}", chat.name);
+                assert!(format!("{error:#}").contains("outside this space's scope"));
+            }
+        }
+    }
 }
 
 #[tokio::test]

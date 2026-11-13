@@ -174,8 +174,6 @@ impl Scoped for OperationMethod {
                 confine_start(manager, caller, parent, start).await?;
                 None
             }
-            // An agent converts only its own space, which the conversion
-            // checks.
             OperationMethod::ConvertToWorkspace { chat, .. } => Some(chat),
             OperationMethod::FollowOperation { id, .. }
             | OperationMethod::CancelOperation { id }
