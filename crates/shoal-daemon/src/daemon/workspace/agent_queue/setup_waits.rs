@@ -2,7 +2,7 @@
 //! returning a start whose preparation left none waiting to the queue,
 //! finding the one waiting for a workspace's, and changing the permissions
 //! its plan starts its agent with before a retried setup lets it start.
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
+use crate::client::{queue::QueueEntryId, space_ids::SpaceId, space_names::SpaceName};
 use std::collections::HashSet;
 
 use anyhow::{Result, ensure};
@@ -12,7 +12,7 @@ use super::blockers;
 use super::store::{ENTRY_COLUMNS, copy_launch_waiting, entry};
 use crate::{
     config::permissions::PermissionsConfig,
-    daemon::{log, store, workspace::Manager},
+    daemon::{log, notifications::NotificationKind, store, workspace::Manager},
     model::QueueEntry,
     start_plan::AddPlan,
     state::{QueueKind, QueueState, WorkspaceState},
@@ -26,9 +26,18 @@ const AWAITING_SETUP: &str =
 /// A starting launch in a workspace whose setup failed.
 struct FailedStart {
     id: QueueEntryId,
+    name: SpaceName,
     workspace: SpaceId,
     branch: Option<String>,
     plan: String,
+}
+
+/// What became of a start whose setup failed.
+enum Returned {
+    /// It waits as this entry for a retried setup of the workspace.
+    Waiting(QueueEntryId, SpaceId),
+    /// Its launch, named so, cannot open the workspace, so it ended.
+    Ended(SpaceName, SpaceId),
 }
 
 impl Manager {
@@ -42,10 +51,26 @@ impl Manager {
             .store
             .write(move |tx| return_failed_starts(tx, &preparing))
             .await?;
-        for (entry, workspace) in returned {
-            log!("returned {entry} to the agent queue to wait for the setup of {workspace}");
+        for returned in returned {
+            self.report_returned(returned).await;
         }
         Ok(())
+    }
+
+    /// Log a start that waits for a retried setup, and tell the user of one
+    /// that ended.
+    async fn report_returned(&self, returned: Returned) {
+        match returned {
+            Returned::Waiting(entry, workspace) => {
+                log!("returned {entry} to the agent queue to wait for the setup of {workspace}");
+            }
+            Returned::Ended(name, workspace) => {
+                let reason = "its setup failed, and its launch cannot open the workspace once a retried setup succeeds";
+                let message = format!("{name} did not start from the agent queue: {reason}");
+                (self.notify_space(&name, &workspace, NotificationKind::QueueFailed, message))
+                    .await;
+            }
+        }
     }
 
     /// The launch waiting for the setup of `workspace`, if one does.
@@ -95,16 +120,15 @@ impl Manager {
 }
 
 /// Return each starting launch of a workspace outside `preparing` whose
-/// setup failed to the queue, returning the new entries with their
-/// workspaces.
+/// setup failed to the queue, returning what became of each.
 fn return_failed_starts(
     tx: &Transaction<'_>,
     preparing: &HashSet<SpaceId>,
-) -> Result<Vec<(QueueEntryId, SpaceId)>> {
+) -> Result<Vec<Returned>> {
     let mut returned = Vec::new();
     for start in failed_starts(tx)? {
         if !preparing.contains(&start.workspace) {
-            returned.extend(return_start(tx, start)?);
+            returned.push(return_start(tx, start)?);
         }
     }
     Ok(returned)
@@ -119,39 +143,37 @@ fn failed_starts(tx: &Transaction<'_>) -> Result<Vec<FailedStart>> {
     ];
     Ok(tx
         .prepare(
-            "SELECT q.id,w.id,w.branch,q.plan FROM agent_queue q
+            "SELECT q.id,q.name,w.id,w.branch,q.plan FROM agent_queue q
              JOIN workspaces w ON w.id=COALESCE(q.space_id,q.opens_workspace_id)
              WHERE q.kind=?1 AND q.state=?2 AND w.state=?3 AND NOT w.setup_finished",
         )?
         .query_map(selection, |row| {
             Ok(FailedStart {
                 id: row.get(0)?,
-                workspace: row.get(1)?,
-                branch: row.get(2)?,
-                plan: row.get(3)?,
+                name: row.get(1)?,
+                workspace: row.get(2)?,
+                branch: row.get(3)?,
+                plan: row.get(4)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?)
 }
 
 /// Replace `start` with a new entry, which no hold on the old one keeps
-/// from admission, waiting for a retried setup to open its workspace,
-/// returning it with its workspace; one that cannot open it ends.
-fn return_start(
-    tx: &Transaction<'_>,
-    start: FailedStart,
-) -> Result<Option<(QueueEntryId, SpaceId)>> {
-    let waiting = match start.reopening_plan() {
+/// from admission, waiting for a retried setup to open its workspace; one
+/// that cannot open it ends.
+fn return_start(tx: &Transaction<'_>, start: FailedStart) -> Result<Returned> {
+    let returned = match start.reopening_plan() {
         Some(plan) => {
             let id = QueueEntryId::generate();
             copy_launch_waiting(tx, &start.id, &id, &plan, &start.workspace)?;
             blockers::wait_for_setup(tx, &id, &start.workspace)?;
-            Some((id, start.workspace))
+            Returned::Waiting(id, start.workspace)
         }
-        None => None,
+        None => Returned::Ended(start.name, start.workspace),
     };
     tx.execute("DELETE FROM agent_queue WHERE id=?1", [&start.id])?;
-    Ok(waiting)
+    Ok(returned)
 }
 
 impl FailedStart {

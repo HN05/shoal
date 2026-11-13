@@ -3,7 +3,7 @@ use rusqlite::params;
 use super::super::tests::{add, limit_globally, register, request};
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::{test_support::manager, workspace::Manager},
+    daemon::{notifications::NotificationKind, test_support::manager, workspace::Manager},
     model::{QueueEntry, QueueRequest, Repository, Workspace},
     protocol::operations::{OperationSpec, Preparation},
     start_plan::{AddPlan, Creation, ResolvedAddAgent},
@@ -37,12 +37,16 @@ fn creating(repository: &Repository, branch: &str) -> String {
     serde_json::to_string(&plan).unwrap()
 }
 
-/// A start in `repository`, admitted to the only slot, whose new `child`
-/// workspace took its entry and then failed its setup.
-async fn failed_start(manager: &Manager, repository: &Repository) -> (Workspace, QueueEntry) {
+/// A start of `plan` in `repository`, admitted to the only slot, whose new
+/// `child` workspace took its entry and then failed its setup.
+async fn failed_start(
+    manager: &Manager,
+    repository: &Repository,
+    plan: String,
+) -> (Workspace, QueueEntry) {
     limit_globally(manager, 1);
     let starting = (manager.queue_add(QueueRequest {
-        plan: creating(repository, "child"),
+        plan,
         ..request(repository, "child", false)
     }))
     .await
@@ -92,7 +96,7 @@ async fn plan(manager: &Manager, entry: &QueueEntry) -> AddPlan {
 async fn a_start_whose_setup_failed_waits_for_a_retried_setup_without_its_slot() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    let (child, starting) = failed_start(&manager, &repo).await;
+    let (child, starting) = failed_start(&manager, &repo, creating(&repo, "child")).await;
     // The CLI that started it still holds the old entry.
     manager.hold_queue_entry(&starting.id).await.unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -115,7 +119,7 @@ async fn a_start_whose_setup_failed_waits_for_a_retried_setup_without_its_slot()
 async fn a_start_whose_setup_failed_keeps_its_entry_while_its_preparation_runs() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    let (child, starting) = failed_start(&manager, &repo).await;
+    let (child, starting) = failed_start(&manager, &repo, creating(&repo, "child")).await;
     let spec = OperationSpec::Prepare {
         workspace: SpaceSelector::id(&child.id),
         steps: Preparation::default(),
@@ -127,4 +131,18 @@ async fn a_start_whose_setup_failed_keeps_its_entry_while_its_preparation_runs()
         .map(|entry| (entry.id, entry.state))
         .collect();
     assert_eq!(ids, [(starting.id, QueueState::Starting)]);
+}
+
+#[tokio::test]
+async fn a_failed_start_that_cannot_open_its_workspace_ends_and_says_so() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let (child, _) = failed_start(&manager, &repo, "{}".into()).await;
+    manager.dispatch_queue().await.unwrap();
+    assert!(manager.queue_entries().await.unwrap().is_empty());
+    let failed: Vec<_> = (manager.notifications(false, 50).await.unwrap().into_iter())
+        .filter(|notification| notification.kind == NotificationKind::QueueFailed)
+        .map(|notification| notification.space_id)
+        .collect();
+    assert_eq!(failed, [Some(child.id)]);
 }
