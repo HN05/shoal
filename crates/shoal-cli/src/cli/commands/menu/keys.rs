@@ -181,7 +181,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
                 approvals::decide_listed(ctx, number, created_at).await?,
             ));
         }
-        Row::NeedsInput(space) => Command::Sessions(SessionsCommand::Attach {
+        Row::NeedsInput(space) | Row::Asleep(space) => Command::Sessions(SessionsCommand::Attach {
             target: Some(SpaceSelector::Id(space)),
             session: None,
         }),

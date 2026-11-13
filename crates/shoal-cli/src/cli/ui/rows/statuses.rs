@@ -6,6 +6,7 @@ use super::{Cell, status_cell, waiting_reasons};
 use crate::cli::list_status::ListStatus;
 use crate::client::space_ids::SpaceId;
 use crate::model::{QueueEntry, Workspace};
+use crate::state::{QueueKind, QueueState};
 
 #[derive(Default)]
 pub struct Statuses {
@@ -41,10 +42,16 @@ impl Statuses {
         shown
     }
 
-    /// The agents queued to start in `workspace`, in queue order.
+    /// The agents queued to start in `workspace`, in queue order, except the
+    /// restore that brings back its asleep agent, which its own status shows.
     pub(super) fn entries(&self, workspace: &Workspace) -> Vec<&QueueEntry> {
+        let asleep = |entry: &QueueEntry| {
+            workspace.asleep.is_some()
+                && entry.kind == QueueKind::Restore
+                && entry.state == QueueState::Queued
+        };
         (self.queued.iter())
-            .filter(|entry| entry.space() == Some(&workspace.id))
+            .filter(|entry| entry.space() == Some(&workspace.id) && !asleep(entry))
             .collect()
     }
 

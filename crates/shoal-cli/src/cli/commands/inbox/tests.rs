@@ -118,3 +118,30 @@ fn a_running_chat_whose_agent_needs_input_is_listed() {
         .collect();
     assert_eq!(listed, ["asking"]);
 }
+
+#[test]
+fn a_chat_shoal_brings_back_is_listed_asleep_with_what_wakes_it() {
+    let chat = |id: &str, asleep: serde_json::Value| -> crate::model::Chat {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "number": 4, "repository_id": "r1", "name": id, "agent": "claude",
+            "running": true, "started_at": 0, "asleep": asleep,
+        }))
+        .unwrap()
+    };
+    let asleep = serde_json::json!({
+        "reason": "critical memory pressure",
+        "wakes_when": "an update arrives for it",
+    });
+    let chats = [
+        chat("asleep", asleep),
+        chat("awake", serde_json::Value::Null),
+    ];
+    let items = super::chat_items(&chats);
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].kind().0, "asleep");
+    let text = items[0].text();
+    for part in ["critical memory pressure", "an update arrives for it"] {
+        assert!(text.contains(part), "{text}");
+    }
+    assert!(items[0].note().contains("shoal attach 4"));
+}

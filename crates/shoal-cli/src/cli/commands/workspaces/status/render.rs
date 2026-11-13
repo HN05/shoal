@@ -153,6 +153,7 @@ fn render_chat(chat: &Chat, palette: Palette) {
         render_agent_state(chat.agent_state);
     }
     render_sleep(chat.sleep);
+    render_asleep(chat.asleep.as_ref(), chat.number);
     split::render(&chat.parent, &chat.children);
 }
 
@@ -298,6 +299,7 @@ fn render_jobs(status: &SpaceStatus, palette: Palette) {
 fn render_agent(status: &WorktreeStatus) {
     render_agent_state(status.workspace.agent_state);
     render_sleep(status.workspace.sleep);
+    render_asleep(status.workspace.asleep.as_ref(), status.workspace.number);
     if let Some(retry) = &status.proxy_retry {
         outln!("API retry:     {}", proxy_retry_label(retry));
     }
@@ -328,6 +330,18 @@ fn render_sleep(sleep: Option<crate::state::Sleep>) {
         crate::state::Sleep::Permanent => "permanent",
     };
     outln!("Sleep:         {until}");
+}
+
+/// Why Shoal put the agent of the space numbered `number` to sleep, what
+/// wakes it, and the commands that wake it now, while it is asleep.
+fn render_asleep(
+    asleep: Option<&crate::model::Asleep>,
+    number: crate::client::space_ids::SpaceNumber,
+) {
+    if let Some(asleep) = asleep {
+        let (label, wake) = (ui::asleep_label(asleep), ui::wake_now(number));
+        outln!("Asleep:        {label}; {wake}");
+    }
 }
 
 /// The ports, simulators and resources the workspace holds.

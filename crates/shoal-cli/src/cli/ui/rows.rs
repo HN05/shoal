@@ -23,8 +23,8 @@ use crate::{
     client::{executions::ServiceLimit, progress::Progress},
     config::modes::ModeName,
     model::{
-        Chat, Dependency, HeldBy, InheritedRank, QueueEntry, QueueRank, Repository, ReviewMark,
-        Tier, Workspace, WorkspaceUsage,
+        Asleep, Chat, Dependency, HeldBy, InheritedRank, QueueEntry, QueueRank, Repository,
+        ReviewMark, Tier, Workspace, WorkspaceUsage,
     },
     state::{AgentState, QueueKind, QueueState},
 };
@@ -391,6 +391,18 @@ pub fn held_by_label(held: HeldBy) -> String {
             format!("upstream {limit} until {}", until.local_minutes())
         }
     }
+}
+
+/// Why an agent is asleep and what wakes it: `critical memory pressure;
+/// wakes once an update arrives for it`.
+pub fn asleep_label(asleep: &Asleep) -> String {
+    format!("{}; wakes once {}", asleep.reason, asleep.wakes_when)
+}
+
+/// The commands that wake the asleep agent of the space numbered `number`
+/// now.
+pub fn wake_now(number: SpaceNumber) -> String {
+    format!("wake it now with shoal attach {number} or shoal queue start {number}")
 }
 
 /// What a queue entry starts: a launch's issue title, a restore, or a CI job.

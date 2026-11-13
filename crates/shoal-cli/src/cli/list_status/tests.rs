@@ -110,17 +110,40 @@ fn only_an_idle_agent_shows_its_sleep() {
     assert_eq!(status(AgentState::Idle, None), ListStatus::Waiting);
     assert_eq!(
         status(AgentState::Idle, Some(Sleep::Turn)),
-        ListStatus::Sleeping
-    );
-    assert_eq!(
-        status(AgentState::Idle, Some(Sleep::Permanent)),
-        ListStatus::SleepingPermanent
+        ListStatus::Asleep
     );
     // A permanent sleep outlasts the turns the agent works.
     assert_eq!(
         status(AgentState::Working, Some(Sleep::Permanent)),
         ListStatus::Working
     );
+}
+
+#[test]
+fn an_agent_shoal_brings_back_shows_asleep_rather_than_stopped_or_queued() {
+    let mut workspace = coordinated(AgentState::Idle);
+    workspace.asleep = Some(crate::model::Asleep {
+        reason: "critical memory pressure".into(),
+        wakes_when: "an update arrives for it".into(),
+    });
+    // Its stop saved work, which comes back on its own.
+    assert_eq!(
+        ListStatus::of_workspace(&workspace, true),
+        ListStatus::Asleep
+    );
+    let mut restore: QueueEntry = serde_json::from_value(serde_json::json!({
+        "id": "entry", "kind": "restore", "repository_id": "repo", "name": "work",
+        "agent": "claude", "issue_title": null, "state": "queued", "position": 1,
+        "created_at": 0, "space_id": workspace.id,
+    }))
+    .unwrap();
+    let statuses = |restore: &QueueEntry| crate::cli::ui::Statuses {
+        stopped: [workspace.id.clone()].into(),
+        queued: vec![restore.clone()],
+    };
+    assert_eq!(statuses(&restore).shown(&workspace), [ListStatus::Asleep]);
+    restore.state = QueueState::Starting;
+    assert_eq!(statuses(&restore).of(&workspace), ListStatus::Starting);
 }
 
 #[test]

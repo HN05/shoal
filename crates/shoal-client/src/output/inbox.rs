@@ -29,6 +29,10 @@ pub enum Item {
     Blocked {
         workspace: Workspace,
     },
+    /// A workspace whose agent Shoal stopped and brings back on its own.
+    Asleep {
+        workspace: Workspace,
+    },
     Ready {
         workspace: Workspace,
         mark: ReviewMark,
@@ -39,6 +43,10 @@ pub enum Item {
     },
     /// A chat whose progress records what blocks it.
     ChatBlocked {
+        chat: Chat,
+    },
+    /// A chat whose agent Shoal stopped and brings back on its own.
+    ChatAsleep {
         chat: Chat,
     },
     /// A chat's mark on its linked work or on itself.

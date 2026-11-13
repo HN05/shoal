@@ -481,7 +481,7 @@ values. See [agent secrets](reference.md#agent-secrets).
 idle = false   # Put any idle agent to sleep once its prompt cache expires
 ```
 
-See [idle agents](reference.md#idle-agents).
+See [sleep](reference.md#sleep).
 
 ### Messages
 

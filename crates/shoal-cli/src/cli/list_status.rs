@@ -34,22 +34,23 @@ pub enum ListStatus {
     /// Its progress records what blocks it.
     Blocked,
     Waiting,
-    /// An idle agent that Shoal does not wake until its next turn starts.
-    Sleeping,
-    /// An idle agent that Shoal does not wake until `shoal sleep --undo`.
-    SleepingPermanent,
+    /// An agent Shoal stopped and brings back on its own, or an idle one
+    /// `shoal sleep` put to sleep.
+    Asleep,
     ReadyOutdated,
     Inactive,
     Finished,
 }
 
 impl ListStatus {
-    /// The workspace's state unless ready, then a recorded completion when
-    /// its work is stopped, stopped work unless blocked, an agent that needs
-    /// input, what blocks it, a recorded completion, a current ready mark,
-    /// the agent's other turn states as its sleep says, an agent or command
-    /// running without one, the coordinator that does its work working, an
-    /// outdated mark, or inactive.
+    /// The workspace's state unless ready, then an agent Shoal put to sleep,
+    /// whose saved work comes back on its own, a recorded completion when its
+    /// work is stopped, stopped work unless blocked, an agent that needs
+    /// input, what blocks it, a recorded
+    /// completion, a current ready mark, the agent's other turn states as
+    /// its sleep says, an agent or command running without one, the
+    /// coordinator that does its work working, an outdated mark, or
+    /// inactive.
     pub fn of_workspace(workspace: &Workspace, stopped: bool) -> Self {
         let outdated = workspace.review.iter().any(|mark| mark.stale == Some(true));
         let agent = workspace.agent_state.map(|status| status.state);
@@ -62,6 +63,7 @@ impl ListStatus {
             WorkspaceState::Restoring => Self::Restoring,
             WorkspaceState::Updating => Self::Updating,
             WorkspaceState::Failed => Self::Failed,
+            WorkspaceState::Ready if workspace.asleep.is_some() => Self::Asleep,
             WorkspaceState::Ready if stopped && workspace.done => Self::Finished,
             WorkspaceState::Ready if stopped && !blocked => Self::Stopped,
             WorkspaceState::Ready if agent == Some(AgentState::Waiting) => Self::NeedsInput,
@@ -95,7 +97,8 @@ impl ListStatus {
         }
     }
 
-    /// A chat is stopped until it is restored, finished when it recorded
+    /// A chat is asleep while Shoal brings its agent back on its own; else
+    /// it is stopped until it is restored, finished when it recorded
     /// completion or blocked while its progress records what blocks it; a
     /// running one needs input while its agent does, is blocked, finished
     /// once it records completion, ready once it marks its work ready, or
@@ -104,6 +107,9 @@ impl ListStatus {
     pub fn of_chat(chat: &Chat) -> Self {
         let agent = chat.agent_state.map(|status| status.state);
         let blocked = chat.progress.as_ref().is_some_and(Progress::blocked);
+        if chat.asleep.is_some() {
+            return Self::Asleep;
+        }
         match chat.running {
             false if chat.completion.is_some() => Self::Finished,
             false if blocked => Self::Blocked,
@@ -133,12 +139,11 @@ impl ListStatus {
         }
     }
 
-    /// The agent's turn `state`, an idle agent shown sleeping as `sleep`
-    /// says.
+    /// The agent's turn `state`, an idle agent shown asleep while `sleep`
+    /// lasts.
     pub fn sleeping(state: AgentState, sleep: Option<Sleep>) -> Self {
         match (state, sleep) {
-            (AgentState::Idle, Some(Sleep::Turn)) => Self::Sleeping,
-            (AgentState::Idle, Some(Sleep::Permanent)) => Self::SleepingPermanent,
+            (AgentState::Idle, Some(_)) => Self::Asleep,
             (state, _) => Self::agent(state),
         }
     }
@@ -161,8 +166,7 @@ impl ListStatus {
             Self::Ready => "ready",
             Self::Working => "working",
             Self::Waiting => "waiting",
-            Self::Sleeping => "sleeping",
-            Self::SleepingPermanent => "sleeping (permanent)",
+            Self::Asleep => "asleep",
             Self::ProcessRunning => "process running",
             Self::ParentWorking => "parent working",
             Self::ReadyOutdated => "ready (outdated)",
@@ -178,8 +182,7 @@ impl ListStatus {
             Self::NeedsInput | Self::Ready | Self::Stopped => Group::YourTurn,
             Self::Working | Self::ProcessRunning | Self::ParentWorking => Group::Busy,
             Self::Waiting
-            | Self::Sleeping
-            | Self::SleepingPermanent
+            | Self::Asleep
             | Self::Blocked
             | Self::Finished
             | Self::ReadyOutdated
@@ -203,7 +206,7 @@ impl ListStatus {
             Self::Ready => Style::Success,
             Self::Finished => Style::Done,
             Self::Working => Style::Heading,
-            Self::Waiting | Self::Sleeping | Self::SleepingPermanent => Style::Idle,
+            Self::Waiting | Self::Asleep => Style::Idle,
             Self::ProcessRunning | Self::ParentWorking => Style::Active,
             Self::NeedsInput => Style::Attention,
             Self::Inactive | Self::Queued => Style::Muted,

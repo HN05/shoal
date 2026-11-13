@@ -1,6 +1,6 @@
 //! `shoal inbox`: what needs the user now, each with its space: open
 //! questions, pending approvals, agents that need input, failed workspaces,
-//! work marked ready at its current commit, running demos, Git worktrees
+//! agents Shoal put to sleep, work marked ready at its current commit, running demos, Git worktrees
 //! under Shoal's directories that no workspace owns, automatic cleanup
 //! failing other than in a workspace, and repositories whose default branch
 //! has stopped syncing.
@@ -222,7 +222,8 @@ fn decision_items(
 }
 
 /// Workspaces whose agent needs input, then blocked ones, then failed ones,
-/// then each mark made at the current commit.
+/// then those whose agent is asleep, then each mark made at the current
+/// commit.
 fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<SpaceId>) -> Vec<Item> {
     let status = |w: &Workspace| ListStatus::of_workspace(w, stopped.contains(&w.id));
     let waiting = workspaces
@@ -243,6 +244,11 @@ fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<SpaceId>) -> Vec<
         .map(|w| Item::Failed {
             workspace: w.clone(),
         });
+    let asleep = (workspaces.iter())
+        .filter(|w| status(w) == ListStatus::Asleep && w.asleep.is_some())
+        .map(|w| Item::Asleep {
+            workspace: w.clone(),
+        });
     let review = workspaces.iter().flat_map(|w| {
         w.review
             .iter()
@@ -252,12 +258,15 @@ fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<SpaceId>) -> Vec<
                 mark: mark.clone(),
             })
     });
-    waiting.chain(blocked).chain(failed).chain(review).collect()
+    (waiting.chain(blocked).chain(failed))
+        .chain(asleep)
+        .chain(review)
+        .collect()
 }
 
-/// Running chats whose agent needs input, then blocked chats, then each
-/// running chat that recorded its work as finished, and each mark of the
-/// others.
+/// Running chats whose agent needs input, then blocked chats, then chats
+/// whose agent is asleep, then each running chat that recorded its work as
+/// finished, and each mark of the others.
 fn chat_items(chats: &[Chat]) -> Vec<Item> {
     let running = || chats.iter().filter(|chat| chat.running);
     let waiting = running()
@@ -266,6 +275,9 @@ fn chat_items(chats: &[Chat]) -> Vec<Item> {
     let blocked = (chats.iter())
         .filter(|chat| ListStatus::of_chat(chat) == ListStatus::Blocked)
         .map(|chat| Item::ChatBlocked { chat: chat.clone() });
+    let asleep = (chats.iter())
+        .filter(|chat| chat.asleep.is_some())
+        .map(|chat| Item::ChatAsleep { chat: chat.clone() });
     let finished = running().flat_map(|chat| match chat.completion {
         Some(_) => vec![Item::ChatDone { chat: chat.clone() }],
         None => (chat.review.iter())
@@ -275,7 +287,9 @@ fn chat_items(chats: &[Chat]) -> Vec<Item> {
             })
             .collect(),
     });
-    waiting.chain(blocked).chain(finished).collect()
+    (waiting.chain(blocked).chain(asleep))
+        .chain(finished)
+        .collect()
 }
 
 /// Operations on the client type [`Item`] that only the `shoal` command uses.
@@ -314,9 +328,11 @@ impl ItemExt for Item {
             Self::NeedsInput { workspace }
             | Self::Blocked { workspace }
             | Self::Failed { workspace }
+            | Self::Asleep { workspace }
             | Self::Ready { workspace, .. } => Some(&workspace.id),
             Self::ChatNeedsInput { chat }
             | Self::ChatBlocked { chat }
+            | Self::ChatAsleep { chat }
             | Self::ChatReady { chat, .. }
             | Self::ChatDone { chat } => Some(&chat.id),
             Self::Demo { demo } => Some(&demo.workspace_id),
@@ -340,9 +356,11 @@ impl ItemExt for Item {
             Self::NeedsInput { workspace }
             | Self::Blocked { workspace }
             | Self::Failed { workspace }
+            | Self::Asleep { workspace }
             | Self::Ready { workspace, .. } => &workspace.name,
             Self::ChatNeedsInput { chat }
             | Self::ChatBlocked { chat }
+            | Self::ChatAsleep { chat }
             | Self::ChatReady { chat, .. }
             | Self::ChatDone { chat } => &chat.name,
             Self::Demo { demo } => &demo.workspace,
@@ -377,6 +395,7 @@ impl ItemExt for Item {
             }
             Self::Blocked { .. } | Self::ChatBlocked { .. } => ("blocked", Style::Warning),
             Self::Failed { .. } => ("failed", Style::Error),
+            Self::Asleep { .. } | Self::ChatAsleep { .. } => ("asleep", Style::Idle),
             Self::Ready { .. } | Self::ChatReady { .. } => ("ready", Style::Success),
             Self::ChatDone { .. } => ("finished", Style::Success),
             Self::Demo { .. } => ("demo", Style::Success),
@@ -394,6 +413,8 @@ impl ItemExt for Item {
             Self::Approval { request } => super::approvals::about(request),
             Self::NeedsInput { workspace } => title(workspace),
             Self::Blocked { workspace } => blocked_by(workspace.progress.as_ref()),
+            Self::Asleep { workspace } => asleep(workspace.asleep.as_ref()),
+            Self::ChatAsleep { chat } => asleep(chat.asleep.as_ref()),
             Self::ChatBlocked { chat } => blocked_by(chat.progress.as_ref()),
             Self::Failed { workspace } => workspace
                 .error
@@ -427,9 +448,11 @@ impl ItemExt for Item {
             Self::NeedsInput { workspace }
             | Self::Blocked { workspace }
             | Self::Failed { workspace }
+            | Self::Asleep { workspace }
             | Self::Ready { workspace, .. } => ui::workspace_mode_cell(workspace),
             Self::ChatNeedsInput { chat }
             | Self::ChatBlocked { chat }
+            | Self::ChatAsleep { chat }
             | Self::ChatReady { chat, .. }
             | Self::ChatDone { chat } => ui::chat_mode_cell(chat),
             _ => (String::new(), None),
@@ -441,6 +464,8 @@ impl ItemExt for Item {
             Self::Question { question } => question_note(question),
             Self::Untracked { .. } => "adopt it with shoal adopt".to_owned(),
             Self::SyncFailed { .. } => "retry with shoal repo sync".to_owned(),
+            Self::Asleep { workspace } => ui::wake_now(workspace.number),
+            Self::ChatAsleep { chat } => ui::wake_now(chat.number),
             _ => String::new(),
         }
     }
@@ -462,6 +487,11 @@ fn question_note(question: &Question) -> String {
         .chain(files)
         .collect::<Vec<_>>()
         .join("; ")
+}
+
+/// Why Shoal put an agent to sleep and what wakes it.
+fn asleep(asleep: Option<&crate::model::Asleep>) -> String {
+    asleep.map(ui::asleep_label).unwrap_or_default()
 }
 
 /// The first of what blocks a space, with its reason, and how many more.

@@ -262,7 +262,7 @@ positive and below their stop thresholds, and with disk protection enabled at
 least `disk.cleanup_free_gib` available on every monitored filesystem. Agents restore one at a time, each with
 a fresh healthy interval, which a reload changing `[machine.overload]` restarts. Missing
 readings, manual stop/removal, an exited wrapper, changed workspace ownership
-or a done assignment prevent recovery, except from an [idle stop](#idle-agents). Surviving processes Shoal cannot stop, or cannot prove stopped,
+or a done assignment prevent recovery, except from an [idle stop](#sleep). Surviving processes Shoal cannot stop, or cannot prove stopped,
 delay it: a `recovery_blocked` notification and the agent's terminal name
 them, and the wrapper keeps waiting until they exit. Reloading with recovery disabled
 finishes waiting agents at once, keeping their records for `shoal restore`.
@@ -523,7 +523,17 @@ inhibitor ends with the daemon. When it cannot start or ends on its own, such as
 when polkit refuses the lock, the daemon records a `keep_awake_failed`
 notification and tries again only once agents have no work or the config reloads.
 
-### Idle agents
+### Sleep
+
+An agent Shoal stopped on its own and brings back on its own is asleep: it
+comes back through the [agent queue](#agent-queue) once what it waits for
+arrives. Overload and disk protection, idle stops, a blocked space and a
+signal that ended its session put an agent to sleep. An agent that `shoal
+stop` stopped, or that quit on its own, is stopped instead, and stays down
+until `shoal restore`. `shoal list` shows an asleep agent's space as `asleep`,
+the [inbox](#inbox) lists it, and `shoal status` adds an `Asleep` line with
+why it sleeps, what wakes it, and `shoal attach` and `shoal queue start`, which
+wake it now; `--json` gives `asleep` with `reason` and `wakes_when`.
 
 An idle agent keeps its memory while it waits for its next update. Each
 [cleanup sweep](#automatic-cleanup) stops the [idle](#agent-state) agents of
@@ -567,7 +577,7 @@ restarts, restores and later turns, until `shoal sleep --undo`, which the user
 or a coordinator can run for a space below. Neither keeps updates, messages
 or the user from waking the agent. In a space whose mode never wakes its agent,
 `shoal sleep` records nothing. `list` shows a sleeping idle agent as
-`sleeping` or `sleeping (permanent)`, and `status` adds a `Sleep` line;
+`asleep`, and `status` adds a `Sleep` line;
 `--json` gives `sleep`, `turn` or `permanent`.
 
 ### Apps
@@ -722,11 +732,13 @@ processes have waited for, then memory, resident on Linux and the physical
 footprint on macOS. `shoal status` adds the process count, and `--json` gives
 `usage` in bytes and percent. The status is the
 state unless ready; for a ready workspace it is, in order of precedence,
-`queued (N)` while nothing Shoal started runs there and an agent waits at place N in
+`queued (N)` while nothing Shoal started runs there and an agent other than
+one asleep there waits at place N in
 the [agent queue](#agent-queue) to start in it, or `starting` once the queue
 admits it, each followed by what else it waits for as `shoal queue` shows (another
 status names such agents after it, as in `process running, queued (2)`), `stopped` when stopped agents or commands wait for `shoal restore` and the
-workspace is neither done nor [blocked](#progress), `needs input`, `blocked`
+workspace is neither done nor [blocked](#progress), `asleep` while its agent
+is [asleep](#sleep), `needs input`, `blocked`
 while its progress records what blocks it, `finished` after `shoal done` until
 `shoal done --undo` or `shoal restore` withdraws the completion, also while its
 work is stopped, `ready`, the other [agent states](#agent-state),
@@ -765,7 +777,8 @@ lists only the chats. `list --repo <repository>`, with or without
 chats and queued agents. `list --status <status>`,
 repeated or comma-separated, lists only rows with one of those statuses, spelled
 in kebab case (`needs-input`, `ready-outdated`, `queued`).
-A chat's status is `stopped` until it is restored, or `finished` after
+A chat's status is `asleep` while its agent is [asleep](#sleep), else
+`stopped` until it is restored, or `finished` after
 `shoal done` or `blocked` while blocked, then, in order of precedence,
 `needs input`, `blocked`, `finished`, `ready`, its agent's other
 [states](#agent-state), or `process running` before its agent reports one.
@@ -775,19 +788,20 @@ and pending approval requests that no coordinating agent decides, each with its
 [proposals](#approval-for-agent-issues-and-prs) whose workspace is gone, workspaces and
 running chats whose agent needs input, blocked workspaces and chats with the
 first of what blocks them, failed
-workspaces, [ready marks](#ready-for-review) at the current HEAD, one row per
+workspaces, workspaces and chats whose agent is [asleep](#sleep) with why,
+what wakes it and the commands that wake it now, [ready marks](#ready-for-review) at the current HEAD, one row per
 marked item, running [demos](#demos), Git worktrees under a repository's
 Shoal directory that no workspace owns, automatic cleanup failing other than in
 a workspace, and repositories whose default branch has failed to
 [sync](#repositories) for 30 minutes. There Enter answers a question, approves or denies a request after
-asking which, refusing one that replaced the request listed, attaches to the agent that needs input, opens a blocked space's actions, shows the status of a failed
+asking which, refusing one that replaced the request listed, attaches to the agent that needs input or is asleep, opens a blocked space's actions, shows the status of a failed
 workspace, and shows a ready PR or issue with `shoal view` (`shoal status` for a
 mark on the workspace itself), opens a demo, adopts an untracked worktree
 with [`shoal adopt`](#adopting-a-worktree), shows Shoal's status, as `shoal status`
 outside a space does, for failing cleanup, and retries a failed sync with `shoal repo sync`; Ctrl-T, Ctrl-O, Ctrl-F and Ctrl-V act on the row's
 workspace and Ctrl-A adds one. `shoal inbox` with `-p`/`--print`, like `--repo <repository>`,
 `--json` or output that is not a terminal, prints it; `--json` gives each item's
-`kind` (`question`, `approval`, `needs_input`, `failed`, `ready`, `demo`,
+`kind` (`question`, `approval`, `needs_input`, `failed`, `asleep`, `ready`, `demo`,
 `untracked`, `cleanup` or `sync_failed`) with its `question`, `request`, `workspace`, `demo`,
 `worktree` (`repository_id` and `path`), `error` or `sync`, and a ready item's `mark`. A workspace
 process gets only its own items, never untracked worktrees, failing cleanup or failing syncs, printed, and none after clearing its scope
@@ -1449,7 +1463,7 @@ turns ends normally. A pending retry outlasts a daemon restart;
 
 `status` shows when an idle agent's [cache expires](#agent-state) from its
 tool's [`prompt_cache_minutes`](config.md#ai-tools), which by default keeps
-[`[sleep] idle`](#idle-agents) from stopping an agent the moment its turn ends.
+[`[sleep] idle`](#sleep) from stopping an agent the moment its turn ends.
 
 A tool's [`proxy`](config.md#agent-tools-on-this-machine) sends its tracked
 agents' API requests through Shoal's retrying proxy to the `upstream` of a
