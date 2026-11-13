@@ -11,7 +11,7 @@ use std::{
 
 use serde_json::{Value, json};
 
-use crate::client::space_names::{SpaceName, SpaceSelector};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::resources::ResourceRequest,
     daemon::{
@@ -517,6 +517,38 @@ async fn a_job_whose_pr_moved_on_is_passed_over_without_a_workspace() {
             .all(|notification| notification.kind != NotificationKind::RunnerFailed),
         "{notifications:?}"
     );
+}
+
+#[tokio::test]
+async fn a_job_whose_checkout_fails_is_passed_over_and_its_workspace_removed() {
+    let fixture = fixture(vec![job("h1", 4, 1)], None, "").await;
+    let manager = &fixture.manager;
+    // The commit is there, but its tree cannot be read.
+    let checkout = manager.repository(&fixture.repository).await.unwrap().path;
+    let tree = git(&checkout, &["rev-parse", "HEAD^{tree}"]);
+    let objects = git(&checkout, &["rev-parse", "--git-path", "objects"]);
+    let (fan_out, rest) = tree.trim().split_at(2);
+    std::fs::remove_file(checkout.join(objects.trim()).join(fan_out).join(rest)).unwrap();
+
+    admit_and_claim(manager).await;
+    let notifications = manager.notifications(false, 50).await.unwrap();
+    let checkout_failed = format!("check out {}", fixture.head);
+    assert!(
+        notifications.iter().any(|notification| {
+            notification.kind == NotificationKind::RunnerFailed
+                && notification.message.contains(&checkout_failed)
+        }),
+        "{notifications:?}"
+    );
+    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    let workspaces = manager.list_workspaces().await.unwrap();
+    assert!(
+        workspaces.iter().all(|workspace| !workspace.disposable),
+        "{workspaces:?}"
+    );
+    // The forge still lists it, but the runner leaves it to others.
+    manager.refresh_waiting_jobs().await.unwrap();
+    assert!(job_entries(manager).await.is_empty());
 }
 
 /// A workspace holding the one permit of the fixture's `builds` pool.
@@ -1195,23 +1227,14 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
     let entry = &admitted[0];
     let job = entry.job.as_deref().unwrap();
     // As if the daemon stopped once the claim's workspace held the permit.
-    let workspace = manager
-        .create_job_workspace(
-            &fixture.repository,
-            (entry.name.as_str(), SpaceName::derive(&job.job.name, "ci")),
-            &job.run.commit,
-            job.run.reference.as_deref(),
-        )
-        .await
-        .unwrap();
     let forge = crate::forge::ForgeRepo::resolve(
         &format!("http://{}/team/repo", fixture.server.host),
         &manager.forge_hosts(),
     )
     .await
     .unwrap();
-    manager
-        .record_claim(entry, &workspace.id, &forge, job)
+    let workspace = manager
+        .create_claimed_workspace(entry, &forge, job)
         .await
         .unwrap();
     let request = ResourceRequest {

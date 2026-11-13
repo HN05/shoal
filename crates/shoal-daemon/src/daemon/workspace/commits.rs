@@ -32,6 +32,20 @@ struct Start {
     diff_ref: Option<String>,
 }
 
+/// The workspace of a CI job, recorded before its worktree is checked out,
+/// with its repository's Git gate.
+pub(crate) struct RecordedJobWorkspace {
+    repo: Repository,
+    workspace: Workspace,
+    git: OwnedMutexGuard<()>,
+}
+
+impl RecordedJobWorkspace {
+    pub(crate) fn id(&self) -> &SpaceId {
+        &self.workspace.id
+    }
+}
+
 impl Manager {
     /// Create a workspace at the commit `start` names in `repository`: a
     /// child of the space `parent`, by ID, or without one a top-level
@@ -141,18 +155,18 @@ impl Manager {
         self.settle_creation(repo, &workspace, result, git).await
     }
 
-    /// Create the workspace a CI job runs in, in `directory` and named
+    /// Record the workspace a CI job runs in, in `directory` and named
     /// after the job: at `commit`, fetched
     /// from the ref `reference` `origin` serves it under, or else by
     /// itself, made for nothing, so no PR reuses it, and disposable, without
-    /// setup; the seed clone still happens.
-    pub(crate) async fn create_job_workspace(
+    /// setup. [`Self::check_out_job_workspace`] creates its worktree.
+    pub(crate) async fn record_job_workspace(
         &self,
         repository_id: &RepositoryId,
         (directory, name): (&str, SpaceName),
         commit: &CommitId,
         reference: Option<&str>,
-    ) -> Result<Workspace> {
+    ) -> Result<RecordedJobWorkspace> {
         let (repo, git) = self.lock_repository(repository_id).await?;
         fetch_job_commit(&repo, commit, reference).await?;
         let at = StartingCommit {
@@ -168,8 +182,29 @@ impl Manager {
         let workspace = self
             .record_commit_workspace(&repo, (directory, name), at, None, None, options)
             .await?;
+        Ok(RecordedJobWorkspace {
+            repo,
+            workspace,
+            git,
+        })
+    }
+
+    /// Check out the worktree of the `recorded` job workspace at its commit;
+    /// the seed clone still happens. One that fails stays `failed`.
+    pub(crate) async fn check_out_job_workspace(
+        &self,
+        recorded: RecordedJobWorkspace,
+    ) -> Result<Workspace> {
+        let RecordedJobWorkspace {
+            repo,
+            workspace,
+            git,
+        } = recorded;
+        let commit = (workspace.at.as_ref())
+            .map(|at| at.commit.clone())
+            .context("the job's workspace records no starting commit")?;
         let result = self
-            .materialize_commit_worktree(&repo, &workspace, commit, None)
+            .materialize_commit_worktree(&repo, &workspace, &commit, None)
             .await;
         self.settle_creation(&repo, &workspace, result, git).await
     }

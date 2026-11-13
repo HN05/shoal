@@ -133,23 +133,7 @@ impl Manager {
         if forge.run_superseded(&self.user_account(), &job.run).await? {
             return Ok(Claim::Superseded);
         }
-        let workspace = self
-            .create_job_workspace(
-                repository,
-                (entry.name.as_str(), SpaceName::derive(&job.job.name, "ci")),
-                &job.run.commit,
-                job.run.reference.as_deref(),
-            )
-            .await?;
-        // Recorded before the workspace takes a permit or runs anything, so
-        // after a restart the claim's end removes it with what it holds.
-        let recorded = self.record_claim(entry, &workspace.id, &forge, job).await;
-        if let Err(error) = recorded {
-            if let Err(removal) = self.remove_job_workspace(&workspace.id).await {
-                crate::daemon::log!("runner: {removal:#}");
-            }
-            return Err(error);
-        }
+        let workspace = self.create_claimed_workspace(entry, &forge, job).await?;
         let claim = Claimed {
             entry,
             workspace: &workspace,
@@ -164,6 +148,38 @@ impl Manager {
             crate::daemon::log!("runner: {error:#}");
         }
         started
+    }
+
+    /// Create the workspace `entry`'s job runs in and record the claim of
+    /// the job there, before the workspace takes a permit or runs anything,
+    /// so the claim's end removes it with what it holds, also after a
+    /// restart. A workspace whose checkout failed is claimed too and
+    /// removed, so a removal that fails is tried again until it succeeds.
+    pub(super) async fn create_claimed_workspace(
+        &self,
+        entry: &QueueEntry,
+        forge: &ForgeRepo,
+        job: &QueuedJob,
+    ) -> Result<Workspace> {
+        let recorded = self
+            .record_job_workspace(
+                entry.job_repository()?,
+                (entry.name.as_str(), SpaceName::derive(&job.job.name, "ci")),
+                &job.run.commit,
+                job.run.reference.as_deref(),
+            )
+            .await?;
+        let id = recorded.id().clone();
+        let created = self.check_out_job_workspace(recorded).await;
+        let claimed = self.record_claim(entry, &id, forge, job).await;
+        let error = match (created, claimed) {
+            (Ok(workspace), Ok(())) => return Ok(workspace),
+            (Err(error), _) | (Ok(_), Err(error)) => error,
+        };
+        if let Err(removal) = self.remove_job_workspace(&id).await {
+            crate::daemon::log!("runner: {removal:#}");
+        }
+        Err(error)
     }
 
     /// Start `claim`'s job in its workspace once it holds its permit.
@@ -248,7 +264,7 @@ impl Manager {
     /// spaces its run links now. Its entry keeps the job's slot until
     /// [`Self::take_over_entry`], so a claim that cannot go on puts the job
     /// back.
-    pub(super) async fn record_claim(
+    async fn record_claim(
         &self,
         entry: &QueueEntry,
         workspace: &SpaceId,
