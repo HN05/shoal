@@ -56,7 +56,7 @@ impl Manager {
         let configured = settings.env;
         let repository_name = crate::repository::name(&repository).to_owned();
         let workspace_id = workspace.id.clone();
-        let token = ScopeToken::generate();
+        let token = crate::daemon::scope::new_token();
         let paths = self.paths.clone();
         self.store
             .write(move |tx| {

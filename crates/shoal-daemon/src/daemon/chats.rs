@@ -711,7 +711,7 @@ fn insert(
                 .transpose()?,
             hands_over,
             unique_id(process)?,
-            ScopeToken::generate(),
+            crate::daemon::scope::new_token(),
             workspace,
             chat.mode,
             (chat.root_dir.as_deref()).map(|root| root.to_string_lossy().into_owned()),

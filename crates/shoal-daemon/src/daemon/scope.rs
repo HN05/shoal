@@ -16,6 +16,11 @@ mod reach;
 
 pub(in crate::daemon) use access::NOT_NOW;
 
+/// A new scope token, which no other caller holds.
+pub(crate) fn new_token() -> ScopeToken {
+    ScopeToken::from(uuid::Uuid::new_v4().to_string())
+}
+
 /// The space and optional tracked execution a scope token belongs to.
 #[derive(Debug, Clone)]
 pub struct Caller {

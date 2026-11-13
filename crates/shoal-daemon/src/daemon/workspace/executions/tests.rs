@@ -1,6 +1,5 @@
 use super::*;
 use crate::client::execution_ids::ExecutionId;
-use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{install_test_script, manager, repository};
 use crate::daemon::workspace::agents::ProtectionExt;
@@ -502,7 +501,7 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
             ..request.clone()
         },
         Reattach {
-            scope_token: ScopeToken::generate(),
+            scope_token: crate::daemon::scope::new_token(),
             ..request.clone()
         },
         Reattach {

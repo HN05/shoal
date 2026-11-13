@@ -12,11 +12,6 @@ use serde::{Deserialize, Serialize};
 pub struct ScopeToken(String);
 
 impl ScopeToken {
-    /// A new token, which no other caller holds.
-    pub fn generate() -> Self {
-        Self(uuid::Uuid::new_v4().to_string())
-    }
-
     /// The token's text, for the places that send it.
     pub fn expose(&self) -> &str {
         &self.0
@@ -30,7 +25,7 @@ impl std::fmt::Debug for ScopeToken {
 }
 
 /// The token that recorded text, such as an environment variable or a file
-/// a starter hands over, holds.
+/// a starter hands over, holds, or that the daemon issues.
 impl From<String> for ScopeToken {
     fn from(token: String) -> Self {
         Self(token)

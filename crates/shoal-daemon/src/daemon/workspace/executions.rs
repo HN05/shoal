@@ -307,7 +307,7 @@ impl Manager {
         let settings = self.workspace_settings(&workspace).await?;
         let repository = self.repository(&workspace.repository_id).await?;
         let id = ExecutionId::generate();
-        let scope_token = ScopeToken::generate();
+        let scope_token = crate::daemon::scope::new_token();
         let (parent_execution, agent_execution) = parents;
         let (ports, directories) = self
             .persist_execution(

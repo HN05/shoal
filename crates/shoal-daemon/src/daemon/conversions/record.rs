@@ -448,7 +448,7 @@ pub(crate) fn replace_workspace(
             chat.session,
             ChatRestore::Resume,
             crate::daemon::chats::unique_id(&chat.process)?,
-            ScopeToken::generate(),
+            crate::daemon::scope::new_token(),
             chat.mode,
             crate::daemon::store::narrowing_column(&chat.narrowing)?,
             chat.stopped_by,

@@ -96,7 +96,7 @@ impl Operations {
     /// another the daemon runs for the caller, until [`Self::revoke`]
     /// revokes it.
     pub(crate) fn issue(&self, caller: &Caller) -> ScopeToken {
-        let token = ScopeToken::generate();
+        let token = crate::daemon::scope::new_token();
         let mut scopes = self.scopes.lock().unwrap_or_else(PoisonError::into_inner);
         scopes.insert(token.clone(), caller.clone());
         token
