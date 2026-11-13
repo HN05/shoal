@@ -163,7 +163,8 @@ async fn start_admitted(ctx: &Context, target: &AddTarget, plan: AddPlan) -> Res
         .context("the admitted agent left the agent queue")?;
     let name = planned_workspace_name(ctx, target, &plan.creation).await?;
     let opens = entry.opens.as_ref();
-    let started = crate::queued_starts::start_admitted_launch(&ctx.paths, plan, opens, &name).await;
+    let started =
+        crate::queued_starts::start_admitted_launch(&ctx.paths, plan, opens, &name, ctx.json).await;
     failing_entry(ctx, Some(&entry.id), started).await?;
     ctx.emit(&format!("Starting {name} in the background"), &entry)?;
     Ok(0)

@@ -22,19 +22,22 @@ use crate::{
 pub(super) async fn start(paths: &CommandPaths, entry: &QueueEntryId) -> Result<()> {
     let (queued, plan) = plan(paths, entry).await?;
     let QueueEntry { opens, name, .. } = &queued.entry;
-    start_admitted(paths, plan, opens.as_ref(), name).await
+    // Nothing reads this worker's output.
+    start_admitted(paths, plan, opens.as_ref(), name, false).await
 }
 
 /// Start the add worker for an admitted launch's `plan`, the planned
 /// workspace `name`, in the background where the terminal that queued it
-/// would have, or in no place for an agent that runs its own way. The
-/// settings of the existing workspace the launch `opens`, its worktree's
-/// file included, decide which, or else the repository's.
+/// would have, or in no place for an agent that runs its own way, reporting
+/// as JSON when `json`. The settings of the existing workspace the launch
+/// `opens`, its worktree's file included, decide which, or else the
+/// repository's.
 pub async fn start_admitted(
     paths: &CommandPaths,
     mut plan: AddPlan,
     opens: Option<&SpaceId>,
     name: &str,
+    json: bool,
 ) -> Result<()> {
     let target = match opens {
         Some(workspace) => ConfigTarget::Space(SpaceSelector::id(workspace)),
@@ -42,7 +45,7 @@ pub async fn start_admitted(
     };
     let settings = crate::config::settings(paths, target).await?;
     if runs_its_own_way(&settings, &plan) {
-        return run_add_worker(paths, &plan).await;
+        return run_add_worker(paths, &plan, json).await;
     }
     crate::terminal::queued::start_add(paths, &settings, &mut plan, name).await
 }
@@ -78,22 +81,24 @@ fn runs_its_own_way(settings: &Effective, plan: &AddPlan) -> bool {
     })
 }
 
-/// Run the add worker for `plan` in no place, as a process of this one that
-/// ends once its agent runs its own way. The worker frees the entry's slot
-/// itself when the launch fails, as it does in a place.
-async fn run_add_worker(paths: &CommandPaths, plan: &AddPlan) -> Result<()> {
+/// Run the add worker for `plan` in no place, reporting as JSON when
+/// `json`, as a process of this one that ends once its agent runs its own
+/// way. The worker frees the entry's slot itself when the launch fails, as
+/// it does in a place, and says why.
+async fn run_add_worker(paths: &CommandPaths, plan: &AddPlan, json: bool) -> Result<()> {
     let worker = Worker::Add {
         host: None,
         close_when_done: false,
         focused: false,
     };
-    let argv = internal_command(paths, false, worker)?;
-    tokio::process::Command::new(&argv[0])
+    let argv = internal_command(paths, json, worker)?;
+    let status = tokio::process::Command::new(&argv[0])
         .args(&argv[1..])
         .env(env::ADD_PLAN, serde_json::to_string(plan)?)
         .stdin(Stdio::null())
         .status()
         .await
         .context("run the add worker")?;
+    anyhow::ensure!(status.success(), "the workspace's start failed ({status})");
     Ok(())
 }
