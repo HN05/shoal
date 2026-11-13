@@ -113,12 +113,13 @@ async fn remove_worktree(repo: &Path, path: &Path, files: FileRemoval) -> Result
     command.arg("--").arg(path);
     let link = link_text(path).await?;
     if let Err(error) = super::output(command).await {
+        let failed = || format!("remove the worktree at {}: {error:#}", path.display());
         // Once Git starts deleting files it forgets the worktree, whatever
         // it could not delete, so the rest goes as a disowned worktree's.
-        if listed(repo, path).await?.is_some() {
+        if listed(repo, path).await.with_context(failed)?.is_some() {
             return Err(error.context(format!("remove the worktree at {}", path.display())));
         }
-        finish_deletion(path, link).await?;
+        finish_deletion(path, link).await.with_context(failed)?;
     }
     ensure!(
         !off_runtime::exists(path).await?,
