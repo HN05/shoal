@@ -189,7 +189,9 @@ user_email = "you@example.com"   # An Atlassian API token's account; omit for an
 
 `type` sets the API a host serves, which Shoal otherwise asks any host other
 than `github.com`, `gitlab.com` and `bitbucket.org` once. `user_token` is your
-login on the host, and `agent_token` the [agent account](reference.md#agent-accounts)'s;
+login on the host, and `agent_token` the [agent account](reference.md#agent-accounts)'s,
+which agents' changes need: `agent_token = { same_as = "user_token" }` makes
+them with your login;
 `user_email` and `agent_email` apply only to Bitbucket. A `{ cmd }` runs at most once
 per operation that needs the token and for at most a minute, and its output is
 never stored; an `{ env }` reads the daemon's environment for its own requests.

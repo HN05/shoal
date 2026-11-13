@@ -300,7 +300,8 @@ instead of the PR delivery guidance below.
   `shoal forge api` requests, sent through the REST transport; scoped callers cannot
   merge. `shoal forge api` paths stay under the forge's API root. Every forge
   request sends the `[machine.forges."<host>"]` token of the repository's own
-  host (`agent_token` for the agent account), validated, on curl's stdin, fetched
+  host (`user_token` for the user; `agent_token` for the agent account, whose
+  reads fall back to `user_token` but whose changes never do), validated, on curl's stdin, fetched
   at most once per operation, never logged, stored or sent to another host;
   Shoal runs no forge CLI. The forge is chosen
   by a pinned `[machine.forges."<host>"] type`, a well-known host name, or else the

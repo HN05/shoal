@@ -105,12 +105,15 @@ async fn each_forge_signs_in_with_its_own_scheme_from_one_fetch() {
 fn changes_without_a_login_name_the_missing_token() {
     let fetches = Arc::new(AtomicUsize::new(0));
     let user = logins(&[("user.example", "user-u")], &fetches);
-    let account = Account::agent(Logins::default(), user)
+    let agent = logins(&[("agent.example", "agent-a")], &fetches);
+    let account = Account::agent(agent, user)
         .naming_missing(Box::new(|host| format!("set a token for {host}")));
-    // The user's login stands in for the agent's own.
-    account.require_login(&repo("user.example")).unwrap();
-    let refused = account.require_login(&repo("none.example")).unwrap_err();
-    assert_eq!(refused.to_string(), "set a token for none.example");
+    account.require_login(&repo("agent.example")).unwrap();
+    // The user's login reads for the agent but never changes anything.
+    for host in ["user.example", "none.example"] {
+        let refused = account.require_login(&repo(host)).unwrap_err();
+        assert_eq!(refused.to_string(), format!("set a token for {host}"));
+    }
     let unnamed = Account::default().require_login(&repo("none.example"));
     assert_eq!(
         unnamed.unwrap_err().to_string(),

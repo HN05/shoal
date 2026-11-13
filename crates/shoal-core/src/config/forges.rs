@@ -198,14 +198,18 @@ impl Forge {
 impl Whose {
     /// What a change to a host without a token of `self`'s says: which token
     /// to set, and that the daemon reads the global config only on reload.
+    /// An agent's changes may take the user's login only by name.
     pub fn missing(self) -> Missing {
-        let tokens = match self {
-            Self::User => "user_token",
-            Self::Agent => "agent_token, or your own user_token,",
+        let key = self.token_key();
+        let alternative = match self {
+            Self::User => "",
+            Self::Agent => {
+                ", or agent_token = { same_as = \"user_token\" } to make agents' changes with your login"
+            }
         };
         Box::new(move |host| {
             format!(
-                "no token for {host}: set {tokens} under [machine.forges.\"{host}\"] in the global config, then run `shoal config reload`"
+                "no {key} for {host}: set {key} under [machine.forges.\"{host}\"] in the global config{alternative}, then run `shoal config reload`"
             )
         })
     }

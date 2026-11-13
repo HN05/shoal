@@ -66,7 +66,8 @@ struct Signer {
 #[derive(Default)]
 pub struct Account {
     logins: Logins,
-    /// The user's tokens, for hosts an agent has none of its own for.
+    /// The user's tokens, which an agent reads with from hosts it has none
+    /// of its own for.
     fallback: Logins,
     /// What earlier requests as this account taught.
     memory: Memory,
@@ -83,8 +84,8 @@ impl Account {
         }
     }
 
-    /// An agent's account; hosts it has no token for use the user's, as
-    /// the agent itself would.
+    /// An agent's account; it reads from hosts it has no token for with the
+    /// user's, as the agent itself would, but changes nothing there.
     pub fn agent(agent: Logins, user: Logins) -> Self {
         Self {
             logins: agent,
@@ -121,10 +122,11 @@ impl Account {
         signer.authorization(repo.kind).await.map(Some)
     }
 
-    /// Refuse a change to `repo` without a login for its host, which the
-    /// forge would refuse anyway, saying which token is missing.
+    /// Refuse a change to `repo` without the account's own login for its
+    /// host, saying which token is missing: an agent's changes never go out
+    /// with the user's login it reads with.
     pub(crate) fn require_login(&self, repo: &ForgeRepo) -> Result<()> {
-        if self.signer(&repo.host).is_some() {
+        if self.logins.get(&repo.host).is_some() {
             return Ok(());
         }
         match &self.missing {

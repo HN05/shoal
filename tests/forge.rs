@@ -45,7 +45,7 @@ const AGENT_TOKEN: &str = "[machine.forges.\"{forge}\"]\ntype = \"{type}\"\n\
 impl Fixture {
     /// `config` names the forge's host as `{forge}` and its type as `{type}`;
     /// unless `config` sets the host's table, its type is pinned and the user
-    /// has the token `usertoken` there.
+    /// has the token `usertoken` there, which agents' changes use too.
     fn new(forge: Forge, config: &str) -> Self {
         let root = support::fixture::home();
         let server = (forge == Forge::Forgejo).then(|| Server::start(root.path()));
@@ -60,7 +60,8 @@ impl Fixture {
         let table = format!("[machine.forges.\"{host}\"]");
         if !config.contains(&table) {
             config.push_str(&format!(
-                "\n{table}\ntype = \"{kind}\"\nuser_token = \"usertoken\"\n"
+                "\n{table}\ntype = \"{kind}\"\nuser_token = \"usertoken\"\n\
+                 agent_token = {{ same_as = \"user_token\" }}\n"
             ));
         }
         let (web, origin) = match forge {
@@ -674,7 +675,8 @@ fn label_pr(fixture: &Fixture) -> Value {
 #[test]
 fn unknown_hosts_are_asked_once_which_forge_they_serve() {
     // The host's token goes to each forge's endpoint on the host, never elsewhere.
-    let config = "[machine.forges.\"ghe.invalid\"]\nuser_token = \"enterprise\"\n";
+    let config = "[machine.forges.\"ghe.invalid\"]\nuser_token = \"enterprise\"\n\
+                  agent_token = { same_as = \"user_token\" }\n";
     let fixture = Fixture::new(Forge::GitHub, config);
     git(
         &fixture.repo,
@@ -763,6 +765,7 @@ fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
     let fixture = Fixture::new(
         Forge::GitHub,
         "[machine.forges.\"GHE.invalid\"]\ntype = \"github\"\nuser_token = \"usertoken\"\n\
+         agent_token = { same_as = \"user_token\" }\n\
          [machine.forges.\"gitlab.invalid\"]\ntype = \"github\"\n",
     );
     git(
@@ -5435,51 +5438,71 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     assert_eq!(direct["created"], true);
 }
 
-/// A chat's agent opens issues as the agent account; without any token
-/// for the host the change is refused before it reaches the forge, naming
-/// the token to set.
+/// The output of a chat's agent opening an issue under `config`, and the
+/// authorization of each issue the forge received.
+fn chat_issue_open(config: &str) -> (std::process::Output, Vec<Value>) {
+    let fixture = Fixture::new(Forge::Forgejo, config);
+    let (mut agent, chat) = fixture.run_chat("planning", &[]);
+    let scope = fixture.request(json!({"chat_scope": {"chat": chat}}));
+    let token = scope["data"]["token"].as_str().unwrap().to_owned();
+    let created = json!({"number": 40, "title": "Flaky", "state": "open", "labels": []});
+    fixture.respond(json!({
+        "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
+        "GET repos/team/project/issues/40": {"body": created},
+    }));
+    fixture.requests();
+    let output = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .env("SHOAL_CHAT", &chat)
+        .env("SHOAL_SCOPE_TOKEN", &token)
+        .args(["--json", "issue", "open", "--title", "Flaky"])
+        .output()
+        .unwrap();
+    let posts = (fixture.requests().into_iter())
+        .filter(|request| request[0] == "POST repos/team/project/issues")
+        .map(|request| request[2].clone())
+        .collect();
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+    (output, posts)
+}
+
+/// A chat's agent opens issues as the agent account.
 #[test]
-fn a_chats_change_without_a_token_names_the_missing_one() {
-    let untokened = "[machine.forges.\"{forge}\"]\ntype = \"{type}\"\n";
-    for (config, signed) in [(AGENT_TOKEN, true), (untokened, false)] {
-        let fixture = Fixture::new(Forge::Forgejo, config);
-        let (mut agent, chat) = fixture.run_chat("planning", &[]);
-        let scope = fixture.request(json!({"chat_scope": {"chat": chat}}));
-        let token = scope["data"]["token"].as_str().unwrap().to_owned();
-        let created = json!({"number": 40, "title": "Flaky", "state": "open", "labels": []});
-        fixture.respond(json!({
-            "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
-            "GET repos/team/project/issues/40": {"body": created},
-        }));
-        fixture.requests();
-        let output = fixture
-            .command()
-            .current_dir(fixture.root.path())
-            .env("SHOAL_CHAT", &chat)
-            .env("SHOAL_SCOPE_TOKEN", &token)
-            .args(["--json", "issue", "open", "--title", "Flaky"])
-            .output()
-            .unwrap();
-        let posts: Vec<_> = (fixture.requests().into_iter())
-            .filter(|request| request[0] == "POST repos/team/project/issues")
-            .map(|request| request[2].clone())
-            .collect();
-        if signed {
-            assert!(output.status.success(), "{output:?}");
-            assert_eq!(posts, [json!("token agenttoken")]);
-        } else {
-            assert!(!output.status.success(), "{output:?}");
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(
-                stderr.contains("set agent_token, or your own user_token, under [machine.forges.")
-                    && stderr.contains("shoal config reload"),
-                "{stderr}"
-            );
-            assert!(posts.is_empty(), "{posts:?}");
-        }
-        agent.kill().unwrap();
-        agent.wait().unwrap();
-    }
+fn a_chats_change_signs_in_with_the_agent_token() {
+    let (output, posts) = chat_issue_open(AGENT_TOKEN);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(posts, [json!("token agenttoken")]);
+}
+
+/// Without an agent token, a chat's change is refused before it reaches
+/// the forge, naming the token, though the user's login is set.
+#[test]
+fn a_chats_change_without_an_agent_token_names_it() {
+    let (output, posts) = chat_issue_open(
+        "[machine.forges.\"{forge}\"]\ntype = \"{type}\"\nuser_token = \"usertoken\"\n",
+    );
+    assert!(!output.status.success(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("set agent_token under [machine.forges.")
+            && stderr.contains("agent_token = { same_as = ")
+            && stderr.contains("shoal config reload"),
+        "{stderr}"
+    );
+    assert!(posts.is_empty(), "{posts:?}");
+}
+
+/// An agent token that names the user's login makes changes with it.
+#[test]
+fn a_chats_change_takes_the_users_login_by_same_as() {
+    let (output, posts) = chat_issue_open(
+        "[machine.forges.\"{forge}\"]\ntype = \"{type}\"\nuser_token = \"usertoken\"\n\
+         agent_token = { same_as = \"user_token\" }\n",
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(posts, [json!("token usertoken")]);
 }
 
 /// A chat's agent proposes an issue as a workspace's does, from no branch
@@ -6513,7 +6536,8 @@ fn agents_open_issues_directly_on_another_forge_when_allowed() {
     let fixture = Fixture::new(
         Forge::Forgejo,
         "[permissions]\nissue_other_repositories = 'direct'\n\
-         [machine.forges.\"github.com\"]\nuser_token = \"usertoken\"\n",
+         [machine.forges.\"github.com\"]\nuser_token = \"usertoken\"\n\
+         agent_token = { same_as = \"user_token\" }\n",
     );
     fixture.respond(json!({
         "POST repos/them/tool/issues": {"status": 201, "body": {"number": 5}},
