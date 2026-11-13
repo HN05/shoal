@@ -234,10 +234,16 @@ impl Config {
         self.repository.clone()
     }
 
+    /// This machine's settings over the built-in defaults, without a
+    /// repository's layers, with the global file's references followed.
+    pub fn global_settings(&self) -> Result<Settings> {
+        resolve::Stack::new(self, &ConfigLayers::default())?.resolve()
+    }
+
     /// Every AI tool as this machine's config describes it, without a
     /// repository's layers.
     pub fn tools(&self) -> Result<crate::ai::Tools> {
-        let settings = resolve::Stack::new(self, &ConfigLayers::default())?.resolve()?;
+        let settings = self.global_settings()?;
         Ok(crate::ai::tools(&agents::describe(
             &settings.agents,
             &self.machine.agents,

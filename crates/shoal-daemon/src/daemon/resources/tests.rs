@@ -295,3 +295,29 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
             .starts_with("no compatible")
     );
 }
+
+/// A global resource that takes another's definition stays global, as the
+/// workspace's settings resolve it, rather than conflicting with it.
+#[tokio::test]
+async fn a_global_resource_takes_another_ones_definition() {
+    use crate::daemon::test_support::{manager, repository};
+    let (temp, manager) = manager().await;
+    crate::daemon::test_support::configure(
+        &manager,
+        "[resources]\nlock = { capacity = 2 }\ncopy = { same_as = \"lock\" }\n",
+    )
+    .await;
+    let repository_dir = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(repository_dir.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    let definitions = manager.resource_definitions(&workspace).await.unwrap();
+    let (scope, copy) = &definitions["copy"];
+    assert_eq!(*scope, Scope::Global);
+    assert_eq!(copy.capacity, 2);
+}
