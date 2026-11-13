@@ -8,7 +8,7 @@ use crate::client::space_ids::SpaceId;
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     client::output::chat::RemovedChat,
-    daemon::{cleanup::Snapshot, events::EventCause},
+    daemon::{cleanup::Snapshot, events::EventCause, space_processes::WorktreeTies},
     model::{Completion, PresentSpace, SpaceRef},
     process::DirectoryUsers,
     removal::{IdleRestore, Inspection, InspectionPolicy, RemovalResult, UnsavedWork},
@@ -317,8 +317,12 @@ impl Manager {
         let below = self.taken_with(id, removal).await?;
         let children = self.remove_children(space.name(), below, removal).await?;
         if let Some(worktree) = &worktree {
-            self.run_removal_hooks(worktree, removal).await?;
+            self.run_removal_hooks(worktree).await?;
         }
+        // After the hooks, so the final inspection and the checkpoint include
+        // the files these processes write as they stop.
+        let ties = (worktree.as_ref()).map_or(WorktreeTies::None, |stage| stage.ties(removal));
+        self.stop_removed_processes(space, ties).await?;
         let last = self
             .check_space_and_worktree(id, removal, Stage::Final, worktree.as_ref(), &cancelled)
             .await?;

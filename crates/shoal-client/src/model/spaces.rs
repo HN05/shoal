@@ -116,6 +116,15 @@ impl PresentSpace {
         }
     }
 
+    /// The `root_dir` a chat without a repository started in, which holds
+    /// its temporary directory; none for a space with a repository.
+    pub fn root_dir(&self) -> Option<&std::path::Path> {
+        match self {
+            Self::Workspace(_) => None,
+            Self::Chat(chat) => chat.root_dir.as_deref(),
+        }
+    }
+
     /// Its worktree, which only a workspace has: the workspace's record.
     pub fn worktree(&self) -> Option<&Workspace> {
         match self {

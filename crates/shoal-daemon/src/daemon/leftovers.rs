@@ -15,6 +15,7 @@ use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use crate::{
     daemon::{space_processes::WorktreeTies, workspace::Manager},
     fsutil::off_runtime,
+    model::PresentSpace,
     process::{
         described,
         identity::{
@@ -132,10 +133,12 @@ impl Manager {
         let mut spaces = Vec::new();
         for workspace in self.list_workspaces().await? {
             let ties = WorktreeTies::when(off_runtime::is_dir(&workspace.path).await?);
-            spaces.push(self.workspace_space(&workspace, ties).await?);
+            let workspace = PresentSpace::Workspace(workspace);
+            spaces.push(self.space_ties(&workspace, ties).await?);
         }
         for chat in self.chats().await? {
-            spaces.push(self.chat_space(&chat).await?);
+            let chat = PresentSpace::Chat(chat);
+            spaces.push(self.space_ties(&chat, WorktreeTies::None).await?);
         }
         Ok(spaces)
     }

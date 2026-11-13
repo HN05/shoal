@@ -11,7 +11,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{events::StoppedProcess, leftovers::COMMAND_LIMIT, store, workspace::Manager},
     fsutil::off_runtime,
-    model::{Chat, PresentSpace, Workspace},
+    model::{PresentSpace, Workspace},
     process::{
         described,
         identity::{
@@ -20,7 +20,6 @@ use crate::{
         },
     },
     state::WorkspaceState,
-    tmp_dirs::Layout,
 };
 
 /// Operations on the client type [`Selection`] that only the `shoal` command uses.
@@ -68,23 +67,18 @@ impl Manager {
         selection: Selection,
         requester: Option<Identity>,
     ) -> Result<Stopped> {
-        let workspace = match self.space(selector).await? {
-            PresentSpace::Workspace(workspace) => workspace,
-            PresentSpace::Chat(chat) => {
-                let stopped = self
-                    .stop_untracked(self.chat_space(&chat).await?, selection, requester)
-                    .await?;
-                return Ok(Stopped {
-                    space: chat.name,
-                    processes: stopped.len(),
-                });
+        let space = self.space(selector).await?;
+        let stopped = match &space {
+            PresentSpace::Workspace(workspace) => {
+                (self.stop_workspace_untracked(workspace, selection, requester)).await?
+            }
+            PresentSpace::Chat(_) => {
+                let ties = self.space_ties(&space, WorktreeTies::None).await?;
+                self.stop_untracked(ties, selection, requester).await?
             }
         };
-        let stopped = self
-            .stop_workspace_untracked(&workspace, selection, requester)
-            .await?;
         Ok(Stopped {
-            space: workspace.name,
+            space: space.name().clone(),
             processes: stopped.len(),
         })
     }
@@ -105,8 +99,9 @@ impl Manager {
         let stopped = async {
             let verified = off_runtime::is_dir(&workspace.path).await?
                 && self.verify_worktree(workspace).await.is_ok();
+            let space = PresentSpace::Workspace(workspace.clone());
             let space = self
-                .workspace_space(workspace, WorktreeTies::when(verified))
+                .space_ties(&space, WorktreeTies::when(verified))
                 .await?;
             self.stop_untracked(space, selection, requester).await
         }
@@ -116,46 +111,25 @@ impl Manager {
         stopped
     }
 
-    /// What ties processes to `workspace`, through its worktree as `ties`
-    /// says, which the caller verified is the workspace's.
-    pub(crate) async fn workspace_space(
+    /// What ties processes to `space`: its identity, its temporary directory
+    /// while that is the one Shoal created, and its worktree, where it has
+    /// one, as `ties` says, which the caller verified is the space's.
+    pub(crate) async fn space_ties(
         &self,
-        workspace: &Workspace,
+        space: &PresentSpace,
         ties: WorktreeTies,
     ) -> Result<Space> {
-        let repo = self.repository(&workspace.repository_id).await?;
-        let worktree = || workspace.path.clone();
-        let mut directories: Vec<PathBuf> = (ties == WorktreeTies::All)
-            .then(worktree)
+        let worktree = space.worktree().map(|workspace| workspace.path.clone());
+        let mut directories: Vec<PathBuf> = (worktree.clone())
+            .filter(|_| ties == WorktreeTies::All)
             .into_iter()
             .collect();
-        directories.extend(Layout::of(&repo).and_then(|layout| layout.existing(&workspace.id)));
+        let layout = self.space_tmp_layout(space).await?;
+        directories.extend(layout.and_then(|layout| layout.existing(space.id())));
         Ok(Space {
-            id: workspace.id.clone(),
+            id: space.id().to_owned(),
             directories,
-            programs: (ties != WorktreeTies::None).then(worktree),
-        })
-    }
-
-    /// Stop the processes of `chat` outside its executions, those carrying
-    /// its identity or working in its temporary directory, such as an agent
-    /// Shoal did not start under a wrapper.
-    pub(crate) async fn stop_chat_processes(&self, chat: &Chat) -> Result<()> {
-        let space = self.chat_space(chat).await?;
-        (self.stop_untracked(space, Selection::Processes, None).await).map(drop)
-    }
-
-    /// What ties processes to `chat`: its identity and its temporary
-    /// directory, while that is the one Shoal created.
-    pub(crate) async fn chat_space(&self, chat: &Chat) -> Result<Space> {
-        let repo = self.chat_repository(chat).await?;
-        Ok(Space {
-            id: chat.id.clone(),
-            directories: (self.chat_tmp_layout(repo.as_ref(), chat))
-                .and_then(|layout| layout.existing(&chat.id))
-                .into_iter()
-                .collect(),
-            programs: None,
+            programs: worktree.filter(|_| ties != WorktreeTies::None),
         })
     }
 

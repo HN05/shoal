@@ -554,20 +554,22 @@ impl Manager {
         Ok(())
     }
 
-    /// Stop every untracked process of the workspace being removed, such as
-    /// servers its hooks or apps started, or scripts a recording left
-    /// behind, since none outlives removal. Its worktree ties processes to
-    /// it as `ties` says once the directory is verified to be its worktree
-    /// still.
-    pub(in crate::daemon::workspace) async fn stop_removed_processes(
+    /// Stop every untracked process of the space being removed, such as
+    /// servers its hooks or apps started, scripts a recording left behind,
+    /// or an agent Shoal did not start under a wrapper, since none outlives
+    /// removal. Its worktree, where it has one, ties processes to it as
+    /// `ties` says once the directory is verified to be its worktree still.
+    pub(crate) async fn stop_removed_processes(
         &self,
-        workspace: &Workspace,
+        space: &PresentSpace,
         ties: WorktreeTies,
     ) -> Result<()> {
-        if ties != WorktreeTies::None {
+        if let Some(workspace) = space.worktree()
+            && ties != WorktreeTies::None
+        {
             self.verify_removed_worktree(workspace).await?;
         }
-        let space = self.workspace_space(workspace, ties).await?;
+        let space = self.space_ties(space, ties).await?;
         self.stop_untracked(space, Selection::Processes, None)
             .await?;
         Ok(())

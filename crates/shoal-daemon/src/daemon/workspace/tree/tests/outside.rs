@@ -117,7 +117,11 @@ async fn a_chat_without_a_repository_keeps_its_temporary_directory_in_root_dir()
     assert_eq!(listed.root_dir, Some(root_dir.clone()));
     let directory = manager.chat_checkout_path(&listed).await.unwrap();
     assert_eq!(directory, root_dir);
-    let space = manager.chat_space(&listed).await.unwrap();
+    let space = crate::model::PresentSpace::Chat(listed);
+    let space = (manager
+        .space_ties(&space, crate::daemon::space_processes::WorktreeTies::None)
+        .await)
+        .unwrap();
     assert_eq!(space.directories, std::slice::from_ref(&tmp_dir));
     manager.sweep_tmp_dirs().await.unwrap();
     assert!(tmp_dir.is_dir(), "{}", tmp_dir.display());

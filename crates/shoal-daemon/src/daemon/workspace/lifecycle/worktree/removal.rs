@@ -14,7 +14,7 @@ use crate::{
         worktree::{BranchRemoval, FileRemoval},
     },
     hooks::{self, Hook, HookKind},
-    model::{RemovedWorkspace, Workspace},
+    model::{PresentSpace, RemovedWorkspace, Workspace},
     removal::{
         self, BranchOutcome, IdleRestore, Inspection, InspectionPolicy, RemovalCheck, RemovalResult,
     },
@@ -102,6 +102,15 @@ impl WorktreeStage {
             removal.cause()
         } else {
             EventCause::MissingDirectory
+        }
+    }
+
+    /// What ties processes to the workspace as `removal` stops them: nothing
+    /// for a deleted directory.
+    pub(in crate::daemon::workspace) fn ties(&self, removal: Removal<'_>) -> WorktreeTies {
+        match self.present {
+            true => removal.worktree_ties(),
+            false => WorktreeTies::None,
         }
     }
 
@@ -287,24 +296,16 @@ impl Manager {
             .await;
     }
 
-    /// Run the worktree's removal hooks and stop the processes tied to it, so
-    /// the final inspection and the checkpoint include the files they write
-    /// as they stop. A deleted directory runs no hooks.
+    /// Run the worktree's removal hooks, which a deleted directory does not.
     pub(in crate::daemon::workspace) async fn run_removal_hooks(
         &self,
         worktree: &WorktreeStage,
-        removal: Removal<'_>,
     ) -> Result<()> {
-        let workspace = &worktree.workspace;
         if !worktree.present {
-            return self
-                .stop_removed_processes(workspace, WorktreeTies::None)
-                .await;
+            return Ok(());
         }
-        self.run_pre_remove_hook(workspace).await?;
-        self.run_resource_release_hooks(workspace).await?;
-        self.stop_removed_processes(workspace, removal.worktree_ties())
-            .await
+        self.run_pre_remove_hook(&worktree.workspace).await?;
+        self.run_resource_release_hooks(&worktree.workspace).await
     }
 
     /// Delete the worktree as the final inspection `check` decides, once a
@@ -366,8 +367,9 @@ impl Manager {
         }
         if let Some(hook) = worktree.post_remove {
             outcome.hook_error = self.run_post_remove_hook(workspace, &hook).await;
+            let space = PresentSpace::Workspace(workspace.clone());
             if let Err(error) = self
-                .stop_removed_processes(workspace, WorktreeTies::None)
+                .stop_removed_processes(&space, WorktreeTies::None)
                 .await
             {
                 crate::daemon::log!(

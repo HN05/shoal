@@ -2,9 +2,11 @@
 //! differs by kind: its agent, reserving it for removal, and its record.
 //! Cleanup and removal call only these, and ask nothing else of a space's
 //! kind than whether it has a worktree.
-use crate::client::space_ids::SpaceId;
+use crate::client::{execution_ids::ExecutionId, space_ids::SpaceId};
 use crate::paths::StateFiles;
 use anyhow::{Context as _, Result, ensure};
+use rusqlite::params;
+use std::collections::HashSet;
 
 use super::{
     Manager, StopRequest,
@@ -17,15 +19,14 @@ use crate::{
     fsutil::off_runtime,
     model::PresentSpace,
     removal::IdleRestore,
-    state::WorkspaceState,
+    state::{QueueKind, QueueState, WorkspaceState},
     time::UnixTime,
 };
 
 /// What a space's agent means for cleanup.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum AgentState {
-    /// It runs. A workspace's running agent is among the commands its
-    /// worktree's cleanup counts instead.
+    /// It runs.
     Running,
     /// Shoal saved its session, or a recovery is pending, to run it again.
     Saved,
@@ -70,45 +71,67 @@ impl SpaceReservation<'_> {
 impl Manager {
     /// The agent of `space`, leaving out the restores of idle agents, which
     /// their wrappers wait to carry out, and the `cancelled` ones a removal
-    /// stopped. A running chat's agent is use; a workspace's is among the
-    /// commands its worktree's cleanup counts.
+    /// stopped. A running agent is use, a workspace's as a chat's.
     pub(crate) async fn space_agent(
         &self,
         space: &PresentSpace,
         cancelled: &[IdleRestore],
     ) -> Result<SpaceAgent> {
-        if let PresentSpace::Chat(chat) = space
-            && chat.running
-        {
-            return Ok(SpaceAgent {
-                state: AgentState::Running,
-                stopped_at: None,
-            });
-        }
         let id = space.id();
-        let mut saved = self.saved_agent(id, cancelled).await?;
+        let running = (self.agents_running_in(id).await?).iter().any(|execution| {
+            !cancelled
+                .iter()
+                .any(|stopped| stopped.execution == *execution)
+        });
+        let idle = self.idle_restores(id).await?;
+        let mut saved = self.saved_agent(id, &idle, cancelled)?;
         // A saved chat in its worktree comes back there, as a saved agent
         // does.
         if let Some(workspace) = space.worktree() {
             for chat in self.chats_in(&workspace.id).await? {
-                saved = saved || self.saved_agent(&chat.id, cancelled).await?;
+                let idle = self.idle_restores(&chat.id).await?;
+                saved = saved || self.saved_agent(&chat.id, &idle, cancelled)?;
             }
         }
         Ok(SpaceAgent {
-            state: if saved {
-                AgentState::Saved
-            } else {
-                AgentState::Stopped
+            state: match (running, saved) {
+                (true, _) => AgentState::Running,
+                (false, true) => AgentState::Saved,
+                (false, false) => AgentState::Stopped,
             },
             stopped_at: self.agent_stopped_at(id).await?,
         })
     }
 
+    /// The executions of the space `id` whose agent runs: those of an agent
+    /// whose restore waits in the queue run none.
+    async fn agents_running_in(&self, id: &SpaceId) -> Result<Vec<ExecutionId>> {
+        let id = id.to_owned();
+        (self.store)
+            .run(move |db| {
+                db.prepare(
+                    "SELECT id FROM executions e WHERE space_id=?1 AND agent IS NOT NULL
+                        AND NOT EXISTS (SELECT 1 FROM agent_queue
+                            WHERE kind=?2 AND state=?3 AND execution_id=e.id)",
+                )?
+                .query_map(params![id, QueueKind::Restore, QueueState::Queued], |row| {
+                    row.get(0)
+                })?
+                .collect::<rusqlite::Result<_>>()
+                .map_err(Into::into)
+            })
+            .await
+    }
+
     /// Whether the space `id` has stopped work saved to restore, other than
-    /// the restores of idle agents, which their wrappers wait to carry out,
-    /// and the `cancelled` ones a removal stopped.
-    async fn saved_agent(&self, id: &SpaceId, cancelled: &[IdleRestore]) -> Result<bool> {
-        let idle = self.idle_restores(id).await?;
+    /// the `idle` restores, which their wrappers wait to carry out, and the
+    /// `cancelled` ones a removal stopped.
+    fn saved_agent(
+        &self,
+        id: &SpaceId,
+        idle: &HashSet<ExecutionId>,
+        cancelled: &[IdleRestore],
+    ) -> Result<bool> {
         crate::execution::recovery::pending_except(&self.paths, id, |execution| {
             idle.contains(execution)
                 || cancelled
@@ -126,20 +149,14 @@ impl Manager {
     }
 
     /// Stop the agent of `space` and its commands for a removal, as `policy`
-    /// and `request` say, and refuse while any of them runs on. A chat's
-    /// processes outside its executions go too, as a workspace's go with its
-    /// worktree.
+    /// and `request` say, and refuse while any of them runs on.
     pub(in crate::daemon::workspace) async fn stop_space_agent(
         &self,
         space: &PresentSpace,
         policy: StopPolicy,
         request: &StopRequest,
     ) -> Result<()> {
-        self.stop_executions(space.id(), policy, request).await?;
-        match space {
-            PresentSpace::Chat(chat) => self.stop_chat_processes(chat).await,
-            PresentSpace::Workspace(_) => Ok(()),
-        }
+        self.stop_executions(space.id(), policy, request).await
     }
 
     /// Reserve the space `id` for `removal`. A manual removal also takes a
@@ -254,18 +271,15 @@ impl Manager {
     /// Delete the temporary directory and attached files of the removed
     /// `space`. A failure is logged, since the removal already happened.
     pub(crate) async fn delete_space_files(&self, space: &PresentSpace) {
+        if let Err(error) = self.delete_tmp_dir(space).await {
+            crate::daemon::log!(
+                "temporary directory of {} not deleted: {error:#}",
+                space.name()
+            );
+        }
         let deleted = match space {
-            PresentSpace::Workspace(workspace) => {
-                let tmp = self.delete_tmp_dir(&workspace.repository_id, &workspace.id);
-                if let Err(error) = tmp.await {
-                    crate::daemon::log!(
-                        "temporary directory of {} not deleted: {error:#}",
-                        workspace.name
-                    );
-                }
-                self.delete_workspace_files(workspace).await
-            }
-            PresentSpace::Chat(chat) => self.delete_chat_tmp_dir(chat).await,
+            PresentSpace::Workspace(workspace) => self.delete_workspace_files(workspace).await,
+            PresentSpace::Chat(_) => Ok(()),
         };
         if let Err(error) = deleted {
             crate::daemon::log!("files of {} not deleted: {error:#}", space.name());

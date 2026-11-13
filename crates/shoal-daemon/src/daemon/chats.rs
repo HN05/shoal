@@ -414,21 +414,6 @@ impl Manager {
         }
     }
 
-    /// The layout that keeps the temporary directory of `chat` of
-    /// `repository`, or for a chat without one of the `root_dir` it started
-    /// in; none in a repository without a directory.
-    pub(crate) fn chat_tmp_layout(
-        &self,
-        repository: Option<&Repository>,
-        chat: &Chat,
-    ) -> Option<tmp_dirs::Layout> {
-        match repository {
-            Some(repository) => tmp_dirs::Layout::of(repository),
-            None => (chat.root_dir.as_deref())
-                .map(|root| tmp_dirs::Layout::outside_repositories(root, &self.root_dir_owner())),
-        }
-    }
-
     /// The layout of the temporary directories of the chats without a
     /// repository in the configured `root_dir`, which no other daemon uses or
     /// sweeps; none while `root_dir` is not valid, when no such chat starts
@@ -454,7 +439,7 @@ impl Manager {
         repository: Option<&Repository>,
         chat: &Chat,
     ) -> Result<Option<std::path::PathBuf>> {
-        (self.chat_tmp_layout(repository, chat))
+        (self.tmp_layout(repository, chat.root_dir.as_deref()))
             .map(|layout| layout.prepare(&chat.id))
             .transpose()
     }

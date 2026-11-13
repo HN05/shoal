@@ -1,40 +1,48 @@
-//! Deleting the temporary directories of workspaces and chats once they are
-//! gone.
+//! Where the temporary directories of spaces are, and deleting them once
+//! their spaces are gone.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, path::Path};
 
 use anyhow::{Result, ensure};
 use rusqlite::Connection;
 
 use crate::{
     daemon::{log, workspace::Manager},
-    model::Chat,
+    model::{PresentSpace, Repository},
     tmp_dirs::Layout,
 };
 
 impl Manager {
-    /// Delete the temporary directory of the workspace or chat `id` of the
-    /// repository `repository_id` once its record is gone.
-    pub(crate) async fn delete_tmp_dir(
+    /// The layout that keeps the temporary directories of the spaces of
+    /// `repository`, or for a chat without one of the `root_dir` it started
+    /// in; none in a repository without a directory.
+    pub(crate) fn tmp_layout(
         &self,
-        repository_id: &RepositoryId,
-        id: &SpaceId,
-    ) -> Result<()> {
-        let repo = self.repository(repository_id).await?;
-        let Some(layout) = Layout::of(&repo) else {
-            return Ok(());
-        };
-        remove(layout, vec![id.to_owned()]).await
+        repository: Option<&Repository>,
+        root_dir: Option<&Path>,
+    ) -> Option<Layout> {
+        match repository {
+            Some(repository) => Layout::of(repository),
+            None => root_dir.map(|root| Layout::outside_repositories(root, &self.root_dir_owner())),
+        }
     }
 
-    /// Delete the temporary directory of `chat` once its record is gone.
-    pub(crate) async fn delete_chat_tmp_dir(&self, chat: &Chat) -> Result<()> {
-        let repo = self.chat_repository(chat).await?;
-        let Some(layout) = self.chat_tmp_layout(repo.as_ref(), chat) else {
+    /// The layout that keeps the temporary directory of `space`.
+    pub(crate) async fn space_tmp_layout(&self, space: &PresentSpace) -> Result<Option<Layout>> {
+        let repository = match space.repository_id() {
+            Some(id) => Some(self.repository(id).await?),
+            None => None,
+        };
+        Ok(self.tmp_layout(repository.as_ref(), space.root_dir()))
+    }
+
+    /// Delete the temporary directory of `space` once its record is gone.
+    pub(crate) async fn delete_tmp_dir(&self, space: &PresentSpace) -> Result<()> {
+        let Some(layout) = self.space_tmp_layout(space).await? else {
             return Ok(());
         };
-        remove(layout, vec![chat.id.clone()]).await
+        remove(layout, vec![space.id().to_owned()]).await
     }
 
     /// Delete every temporary directory that belongs to no workspace or chat
