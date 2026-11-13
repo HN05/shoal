@@ -111,7 +111,7 @@ async fn chat_reviews(ctx: &Context, chat: &Chat) -> Result<Vec<Review>> {
     Ok(reviews
         .into_iter()
         .filter(|review| match &review.target {
-            ReviewTarget::Pr { url, .. } => chat.links.prs.contains(url),
+            ReviewTarget::Pr { url, .. } => chat.links.prs.iter().any(|pr| pr.url == *url),
             ReviewTarget::Workspace => false,
         })
         .collect())

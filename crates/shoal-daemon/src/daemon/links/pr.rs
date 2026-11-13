@@ -30,6 +30,8 @@ use crate::{
     repository,
 };
 
+pub(crate) mod titles;
+
 /// How a new PR watch is checked before it is recorded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WatchCheck {
@@ -86,20 +88,23 @@ impl Manager {
             Err(_) if matches!(action, Action::Clear) => None,
             Err(error) => return Err(error),
         };
-        let kind = match action {
-            Action::Clear => None,
+        let (kind, titled) = match action {
+            Action::Clear => (None, None),
             Action::Unwatch { url } => {
-                (self.without_pr_watch(chat.origin_path(), &id, url)).await?
+                let kind = self.without_pr_watch(chat.origin_path(), &id, url).await?;
+                (kind, None)
             }
-            Action::Watch { url } => {
+            Action::Watch { url, title } => {
                 let (_, url) = self.pr_forge(chat.origin_path(), &url).await?;
-                Some(self.adding_pr_watch(&id, url).await?)
+                let titled = title.map(|title| (url.clone(), title));
+                (Some(self.adding_pr_watch(&id, url).await?), titled)
             }
             Action::Acknowledge => bail!("a chat has no branch whose merge it acknowledges"),
         };
         let change = RegistrationChange::new(
             previous.as_ref(),
             kind.map(|kind| Registration { kind, error: None }),
+            titled,
         );
         self.record_chat_registration(id, change).await
     }
@@ -143,19 +148,25 @@ impl Manager {
             Err(_) if matches!(action, Action::Clear) => None,
             Err(error) => return Err(error),
         };
-        let kind = match action {
-            Action::Clear => None,
+        let (kind, titled) = match action {
+            Action::Clear => (None, None),
             Action::Unwatch { url } => {
-                (self.without_pr_watch(&workspace.path, &workspace.id, url)).await?
+                let kind = (self.without_pr_watch(&workspace.path, &workspace.id, url)).await?;
+                (kind, None)
             }
-            Action::Watch { url } => Some(self.with_pr_watch(&workspace, url, check).await?),
-            Action::Acknowledge => Some(RegistrationKind::Acknowledgement {
-                head: current_head(&workspace).await?,
-            }),
+            Action::Watch { url, title } => {
+                let (kind, url) = self.with_pr_watch(&workspace, url, check).await?;
+                (Some(kind), title.map(|title| (url, title)))
+            }
+            Action::Acknowledge => {
+                let head = current_head(&workspace).await?;
+                (Some(RegistrationKind::Acknowledgement { head }), None)
+            }
         };
         let change = RegistrationChange::new(
             previous.as_ref(),
             kind.map(|kind| Registration { kind, error: None }),
+            titled,
         );
         let id = workspace.id;
         self.store
@@ -169,12 +180,14 @@ impl Manager {
         Ok(())
     }
 
+    /// The workspace's PR watches with the PR `input` names among them, and
+    /// that PR.
     async fn with_pr_watch(
         &self,
         workspace: &Workspace,
         input: ItemInput,
         check: WatchCheck,
-    ) -> Result<RegistrationKind> {
+    ) -> Result<(RegistrationKind, ItemRef)> {
         let (forge, url) = self.pr_forge(&workspace.path, &input).await?;
         // Detect missing tools or login and invalid PRs now.
         if check == WatchCheck::Lookup {
@@ -182,7 +195,8 @@ impl Manager {
                 .merged_commits(&self.user_account(), url.pull()?)
                 .await?;
         }
-        self.adding_pr_watch(&workspace.id, url).await
+        let kind = self.adding_pr_watch(&workspace.id, url.clone()).await?;
+        Ok((kind, url))
     }
 
     /// The PR watches of the space `id` with `url` among them.
@@ -476,15 +490,21 @@ impl Manager {
     }
 }
 
-/// A workspace's PR registration replacing its previous one.
+/// A workspace's PR registration replacing its previous one, with the title
+/// the caller knows of the PR it watches.
 struct RegistrationChange {
     registration: Option<Registration>,
     added: Vec<ItemRef>,
     removed: Vec<ItemRef>,
+    title: Option<(ItemRef, String)>,
 }
 
 impl RegistrationChange {
-    fn new(previous: Option<&Registration>, registration: Option<Registration>) -> Self {
+    fn new(
+        previous: Option<&Registration>,
+        registration: Option<Registration>,
+        title: Option<(ItemRef, String)>,
+    ) -> Self {
         let before = watched_urls(previous);
         let after = watched_urls(registration.as_ref());
         let added = after
@@ -501,15 +521,18 @@ impl RegistrationChange {
             registration,
             added,
             removed,
+            title,
         }
     }
 
     /// Store the registration within the caller's transaction. A dropped watch
-    /// takes its replay cursors and review mark with it, an added one replaces
-    /// the PR's opened or related link, and every watch added or dropped is
-    /// journaled as an assigned PR link change.
+    /// takes its replay cursors, review mark and title with it, an added one
+    /// replaces the PR's opened or related link, and every watch added or
+    /// dropped is journaled as an assigned PR link change. A title the caller
+    /// knows replaces the recorded one.
     fn apply(&self, db: &Connection, id: &SpaceId) -> Result<()> {
         super::forget_assigned(db, id, ItemKind::Pr, &self.removed)?;
+        titles::forget(db, id, &self.removed)?;
         store_registration(db, id, self.registration.as_ref())?;
         for url in &self.added {
             super::drop_recorded(db, id, url.url(), None)?;
@@ -522,8 +545,24 @@ impl RegistrationChange {
                 url.url(),
             )?;
         }
+        if let Some((url, title)) = &self.title {
+            titles::record(db, id, url.url(), title)?;
+        }
         Ok(())
     }
+}
+
+/// The PRs the space `id` watches; an unreadable registration watches none.
+pub(crate) fn watched_prs(db: &Connection, id: &SpaceId) -> rusqlite::Result<Vec<ItemRef>> {
+    let record: Option<String> = db
+        .query_row(
+            "SELECT record FROM pr_cleanup WHERE space_id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let registration = record.and_then(|record| serde_json::from_str(&record).ok());
+    Ok(watched_urls(registration.as_ref()).to_vec())
 }
 
 fn watched_urls(registration: Option<&Registration>) -> &[ItemRef] {

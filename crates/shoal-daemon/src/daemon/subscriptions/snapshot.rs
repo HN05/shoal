@@ -20,7 +20,7 @@ use crate::{
         scope::Caller,
         workspace::Manager,
     },
-    forge::{items::link::LinkKind, updates::Snapshot},
+    forge::updates::Snapshot,
     model::{Chat, PresentSpace, Relation, Workspace},
 };
 
@@ -197,10 +197,14 @@ async fn links(manager: &Manager, workspaces: &[Workspace]) -> Result<Vec<Record
 /// its forge, from `activity` by URL.
 fn workspace_links(workspace: &Workspace, activity: &HashMap<String, Snapshot>) -> Vec<Link> {
     let links = &workspace.links;
-    let assigned = (links.issues.iter())
-        .map(|issue| (LinkKind::Issue, &issue.url, issue.title.clone()))
-        .chain(links.prs.iter().map(|url| (LinkKind::Pr, url, None)))
-        .map(|(kind, url, title)| (Relation::Assigned, kind, url, title));
+    let assigned = (links.issues.iter().chain(&links.prs)).map(|item| {
+        (
+            Relation::Assigned,
+            item.kind(),
+            &item.url,
+            item.title.clone(),
+        )
+    });
     let recorded = [
         (Relation::Opened, &links.opened),
         (Relation::Related, &links.related),

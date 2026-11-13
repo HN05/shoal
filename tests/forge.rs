@@ -2518,7 +2518,8 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
         links["issues"][0]["url"],
         format!("{}/issues/8", fixture.web)
     );
-    assert_eq!(links["prs"], json!([format!("{}/pulls/9", fixture.web)]));
+    let fix = json!({"kind": "pr", "url": format!("{}/pulls/9", fixture.web), "title": "Fix"});
+    assert_eq!(links["prs"], json!([fix]));
 
     let marks = fixture.ok(&["ready", "#9", "--space", &fixture.id("topic")]);
     assert_eq!(marks[0]["kind"], "pr", "{marks}");
@@ -2537,7 +2538,7 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
     fixture.ok(&["unlink", "8", "assigned", "--space", &fixture.id("topic")]);
     let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
     assert_eq!(links["issues"], json!([]), "{links}");
-    assert_eq!(links["prs"], json!([format!("{}/pulls/9", fixture.web)]));
+    assert_eq!(links["prs"], json!([fix]));
 
     // Recorded relations name the kind without asking the forge, as forges
     // with separate issue and PR numbers need.
@@ -2590,7 +2591,9 @@ fn a_pr_from_another_branch_of_the_worktree_is_assigned_and_watched() {
         &fixture.id("topic"),
     ]);
     let links = &fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"];
-    assert_eq!(links["prs"], json!([format!("{}/pulls/8", fixture.web)]));
+    let stacked =
+        json!({"kind": "pr", "url": format!("{}/pulls/8", fixture.web), "title": "Stacked"});
+    assert_eq!(links["prs"], json!([stacked]));
     let watched = fixture.ok(&["watch", "pr", "--space", &fixture.id("topic")]);
     assert_eq!(watched["updates"][0]["kind"], "comment", "{watched}");
 
@@ -2935,7 +2938,7 @@ fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
         );
         let links =
             fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"]["prs"].clone();
-        assert_eq!(links, json!([url]));
+        assert_eq!(links, json!([{"kind": "pr", "url": url, "title": "Fix"}]));
 
         // An open PR for the branch is linked instead of opening another.
         fixture.ok(&["unlink", "pr", "assigned", "--space", &fixture.id("topic")]);
@@ -4706,7 +4709,8 @@ fn a_chat_links_views_and_watches_items_as_a_workspace_does() {
     // The chat's record lists its links as a workspace's does.
     let chats = fixture.request(json!("list_chats"));
     let links = &chats["data"][0]["links"];
-    assert_eq!(links["prs"], json!([pr]), "{chats}");
+    // The forge does not show the PR, so it is linked without a title.
+    assert_eq!(links["prs"], json!([{"kind": "pr", "url": pr}]), "{chats}");
     assert_eq!(links["related"][0]["url"], json!(run), "{chats}");
     let viewed = fixture.ok(&["view", "ci", "--space", &fixture.id("planning")]);
     assert_eq!(viewed[0]["state"], "running", "{viewed}");
@@ -5920,7 +5924,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
     );
     assert_eq!(
         fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"]["prs"],
-        json!([url])
+        json!([{"kind": "pr", "url": url, "title": "Fix"}])
     );
     assert!(messages(&fixture)[0].contains(&url));
     // Outdated requests stay until the workspace goes, so their numbers are
@@ -6193,7 +6197,7 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
     );
     assert_eq!(
         fixture.ok(&["status", &fixture.id("topic")])["workspace"]["links"]["prs"],
-        json!([url])
+        json!([{"kind": "pr", "url": url, "title": "initial"}])
     );
 }
 

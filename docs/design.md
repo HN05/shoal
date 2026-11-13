@@ -109,9 +109,9 @@ Internal CLI workers are built through one typed argument builder that explicitl
 passes the resolved state directory and output mode.
 Workspace JSON records expose canonical linked-item URLs under `links`, with an
 `issues` list of assigned issues in the order they were assigned, a list of
-watched PR URLs, and `opened` and `related` lists, each item of these lists with
+watched PRs, and `opened` and `related` lists, each item of these lists with
 its kind, URL and known title; acknowledgement-only PR cleanup records have no URL to
-expose. Linking the same issue again records a newly supplied title.
+expose. Linking the same item again records a newly supplied title.
 Their `running` flag says whether a tracked execution is running; unverified
 executions after a daemon restart do not count. Their `done` flag says whether a
 completion is recorded.

@@ -47,9 +47,9 @@ use crate::{
 };
 
 impl Manager {
-    /// Link the item `input` names with `relation`; an issue linked without
-    /// its title gets the one the forge shows, or else none, which the
-    /// answer says why.
+    /// Link the item `input` names with `relation`; an issue or PR linked
+    /// without its title gets the one the forge shows, or else none, which
+    /// the answer says why.
     pub async fn link_item(
         &self,
         selector: &SpaceSelector,
@@ -59,8 +59,8 @@ impl Manager {
         title: Option<String>,
         caller: Option<&Caller>,
     ) -> Result<Linked> {
-        let (title, title_error) = match (kind, title) {
-            (LinkKind::Issue, None) => self.issue_title(selector, input, caller).await,
+        let (title, title_error) = match (kind.item(), title) {
+            (Some(kind), None) => self.item_title(selector, kind, input, caller).await,
             (_, title) => (title, None),
         };
         self.record_link(selector, kind, input, relation, title, caller)
@@ -82,7 +82,7 @@ impl Manager {
             (Relation::Assigned, LinkKind::Issue) => self.set_issue(selector, input, title).await,
             (Relation::Assigned, LinkKind::Pr) => {
                 let url = input.clone();
-                self.set_pr(selector, Action::Watch { url }).await
+                self.set_pr(selector, Action::Watch { url, title }).await
             }
             (Relation::Assigned, LinkKind::Ci) => bail!(
                 "a CI run cannot be assigned, because assigned items drive completion \
@@ -96,21 +96,22 @@ impl Manager {
         }
     }
 
-    /// The title of the issue `input` names, which lists show for the space,
-    /// or else why the forge could not be read.
-    async fn issue_title(
+    /// The title of the issue or PR `input` names, which lists show for the
+    /// space, or else why the forge could not be read.
+    async fn item_title(
         &self,
         selector: &SpaceSelector,
+        kind: ItemKind,
         input: &ItemInput,
         caller: Option<&Caller>,
     ) -> (Option<String>, Option<String>) {
         let read = async {
             let context = self.link_space(selector).await?.item_context();
-            anyhow::Ok(
-                self.issue_details(&context, input, false, caller)
-                    .await?
-                    .title,
-            )
+            let forge = self.context_forge(&context).await?;
+            let item = ItemRef::in_repository(&forge, kind.into(), input)?;
+            let account = self.read_account(caller);
+            let current = forge.read(&account, kind, item.number().get()).await?;
+            anyhow::Ok(current.item.title)
         };
         match read.await {
             Ok(title) => (Some(title), None),

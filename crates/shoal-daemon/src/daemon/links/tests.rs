@@ -274,20 +274,28 @@ fn link_events_from_before_relations_were_assignments() {
     assert_eq!(link.relation, Relation::Assigned);
 }
 
-#[tokio::test]
-async fn an_issue_linked_without_its_title_gets_the_forges() {
-    let server = crate::forge::test_support::Server::start(|request| {
-        let number = request
-            .line
-            .strip_prefix("GET /api/v1/repos/team/repo/issues/");
-        let Some(number) = number.filter(|number| *number != "9") else {
+/// A server for the Forgejo repository `team/repo` that shows each issue and
+/// PR but number 9, titled by its kind and number.
+fn titled_items() -> crate::forge::test_support::Server {
+    crate::forge::test_support::Server::start(|request| {
+        let path = request.line.strip_prefix("GET /api/v1/repos/team/repo/");
+        let item = path.and_then(|path| {
+            (path.strip_prefix("issues/").map(|number| ("Issue", number)))
+                .or_else(|| path.strip_prefix("pulls/").map(|number| ("PR", number)))
+        });
+        let Some((kind, number)) = item.filter(|(_, number)| *number != "9") else {
             return (404, Vec::new(), Vec::new());
         };
-        let issue = serde_json::json!({"number": number.parse::<u64>().unwrap(),
-            "title": format!("Issue {number}"), "state": "open"});
-        (200, Vec::new(), issue.to_string().into())
-    });
-    let host = &server.host;
+        let item = serde_json::json!({"number": number.parse::<u64>().unwrap(),
+            "title": format!("{kind} {number}"), "state": "open", "merged": false,
+            "head": {"ref": "topic"}, "base": {"ref": "main"}});
+        (200, Vec::new(), item.to_string().into())
+    })
+}
+
+/// A workspace whose origin is the Forgejo repository `team/repo` at
+/// `host`, which the user's token reads.
+async fn forge_workspace(host: &str) -> (tempfile::TempDir, std::sync::Arc<Manager>, SpaceId) {
     // Pins are this process's, which parallel tests replace; an answer stays.
     crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::Forgejo);
     let (root, manager) = manager().await;
@@ -314,7 +322,14 @@ async fn an_issue_linked_without_its_title_gets_the_forges() {
             &format!("http://{host}/team/repo"),
         ],
     );
-    let selector = SpaceSelector::id(&workspace.id);
+    (root, manager, workspace.id)
+}
+
+#[tokio::test]
+async fn an_issue_linked_without_its_title_gets_the_forges() {
+    let server = titled_items();
+    let (_root, manager, id) = forge_workspace(&server.host).await;
+    let selector = SpaceSelector::id(&id);
     let link = |input: &str, relation| {
         let input = input.parse().unwrap();
         let (manager, selector) = (&manager, &selector);
@@ -326,9 +341,49 @@ async fn an_issue_linked_without_its_title_gets_the_forges() {
     // An issue the forge does not show is linked without a title.
     let unread = link("9", Relation::Opened).await.unwrap();
 
-    let links = manager.workspace_by_id(&workspace.id).await.unwrap().links;
+    let links = manager.workspace_by_id(&id).await.unwrap().links;
     assert_eq!(links.issues[0].title.as_deref(), Some("Issue 5"));
     assert_eq!(links.related[0].title.as_deref(), Some("Issue 6"));
     assert!(unread.title_error.is_some());
     assert_eq!(links.opened[0].title, None);
+}
+
+#[tokio::test]
+async fn an_assigned_pr_keeps_its_title_until_it_is_unlinked() {
+    let server = titled_items();
+    let (_root, manager, id) = forge_workspace(&server.host).await;
+    let selector = SpaceSelector::id(&id);
+    let link = |input: &str, relation, title: Option<&str>| {
+        let (input, title) = (input.parse().unwrap(), title.map(Into::into));
+        let (manager, selector) = (&manager, &selector);
+        async move { (manager.link_item(selector, LinkKind::Pr, &input, relation, title, None)).await }
+    };
+    let titles = async || {
+        let links = manager.workspace_by_id(&id).await.unwrap().links;
+        let titles = |items: &[LinkedItem]| -> Vec<_> {
+            items.iter().map(|item| item.title.clone()).collect()
+        };
+        (titles(&links.prs), titles(&links.related))
+    };
+    for (input, relation) in [("5", Relation::Assigned), ("6", Relation::Related)] {
+        assert_eq!(link(input, relation, None).await.unwrap().title_error, None);
+    }
+    let read = (vec![Some("PR 5".into())], vec![Some("PR 6".into())]);
+    assert_eq!(titles().await, read);
+    // A title the caller knows replaces the recorded one, and an assignment
+    // records the title the forge shows in place of the related link's.
+    link("5", Relation::Assigned, Some("Renamed"))
+        .await
+        .unwrap();
+    link("6", Relation::Assigned, None).await.unwrap();
+    let assigned = vec![Some("Renamed".into()), Some("PR 6".into())];
+    assert_eq!(titles().await, (assigned, Vec::new()));
+    // An unlinked PR takes its title with it.
+    let unlink = manager.unlink_items(&selector, Relation::Assigned, Some(LinkKind::Pr), None);
+    unlink.await.unwrap();
+    let recorded: i64 = (manager.store)
+        .read(|tx| Ok(tx.query_row("SELECT COUNT(*) FROM space_pr_titles", [], |row| row.get(0))?))
+        .await
+        .unwrap();
+    assert_eq!(recorded, 0);
 }

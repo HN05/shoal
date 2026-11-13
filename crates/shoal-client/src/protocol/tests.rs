@@ -99,6 +99,7 @@ fn pr_actions_preserve_existing_wire_fields() {
         (
             Action::Watch {
                 url: "https://forge.example/team/repo/pulls/7".parse().unwrap(),
+                title: None,
             },
             Some("https://forge.example/team/repo/pulls/7"),
             false,
@@ -141,6 +142,25 @@ fn selective_unwatch_round_trips_and_rejects_conflicting_actions() {
     ] {
         assert!(serde_json::from_value::<crate::links::pr::Action>(action).is_err());
     }
+}
+
+#[test]
+fn only_a_pr_watch_carries_a_title() {
+    use crate::links::pr::Action;
+    let url = "https://forge.example/team/repo/pulls/7";
+    let wire = json!({"set_pr": {"space": "worker", "url": url, "clear": false, "title": "Fix"}});
+    let decoded: ItemMethod = serde_json::from_value(wire.clone()).unwrap();
+    let ItemMethod::SetPr {
+        action: Action::Watch { title, .. },
+        ..
+    } = &decoded
+    else {
+        panic!("expected a PR watch")
+    };
+    assert_eq!(title.as_deref(), Some("Fix"));
+    assert_eq!(serde_json::to_value(decoded).unwrap(), wire);
+    let cleared = json!({"url": null, "clear": true, "title": "Fix"});
+    assert!(serde_json::from_value::<Action>(cleared).is_err());
 }
 
 #[test]

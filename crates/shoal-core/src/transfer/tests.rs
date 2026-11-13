@@ -92,7 +92,10 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
                 url: "https://forge.example/team/repo/issues/12".parse().unwrap(),
                 title: Some("Plan the cache".into()),
             }],
-            prs: vec!["https://forge.example/team/repo/pulls/14".parse().unwrap()],
+            prs: vec![crate::model::LinkedItem {
+                url: "https://forge.example/team/repo/pulls/14".parse().unwrap(),
+                title: Some("Fix it".into()),
+            }],
             opened: Vec::new(),
             related: vec![crate::model::LinkedItem {
                 url: "https://forge.example/team/repo/issues/9".parse().unwrap(),
@@ -147,7 +150,10 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
                 crate::model::Relation::Assigned,
                 chat.links.issues[0].url.clone()
             ),
-            (crate::model::Relation::Assigned, chat.links.prs[0].clone()),
+            (
+                crate::model::Relation::Assigned,
+                chat.links.prs[0].url.clone()
+            ),
             (
                 crate::model::Relation::Related,
                 chat.links.related[0].url.clone()

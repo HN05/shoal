@@ -938,7 +938,7 @@ whose files are not on this machine, or of an agent whose tool Shoal does not
 know, has no `path` and no files, and one whose files could not be looked for
 says why in `error`; sessions the agents' hooks never reported, such as those
 before a `/clear`, are not listed. Workspace records from `list --json` and `status --json` include
-the assigned issues in `links.issues`, first assigned first, assigned PR URLs in
+the assigned issues in `links.issues`, first assigned first, assigned PRs in
 `links.prs`, and items recorded as opened or related in `links.opened` and
 `links.related`, each item with `kind`, `url` and `title` when known; an acknowledgement without a PR URL leaves
 `links.prs` empty. `status` lists opened and related items too. An issue, PR or
@@ -4592,9 +4592,9 @@ than the current one. Numbers resolve against its origin and URLs must match it.
 an item again under its relation changes nothing but a newly known title.
 Assigned issues accumulate without duplicates in the order they were assigned;
 the first names a new branch, gives a new PR its title and starts the agent.
-Linking an issue records its title, and workspace lists show the first's; when
-the forge cannot be read, the link is recorded without one and a warning names
-the error.
+Linking an issue or PR records its title, and workspace lists show the first
+assigned issue's; when the forge cannot be read, the link is recorded without
+one and a warning names the error.
 Assigned PRs accumulate without duplicates, and any PR of the repository can be
 assigned whatever its head branch, such as one pushed from the worktree on
 another branch. Assigned items suppress idle cleanup.

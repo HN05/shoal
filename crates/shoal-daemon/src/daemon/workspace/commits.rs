@@ -220,10 +220,9 @@ impl Manager {
         let made_for = Some(MadeFor::Pr(number));
         Ok(self.list_workspaces().await?.into_iter().find(|workspace| {
             workspace.repository_id == *repository_id
-                && workspace
-                    .at
-                    .as_ref()
-                    .is_some_and(|at| at.made_for == made_for || workspace.links.prs.contains(url))
+                && workspace.at.as_ref().is_some_and(|at| {
+                    at.made_for == made_for || workspace.links.prs.iter().any(|pr| pr.url == *url)
+                })
         }))
     }
 

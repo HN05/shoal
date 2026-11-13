@@ -210,8 +210,8 @@ pub(in crate::cli::commands) async fn prepare_reopened(
         };
         workspace = set_up.workspace;
     }
-    for url in &removed.links.prs {
-        workspace = crate::opened_pull::link(&ctx.paths, workspace, url.clone()).await?;
+    for pr in &removed.links.prs {
+        workspace = crate::opened_pull::link(&ctx.paths, workspace, pr.clone()).await?;
     }
     Ok(Some(Reopened {
         agents_saved: !(removed.agents.is_empty() && removed.last_sessions.is_empty()),

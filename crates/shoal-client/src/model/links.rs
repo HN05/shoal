@@ -12,8 +12,8 @@ pub struct SpaceLinks {
     /// The assigned issues in the order they were assigned, each with its
     /// title when the linking caller knew it.
     pub issues: Vec<LinkedItem>,
-    /// The assigned PRs.
-    pub prs: Vec<ItemRef>,
+    /// The assigned PRs, each with its title when known.
+    pub prs: Vec<LinkedItem>,
     /// Issues and PRs the space created through Shoal, oldest first.
     pub opened: Vec<LinkedItem>,
     /// Issues and PRs linked as related to the work, oldest first.
@@ -21,7 +21,8 @@ pub struct SpaceLinks {
 }
 
 /// How [`SpaceLinks`] reads: removal records and move packages of earlier
-/// releases hold one assigned issue and its title in place of the list.
+/// releases hold one assigned issue and its title in place of the list, and
+/// their assigned PRs' URLs without titles.
 #[derive(Deserialize)]
 struct LinksFields {
     #[serde(default)]
@@ -30,7 +31,7 @@ struct LinksFields {
     issue: Option<ItemRef>,
     #[serde(default)]
     issue_title: Option<String>,
-    prs: Vec<ItemRef>,
+    prs: Vec<PrField>,
     #[serde(default)]
     opened: Vec<LinkedItem>,
     #[serde(default)]
@@ -43,9 +44,27 @@ impl From<LinksFields> for SpaceLinks {
         let earlier = fields.issue.map(|url| LinkedItem { url, title });
         Self {
             issues: earlier.into_iter().chain(fields.issues).collect(),
-            prs: fields.prs,
+            prs: fields.prs.into_iter().map(PrField::into_item).collect(),
             opened: fields.opened,
             related: fields.related,
+        }
+    }
+}
+
+/// An assigned PR as [`SpaceLinks`] reads it: an item, or the bare URL an
+/// earlier release recorded.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum PrField {
+    Item(LinkedItem),
+    Url(ItemRef),
+}
+
+impl PrField {
+    fn into_item(self) -> LinkedItem {
+        match self {
+            Self::Item(item) => item,
+            Self::Url(url) => LinkedItem { url, title: None },
         }
     }
 }
@@ -83,12 +102,8 @@ impl SpaceLinks {
     /// Every link with its relation: the assigned issues and PRs, then the
     /// opened and related items.
     pub fn relations(&self) -> Vec<(Relation, LinkedItem)> {
-        let issues = self.issues.iter().cloned();
-        let prs = self.prs.iter().map(|url| LinkedItem {
-            url: url.clone(),
-            title: None,
-        });
-        let assigned = issues.chain(prs).map(|item| (Relation::Assigned, item));
+        let assigned =
+            (self.issues.iter().chain(&self.prs).cloned()).map(|item| (Relation::Assigned, item));
         let opened = (self.opened.iter().cloned()).map(|item| (Relation::Opened, item));
         let related = (self.related.iter().cloned()).map(|item| (Relation::Related, item));
         assigned.chain(opened).chain(related).collect()

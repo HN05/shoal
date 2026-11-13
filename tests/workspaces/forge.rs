@@ -388,7 +388,8 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     let url = "https://forge.example/team/project/pulls/7";
     let linked_prs =
         || fixture.ok(&["status", &fixture.id("Top change")])["workspace"]["links"]["prs"].clone();
-    assert_eq!(linked_prs(), serde_json::json!([url]));
+    let pr = serde_json::json!({"kind": "pr", "url": url, "title": "Top change"});
+    assert_eq!(linked_prs(), serde_json::json!([pr]));
     // Opening the PR again relinks it to its owner.
     fixture.ok(&[
         "unlink",
@@ -410,10 +411,10 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         .output()
         .unwrap();
     assert!(added.status.success(), "{added:?}");
-    assert_eq!(linked_prs(), serde_json::json!([url]));
+    assert_eq!(linked_prs(), serde_json::json!([pr]));
     let added: Value = serde_json::from_slice(&added.stdout).unwrap();
     assert_eq!(added["branch"], "stack/top");
-    assert_eq!(added["links"]["prs"], serde_json::json!([url]));
+    assert_eq!(added["links"]["prs"], serde_json::json!([pr]));
     let branch = fixture.ok(&[
         "start",
         "https://forge.example/team/project/src/branch/stack%2Ftop",
@@ -443,7 +444,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     git(&author, &["push", "origin", "stack/top"]);
     let output = review(&["https://forge.example/team/project/pulls/7", "--no-post"]);
     assert!(output.status.success(), "{output:?}");
-    assert_eq!(linked_prs(), serde_json::json!([url]));
+    assert_eq!(linked_prs(), serde_json::json!([pr]));
     assert_eq!(
         fixture.ok(&["watch", "review", "2"])["target"]["post"],
         false
@@ -492,7 +493,8 @@ fn link_picks_an_omitted_open_issue_or_pull_request() {
     let workspace = fixture.ok(&["status", &fixture.id("topic")]);
     assert_eq!(
         workspace["workspace"]["links"]["prs"],
-        serde_json::json!(["https://github.com/team/project/pull/7"])
+        serde_json::json!([{"kind": "pr", "url": "https://github.com/team/project/pull/7",
+            "title": "Topic"}])
     );
     assert_eq!(
         workspace["workspace"]["links"]["issues"][0]["url"],
@@ -659,7 +661,8 @@ fn pr_cleanup_can_be_disabled_independently() {
     ]);
     assert_eq!(
         fixture.ok(&["status", &fixture.id("keep")])["workspace"]["links"]["prs"],
-        serde_json::json!(["https://github.com/team/project/pull/7"])
+        serde_json::json!([{"kind": "pr", "url": "https://github.com/team/project/pull/7",
+            "title": "PR"}])
     );
     fixture.ok(&["unlink", "pr", "assigned", "--space", &fixture.id("keep")]);
     let output = fixture.acknowledge("keep");
@@ -2405,7 +2408,8 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     assert_eq!(workspace["setup_skipped"], true);
     // Its diff, and a manual review's {diff_base}, compare with the PR's base.
     assert_eq!(workspace["base_ref"], "refs/remotes/origin/main");
-    assert_eq!(workspace["links"]["prs"], serde_json::json!([url]));
+    let pr = serde_json::json!({"kind": "pr", "url": url, "title": "PR 8"});
+    assert_eq!(workspace["links"]["prs"], serde_json::json!([pr]));
 
     // Adding the PR reuses its workspace; it holds no agent.
     let output = run(&["--json", "start", url]);

@@ -25,8 +25,8 @@ pub enum OpenOutcome {
 /// What linking an item reports beside recording it.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Linked {
-    /// Why the issue's title could not be read, which leaves the link
-    /// without one.
+    /// Why the issue's or PR's title could not be read, which leaves the
+    /// link without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title_error: Option<String>,
 }

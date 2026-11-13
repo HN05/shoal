@@ -527,7 +527,10 @@ impl Manager {
         let url = item.url.clone();
         self.set_pr_gated(
             &SpaceSelector::id(&workspace.id),
-            super::pr::Action::Watch { url: url.into() },
+            super::pr::Action::Watch {
+                url: url.into(),
+                title: Some(item.title.clone()),
+            },
             super::pr::WatchCheck::Known,
         )
         .await
@@ -614,7 +617,11 @@ impl Manager {
             }
             ItemKind::Pr => {
                 let check = super::pr::WatchCheck::Known;
-                let watch = super::pr::Action::Watch { url: url.into() };
+                let title = Some(item.title.clone());
+                let watch = super::pr::Action::Watch {
+                    url: url.into(),
+                    title,
+                };
                 self.set_pr_gated(&SpaceSelector::id(space), watch, check)
                     .await
             }

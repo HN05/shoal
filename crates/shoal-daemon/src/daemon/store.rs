@@ -452,22 +452,13 @@ pub fn space_links(db: &Connection, space_id: &SpaceId) -> rusqlite::Result<Spac
             title: issue.title,
         })
         .collect();
-    let prs = db
-        .query_row(
-            "SELECT record FROM pr_cleanup WHERE space_id=?1",
-            [space_id],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()?
-        .and_then(|record| {
-            serde_json::from_str::<crate::daemon::links::pr::Registration>(&record)
-                .ok()
-                .and_then(|registration| match registration.kind {
-                    crate::daemon::links::pr::RegistrationKind::Watch { urls, .. } => Some(urls),
-                    crate::daemon::links::pr::RegistrationKind::Acknowledgement { .. } => None,
-                })
+    let mut titles = crate::daemon::links::pr::titles::of_space(db, space_id)?;
+    let prs = (crate::daemon::links::pr::watched_prs(db, space_id)?.into_iter())
+        .map(|url| LinkedItem {
+            title: titles.remove(url.url()),
+            url,
         })
-        .unwrap_or_default();
+        .collect();
     Ok(SpaceLinks {
         issues,
         prs,

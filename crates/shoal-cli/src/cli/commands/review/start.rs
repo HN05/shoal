@@ -24,7 +24,7 @@ use crate::{
         },
     },
     git,
-    model::{Chat, Repository, Workspace},
+    model::{Chat, LinkedItem, Repository, Workspace},
     protocol::{ConfigTarget, CreationOptions, ItemContext, operations::WorkspaceStart},
     reviews::ReviewTarget,
 };
@@ -165,7 +165,7 @@ pub(super) async fn start(
 /// The chat's one linked PR, with the chat's repository.
 async fn chat_pull(ctx: &Context, chat: &Chat) -> Result<(Repository, ItemInput)> {
     let url = match chat.links.prs.as_slice() {
-        [url] => url.clone(),
+        [pr] => pr.url.clone(),
         [] => bail!("{} links no PR; pass --pr or a PR URL", chat.name),
         _ => bail!("{} links several PRs; pass --pr or a PR URL", chat.name),
     };
@@ -269,8 +269,11 @@ async fn pull_request(
         Some(workspace) => {
             fetch_pull_branch(&repo.path, "base", &pull.base).await?;
             update_to_head(ctx, &repo.path, &workspace, &pull.head).await?;
-            let workspace =
-                crate::opened_pull::link(&ctx.paths, workspace, pull.url.clone()).await?;
+            let linked = LinkedItem {
+                url: pull.url.clone(),
+                title: Some(pull.title.clone()),
+            };
+            let workspace = crate::opened_pull::link(&ctx.paths, workspace, linked).await?;
             eprintln!(
                 "Reviewing PR #{} in workspace {}",
                 pull.number, workspace.name

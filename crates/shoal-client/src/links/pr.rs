@@ -95,9 +95,11 @@ impl From<Registration> for RegistrationRecord {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "ActionFields", into = "ActionFields")]
 pub enum Action {
-    /// Watch the PR a number or URL names.
+    /// Watch the PR a number or URL names, recording its title when the
+    /// caller knows it.
     Watch {
         url: ItemInput,
+        title: Option<String>,
     },
     Unwatch {
         url: ItemInput,
@@ -113,14 +115,21 @@ struct ActionFields {
     clear: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     unwatch: Option<ItemInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    title: Option<String>,
 }
 
 impl TryFrom<ActionFields> for Action {
     type Error = anyhow::Error;
 
     fn try_from(fields: ActionFields) -> Result<Self> {
+        let title = fields.title;
+        ensure!(
+            title.is_none() || fields.url.is_some(),
+            "invalid PR cleanup action: only a watch has a title"
+        );
         match (fields.url, fields.clear, fields.unwatch) {
-            (Some(url), false, None) => Ok(Self::Watch { url }),
+            (Some(url), false, None) => Ok(Self::Watch { url, title }),
             (None, false, None) => Ok(Self::Acknowledge),
             (None, false, Some(url)) => Ok(Self::Unwatch { url }),
             (None, true, None) => Ok(Self::Clear),
@@ -136,16 +145,17 @@ impl TryFrom<ActionFields> for Action {
 
 impl From<Action> for ActionFields {
     fn from(action: Action) -> Self {
-        let (url, clear, unwatch) = match action {
-            Action::Watch { url } => (Some(url), false, None),
-            Action::Unwatch { url } => (None, false, Some(url)),
-            Action::Acknowledge => (None, false, None),
-            Action::Clear => (None, true, None),
+        let (url, clear, unwatch, title) = match action {
+            Action::Watch { url, title } => (Some(url), false, None, title),
+            Action::Unwatch { url } => (None, false, Some(url), None),
+            Action::Acknowledge => (None, false, None, None),
+            Action::Clear => (None, true, None, None),
         };
         Self {
             url,
             clear,
             unwatch,
+            title,
         }
     }
 }

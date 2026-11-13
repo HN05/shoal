@@ -121,13 +121,7 @@ fn pr_spaces(db: &Connection, url: &str) -> Result<Vec<SpaceId>> {
     let mut spaces = Vec::new();
     for id in ids {
         let links = store::space_links(db, &id)?;
-        let opened = links.opened.iter().map(|item| &item.url);
-        if links
-            .prs
-            .iter()
-            .chain(opened)
-            .any(|linked| linked.url() == url)
-        {
+        if (links.prs.iter().chain(&links.opened)).any(|linked| linked.url.url() == url) {
             spaces.push(id);
         }
     }

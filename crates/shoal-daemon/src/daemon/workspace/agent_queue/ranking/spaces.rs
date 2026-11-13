@@ -158,10 +158,8 @@ pub(super) fn prioritize(
 /// or that no watch has read yet.
 fn has_open_pr(db: &Connection, id: &SpaceId) -> Result<bool> {
     let links = store::space_links(db, id)?;
-    let opened = (links.opened.iter())
-        .filter(|item| item.kind() == LinkKind::Pr)
-        .map(|item| &item.url);
-    for url in links.prs.iter().chain(opened) {
+    let opened = (links.opened.iter()).filter(|item| item.kind() == LinkKind::Pr);
+    for url in links.prs.iter().chain(opened).map(|item| &item.url) {
         // The background poll's observation is current; a watch's cursor
         // waits for its deliveries to be read.
         let state: Option<Option<String>> = db

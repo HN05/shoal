@@ -175,8 +175,6 @@ impl Spaces {
 
 /// Whether `links` names the PR `number` of `forge`'s repository.
 fn links_pull(forge: &ForgeRepo, links: &SpaceLinks, number: PullNumber) -> bool {
-    links
-        .prs
-        .iter()
+    (links.prs.iter().map(|pr| &pr.url))
         .any(|url| url.repository() == forge && url.pull().is_ok_and(|linked| linked == number))
 }

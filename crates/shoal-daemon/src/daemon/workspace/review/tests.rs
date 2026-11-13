@@ -135,7 +135,10 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
                 url: issue.parse().unwrap(),
                 title: None,
             }],
-            prs: vec![pr.parse().unwrap()],
+            prs: vec![crate::model::LinkedItem {
+                url: pr.parse().unwrap(),
+                title: None,
+            }],
             ..Default::default()
         }
     );

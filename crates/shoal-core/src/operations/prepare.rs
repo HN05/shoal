@@ -138,7 +138,7 @@ async fn link_pr(
     reporter: &Reporter<'_>,
 ) -> Result<Workspace> {
     reporter.ensure_running()?;
-    if !crate::opened_pull::link_or_warn(paths, &workspace.id, pr).await {
+    if !crate::opened_pull::link_or_warn(paths, &workspace.id, pr, None).await {
         return Ok(workspace);
     }
     reporter.reached(Step::PrLinked).await?;

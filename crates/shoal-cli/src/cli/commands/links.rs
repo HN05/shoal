@@ -103,7 +103,7 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
     let linked =
         crate::client::items::link(&ctx.paths, &space, relation, kind, input, None).await?;
     if let Some(error) = linked.title_error {
-        eprintln!("Issue title unavailable: {error}");
+        eprintln!("Title unavailable: {error}");
     }
     ctx.emit(
         &link_outcome(kind, relation),

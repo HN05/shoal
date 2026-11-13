@@ -71,3 +71,26 @@ fn links_of_an_earlier_release_keep_their_issue_as_the_first_assigned() {
         serde_json::from_value(serde_json::json!({"issue": null, "prs": []})).unwrap();
     assert!(without.issues.is_empty());
 }
+
+#[test]
+fn links_of_an_earlier_release_keep_their_prs_without_titles() {
+    let (earlier, titled) = ("https://forge/o/r/pulls/4", "https://forge/o/r/pulls/5");
+    let links: SpaceLinks = serde_json::from_value(serde_json::json!({"prs": [
+        earlier,
+        {"kind": "pr", "url": titled, "title": "Fix it"},
+    ]}))
+    .unwrap();
+    assert_eq!(
+        links.prs,
+        [
+            LinkedItem {
+                url: earlier.parse().unwrap(),
+                title: None,
+            },
+            LinkedItem {
+                url: titled.parse().unwrap(),
+                title: Some("Fix it".into()),
+            },
+        ]
+    );
+}
