@@ -2,6 +2,7 @@ use serde_json::json;
 
 use super::*;
 use crate::daemon::test_support::{manager, repository};
+use std::time::Duration;
 
 fn queued(workflow: &str, name: &str) -> QueuedJob {
     serde_json::from_value(json!({
@@ -82,4 +83,103 @@ async fn a_job_counts_at_the_peak_memory_of_its_recent_runs() {
         .await
         .unwrap();
     assert_eq!(runs, 5);
+}
+
+/// Record a claimed job of `repo` in a new workspace named `name`, its run
+/// `job`, started `ran` before now.
+async fn claim(
+    manager: &Manager,
+    repo: &RepositoryId,
+    name: &str,
+    job: &QueuedJob,
+    ran: Duration,
+) -> ClaimedJob {
+    let workspace = manager
+        .create_workspace(repo, name.into(), None, None, None)
+        .await
+        .unwrap();
+    let launched = crate::time::UnixTime::now() - ran;
+    let claimed = ClaimedJob {
+        id: format!("job-{name}").into(),
+        repository_id: repo.clone(),
+        workspace_id: workspace.id.clone(),
+        execution_id: None,
+        launched_at: Some(launched),
+        job: job.clone(),
+        runner_id: None,
+    };
+    let row = (
+        claimed.id.clone(),
+        repo.clone(),
+        workspace.id,
+        serde_json::to_string(job).unwrap(),
+    );
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO ci_jobs(id,repository_id,workspace_id,job,started_at,launched_at,peak_memory)
+                 VALUES (?1,?2,?3,?4,0,?5,1)",
+                params![row.0, row.1, row.2, row.3, launched],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    claimed
+}
+
+#[tokio::test]
+async fn a_spaces_ci_has_what_its_longest_job_has_left_once_each_has_run() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let space: SpaceId = "space".into();
+    let mut rust = queued("ci.yml", "rust");
+    rust.space_ids = vec![space.clone()];
+    // Nothing runs for the space yet.
+    let now = crate::time::UnixTime::now();
+    assert_eq!(manager.ci_remaining(&space, now).await.unwrap(), None);
+
+    // A run of the job ends after half an hour.
+    let earlier = claim(
+        &manager,
+        &repo.id,
+        "earlier",
+        &rust,
+        Duration::from_secs(1800),
+    )
+    .await;
+    manager.record_job_usage(&earlier).await.unwrap();
+    let seconds: i64 = manager
+        .store
+        .run(|db| Ok(db.query_row("SELECT seconds FROM ci_job_usage", [], |row| row.get(0))?))
+        .await
+        .unwrap();
+    assert!((1800..1860).contains(&seconds), "{seconds}");
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE ci_job_usage SET seconds=1800", [])?;
+            db.execute("DELETE FROM ci_jobs", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    // Another run of it, ten minutes in, has twenty left.
+    let running = claim(&manager, &repo.id, "running", &rust, Duration::ZERO).await;
+    let now = running.launched_at.unwrap() + Duration::from_secs(600);
+    assert_eq!(
+        manager.ci_remaining(&space, now).await.unwrap(),
+        Some(Duration::from_secs(1200))
+    );
+    // A job that has never run leaves the wait unknown.
+    let mut docs = queued("ci.yml", "docs");
+    docs.space_ids = vec![space.clone()];
+    claim(&manager, &repo.id, "docs", &docs, Duration::ZERO).await;
+    assert_eq!(manager.ci_remaining(&space, now).await.unwrap(), None);
 }

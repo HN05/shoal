@@ -155,7 +155,7 @@ async fn a_sleep_lasts_through_its_turn_and_a_wait_for_the_user() {
 }
 
 #[tokio::test]
-async fn a_chat_sleeps_only_in_a_mode_that_wakes_it() {
+async fn a_chat_sleeps_whatever_its_mode() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -168,7 +168,10 @@ async fn a_chat_sleeps_only_in_a_mode_that_wakes_it() {
     let slept = (manager.sleep(&SpaceSelector::id(&talks.id), Some(Sleep::Permanent)))
         .await
         .unwrap();
-    assert_eq!((slept.sleep, slept.idle_wake_minutes), (None, None));
+    assert_eq!(
+        (slept.sleep, slept.idle_wake_minutes),
+        (Some(Sleep::Permanent), None)
+    );
     for chat in [&talks, &plans] {
         report(&manager, &chat.id, AgentState::Idle).await;
     }

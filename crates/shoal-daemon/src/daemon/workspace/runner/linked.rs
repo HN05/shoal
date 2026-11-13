@@ -90,7 +90,9 @@ impl Manager {
 }
 
 /// Each waiting job's entry ID, repository and job.
-fn waiting_jobs(db: &Connection) -> Result<Vec<(QueueEntryId, RepositoryId, QueuedJob)>> {
+pub(super) fn waiting_jobs(
+    db: &Connection,
+) -> Result<Vec<(QueueEntryId, RepositoryId, QueuedJob)>> {
     let rows = db
         .prepare(
             "SELECT id,repository_id,job FROM agent_queue

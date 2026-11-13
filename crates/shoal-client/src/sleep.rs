@@ -14,16 +14,15 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Slept {
     pub space: SpaceName,
-    /// How long its agent sleeps; none while Shoal may wake it.
+    /// How long its agent sleeps; none once it is awake.
     pub sleep: Option<Sleep>,
     /// How many minutes its agent may stay idle before Shoal wakes it, as
-    /// its mode sets; none when its mode never wakes it, which leaves a
-    /// sleep unrecorded.
+    /// its mode sets; none when its mode never wakes it.
     pub idle_wake_minutes: Option<u64>,
 }
 
-/// Let the agent of `space` sleep as `sleep` says, or end its sleep with
-/// none.
+/// Let the agent of `space` sleep as `sleep` says, or with none end its
+/// sleep and wake it.
 pub async fn set(
     daemon: &impl Daemon,
     space: SpaceSelector,

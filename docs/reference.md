@@ -527,8 +527,8 @@ notification and tries again only once agents have no work or the config reloads
 
 An agent Shoal stopped on its own and brings back on its own is asleep: it
 comes back through the [agent queue](#agent-queue) once what it waits for
-arrives. Overload and disk protection, idle stops, a blocked space and a
-signal that ended its session put an agent to sleep. An agent that `shoal
+arrives. Overload and disk protection, idle stops, a blocked space, a signal
+that ended its session and `shoal sleep` put an agent to sleep. An agent that `shoal
 stop` stopped, or that quit on its own, is stopped instead, and stays down
 until `shoal restore`. `shoal list` shows an asleep agent's space as `asleep`,
 the [inbox](#inbox) lists it, and `shoal status` adds an `Asleep` line with
@@ -556,9 +556,9 @@ which is why `[sleep] idle` is opt-in.
 ### Idle wakes
 
 ```sh
-shoal sleep                 # No idle wake until the agent's next turn starts
-shoal sleep --permanent     # No idle wakes for this space until --undo
-shoal sleep --undo [space]  # Idle wakes again; ends either kind of sleep
+shoal sleep                 # Asleep from the end of the turn until the next
+shoal sleep --permanent     # Back to sleep after every turn until --undo
+shoal sleep --undo [space]  # Awake; ends either kind of sleep and wakes it
 ```
 
 As a backup to the wakes its updates bring, Shoal wakes an agent that has
@@ -570,15 +570,22 @@ is woken again after each further period. A space whose work is
 [done](#assignment-completion) is never woken; open questions and pending
 approvals do not pause the timer.
 
-An agent that waits for something sleeps. A plain `shoal sleep` lasts until
-its next turn starts, by an update, a message or the user; a permission prompt
-in the turn that slept does not end it. `--permanent` lasts, through
-restarts, restores and later turns, until `shoal sleep --undo`, which the user
-or a coordinator can run for a space below. Neither keeps updates, messages
-or the user from waking the agent. In a space whose mode never wakes its agent,
-`shoal sleep` records nothing. `list` shows a sleeping idle agent as
-`asleep`, and `status` adds a `Sleep` line;
-`--json` gives `sleep`, `turn` or `permanent`.
+An agent that waits for something runs `shoal sleep`: from the end of its turn
+it sleeps, gets no idle wakes, and once stopping it costs no prompt cache,
+whether or not other work waits, Shoal stops it and saves it to come back once
+an update arrives, as an idle stop does. Under the `balanced` and `cache`
+[schedules](config.md#machine) that is once its cache has expired, or while the
+CI jobs this machine's [runner](#runner) runs or has queued for its space are
+expected, from the longest of each job's recent runs, to outlast the cache;
+Shoal waits for expiry when a job has no recorded run. Under `speed` it is at
+once. A plain `shoal sleep` lasts until its next turn starts, by an update, a
+message or the user; a permission prompt in the turn that slept does not end
+it. `--permanent` puts the agent back to sleep after every turn, through
+restarts and restores, until `shoal sleep --undo`, which also wakes an asleep
+agent: its restore then waits only for its turn in the agent queue. The user or
+a coordinator can run either for a space below. `list` shows a sleeping idle
+agent as `asleep`, and `status` adds a `Sleep` line; `--json` gives `sleep`,
+`turn` or `permanent`.
 
 ### Apps
 

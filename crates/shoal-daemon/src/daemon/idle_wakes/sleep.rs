@@ -1,6 +1,7 @@
-//! The sleep an agent that waits for something takes, so Shoal does not
-//! wake it for having stayed idle: until its next turn starts, or until
-//! `shoal sleep --undo`.
+//! The sleep an agent that waits for something takes: Shoal does not wake
+//! it for having stayed idle, and puts it to sleep once that costs nothing,
+//! until its next turn starts, or after every turn until `shoal sleep
+//! --undo`, which also wakes an agent asleep for any reason.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -57,21 +58,22 @@ pub(crate) fn follow_state(
 
 impl Manager {
     /// Let the agent of the space `selector` names sleep as `sleep` says,
-    /// or end its sleep with none. A sleep does nothing in a space whose
-    /// mode never wakes its agent.
+    /// or with none end its sleep and wake it: a restore Shoal queued on its
+    /// own for it then waits only for its turn in the agent queue.
     pub async fn sleep(&self, selector: &SpaceSelector, sleep: Option<Sleep>) -> Result<Slept> {
         let space = self.space(selector).await?;
         let idle_wake_minutes = self.idle_wake_minutes(&space).await?;
         let id = space.id().to_owned();
-        let changes = sleep.is_none() || idle_wake_minutes.is_some();
         let sleep = (self.store)
-            .write(move |db| {
-                if changes {
-                    set(db, &id, sleep)?;
+            .write(move |tx| {
+                set(tx, &id, sleep)?;
+                if sleep.is_none() {
+                    crate::daemon::workspace::agent_queue::asleep::wake(tx, &id)?;
                 }
-                current(db, &id)
+                current(tx, &id)
             })
             .await?;
+        self.agent_queue.wake();
         Ok(Slept {
             space: space.name().to_owned(),
             sleep,

@@ -25,3 +25,14 @@ pub(crate) fn current(db: &Connection, id: &SpaceId) -> Result<Option<Asleep>> {
         wakes_when: wakes_when.unwrap_or_else(|| WAKES_IN_QUEUE.to_owned()),
     }))
 }
+
+/// Wake the agent of the space `id` if it is asleep: the restores Shoal
+/// queued on its own for it wait only for their turn in the agent queue, as
+/// after `shoal restore`, without withdrawing a completion.
+pub(crate) fn wake(db: &Connection, id: &SpaceId) -> Result<()> {
+    db.execute(
+        "UPDATE agent_queue SET automatic=0 WHERE space_id=?1 AND kind=?2 AND automatic",
+        params![id, QueueKind::Restore],
+    )?;
+    Ok(())
+}

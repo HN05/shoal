@@ -14,7 +14,7 @@ use crate::{
     },
     execution::recovery::Record,
     model::Workspace,
-    state::AgentState,
+    state::{AgentState, Sleep},
 };
 
 /// How a test workspace keeps its agent.
@@ -236,9 +236,7 @@ async fn a_cache_renewed_after_the_agent_was_chosen_keeps_it() {
     // A turn ended after the sweep chose the agent.
     cache_expires_in(&manager, &workspace, 600).await;
     let turns = manager.agent_turns().await.unwrap();
-    manager
-        .stop_idle(turns, chosen, crate::time::UnixTime::now())
-        .await;
+    manager.stop_idle(turns, chosen).await;
     assert!(!*execution.stop.borrow());
 }
 
@@ -268,9 +266,7 @@ async fn a_turn_that_starts_between_the_choice_and_the_stop_keeps_the_agent() {
             .unwrap();
     }
     cache_expires_in(&manager, &workspace, 0).await;
-    manager
-        .stop_idle(turns, chosen, crate::time::UnixTime::now())
-        .await;
+    manager.stop_idle(turns, chosen).await;
     assert!(!*execution.stop.borrow(), "the agent keeps running");
     assert!(manager.agent_overload(&id).await.is_none());
 }
@@ -338,9 +334,7 @@ async fn an_idle_stop_after_a_wake_keeps_the_agent() {
         .await
         .unwrap();
     assert!(woken);
-    manager
-        .stop_idle(turns, chosen, crate::time::UnixTime::now())
-        .await;
+    manager.stop_idle(turns, chosen).await;
     assert!(!*execution.stop.borrow());
 }
 
@@ -350,6 +344,7 @@ async fn chosen_held(manager: &Manager, execution: &ExecutionId) -> HashMap<Exec
     let stop = Chosen {
         protection: Protection::idle_held(),
         turn: manager.reported_turns().await.unwrap()[execution],
+        cache_expired_at: Some(crate::time::UnixTime::now()),
     };
     HashMap::from([(execution.to_owned(), stop)])
 }
@@ -573,4 +568,62 @@ async fn a_blocked_chats_idle_agent_stops_until_its_space_clears() {
 
     assert!(*execution.stop.borrow());
     assert!(manager.restore_waits_for_unblock(&chat.id, &execution.plan.id));
+}
+
+/// An agent whose work is not done, in a workspace nothing holds.
+const UNFINISHED: Setup = Setup {
+    done: false,
+    held: false,
+    ..HELD_DONE_IDLE
+};
+
+/// Why Shoal stopped the agent of `execution`, while it waits to restore.
+async fn stop_reason(manager: &Manager, execution: &StartedExecution) -> Option<String> {
+    let protection = manager.agent_overload(&execution.plan.id).await;
+    protection.map(|protection| protection.reason)
+}
+
+#[tokio::test]
+async fn a_sleeping_agent_sleeps_once_its_cache_expires() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (workspace, execution) = agent(&manager, &repo.id, "sleeps", UNFINISHED).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.sleep(&selector, Some(Sleep::Turn))).await.unwrap();
+    cache_expires_in(&manager, &workspace, 600).await;
+    manager.stop_idle_agents().await.unwrap();
+    assert!(!*execution.stop.borrow(), "a warm cache keeps the agent");
+
+    cache_expires_in(&manager, &workspace, 0).await;
+    manager.stop_idle_agents().await.unwrap();
+    assert!(*execution.stop.borrow());
+    assert_eq!(
+        stop_reason(&manager, &execution).await,
+        Some(Protection::slept().reason)
+    );
+}
+
+#[tokio::test]
+async fn under_the_speed_schedule_a_sleeping_agent_sleeps_at_once() {
+    let (root, manager) = manager().await;
+    manager.publish_config(crate::test_support::global_config(
+        "[machine]\nschedule = \"speed\"\n",
+    ));
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (workspace, execution) = agent(&manager, &repo.id, "sleeps", UNFINISHED).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.sleep(&selector, Some(Sleep::Permanent)))
+        .await
+        .unwrap();
+    cache_expires_in(&manager, &workspace, 600).await;
+    manager.stop_idle_agents().await.unwrap();
+    assert!(*execution.stop.borrow());
 }

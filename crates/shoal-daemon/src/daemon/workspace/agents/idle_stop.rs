@@ -1,8 +1,9 @@
-//! Stop idle agents, saving each as protection does: to free memory, so
-//! that an update restores it, and whose space is blocked, so that its
-//! restore waits until nothing blocks the space. Only an agent whose prompt
-//! cache has expired stops to free memory, since restoring one rewrites its
-//! cache; a blocked one stops once its turn ends.
+//! Put idle agents to sleep, saving each as protection does, so that an
+//! update restores it: to free memory and after `shoal sleep`, and whose
+//! space is blocked, so that its restore waits until nothing blocks the
+//! space. Only an agent whose prompt cache has expired sleeps to free
+//! memory, and one that `shoal sleep` puts to sleep only once that costs
+//! nothing; a blocked one sleeps once its turn ends.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
@@ -12,43 +13,46 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use super::{Manager, Protection, StoppedAgent, Turn};
+use crate::time::UnixTime;
 
 /// A connected idle agent.
-struct Candidate {
-    execution: ExecutionId,
-    workspace_id: SpaceId,
+pub(super) struct Candidate {
+    pub(super) execution: ExecutionId,
+    pub(super) workspace_id: SpaceId,
     workspace: SpaceName,
     /// Whether the user attends its space.
-    attended: bool,
+    pub(super) attended: bool,
     /// The idle turn it was found in.
-    turn: Turn,
+    pub(super) turn: Turn,
 }
 
-/// An agent to stop, and the idle turn it was chosen in.
-struct Chosen {
-    protection: Protection,
-    turn: Turn,
+/// An agent to put to sleep, the idle turn it was chosen in, and the time
+/// recording its stop must find its prompt cache expired by, if any.
+pub(super) struct Chosen {
+    pub(super) protection: Protection,
+    pub(super) turn: Turn,
+    pub(super) cache_expired_at: Option<UnixTime>,
 }
 
 impl Manager {
-    /// Stop each idle agent whose space is blocked, and each whose prompt
-    /// cache has expired in a done workspace whose cleanup is held, which
-    /// could otherwise run until the workspace goes, or in any workspace
-    /// whose `[sleep] idle` is enabled. A failure in one workspace does not
-    /// skip the others.
+    /// Put to sleep each idle agent whose space is blocked; each whose
+    /// prompt cache has expired in a done workspace whose cleanup is held,
+    /// which could otherwise run until the workspace goes, or in any
+    /// workspace whose `[sleep] idle` is enabled; each whose space sleeps
+    /// after `shoal sleep` once that costs nothing. A failure in one
+    /// workspace does not skip the others.
     pub(crate) async fn stop_idle_agents(&self) -> Result<()> {
         // The process scan that tells agents with work in flight waits until
         // some agent would stop.
         let turns = self.reported_turns().await?;
-        let now = crate::time::UnixTime::now();
+        let now = UnixTime::now();
+        let candidates = self.idle_candidates(&turns).await;
         let mut chosen = HashMap::new();
         let mut failed = crate::daemon::cleanup::SpaceFailures::default();
-        for candidate in self.idle_candidates(&turns).await {
-            let cache_expired = candidate.turn.idle_without_cache(now);
-            match self.idle_stop(&candidate, cache_expired).await {
-                Ok(Some(protection)) => {
-                    let turn = candidate.turn;
-                    chosen.insert(candidate.execution, Chosen { protection, turn });
+        for candidate in &candidates {
+            match self.idle_stop(candidate, now).await {
+                Ok(Some(stop)) => {
+                    chosen.insert(candidate.execution.clone(), stop);
                 }
                 Ok(None) => {}
                 Err(error) => failed.push(&candidate.workspace_id, &candidate.workspace, &error),
@@ -56,8 +60,7 @@ impl Manager {
         }
         if !chosen.is_empty() {
             let turns = self.agent_turns().await?;
-            let now = crate::time::UnixTime::now();
-            self.stop_idle(turns, chosen, now).await;
+            self.stop_idle(turns, chosen).await;
         }
         failed.into_result()
     }
@@ -84,21 +87,42 @@ impl Manager {
             .await
     }
 
-    /// Why the `candidate` agent stops, if it does: its space is blocked,
-    /// or, once its prompt cache expired and unless the user attends its
-    /// space, to free memory.
-    async fn idle_stop(
-        &self,
-        candidate: &Candidate,
-        cache_expired: bool,
-    ) -> Result<Option<Protection>> {
+    /// Why the `candidate` agent sleeps at `now`, if it does: its space is
+    /// blocked; or, unless the user attends its space, its prompt cache
+    /// expired where that frees memory, or its space sleeps and sleeping
+    /// costs nothing.
+    async fn idle_stop(&self, candidate: &Candidate, now: UnixTime) -> Result<Option<Chosen>> {
         let id = &candidate.workspace_id;
+        let chosen = |protection, cache_expired_at| {
+            Some(Chosen {
+                protection,
+                turn: candidate.turn,
+                cache_expired_at,
+            })
+        };
         if self.space_blocked(id).await? {
-            return Ok(Some(Protection::blocked()));
+            return Ok(chosen(Protection::blocked(), None));
         }
-        if !cache_expired || candidate.attended {
+        if candidate.attended {
             return Ok(None);
         }
+        if candidate.turn.idle_without_cache(now)
+            && let Some(protection) = self.expired_stop(id).await?
+        {
+            return Ok(chosen(protection, Some(now)));
+        }
+        if self.space_by_id(id).await?.sleep().is_some()
+            && let Some(free) = self.sleep_cost(id, &candidate.turn, now).await?
+        {
+            return Ok(chosen(Protection::slept(), free.cache_expired_at(now)));
+        }
+        Ok(None)
+    }
+
+    /// Why the idle agent of the space `id`, whose prompt cache expired,
+    /// sleeps to free memory, if it does: its space is done and its cleanup
+    /// held, or its `[sleep] idle` is enabled.
+    async fn expired_stop(&self, id: &SpaceId) -> Result<Option<Protection>> {
         if self.completion(id).await?.is_some() && self.keep_reason(id).await?.is_some() {
             return Ok(Some(Protection::idle_held()));
         }
@@ -109,23 +133,26 @@ impl Manager {
     }
 
     /// Stop the `chosen` agents that are still idle in the turn they were
-    /// chosen in, with no prompt cache left at `now` unless their space is
-    /// blocked, and whose processes `turns` found no work in flight outside
-    /// their process group. A blocked agent's stop notifies no one; its
-    /// space's blocking already did.
+    /// chosen in, with no prompt cache left by the time each requires, and
+    /// whose processes `turns` found no work in flight outside their process
+    /// group. A blocked agent's stop notifies no one; its space's blocking
+    /// already did.
     async fn stop_idle(
         &self,
         turns: HashMap<ExecutionId, Turn>,
         chosen: HashMap<ExecutionId, Chosen>,
-        now: crate::time::UnixTime,
     ) {
         let mut stopped: Vec<StoppedAgent> = Vec::new();
         for (id, stop) in chosen {
             if !turns.get(&id).is_some_and(Turn::idle) {
                 continue;
             }
-            let cache_expired_at = (!stop.protection.is_blocked()).then_some(now);
-            let protected = self.protect(&id, &stop.protection, Some(stop.turn), cache_expired_at);
+            let protected = self.protect(
+                &id,
+                &stop.protection,
+                Some(stop.turn),
+                stop.cache_expired_at,
+            );
             stopped.extend(protected.await);
         }
         for agent in &stopped {

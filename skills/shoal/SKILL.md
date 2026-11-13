@@ -229,21 +229,25 @@ workflow on the default branch, passing. A coordinator removes a blocker of a
 space below with `--space`; `shoal restore` restores a blocked agent at once,
 and `shoal done` removes the blockers.
 
-## Idle wakes
+## Sleep
 
 ```sh
-shoal sleep                 # No idle wake until your next turn starts
-shoal sleep --permanent     # No idle wakes for this space until --undo
-shoal sleep --undo [space]  # Idle wakes again
+shoal sleep                 # Asleep from the end of your turn until the next
+shoal sleep --permanent     # Back to sleep after every turn until --undo
+shoal sleep --undo [space]  # Awake; an agent that stopped comes back
 ```
 
 An agent whose mode sets `idle_wake_minutes`, 60 for `worker`, receives a
 message once it has stayed idle that long, and again after each further
 period, until its space is done: "You have been idle for 60 minutes. Continue
-your work if any remains; otherwise run `shoal sleep`." `sleep` stops these
-wakes until the agent's next turn starts, and `--permanent` until `--undo`;
-updates, messages and the user still wake it. In a space whose mode never
-wakes its agent, `sleep` does nothing. `list` and `status` show the sleep.
+your work if any remains; otherwise run `shoal sleep`." An agent that has
+nothing to do until something arrives runs `shoal sleep`: from the end of its
+turn it gets no idle wakes, and once stopping it costs no prompt cache Shoal
+stops it, keeping its session, slot-free until an update, a message, an answer
+or the user wakes it. A coordinator puts a space below to sleep with
+`shoal sleep <space>`. An agent Shoal stopped on its own is asleep; `list` and
+`status` show it with why and what wakes it. One stopped by `shoal stop`, or
+that quit, stays stopped until `shoal restore`.
 
 ## Issues and pull requests
 

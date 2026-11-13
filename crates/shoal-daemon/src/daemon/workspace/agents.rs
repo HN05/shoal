@@ -34,6 +34,7 @@ mod forks;
 mod idle_stop;
 mod interrupts;
 mod restart;
+mod sleep_cost;
 mod stops;
 pub use restart::RestartWaits;
 pub(crate) use restart::{Renewals, forget_ended_renewals};
@@ -57,6 +58,10 @@ pub(crate) trait ProtectionExt {
     /// An idle agent whose prompt cache expired, which Shoal stops to free
     /// memory under `[sleep] idle`.
     fn idle_expired() -> Self;
+
+    /// An idle agent whose space sleeps after `shoal sleep`, which Shoal
+    /// puts to sleep once that costs nothing.
+    fn slept() -> Self;
 
     /// An idle stop for `reason`, whose restore waits for an update. Wrappers
     /// handle it as any protection stop they restore.
@@ -111,6 +116,10 @@ impl ProtectionExt for Protection {
         Self::idle(IDLE_EXPIRED_REASON)
     }
 
+    fn slept() -> Self {
+        Self::idle(SLEPT_REASON)
+    }
+
     fn idle(reason: &str) -> Self {
         Self {
             reason: reason.into(),
@@ -126,7 +135,13 @@ impl ProtectionExt for Protection {
     }
 
     fn is_idle(&self) -> bool {
-        [IDLE_HELD_REASON, IDLE_EXPIRED_REASON, BLOCKED_REASON].contains(&self.reason.as_str())
+        [
+            IDLE_HELD_REASON,
+            IDLE_EXPIRED_REASON,
+            SLEPT_REASON,
+            BLOCKED_REASON,
+        ]
+        .contains(&self.reason.as_str())
     }
 
     fn is_blocked(&self) -> bool {
@@ -150,6 +165,9 @@ const IDLE_HELD_REASON: &str = "idle in a done workspace whose cleanup is held";
 
 /// The stop reason of an idle agent `[sleep] idle` puts to sleep.
 const IDLE_EXPIRED_REASON: &str = "idle with its prompt cache expired";
+
+/// The stop reason of an idle agent whose space sleeps after `shoal sleep`.
+const SLEPT_REASON: &str = "shoal sleep";
 
 /// The stop reason of an agent whose turn ended while its space is blocked,
 /// which its recovery record keeps.
