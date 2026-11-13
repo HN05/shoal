@@ -6,7 +6,7 @@ use crate::daemon::operations::fake;
 use crate::daemon::test_support::{manager, repository};
 use crate::model::{Repository, Workspace};
 use crate::protocol::operations::{OperationKind, OperationSpec, Preparation};
-use crate::protocol::{Work, WorkSpace};
+use crate::protocol::{ErrorCode, Work, WorkSpace};
 use crate::state::WorkspaceState;
 use futures_util::FutureExt;
 use std::sync::Arc;
@@ -134,7 +134,8 @@ fn waiting(
     let (client, mut stream) = UnixStream::pair().unwrap();
     let manager = manager.clone();
     let wait = tokio::spawn(async move {
-        let quiet = wait(&manager, &mut stream, 1, when).await.unwrap();
+        let quiet = wait(&manager, &mut stream, 1, Exit::Restart, when);
+        let quiet = quiet.await.unwrap();
         (stream, quiet)
     });
     (client, wait)
@@ -200,4 +201,22 @@ async fn an_exit_whose_client_hangs_up_stops_holding_back_work() {
     assert!(quiet.is_none());
     assert!(manager.gates.admit().is_ok());
     drop(running);
+}
+
+#[tokio::test]
+async fn work_stays_held_back_until_every_exit_that_waits_lets_go() {
+    let (_root, manager) = manager().await;
+    let restart = manager.gates.hold_back(Exit::Restart);
+    let refused = manager.gates.admit().unwrap_err();
+    assert_eq!(refused.code(), ErrorCode::Exiting);
+    // No daemon follows a stop, so its refusal sends nothing to one.
+    let stop = manager.gates.hold_back(Exit::Stop);
+    let refused = manager.gates.admit().unwrap_err();
+    assert_eq!(refused.code(), ErrorCode::OperationFailed);
+    drop(stop);
+    assert_eq!(manager.gates.admit().unwrap_err().exit, Exit::Restart);
+    assert!(manager.gates.background_pass().now_or_never().is_none());
+    drop(restart);
+    assert!(manager.gates.admit().is_ok());
+    assert!(manager.gates.background_pass().now_or_never().is_some());
 }

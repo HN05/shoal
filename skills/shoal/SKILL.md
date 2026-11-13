@@ -696,7 +696,7 @@ process of the workspace Shoal does not track, never the agent or its shells.
 The daemon, its service and the Shoal installation belong to the user.
 Stopping the daemon stops every agent. While a stop or restart waits for the
 work the daemon runs itself, commands that would start more, such as `shoal rm`,
-wait and run on the next daemon; while it restarts, every agent's other `shoal`
+wait and run on the next daemon, or fail for a stop; while it restarts, every agent's other `shoal`
 commands fail. `shoal config reload` applies the config on disk without
 stopping anything; an invalid file leaves the previous settings in place.
 

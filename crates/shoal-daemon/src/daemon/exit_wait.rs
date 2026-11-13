@@ -13,7 +13,7 @@ use super::{
     answer,
     workspace::{HeldBack, Manager},
 };
-use crate::protocol::{self, Body, ExitWhen, Response};
+use crate::protocol::{self, Body, Exit, ExitWhen, Response};
 
 /// How often an exit that waits looks again at the work in progress.
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
@@ -52,9 +52,10 @@ pub(super) async fn wait(
     manager: &Manager,
     stream: &mut UnixStream,
     request_id: u64,
+    exit: Exit,
     when: ExitWhen,
 ) -> Result<Option<Quiet>> {
-    let held_back = manager.gates.hold_back();
+    let held_back = manager.gates.hold_back(exit);
     let mut reported = None;
     loop {
         if let Some(quiescence) = quiesce(manager) {

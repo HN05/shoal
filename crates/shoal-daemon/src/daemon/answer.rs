@@ -107,8 +107,8 @@ fn error_code(error: &anyhow::Error) -> ErrorCode {
         ErrorCode::UnprovenStop
     } else if error.downcast_ref::<workspace::RestartWaits>().is_some() {
         ErrorCode::RestartWaits
-    } else if error.downcast_ref::<workspace::Exiting>().is_some() {
-        ErrorCode::Exiting
+    } else if let Some(exiting) = error.downcast_ref::<workspace::Exiting>() {
+        exiting.code()
     } else {
         Reason::of(error).map_or(ErrorCode::OperationFailed, Reason::code)
     }

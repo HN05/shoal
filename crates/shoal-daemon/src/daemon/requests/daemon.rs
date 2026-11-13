@@ -80,7 +80,9 @@ pub(in crate::daemon) async fn exit(
         when => {
             // The exit's own request would keep the daemon from quiescing.
             drop(guard);
-            match exit_wait::wait(&server.manager, &mut stream, request_id, when).await? {
+            let waiting =
+                exit_wait::wait(&server.manager, &mut stream, request_id, request.exit, when);
+            match waiting.await? {
                 Some(quiet) => (Some(quiet), None),
                 None => return Ok(()),
             }

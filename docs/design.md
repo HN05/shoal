@@ -207,7 +207,7 @@ ask the daemon to exit only once none runs, with the same quiescence an update
 waits for. That wait happens in the daemon before it begins to exit, outside
 the service manager's stop timeout. Meanwhile it holds back the background
 passes and requests that would start such work, whose clients send them again
-until the next daemon takes them; agents, which reattach, still start, and
+until the next daemon takes them when a restart brings one; agents, which reattach, still start, and
 other requests go on, so agents keep working through the wait.
 
 Overload protection is configured machine-wide: memory is enabled by default,

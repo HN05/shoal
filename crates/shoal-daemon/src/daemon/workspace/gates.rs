@@ -6,6 +6,8 @@ use crate::client::space_ids::SpaceId;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+
+use crate::protocol::{ErrorCode, Exit};
 use tokio::sync::{
     Mutex, MutexGuard, OwnedMutexGuard, OwnedRwLockReadGuard, OwnedRwLockWriteGuard, RwLock,
     RwLockReadGuard, watch,
@@ -20,8 +22,8 @@ mod tests;
 #[derive(Default)]
 pub(crate) struct Gates {
     background_operations: Arc<RwLock<()>>,
-    /// Whether an exit that waits for work in progress holds back new work.
-    held_back: Arc<watch::Sender<bool>>,
+    /// The exits that wait for work in progress, holding back new work.
+    held_back: Arc<watch::Sender<Holds>>,
     registry: Mutex<()>,
     checkpoints: Mutex<()>,
     simulators: Mutex<()>,
@@ -56,27 +58,72 @@ pub(crate) enum ResourceGuard {
     Hook { _guard: OwnedRwLockWriteGuard<()> },
 }
 
-/// The daemon holds back new work until it exits; the request runs once the
-/// next daemon answers.
+/// The daemon holds back new work until it exits: a restart's next daemon
+/// takes the request, which [`ErrorCode::Exiting`] tells its client, while
+/// a stop leaves none to take it.
 #[derive(Debug)]
-pub struct Exiting;
+pub struct Exiting {
+    pub exit: Exit,
+}
+
+impl Exiting {
+    /// The code the daemon refuses a request with.
+    pub fn code(&self) -> ErrorCode {
+        match self.exit {
+            Exit::Restart => ErrorCode::Exiting,
+            Exit::Stop => ErrorCode::OperationFailed,
+        }
+    }
+}
 
 impl std::fmt::Display for Exiting {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("the daemon is about to exit and starts no new work; send the request again once it is back")
+        f.write_str(match self.exit {
+            Exit::Restart => "the daemon is about to restart and starts no new work; send the request again once it is back",
+            Exit::Stop => "the daemon is about to stop and starts no new work; run the command again once a daemon runs",
+        })
     }
 }
 
 impl std::error::Error for Exiting {}
 
-/// New work held back for an exit that waits, until it drops.
+/// How many exits of each kind hold back new work.
+#[derive(Debug, Default, Clone, Copy)]
+struct Holds {
+    stops: usize,
+    restarts: usize,
+}
+
+impl Holds {
+    fn count(&mut self, exit: Exit) -> &mut usize {
+        match exit {
+            Exit::Stop => &mut self.stops,
+            Exit::Restart => &mut self.restarts,
+        }
+    }
+
+    /// The exit new work is refused for, a stop before a restart, since no
+    /// daemon follows it.
+    fn exiting(self) -> Option<Exiting> {
+        let exit = match self {
+            Holds { stops: 1.., .. } => Exit::Stop,
+            Holds { restarts: 1.., .. } => Exit::Restart,
+            Holds { .. } => return None,
+        };
+        Some(Exiting { exit })
+    }
+}
+
+/// New work held back for an exit that waits, until it drops; work starts
+/// again once every such exit has dropped its hold.
 pub(crate) struct HeldBack {
-    held_back: Arc<watch::Sender<bool>>,
+    held_back: Arc<watch::Sender<Holds>>,
+    exit: Exit,
 }
 
 impl Drop for HeldBack {
     fn drop(&mut self) {
-        self.held_back.send_replace(false);
+        (self.held_back).send_modify(|holds| *holds.count(self.exit) -= 1);
     }
 }
 
@@ -93,7 +140,7 @@ impl Gates {
     pub(crate) async fn background_pass(&self) -> RwLockReadGuard<'_, ()> {
         let mut held_back = self.held_back.subscribe();
         // The sender lives as long as the gates.
-        let _ = held_back.wait_for(|held| !held).await;
+        let _ = held_back.wait_for(|holds| holds.exiting().is_none()).await;
         self.background_operations.read().await
     }
 
@@ -124,21 +171,24 @@ impl Gates {
     }
 
     /// Hold back the background passes and requests that start work an
-    /// exit would cut off, until the guard drops, so that work in progress
+    /// `exit` would cut off, until the guard drops, so that work in progress
     /// can end before the daemon exits.
-    pub(crate) fn hold_back(&self) -> HeldBack {
-        self.held_back.send_replace(true);
+    pub(crate) fn hold_back(&self, exit: Exit) -> HeldBack {
+        (self.held_back).send_modify(|holds| *holds.count(exit) += 1);
         HeldBack {
             held_back: self.held_back.clone(),
+            exit,
         }
+    }
+
+    /// The exit that holds back new work, when one does.
+    pub(crate) fn exiting(&self) -> Option<Exiting> {
+        self.held_back.borrow().exiting()
     }
 
     /// Refuse, as [`Exiting`], to start work while an exit holds it back.
     pub(crate) fn admit(&self) -> Result<(), Exiting> {
-        match *self.held_back.borrow() {
-            true => Err(Exiting),
-            false => Ok(()),
-        }
+        self.exiting().map_or(Ok(()), Err)
     }
 
     /// Serialize repository registration, removal, and local config changes.

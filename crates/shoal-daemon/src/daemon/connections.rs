@@ -17,7 +17,7 @@ use tokio::{
 };
 
 use super::{log, workspace::Exiting};
-use crate::protocol::{self, Body, ErrorCode, Method, Request, Response, timing};
+use crate::protocol::{self, Body, Method, Request, Response, timing};
 use running::Running;
 
 mod running;
@@ -33,14 +33,15 @@ const RESERVED_DESCRIPTORS: usize = 512;
 const MIN_LONG_LIVED: usize = 64;
 
 /// Refuse the request on `stream`, which arrived once an exit that waited
-/// held operations off, as [`ErrorCode::Exiting`], so its client sends it to
-/// the next daemon.
-pub(super) async fn refuse_while_exiting(mut stream: UnixStream) {
+/// held operations off, as `exiting` says, so its client sends it to the
+/// next daemon when one follows.
+pub(super) async fn refuse_while_exiting(mut stream: UnixStream, exiting: Exiting) {
     let read = protocol::read::<Request>(&mut stream);
     let Ok(Ok(request)) = tokio::time::timeout(timing::REQUEST_READ_TIMEOUT, read).await else {
         return;
     };
-    let response = Response::new(request.id, Body::error(ErrorCode::Exiting, Exiting));
+    let body = Body::error(exiting.code(), &exiting);
+    let response = Response::new(request.id, body);
     // The client may have hung up.
     let _ = protocol::write(&mut stream, &response).await;
 }
