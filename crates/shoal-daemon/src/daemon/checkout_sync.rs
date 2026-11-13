@@ -5,6 +5,7 @@
 //! state now sync through the same path. A sync that keeps failing shows in
 //! workspace status, then in the inbox with one notification.
 use crate::client::repository_ids::RepositoryId;
+use shoal_refs::BranchName;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex, MutexGuard, PoisonError},
@@ -208,14 +209,13 @@ impl Manager {
         let synced = async {
             // A move may have finished while the fetch ran.
             let repo = self.repository(repository_id).await?;
-            self.fast_forward_default(&repo, &default.as_str().into())
-                .await
+            self.fast_forward_default(&repo, &default).await
         };
         Synced::Fetched(synced.await)
     }
 
     /// Fetch the repository's default-branch remotes; returns the default branch.
-    async fn fetch_repository(&self, repository_id: &RepositoryId) -> Result<String> {
+    async fn fetch_repository(&self, repository_id: &RepositoryId) -> Result<BranchName> {
         let repo = self.repository(repository_id).await?;
         self.fetch_default_remotes(&repo).await
     }

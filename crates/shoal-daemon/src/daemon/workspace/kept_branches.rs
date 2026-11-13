@@ -62,7 +62,7 @@ impl Manager {
         let Some(branch) = outcome
             .branch
             .clone()
-            .filter(|branch| workspace.branch.as_ref() == Some(&branch.as_str().into()))
+            .filter(|branch| workspace.branch.as_ref() == Some(branch))
             .filter(|_| !outcome.branch_outcome.is_deleted())
         else {
             return Ok(());
@@ -71,17 +71,15 @@ impl Manager {
         let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
             .await
             .ok();
-        if default.as_ref().map(BranchName::as_str) == Some(branch.as_str()) {
+        if default.as_ref() == Some(&branch) {
             return Ok(());
         }
-        let Some(head) =
-            git::status::local_branch_commit(&repo.path, &branch.as_str().into()).await?
-        else {
+        let Some(head) = git::status::local_branch_commit(&repo.path, &branch).await? else {
             return Ok(());
         };
         self.save_kept_branch(Record {
             repository_id: repo.id,
-            branch: branch.into(),
+            branch,
             head,
             kept_at: UnixTime::now(),
         })

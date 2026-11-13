@@ -185,14 +185,14 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceRef> {
 
 /// The branch an explicit base names, locally or on a remote, which another
 /// workspace may own. Unresolvable bases infer nothing; creation reports them.
-pub(super) async fn base_branch(repo: &Path, base: &str) -> Result<Option<String>> {
+pub(super) async fn base_branch(repo: &Path, base: &str) -> Result<Option<BranchName>> {
     if let Some((_, branch)) = git::remote_branch(repo, base).await? {
-        return Ok(Some(branch.into()));
+        return Ok(Some(branch));
     }
     let Ok(reference) = git::symbolic_revision(repo, base, git::run_isolated).await else {
         return Ok(None);
     };
-    Ok(git::strip_local(reference.trim_end()).map(str::to_owned))
+    Ok(git::strip_local(reference.trim_end()).map(BranchName::from))
 }
 
 /// The workspace in `repository_id` that owns `branch`, one a new workspace

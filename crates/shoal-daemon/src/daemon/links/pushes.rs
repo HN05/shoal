@@ -370,18 +370,13 @@ async fn push_current(workspace: &Workspace, request: &ApprovalRequest) -> Resul
 /// upstream, as `git push --set-upstream` would have, when it has none.
 /// Failure only logs; the push is done.
 async fn track_pushed_branch(workspace: &Workspace, push: &PushSpecification) {
-    let Some(branch) = workspace
-        .branch
-        .as_ref()
-        .map(BranchName::as_str)
-        .map(BranchName::from)
-    else {
+    let Some(branch) = &workspace.branch else {
         return;
     };
-    if push.commit.is_none() || push.destination != git::local_ref(&branch) {
+    if push.commit.is_none() || push.destination != git::local_ref(branch) {
         return;
     }
-    if let Err(error) = git::track_pushed_branch(&workspace.path, &branch, &push.remote).await {
+    if let Err(error) = git::track_pushed_branch(&workspace.path, branch, &push.remote).await {
         log!("upstream of {branch} not set: {error:#}");
     }
 }

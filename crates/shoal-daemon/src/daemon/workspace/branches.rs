@@ -142,7 +142,7 @@ impl Manager {
     /// the local default branch's upstream and the default remote, so they
     /// see what the forge merged; local branches stay unchanged. Returns the
     /// default branch. The caller holds the repository's fetch gate.
-    pub(crate) async fn fetch_default_remotes(&self, repo: &Repository) -> Result<String> {
+    pub(crate) async fn fetch_default_remotes(&self, repo: &Repository) -> Result<BranchName> {
         let default =
             crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
         let mut remotes = Vec::new();
@@ -162,7 +162,7 @@ impl Manager {
                 .await
                 .with_context(|| format!("could not fetch {remote}"))?;
         }
-        Ok(default.into())
+        Ok(default)
     }
 
     /// Fast-forward the local default branch to its upstream as

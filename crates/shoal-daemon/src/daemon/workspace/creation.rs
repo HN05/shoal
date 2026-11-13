@@ -297,7 +297,7 @@ impl Manager {
     pub(super) async fn insert_workspace(
         &self,
         record: Workspace,
-        base_branch: Option<String>,
+        base_branch: Option<BranchName>,
         parent: Option<SpaceId>,
         chosen: bool,
     ) -> Result<Workspace> {
@@ -310,7 +310,7 @@ impl Manager {
     async fn insert_workspace_as(
         &self,
         record: Workspace,
-        base_branch: Option<String>,
+        base_branch: Option<BranchName>,
         placement: Placement,
         chosen: bool,
     ) -> Result<Workspace> {
@@ -357,7 +357,7 @@ impl Manager {
                         "Git worktree is already owned by {}; restore its recorded path", workspace.name);
                 }
                 let base_workspace = match &base_branch {
-                    Some(branch) => stack::owner(tx, &record.repository_id, &branch.as_str().into())?,
+                    Some(branch) => stack::owner(tx, &record.repository_id, branch)?,
                     None => None,
                 };
                 // Recorded first, so the workspace's creation names it.

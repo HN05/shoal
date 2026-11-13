@@ -282,13 +282,8 @@ impl Manager {
             )
         };
         let base_branch = branch.and(source.base_branch.clone());
-        self.insert_workspace(
-            record,
-            base_branch.map(String::from),
-            new.parent.clone(),
-            chosen,
-        )
-        .await
+        self.insert_workspace(record, base_branch, new.parent.clone(), chosen)
+            .await
     }
 
     /// Create the copy's worktree with its source's files.
@@ -347,12 +342,7 @@ impl Manager {
         git_profile: Option<&str>,
     ) -> Result<Configured> {
         let path = &workspace.path;
-        let branch = workspace
-            .branch
-            .as_ref()
-            .map(BranchName::as_str)
-            .map(BranchName::from);
-        git::copy::add_worktree(&repo.path, path, branch.as_ref(), head.as_str()).await?;
+        git::copy::add_worktree(&repo.path, path, workspace.branch.as_ref(), head.as_str()).await?;
         // Recorded before the files are cloned, so a restart can verify and
         // remove the worktree.
         self.record_worktree_identity(workspace).await?;
