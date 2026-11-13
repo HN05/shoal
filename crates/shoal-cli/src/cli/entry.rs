@@ -5,8 +5,8 @@ use futures_util::future::LocalBoxFuture;
 
 use crate::cli::{self, Cli};
 use crate::{
-    WORKER_STACK, client, daemon_handoff::Handoff, env, paths::Paths, process, profile, releases,
-    service, stdout,
+    WORKER_STACK, client, daemon_handoff::Handoff, env, git, paths::Paths, process, profile,
+    releases, service, stdout,
 };
 
 /// Runs the daemon in this process, given its state, whether its service
@@ -29,6 +29,11 @@ pub fn run(daemon: RunDaemon) {
     let mut cli = Cli::from_args();
     // SAFETY: no other threads exist before the runtime starts.
     unsafe { releases::take_inherited() };
+    if cli.command.as_ref().is_some_and(cli::Command::runs_daemon) {
+        // SAFETY: as above. What the daemon starts works in the spaces'
+        // repositories, never in one a Git hook that started it ran in.
+        unsafe { git::forget_inherited_repository() };
+    }
     if cli
         .command
         .as_ref()

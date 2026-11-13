@@ -279,12 +279,7 @@ pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
     ctx.command = cli.path;
     // The daemon pins its own config's forges and keeps them across a
     // reload that fails, which a loader reading the file later would not.
-    if !matches!(
-        cli.command,
-        Some(Command::Service(ServiceCommand::Daemon {
-            command: DaemonCommand::Run { .. }
-        }))
-    ) {
+    if !cli.command.as_ref().is_some_and(Command::runs_daemon) {
         ctx.learn_pinned_forges();
     }
     let command = match picker_start(&ctx, cli.command.as_ref()) {

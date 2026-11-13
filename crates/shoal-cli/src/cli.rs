@@ -37,7 +37,7 @@ use crate::cli::args::{
     lifecycle::LifecycleCommand,
     repository::{RepoCommand, RepositoryCommand},
     resources::ResourcesCommand,
-    service::{ConfigCommand, ServiceCommand},
+    service::{ConfigCommand, DaemonCommand, ServiceCommand},
     sessions::SessionsCommand,
     workspace::WorkspaceCommand,
 };
@@ -252,6 +252,16 @@ impl Command {
                     | InternalCommand::Detached { .. }
                     | InternalCommand::Demo { .. }
             }
+        )
+    }
+
+    /// Whether the command runs the daemon in this process.
+    pub fn runs_daemon(&self) -> bool {
+        matches!(
+            self,
+            Command::Service(ServiceCommand::Daemon {
+                command: DaemonCommand::Run { .. }
+            })
         )
     }
 
