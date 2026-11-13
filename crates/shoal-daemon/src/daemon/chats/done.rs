@@ -116,7 +116,7 @@ fn record_completion(
 ) -> Result<Vec<crate::daemon::item_numbers::ItemNumber>> {
     let changed = done::record_completion(tx, id, completion)?;
     let closed = questions::close_open(tx, id)?;
-    // Finished work leaves its failed turn alone.
+    // Finished work drops the pending retry of its failed turn.
     turn_retry::cancel(tx, id)?;
     ensure!(
         changed || !closed.is_empty() || progressed,
