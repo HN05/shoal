@@ -23,7 +23,7 @@ async fn kept_packages_move_to_the_root_dir_once_with_one_notification() {
     manager.move_unmoved_packages().await.unwrap();
 
     assert!(!kept.exists());
-    let target = (manager.config().root_dir(&manager.paths).unwrap()).join("unmoved");
+    let target = (manager.config().root_dir(&manager.paths).unwrap()).join(".unmoved");
     for name in ["chat-1.shoal", "workspace-2.shoal"] {
         assert_eq!(fs::read_to_string(target.join(name)).unwrap(), name);
     }
@@ -42,7 +42,7 @@ async fn a_package_whose_name_is_taken_there_stays() {
     let kept = manager.paths.state.join("unmoved");
     fs::create_dir_all(&kept).unwrap();
     fs::write(kept.join("chat-1.shoal"), "kept").unwrap();
-    let target = (manager.config().root_dir(&manager.paths).unwrap()).join("unmoved");
+    let target = (manager.config().root_dir(&manager.paths).unwrap()).join(".unmoved");
     fs::create_dir_all(&target).unwrap();
     fs::write(target.join("chat-1.shoal"), "other").unwrap();
 

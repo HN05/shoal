@@ -12,22 +12,25 @@ use crate::{
     fsutil::off_runtime,
 };
 
-/// The directory an earlier release kept them in, in the state directory,
-/// and the one in `root_dir` they move to.
-const UNMOVED: &str = "unmoved";
+/// The directory an earlier release kept them in, in the state directory.
+const KEPT: &str = "unmoved";
+
+/// The directory in `root_dir` they move to, whose leading dot no
+/// repository's directory there takes, as with `root_dir`'s `.tmp`.
+const MOVED: &str = ".unmoved";
 
 impl Manager {
     /// Move the packages an earlier `shoal move ssh` kept in
-    /// `<state>/unmoved` to `<root_dir>/unmoved/`, then record one
+    /// `<state>/unmoved` to `<root_dir>/.unmoved/`, then record one
     /// notification naming each with the `shoal move import` that continues
     /// it. They may be the only copy of a chat, so nothing deletes them, and
     /// one that cannot move stays for the next start.
     pub(crate) async fn move_unmoved_packages(&self) -> Result<()> {
-        let kept = self.paths.state.join(UNMOVED);
+        let kept = self.paths.state.join(KEPT);
         if !off_runtime::exists(&kept).await? {
             return Ok(());
         }
-        let target = self.config().root_dir(&self.paths)?.join(UNMOVED);
+        let target = self.config().root_dir(&self.paths)?.join(MOVED);
         let moved = off_runtime::run(move || move_packages(&kept, &target)).await?;
         if !moved.is_empty() {
             (self.notify(None, NotificationKind::UnmovedPackages, notice(&moved))).await;
