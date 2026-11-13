@@ -389,6 +389,41 @@ async fn a_rate_limit_or_spent_quota_is_reported_once_until_the_upstream_answers
 }
 
 #[tokio::test]
+async fn a_limit_the_proxy_keeps_meeting_is_sent_again_after_a_while() {
+    use shoal_proxy::{Event, Failure};
+    use std::sync::atomic::{AtomicI64, Ordering};
+    static CLOCK: AtomicI64 = AtomicI64::new(1_700_000_000);
+    let root = tempfile::tempdir().unwrap();
+    let paths = crate::paths::CommandPaths::from(crate::paths::Paths::for_test(root.path()));
+    let (_daemon, methods) = daemon_speaking(&paths, crate::protocol::VERSION);
+    let (sender, events) = tokio::sync::mpsc::unbounded_channel();
+    let spent = Event::Failed {
+        failure: Failure::Exhausted,
+        in_stream: false,
+        wait: None,
+        subagent: false,
+    };
+    for event in [spent.clone(), spent] {
+        sender.send(event).unwrap();
+    }
+    drop(sender);
+    let reporter = launch::Reporter {
+        paths: paths.clone(),
+        workspace: "w".into(),
+        execution: "e".into(),
+        ends_turns: false,
+        sent: Default::default(),
+        // Each reading is a minute and a second after the last.
+        now: || UnixTime::from_seconds(CLOCK.fetch_add(61, Ordering::Relaxed)),
+    };
+    reporter.run(events).await;
+    assert_eq!(
+        *methods.lock().unwrap(),
+        ["report_upstream_limit", "report_upstream_limit"]
+    );
+}
+
+#[tokio::test]
 async fn a_report_the_daemon_did_not_take_goes_again_with_the_next_event() {
     use shoal_proxy::{Event, Failure};
     let root = tempfile::tempdir().unwrap();

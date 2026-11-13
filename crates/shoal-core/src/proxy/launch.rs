@@ -236,9 +236,14 @@ pub(super) struct Sent {
     retry: bool,
     /// When the upstream refuses requests until.
     reset: Option<UnixTime>,
-    /// The limit the upstream is under.
-    limit: Option<crate::client::executions::UpstreamLimit>,
+    /// The limit the upstream is under, with when it was sent.
+    limit: Option<(crate::client::executions::UpstreamLimit, UnixTime)>,
 }
+
+/// How often a limit the proxy keeps meeting is sent again, so the daemon
+/// counts a limit without a named end from when it was last met and learns
+/// again one it lost in a restart.
+const LIMIT_RESENT_AFTER: std::time::Duration = std::time::Duration::from_secs(60);
 
 impl Reporter {
     pub(super) async fn run(
@@ -309,17 +314,22 @@ impl Reporter {
 
     /// Tell the daemon the upstream is under the limit `failure` says, if
     /// any, lifting after `wait` when the upstream said when. The same
-    /// limit is not sent again.
+    /// limit goes again only once [`LIMIT_RESENT_AFTER`] has passed.
     async fn limited(&mut self, failure: shoal_proxy::Failure, wait: Option<std::time::Duration>) {
         let Some(limit) = service_limit(failure) else {
             return;
         };
+        let now = (self.now)();
         let limit = crate::client::executions::UpstreamLimit {
             limit,
-            until: wait.map(|wait| self.after(wait)),
+            until: wait.map(|wait| now + wait),
         };
-        if self.sent.limit != Some(limit) && self.limit_sent(Some(limit)).await {
-            self.sent.limit = Some(limit);
+        let recent = self
+            .sent
+            .limit
+            .is_some_and(|(sent, at)| sent == limit && now.duration_since(at) < LIMIT_RESENT_AFTER);
+        if !recent && self.limit_sent(Some(limit)).await {
+            self.sent.limit = Some((limit, now));
         }
     }
 
