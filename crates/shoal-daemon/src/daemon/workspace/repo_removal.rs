@@ -502,22 +502,8 @@ async fn delete_empty_workspaces_dir(directory: Option<std::path::PathBuf>) -> R
     let Some(directory) = directory else {
         return Ok(());
     };
-    tokio::task::spawn_blocking(move || -> Result<()> {
-        // Only an empty repository directory goes; anything else in it is the user's.
-        match fs::remove_dir(&directory) {
-            Ok(()) => Ok(()),
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
-                ) =>
-            {
-                Ok(())
-            }
-            Err(error) => Err(error).with_context(|| format!("delete {}", directory.display())),
-        }
-    })
-    .await?
+    // Only an empty repository directory goes; anything else in it is the user's.
+    tokio::task::spawn_blocking(move || crate::shoal_dirs::remove_if_empty(&directory)).await?
 }
 
 fn verify_directory(path: &Path, expected: Option<&str>, allow_missing: bool) -> Result<()> {

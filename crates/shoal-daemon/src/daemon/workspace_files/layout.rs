@@ -15,7 +15,7 @@ use crate::{
     daemon::file_copies::{incomplete_copies, keep_copies},
     forge::items::attach::Attachment,
     model::Repository,
-    shoal_dirs::{Contents, ShoalDir, remove_dir},
+    shoal_dirs::{Contents, ShoalDir, remove_dir, remove_if_empty},
 };
 
 /// The directory below a repository's attached files that keeps what
@@ -284,17 +284,7 @@ impl Kept {
         if let Some(created) = &self.created {
             remove_dir(created)?;
         }
-        match std::fs::remove_dir(&self.workspace) {
-            Err(error)
-                if !matches!(
-                    error.kind(),
-                    ErrorKind::NotFound | ErrorKind::DirectoryNotEmpty
-                ) =>
-            {
-                Err(error).with_context(|| format!("delete {}", self.workspace.display()))
-            }
-            _ => Ok(()),
-        }
+        remove_if_empty(&self.workspace)
     }
 }
 

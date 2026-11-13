@@ -150,5 +150,20 @@ pub fn remove_dir(directory: &Path) -> Result<()> {
     }
 }
 
+/// Delete `directory` when it is empty; anything left in it stays.
+pub fn remove_if_empty(directory: &Path) -> Result<()> {
+    match std::fs::remove_dir(directory) {
+        Err(error)
+            if !matches!(
+                error.kind(),
+                ErrorKind::NotFound | ErrorKind::DirectoryNotEmpty
+            ) =>
+        {
+            Err(error).with_context(|| format!("delete {}", directory.display()))
+        }
+        _ => Ok(()),
+    }
+}
+
 #[cfg(test)]
 mod tests;

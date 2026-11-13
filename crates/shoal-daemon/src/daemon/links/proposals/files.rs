@@ -22,7 +22,7 @@ use crate::{
     },
     forge::items::attach::{self, Attachment},
     model::Repository,
-    shoal_dirs::{Contents, ShoalDir},
+    shoal_dirs::{Contents, ShoalDir, remove_if_empty},
 };
 
 /// Where earlier versions kept the copies in the state directory.
@@ -163,18 +163,4 @@ fn remove_unattached(root: &Path, attached: &[PathBuf]) -> Result<()> {
         }
     }
     Ok(())
-}
-
-fn remove_if_empty(directory: &Path) -> Result<()> {
-    match std::fs::remove_dir(directory) {
-        Err(error)
-            if !matches!(
-                error.kind(),
-                std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
-            ) =>
-        {
-            Err(error).with_context(|| format!("delete {}", directory.display()))
-        }
-        _ => Ok(()),
-    }
 }
