@@ -72,7 +72,21 @@ pub struct ModeConfig {
     /// What the mode's agents may do, over `[permissions]`.
     #[option(section)]
     pub permissions: PermissionsConfig,
+    /// Whether its agents take an agent slot.
+    #[option(default = Weight::Heavy)]
+    pub weight: Option<Weight>,
 }
+
+crate::state::states!(
+    /// How much of the machine a mode's agents take.
+    Weight {
+        /// They start at once, hold no agent slot and are never stopped
+        /// for load.
+        Light => "light",
+        /// They wait for an agent slot and protection may stop them.
+        Heavy => "heavy",
+    }
+);
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
@@ -95,6 +109,11 @@ pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
         focus: None,
         idle_wake_minutes: None,
         permissions: PermissionsConfig::default(),
+        // The chats wait for the user, not for the machine.
+        weight: Some(match kind {
+            SpaceKind::Chat => Weight::Light,
+            SpaceKind::Workspace => Weight::Heavy,
+        }),
     };
     let focused = |mode: ModeConfig| ModeConfig {
         focus: Some(true),
