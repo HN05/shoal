@@ -270,6 +270,10 @@ pub async fn run(
     // A daemon that stops accepting connections fails and leaves work
     // running for the next daemon the service manager starts. Background
     // loops run on meanwhile, so a stop the shutdown lock started finishes.
+    // An exit that waited and quiesced only now finds no daemon to end,
+    // so its hold on operations goes at once.
+    exit_requested.close();
+    while exit_requested.try_recv().is_ok() {}
     let ending = *result.as_ref().unwrap_or(&Ending::Detach);
     if let Some(requested) = &mut requested_exit {
         requested.ending_work();
