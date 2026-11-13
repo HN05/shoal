@@ -3768,11 +3768,10 @@ start in the background there. It checks the spaces as a batch export does and
 asks once before ending them. Each space then moves on its own, after the
 spaces below it: Shoal stops its agents, saving their sessions, exports it
 while it stays here, and imports it there, and only once that import succeeds
-ends it here through the export's removal. When the export fails, or the
-import never reaches Shoal there or fails with `not_imported`, the space stays
-here, its stopped agents' restores are queued, and the report gives the other
+ends it here through the export's removal. When the export fails, `ssh` cannot
+run, or the import fails with `not_imported`, the space stays here, its stopped agents' restores are queued, and the report gives the other
 machine's error. When the import fails otherwise, as when setup there fails or
-the connection drops, the space stays here with its agents stopped, since the
+the connection fails or drops, the space stays here with its agents stopped, since the
 other machine may have it, and the report names the `shoal restore` that
 continues it here. A workspace with a space below it
 that stayed is not exported and stays here. When the import succeeds but the

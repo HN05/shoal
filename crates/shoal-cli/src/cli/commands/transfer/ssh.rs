@@ -165,13 +165,13 @@ impl Remote {
 
 /// Why an import on the other machine failed.
 enum ImportFailure {
-    /// It never reached Shoal there, or failed before it recorded anything,
-    /// as its `not_imported` error says, so that machine has nothing of the
-    /// space.
+    /// `ssh` could not run, or Shoal there failed before it recorded
+    /// anything, as its `not_imported` error says, so that machine has
+    /// nothing of the space.
     Refused(anyhow::Error),
     /// It may have recorded the space there, as when setup there failed
-    /// after the import, the connection dropped or its report cannot be
-    /// read.
+    /// after the import, the connection failed or dropped or its report
+    /// cannot be read.
     Unknown(anyhow::Error),
 }
 
