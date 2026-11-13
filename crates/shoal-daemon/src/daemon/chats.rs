@@ -17,7 +17,7 @@ use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
-        store,
+        events, store,
         workspace::{self, Manager},
     },
     fsutil::off_runtime,
@@ -276,7 +276,10 @@ impl Manager {
             }
             Err(error) => {
                 let id = chat.id.clone();
-                self.store.run(move |db| forget_unstarted(db, &id)).await?;
+                let failure = format!("{error:#}");
+                (self.store)
+                    .write(move |tx| forget_unstarted(tx, &id, &failure))
+                    .await?;
                 Err(error)
             }
         }
@@ -678,13 +681,21 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
     .collect()
 }
 
-/// Delete the record of the chat `id`, just started, which never ran.
-fn forget_unstarted(db: &mut Connection, id: &SpaceId) -> Result<()> {
-    db.execute(
-        "DELETE FROM chats WHERE id=?1 AND NOT EXISTS
+/// Delete the record of the chat `id`, just started, which never ran, since
+/// its start failed with `error`, journaling its removal as a removed
+/// space's.
+fn forget_unstarted(tx: &rusqlite::Transaction<'_>, id: &SpaceId, error: &str) -> Result<()> {
+    let unstarted = store::exists(
+        tx,
+        "SELECT 1 FROM chats WHERE id=?1 AND NOT EXISTS
             (SELECT 1 FROM executions WHERE space_id=?1)",
         [id],
     )?;
+    if unstarted {
+        let cause = events::EventCause::Manual;
+        events::record(tx, id, events::EventKind::Removed, cause, Some(error))?;
+        tx.execute("DELETE FROM space_records WHERE id=?1", [id])?;
+    }
     Ok(())
 }
 

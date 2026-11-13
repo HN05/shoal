@@ -396,6 +396,21 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
         .await
         .unwrap_err();
     assert!(manager.chats().await.unwrap().is_empty());
+    // The journal ends the start it recorded.
+    let ended = (manager.store)
+        .run(|db| {
+            Ok(db.query_row(
+                "SELECT json_extract(record,'$.kind') FROM workspace_events
+                 WHERE space_id=(SELECT space_id FROM workspace_events
+                     WHERE json_extract(record,'$.kind')='chat_started' ORDER BY id DESC LIMIT 1)
+                 ORDER BY id DESC LIMIT 1",
+                [],
+                |row| row.get::<_, String>(0),
+            )?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(ended, EventKind::Removed.to_string());
 }
 
 #[tokio::test]
