@@ -1638,3 +1638,25 @@ async fn requested_cleanup_removes_a_merged_workspace_whose_config_the_format_re
     assert_eq!(report.removed, ["old"]);
     assert!(manager.list_workspaces().await.unwrap().is_empty());
 }
+
+/// A ready worktree whose branch cannot be read fails the pass in its own
+/// workspace, which the log then has once while it repeats.
+#[tokio::test]
+async fn a_failed_branch_observation_is_the_workspace_s_failure() {
+    use crate::daemon::test_support::{git, manager, repository};
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "broken".into(), None, None, None)
+        .await
+        .unwrap();
+    let admin_dir = git(&workspace.path, &["rev-parse", "--absolute-git-dir"]);
+    fs::remove_dir_all(admin_dir.trim_end()).unwrap();
+    let failed = sweep(&manager, &mut Timers::default()).await.unwrap_err();
+    let failure = failed.space(&workspace.id).unwrap();
+    assert!(failure.contains("branch observation"), "{failure}");
+}

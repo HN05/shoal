@@ -246,17 +246,24 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<(), SweepFa
     failed.into_result()
 }
 
+/// Observe the branch of each ready worktree. A failure is the pass's in
+/// the workspace it concerns, so the log has it once while it repeats,
+/// except in a directory whose file access stalled, which is reported as
+/// such and skipped.
 async fn observe_branches(manager: &Manager) -> Result<()> {
+    let mut failed = SpaceFailures::default();
     for workspace in manager.list_workspaces().await? {
         if workspace.state != WorkspaceState::Ready || !is_dir(&workspace.path).await {
             continue;
         }
         let observed = manager.observe_workspace_branch(&workspace);
-        if let Err(error) = manager.check_access(&workspace.path, observed).await {
-            log!("branch observation skipped {}: {error:#}", workspace.name);
+        if let Err(error) = manager.check_access(&workspace.path, observed).await
+            && !manager.sweep_skips(&workspace.path).await
+        {
+            failed.push(&workspace.id, &workspace.name, &error);
         }
     }
-    Ok(())
+    failed.into_result()
 }
 
 /// Whether `path` is a directory, read off the runtime's threads and within
