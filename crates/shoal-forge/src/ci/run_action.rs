@@ -11,7 +11,7 @@ use crate::{
     backends::Runs,
     capability::{self, Capability},
     ci::{CiAction, JobState, id},
-    items::reference::ItemRef,
+    items::{link::LinkKind, reference::ItemRef},
     numbers::{JobId, PullNumber, RunId, RunNumber},
     transport::api::{HttpMethod, Request},
 };
@@ -117,6 +117,20 @@ impl ForgeRepo {
         let read = Request::get(self.repo_endpoint(&self.kind.run_path(number)));
         let value = self.send(account, &read).await?;
         self.kind.run(self, number, &value)
+    }
+
+    /// The branch of this repository `run` is of: the head branch of the PR
+    /// it ran for, whatever commit of the PR it ran on, since a forge may
+    /// name the PR as its branch, otherwise the branch it ran on. A fork's
+    /// PR has none here.
+    pub async fn run_branch(&self, account: &Account, run: &Run) -> Result<Option<String>> {
+        let Some(number) = run.pull else {
+            return Ok(run.branch.clone());
+        };
+        let url = ItemRef::numbered(self, LinkKind::Pr, number.get())?;
+        let pull = (self.pull_request(account, &url).await)
+            .with_context(|| format!("could not read {url}, which {} ran for", run.url))?;
+        Ok((!pull.fork).then(|| pull.head.to_string()))
     }
 
     /// Cancel `run` unless it has finished, returning whether it ran.

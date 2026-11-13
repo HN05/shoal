@@ -108,7 +108,7 @@ impl Manager {
             .await
             .with_context(|| format!("could not {action} CI run {run}"))?;
         if let Some(caller) = caller {
-            let branch = reach::run_branch(&place, &run).await?;
+            let branch = forge.run_branch(account, &run).await?;
             (self.ensure_run_branch_in_reach(caller, &place, branch.as_deref())).await?;
         }
         forge
