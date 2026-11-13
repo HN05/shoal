@@ -246,6 +246,31 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
 }
 
 #[tokio::test]
+async fn an_exit_that_waits_keeps_an_approved_push_pending() {
+    let (_root, manager, workspace, caller) = setup().await;
+    let selected = SpaceSelector::id(&workspace.id);
+    let requested = manager.request_push(&selected, branch(&workspace).await, Some(&caller));
+    let request = proposed(requested.await.unwrap());
+    let approve = || manager.decide_approval(request.number, true, None, Default::default(), None);
+    let held = manager.gates.hold_back(crate::protocol::Exit::Restart);
+    let error = approve().await.unwrap_err();
+    assert!(
+        error
+            .downcast_ref::<crate::daemon::workspace::Exiting>()
+            .is_some()
+    );
+    let kept = manager
+        .approval_by_key(&request.key)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(kept.status, DecisionStatus::Pending);
+    assert!(kept.operation.is_none());
+    drop(held);
+    assert!(approve().await.unwrap().operation.is_some());
+}
+
+#[tokio::test]
 async fn approving_a_push_of_a_branch_that_moved_outdates_it() {
     let (_root, manager, workspace, caller) = setup().await;
     let request = proposed(

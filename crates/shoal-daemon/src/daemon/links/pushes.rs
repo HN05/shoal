@@ -184,7 +184,8 @@ impl Manager {
     /// Approve a request that pushes: start the operation that runs the
     /// push in `env`, which decides the request once it is done. The request
     /// stays pending meanwhile, with the user's edits kept. A branch that
-    /// moved since the request outdates it instead.
+    /// moved since the request outdates it instead, and an exit that waits
+    /// for the work it would cut off refuses it, keeping it pending.
     pub(super) async fn start_approved_push(
         &self,
         mut request: ApprovalRequest,
@@ -192,6 +193,7 @@ impl Manager {
         decision: &ProposalDecision,
         env: Option<BTreeMap<String, String>>,
     ) -> Result<ApprovalRequest> {
+        self.gates.admit()?;
         let workspace = workspace.context("the workspace that asked for the push is gone")?;
         self.verify_worktree(workspace).await?;
         if !push_current(workspace, &request).await? {
