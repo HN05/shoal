@@ -128,7 +128,8 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
         &json!({"jobs": [
             {"id": 34, "name": "rust", "status": "completed", "conclusion": "failure",
                 "html_url": "https://github.com/team/repo/actions/runs/12/job/34"},
-            {"id": 35, "name": "docs", "status": "in_progress", "conclusion": null}
+            {"id": 35, "name": "docs", "status": "in_progress", "conclusion": null},
+            {"id": 36, "name": "lint", "status": "completed", "conclusion": "cancelled"}
         ]}),
     )?;
     assert_eq!(
@@ -146,7 +147,25 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
                 state: JobState::Running,
                 url: None,
             },
+            RunJob {
+                id: JobId::new(36),
+                name: "lint".into(),
+                state: JobState::Cancelled,
+                url: None,
+            },
         ]
+    );
+    let gitlab = ForgeRepo::parse("https://gitlab.com/team/repo")?;
+    let jobs = gitlab.kind.run_jobs(
+        &run,
+        0,
+        &json!([{"id": 1, "name": "rust", "status": "failed"},
+                {"id": 2, "name": "docs", "status": "canceling"},
+                {"id": 3, "name": "lint", "status": "canceled"}]),
+    )?;
+    assert_eq!(
+        jobs.iter().map(|job| job.state).collect::<Vec<_>>(),
+        [JobState::Failed, JobState::Running, JobState::Cancelled]
     );
     // Forgejo links a job by its index in the run.
     let forgejo = ForgeRepo::parse("https://codeberg.org/team/repo")?;

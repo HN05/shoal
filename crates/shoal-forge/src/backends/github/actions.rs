@@ -23,8 +23,7 @@ pub(crate) fn checks(response: &Value) -> Result<Vec<CiCheck>> {
         .collect()
 }
 
-/// The state of a check run, workflow run or job from its status and
-/// conclusion.
+/// The state of a check run or workflow run from its status and conclusion.
 pub(crate) fn state(value: &Value) -> Result<JobState> {
     Ok(
         match (value["status"].as_str(), value["conclusion"].as_str()) {
@@ -38,6 +37,15 @@ pub(crate) fn state(value: &Value) -> Result<JobState> {
             (None, _) => bail!("GitHub run or job has no status"),
         },
     )
+}
+
+/// The state of a run's job. A cancelled job was cancelled, while a run's
+/// cancelled conclusion can also hide a failed job.
+pub(crate) fn job_state(job: &Value) -> Result<JobState> {
+    match (job["status"].as_str(), job["conclusion"].as_str()) {
+        (Some("completed"), Some("cancelled")) => Ok(JobState::Cancelled),
+        _ => state(job),
+    }
 }
 
 /// The job a check run's URL links in the repository.

@@ -10,7 +10,9 @@ use crate::{
     account::Account,
     backends::Runs,
     ci::{
-        CiAction, Location, id,
+        CiAction, JobState, Location,
+        check_state::CheckState,
+        id,
         run::NewRun,
         run_action::{Run, RunOperation},
         run_view::{JOBS_PAGE, RunFilter, RunJob},
@@ -110,7 +112,7 @@ impl Runs for GitLab {
                 Ok(RunJob {
                     id: JobId::new(job["id"].as_u64().context("GitLab job has no ID")?),
                     name: text(&job["name"]).context("GitLab job has no name")?,
-                    state: status_state(&job["status"])?.into(),
+                    state: job_state(&job["status"])?,
                     url: text(&job["web_url"]),
                 })
             })
@@ -136,4 +138,13 @@ impl Runs for GitLab {
             CiAction::Cancel => format!("pipelines/{id}/cancel"),
         }))
     }
+}
+
+/// The state of a pipeline's job. A canceled job was cancelled, while a
+/// canceled pipeline can also hide a failed job.
+fn job_state(status: &Value) -> Result<JobState> {
+    Ok(match status_state(status)? {
+        CheckState::Cancelled => JobState::Cancelled,
+        state => state.into(),
+    })
 }

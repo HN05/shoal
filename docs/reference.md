@@ -4380,7 +4380,7 @@ run.
 `shoal view ci` shows a run's state (`waiting` until a runner takes a job,
 `running`, `failed` or `finished`),
 branch, workflow and jobs, each in one of those states or `cancelled` when
-Forgejo cancelled it, and the log
+it was cancelled, and the log
 tails of its failed jobs as `shoal view`
 shows a PR's; `--job` shows only one job's whole log, in any state and up to
 8 MiB, by its name or, as several jobs may share one, the ID the view lists

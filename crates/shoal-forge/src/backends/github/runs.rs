@@ -97,7 +97,7 @@ impl Runs for GitHub {
                 Ok(RunJob {
                     id: JobId::new(job["id"].as_u64().context("Actions job has no ID")?),
                     name: text(&job["name"]).context("Actions job has no name")?,
-                    state: actions::state(job)?,
+                    state: actions::job_state(job)?,
                     url: text(&job["html_url"]),
                 })
             })
