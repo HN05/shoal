@@ -49,21 +49,20 @@ pub(super) async fn launch(
 
 /// A repository whose origin is a Forgejo that lists `jobs` as waiting:
 /// run 1 pushed `main` at its head and runs 2 and 8 wait for PR 12 at that
-/// head, which `pull_head` names when the PR moved on since, and the forge
-/// refuses to cancel run 8; run 3 runs, and run 6 was cancelled.
+/// head, until `pull_head` moves the PR on, and the forge refuses to cancel
+/// run 8; run 9 waits for PR 13, whose head cannot be read; run 3 runs, and
+/// run 6 was cancelled.
 pub(super) struct Fixture {
     _root: tempfile::TempDir,
     pub manager: Arc<Manager>,
     pub repository: RepositoryId,
     pub head: String,
     pub server: Server,
+    /// The head PR 12 has now.
+    pub pull_head: Arc<Mutex<String>>,
 }
 
-pub(super) async fn fixture(
-    jobs: Vec<Value>,
-    pull_head: Option<&'static str>,
-    settings: &str,
-) -> Fixture {
+pub(super) async fn fixture(jobs: Vec<Value>, settings: &str) -> Fixture {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -72,7 +71,8 @@ pub(super) async fn fixture(
         .unwrap();
     let head = git(&path, &["rev-parse", "HEAD"]).trim().to_owned();
     let pushed = head.clone();
-    let pull_head = pull_head.map_or_else(|| head.clone(), str::to_owned);
+    let pull_head = Arc::new(Mutex::new(head.clone()));
+    let served_head = pull_head.clone();
     let server = Server::start(move |request| {
         let line = request.line.as_str();
         let body = if line == "GET /api/v1/version" {
@@ -102,6 +102,13 @@ pub(super) async fn fixture(
             json!({"workflow_runs": [cancelled]})
         } else if line == "GET /api/v1/repos/team/repo/actions/runs/8" {
             run(8, "pull_request", &pushed, json!({"number": 12}))
+        } else if line == "GET /api/v1/repos/team/repo/actions/runs/9" {
+            run(
+                9,
+                "pull_request",
+                &pushed,
+                json!({"pull_request": {"number": 13}}),
+            )
         } else if let Some(number) = ["2", "8"].into_iter().find(|number| {
             line == format!("GET /api/v1/repos/team/repo/actions/runs?run_number={number}")
         }) {
@@ -115,7 +122,7 @@ pub(super) async fn fixture(
         } else if line == "POST /api/v1/repos/team/repo/actions/runs/8/cancel" {
             return (403, Vec::new(), b"{}".to_vec());
         } else if line == "GET /api/v1/repos/team/repo/pulls/12" {
-            json!({"number": 12, "title": "Fix", "state": "open", "head": {"sha": pull_head, "ref": "fix"}, "base": {"ref": "main"}})
+            json!({"number": 12, "title": "Fix", "state": "open", "head": {"sha": *served_head.lock().unwrap(), "ref": "fix"}, "base": {"ref": "main"}})
         } else {
             return (404, Vec::new(), b"{}".to_vec());
         };
@@ -162,6 +169,7 @@ pub(super) async fn fixture(
         repository: repo.id,
         head,
         server,
+        pull_head,
     }
 }
 
@@ -387,7 +395,7 @@ pub(super) async fn job_entries(manager: &Manager) -> Vec<QueueEntry> {
 
 #[tokio::test]
 async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends() {
-    let fixture = fixture(vec![job("h1", 4, 1)], None, "").await;
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
 
     let admitted = admit_and_claim(manager).await;
@@ -474,7 +482,7 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
 #[tokio::test]
 async fn waiting_jobs_are_read_every_minute_while_none_could_start() {
     use crate::daemon::runner::INTERVAL;
-    let fixture = fixture(vec![job("h1", 4, 1), job("h2", 5, 1)], None, "").await;
+    let fixture = fixture(vec![job("h1", 4, 1), job("h2", 5, 1)], "").await;
     let manager = &fixture.manager;
     let reads = || {
         fixture
@@ -509,7 +517,7 @@ async fn waiting_jobs_are_read_every_minute_while_none_could_start() {
 
 #[tokio::test]
 async fn a_job_whose_checkout_fails_is_passed_over_and_its_workspace_removed() {
-    let fixture = fixture(vec![job("h1", 4, 1)], None, "").await;
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     // The commit is there, but its tree cannot be read.
     let checkout = manager.repository(&fixture.repository).await.unwrap().path;
@@ -566,7 +574,6 @@ async fn hold_the_builds_permit(fixture: &Fixture) -> crate::model::Workspace {
 async fn a_job_waits_while_its_permit_pool_is_full() {
     let fixture = fixture(
         vec![job("h1", 4, 1)],
-        None,
         "permit = \"builds\"\n[resources.builds]\n",
     )
     .await;
@@ -615,7 +622,7 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
 
 #[tokio::test]
 async fn a_restart_during_a_claim_keeps_a_started_command_and_removes_the_rest() {
-    let fixture = fixture(vec![job("h1", 4, 1)], None, "").await;
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
     let claimed = manager.claimed_jobs().await.unwrap();
@@ -659,7 +666,7 @@ async fn a_restart_during_a_claim_keeps_a_started_command_and_removes_the_rest()
 
 #[tokio::test]
 async fn a_jobs_directory_goes_however_its_workspace_went() {
-    let fixture = fixture(vec![job("h1", 4, 1)], None, "").await;
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
     let claimed = manager.claimed_jobs().await.unwrap();
@@ -676,7 +683,7 @@ async fn a_jobs_directory_goes_however_its_workspace_went() {
 
 #[tokio::test]
 async fn turning_the_runner_off_withdraws_its_jobs_without_claiming_them() {
-    let fixture = fixture(vec![job("h1", 4, 1), job("h2", 5, 1)], None, "").await;
+    let fixture = fixture(vec![job("h1", 4, 1), job("h2", 5, 1)], "").await;
     let manager = &fixture.manager;
     manager.refresh_waiting_jobs().await.unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -718,7 +725,7 @@ async fn turning_the_runner_off_withdraws_its_jobs_without_claiming_them() {
 
 #[tokio::test]
 async fn a_jobs_workspace_names_its_job_and_lists_with_its_branchs_workspace() {
-    let fixture = fixture(vec![job("h3", 7, 3)], None, "").await;
+    let fixture = fixture(vec![job("h3", 7, 3)], "").await;
     let manager = &fixture.manager;
     let topic = manager
         .create_workspace(&fixture.repository, "topic".into(), None, None, None)
@@ -753,7 +760,6 @@ async fn a_jobs_workspace_names_its_job_and_lists_with_its_branchs_workspace() {
 async fn a_waiting_job_lists_with_its_branchs_workspace_and_what_holds_it() {
     let fixture = fixture(
         vec![job("h3", 7, 3)],
-        None,
         "permit = \"builds\"\n[resources.builds]\n",
     )
     .await;
@@ -795,7 +801,6 @@ async fn watch_pull(manager: &Manager, space: &SpaceId, url: Option<String>) {
 async fn a_chat_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
     let fixture = fixture(
         vec![job("h2", 4, 2)],
-        None,
         "permit = \"builds\"\n[resources.builds]\n",
     )
     .await;
@@ -875,7 +880,7 @@ async fn a_chat_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
 
 #[tokio::test]
 async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_forge() {
-    let fixture = fixture(vec![job("h3", 7, 3)], None, "").await;
+    let fixture = fixture(vec![job("h3", 7, 3)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
     let claimed = manager.claimed_jobs().await.unwrap();
@@ -1061,7 +1066,7 @@ async fn connect_runner(manager: &Arc<Manager>, workspace: &SpaceId) -> Connecte
 async fn daemon_exit_with_runner(job: Value, ending: Ending) -> Fixture {
     use crate::protocol::{self, Control, ExecutionEvent};
 
-    let fixture = fixture(vec![job], None, "").await;
+    let fixture = fixture(vec![job], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
     let claimed = manager.claimed_jobs().await.unwrap();
@@ -1103,7 +1108,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
         protocol::{self, Control, ExecutionEvent},
     };
 
-    let fixture = fixture(vec![job("h6", 8, 6)], None, "").await;
+    let fixture = fixture(vec![job("h6", 8, 6)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
     let claimed = manager.claimed_jobs().await.unwrap();
@@ -1177,7 +1182,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
 
 #[tokio::test]
 async fn a_job_admitted_as_the_system_shuts_down_waits_in_the_queue() {
-    let fixture = fixture(vec![job("h1", 4, 1)], None, "").await;
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     manager.refresh_waiting_jobs().await.unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -1202,7 +1207,6 @@ async fn a_job_admitted_as_the_system_shuts_down_waits_in_the_queue() {
 async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_claimed_again() {
     let fixture = fixture(
         vec![job("h1", 4, 1)],
-        None,
         "permit = \"builds\"\n[resources.builds]\n",
     )
     .await;
@@ -1256,7 +1260,7 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
 
 #[tokio::test]
 async fn removing_a_running_jobs_workspace_cancels_its_run_first() {
-    let fixture = fixture(vec![job("h3", 7, 3)], None, "").await;
+    let fixture = fixture(vec![job("h3", 7, 3)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
     let claimed = manager.claimed_jobs().await.unwrap();
@@ -1277,7 +1281,7 @@ async fn removing_a_running_jobs_workspace_cancels_its_run_first() {
 
 #[tokio::test]
 async fn removing_a_job_whose_execution_is_not_recorded_yet_cancels_its_run() {
-    let fixture = fixture(vec![job("h3", 7, 3)], None, "").await;
+    let fixture = fixture(vec![job("h3", 7, 3)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
     let claimed = manager.claimed_jobs().await.unwrap();
@@ -1308,7 +1312,7 @@ async fn removing_a_job_whose_execution_is_not_recorded_yet_cancels_its_run() {
 #[tokio::test]
 async fn a_job_keeps_warming_until_its_runner_starts() {
     use crate::daemon::workspace::capacity::{Activity, WARM_UP};
-    let fixture = fixture(vec![job("h1", 4, 1)], None, "").await;
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     let ages = || async {
         manager
@@ -1349,7 +1353,7 @@ async fn a_job_keeps_warming_until_its_runner_starts() {
 
 #[tokio::test]
 async fn the_sweep_keeps_the_directory_of_a_recorded_claim() {
-    let fixture = fixture(vec![job("h1", 4, 1)], None, "").await;
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
     let claimed = manager.claimed_jobs().await.unwrap();
@@ -1364,7 +1368,7 @@ async fn the_sweep_keeps_the_directory_of_a_recorded_claim() {
 #[tokio::test]
 async fn a_runner_gone_while_the_daemon_was_away_gives_its_job_up_once_nothing_of_it_runs() {
     use crate::process::identity::{Identity, capture};
-    let fixture = fixture(vec![job("h1", 4, 1)], None, "").await;
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
     let claimed = manager.claimed_jobs().await.unwrap();

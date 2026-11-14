@@ -1,19 +1,44 @@
-use super::super::tests::{admit_and_claim, fixture, job, job_entries};
+use super::super::tests::{Fixture, fixture, job, job_entries};
 use crate::daemon::notifications::NotificationKind;
 
-#[tokio::test]
-async fn a_job_whose_pr_moved_on_has_its_run_cancelled_without_a_workspace() {
-    let fixture = fixture(vec![job("old", 4, 2)], Some("new"), "").await;
-    let manager = &fixture.manager;
+/// Move PR 12 past the commit its runs wait at.
+fn move_pull_on(fixture: &Fixture) {
+    *fixture.pull_head.lock().unwrap() = "new".into();
+}
 
-    admit_and_claim(manager).await;
-    assert!(
-        fixture
-            .server
-            .received()
-            .iter()
-            .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/2/cancel")
-    );
+/// How many requests `fixture`'s forge received for `line`.
+fn received(fixture: &Fixture, line: &str) -> usize {
+    (fixture.server.received().iter())
+        .filter(|request| request.line == line)
+        .count()
+}
+
+/// Whether the user heard that cancelling a superseded run failed.
+async fn cancel_failed(fixture: &Fixture) -> bool {
+    let notifications = fixture.manager.notifications(false, 50).await.unwrap();
+    notifications
+        .iter()
+        .any(|notification| notification.kind == NotificationKind::RunnerFailed)
+}
+
+/// Admit the queued jobs and claim each.
+async fn claim_admitted(manager: &crate::daemon::workspace::Manager) {
+    manager.dispatch_queue().await.unwrap();
+    for entry in manager.admitted_jobs().await.unwrap() {
+        manager.claim_job(&entry).await;
+    }
+}
+
+#[tokio::test]
+async fn a_claimed_job_whose_pr_moved_on_has_its_run_cancelled_without_a_workspace() {
+    let fixture = fixture(vec![job("old", 4, 2)], "").await;
+    let manager = &fixture.manager;
+    manager.refresh_waiting_jobs().await.unwrap();
+    move_pull_on(&fixture);
+
+    claim_admitted(manager).await;
+    let cancel = "POST /api/v1/repos/team/repo/actions/runs/2/cancel";
+    assert_eq!(received(&fixture, cancel), 1);
     assert!(job_entries(manager).await.is_empty());
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
     assert!(
@@ -27,21 +52,17 @@ async fn a_job_whose_pr_moved_on_has_its_run_cancelled_without_a_workspace() {
     // The forge still lists it, but the runner leaves it to others.
     manager.refresh_waiting_jobs().await.unwrap();
     assert!(job_entries(manager).await.is_empty());
-    let notifications = manager.notifications(false, 50).await.unwrap();
-    assert!(
-        notifications
-            .iter()
-            .all(|notification| notification.kind != NotificationKind::RunnerFailed),
-        "{notifications:?}"
-    );
+    assert!(!cancel_failed(&fixture).await);
 }
 
 #[tokio::test]
 async fn a_superseded_run_the_forge_does_not_cancel_is_passed_over_with_a_notification() {
-    let fixture = fixture(vec![job("old", 4, 8)], Some("new"), "").await;
+    let fixture = fixture(vec![job("old", 4, 8)], "").await;
     let manager = &fixture.manager;
+    manager.refresh_waiting_jobs().await.unwrap();
+    move_pull_on(&fixture);
 
-    admit_and_claim(manager).await;
+    claim_admitted(manager).await;
     assert!(job_entries(manager).await.is_empty());
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
     let notifications = manager.notifications(false, 50).await.unwrap();
