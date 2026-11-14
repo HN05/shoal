@@ -315,6 +315,7 @@ impl Connections<'_> {
                         agent_execution,
                     }),
                     space_id: workspace_id.to_owned(),
+                    granted: None,
                 },
             )
             .await;

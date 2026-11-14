@@ -283,6 +283,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
             Caller {
                 space_id: own.id.clone(),
                 execution: None,
+                granted: None,
             },
         )
         .await;

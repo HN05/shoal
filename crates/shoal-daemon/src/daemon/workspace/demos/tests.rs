@@ -227,6 +227,7 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
                     kind: ExecutionKind::Command,
                     agent_execution: None,
                 }),
+                granted: None,
             },
         )
         .await;

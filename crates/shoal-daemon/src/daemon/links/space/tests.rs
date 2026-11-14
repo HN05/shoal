@@ -232,6 +232,7 @@ async fn a_chat_without_a_repository_opens_no_issue_elsewhere_unless_allowed_dir
     let caller = crate::daemon::scope::Caller {
         space_id: master.id.clone(),
         execution: None,
+        granted: None,
     };
     let issue = || NewIssue {
         title: "Flaky".into(),

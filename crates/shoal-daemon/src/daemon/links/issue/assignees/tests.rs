@@ -313,6 +313,7 @@ async fn a_scoped_relink_assigns_as_the_agent_and_takes_on_nothing() {
     let caller = crate::daemon::scope::Caller {
         space_id: workspace.id.clone(),
         execution: None,
+        granted: None,
     };
     let warnings = (fixture
         .manager
@@ -340,6 +341,7 @@ async fn a_scoped_relink_checks_its_related_items_as_links_do() {
     let caller = crate::daemon::scope::Caller {
         space_id: workspace.id.clone(),
         execution: None,
+        granted: None,
     };
     let manager = &fixture.manager;
     let warnings = (manager.relink_space(&workspace.id, &links, Some(&caller))).await;

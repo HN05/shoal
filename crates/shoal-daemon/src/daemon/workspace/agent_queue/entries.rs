@@ -423,6 +423,7 @@ impl Manager {
         Ok(scope.map(|space_id| Caller {
             space_id,
             execution: None,
+            granted: None,
         }))
     }
 

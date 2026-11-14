@@ -132,6 +132,9 @@ pub struct Manager {
     pub(crate) overload_recovery: overload_recovery::OverloadRecovery,
     pub(crate) agent_queue: agent_queue::AgentQueue,
     pub(crate) operations: Arc<crate::daemon::operations::Operations>,
+    /// The scope tokens approved commands take their permission's actions
+    /// with.
+    pub(crate) grants: crate::daemon::permissions::Grants,
     /// Held through a stop before a shutdown; true once one finished, until
     /// a system shutdown is cancelled, so later ones leave the work alone.
     pub(crate) shutdown_stopped: tokio::sync::Mutex<bool>,
@@ -202,6 +205,7 @@ impl Manager {
             overload_recovery: Default::default(),
             agent_queue: Default::default(),
             operations: Default::default(),
+            grants: Default::default(),
             shutdown_stopped: Default::default(),
             signals: Default::default(),
             settle_clock: Default::default(),

@@ -252,6 +252,7 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
                     kind: super::super::ExecutionKind::Command,
                     agent_execution: None,
                 }),
+                granted: None,
             },
         )
         .await;
@@ -695,6 +696,7 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
         let caller = (chat.clone().filter(|_| by_agent)).map(|space_id| Caller {
             space_id,
             execution: None,
+            granted: None,
         });
         let head = head.clone();
         async move {
@@ -850,6 +852,7 @@ async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
             Some(&Caller {
                 space_id: chat.id.clone(),
                 execution: None,
+                granted: None,
             }),
         )
         .await

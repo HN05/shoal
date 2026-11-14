@@ -984,6 +984,7 @@ async fn a_scoped_launch_its_caller_starts_is_left_to_it() {
     let caller = crate::daemon::scope::Caller {
         space_id: parent.id.clone(),
         execution: None,
+        granted: None,
     };
     let starts = |starts_in_caller: bool, name: &str| QueueRequest {
         starts_in_caller,
@@ -1014,6 +1015,7 @@ async fn a_scoped_caller_holds_and_fails_only_the_launches_it_reaches() {
     let caller = crate::daemon::scope::Caller {
         space_id: parent.id.clone(),
         execution: None,
+        granted: None,
     };
     let own = QueueRequest {
         starts_in_caller: true,
@@ -1112,6 +1114,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
             crate::daemon::scope::Caller {
                 space_id: parent.id.clone(),
                 execution: None,
+                granted: None,
             },
         )
         .await;
@@ -1174,6 +1177,7 @@ async fn a_launch_a_space_queued_keeps_it_and_goes_with_it() {
     let caller = crate::daemon::scope::Caller {
         space_id: parent.id.clone(),
         execution: None,
+        granted: None,
     };
     let waiting = QueueRequest {
         blockers: vec![crate::model::Blocker::Space(blocker.id.to_string())],
@@ -1189,6 +1193,7 @@ async fn a_launch_a_space_queued_keeps_it_and_goes_with_it() {
     let sibling = crate::daemon::scope::Caller {
         space_id: blocker.id.clone(),
         execution: None,
+        granted: None,
     };
     let reached = manager.reachable_queue(Some(&sibling)).await.unwrap();
     assert!(reached.iter().all(|reached| reached.id != entry.id));
@@ -1258,6 +1263,7 @@ async fn a_space_a_removal_holds_refuses_the_launches_it_queues() {
     let queued_by = |space_id: &crate::client::space_ids::SpaceId| crate::daemon::scope::Caller {
         space_id: space_id.clone(),
         execution: None,
+        granted: None,
     };
     let launch = |name: &str| QueueRequest {
         blockers: vec![crate::model::Blocker::Space(workspace.id.to_string())],

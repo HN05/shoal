@@ -476,6 +476,7 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             Caller {
                 space_id: workspace.id.clone(),
                 execution: None,
+                granted: None,
             },
         )
         .await;

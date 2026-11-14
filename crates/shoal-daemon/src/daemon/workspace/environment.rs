@@ -18,6 +18,9 @@ impl Manager {
         if let Some(caller) = self.operations.caller(token) {
             return Ok(Some(caller));
         }
+        if let Some(caller) = self.grants.caller(token) {
+            return Ok(Some(caller));
+        }
         let token = token.to_owned();
         self.store
             .run(move |db| {
@@ -31,6 +34,7 @@ impl Manager {
                             Ok(Caller {
                                 space_id: row.get(0)?,
                                 execution: None,
+                                granted: None,
                             })
                         },
                     )

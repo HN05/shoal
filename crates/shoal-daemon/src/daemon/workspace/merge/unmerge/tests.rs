@@ -474,6 +474,7 @@ async fn an_agents_unmerge_waits_for_approval_of_the_merge_it_undoes() {
     let caller = scope::Caller {
         execution: None,
         space_id: worker.id.clone(),
+        granted: None,
     };
     let begin = async || {
         f.manager

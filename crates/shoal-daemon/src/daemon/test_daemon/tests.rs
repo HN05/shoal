@@ -1018,6 +1018,7 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
     let caller = crate::daemon::scope::Caller {
         space_id: child.id.clone(),
         execution: None,
+        granted: None,
     };
     let theirs = (daemon.manager.queue_add_as(request, Some(&caller)))
         .await

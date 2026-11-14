@@ -435,6 +435,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
             crate::daemon::scope::Caller {
                 space_id: chat.id.clone(),
                 execution: None,
+                granted: None,
             },
         )
         .await;
@@ -559,6 +560,7 @@ async fn a_scoped_process_restarts_only_the_chats_below_its_space() {
         let scope = crate::daemon::scope::Caller {
             space_id,
             execution: None,
+            granted: None,
         };
         manager.executions.issue_scope(token.clone(), scope).await;
         let mut restart = crate::protocol::ExecutionMethod::RestartAgent {

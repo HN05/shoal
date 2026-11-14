@@ -70,6 +70,7 @@ async fn setup() -> (tempfile::TempDir, std::sync::Arc<Manager>, Caller) {
     let caller = Caller {
         space_id: workspace.id,
         execution: None,
+        granted: None,
     };
     (temp, manager, caller)
 }

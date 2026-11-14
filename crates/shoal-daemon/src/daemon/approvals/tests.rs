@@ -398,6 +398,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
     let caller = crate::daemon::scope::Caller {
         space_id: workspace.id.clone(),
         execution: None,
+        granted: None,
     };
     manager.executions.issue_scope("scope".into(), caller).await;
     for (target, allowed) in [(&workspace.id, true), (&other.id, false)] {

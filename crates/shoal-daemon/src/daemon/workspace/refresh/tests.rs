@@ -382,6 +382,7 @@ fn caller(space: &SpaceId, execution: &str) -> Caller {
             kind: crate::daemon::workspace::ExecutionKind::Command,
             agent_execution: None,
         }),
+        granted: None,
     }
 }
 

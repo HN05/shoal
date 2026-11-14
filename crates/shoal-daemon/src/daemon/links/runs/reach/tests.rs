@@ -23,6 +23,7 @@ async fn a_scope_reaches_the_default_branch_and_its_workspaces_branches() {
         let caller = Caller {
             space_id: space.clone(),
             execution: None,
+            granted: None,
         };
         manager
             .branch_in_reach(&caller, &repo.id, branch)

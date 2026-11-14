@@ -55,7 +55,8 @@ pub enum ApprovalMethod {
     },
     /// Let the caller take `action`, which the permission `key` governs and
     /// which the caller takes itself, as its space's permission allows: at
-    /// once, once approved, or not at all.
+    /// once, once approved, or not at all; an approval grants a scope token
+    /// for the requests the action sends.
     AuthorizeAction {
         key: crate::config::permissions::PermissionKey,
         action: String,

@@ -40,6 +40,7 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
     let caller = Caller {
         space_id: workspace.id.clone(),
         execution: None,
+        granted: None,
     };
     let request = |method| RawRequest {
         method,
@@ -147,6 +148,7 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
     let caller = Caller {
         space_id: chat.id.clone(),
         execution: None,
+        granted: None,
     };
     let request = |method| RawRequest {
         method,
@@ -237,6 +239,7 @@ async fn agents_download_from_their_forge_as_their_account() {
     let caller = Caller {
         space_id: workspace.id.clone(),
         execution: None,
+        granted: None,
     };
     let url = &format!("http://{host}/user-attachments/assets/abc");
 

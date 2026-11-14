@@ -15,6 +15,7 @@ fn caller(space: &SpaceId) -> Caller {
     Caller {
         space_id: space.clone(),
         execution: None,
+        granted: None,
     }
 }
 

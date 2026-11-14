@@ -205,6 +205,7 @@ response_bodies! {
     RemovedChat(crate::output::chat::RemovedChat),
     StartedChat(crate::output::chat::StartedChat),
     ScopeToken(ChatScope),
+    Granted(Option<crate::scope_tokens::ScopeToken>),
     Branches(Vec<crate::model::Branch>),
     OpenedWorkspace(crate::model::OpenedWorkspace),
     Inspection(Inspection),

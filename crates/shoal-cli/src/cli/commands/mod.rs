@@ -314,8 +314,9 @@ pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
 }
 
 /// Refuse a scoped process `command` where its space's permissions do not
-/// let it take what the command does itself, asking the daemon, which
-/// records the approval request a permission asks for.
+/// let it take what it does, asking the daemon, which records the approval
+/// request a permission asks for. An approval lets the requests the command
+/// sends take what it governs.
 async fn authorize(ctx: &Context, command: &Command) -> Result<()> {
     if !env::inherits_scope(&ctx.paths.state) {
         return Ok(());
@@ -332,7 +333,11 @@ async fn authorize(ctx: &Context, command: &Command) -> Result<()> {
         env::is_scoped(),
         "this process runs below a scoped one without its scope; run it where the agent runs"
     );
-    crate::client::approvals::authorize(&ctx.paths, key, command_line()).await
+    let granted = crate::client::approvals::authorize(&ctx.paths, key, command_line()).await?;
+    if let Some(token) = granted {
+        env::act_under_grant(token);
+    }
+    Ok(())
 }
 
 /// This command as the user typed it, which an approval of it names.

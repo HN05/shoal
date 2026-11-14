@@ -62,6 +62,7 @@ async fn a_scoped_chat_lists_items_as_the_agent_account() {
     let agent = Caller {
         space_id: chat.id.clone(),
         execution: None,
+        granted: None,
     };
     for caller in [Some(&agent), None] {
         manager

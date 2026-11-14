@@ -2437,7 +2437,8 @@ permission. With `"propose"` the action becomes an
 with its arguments, which the command reports with exit 2 and
 `code: "approval_pending"`, or `"approval_denied"` once denied. Once the
 request is approved, the same action proceeds once under every other check,
-and taking it again asks again. `daemon` governs installing, starting,
+and taking it again asks again; an approved command's own requests take
+what the same key governs without asking again. `daemon` governs installing, starting,
 stopping and restarting the daemon, and `shoal update`.
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the

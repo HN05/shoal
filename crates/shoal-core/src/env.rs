@@ -432,6 +432,12 @@ pub fn take_handed_scope(token: ScopeToken) -> bool {
     first
 }
 
+/// Act from now on in the scope of `token`, which an approval of what this
+/// process does granted it.
+pub fn act_under_grant(token: ScopeToken) {
+    hold_scope(token);
+}
+
 /// Act from now on in the scope of `token`, that of the chat this scoped
 /// process runs, whose agent outlasts the scope it was handed or inherited.
 pub fn act_in_chat_scope(token: ScopeToken) {

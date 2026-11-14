@@ -316,6 +316,7 @@ impl Manager {
         let caller = Caller {
             space_id: coordinator.clone(),
             execution: None,
+            granted: None,
         };
         ensure!(
             self.reaches(&caller, &original.space_id).await?,

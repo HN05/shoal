@@ -240,7 +240,7 @@ fn recorded_agent(space: &PresentSpace) -> Option<RecordedAgent<'_>> {
 
 mod actions;
 
-pub(crate) use actions::Action;
+pub(crate) use actions::{Action, Grants};
 
 #[cfg(test)]
 mod tests;

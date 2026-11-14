@@ -14,6 +14,7 @@ fn caller(space: &crate::client::space_ids::SpaceId) -> Caller {
     Caller {
         space_id: space.clone(),
         execution: None,
+        granted: None,
     }
 }
 
@@ -111,4 +112,43 @@ async fn a_parent_without_the_key_at_direct_cannot_approve() {
             .await,
     );
     assert_eq!(denied.status, DecisionStatus::Denied);
+}
+
+#[tokio::test]
+async fn an_approved_command_takes_its_permission_s_actions_without_asking_again() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap();
+    let config = "[permissions]\ndaemon = 'propose'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
+    let chat = chat(&manager, "chat", "chat", Some(&repo), None).await;
+    let asking = caller(&chat.id);
+    let command = || Action::new(PermissionKey::Daemon, "shoal daemon stop");
+    let request = undecided(
+        manager
+            .grant_action(Some(&asking), command())
+            .await
+            .map(drop),
+    );
+    (manager.decide_approval(request.number, true, None, Default::default(), None))
+        .await
+        .unwrap();
+    let token = (manager.grant_action(Some(&asking), command()).await)
+        .unwrap()
+        .expect("an approval grants a token");
+
+    // The command's own requests take the permission's actions at once,
+    // as often as they come, while the space's other processes still ask.
+    let granted = manager.caller(&token).await.unwrap().unwrap();
+    assert_eq!(granted.space_id, chat.id);
+    for _ in 0..2 {
+        (manager.authorize_action(Some(&granted), restart()))
+            .await
+            .unwrap();
+    }
+    undecided(manager.authorize_action(Some(&asking), restart()).await);
 }

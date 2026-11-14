@@ -46,6 +46,7 @@ async fn scoped_merge_answers_with_its_approval_request() {
             caller: Some(Caller {
                 space_id: workspace.id.clone(),
                 execution: None,
+                granted: None,
             }),
         },
         manager.gates.owned_operation().await,

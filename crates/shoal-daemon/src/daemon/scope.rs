@@ -5,6 +5,7 @@ use crate::client::execution_ids::ExecutionId;
 use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
+use crate::config::permissions::PermissionKey;
 use crate::{
     daemon::workspace::{ExecutionKind, Manager},
     protocol::{ItemMethod, Operation},
@@ -27,6 +28,10 @@ pub(crate) fn new_token() -> ScopeToken {
 pub struct Caller {
     pub space_id: SpaceId,
     pub execution: Option<ScopedExecution>,
+    /// The permission whose action an approval let this caller's command
+    /// take, which lets the requests that command sends take actions that
+    /// permission governs without asking again.
+    pub granted: Option<PermissionKey>,
 }
 
 #[derive(Debug, Clone)]

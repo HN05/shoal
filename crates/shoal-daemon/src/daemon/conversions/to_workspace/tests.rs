@@ -68,6 +68,7 @@ async fn an_agent_converts_the_spaces_its_scope_reaches() {
     let caller = Caller {
         space_id: lead.id.clone(),
         execution: None,
+        granted: None,
     };
     manager.executions.issue_scope("lead".into(), caller).await;
 

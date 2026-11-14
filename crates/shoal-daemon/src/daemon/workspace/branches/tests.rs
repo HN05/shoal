@@ -1566,6 +1566,7 @@ async fn begin_merge_as_agent(
     let caller = scope::Caller {
         execution: None,
         space_id: workspace.id.clone(),
+        granted: None,
     };
     let request = crate::daemon::workspace::ExecutionRequest {
         merge: Some(crate::model::MergeOptions {
@@ -2347,6 +2348,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
                     kind: ExecutionKind::Command,
                     agent_execution: None,
                 }),
+                granted: None,
             },
         )
         .await;

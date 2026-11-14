@@ -58,8 +58,7 @@ pub(super) async fn handle(
         }
         ApprovalMethod::AuthorizeAction { key, action } => {
             let action = Action::new(key, action);
-            manager.authorize_action(caller, action).await?;
-            Body::Ok
+            Body::Granted(manager.grant_action(caller, action).await?)
         }
         ApprovalMethod::FinishPush { key, failure } => {
             Body::ApprovalRequest(Box::new(manager.finish_approved_push(&key, failure).await?))

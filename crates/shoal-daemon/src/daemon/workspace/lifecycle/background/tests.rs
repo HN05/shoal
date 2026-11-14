@@ -178,5 +178,6 @@ fn caller_in(id: &SpaceId) -> Caller {
     Caller {
         space_id: id.clone(),
         execution: None,
+        granted: None,
     }
 }

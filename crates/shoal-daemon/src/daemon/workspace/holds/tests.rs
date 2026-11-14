@@ -58,6 +58,7 @@ async fn holds_are_idempotent_persistent_and_scoped() {
                     kind: super::super::ExecutionKind::Command,
                     agent_execution: None,
                 }),
+                granted: None,
             },
         )
         .await;
@@ -274,6 +275,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
                 Caller {
                     space_id: workspace.id.clone(),
                     execution: None,
+                    granted: None,
                 },
             )
             .await;

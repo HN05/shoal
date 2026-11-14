@@ -287,18 +287,13 @@ impl Command {
         )
     }
 
-    /// The permission that governs what the command does itself, without a
-    /// daemon request that the daemon checks: a scoped process takes it as
-    /// its space's permission for it allows.
+    /// The permission that governs the command, which a scoped process runs
+    /// as its space's permission for it allows.
     pub fn permission(&self) -> Option<PermissionKey> {
         match self {
-            Command::Service(
-                ServiceCommand::Update
-                | ServiceCommand::Daemon {
-                    command:
-                        DaemonCommand::Install { .. } | DaemonCommand::Start | DaemonCommand::Run { .. },
-                },
-            ) => Some(PermissionKey::Daemon),
+            Command::Service(ServiceCommand::Update | ServiceCommand::Daemon { .. }) => {
+                Some(PermissionKey::Daemon)
+            }
             _ => None,
         }
     }

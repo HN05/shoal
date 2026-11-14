@@ -319,6 +319,7 @@ async fn a_space_and_a_queued_launch_rank_with_the_priority_set_on_them() {
     let caller = Caller {
         space_id: workspace.id.clone(),
         execution: None,
+        granted: None,
     };
     let refused = manager.queue_add_as(urgent("child"), Some(&caller)).await;
     assert!(refused.is_err());

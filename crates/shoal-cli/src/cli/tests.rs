@@ -162,11 +162,12 @@ fn config_show_and_reference_are_available_to_workspace_processes() {
 }
 
 #[test]
-fn the_daemon_permission_governs_what_the_cli_does_to_the_daemon_itself() {
+fn the_daemon_permission_governs_the_service_commands() {
     let reload = Cli::try_parse_from(["shoal", "config", "reload"]).unwrap();
-    assert!(!reload.command.unwrap().is_administrative());
+    assert_eq!(reload.command.unwrap().permission(), None);
     for args in [
         vec!["shoal", "daemon", "start"],
+        vec!["shoal", "daemon", "stop"],
         vec!["shoal", "daemon", "install"],
         vec!["shoal", "update"],
     ] {
@@ -176,11 +177,6 @@ fn the_daemon_permission_governs_what_the_cli_does_to_the_daemon_itself() {
             Some(PermissionKey::Daemon),
             "{args:?}"
         );
-    }
-    // The daemon checks the exit request itself.
-    for verb in ["stop", "restart"] {
-        let command = Cli::try_parse_from(["shoal", "daemon", verb]).unwrap();
-        assert_eq!(command.command.unwrap().permission(), None, "{verb}");
     }
 }
 

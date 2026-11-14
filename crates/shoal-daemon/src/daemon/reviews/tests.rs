@@ -790,6 +790,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
                     kind: crate::daemon::workspace::ExecutionKind::Command,
                     agent_execution: None,
                 }),
+                granted: None,
             },
         )
         .await;
@@ -811,6 +812,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
             Caller {
                 space_id: child.id.clone(),
                 execution: None,
+                granted: None,
             },
         )
         .await;
@@ -911,6 +913,7 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
     let caller = crate::daemon::scope::Caller {
         space_id: workspace.id.clone(),
         execution: None,
+        granted: None,
     };
     let marks = manager
         .mark_ready(

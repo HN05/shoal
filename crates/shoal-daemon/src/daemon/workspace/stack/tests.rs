@@ -150,6 +150,7 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
             crate::daemon::scope::Caller {
                 space_id: upper.id.clone(),
                 execution: None,
+                granted: None,
             },
         )
         .await;

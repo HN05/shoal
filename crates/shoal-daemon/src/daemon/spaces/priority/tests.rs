@@ -15,6 +15,7 @@ async fn a_scoped_caller_gives_at_most_its_own_spaces_priority() {
     let caller = |space_id: &SpaceId| Caller {
         space_id: space_id.clone(),
         execution: None,
+        granted: None,
     };
     let selector = SpaceSelector::id(&child.id);
     let urgent = |caller: Option<Caller>| {
@@ -125,6 +126,7 @@ async fn a_started_or_split_workspace_records_the_priority_it_is_given() {
     let caller = Caller {
         space_id: parent.id.clone(),
         execution: None,
+        granted: None,
     };
     let refused = manager
         .start_workspace((&repo.id).into(), opening("refused"), bare(), Some(&caller))
@@ -145,6 +147,7 @@ async fn a_scoped_caller_that_names_no_priority_gives_its_own_when_lower() {
     let caller = Caller {
         space_id: top.id.clone(),
         execution: None,
+        granted: None,
     };
     let given = |caller| manager.given_priority(caller, None);
     assert_eq!(given(Some(&caller)).await.unwrap(), None);
@@ -202,6 +205,7 @@ async fn a_reopened_workspace_keeps_its_priority_unless_one_is_asked_for() {
     let caller = Caller {
         space_id: parent.id.clone(),
         execution: None,
+        granted: None,
     };
     let branch = child.workspace.branch.clone().unwrap();
     let reopened = manager

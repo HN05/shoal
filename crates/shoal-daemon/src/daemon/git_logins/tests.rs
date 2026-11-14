@@ -18,6 +18,7 @@ async fn only_scoped_callers_get_the_agent_token_of_a_host_with_one() {
     let caller = Caller {
         space_id: SpaceId::generate(),
         execution: None,
+        granted: None,
     };
 
     let scoped = manager
