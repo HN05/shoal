@@ -329,6 +329,7 @@ pub(super) async fn start_chat(
         mode,
         narrowing: *narrowing,
         parent: parent.as_ref(),
+        queue_entry: None,
     };
     let record = crate::client::chats::start(&ctx.paths, home, new, None).await?;
     super::link_chat(ctx, &record, links).await;

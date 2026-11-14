@@ -440,6 +440,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         .await;
     let start = |workspace: &Workspace| crate::protocol::ChatMethod::StartChat {
         priority: None,
+        queue_entry: None,
         narrowing: Default::default(),
         mode: None,
         repository: Some(repo.id.clone().into()),
@@ -491,6 +492,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
     // below one outside its tree.
     let below = |parent: &Workspace| crate::protocol::ChatMethod::StartChat {
         priority: None,
+        queue_entry: None,
         narrowing: Default::default(),
         mode: None,
         repository: Some(repo.id.clone().into()),

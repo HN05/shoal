@@ -46,6 +46,11 @@ pub enum ChatMethod {
         /// own space's.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         priority: Option<crate::priority::Priority>,
+        /// The queued launch whose start records the chat, which a scoped
+        /// process may have queued: the chat is then confined as that
+        /// process's start would be.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        queue_entry: Option<crate::queue::QueueEntryId>,
     },
     ListChats,
     /// Remove the chat `chat`, by ID or name, stopping its agent: first

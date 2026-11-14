@@ -35,12 +35,15 @@ pub(super) async fn handle(
             mode,
             narrowing,
             origin,
-            parent,
+            mut parent,
             priority,
+            queue_entry,
         } => {
             if caller.is_none() {
                 (manager.ensure_parent_not_host(workspace.as_ref(), parent.as_ref())).await?;
             }
+            let queued = queued_scope(manager, caller, queue_entry.as_ref(), &mut parent).await?;
+            let caller = caller.or(queued.as_ref());
             let held = (repository.as_ref(), workspace.as_ref());
             ensure_caller_holds(manager, caller, &narrowing, held).await?;
             let priority = manager.given_priority(caller, priority).await?;
@@ -93,6 +96,27 @@ pub(super) async fn handle(
             Body::Ok
         }
     }))
+}
+
+/// The scope a chat the user's process records for the launch `entry` is
+/// confined to: that of the space whose scoped process queued the launch,
+/// below which `parent` then goes, as that process's own start would put
+/// it; none for a scoped `caller`, whose own scope confines it, or for a
+/// launch the user queued.
+async fn queued_scope(
+    manager: &Manager,
+    caller: Option<&Caller>,
+    entry: Option<&crate::client::queue::QueueEntryId>,
+    parent: &mut Option<SpaceSelector>,
+) -> Result<Option<Caller>> {
+    let (None, Some(entry)) = (caller, entry) else {
+        return Ok(None);
+    };
+    let Some(queued) = manager.queued_scope(entry).await? else {
+        return Ok(None);
+    };
+    manager.parent_below(&queued, parent).await?;
+    Ok(Some(queued))
 }
 
 /// Refuse the permissions `given` to a new chat in the repository or the
@@ -191,3 +215,6 @@ impl Scoped for ChatMethod {
         })
     }
 }
+
+#[cfg(test)]
+mod tests;

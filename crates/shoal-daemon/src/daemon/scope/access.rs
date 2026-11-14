@@ -448,7 +448,7 @@ impl Manager {
 
     /// Confine the launch of a new chat's agent that `caller` queues: it
     /// starts now only for the user, in the caller's own repository, with
-    /// permissions the caller holds.
+    /// permissions the caller holds, and its chat is recorded at once.
     pub(in crate::daemon) async fn confine_chat_launch(
         &self,
         caller: &Caller,
@@ -456,6 +456,9 @@ impl Manager {
     ) -> Result<()> {
         const REFUSAL: &str = "workspace processes start chats only in their own repository";
         ensure!(!request.now, NOT_NOW);
+        // Its chat is recorded at once, below the caller, rather than by the
+        // queue's later start, which acts as the user.
+        request.records_when_waiting = true;
         let repository = match &request.repository {
             Some(selector) => {
                 let selector = self.own_repository(caller, selector, REFUSAL).await?;

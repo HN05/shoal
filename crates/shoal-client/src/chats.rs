@@ -39,6 +39,8 @@ pub struct NewChat<'a> {
     pub parent: Option<&'a SpaceSelector>,
     /// The priority set on it.
     pub priority: Option<crate::priority::Priority>,
+    /// The queued launch whose start records it, if any.
+    pub queue_entry: Option<&'a crate::queue::QueueEntryId>,
 }
 
 /// Record the `chat` at `home`, running at `origin` in a terminal host when
@@ -63,6 +65,7 @@ pub async fn start(
             origin,
             parent: chat.parent.cloned(),
             priority: chat.priority,
+            queue_entry: chat.queue_entry.cloned(),
         },
     )
     .await
