@@ -2,7 +2,6 @@
 //! restores stopped agents request, then admits the waiting entries that fit
 //! and starts what the daemon starts itself.
 use crate::client::execution_ids::ExecutionId;
-use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceName;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -219,7 +218,7 @@ impl Manager {
         let slots = self.occupied_slots(&dormant, &work.light).await?;
         let jobs = self.job_activities().await?;
         let limits = self.agent_limits(repositories, &slots, &jobs).await?;
-        let occupied: Vec<RepositoryId> = slots.into_iter().map(|slot| slot.repository).collect();
+        let occupied: Vec<_> = slots.into_iter().map(|slot| slot.repository).collect();
         Ok(admit(&occupied, &work.admissible(), &limits, recovered))
     }
 
@@ -285,14 +284,11 @@ impl Manager {
             automatic,
             job,
             mode,
-            attended,
             agent: _,
         } in queued
         {
             let is_light = kind != QueueKind::Job
-                && (repository.as_ref()).is_some_and(|repository| {
-                    light.entry(execution.as_ref(), repository, mode.as_ref())
-                });
+                && light.entry(execution.as_ref(), repository.as_ref(), mode.as_ref());
             let work = match (kind, execution, workspace) {
                 (QueueKind::Job, ..) => {
                     let repository = repository
@@ -338,7 +334,6 @@ impl Manager {
                 repository,
                 work,
                 light: is_light,
-                attended,
             });
         }
         let oneshots = oneshots.into_iter().map(|oneshot| Waiting {
@@ -349,7 +344,6 @@ impl Manager {
                 after_stop: oneshot.after_stop,
             },
             light: false,
-            attended: false,
         });
         waiting.extend(oneshots);
         self.in_rank_order(&mut waiting).await?;
@@ -364,8 +358,7 @@ impl Manager {
     }
 
     /// The agents of `queued` whose tool's upstream stands under a limit,
-    /// with the hold each waits for. An agent the user attends starts
-    /// anyway, as it does on a full machine.
+    /// with the hold each waits for.
     async fn upstream_limited(
         &self,
         queued: &[QueuedRow],
@@ -375,7 +368,7 @@ impl Manager {
         }
         let limits = self.tool_limits(UnixTime::now()).await?;
         Ok((queued.iter())
-            .filter(|row| row.kind != QueueKind::Job && !row.attended)
+            .filter(|row| row.kind != QueueKind::Job)
             .filter_map(|row| {
                 let (limit, until) = *limits.get(&row.agent)?;
                 Some((row.id.clone(), HeldBy::UpstreamLimit { limit, until }))

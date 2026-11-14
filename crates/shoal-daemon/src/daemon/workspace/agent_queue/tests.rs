@@ -1853,38 +1853,82 @@ async fn an_entrys_wait_for_memory_lasts_while_passes_hold_it_for_memory() {
     assert_eq!(queue.waited_for_memory(&id, at(240)), Duration::ZERO);
 }
 
-/// A chat's restore, of one without a repository too, starts on a full
-/// machine, since the user attends the chat, whose agent takes no slot.
+/// Save a stopped agent of `mode` in the space `id` for its restore, and
+/// queue the restore as `shoal restore` does.
+async fn queue_saved_restore(
+    manager: &Manager,
+    id: &crate::client::space_ids::SpaceId,
+    mode: &str,
+) -> QueueEntry {
+    let execution = ExecutionId::from(format!("stopped-{mode}"));
+    let agent = crate::execution::TrackedAgent {
+        mode: mode.into(),
+        ..crate::execution::TrackedAgent::named("claude")
+    };
+    let saved =
+        crate::execution::recovery::save_record(&manager.paths, id, &execution, &agent, None, None);
+    saved.unwrap();
+    let env = BTreeMap::from([("HERDR_ENV".into(), "1".into())]);
+    manager
+        .queue_stopped_restore(&SpaceSelector::id(id), &execution, env)
+        .await
+        .unwrap()
+}
+
+/// A chat without a repository takes its weight from the global config's
+/// modes: a heavy mode's restore waits for a slot on a full machine, as a
+/// workspace agent's does, and a light one's starts beside it.
 #[tokio::test]
-async fn a_chats_restore_starts_on_a_full_machine() {
+async fn a_chats_restore_waits_for_a_slot_by_its_modes_weight() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    limit_globally(&manager, 1);
-    let busy = add(&manager, &repo, "busy").await;
-    assert!(busy.start);
+    manager.publish_config(global_config(
+        "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n\
+         [modes.solo]\nkind = 'chat'\nrepository = false\n",
+    ));
+    assert!(add(&manager, &repo, "busy").await.start);
     let chat = crate::daemon::test_support::chat(&manager, "master", "chat", None, None).await;
-    let execution = ExecutionId::from("stopped");
-    crate::execution::recovery::save_record(
-        &manager.paths,
-        &chat.id,
-        &execution,
-        &crate::execution::TrackedAgent::named("claude"),
-        None,
-        None,
-    )
-    .unwrap();
 
-    let env = BTreeMap::from([("HERDR_ENV".into(), "1".into())]);
-    let entry = manager
-        .queue_stopped_restore(&SpaceSelector::id(&chat.id), &execution, env)
-        .await
-        .unwrap();
-    assert_eq!(entry.repository_id, None);
+    let heavy = queue_saved_restore(&manager, &chat.id, "solo").await;
+    let light = queue_saved_restore(&manager, &chat.id, "chat").await;
+    assert_eq!(heavy.repository_id, None);
     manager.dispatch_queue().await.unwrap();
 
-    assert!(started(&entry.id));
-    let held = add(&manager, &repo, "held").await;
-    assert!(!held.start, "the machine stays full");
+    assert!(!started(&heavy.id));
+    assert!(started(&light.id));
+    let entries = manager.queue_entries().await.unwrap();
+    let waiting = entries.iter().find(|entry| entry.id == heavy.id).unwrap();
+    assert_eq!(waiting.held_by, Some(crate::model::HeldBy::MaxAgents));
+}
+
+/// A heavy chat's agent holds a machine slot, and one in a repository
+/// that repository's.
+#[tokio::test]
+async fn a_heavy_chats_agent_holds_a_slot() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(
+        "[machine]\nmax_agents = 2\n[machine.overload.disk]\nenabled = false\n\
+         [modes.solo]\nkind = 'chat'\nrepository = false\n\
+         [modes.pair]\nkind = 'chat'\n",
+    ));
+    let chat = |name, mode, repository| {
+        crate::daemon::test_support::chat(&manager, name, mode, repository, None)
+    };
+    chat("light", "chat", Some(&repo)).await;
+    chat("solo", "solo", None).await;
+    chat("pair", "pair", Some(&repo)).await;
+    let light_mode = manager.light().await.unwrap();
+    let slots = manager.occupied_slots(&HashSet::new(), &light_mode).await;
+    let mut slots: Vec<_> = (slots.unwrap().into_iter())
+        .map(|slot| slot.repository)
+        .collect();
+    slots.sort();
+    assert_eq!(slots, [None, Some(repo.id.clone())]);
+    assert!(
+        !add(&manager, &repo, "held").await.start,
+        "the machine is full"
+    );
 }
 
 /// A running claude agent in a workspace of `repo`, whose proxy found
@@ -1955,32 +1999,24 @@ async fn a_tools_upstream_limit_holds_its_queued_agents_while_others_start() {
     assert!(started(&claude.id));
 }
 
-/// The user attends a chat, so its restore starts whatever the limit, and
-/// its agent shows the upstream's failure.
+/// A chat's agent, light or heavy, waits while its tool's upstream stands
+/// under a limit, as a workspace agent's does.
 #[tokio::test]
-async fn a_chats_restore_starts_under_its_tools_upstream_limit() {
+async fn a_chats_restore_waits_for_its_tools_upstream_limit() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 3);
     limit_claude(&manager, &repo).await;
     let chat = crate::daemon::test_support::chat(&manager, "master", "chat", None, None).await;
-    let execution = ExecutionId::from("stopped");
-    crate::execution::recovery::save_record(
-        &manager.paths,
-        &chat.id,
-        &execution,
-        &crate::execution::TrackedAgent::named("claude"),
-        None,
-        None,
-    )
-    .unwrap();
-    let env = BTreeMap::from([("HERDR_ENV".into(), "1".into())]);
-    let entry = manager
-        .queue_stopped_restore(&SpaceSelector::id(&chat.id), &execution, env)
-        .await
-        .unwrap();
+    let entry = queue_saved_restore(&manager, &chat.id, "chat").await;
     manager.dispatch_queue().await.unwrap();
-    assert!(started(&entry.id));
+    assert!(!started(&entry.id));
+    let entries = manager.queue_entries().await.unwrap();
+    let waiting = entries.iter().find(|queued| queued.id == entry.id).unwrap();
+    assert!(matches!(
+        waiting.held_by,
+        Some(crate::model::HeldBy::UpstreamLimit { .. })
+    ));
 }
 
 #[tokio::test]

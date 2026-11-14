@@ -23,23 +23,23 @@ fn job(id: &str, memory: u64) -> Waiting {
         },
         light: false,
         waited_for_memory: Duration::ZERO,
-        attended: false,
     }
 }
 
-/// The entries a pass admits.
+/// The entries a pass admits beside the slots of `occupied` repositories.
 fn admit(
     occupied: &[RepositoryId],
     waiting: &[Waiting],
     limits: &Limits,
     recovered: bool,
 ) -> Vec<QueueEntryId> {
-    super::admit(occupied, waiting, limits, recovered).admitted
+    let occupied: Vec<_> = occupied.iter().cloned().map(Some).collect();
+    super::admit(&occupied, waiting, limits, recovered).admitted
 }
 
 /// What holds back each entry a pass passes over, by entry ID.
 fn held(occupied: &[&str], waiting: &[Waiting], limits: &Limits) -> Vec<(String, HeldBy)> {
-    let occupied: Vec<RepositoryId> = occupied.iter().map(|id| (*id).into()).collect();
+    let occupied: Vec<_> = occupied.iter().map(|id| Some((*id).into())).collect();
     let mut held: Vec<_> = super::admit(&occupied, waiting, limits, false)
         .held
         .into_iter()
@@ -79,7 +79,6 @@ fn waiting(entries: &[(&str, &str)]) -> Vec<Waiting> {
             },
             light: id.starts_with('l'),
             waited_for_memory: Duration::ZERO,
-            attended: false,
         })
         .collect()
 }
@@ -444,7 +443,6 @@ fn a_oneshot_run_holds_no_slot_but_waits_for_memory_room_and_low_disk() {
         work: Work::OneShot { after_stop: false },
         light: false,
         waited_for_memory: Duration::ZERO,
-        attended: false,
     }];
     let admitted = |limits: &Limits| !admit(&["a".into()], &review, limits, false).is_empty();
     // The machine's and the repository's one slot is taken.
@@ -540,24 +538,29 @@ fn work_that_fits_starts_ahead_until_the_entry_waiting_for_memory_waited_its_lim
 }
 
 #[test]
-fn an_attended_spaces_entry_starts_once_it_waits_for_nothing_else() {
-    let attended = |work| Waiting {
+fn a_chat_without_a_repository_meets_the_machines_limits_alone() {
+    let chat = |light| Waiting {
         id: "chat".into(),
         repository: None,
-        work,
-        light: false,
+        work: Work::Launch,
+        light,
         waited_for_memory: Duration::ZERO,
-        attended: true,
     };
-    let full = limits(Some(1), &[]);
-    let occupied = [RepositoryId::from("a")];
-    let launch = [attended(Work::Launch)];
-    assert_eq!(admit(&occupied, &launch, &full, false), ["chat"]);
-    // A restore waiting for healthy readings still waits for them.
-    let recovering = [attended(Work::Restore {
-        waiting: true,
-        wake: Wake::Recovery,
-    })];
-    assert!(admit(&occupied, &recovering, &full, false).is_empty());
-    assert_eq!(admit(&occupied, &recovering, &full, true), ["chat"]);
+    // Repository a's one slot is taken, and the machine has another.
+    let limits = limits(Some(2), &[("a", Some(1))]);
+    let in_a = Some(RepositoryId::from("a"));
+    let pass =
+        |occupied: &[Option<RepositoryId>], entry| super::admit(occupied, &[entry], &limits, false);
+    assert_eq!(pass(std::slice::from_ref(&in_a), chat(false)).admitted, ["chat"]);
+    // Its slot fills the machine for a heavy chat, but not for a light one.
+    let full = [in_a, None];
+    let held = pass(&full, chat(false)).held;
+    assert_eq!(
+        held.get(&QueueEntryId::from("chat")),
+        Some(&HeldBy::MaxAgents)
+    );
+    assert_eq!(pass(&full, chat(true)).admitted, ["chat"]);
+    // It counts toward no repository's limit.
+    let in_repository = waiting(&[("a1", "a")]).remove(0);
+    assert_eq!(pass(&[None], in_repository).admitted, ["a1"]);
 }
