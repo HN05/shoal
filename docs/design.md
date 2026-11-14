@@ -549,8 +549,10 @@ preserving complete asset sets. It never tags a later commit, downgrades, or for
 explicitly selecting the current tagged version resumes from that tag, and tap
 updates retry against the tap's latest main without force pushes. Deleted release
 branch labels are accepted only for matching repository and exact PR identity.
-A release runs the test suite once, with nextest as CI does: it validates the
-version commit before opening the PR, again only when the merge changed that tree, and CI runs no checks on the
+A release runs no tests of its own: the version commit changes only versions, so
+it accepts one once the `rust` and `musl` checks passed on the `main` commit
+below it, and checks the version change with fmt and Clippy, before opening the
+PR and again only when the merge changed that tree. CI runs no checks on the
 release PR or on its version commit on main.
 
 Release signing: the release job signs each macOS binary with `rcodesign` as
