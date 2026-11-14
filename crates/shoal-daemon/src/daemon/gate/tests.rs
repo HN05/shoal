@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::client::{links::PushOutcome, notifications::NotificationKind};
+use crate::client::{scope_tokens::ScopeToken, space_names::SpaceSelector};
 use crate::daemon::{
     approvals::PushSpecification,
     scope::Caller,
@@ -11,7 +11,8 @@ use crate::daemon::{
 use crate::model::Workspace;
 
 /// A fake gate agent: it records each run as `new` or `resume <session>`,
-/// the latest resumed run's prompt in `resumed`,
+/// the latest resumed run's prompt in `resumed`, its scope token and state
+/// directory in `scope`,
 /// reports session `s<run>` or the one it resumes, fails while `fail`
 /// exists, cannot resume while `stale` exists, waits while `hold` exists, and returns `verdict.json`.
 const AGENT: &str = r#"#!/bin/sh
@@ -19,6 +20,7 @@ dir='{dir}'
 if [ "$1" = resume ]; then echo "resume $2" >> "$dir/runs"; session=$2; printf '%s' "$3" > "$dir/resumed"
 else echo new >> "$dir/runs"; session="s$(wc -l < "$dir/runs" | tr -d ' ')"; fi
 echo "session id: $session" >&2
+printf '%s\n%s' "$SHOAL_SCOPE_TOKEN" "$SHOAL_STATE_DIR" > "$dir/scope.tmp" && mv "$dir/scope.tmp" "$dir/scope"
 [ -e "$dir/fail" ] && exit 1
 [ "$1" = resume ] && [ -e "$dir/stale" ] && exit 1
 while [ -e "$dir/hold" ]; do sleep 0.1; done
@@ -124,6 +126,19 @@ impl Fixture {
         self.push("refs/heads/worker").await.unwrap()
     }
 
+    /// The scope token and state directory the latest run was given, once
+    /// it started.
+    async fn run_scope(&self) -> (ScopeToken, PathBuf) {
+        let path = self.root.path().join("scope");
+        loop {
+            if let Ok(scope) = std::fs::read_to_string(&path) {
+                let (token, state) = scope.split_once('\n').unwrap();
+                return (ScopeToken::from(token.to_owned()), state.into());
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }
+
     /// The next message the workspace's agent receives, which it takes as
     /// its hooks would, so the next one is not collapsed into it.
     async fn message(&self) -> String {
@@ -197,6 +212,27 @@ async fn an_allowed_push_runs_as_an_approved_one_without_the_user() {
         .await;
     assert_eq!(allowed.gate, Some(GateStep::Allowed));
     assert_eq!(fixture.logged_verdicts().await, ["allow"]);
+}
+
+/// A run's `shoal` commands reach this daemon with a read-only scope of
+/// the requesting space, which ends with the run.
+#[tokio::test]
+async fn a_run_holds_a_read_only_scope_of_the_space_until_it_ends() {
+    let fixture = fixture().await;
+    fixture.verdict("allow", "", "");
+    let hold = fixture.root.path().join("hold");
+    std::fs::write(&hold, "").unwrap();
+    let request = fixture.push_branch().await;
+    let (token, state) = fixture.run_scope().await;
+    assert_eq!(state, fixture.manager.paths.state);
+    let caller = fixture.manager.caller(&token).await.unwrap().unwrap();
+    assert_eq!(caller.space_id, fixture.workspace.id);
+    assert!(caller.read_only);
+    std::fs::remove_file(&hold).unwrap();
+    fixture
+        .request_when(&request.key, |stored| stored.operation.is_some())
+        .await;
+    assert!(fixture.manager.caller(&token).await.unwrap().is_none());
 }
 
 #[tokio::test]

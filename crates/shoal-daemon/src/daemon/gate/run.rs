@@ -4,6 +4,7 @@
 //! listed case, then once by the fallback agent when it fails.
 use std::{
     collections::BTreeMap,
+    ffi::OsString,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -318,7 +319,8 @@ impl Manager {
         Ok((admission, cancelled))
     }
 
-    /// Run `agent` once in the checkout, writing to `files`.
+    /// Run `agent` once in the checkout, writing to `files`, under a
+    /// read-only scope of the requesting space that ends with the run.
     async fn run_gate_once(
         &self,
         case: &Case,
@@ -328,7 +330,10 @@ impl Manager {
         files: &Path,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Result<Ran> {
-        let command = gate_command(case, agent, session, prompt, files, &self.paths.home)?;
+        let scope = self.gate_scope(&case.space);
+        let environment = scope.environment(&self.paths);
+        let home = &self.paths.home;
+        let command = gate_command(case, agent, session, prompt, files, &environment, home)?;
         let run = oneshot::Run {
             runs: &self.oneshot_runs,
             command: &command.command,
@@ -363,15 +368,16 @@ struct GateCommand {
     format: &'static output::ResultFormat,
 }
 
-/// The command that runs `agent` once with `prompt` in a run writing to
-/// `files`, resuming `session` when given, after writing the output schema
-/// there.
+/// The command that runs `agent` once with `prompt` and `environment` in a
+/// run writing to `files`, resuming `session` when given, after writing the
+/// output schema there.
 fn gate_command(
     case: &Case,
     agent: &Agent,
     session: Option<&AgentSessionId>,
     prompt: &str,
     files: &Path,
+    environment: &BTreeMap<String, OsString>,
     home: &Path,
 ) -> Result<GateCommand> {
     std::fs::create_dir_all(files).with_context(|| format!("create {}", files.display()))?;
@@ -392,9 +398,8 @@ fn gate_command(
     }
     .with_context(|| format!("{agent} has no template for a one-shot run"))?;
     let model = case.settings.model(agent, Default::default());
-    let configured = BTreeMap::new();
     Ok(GateCommand {
-        command: oneshot::agent_command(&case.settings, agent, &model, args, &configured, home)?,
+        command: oneshot::agent_command(&case.settings, agent, &model, args, environment, home)?,
         result: match session.map_or(arguments.review_writes_output(), |_| {
             arguments.review_resume_writes_output()
         }) {

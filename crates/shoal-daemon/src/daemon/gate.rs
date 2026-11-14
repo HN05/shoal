@@ -23,6 +23,7 @@ mod leftovers;
 mod outcome;
 mod prompt;
 mod run;
+mod scope;
 mod store;
 mod subject;
 mod verdict;

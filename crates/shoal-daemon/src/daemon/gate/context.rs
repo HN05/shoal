@@ -8,7 +8,7 @@ use super::{
     prompt,
     subject::{self, Subject},
 };
-use crate::client::space_names::SpaceSelector;
+use crate::client::{space_ids::SpaceId, space_names::SpaceSelector};
 use crate::{
     agent::Agent,
     config::{Effective, gate::GateRules},
@@ -41,6 +41,8 @@ const COMMIT_LIMIT: usize = 50;
 
 /// Everything the gate's run of one request needs.
 pub(super) struct Case {
+    /// The requesting space, which the run's scope reaches.
+    pub space: SpaceId,
     /// The registered checkout it runs in, whose config it reads.
     pub repository: Repository,
     pub settings: Effective,
@@ -103,6 +105,7 @@ impl Manager {
         };
         let warnings = self.gate_warnings(request, &repository, &settings).await;
         Ok(Case {
+            space: request.space_id.clone(),
             action: subject::action(request),
             worktree: workspace.map(|workspace| workspace.path.clone()),
             head: bound_commit(request),
