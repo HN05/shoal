@@ -437,3 +437,37 @@ async fn a_decider_without_a_repository_decides_as_the_action_s_repository_allow
     let refused = format!("{:#}", approving.await.unwrap_err());
     assert!(refused.contains("admin"), "{refused}");
 }
+
+#[tokio::test]
+async fn an_approval_to_release_a_hold_covers_only_the_space_it_names() {
+    use crate::{client::space_names::SpaceSelector, model::HoldPlacer};
+
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap();
+    let lead = chat(&manager, "lead", "chat", Some(&repo), None).await;
+    let mut held = Vec::new();
+    for _ in 0..2 {
+        let child =
+            crate::daemon::test_support::workspace_below(&manager, &repo, "child", &lead.id, None)
+                .await;
+        let selector = SpaceSelector::id(&child.id);
+        (manager.acquire_hold(&selector, "keep".into(), None, HoldPlacer::User))
+            .await
+            .unwrap();
+        held.push(selector);
+    }
+    let leading = caller(&lead.id);
+    let release =
+        |index: usize| manager.release_hold_as(Some(&leading), &held[index], "keep".into());
+    let first = undecided(release(0).await);
+    (manager.decide_approval(first.number, true, None, Default::default(), None))
+        .await
+        .unwrap();
+    // The other space of the same name asks for its own approval.
+    let second = undecided(release(1).await);
+    assert_ne!(second.key, first.key);
+    release(0).await.unwrap();
+}

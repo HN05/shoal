@@ -177,7 +177,11 @@ impl Manager {
         if !users {
             return self.release_hold(selector, name, HoldPlacer::Agent).await;
         }
-        let release = format!("release the user's hold {name} on {}", workspace.name);
+        // A name may repeat, so the workspace's ID binds the approval.
+        let release = format!(
+            "release the user's hold {name} on {} ({})",
+            workspace.name, workspace.id
+        );
         let action = Action::new(PermissionKey::UserHolds, release)
             .in_repository(workspace.repository_id.clone());
         self.authorize_action(Some(caller), action).await?;

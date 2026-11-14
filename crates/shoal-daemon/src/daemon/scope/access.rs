@@ -187,7 +187,12 @@ impl Manager {
         if !self.user_holds_below(space.id()).await? {
             return Ok(workspace);
         }
-        let removal = format!("remove {}, which the user holds", space.name());
+        // A name may repeat, so the space's ID binds the approval.
+        let removal = format!(
+            "remove {} ({}), which the user holds",
+            space.name(),
+            space.id()
+        );
         let action = Action {
             repository: space.repository_id().cloned(),
             ..Action::new(PermissionKey::UserHolds, removal)
