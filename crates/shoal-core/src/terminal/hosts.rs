@@ -283,6 +283,24 @@ pub(super) fn foreign_place_variables(host: HostName) -> Vec<&'static str> {
         .collect()
 }
 
+/// Forget every host's place this test process inherited from the terminal
+/// that runs the tests, so code under test finds no place of the runner's,
+/// whose host it would ask.
+///
+/// # Safety
+///
+/// No other thread reads or writes the environment meanwhile.
+#[cfg(test)]
+pub(crate) unsafe fn forget_inherited_places() {
+    for name in hosts()
+        .filter_map(Host::places)
+        .flat_map(|places| places.place_variables().iter().copied())
+    {
+        // SAFETY: the caller keeps other threads off the environment.
+        unsafe { std::env::remove_var(name) };
+    }
+}
+
 /// The host named `name`, where config enables it.
 pub fn enabled_host(settings: &Effective, name: HostName) -> Option<&'static dyn Host> {
     Configured::all(settings)

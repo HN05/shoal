@@ -8,6 +8,10 @@ use tokio::net::UnixListener;
 /// What `setup` returns when the daemon answers its first request with
 /// `response`.
 async fn setup_answered(mut response: Response) -> Result<i32> {
+    // Setup records the terminal place it runs in, asking its host.
+    // SAFETY: nextest runs each test in a process of its own, and a tokio
+    // test runs on this thread alone.
+    unsafe { crate::terminal::hosts::forget_inherited_places() };
     let temp = tempfile::tempdir_in("/tmp")?;
     let paths = CommandPaths::from(crate::paths::Paths::for_test(temp.path()));
     paths.prepare()?;
