@@ -10,6 +10,7 @@ use crate::{
     account::Account,
     backends::Runs,
     capability::Capability,
+    ci::run_action::Run,
     numbers::PullNumber,
     transport::api::{HttpMethod, Request},
 };
@@ -64,21 +65,25 @@ impl ForgeRepo {
         Ok(waiting)
     }
 
-    /// The URL of the run `run`, once the forge approves runs and the run
-    /// waits for approval, as [`Self::approve_run`] requires.
-    pub async fn waiting_run(&self, account: &Account, run: &ItemRef) -> Result<String> {
+    /// The run `run`, once the forge approves runs and the run waits for
+    /// approval, which [`Self::approve_waiting`] approves.
+    pub async fn waiting_run(&self, account: &Account, run: &ItemRef) -> Result<Run> {
         self.require(Capability::ApproveRuns)?;
         let run = self.read_run(account, run).await?;
         ensure!(run.waiting, "{} does not wait for approval", run.url);
-        Ok(run.url)
+        Ok(run)
     }
 
     /// Approve the run `run`, which must wait for approval, and return its
     /// URL.
     pub async fn approve_run(&self, account: &Account, run: &ItemRef) -> Result<String> {
-        self.require(Capability::ApproveRuns)?;
-        let run = self.read_run(account, run).await?;
-        ensure!(run.waiting, "{} does not wait for approval", run.url);
+        let run = self.waiting_run(account, run).await?;
+        self.approve_waiting(account, run).await
+    }
+
+    /// Approve the run `run`, which [`Self::waiting_run`] read, and return
+    /// its URL.
+    pub async fn approve_waiting(&self, account: &Account, run: Run) -> Result<String> {
         let endpoint = self.repo_endpoint(&self.kind.approve_endpoint(&run)?);
         self.send(account, &Request::new(HttpMethod::Post, endpoint, None))
             .await?;

@@ -46,10 +46,10 @@ impl Manager {
                 let run = ItemRef::in_repository(&forge, LinkKind::Ci, &input)?;
                 // It asks once the forge would approve the run.
                 let waiting = forge.waiting_run(&account, &run).await?;
-                let approval = format!("approve CI run {waiting}");
+                let approval = format!("approve CI run {}", waiting.url);
                 self.authorize_approval(caller, &place, approval).await?;
                 let url = forge
-                    .approve_run(&account, &run)
+                    .approve_waiting(&account, waiting)
                     .await
                     .with_context(|| format!("could not approve CI run {run}"))?;
                 self.record_approval(workspace, LinkKind::Ci, &url).await?;
