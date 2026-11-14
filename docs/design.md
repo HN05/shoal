@@ -2461,8 +2461,12 @@ same on every forge. Label and reviewer choices are listed under the names
 those options take, a team as `owner/team`, so a client can offer them without
 forge API calls of its own.
 
-Ready-for-review marks are the agent's status signal for integrations, separate
-from messages and completion: they never notify, complete, or change cleanup. A
+Ready-for-review marks are the agent's signal that it needs the user before
+it can go on, in every space: its work is ready for review, or it has a
+decision or answer to ask them for, as a plan chat does once it has checked
+its issue. The shared `work` rule says so, so every built-in mode marks the
+same way. They are a status signal for integrations, separate from messages
+and completion: they never notify, complete, or change cleanup. A
 mark covers a linked issue or PR, or the workspace when nothing is linked, and
 binds to HEAD; new commits make it outdated rather than removing it, so marking
 again is an explicit statement about the new revision. Only an open PR whose

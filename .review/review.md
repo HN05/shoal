@@ -215,7 +215,7 @@ instead of the PR delivery guidance below.
   states and non-closing forge activity capped per space. A space's log is a
   filtered view of them, readable by a scoped caller for its own space and
   those below it. Ready-for-review
-  marks bind to HEAD, cover only linked items or the unlinked workspace, record
+  marks say the agent needs the user before it can go on, in every space, bind to HEAD, cover only linked items or the unlinked workspace, record
   journal events, and never notify, complete, or change cleanup; `hooks.post_ready`
   failure keeps them. Only explicit
   done completes an assignment. PR cleanup

@@ -484,11 +484,13 @@ resolved, and the refusal starts one when none exists.
 
 ## Ready marks
 
-`shoal ready` marks the linked items, or the space when nothing is linked,
-ready for review at HEAD for the user's integrations, and takes a linked draft
-PR out of draft unless `[pr] undraft_on_ready = false`. It skips a linked PR
-that is not open or whose head on the forge is not HEAD, naming each with its
-reason on stderr. `shoal ready --undo` withdraws the marks, and `--draft` also
+A ready mark says that a space's agent needs the user before it can go on:
+its work is ready for review, or it has a decision or answer to ask them for.
+`shoal ready` marks the linked items, or the space when nothing is linked, at
+HEAD for the user's integrations, and takes a linked draft PR out of draft
+unless `[pr] undraft_on_ready = false`. It skips a linked PR that is not open
+or whose head on the forge is not HEAD, naming each with its reason on
+stderr. `shoal ready --undo` withdraws the marks, and `--draft` also
 returns the PR to draft.
 
 ## Messages, alerts and questions

@@ -5001,8 +5001,10 @@ shoal ready --undo            # Withdraw all marks; select a kind or item like u
 shoal ready --undo --draft    # Also return the PRs whose marks are withdrawn to draft
 ```
 
-A mark says the agent considers the work for a linked issue or PR, or for the
-workspace itself when nothing is linked, ready for review at the current HEAD.
+A mark says the agent needs the user before it can go on: the work for a
+linked issue or PR, or for the workspace itself when nothing is linked, is
+ready for review at the current HEAD, or the agent has a decision or answer to
+ask them for. It means the same in a workspace and a chat.
 Items are selected like `link`, and a selected item must be linked; a kind with
 no linked items is an error. A linked PR is marked only while it is open and
 its head on the forge is HEAD; `shoal ready` skips any other, prints each
