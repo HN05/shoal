@@ -639,8 +639,8 @@ pub struct PrConfig {
     #[option(default = Vec::new())]
     pub required_labels: Option<Vec<String>>,
     /// Whether Shoal writes the agent's progress into a section at the end
-    /// of the body of each open PR it opened or was assigned.
-    #[option(default = true)]
+    /// of the body of each open draft PR it opened or was assigned.
+    #[option(default = false)]
     pub progress: Option<bool>,
 }
 

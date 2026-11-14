@@ -220,11 +220,11 @@ shoal progress --remove-blocker 1468 [--step 3] [--space S]
 ```
 
 `progress` sets the space's status line, one line in the agent's words that
-`list`, `status` and the PRs the space opened or was assigned show. Claude
-Code's and Codex's plan tools set the steps through Shoal's hooks; `--steps`
-sets them for other agents. Each open draft PR's body ends with a section
-showing both until it leaves draft. Changes never notify; a coordinator
-reads its children's progress on demand.
+`list` and `status` show. Claude Code's and Codex's plan tools set the steps
+through Shoal's hooks; `--steps` sets them for other agents. With
+`[pr] progress` on, each open draft PR the space opened or was assigned ends
+its body with a section showing both until it leaves draft. Changes never
+notify; a coordinator reads its children's progress on demand.
 
 `--add-blocker` records what blocks the space, or with `--step` one step as
 `shoal progress` numbers them: an issue by number or URL, a PR or CI run by

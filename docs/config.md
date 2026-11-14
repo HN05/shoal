@@ -832,10 +832,12 @@ draft = false                       # Open new PRs as drafts
 required_labels = ["area/", "type/"] # Default: []
 undraft_on_ready = true             # `shoal ready` takes a draft PR out of draft
 draft_on_unready = false            # `shoal ready --undo` returns it to draft
-progress = true                     # Show the space's progress in its PR bodies
+progress = false                    # Show the space's progress in its draft PR bodies
 ```
 
-`required_labels` works as for issues. See [issue and PR actions](reference.md#issue-and-pr-actions),
+`required_labels` works as for issues. `progress = true` with `draft = true`
+shows each agent's progress on its draft PRs until they leave draft.
+See [issue and PR actions](reference.md#issue-and-pr-actions),
 [ready for review](reference.md#ready-for-review) and [progress](reference.md#progress).
 
 ### Reviews

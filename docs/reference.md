@@ -5194,9 +5194,9 @@ Each change is a `progress_changed` [event](#workspace-events), which
 change. Progress never notifies, and coordinating agents read their
 children's progress on demand.
 
-While a space has an open draft PR it opened or was assigned, Shoal writes
-the status line and the steps into a section at the end of the PR's body, as
-the agent account:
+With [`[pr] progress = true`](config.md#prs), while a space has an open draft
+PR it opened or was assigned, Shoal writes the status line and the steps into
+a section at the end of the PR's body, as the agent account:
 
 ```markdown
 <!-- shoal:progress -->
@@ -5216,8 +5216,8 @@ notification. A PR that leaves draft, through
 [`shoal ready`](#ready-for-review), `shoal pr edit --no-draft` or the forge,
 loses the section with the next publication, and one that returns to draft
 shows it again. Merged and closed PRs are never edited, and completing with
-`shoal done` keeps the section. [`[pr] progress = false`](config.md#prs) leaves PR
-bodies alone.
+`shoal done` keeps the section. Turning `[pr] progress` off stops the updates
+and leaves existing sections as they are.
 
 Scoped callers set only their own space's progress, and read their own and
 that of the spaces below it.

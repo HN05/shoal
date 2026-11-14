@@ -2557,17 +2557,19 @@ its restore waits until nothing blocks the space instead of for an update;
 `shoal done` removes the blockers and cancels it. A chat comes back the same
 way through its automatic restore.
 
-An open draft PR the space opened or was assigned shows its progress in a
-section at the end of its body, which belongs to Shoal: the daemon writes it
-through the same forge-edit path as the space's other changes, recorded as its
-own so the watch does not report it back, at most once a minute per space with
-the latest progress written in the end. The section follows the PR's draft
+With `[pr] progress` on, an open draft PR the space opened or was assigned
+shows its progress in a section at the end of its body, which belongs to
+Shoal: the daemon writes it through the same forge-edit path as the space's
+other changes, recorded as its own so the watch does not report it back, at
+most once a minute per space with the latest progress written in the end. The section follows the PR's draft
 state, not the ready mark: a draft is the work in progress, while a PR out of
 draft is read by reviewers, who read the description, not a live plan. Each
 publication reads the PR and writes the section only to a draft, removing it
 otherwise, so leaving draft through `shoal ready`, `shoal pr edit` or the
 forge, which Shoal's own edits and the background poll report, takes one path.
-`[pr] progress` turns it off.
+It is opt-in: a status line written for `shoal list` reads as noise in a
+description written for reviewers, so only someone following agents on the
+forge, who opens their PRs as drafts, turns it on.
 
 The wrapper does not report progress to the terminal through OSC 7501: its
 writes, from a second process, interleave with the agent's own TUI output and
