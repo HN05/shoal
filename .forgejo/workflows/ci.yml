@@ -2,9 +2,11 @@
 # job, on Docker, are intended as the required checks on the `main` protection
 # rule.
 #
-# A PR whose only `area/` label is `area/docs` runs no checks: the gate job
-# reads the labels and the rust and musl jobs' check steps skip themselves,
-# which still reports a status for the required check.
+# A PR builds, lints and tests only when it changes a package or a file every
+# package's build reads, and runs only the tests of the packages it can affect:
+# the ones it changes and those that depend on them
+# (scripts/affected_packages.py). Its jobs' steps skip themselves otherwise,
+# which still reports a status for the required checks.
 # Pushes to main and dispatches always run everything, except that a release
 # PR (`release/v*`) and its version commit on main run no checks: release.py
 # accepts that tree only once the rust and musl statuses below passed on the
@@ -86,7 +88,7 @@ jobs:
           checks=$(curl -sf --max-time 20 -H "Authorization: token $TOKEN" "$API" | jq -r --arg run "/actions/runs/$RUN/" '.statuses[]
               | select(.target_url | contains($run) | not)
               | select(.context == "ci / rust (fmt, clippy, test, scripts) (pull_request)"
-                  or (.context == "ci / gate (docs-only PRs skip the checks) (pull_request)" and .status != "skipped"))
+                  or (.context == "ci / gate (pull_request)" and .status != "skipped"))
               | "\(.context): \(.status)"') \
             || { echo "status lookup failed; running the checks"; checks=""; }
           if [ -n "$checks" ]; then
@@ -98,7 +100,7 @@ jobs:
           fi
 
   gate:
-    name: gate (docs-only PRs skip the checks)
+    name: gate
     needs: undraft
     # The undraft job runs only for edits; a failed one leaves its output empty
     # and the checks run. Release PRs and their version commits on main skip
@@ -112,38 +114,13 @@ jobs:
     container:
       image: git.henriknordvik.com/hn05/ci-shoal:1.100
     outputs:
-      docs_only: ${{ steps.labels.outputs.docs_only }}
       # Name the rust and musl jobs through their matrices (see the top of
       # the file).
       checks: fmt, clippy, test, scripts
       musl_checks: check, identity test
     steps:
-      - name: Read the PR's area labels
-        id: labels
-        env:
-          EVENT: ${{ github.event_name }}
-          ACTION: ${{ github.event.action }}
-          TOKEN: ${{ github.token }}
-          API: ${{ github.api_url }}/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}
-        run: |
-          set -o pipefail
-          if [ "$EVENT" != pull_request ]; then
-            echo "docs_only=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Labels are added right after the PR opens, so only the opened run can race them.
-          if [ "$ACTION" = opened ]; then sleep 15; fi
-          # A failed lookup must not narrow the checks: fall through to running them all.
-          labels=$(curl -sf --max-time 20 -H "Authorization: token $TOKEN" "$API" | jq -r '.labels[].name') \
-            || { echo "label lookup failed; running every check"; labels=""; }
-          areas=$(printf '%s\n' "$labels" | grep '^area/' || true)
-          echo "area labels: ${areas:-none}"
-          if [ "$areas" = "area/docs" ]; then
-            echo "docs-only PR: skipping the checks"
-            echo "docs_only=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "docs_only=false" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Admit the checks
+        run: echo "running the checks"
 
   rust:
     # Named `rust (fmt, clippy, test, scripts)` by its matrix, which waits on
@@ -151,7 +128,6 @@ jobs:
     # a status.
     name: rust
     needs: gate
-    # A failed gate leaves docs_only empty and every check runs.
     if: "!cancelled()"
     strategy:
       matrix:
@@ -163,41 +139,80 @@ jobs:
       run:
         working-directory: ${{ env.SHOAL_WORKSPACE_PATH }}
     env:
-      DOCS_ONLY: ${{ needs.gate.outputs.docs_only }}
+      # Empty outside PRs.
+      PR_BASE: ${{ github.event.pull_request.base.sha }}
     steps:
       - name: Toolchain
-        if: env.DOCS_ONLY != 'true'
         run: .forgejo/scripts/check-toolchain.sh
 
       - name: Release script tests
-        if: env.DOCS_ONLY != 'true'
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
       - name: cargo fmt --check
-        if: env.DOCS_ONLY != 'true'
         run: cargo fmt --all -- --check
 
+      # `all` outside PRs and for a PR whose base the workspace's history
+      # lacks, else the names of the packages the PR can affect, if any.
+      - name: Packages the change affects
+        id: affected
+        run: |
+          set -eu
+          packages=all
+          if [ -n "$PR_BASE" ]; then
+            packages=$(python3 scripts/affected_packages.py "$PR_BASE")
+          fi
+          # One line, the names apart by spaces.
+          packages=$(echo $packages)
+          echo "affected packages: ${packages:-none}"
+          echo "packages=$packages" >> "$GITHUB_OUTPUT"
+
+      # The cargo steps below build and lint the whole workspace: with `-p`,
+      # Cargo would unify the dependencies' features over the selected
+      # packages alone and rebuild the dependencies the seed build has. The
+      # workspace build rebuilds only the packages the PR affects.
       - name: cargo clippy
-        if: env.DOCS_ONLY != 'true'
+        if: steps.affected.outputs.packages != ''
         run: |
           CARGO_BUILD_WARNINGS=deny cargo clippy --locked --all-targets
 
-      - name: cargo check of each crate alone
-        if: env.DOCS_ONLY != 'true'
+      - name: cargo check of each affected crate alone
+        if: steps.affected.outputs.packages != ''
         # A workspace build unifies features; each crate must also build alone.
+        env:
+          PACKAGES: ${{ steps.affected.outputs.packages }}
         run: |
-          for manifest in crates/*/Cargo.toml; do
-            cargo check --locked --manifest-path "$manifest"
-          done
+          set -eu
+          if [ "$PACKAGES" = all ]; then
+            for manifest in crates/*/Cargo.toml; do
+              cargo check --locked --manifest-path "$manifest"
+            done
+          else
+            for package in $PACKAGES; do
+              cargo check --locked -p "$package"
+            done
+          fi
 
       # Nextest runs the tests of every binary in one pool; doc tests are
       # libtest's alone. .config/nextest.toml has the ci profile.
       - name: cargo nextest run
-        if: env.DOCS_ONLY != 'true'
-        run: cargo nextest run --locked --profile ci
+        if: steps.affected.outputs.packages != ''
+        env:
+          PACKAGES: ${{ steps.affected.outputs.packages }}
+        run: |
+          set -eu
+          if [ "$PACKAGES" = all ]; then
+            cargo nextest run --locked --profile ci
+          else
+            filter=$(printf 'package(=%s) | ' $PACKAGES)
+            cargo nextest run --locked --profile ci --no-tests=pass -E "${filter% | }"
+          fi
+
+      - name: Packages build only from their own files
+        if: steps.affected.outputs.packages != ''
+        run: python3 scripts/check_package_sources.py
 
       - name: cargo test --doc
-        if: env.DOCS_ONLY != 'true'
+        if: steps.affected.outputs.packages != ''
         run: cargo test --doc --locked
 
   # Distributed Linux binaries link musl, whose libc types differ from GNU's:
@@ -211,7 +226,6 @@ jobs:
     # status.
     name: musl
     needs: gate
-    # A failed gate leaves docs_only empty and every check runs.
     if: "!cancelled()"
     strategy:
       matrix:
@@ -220,7 +234,6 @@ jobs:
     container:
       image: git.henriknordvik.com/hn05/ci-shoal:1.100
     env:
-      DOCS_ONLY: ${{ needs.gate.outputs.docs_only }}
       # Empty outside PRs.
       PR_BASE: ${{ github.event.pull_request.base.sha }}
       # Runner-mounted volume; a plain directory when unmounted.
@@ -234,9 +247,10 @@ jobs:
       CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       # The checkout is shallow, so it fetches the PR's base commit too for
-      # the identity test's path filter. A base it cannot fetch runs the test.
+      # the identity test's path filter, and deepens both histories until
+      # they meet for the affected packages. A base it cannot fetch runs
+      # everything.
       - name: Checkout
-        if: env.DOCS_ONLY != 'true'
         run: |
           git init -q .
           git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
@@ -246,6 +260,11 @@ jobs:
           if [ -n "$PR_BASE" ]; then
             git -c http.extraheader="$auth" fetch -q --depth 1 origin "$PR_BASE" ||
               echo "could not fetch the PR's base $PR_BASE"
+            for depth in 50 500; do
+              git merge-base "$PR_BASE" HEAD > /dev/null 2>&1 && break
+              git -c http.extraheader="$auth" fetch -q --depth "$depth" origin "${{ github.sha }}" "$PR_BASE" ||
+                break
+            done
           fi
 
       # One step, because the /ci-target slot lasts as long as the step's
@@ -255,10 +274,16 @@ jobs:
       # Cargo rebuilds the workspace's packages rather than take another
       # branch's build of them as fresh.
       - name: musl check and identity test (holding a /ci-target slot)
-        if: env.DOCS_ONLY != 'true'
         shell: bash
         run: |
           set -euo pipefail
+          if [ -n "$PR_BASE" ]; then
+            packages=$(python3 scripts/affected_packages.py "$PR_BASE")
+            if [ -z "$packages" ]; then
+              echo "the PR changes no package: skipping the musl check"
+              exit 0
+            fi
+          fi
           . .forgejo/scripts/lock-target-dir.sh
           git ls-files -z | xargs -0 touch -h --
           musl_target="$(uname -m)-unknown-linux-musl"

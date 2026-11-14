@@ -215,7 +215,7 @@ class ReleaseTests(unittest.TestCase):
     @staticmethod
     def statuses(**states):
         contexts = {"rust": release.REQUIRED_CHECKS[0], "musl": release.REQUIRED_CHECKS[1],
-                    "gate": "ci / gate (docs-only PRs skip the checks) (push)"}
+                    "gate": "ci / gate (push)"}
         return {"statuses": [{"context": contexts[name], "status": state}
                              for name, state in states.items()] or None}
 

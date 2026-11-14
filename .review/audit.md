@@ -102,7 +102,8 @@ wall-clock durations or race short real timeouts, and tests that cannot catch
 a behavior regression, such as assertions on prose the code spells out as a
 literal, as `AGENTS.md` forbids. Check
 that CI runs the checks `AGENTS.md` describes, reuses the prebuilt CI image and
-shared target directory, and skips code checks only for docs-only PRs.
+shared target directory, and skips a PR's code checks only for the packages it
+cannot affect.
 
 ## Performance
 
