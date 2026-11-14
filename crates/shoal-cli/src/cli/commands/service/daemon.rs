@@ -225,7 +225,11 @@ pub(super) async fn stop_daemon(
     let mut waited_for = Vec::new();
     let exiting = loop {
         match client::exit(paths, request, &mut waiting).await? {
-            ExitAnswer::Exiting(exiting) => break exiting,
+            ExitAnswer::Exiting(exiting) => {
+                // Only the exiting daemon knows a granted scope token.
+                crate::env::release_grant();
+                break exiting;
+            }
             ExitAnswer::Refused(work) => return Ok(Stopping::Refused(work)),
             ExitAnswer::Unanswered => {
                 terminate(paths).await?;

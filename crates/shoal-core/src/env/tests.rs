@@ -155,3 +155,12 @@ fn a_workspace_process_a_chat_started_belongs_to_the_workspace() {
     assert_eq!(own_chat(Some("workspace".into()), chat()), None);
     assert_eq!(own_chat(None, None), None);
 }
+
+#[test]
+fn a_granted_scope_token_stands_in_until_it_is_released() {
+    take_handed_scope(ScopeToken::from("own"));
+    act_under_grant(ScopeToken::from("granted"));
+    assert_eq!(scope_token(), Some(ScopeToken::from("granted")));
+    release_grant();
+    assert_eq!(scope_token(), Some(ScopeToken::from("own")));
+}
