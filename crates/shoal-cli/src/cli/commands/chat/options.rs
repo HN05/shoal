@@ -110,7 +110,7 @@ impl Options {
                 None => Narrowing::Requested(PermissionChange::combined(&args.permissions).set),
             },
             priority: args.priority.take(),
-            now: args.now || args.focus,
+            now: args.now,
         }
     }
 
