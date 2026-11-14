@@ -3831,15 +3831,16 @@ with the space. A workspace is removed as `shoal rm` removes it, and its file
 holds its removal record and checkpoint. The export also refuses one whose file
 lies inside it, whose uncommitted files a checkpoint cannot keep, or with chats
 in its worktree or in one below it, and asks
-before releasing holds unless given `--yes`. A workspace already removed is
-exported from its removal record without another removal. The checkpoint
+before releasing holds unless given `--yes`. The checkpoint
 travels as a Git bundle without the commits of the default remote's default
 branch; a checkpoint that branch already has travels without one. Ignored files,
 leases, permits, approvals, grants and holds stay behind; setup rebuilds what the
 workspace needs. A chat's file holds its name, agent and session: the export
 refuses a chat whose agent reported no session, or the one it runs in, and asks
 before stopping the agent unless given `--yes`, and one with workspaces below
-it or in a workspace's worktree; the chat is then removed. The file's manifest names its `kind`, `workspace` or `chat`.
+it or in a workspace's worktree; the chat is then removed. A workspace or chat
+already removed, as by cleanup, is exported from its removal record, which
+stays, under the refusals that still apply, without another removal. The file's manifest names its `kind`, `workspace` or `chat`.
 
 `shoal move export <space>... -o <directory>`, for several spaces or those the
 picker selects when `-o` names an existing directory, and `shoal move export
@@ -3856,7 +3857,7 @@ naming each failed space.
 `shoal move export [space] --keep -o <file>` leaves the space running and writes a
 copy of it instead: a workspace at a new checkpoint, as `shoal checkpoint`
 takes one, or with `--checkpoint N` at an earlier one `shoal restore
-<workspace> --checkpoint` lists, and a chat with its session. It refuses a removed workspace
+<workspace> --checkpoint` lists, and a chat with its session. It refuses a removed space
 and a chat whose agent reported no session. With several spaces, a directory or
 `--all`, it writes a copy of each to `<id>.shoal` in the directory, reporting
 each space it cannot copy and copying the rest. It refuses `--checkpoint` for

@@ -1210,6 +1210,25 @@ fn a_chat_moves_with_its_session_and_continues_it() {
 }
 
 #[test]
+fn a_removed_chat_moves_from_its_removal_record() {
+    let fixture = chat_moving_fixture();
+    let mut id = String::new();
+    talk_until(&fixture, |_, chats| {
+        id = chats[0]["id"].as_str().unwrap().to_owned();
+        fixture.ok(&["rm", &id, "--yes"]);
+    });
+    let file = fixture.root.path().join("talk.shoal");
+    let file = file.to_str().unwrap();
+
+    let exported = fixture.ok(&["move", "export", &id, "-o", file]);
+    assert_eq!(exported["manifest"]["kind"], "chat", "{exported}");
+    assert_eq!(exported["manifest"]["name"], "talk", "{exported}");
+    let removed = fixture.ok(&["restore"])["removed"].clone();
+    assert_eq!(removed[0]["workspace_id"], id.as_str(), "{removed}");
+    import_continues_the_chat(&fixture, file);
+}
+
+#[test]
 fn the_sessions_of_a_profile_only_the_workspace_defines_move_with_it() {
     let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("profiled");

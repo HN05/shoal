@@ -17,20 +17,20 @@ use crate::{
 
 impl Manager {
     /// The workspace or running chat `selector` names, refusing a removed
-    /// workspace, which runs nothing to keep.
+    /// space, which runs nothing to keep.
     pub(super) async fn running_space(&self, selector: &SpaceSelector) -> Result<PresentSpace> {
         let error = match self.space(selector).await {
             Ok(space) => return Ok(space),
             Err(error) => error,
         };
         let removed = self
-            .removed_workspaces()
+            .removed_spaces()
             .await?
             .into_iter()
             .find(|removed| selector.given_id() == Some(&removed.space_id));
         match removed {
             Some(removed) => anyhow::bail!(
-                "workspace {} was removed, so nothing runs to keep; export it without --keep, or shoal restore {} opens it again",
+                "{} was removed, so nothing runs to keep; export it without --keep, or shoal restore {} opens it again",
                 removed.name,
                 removed.space_id
             ),

@@ -47,8 +47,9 @@ struct Prepared {
 
 impl Manager {
     /// Write a space for another Shoal to the new file `file`, removing it
-    /// here first, a running chat once its agent stopped. A selector that names neither exports the latest removal
-    /// record with that name or ID. The daemon writes the file, so closing
+    /// here first, a running chat once its agent stopped. A selector that
+    /// names neither exports the removal record of the workspace or chat
+    /// with that ID, which stays. The daemon writes the file, so closing
     /// the caller's terminal with the space cannot cut the export short; it
     /// checks that it can before ending anything, since its file access can
     /// differ from the caller's.
@@ -148,7 +149,8 @@ impl Manager {
     }
 
     /// Remove the workspace `selector` names for its export, or take the
-    /// latest removal record with that name or ID when none exists.
+    /// removal record of the workspace or chat with that ID when none
+    /// exists, which stays.
     async fn remove_for_export(
         &self,
         selector: &SpaceSelector,
@@ -166,14 +168,34 @@ impl Manager {
             Err(_) => (None, None),
         };
         let removed = self
-            .removed_workspaces()
+            .removed_spaces()
             .await?
             .into_iter()
             .find(|removed| match &removal {
                 Some((id, _)) => &removed.space_id == id,
                 None => selector.given_id() == Some(&removed.space_id),
             })
-            .with_context(|| format!("no space or restorable workspace {selector}"))?;
+            .with_context(|| format!("no space or restorable space {selector}"))?;
+        match removed.kind {
+            RemovedKind::Workspace(_) => {
+                let removal = removal.map(|(_, removal)| removal);
+                self.prepare_removed_workspace(removed, removal, settings)
+                    .await
+            }
+            RemovedKind::Chat { .. } => self.prepare_removed_chat(removed).await,
+        }
+    }
+
+    /// Prepare the package of the workspace `removed` records, which
+    /// `removal` removed for the export when it did, with the `settings`
+    /// describing its agents when they are not its repository's, refusing
+    /// one whose removal could not keep its uncommitted files.
+    async fn prepare_removed_workspace(
+        &self,
+        removed: RemovedSpace,
+        removal: Option<RemovalResult>,
+        settings: Option<Result<Effective>>,
+    ) -> Result<Prepared> {
         ensure!(
             !removed.kept_workspace()?.checkpoint.files_omitted,
             "the removal could not keep the uncommitted files; shoal restore {} opens the workspace here again",
@@ -184,10 +206,54 @@ impl Manager {
             kept_sessions: kept_session_sources(&repo, &removed),
             manifest: Manifest::of(&repo, Source::Workspace(removed)).await?,
             repo,
-            removal: removal.map(|(_, removal)| removal),
+            removal,
             settings,
             continues: None,
         })
+    }
+
+    /// Prepare the package of the chat `removed` records, whose record
+    /// stays.
+    async fn prepare_removed_chat(&self, removed: RemovedSpace) -> Result<Prepared> {
+        let repo = self.movable_removed_chat(&removed).await?;
+        Ok(Prepared {
+            manifest: Manifest::of(&repo, Source::RemovedChat(removed)).await?,
+            repo,
+            removal: None,
+            settings: None,
+            kept_sessions: Vec::new(),
+            continues: None,
+        })
+    }
+
+    /// The repository of the chat `removed` records, which moves to another
+    /// machine, refusing what [`Self::movable_chat`] refuses of a live chat
+    /// that its removal left: a chat that ran in a workspace, one without a
+    /// repository and one whose agent reported no session to continue.
+    async fn movable_removed_chat(&self, removed: &RemovedSpace) -> Result<Repository> {
+        let kept = removed
+            .chat()
+            .context("the removal record is not a chat's")?;
+        if let Some(workspace) = &kept.workspace {
+            anyhow::bail!(
+                "chat {} ran in workspace {}, and shoal move does not move a chat in a workspace",
+                removed.name,
+                workspace.name
+            );
+        }
+        let Some(repository) = &removed.repository_id else {
+            anyhow::bail!(
+                "chat {} had no repository, and shoal move moves only a chat in one",
+                removed.name
+            );
+        };
+        ensure!(
+            kept.session.is_some(),
+            "the agent of chat {} reported no session to continue elsewhere; shoal restore {} opens it here again",
+            removed.name,
+            removed.space_id
+        );
+        self.repository(repository).await
     }
 
     /// Remove `workspace` for its export through the removal path, taking

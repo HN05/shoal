@@ -3347,7 +3347,9 @@ daemon, which outlives a terminal closing with the workspace and checks the
 destination before removing anything. Import records both as a removal of this
 repository, the ref before the records, then runs the normal restore. Moving rather than copying keeps one workspace per
 branch, so two agents never push it or watch its PRs, and the source's removal
-stays restorable when the transfer fails. A copy, which leaves the space
+stays restorable when the transfer fails. A space already removed, a
+chat as a workspace, exports from its removal record, which stays, so it
+remains restorable here. A copy, which leaves the space
 running, keeps that rule by becoming new work: a workspace's copy is one of its
 checkpoints, which the import opens as a new workspace on a branch of its own
 with its issue links but not its PRs or CI runs, and every copied agent, a

@@ -113,20 +113,19 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         children: Vec::new(),
         converted: false,
     };
+    let packaged = PackagedChat {
+        name: chat.name.clone(),
+        agent: chat.agent.clone(),
+        links: chat.links.clone(),
+        mode: chat.mode.clone(),
+        narrowing: chat.narrowing,
+    };
+    let (space, sessions) =
+        chat_package(Some("m1".into()), &chat.id, packaged, chat.session.clone());
     let mut manifest = Manifest {
         remote_url: None,
-        space: Space::Chat(PackagedChat {
-            name: chat.name.clone(),
-            agent: chat.agent.clone(),
-            links: chat.links.clone(),
-            mode: chat.mode.clone(),
-            narrowing: chat.narrowing,
-        }),
-        sessions: Some(Sessions {
-            machine: Some("m1".into()),
-            agents: Vec::new(),
-            last_sessions: vec![chat_session(&chat)],
-        }),
+        space,
+        sessions: Some(sessions),
         session_files: vec![session_file("p/s1.jsonl", 3)],
         copy: None,
     };

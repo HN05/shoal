@@ -378,3 +378,91 @@ async fn a_chat_without_a_session_has_none_to_fork() {
     let chat = manager.chats().await.unwrap().remove(0);
     stop(&manager, &chat).await;
 }
+
+/// A manager with a chat `name` in `mode` about a registered repository,
+/// removed once its agent reported `session`, when it did.
+async fn removed_chat(
+    name: &str,
+    mode: &str,
+    session: Option<&str>,
+) -> (tempfile::TempDir, Arc<Manager>, crate::model::Chat) {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = crate::daemon::test_support::chat(&manager, name, mode, Some(&repo), None).await;
+    if let Some(session) = session {
+        manager
+            .record_chat_session(&chat.id, session.into())
+            .await
+            .unwrap();
+    }
+    manager
+        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .await
+        .unwrap();
+    (root, manager, chat)
+}
+
+/// Export the removed space `id` to `file`.
+async fn export_removed(
+    manager: &Manager,
+    id: &crate::client::space_ids::SpaceId,
+    file: &Path,
+) -> anyhow::Result<ExportedSpace> {
+    manager
+        .export_space(
+            &SpaceSelector::id(id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+            file.to_owned(),
+        )
+        .await
+}
+
+#[tokio::test]
+async fn a_removed_chat_exports_from_its_record_which_stays() {
+    let (root, manager, chat) = removed_chat("notes", "plan", Some("s1")).await;
+    let file = root.path().join("notes.shoal");
+
+    let exported = export_removed(&manager, &chat.id, &file).await.unwrap();
+    assert!(exported.removal.is_none());
+    let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
+    let Space::Chat(packaged) = &import.manifest.space else {
+        panic!("not a chat: {:?}", import.manifest);
+    };
+    assert_eq!(
+        (packaged.name.as_str(), packaged.mode.as_str()),
+        ("notes", "plan")
+    );
+    let sessions = import.manifest.sessions.as_ref().unwrap();
+    assert_eq!(
+        sessions.reported().collect::<Vec<_>>(),
+        [(&crate::agent::Agent::from("claude"), &"s1".into())]
+    );
+    assert_eq!(
+        sessions.last_sessions[0].execution.as_str(),
+        chat.id.as_str()
+    );
+    let kept = manager.removed_spaces().await.unwrap();
+    assert_eq!(
+        kept.iter()
+            .map(|removed| &removed.space_id)
+            .collect::<Vec<_>>(),
+        [&chat.id]
+    );
+}
+
+#[tokio::test]
+async fn a_removed_chat_without_a_session_is_not_exported() {
+    let (root, manager, chat) = removed_chat("talk", "chat", None).await;
+    let file = root.path().join("talk.shoal");
+
+    let refused = export_removed(&manager, &chat.id, &file).await.unwrap_err();
+    let restore = format!("shoal restore {}", chat.id);
+    assert!(format!("{refused:#}").contains(&restore), "{refused:#}");
+    assert!(!file.exists());
+    assert_eq!(manager.removed_spaces().await.unwrap().len(), 1);
+}

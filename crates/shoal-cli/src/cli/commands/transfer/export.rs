@@ -30,7 +30,7 @@ use directory::DirectoryReport;
 pub(super) use directory::ExportDirectory;
 
 /// `shoal move export`: end the space here, or take an already removed
-/// workspace, and write it to `file`. Several spaces, or any written to a
+/// one, and write it to `file`. Several spaces, or any written to a
 /// directory, go to a file each in it. The destination is checked before a
 /// picker opens.
 pub(super) async fn export(
@@ -200,7 +200,7 @@ impl Output {
     }
 }
 
-/// Export the removed workspace `selector` names, which needs no removal.
+/// Export the removed space `selector` names, which needs no removal.
 async fn export_removed(
     ctx: &Context,
     selector: &SpaceSelector,

@@ -2,9 +2,10 @@
 //! there, which `shoal move import` opens. Every package holds the space's
 //! agents with their sessions and the sessions' files; a workspace's also
 //! holds its removal record and a Git bundle of its checkpoint, and a chat's
-//! its name.
+//! its name, from the live chat or its removal record.
 use crate::client::agent::AgentSessionId;
 use crate::client::execution_ids::ExecutionId;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
@@ -25,7 +26,7 @@ use crate::{
     config::Effective,
     execution::recovery::{Copied, LastSession, Record, StoppedAgent},
     git::{self, default_branch::DefaultBranchLookup},
-    model::{Chat, RemovedSpace, Repository},
+    model::{Chat, RemovedKind, RemovedSpace, Repository},
 };
 
 /// The first line of a package names its format and the version of it,
@@ -53,8 +54,8 @@ fn version(manifest: &Manifest) -> u32 {
     }
 }
 
-/// What a package is made from: a removed workspace, or a chat whose agent
-/// ended.
+/// What a package is made from: a removed workspace, a chat whose agent
+/// ended, or a removed chat's removal record.
 #[derive(Debug, Clone)]
 #[allow(
     clippy::large_enum_variant,
@@ -63,6 +64,7 @@ fn version(manifest: &Manifest) -> u32 {
 pub enum Source {
     Workspace(RemovedSpace),
     Chat(Chat),
+    RemovedChat(RemovedSpace),
 }
 
 /// A session file to export: where it is, and the path it keeps in the
@@ -229,11 +231,6 @@ impl ManifestExt for Manifest {
                 (Space::Workspace(packaged), sessions)
             }
             Source::Chat(chat) => {
-                let sessions = Sessions {
-                    machine,
-                    agents: Vec::new(),
-                    last_sessions: vec![chat_session(&chat)],
-                };
                 let packaged = PackagedChat {
                     name: chat.name,
                     agent: chat.agent,
@@ -241,7 +238,20 @@ impl ManifestExt for Manifest {
                     mode: chat.mode,
                     narrowing: chat.narrowing,
                 };
-                (Space::Chat(packaged), sessions)
+                chat_package(machine, &chat.id, packaged, chat.session)
+            }
+            Source::RemovedChat(removed) => {
+                let RemovedKind::Chat { chat: kept } = removed.kind else {
+                    anyhow::bail!("{} was not a chat", removed.space_id);
+                };
+                let packaged = PackagedChat {
+                    name: removed.name,
+                    agent: kept.agent,
+                    links: removed.links,
+                    mode: kept.mode,
+                    narrowing: kept.narrowing,
+                };
+                chat_package(machine, &removed.space_id, packaged, kept.session)
             }
         };
         Ok(Self {
@@ -389,23 +399,34 @@ pub fn continue_chat(chat: &Chat, repository: &str) -> Option<String> {
     ))
 }
 
-/// The session `chat`'s agent continues, as the one last session of its
-/// package.
-fn chat_session(chat: &Chat) -> LastSession {
-    LastSession {
-        narrowing: chat.narrowing,
+/// The package of the chat `id`, `packaged`, on `machine`, whose agent
+/// continues `session` as the package's one last session.
+fn chat_package(
+    machine: Option<String>,
+    id: &SpaceId,
+    packaged: PackagedChat,
+    session: Option<AgentSessionId>,
+) -> (Space, Sessions) {
+    let last = LastSession {
+        narrowing: packaged.narrowing,
         // A chat's agent runs in no execution; its chat's ID keys it.
-        execution: ExecutionId::from(chat.id.to_string()),
-        agent: chat.agent.clone(),
-        session: chat.session.clone(),
+        execution: ExecutionId::from(id.to_string()),
+        agent: packaged.agent.clone(),
+        session,
         moved: false,
         copied: None,
         converted: false,
         origin: None,
         stop: None,
         model: Default::default(),
-        mode: chat.mode.clone(),
-    }
+        mode: packaged.mode.clone(),
+    };
+    let sessions = Sessions {
+        machine,
+        agents: Vec::new(),
+        last_sessions: vec![last],
+    };
+    (Space::Chat(packaged), sessions)
 }
 
 /// A Git bundle of a package's checkpoint, in a directory of its own because

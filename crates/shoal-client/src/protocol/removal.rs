@@ -96,7 +96,7 @@ pub enum RemovalMethod {
     /// returned, once the caller has put them in place.
     DropRestoredSessions { workspace: SpaceSelector },
     /// End a space here, removing a workspace or stopping a chat's agent,
-    /// or take a removed workspace, and write it for another Shoal to the
+    /// or take a removed space, and write it for another Shoal to the
     /// new file `file`.
     ExportSpace {
         space: SpaceSelector,
