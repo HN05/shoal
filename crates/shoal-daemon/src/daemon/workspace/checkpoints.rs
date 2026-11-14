@@ -309,12 +309,8 @@ impl Manager {
         checkpoint: &Checkpoint,
         own_execution: Option<&ExecutionId>,
     ) -> Result<()> {
-        if let Some(execution) = self.other_execution(&workspace.id, own_execution).await? {
-            bail!(
-                "execution {execution} runs in the workspace; stop it with shoal stop {} first",
-                workspace.number
-            );
-        }
+        self.ensure_no_other_execution(workspace, own_execution)
+            .await?;
         self.verify_worktree(workspace).await?;
         let path = &workspace.path;
         ensure!(
@@ -341,6 +337,22 @@ impl Manager {
             checkpoint.number,
             ignored.join(", ")
         );
+        Ok(())
+    }
+
+    /// Refuse a change to the files of `workspace` while an execution other
+    /// than `own` runs in it, naming the command that stops it.
+    pub(super) async fn ensure_no_other_execution(
+        &self,
+        workspace: &Workspace,
+        own: Option<&ExecutionId>,
+    ) -> Result<()> {
+        if let Some(execution) = self.other_execution(&workspace.id, own).await? {
+            bail!(
+                "execution {execution} runs in the workspace; stop it with shoal stop {} first",
+                workspace.number
+            );
+        }
         Ok(())
     }
 
