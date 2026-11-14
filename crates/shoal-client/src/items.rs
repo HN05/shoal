@@ -39,6 +39,16 @@ pub async fn link(
     request(daemon, method).await
 }
 
+/// Link the issues, opened and related items `links` carries to `space`,
+/// as a moved space brings them; the caller links its PRs.
+pub async fn relink(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    links: crate::model::SpaceLinks,
+) -> Result<crate::links::Linked> {
+    request(daemon, ItemMethod::RelinkSpace { space, links }).await
+}
+
 /// Unlink `space`'s items of `relation`, only those of `kind` or the one
 /// `item` names when given.
 pub async fn unlink(

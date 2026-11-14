@@ -13,7 +13,7 @@ use crate::{
     },
     config,
     forge::items::{link::ItemKind, list::Search, reference::ItemInput},
-    model::{LinkedItem, Relation, Repository},
+    model::{LinkedItem, Repository, SpaceLinks},
 };
 
 /// The registered repository of the issue `input` names, else the one
@@ -70,13 +70,13 @@ pub(super) fn on(topic: Topic, issue: &Issue) -> Topic {
         name: Some(issue.title.clone()),
         relaunch: topic.relaunch.on_issue(&issue.url),
         subject: Some(issue.subject()),
-        links: vec![(
-            Relation::Assigned,
-            LinkedItem {
+        links: SpaceLinks {
+            issues: vec![LinkedItem {
                 url: issue.url.clone(),
                 title: Some(issue.title.clone()),
-            },
-        )],
+            }],
+            ..SpaceLinks::default()
+        },
         ..topic
     }
 }

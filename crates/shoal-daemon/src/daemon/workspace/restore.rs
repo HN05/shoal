@@ -3,7 +3,6 @@
 //! record expires.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
-use crate::daemon::links::issue::Assigner;
 use crate::execution::recovery::LastSessionExt;
 use shoal_refs::{BranchName, CommitId};
 use std::path::Path;
@@ -19,8 +18,8 @@ use crate::{
     daemon::events::EventCause,
     git,
     model::{
-        CheckpointCause, LinkedItem, OpenedWorkspace, Relation, RemovedWorkspace, Repository,
-        RestoredWorkspace, SpaceLinks, Workspace,
+        CheckpointCause, OpenedWorkspace, RemovedWorkspace, Repository, RestoredWorkspace,
+        Workspace,
     },
     time::UnixTime,
     transfer::CarriedSessionFile,
@@ -139,7 +138,8 @@ impl Manager {
             },
             None => self.restore_branch_workspace(&removed, files).await?,
         };
-        let mut warnings = self.relink(&opened.workspace.id, &removed.links).await;
+        // Only the user restores a removed workspace.
+        let mut warnings = (self.relink_space(&opened.workspace.id, &removed.links, None)).await;
         let session_files = self
             .hand_over_imported_sessions(&removed, &opened.workspace.id)
             .await
@@ -367,30 +367,6 @@ impl Manager {
         Ok(removed)
     }
 
-    /// Link the restored workspace's issues and recorded items again; the
-    /// caller links its PRs. Each issue is assigned on the forge as the
-    /// account it was, and Shoal takes on the assignments it had made. Each
-    /// failure becomes a warning.
-    async fn relink(&self, workspace_id: &SpaceId, links: &SpaceLinks) -> Vec<String> {
-        let mut warnings = Vec::new();
-        for issue in &links.issues {
-            let (selector, input) = (SpaceSelector::id(workspace_id), issue.url.clone().into());
-            let (title, assigner) = (issue.title.clone(), assigned_as(links, &issue.url));
-            match (self.set_issue(&selector, &input, title, assigner)).await {
-                Ok(assigned) => warnings.extend(assigned),
-                Err(error) => warnings.push(format!("cannot link issue {}: {error:#}", issue.url)),
-            }
-        }
-        let assignees = links.assignees.clone();
-        if let Err(error) = self.claim_assignees(workspace_id, assignees).await {
-            warnings.push(format!("cannot record the issues' assignees: {error:#}"));
-        }
-        if let Err(error) = self.record_items(workspace_id, recorded(links)).await {
-            warnings.push(format!("cannot link opened and related items: {error:#}"));
-        }
-        warnings
-    }
-
     /// The removal record to reopen, kept with its checkpoints for at least
     /// [`RESTORE_CLAIM`] in the same transaction, so expiry cannot delete
     /// them while the restore runs.
@@ -564,27 +540,6 @@ fn find(db: &Connection, id: &SpaceId) -> Result<Option<RemovedWorkspace>> {
     Ok(record
         .map(|record| serde_json::from_str(&record))
         .transpose()?)
-}
-
-/// The account `links` records the issue `url` assigned as; the user's own
-/// where it records none, since only the user restores a removed workspace.
-fn assigned_as(links: &SpaceLinks, url: &crate::forge::items::reference::ItemRef) -> Assigner {
-    (links.assignees.iter())
-        .find(|assignee| assignee.url == *url)
-        .map_or(Assigner::User, |assignee| assignee.account)
-}
-
-/// The opened and related items to record again from `links`, each under the
-/// first relation it lists: a record taken before an item had one relation
-/// can also list an assigned item as opened or related, or an item as both,
-/// which keeps the assignment, or else opened, as the migration does.
-fn recorded(links: &SpaceLinks) -> Vec<(Relation, LinkedItem)> {
-    (links.relations().into_iter())
-        .filter(|(relation, item)| {
-            *relation != Relation::Assigned
-                && links.relations_of(&item.url).first() == Some(relation)
-        })
-        .collect()
 }
 
 #[cfg(test)]

@@ -273,6 +273,58 @@ async fn a_restored_space_takes_back_the_assignee_shoal_added_before() {
     );
 }
 
+/// The links of a space whose issue 7 the agent account had, which Shoal
+/// added.
+fn carried(fixture: &Fixture) -> crate::model::SpaceLinks {
+    let url = format!("http://{}/team/repo/issues/7", fixture.server.host);
+    let url: ItemRef = url.parse().unwrap();
+    crate::model::SpaceLinks {
+        issues: vec![crate::model::LinkedItem {
+            url: url.clone(),
+            title: None,
+        }],
+        assignees: vec![IssueAssignee {
+            url,
+            account: Assigner::Agent,
+            added: true,
+        }],
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn a_relinked_space_assigns_as_the_account_its_links_carry_for_the_user() {
+    let agent = "agent_token = \"agent\"\n";
+    let fixture = Fixture::start(&["fix"], &[], "", agent).await;
+    let workspace = &fixture.workspaces[0];
+    let links = carried(&fixture);
+    let warnings = (fixture.manager.relink_space(&workspace.id, &links, None)).await;
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(fixture.change_tokens(), ["token agent"]);
+}
+
+#[tokio::test]
+async fn a_scoped_relink_assigns_as_the_agent_and_takes_on_nothing() {
+    let agent = "agent_token = \"agent\"\n";
+    let fixture = Fixture::start(&["fix"], &["shoal-user"], "", agent).await;
+    let workspace = &fixture.workspaces[0];
+    let mut links = carried(&fixture);
+    links.assignees[0].account = Assigner::User;
+    let caller = crate::daemon::scope::Caller {
+        space_id: workspace.id.clone(),
+        execution: None,
+    };
+    let warnings = (fixture
+        .manager
+        .relink_space(&workspace.id, &links, Some(&caller)))
+    .await;
+    assert!(warnings.is_empty(), "{warnings:?}");
+    // The login was there already and the claim was ignored, so nothing
+    // takes it back.
+    fixture.unlink(workspace).await;
+    assert!(fixture.changes().is_empty());
+}
+
 #[tokio::test]
 async fn linking_an_issue_others_are_assigned_names_them() {
     let fixture = Fixture::new(&["fix"], &["ann", "bob"], "").await;

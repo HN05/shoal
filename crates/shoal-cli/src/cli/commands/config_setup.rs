@@ -86,7 +86,7 @@ pub(in crate::cli::commands) fn topic(config: &Path) -> chat::Topic {
         mode: modes::ModeName::SETUP,
         subject: Some(Subject::told(subject(config))),
         linked_issue: None,
-        links: Vec::new(),
+        links: Default::default(),
         workspace: None,
         tells_resumed: false,
     }

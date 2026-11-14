@@ -10,7 +10,7 @@ use rusqlite::Connection;
 mod assignees;
 
 pub(crate) use crate::client::links::issue::Registration;
-pub(crate) use crate::model::Assigner;
+pub(crate) use crate::model::{Assigner, IssueAssignee};
 use crate::{
     daemon::{
         events::{self, EventKind},

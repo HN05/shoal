@@ -25,7 +25,7 @@ use crate::{
     ai::IntegrationKind,
     cli::{context::Context, ui},
     config::{Effective, modes, named_commands::Commands, templates},
-    model::{Chat, ChatHome, LinkedItem, Relation, RemovedWorkspace, Repository, Workspace},
+    model::{Chat, ChatHome, Relation, RemovedWorkspace, Repository, SpaceLinks, Workspace},
     protocol::ConfigTarget,
     tools::{ensure_program, program_available},
 };
@@ -131,7 +131,7 @@ pub(in crate::cli) struct ChatLaunch {
     pub model: ModelChoice,
     pub args: Vec<OsString>,
     /// What the chat is linked to once recorded, such as the issue it plans.
-    pub links: Vec<(Relation, LinkedItem)>,
+    pub links: SpaceLinks,
 }
 
 impl ChatLaunch {
@@ -141,31 +141,36 @@ impl ChatLaunch {
     }
 }
 
-/// Assign the recorded `chat` the issue its launch names, if any. A failure
-/// is told and leaves the chat to start without it.
-pub(in crate::cli) async fn link_chat(
-    ctx: &Context,
-    chat: &Chat,
-    links: &[(Relation, LinkedItem)],
-) {
+/// Link the recorded `chat` to what its launch names, such as the issue it
+/// starts on or what a moved chat carries. A failure is told and leaves the
+/// chat to start without it.
+pub(in crate::cli) async fn link_chat(ctx: &Context, chat: &Chat, links: &SpaceLinks) {
     let space = SpaceSelector::id(&chat.id);
-    for (relation, item) in links {
+    let relinked = crate::client::items::relink(&ctx.paths, space.clone(), links.clone());
+    match relinked.await {
+        Ok(linked) => warn_chat(&linked.warnings),
+        Err(error) => eprintln!("shoal: the chat's issues were not linked: {error:#}"),
+    }
+    for pr in &links.prs {
         let linked = crate::client::items::link(
             &ctx.paths,
             &space,
-            *relation,
-            item.kind(),
-            item.url.clone().into(),
-            item.title.clone(),
+            Relation::Assigned,
+            pr.kind(),
+            pr.url.clone().into(),
+            pr.title.clone(),
         );
         match linked.await {
-            Ok(linked) => {
-                for warning in &linked.warnings {
-                    eprintln!("shoal: {warning}");
-                }
-            }
-            Err(error) => eprintln!("shoal: {} was not linked to the chat: {error:#}", item.url),
+            Ok(linked) => warn_chat(&linked.warnings),
+            Err(error) => eprintln!("shoal: {} was not linked to the chat: {error:#}", pr.url),
         }
+    }
+}
+
+/// Tell what linking a chat's items warned of.
+fn warn_chat(warnings: &[String]) {
+    for warning in warnings {
+        eprintln!("shoal: {warning}");
     }
 }
 

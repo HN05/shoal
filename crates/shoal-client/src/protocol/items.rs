@@ -21,6 +21,12 @@ pub enum ItemMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         title: Option<String>,
     },
+    /// Link the issues, opened and related items a moved space carries,
+    /// each assigned issue as the account it was assigned as.
+    RelinkSpace {
+        space: SpaceSelector,
+        links: crate::model::SpaceLinks,
+    },
     /// Unlink the relation's items, optionally only one kind or one item.
     UnlinkItems {
         space: SpaceSelector,

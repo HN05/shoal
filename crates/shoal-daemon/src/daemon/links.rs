@@ -14,6 +14,7 @@ pub mod proposals;
 mod pushes;
 mod raw;
 mod reads;
+mod relink;
 mod revert;
 mod run_approval;
 mod runs;

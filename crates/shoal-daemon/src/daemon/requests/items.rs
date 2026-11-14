@@ -218,6 +218,14 @@ pub(super) async fn handle(
                 .link_item(&workspace, kind, &item, relation, title, caller)
                 .await?,
         ),
+        ItemMethod::RelinkSpace { space, links } => {
+            let id = manager.link_space(&space).await?.id().to_owned();
+            let warnings = manager.relink_space(&id, &links, caller).await;
+            Body::Linked(crate::client::links::Linked {
+                title_error: None,
+                warnings,
+            })
+        }
         ItemMethod::UnlinkItems {
             space: workspace,
             relation,
@@ -307,6 +315,9 @@ impl Scoped for ItemMethod {
                 ..
             } => Some(change_context_space(manager, caller, context).await?),
             ItemMethod::LinkItem {
+                space: workspace, ..
+            }
+            | ItemMethod::RelinkSpace {
                 space: workspace, ..
             }
             | ItemMethod::UnlinkItems {

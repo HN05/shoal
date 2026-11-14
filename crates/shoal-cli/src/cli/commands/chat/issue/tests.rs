@@ -41,5 +41,5 @@ fn a_chat_on_an_issue_is_named_after_its_title_without_asking() {
         ),
         (Some("id"), Some(Some(issue.url.clone().into())))
     );
-    assert_eq!(topic.links[0].0, Relation::Assigned);
+    assert_eq!(topic.links.issues[0].url, issue.url);
 }

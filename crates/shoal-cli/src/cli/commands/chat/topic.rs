@@ -12,7 +12,7 @@ use crate::{
     },
     config::templates,
     forge::items::reference::ItemRef,
-    model::{ChatHome, LinkedItem, Relation, Repository, SpaceLinks, Workspace},
+    model::{ChatHome, Repository, SpaceLinks, Workspace},
 };
 
 /// What a chat is about beyond its repository, and how it reopens in a new tab.
@@ -30,7 +30,7 @@ pub(in crate::cli::commands) struct Topic {
     /// restored without its subject take.
     pub linked_issue: Option<templates::IssueFields>,
     /// What the chat is linked to once recorded, such as the issue it plans.
-    pub links: Vec<(Relation, LinkedItem)>,
+    pub links: SpaceLinks,
     /// The workspace whose worktree the chat runs in, instead of the
     /// repository's checkout.
     pub workspace: Option<Workspace>,
@@ -51,7 +51,7 @@ impl Topic {
             mode: mode.clone(),
             subject: None,
             linked_issue: None,
-            links: Vec::new(),
+            links: SpaceLinks::default(),
             workspace: None,
             tells_resumed: false,
         }
@@ -67,7 +67,7 @@ impl Topic {
             mode: mode.clone(),
             subject: None,
             linked_issue: None,
-            links: Vec::new(),
+            links: SpaceLinks::default(),
             workspace: None,
             tells_resumed: false,
         }
@@ -88,7 +88,7 @@ impl Topic {
             mode: mode.clone(),
             subject: None,
             linked_issue: None,
-            links: Vec::new(),
+            links: SpaceLinks::default(),
             workspace: Some(workspace),
             tells_resumed: false,
         }
@@ -111,7 +111,7 @@ impl Topic {
         };
         Self {
             relaunch: Relaunch::start(mode, linked),
-            links: links.relations(),
+            links: links.clone(),
             linked_issue: templates::IssueFields::linked(links),
             ..topic
         }
