@@ -1,7 +1,7 @@
 //! A space's permissions as its mode and the config give them, from
 //! `[modes.NAME.permissions]`, `[permissions]` and the built-in modes'
 //! defaults. Each value is ordered from the narrowest to the widest, `deny` <
-//! `propose` < `direct`.
+//! `propose` < `gate` < `direct`.
 use anyhow::Result;
 
 pub use crate::client::config::permissions::*;

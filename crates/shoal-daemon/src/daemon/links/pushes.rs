@@ -39,7 +39,7 @@ fn denied(push: Permission<Pushes>) -> anyhow::Error {
 impl Manager {
     /// Whether the push of the workspace's branch that `shoal pr open` runs
     /// waits for approval: one from a scoped caller whose `push` permission
-    /// is `"propose"`, unless the remote has the branch's commit already.
+    /// is `"propose"` or `"gate"`, unless the remote has the branch's commit already.
     /// `"deny"` refuses it.
     pub async fn branch_push_held(
         &self,
@@ -96,7 +96,10 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<PushSpecification> {
         anyhow::ensure!(
-            self.scoped_pushes(workspace, caller).await?.value == Pushes::Propose,
+            matches!(
+                self.scoped_pushes(workspace, caller).await?.value,
+                Pushes::Propose | Pushes::Gate
+            ),
             "the push permission no longer holds back this push; run shoal pr open again"
         );
         branch_push(workspace, proposer.and_then(|p| p.agent.clone())).await
@@ -115,7 +118,7 @@ impl Manager {
         match pushes.value {
             Pushes::Direct => return Ok(PushOutcome::Direct),
             Pushes::Deny => return Err(denied(pushes)),
-            Pushes::Propose => {}
+            Pushes::Propose | Pushes::Gate => {}
         }
         self.ensure_workspace_not_pushing(&workspace).await?;
         anyhow::ensure!(

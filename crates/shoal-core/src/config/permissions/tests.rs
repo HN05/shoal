@@ -149,6 +149,46 @@ fn a_given_permission_applies_as_given_and_only_from_one_who_holds_it() {
 }
 
 #[test]
+fn gate_narrows_between_direct_and_propose() {
+    let settings = settings("", "[permissions]\npush = 'gate'\nmerge = 'gate'\n");
+    let gated = resolve(&settings, None).unwrap();
+    let proposing = resolve(&settings, None)
+        .unwrap()
+        .given(&PermissionsConfig::assigned(&["push=propose".to_owned()]).unwrap());
+    let direct = resolve(&settings, None).unwrap().given(
+        &PermissionsConfig::assigned(&["push=direct".to_owned(), "merge=direct".to_owned()])
+            .unwrap(),
+    );
+    assert_eq!(gated.below(&direct).push.value, Pushes::Gate);
+    assert_eq!(direct.below(&gated).merge.value, Opening::Gate);
+    assert_eq!(gated.below(&proposing).push.value, Pushes::Propose);
+    // A space holding `gate` gives it, but not `direct`; one holding
+    // `propose` gives neither.
+    let gate = PermissionsConfig::assigned(&["push=gate".to_owned()]).unwrap();
+    assert!(gate.ensure_held(&gated).is_ok());
+    assert!(gate.ensure_held(&proposing).is_err());
+    let wider = PermissionsConfig::assigned(&["push=direct".to_owned()]).unwrap();
+    assert!(wider.ensure_held(&gated).is_err());
+    // The gate decides only where the narrowest governing key is `gate`.
+    use PermissionKey::{Merge, Push};
+    assert!(gated.gated(&[Merge, Push]));
+    assert!(!proposing.gated(&[Merge, Push]));
+    assert!(gated.withheld(&[Push]).is_some());
+}
+
+#[test]
+fn no_built_in_mode_gates_a_key() {
+    let settings = settings("", "");
+    for name in crate::config::modes::built_in_modes().keys() {
+        let permissions = resolve(&settings, mode(&name.as_str().into())).unwrap();
+        assert!(
+            (permissions.entries()).all(|(_, value, _)| value != Opening::Gate.as_str()),
+            "{name}"
+        );
+    }
+}
+
+#[test]
 fn a_dropped_key_gives_the_value_it_falls_back_to() {
     let settings = settings("", "");
     let master = resolve(&settings, mode(&"orchestrate".into())).unwrap();

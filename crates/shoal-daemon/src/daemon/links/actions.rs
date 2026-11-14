@@ -809,7 +809,7 @@ impl Manager {
         let permissions = self
             .caller_permissions(caller, &workspace.repository_id)
             .await?;
-        Ok(permissions.pr_open.value == Opening::Propose)
+        Ok(permissions.pr_open.value != Opening::Direct)
     }
 }
 

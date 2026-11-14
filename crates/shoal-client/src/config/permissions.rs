@@ -1,6 +1,7 @@
 //! `[permissions]` and `[modes.NAME.permissions]`: what a scoped agent may do
 //! at once, after approval, or not at all. Each value is ordered from the
-//! narrowest to the widest, `deny` < `propose` < `direct`. A space has its
+//! narrowest to the widest, `deny` < `propose` < `gate` < `direct`, where
+//! `gate` asks the gate agent for the approval `propose` asks the user for. A space has its
 //! mode's, each no wider than its parent's, then each key a `--permission`
 //! given to its agent sets, as given.
 use anyhow::{Context, Result, bail};
@@ -18,6 +19,7 @@ states!(
     /// approval.
     Opening {
         Propose => "propose",
+        Gate => "gate",
         Direct => "direct",
     }
 );
@@ -26,9 +28,10 @@ states!(
     #[derive(PartialOrd, Ord)]
     /// Whether a scoped caller's push happens at once, waits for approval,
     /// or is refused.
-    Pushes {
+    Pushes: Variants {
         Deny => "deny",
         Propose => "propose",
+        Gate => "gate",
         Direct => "direct",
     }
 );
@@ -40,6 +43,7 @@ states!(
     OtherRepositories {
         Deny => "deny",
         Propose => "propose",
+        Gate => "gate",
         Direct => "direct",
     }
 );
@@ -484,12 +488,30 @@ impl Permissions {
             .map(|&key| self.cited(key))
     }
 
-    /// What `key` lets the space do, whichever of its values the key takes.
+    /// What `key` lets the space do, whichever of its values the key takes:
+    /// `gate` asks for approval as `propose` does, of the gate first.
     pub fn acting(&self, key: PermissionKey) -> Acting {
+        match self.level(key) {
+            Pushes::Deny => Acting::Deny,
+            Pushes::Propose | Pushes::Gate => Acting::Propose,
+            Pushes::Direct => Acting::Direct,
+        }
+    }
+
+    /// Whether the gate decides an action `keys` govern: the narrowest of
+    /// their values is `gate`. One `propose` among them asks the user.
+    pub fn gated(&self, keys: &[PermissionKey]) -> bool {
+        let narrowest = keys.iter().map(|&key| self.level(key)).min();
+        narrowest == Some(Pushes::Gate)
+    }
+
+    /// The value of `key` on the scale every key's values share, which
+    /// `push`'s values span.
+    fn level(&self, key: PermissionKey) -> Pushes {
         let (value, _) = self.get(key);
-        (Acting::ALL.iter().copied())
-            .find(|acting| acting.as_str() == value)
-            .expect("every value is deny, propose or direct")
+        (Pushes::ALL.iter().copied())
+            .find(|level| level.as_str() == value)
+            .expect("every value is deny, propose, gate or direct")
     }
 
     /// The permission `key` as a refusal cites it, with where it comes from.

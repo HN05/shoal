@@ -115,7 +115,7 @@ impl Manager {
             let permissions = self
                 .caller_permissions(caller, space.repository_id())
                 .await?;
-            if destination.opening(&permissions)? == Opening::Propose {
+            if destination.opening(&permissions)? != Opening::Direct {
                 let settings = self.space_settings(&space).await?;
                 let required = destination.required(&settings);
                 return (self.propose_issue_at(
@@ -246,7 +246,7 @@ impl Manager {
             None => Opening::Direct,
         };
         let (forge, required) = (&destination.forge, destination.required(&settings));
-        if let Some(proposer) = proposer.filter(|_| opening == Opening::Propose) {
+        if let Some(proposer) = proposer.filter(|_| opening != Opening::Direct) {
             let space = LinkSpace::from(workspace.clone());
             return (self.propose_issue_at(&space, &destination, required, issue, link, proposer))
                 .await;
@@ -363,6 +363,7 @@ impl IssueDestination {
                 other.cited("issue_other_repositories")
             ),
             OtherRepositories::Propose => Ok(Opening::Propose),
+            OtherRepositories::Gate => Ok(Opening::Gate),
             OtherRepositories::Direct => Ok(Opening::Direct),
         }
     }
