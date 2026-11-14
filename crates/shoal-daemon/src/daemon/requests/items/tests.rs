@@ -115,10 +115,12 @@ async fn agents_approve_prs_as_the_review_account_as_pr_review_allows() {
         .unwrap();
     let forge =
         format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\nagent_token = \"agent\"\n");
-    let direct = "[modes.plan.permissions]\npr_review = \"direct\"\n";
+    let direct = "[modes.plan.permissions]\npr_review = \"direct\"\n\
+                  [modes.worker.permissions]\npr_review = \"deny\"\n";
     test_support::configure(&manager, &format!("{forge}{direct}")).await;
     let reviewing = test_support::chat(&manager, "reviewing", "plan", Some(&repo), None).await;
     let proposing = test_support::chat(&manager, "proposing", "chat", Some(&repo), None).await;
+    let denied = test_support::chat(&manager, "denied", "worker", Some(&repo), None).await;
     let caller = |id: &crate::client::space_ids::SpaceId| Caller {
         space_id: id.clone(),
         execution: None,
@@ -135,6 +137,14 @@ async fn agents_approve_prs_as_the_review_account_as_pr_review_allows() {
             .map(|request| request.header("Authorization").map(str::to_owned))
             .collect::<Vec<_>>()
     };
+
+    // A denied space is refused for that, before anything is read.
+    let refused = format!("{:#}", approve(&denied.id, "8").await.err().unwrap());
+    assert!(
+        refused.contains("pr_review permission is \"deny\""),
+        "{refused}"
+    );
+    assert!(server.received().is_empty());
 
     // Without a review_token nothing is sent.
     let refused = format!("{:#}", approve(&reviewing.id, "8").await.err().unwrap());

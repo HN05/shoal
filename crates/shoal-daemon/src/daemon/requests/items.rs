@@ -301,6 +301,10 @@ impl Scoped for ItemMethod {
             } => {
                 if review.has_verdict() {
                     let repository = reached_change_context(manager, caller, context).await?;
+                    let key = PermissionKey::PrReview;
+                    manager
+                        .refuse_denied(caller, key, Some(&repository))
+                        .await?;
                     let verdict = manager.verdict_action(context, item.clone(), review, repository);
                     manager
                         .authorize_action(Some(caller), verdict.await?)
