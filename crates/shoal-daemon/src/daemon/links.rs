@@ -20,6 +20,7 @@ mod run_approval;
 mod runs;
 pub(crate) mod space;
 mod stack;
+mod verdict;
 mod view;
 pub mod wait;
 
