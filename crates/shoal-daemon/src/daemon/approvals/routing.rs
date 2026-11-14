@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, Transaction, params};
 
 use super::{
-    ApprovalRequest, ApprovalRequestExt, DecisionStatus, Target, proposals,
+    ApprovalRequest, ApprovalRequestExt, DecisionStatus, Specification, Target, proposals,
     store::{CANDIDATES, by_key, decode_record, record_row, write_record},
 };
 use crate::client::space_names::SpaceSelector;
@@ -328,10 +328,14 @@ impl Manager {
         Ok(())
     }
 
-    /// The repository `request`'s action is in: a proposed issue's, else
-    /// that of the space that made it.
+    /// The repository `request`'s action is in: a proposed issue's, the
+    /// one an action names, else that of the space that made it.
     async fn request_repository(&self, request: &ApprovalRequest) -> Result<Option<RepositoryId>> {
-        Ok(match &request.repository_id {
+        let named = match &request.specification {
+            Specification::Action(action) => action.repository.as_ref(),
+            _ => request.repository_id.as_ref(),
+        };
+        Ok(match named {
             Some(repository) => Some(repository.clone()),
             None => (self.space_by_id(&request.space_id).await?)
                 .repository_id()

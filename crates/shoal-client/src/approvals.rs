@@ -273,6 +273,10 @@ pub struct HoldSpecification {
 #[serde(deny_unknown_fields)]
 pub struct ActionSpecification {
     pub action: String,
+    /// The registered repository the action is in, in whose config a
+    /// space without a repository resolves the permissions of its decision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<RepositoryId>,
 }
 
 impl fmt::Display for Specification {

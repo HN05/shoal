@@ -403,3 +403,37 @@ async fn a_chat_without_a_repository_takes_an_action_as_its_repository_allows() 
     let error = denied.await.unwrap_err();
     assert!(error.downcast_ref::<Undecided>().is_none(), "{error:#}");
 }
+
+#[tokio::test]
+async fn a_decider_without_a_repository_decides_as_the_action_s_repository_allows() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap();
+    let config = "[modes.orchestrate.permissions]\nadmin = 'propose'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let below = chat(&manager, "below", "chat", None, Some(&master.id)).await;
+    let setup = Action::new(PermissionKey::Admin, "shoal setup --skip 3").in_repository(repo.id);
+    let request = undecided(
+        manager
+            .authorize_action(Some(&caller(&below.id)), setup)
+            .await,
+    );
+    // The repository holds the master session's admin to propose, so it
+    // may only deny or pass up what its global config would let it approve.
+    let mastering = caller(&master.id);
+    let approving = manager.decide_approval_as(
+        Some(&mastering),
+        request.number,
+        true,
+        None,
+        Default::default(),
+        None,
+    );
+    let refused = format!("{:#}", approving.await.unwrap_err());
+    assert!(refused.contains("admin"), "{refused}");
+}

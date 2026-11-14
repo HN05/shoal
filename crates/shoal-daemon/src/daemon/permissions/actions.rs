@@ -278,6 +278,7 @@ fn action_request(caller: &Caller, action: Action) -> ApprovalRequest {
         &action.action,
         Specification::Action(ActionSpecification {
             action: action.action.clone(),
+            repository: action.repository,
         }),
         Lifetime::Lease,
         Some(&reason),
