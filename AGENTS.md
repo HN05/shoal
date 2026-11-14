@@ -168,7 +168,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   sync, listing issues and PRs of any repository, opening and changing those of the own repository (for a chat without a repository, every registered one, under its permissions there), opening issues
   in other repositories as their `issue_other_repositories` permission allows, rerunning
   or cancelling their CI jobs, starting, rerunning or cancelling CI runs of the default branch and of the branches of the workspaces their scope reaches in the repository they act in, and reading the own repository's, and GET requests to any repository's forge API, or
-  other methods to the own repository's where their `api_writes` permission allows them, are allowed, except approving or requesting changes on a PR.
+  other methods to the own repository's where their `api_writes` permission allows them, are allowed, and approving or requesting changes on a PR
+  as their `pr_review` permission allows, as the host's `review_token`.
   Scoped callers may run, view, cancel and answer the reviews of their own workspace and those below it;
   with `[review] require_for_pr` or `require_for_ready`, a workspace process's new-PR `pr open` and its
   ready mark are refused until a finished review covers HEAD with every finding resolved.

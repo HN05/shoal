@@ -193,6 +193,8 @@ permission_keys! {
     decide: Decide => "decide", Allowed;
     /// Approving CI runs that wait for approval.
     ci_approve: CiApprove => "ci_approve", Acting;
+    /// Approving and requesting changes on PRs.
+    pr_review: PrReview => "pr_review", Acting;
 }
 
 /// Refuse `value` of `key` where it is wider than `held`.
@@ -226,6 +228,7 @@ impl PermissionsConfig {
         notifications: Some(Allowed::Deny),
         decide: Some(Allowed::Deny),
         ci_approve: Some(Acting::Propose),
+        pr_review: Some(Acting::Propose),
     };
 
     /// The defaults of a mode that coordinates rather than edits: it opens
@@ -247,6 +250,7 @@ impl PermissionsConfig {
         notifications: Some(Allowed::Direct),
         decide: Some(Allowed::Direct),
         ci_approve: Some(Acting::Direct),
+        pr_review: Some(Acting::Direct),
         ..Self::COORDINATING
     };
 

@@ -305,8 +305,9 @@ allows;
 `issue ls` and `pr ls` take `--repo` too. `shoal pr revert [<number>]`
 opens a PR that undoes a merged one; where the forge cannot, it opens it from a
 child workspace already marked done, which goes once the revert merges.
-Workspace processes cannot approve or request changes on a PR:
-`pr review --approve` and `--request-changes` are refused. `pr merge`, its
+`pr review --approve` and `--request-changes` follow the space's
+`pr_review` [permission](#permitted-actions), as the host's `review_token`,
+which must be set and must not be the account that opened the PR. `pr merge`, its
 `--auto` and `--cancel-auto`, and `pr delete-branch` follow the space's
 `merge` permission, a merge bound to the PR's head commit, and `ci approve`
 its `ci_approve` [permission](#permitted-actions).
@@ -360,7 +361,8 @@ workspaces, which reopen below your space (a permission you set in config
 only to a value your space holds, and `config reset`, `install`, `setup` and
 `repo setup` stay the user's), `limits` starting agents regardless of the limits, with
 `--now`, `--focus` or `queue start`, `ci_approve` approving CI runs that wait
-for approval, `user_holds` releasing the user's holds
+for approval, `pr_review` approving and requesting changes on PRs, bound to
+the PR's head and the review's text, `user_holds` releasing the user's holds
 and removing what the user holds, and `daemon` the daemon's service
 commands and `shoal update` while a daemon of this Shoal answers to decide
 it. `notifications`, `deny` or `direct`, lets a
@@ -371,8 +373,8 @@ With `propose` the command exits 2 with `approval_pending` and the request,
 which goes to the space above whose own value is `direct`, or the user; once
 approved, the same command proceeds once. A master session has every one
 at `direct` but `daemon`, which it proposes, as it proposes `api_writes`;
-other modes propose `admin`, `limits`, `ci_approve` and `user_holds` and
-are denied the rest.
+other modes propose `admin`, `limits`, `ci_approve`, `pr_review` and
+`user_holds` and are denied the rest.
 
 ## Links and watches
 

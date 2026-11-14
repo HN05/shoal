@@ -170,7 +170,7 @@ instead of the PR delivery guidance below.
   linking and watching CI runs of the own repository,
   merge acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks,
   assignment completion and its withdrawal, listing issues and PRs of any repository, opening and changing
-  those of the own repository except approving or requesting changes, rerunning or cancelling their CI jobs,
+  those of the own repository, approving or requesting changes only as their `pr_review` permission allows, rerunning or cancelling their CI jobs,
   starting, rerunning or cancelling CI runs of the default branch and of the branches of the workspaces their scope reaches, and reading the own repository's,
   GET requests to any repository's forge API, or other methods to the own repository's where
   their `api_writes` permission allows them, own-repository sync and
@@ -319,7 +319,9 @@ instead of the PR delivery guidance below.
   targeting the head branch of one of its merged PRs, and queues a watch update; it never rebases or pushes.
   Forge writes are retargeting, the daemon's typed issue and PR actions and
   `shoal forge api` requests, sent through the REST transport; scoped callers
-  merge only as their `merge` permission allows, as the agent account. `shoal forge api` paths stay under the forge's API root. Every forge
+  merge only as their `merge` permission allows, as the agent account, and approve or request
+  changes only as their `pr_review` permission allows, as `review_token`, which never falls back and is
+  refused before any request when its account opened the PR. `shoal forge api` paths stay under the forge's API root. Every forge
   request sends the `[machine.forges."<host>"]` token of the repository's own
   host (`user_token` for the user; `agent_token` for the agent account, whose
   reads fall back to `user_token` but whose changes never do), validated, on curl's stdin, fetched

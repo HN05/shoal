@@ -2441,7 +2441,9 @@ with its arguments, which the command reports with exit 2 and
 request is approved, the same action proceeds once under every other check,
 and taking it again asks again; an approved command's own requests take
 what the same key governs without asking again. `ci_approve` governs
-approving CI runs that wait for approval; `decide`, which is
+approving CI runs that wait for approval, and `pr_review` approving and
+requesting changes on PRs, bound to the PR's head commit and the review's
+text; `decide`, which is
 `"deny"` or `"direct"`, governs deciding the requests of the spaces below as
 you would; `notifications`, also `"deny"` or `"direct"`, governs reading, clearing and watching your
 notifications, Shoal's own log, and the untracked worktrees, cleanup errors
@@ -4273,11 +4275,16 @@ Requesting changes needs a body; any other review needs a body, a line comment
 or both. Shoal reads the PR's diff at its head commit and refuses the whole
 review before sending anything when a comment is on a file the diff does not
 change or a line none of its hunks shows, listing each such comment; the review
-is then posted of that commit. Workspace processes can only comment, as the
-agent account, and their watches do not report the review back; `--approve`
-and `--request-changes` are refused to them like `merge`, and use your own
-login. A forge that refuses a verdict, such as on your own PR, fails with its
-message. GitHub, Forgejo and Gitea take a review in one request. GitLab drafts a
+is then posted of that commit. Workspace processes comment as the agent
+account, and their watches do not report the review back. `--approve` and
+`--request-changes` use your own login, and for workspace processes, as their
+[`pr_review` permission](#permitted-actions) allows, the host's
+[`review_token`](config.md#forges), with no other login to fall back on:
+Shoal refuses their verdict, before sending any request, on a host without
+one or on a PR its account opened, naming `review_token`, and posts it of the
+head commit it read, which an approval also binds. A forge that refuses a
+verdict, such as on your own PR, fails with its message. A space's log
+records each review it posted, by its verdict. GitHub, Forgejo and Gitea take a review in one request. GitLab drafts a
 note on each line, deleting the drafts when one fails, then publishes them with
 the body as a summary and requested changes as your reviewer state, then
 approves; since publishing takes every draft the account has on the merge

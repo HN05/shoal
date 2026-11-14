@@ -65,7 +65,8 @@ impl Manager {
 
     /// Apply `action` for the workspace or chat and record it as its own
     /// change: the user's decisions with the user's login, unless a scoped
-    /// `caller` takes one as its permissions allow, as the agent account.
+    /// `caller` takes one as its permissions allow, as the review account
+    /// for a review's verdict and the agent account otherwise.
     async fn space_item_action(
         &self,
         space: LinkSpace,
@@ -80,6 +81,7 @@ impl Manager {
         let (number, url) = (item.number().get(), item.to_string());
         let account = match caller {
             None if users_decision(&action) => self.user_account(),
+            Some(_) if has_verdict(&action) => self.review_account(),
             _ => self.agent_account(),
         };
         // Held from before the change, so a poll that observes it records
@@ -378,9 +380,13 @@ fn users_decision(action: &Action) -> bool {
         | Action::AutoMerge { .. }
         | Action::CancelAutoMerge
         | Action::DeleteBranch => true,
-        Action::Review(review) => review.has_verdict(),
-        _ => false,
+        _ => has_verdict(action),
     }
+}
+
+/// Whether `action` is a review that approves or requests changes.
+fn has_verdict(action: &Action) -> bool {
+    matches!(action, Action::Review(review) if review.has_verdict())
 }
 
 /// The activity keys of what `action` posted that are the agent's own, so

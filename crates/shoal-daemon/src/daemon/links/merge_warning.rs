@@ -32,7 +32,7 @@ impl Manager {
         context: &ItemContext,
         input: Option<ItemInput>,
     ) -> Result<Option<MergeWarning>> {
-        let (forge, url) = self.pull_to_merge(context, input).await?;
+        let (forge, url) = self.context_pull(context, input).await?;
         let number = url.pull()?;
         let recorded = self.recorded_for_pull(url.clone()).await?;
         if recorded.is_empty() {
@@ -69,7 +69,7 @@ impl Manager {
             matches!(action, Action::Merge { .. } | Action::AutoMerge { .. }),
             "only a merge confirms a merge warning"
         );
-        let (_, url) = self.pull_to_merge(context, input).await?;
+        let (_, url) = self.context_pull(context, input).await?;
         let current = self
             .merge_warning(context, Some(url.clone().into()))
             .await?;
@@ -113,7 +113,7 @@ impl Manager {
         input: Option<ItemInput>,
         action: &Action,
     ) -> Result<String> {
-        let (forge, url) = self.pull_to_merge(context, input).await?;
+        let (forge, url) = self.context_pull(context, input).await?;
         let head = match action {
             Action::Merge { .. } | Action::AutoMerge { .. } => {
                 (forge.pull_request(&self.agent_account(), &url).await?).head_commit
@@ -126,7 +126,7 @@ impl Manager {
 
     /// The forge and the PR `input` names in the repository of `context`, or
     /// the space's linked PR.
-    async fn pull_to_merge(
+    pub(super) async fn context_pull(
         &self,
         context: &ItemContext,
         input: Option<ItemInput>,

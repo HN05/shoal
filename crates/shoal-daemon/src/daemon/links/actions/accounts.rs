@@ -1,5 +1,6 @@
 //! The forge and the accounts item actions go out with: the user's own
-//! logins for reads and the user's decisions, the agent account for the rest.
+//! logins for reads and the user's decisions, the review account for a
+//! scoped caller's verdicts, the agent account for the rest.
 use crate::client::{repository_ids::RepositoryId, space_ids::SpaceId};
 use anyhow::{Context, Result};
 
@@ -85,6 +86,16 @@ impl Manager {
         Account::agent(forges.logins(Whose::Agent), forges.logins(Whose::User))
             .remembering(self.forge_memories.of(&identity))
             .naming_missing(Whose::Agent.missing())
+    }
+
+    /// The account scoped callers approve and request changes on PRs as:
+    /// the hosts' review tokens, with no other login to fall back on.
+    pub(in crate::daemon::links) fn review_account(&self) -> Account {
+        let forges = &self.config().machine.forges;
+        let identity = format!("review {}", forges.identity(Whose::Review));
+        Account::user(forges.logins(Whose::Review))
+            .remembering(self.forge_memories.of(&identity))
+            .naming_missing(Whose::Review.missing())
     }
 
     /// The forge of the workspace's `origin`.

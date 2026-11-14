@@ -291,12 +291,23 @@ impl Scoped for ItemMethod {
             ItemMethod::MergeWarning { context, .. } => {
                 read_context_space(manager, caller, context).await?
             }
+            // Approving and requesting changes are the `pr_review`
+            // permission's.
             ItemMethod::ItemAction {
+                context,
+                item,
                 action: Action::Review(review),
                 ..
-            } if review.has_verdict() => bail!(
-                "approving and requesting changes are the user's decision; ask them with shoal alerts send"
-            ),
+            } => {
+                if review.has_verdict() {
+                    let repository = reached_change_context(manager, caller, context).await?;
+                    let verdict = manager.verdict_action(context, item.clone(), review, repository);
+                    manager
+                        .authorize_action(Some(caller), verdict.await?)
+                        .await?;
+                }
+                Some(change_context_space(manager, caller, context).await?)
+            }
             // Reads go out as the agent account wherever they run.
             ItemMethod::ListItems { context, .. }
             | ItemMethod::Labels { context, .. }
@@ -322,7 +333,6 @@ impl Scoped for ItemMethod {
                     | Action::Comment { .. }
                     | Action::EditComment(_)
                     | Action::Thread(_)
-                    | Action::Review(_)
                     | Action::React(_)
                     | Action::Close
                     | Action::Reopen

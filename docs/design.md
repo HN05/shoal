@@ -2337,11 +2337,16 @@ patches, never assumed, since reverting a guess can undo someone else's work. Ac
 daemon, where scope applies: they act as the workspace's agent account, except
 an issue's assignee for a link the user's terminal makes, while
 merging, deleting a PR's branch and a review's verdict stay the user's
-decisions, so scoped callers can comment in a review but not merge, delete a
-branch, approve or request changes, and those act as the user's own login.
+decisions unless a permission gives them to a scoped caller: `merge` its
+merges and branch deletions, as the agent account, and `pr_review` its
+verdicts, as the host's `review_token`, a login of its own, since agents open
+their PRs as the agent account and forges take no verdict from a PR's
+author; the user's own act as the user's login.
 Deleting the branch of a merged or closed PR refuses a branch that no longer
-points to the PR's head, since its other commits are in no PR. A forge that refuses a verdict, such as on its author's
-own PR, says so itself rather than Shoal guessing first. A review's line
+points to the PR's head, since its other commits are in no PR. A forge that refuses the user's verdict, such as on its author's
+own PR, says so itself rather than Shoal guessing first; a scoped verdict is
+refused before any request when `review_token` is missing or its account
+opened the PR, so the refusal names the setting to change. A review's line
 comments are checked against the PR's diff before anything is sent, so a
 review is refused whole rather than posted in part. Review
 threads are named by any of their comments' IDs. Reactions use GitHub's names
