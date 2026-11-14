@@ -148,8 +148,9 @@ impl Layout {
             }
             _ => {}
         }
-        // A copy sits in a directory of its own, below the files attached with it.
-        for directory in path.ancestors().skip(1).take(2) {
+        // A copy sits in a directory of its own, below the files attached
+        // with it, below those of its space's ID, which each go once empty.
+        for directory in path.ancestors().skip(1).take(3) {
             if std::fs::remove_dir(directory).is_err() {
                 break;
             }
@@ -204,7 +205,7 @@ impl Layout {
         if !self.dir.is_own() {
             return Ok(());
         }
-        self.delete_copies(copies)?;
+        copies.iter().try_for_each(|copy| self.delete_copy(copy))?;
         for directory in self.kept(space_id) {
             ensure!(
                 self.contains(&directory),
@@ -212,20 +213,6 @@ impl Layout {
                 directory.display()
             );
             remove_dir(&directory)?;
-        }
-        Ok(())
-    }
-
-    /// Delete the `copies`, and the directory of the ID each sits under once
-    /// that is empty, as for the copies a restored workspace keeps under the
-    /// ID it had before.
-    fn delete_copies(&self, copies: &[PathBuf]) -> Result<()> {
-        for copy in copies {
-            self.delete_copy(copy)?;
-            // A copy sits in its own directory, in its message's, in its ID's.
-            if let Some(directory) = copy.ancestors().nth(3).filter(|dir| self.contains(dir)) {
-                let _ = std::fs::remove_dir(directory);
-            }
         }
         Ok(())
     }

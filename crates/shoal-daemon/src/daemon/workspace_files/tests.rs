@@ -1786,7 +1786,9 @@ async fn removal_deletes_the_directories_of_files_already_deleted() {
         .unwrap();
     let directory = added.path.ancestors().nth(3).unwrap().to_owned();
     assert!(directory.ends_with(workspace.id.as_str()));
+    assert!(!directory.exists(), "deleting its last copy empties it");
     // A leftover no record names, as a failed discard leaves.
+    std::fs::create_dir_all(&directory).unwrap();
     std::fs::write(directory.join("leftover"), "").unwrap();
     manager
         .remove_workspace(

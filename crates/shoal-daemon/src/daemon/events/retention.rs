@@ -1,7 +1,7 @@
 //! How long a space's events stay: while the space exists, and once it is
 //! gone for its repository's `cleanup.restore.retention_days` after its
 //! removal, as its checkpoints and attached files do. A removal record or
-//! a removed chat's unexpired files keep them longer. Shoal's own events
+//! a removed space's unexpired files keep them longer. Shoal's own events
 //! stay for the global retention.
 use crate::client::repository_ids::RepositoryId;
 use std::{collections::HashMap, time::Duration};
