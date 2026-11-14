@@ -697,7 +697,7 @@ becomes the `fork` remote and `remote.pushDefault`, which Git, `pr open` and
 cleanup all honour. It goes through `repo rm`'s path once nothing of it has been
 left for the unattended grace period: no workspace, queued agent, chat, pending
 issue proposal, kept branch or borrowed resource, nothing `shoal restore` could
-use, no files a removed chat keeps, and no work in its checkout that the remotes' advertised branches and tags
+use, no files a removed space keeps, and no work in its checkout that the remotes' advertised branches and tags
 lack. The final
 check records the removal in the same transaction, under the gates creation
 takes, and queue and chat records refuse a repository being removed. An existing
@@ -3044,12 +3044,11 @@ user; it does not assert that work was merged. A `done` that would change
 nothing and an `undone` without a completion fail, so a misplaced signal is
 reported instead of passing silently. An assignment that ends with a finding
 rather than something to merge hands back files with its completion. They are
-the workspace's results among its attached files, which stay when cleanup
-removes it, for as long as its removal record, so the user or the parent's
-agent can read them after the worktree is gone; the workspace's other attached
-files go with it. Files an agent sends the user with an alert or a question
-stay the same way, since the user may read the alert after the workspace is
-gone, and outlive the alert or question as a message's files outlive the
+the workspace's results among its attached files, which, like every attached
+file, stay for `cleanup.restore.retention_days` after cleanup removes it, so
+the user or the parent's agent can read them after the worktree is gone. Files
+an agent sends the user with an alert or a question stay the same way, since
+the user may read the alert after the workspace is gone, and outlive the alert or question as a message's files outlive the
 message: clearing or withdrawing an alert and answering a question leave them
 among the space's files, which the user already sees and Quay may show, until
 `shoal files rm` or the retention removes them. The alert or question names them by their records rather than by path,
@@ -3073,11 +3072,14 @@ space that exists, never a removed workspace or a queued launch, which are
 selected by ID. `--add-blocker` is the exception: it names blockers, where
 a bare number stays an issue, as `shoal start` takes one. A chat owns attached
 files as a workspace does, since its
-agent hands the user reports and pages too; they stay for the same retention
-after the chat is removed, as a chat has no worktree to clean up and its files
-are what remain of it. Files are keyed by their owner's ID, which a workspace and a
+agent hands the user reports and pages too. A removed space keeps every
+attached file by one rule, whatever its kind: they stay for the same retention
+as its checkpoints, since an agent's session may refer to any of them and a
+chat has no worktree to clean up, so its files are what remain of it.
+Files are keyed by their owner's ID, which a workspace and a
 chat never share, so no kind tells them apart: an owner is gone when neither
-has the ID, and its removal or end record says how long its files stay. Each attached file records who attached it: the user, or the
+has the ID, and a record of its own says how long its files stay, apart from
+a workspace's removal record, which a disposable workspace lacks. Each attached file records who attached it: the user, or the
 agent whose process tree sent the request, by both its execution, which pins
 the run, and the session it reported, which outlives a restart or resume and
 names the conversation a client shows the file in. A chat's agent runs

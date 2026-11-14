@@ -2874,7 +2874,7 @@ there and opens the PR from the fork. Forking needs GitHub, Forgejo or Gitea.
 The cleanup sweep removes a contribution repository as `repo rm` does once it has
 had no workspace, queued agent, chat, pending issue proposal, kept branch or
 resource another repository's workspace borrows, no unexpired
-[checkpoint](#checkpoints-and-restore), removal record or removed chat's
+[checkpoint](#checkpoints-and-restore), removal record or removed space's
 [files](#attached-files), and no changed files,
 stash, Git operation under way or commits in its checkout that no branch or tag
 its remotes advertise has, for
@@ -5400,7 +5400,7 @@ shoal done --attach report.md    # Hand back a file with the completion
 shoal files add notes.md [--space S]      # Attach files without a message
 shoal files add 'chart.html#Latency by region'  # Attach a file with a title
 shoal files rm [FILE...] [--space S]      # Delete a space's files, or those with these names
-shoal files rm --all                      # Delete the files of every idle workspace and removed chat
+shoal files rm --all                      # Delete the files of every idle workspace and removed space
 ```
 
 `shoal files` lists the files attached to a space, a workspace or
@@ -5416,13 +5416,10 @@ how it came (`message` for a file sent with `shoal messages send --attach`,
 `shoal alerts send --attach` and `shoal questions ask --attach`), when, and the path of Shoal's copy in the repository
 directory's `.attachments`, or for a chat without a repository that of the
 `root_dir` it started in.
-Results, and the files sent with alerts and
-questions, outlive the workspace: they stay for as
-long as its removal record, `cleanup.restore.retention_days` like its
+A space's files outlive it: they stay for `cleanup.restore.retention_days`
+after its removal, like a workspace's
 [checkpoints](#checkpoints-and-restore), and `shoal files <id>` still lists
-them, with when they go, and deletes them with `rm`. A chat's files outlive
-the chat the same way: they stay for `cleanup.restore.retention_days` after it
-is removed, listed under its ID. Disk space cleanup
+them, with when they go, and deletes them with `rm`. Disk space cleanup
 deletes them sooner when nothing else frees enough space. A space is named by
 the workspace's or chat's number or ID, a removed one's by ID; run from a chat's agent outside any workspace, `shoal files`, `add`
 and `rm` act on its chat.
@@ -5439,13 +5436,13 @@ this have no `attached_by`. Every way of attaching takes a file as `PATH` or
 128 characters, says what the file is, and clients show the name where there is
 none. `shoal files add` copies files of at most 100 MiB
 there without telling the workspace's agents; adding the same file again keeps
-its copy, and its title unless a new one is given. The other copies stay until the workspace is removed, or until
-`shoal files rm` deletes them sooner: all of a workspace's, or with file names
-only the copies of those files. It asks first when an agent or command runs in
+its copy, and its title unless a new one is given. `shoal files rm` deletes
+copies sooner: all of a space's, or with file names only the copies of those
+files. It asks first when an agent or command runs in
 the workspace, or the chat runs. `--all` deletes the files of every workspace
-and chat where none runs, after asking; noninteractive and JSON calls confirm with `--yes`. Sending files
+and chat where none runs, and of every removed space, after asking; noninteractive and JSON calls confirm with `--yes`. Sending files
 again copies any deleted copy anew. Scoped agents may list, add and delete the
-files of their own workspace and the spaces below it, and the results of a
+files of their own workspace and the spaces below it, and the files of a
 removed space that was below one of those, but not use `--all` or
 reach a chat's files.
 

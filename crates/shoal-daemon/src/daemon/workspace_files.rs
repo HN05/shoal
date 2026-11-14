@@ -154,8 +154,7 @@ pub(crate) async fn keep(
 }
 
 /// Copies of `files` that the workspace or chat `space_id` hands the user
-/// with `message`, apart from its other files since they outlive its
-/// removal, made off the async runtime. Callers hold the gate of the
+/// with `message`, among its results, made off the async runtime. Callers hold the gate of the
 /// repository's attached files.
 async fn copy_for_user(
     layout: Layout,
@@ -168,8 +167,8 @@ async fn copy_for_user(
 }
 
 /// Delete the copies of files that were refused, such as ones for a
-/// workspace removed while they were made. Failure only logs: the workspace's
-/// removal deletes whatever is left.
+/// workspace removed while they were made. Failure only logs, as the
+/// refusal is what the sender hears.
 pub(crate) async fn discard(kept: Kept) {
     let discarded = tokio::task::spawn_blocking(move || kept.discard()).await;
     if let Err(error) = discarded
@@ -280,8 +279,7 @@ impl Manager {
     }
 
     /// Copies of the files `results` that `space` hands back with its
-    /// completion, recorded as its results attached by `attacher`, which
-    /// outlive its removal.
+    /// completion, recorded as its results attached by `attacher`.
     pub(crate) async fn keep_results(
         &self,
         space: &Space,

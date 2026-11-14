@@ -274,49 +274,25 @@ pub(super) fn forget_space(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<(
     Ok(())
 }
 
-/// Keep the files of the removed space `space_id` that outlive it, which
-/// keep its last name, until `expires_at`, and move those it was the parent
-/// of to its own parent, in the transaction that deletes its record, before
-/// the record goes: a chat keeps every one, a workspace those it handed the
-/// user.
+/// Keep the files of the removed space `space_id`, which keep its last
+/// name, until `expires_at`, and move those it was the parent of to its own
+/// parent, in the transaction that deletes its record, before the record
+/// goes.
 pub(crate) fn keep_removed(
     tx: &Transaction<'_>,
     space_id: &SpaceId,
     expires_at: crate::time::UnixTime,
 ) -> Result<()> {
-    match crate::daemon::links::space::is_chat(tx, space_id)? {
-        true => keep_ended_chat(tx, space_id, expires_at),
-        false => forget_removed(tx, space_id, expires_at),
-    }
-}
-
-/// Keep the files of the chat `chat_id`, which keep its last name, until
-/// `expires_at`, and move those it was the parent of to its own parent.
-fn keep_ended_chat(
-    tx: &Transaction<'_>,
-    chat_id: &SpaceId,
-    expires_at: crate::time::UnixTime,
-) -> Result<()> {
     tx.execute(
-        "UPDATE workspace_files SET space=(SELECT name FROM chats WHERE id=?1)
+        "UPDATE workspace_files SET space=(SELECT name FROM spaces WHERE id=?1)
             WHERE space_id=?1",
-        [chat_id],
+        [space_id],
     )?;
-    reparent(tx, chat_id)?;
-    keep_until(tx, chat_id, expires_at)
-}
-
-/// Record that the files the space `space_id` keeps, if any, stay until
-/// `expires_at`, before its record goes.
-fn keep_until(
-    tx: &Transaction<'_>,
-    space_id: &SpaceId,
-    expires_at: crate::time::UnixTime,
-) -> Result<()> {
+    reparent(tx, space_id)?;
     tx.execute(
         "INSERT OR REPLACE INTO removed_space_files(space_id,chat,expires_at)
-            SELECT ?1,?1 IN (SELECT id FROM chats),?2
-            WHERE EXISTS(SELECT 1 FROM workspace_files WHERE space_id=?1)",
+            SELECT id,kind='chat',?2 FROM spaces WHERE id=?1
+                AND EXISTS(SELECT 1 FROM workspace_files WHERE space_id=?1)",
         params![space_id, expires_at],
     )?;
     Ok(())
@@ -331,28 +307,6 @@ pub(super) fn forget_expired(db: &mut Connection) -> Result<()> {
         [],
     )?;
     Ok(())
-}
-
-/// Forget the records of the workspace `workspace_id` but those of the files
-/// it handed the user, which keep its last name until `expires_at`, and move
-/// those it was the parent of to its own parent.
-fn forget_removed(
-    tx: &Transaction<'_>,
-    workspace_id: &SpaceId,
-    expires_at: crate::time::UnixTime,
-) -> Result<()> {
-    let [result, alert, question] = FileSource::KEPT;
-    tx.execute(
-        "DELETE FROM workspace_files WHERE space_id=?1 AND source NOT IN (?2,?3,?4)",
-        params![workspace_id, result, alert, question],
-    )?;
-    tx.execute(
-        "UPDATE workspace_files SET space=(SELECT name FROM workspaces WHERE id=?1)
-            WHERE space_id=?1",
-        [workspace_id],
-    )?;
-    reparent(tx, workspace_id)?;
-    keep_until(tx, workspace_id, expires_at)
 }
 
 /// Move the records of files whose space was below the space `id`, which

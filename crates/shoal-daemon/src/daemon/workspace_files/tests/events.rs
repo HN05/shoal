@@ -185,7 +185,7 @@ async fn every_deletion_records_one_removed_event_per_file() {
         )
         .await
         .unwrap();
-    // Removal deletes all but the results.
+    // Removal keeps every file.
     manager
         .mark_done(
             &SpaceSelector::id(&child.id),
@@ -242,14 +242,14 @@ async fn every_deletion_records_one_removed_event_per_file() {
         [
             (Removed, "idle.md", FileSource::Added),
             (Removed, "deleted.md", FileSource::Added),
-            (Removed, "removed.md", FileSource::Added),
             (Removed, "expired.md", FileSource::Result),
             (Removed, "low-disk.md", FileSource::Result),
+            (Removed, "removed.md", FileSource::Added),
             (Removed, "kept.md", FileSource::Result),
         ]
     );
     // A removed workspace's events keep its identity.
-    let gone = &removed[3];
+    let gone = &removed[2];
     assert_eq!(gone.workspace_id.as_ref(), Some(&expired.id));
     assert_eq!(gone.file.workspace.as_deref(), Some("expired"));
     assert_eq!(gone.repository_id.as_ref(), Some(&workspace.repository_id));

@@ -19,20 +19,13 @@ states!(FileSource {
     Message => "message",
     /// Added with `shoal files add`.
     Added => "added",
-    /// Handed back with `shoal done`; kept after the workspace's removal for
-    /// as long as its removal record.
+    /// Handed back with `shoal done`.
     Result => "result",
-    /// Sent to the user with `shoal alerts send`; kept as results are.
+    /// Sent to the user with `shoal alerts send`.
     Alert => "alert",
-    /// Sent to the user with `shoal questions ask`; kept as results are.
+    /// Sent to the user with `shoal questions ask`.
     Question => "question",
 });
-
-impl FileSource {
-    /// The sources whose files a workspace hands the user, which stay after
-    /// its removal for as long as its removal record.
-    pub const KEPT: [Self; 3] = [Self::Result, Self::Alert, Self::Question];
-}
 
 /// Who attached a file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -194,7 +187,7 @@ pub struct AttachedFile {
     /// None for a file attached before Shoal recorded who attached it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attached_by: Option<Attacher>,
-    /// When the file of a removed workspace or removed chat is deleted.
+    /// When the file of a removed space is deleted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<crate::time::UnixTime>,
 }

@@ -229,7 +229,7 @@ async fn results_name_the_agent_that_handed_them_back() {
 }
 
 #[tokio::test]
-async fn files_sent_with_messages_are_listed_until_removal() {
+async fn files_sent_with_messages_are_listed_until_they_expire() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
     let file = temp.path().join("crash.log");
@@ -274,6 +274,28 @@ async fn files_sent_with_messages_are_listed_until_removal() {
         )
         .await
         .unwrap();
+    // The removed workspace's files stay, listed under its ID.
+    let kept = manager
+        .attached_files(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+    let [kept] = kept.as_slice() else {
+        panic!("{kept:?}");
+    };
+    assert_eq!(
+        (&kept.path, kept.expires_at.is_some()),
+        (&listed.path, true)
+    );
+    assert!(listed.path.exists());
+    manager
+        .store
+        .run(|db| {
+            db.execute("UPDATE removed_space_files SET expires_at=0", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.expire_results().await.unwrap();
     assert!(!listed.path.exists());
     let left = manager
         .store
@@ -1686,3 +1708,57 @@ async fn a_chats_agent_attaches_as_its_chat_outside_any_workspace() {
 }
 
 mod events;
+
+#[tokio::test]
+async fn a_disposable_workspaces_files_outlive_it_for_the_retention_period() {
+    let (temp, manager) = manager().await;
+    let receiver = workspace(&temp, &manager).await;
+    let disposable = manager
+        .create_workspace_with(
+            &receiver.repository_id,
+            "scratch".into(),
+            None,
+            crate::daemon::workspace::NewWorkspace {
+                options: crate::protocol::CreationOptions {
+                    disposable: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    let file = temp.path().join("notes.md");
+    std::fs::write(&file, "notes").unwrap();
+    let added = manager
+        .add_attached_files(
+            &SpaceSelector::id(&disposable.id),
+            vec![file.into()],
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    let [added] = added.as_slice() else {
+        panic!("{added:?}");
+    };
+    manager
+        .remove_workspace(
+            &SpaceSelector::id(&disposable.id),
+            crate::removal::UnsavedWork::default(),
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    manager.expire_results().await.unwrap();
+    let kept = manager
+        .attached_files(&SpaceSelector::id(&disposable.id))
+        .await
+        .unwrap();
+    let [kept] = kept.as_slice() else {
+        panic!("{kept:?}");
+    };
+    assert_eq!(kept.path, added.path);
+    assert_eq!(kept.workspace.as_deref(), Some("scratch"));
+    assert!(kept.expires_at.is_some());
+    assert!(added.path.exists());
+}

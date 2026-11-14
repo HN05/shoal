@@ -108,7 +108,7 @@ instead of the PR delivery guidance below.
   then rechecks, under the gates workspace creation takes and in the transaction
   that records the removal, that no workspace, queued agent, chat, pending issue
   proposal, kept branch, borrowed resource, unexpired checkpoint, removal
-  record or removed chat's files, or checkout work the remotes' advertised branches and tags lack remains;
+  record or removed space's files, or checkout work the remotes' advertised branches and tags lack remains;
   removing one with any of them is a blocker.
   Workspace removal confirmations list uncommitted changes
   and untracked files with Git status codes, bounding the preview and reporting omitted

@@ -24,7 +24,7 @@ pub enum FileMethod {
     /// Delete the attached files of a workspace or chat, only those with one
     /// of `names` and the records `ids` when there are any; without one,
     /// those of every workspace without a running agent or command and of
-    /// every removed chat.
+    /// every removed space.
     RemoveFiles {
         space: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]

@@ -286,21 +286,14 @@ impl Manager {
         self.delete_session_logs(space.id());
     }
 
-    /// Delete the temporary directory and attached files of the removed
-    /// `space`. A failure is logged, since the removal already happened.
-    pub(crate) async fn delete_space_files(&self, space: &PresentSpace) {
+    /// Delete the temporary directory of the removed `space`. A failure is
+    /// logged, since the removal already happened.
+    pub(crate) async fn delete_removed_tmp_dir(&self, space: &PresentSpace) {
         if let Err(error) = self.delete_tmp_dir(space).await {
             crate::daemon::log!(
                 "temporary directory of {} not deleted: {error:#}",
                 space.name()
             );
-        }
-        let deleted = match space {
-            PresentSpace::Workspace(workspace) => self.delete_workspace_files(workspace).await,
-            PresentSpace::Chat(_) => Ok(()),
-        };
-        if let Err(error) = deleted {
-            crate::daemon::log!("files of {} not deleted: {error:#}", space.name());
         }
     }
 
@@ -324,8 +317,8 @@ struct Deleted {
 /// Delete the record of the space `id`, which `cause` removed, once the
 /// spaces below it are gone, in one transaction with what it recorded:
 /// the user gets its unread messages and the requests it decides, such as
-/// an issue proposal that outlives it, and the attached files that outlive
-/// it stay, a chat's until `expires_at`.
+/// an issue proposal that outlives it, and its attached files stay until
+/// `expires_at`.
 fn delete_record(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,

@@ -67,8 +67,8 @@ impl Layout {
     }
 
     /// Copies of the files `files` that the workspace `workspace_id` hands
-    /// the user with `message`, such as its completion or an alert, apart
-    /// from its other files since they outlive its removal.
+    /// the user with `message`, such as its completion or an alert, among its
+    /// results.
     pub(crate) fn keep_results(
         &self,
         workspace_id: &SpaceId,
@@ -188,17 +188,8 @@ impl Layout {
         Ok(copies)
     }
 
-    /// Delete the files attached for the workspace `workspace_id`.
-    pub(crate) fn remove_workspace(&self, workspace_id: &SpaceId) -> Result<()> {
-        if !self.dir.is_own() {
-            return Ok(());
-        }
-        remove_dir(&self.root().join(workspace_id))
-    }
-
-    /// The directories that may hold the files kept for the workspace or
-    /// chat `space_id` after it is gone: a chat's own, and the results a
-    /// workspace handed back.
+    /// The directories that may hold the files kept for the space
+    /// `space_id` after it is gone: its own, and the results it handed back.
     pub(crate) fn kept(&self, space_id: &SpaceId) -> [PathBuf; 2] {
         [
             self.root().join(space_id),

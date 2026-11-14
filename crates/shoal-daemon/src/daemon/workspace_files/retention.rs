@@ -1,6 +1,6 @@
-//! How long attached files stay: a workspace's files go with it, except its
-//! results, which stay as long as its removal record; a chat's stay for the
-//! same retention after it ends; and every file goes with its repository.
+//! How long attached files stay: a removed space's stay for
+//! `cleanup.restore.retention_days` after its removal, and every file goes
+//! with its repository.
 use crate::client::space_ids::SpaceId;
 use std::{path::Path, time::Duration};
 
@@ -9,24 +9,11 @@ use anyhow::{Result, ensure};
 use super::{FilesHome, HomeKey, Space, records};
 use crate::{
     daemon::{log, workspace::Manager},
-    model::{Repository, Workspace},
+    model::Repository,
     time::UnixTime,
 };
 
 impl Manager {
-    /// Delete the files attached to `workspace` once it is removed; its
-    /// results stay until [`Manager::expire_results`]. The removal's own
-    /// transaction already forgot their records.
-    pub(crate) async fn delete_workspace_files(&self, workspace: &Workspace) -> Result<()> {
-        let key = HomeKey::Repository(self.repository(&workspace.repository_id).await?);
-        let (home, _files) = self.lock_files_home(&key).await?;
-        let Some(layout) = home.layout() else {
-            return Ok(());
-        };
-        let id = workspace.id.clone();
-        tokio::task::spawn_blocking(move || layout.remove_workspace(&id)).await?
-    }
-
     /// Delete the directory of attached files with the repository, once its
     /// workspaces are gone.
     pub(crate) async fn delete_repository_files(&self, repo: &Repository) -> Result<()> {
