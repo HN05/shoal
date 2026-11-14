@@ -265,6 +265,21 @@ async fn a_gate_that_cannot_be_set_up_denies_and_tells_the_user() {
 }
 
 #[tokio::test]
+async fn a_run_that_panics_denies_its_request() {
+    let fixture = fixture().await;
+    std::fs::write(fixture.root.path().join("hold"), "").unwrap();
+    let request = fixture.push_branch().await;
+    let mut runs = Runs::default();
+    runs.spawn(request, async { panic!("the gate's run broke") });
+    let ended = runs.running.join_next_with_id().await.unwrap();
+    runs.end(&fixture.manager, ended).await;
+    let denied = fixture.message().await;
+    assert!(denied.contains("could not decide"), "{denied}");
+    assert_eq!(fixture.logged_verdicts().await, ["failed"]);
+    std::fs::remove_file(fixture.root.path().join("hold")).unwrap();
+}
+
+#[tokio::test]
 async fn an_issue_proposal_whose_space_is_gone_goes_to_the_user() {
     let fixture = fixture().await;
     let space = fixture.workspace.clone().into();

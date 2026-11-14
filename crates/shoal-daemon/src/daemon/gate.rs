@@ -4,12 +4,12 @@
 //! the session of the request's subject; it allows the request, denies it
 //! with a reason, or passes it on for a case the user wrote down.
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::{Arc, Mutex},
 };
 
 use anyhow::{Result, bail};
-use tokio::task::JoinSet;
+use tokio::task::{Id, JoinError, JoinSet};
 
 use crate::client::space_ids::SpaceId;
 use crate::daemon::{
@@ -71,8 +71,7 @@ impl Gatekeeper {
 /// short.
 pub(crate) async fn run(manager: Arc<Manager>) {
     manager.carry_out_stranded_allows().await;
-    let mut running = JoinSet::new();
-    let mut started = HashSet::new();
+    let mut runs = Runs::default();
     loop {
         let queued = manager.gate.queued.notified();
         tokio::pin!(queued);
@@ -82,28 +81,64 @@ pub(crate) async fn run(manager: Arc<Manager>) {
             .read(|tx| crate::daemon::approvals::gated::deciding(tx))
             .await
         {
-            Ok(requests) => {
-                for request in requests
-                    .into_iter()
-                    .filter(|r| started.insert(r.key.clone()))
-                {
-                    let manager = manager.clone();
-                    running.spawn(async move {
-                        let key = request.key.clone();
-                        manager.decide_by_gate(request).await;
-                        key
-                    });
-                }
-            }
+            Ok(requests) => runs.start(&manager, requests),
             Err(error) => log!("requests for the gate: {error:#}"),
         }
         tokio::select! {
             () = &mut queued => {}
-            Some(ended) = running.join_next(), if !running.is_empty() => {
-                if let Ok(key) = ended {
-                    started.remove(&key);
-                }
+            Some(ended) = runs.running.join_next_with_id(), if !runs.running.is_empty() => {
+                runs.end(&manager, ended).await;
             }
+        }
+    }
+}
+
+/// The gate's runs in progress, one for each request it decides.
+#[derive(Default)]
+struct Runs {
+    running: JoinSet<()>,
+    /// The request each run decides, by its task.
+    requests: HashMap<Id, ApprovalRequest>,
+}
+
+impl Runs {
+    /// Start a run for each of `requests` that has none.
+    fn start(&mut self, manager: &Arc<Manager>, requests: Vec<ApprovalRequest>) {
+        for request in requests {
+            if self.requests.values().any(|run| run.key == request.key) {
+                continue;
+            }
+            let (manager, decided) = (manager.clone(), request.clone());
+            self.spawn(
+                request,
+                async move { manager.decide_by_gate(decided).await },
+            );
+        }
+    }
+
+    /// Run `run`, which decides `request`.
+    fn spawn(&mut self, request: ApprovalRequest, run: impl Future<Output = ()> + Send + 'static) {
+        let task = self.running.spawn(run);
+        self.requests.insert(task.id(), request);
+    }
+
+    /// Forget the run that `ended`; one that panicked denies its request as
+    /// a failed run does, which would otherwise wait for the gate, out of
+    /// the inbox, until a restart asked it again.
+    async fn end(&mut self, manager: &Manager, ended: Result<(Id, ()), JoinError>) {
+        let id = match &ended {
+            Ok((id, ())) => *id,
+            Err(error) => error.id(),
+        };
+        let Some(request) = self.requests.remove(&id) else {
+            return;
+        };
+        if let Err(error) = ended
+            && error.is_panic()
+        {
+            log!("approval {}: the gate's run panicked", request.number);
+            let failure = "the gate's run failed unexpectedly".to_owned();
+            manager.conclude_gate_failure(&request, None, failure).await;
         }
     }
 }
