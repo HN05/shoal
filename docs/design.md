@@ -852,8 +852,8 @@ new workspace or chat below it, or below a space its scope reaches that
 `--parent` names, in its repository, and a scoped caller creates nothing else,
 while the user's terminal creates top-level spaces.
 A chat an agent starts opens in a background place, since the agent cannot
-hand over its terminal, and keeps the agent's scope until it records the chat
-below the agent's space. Every start in a background place waits for the place
+hand over its terminal, unless `start --here` runs it in the caller's own, and
+keeps the agent's scope until it records the chat below the agent's space. Every start in a background place waits for the place
 to report that the chat is about to run its agent, or why not, since an open
 place proves neither. The place takes the handoff before anything checks its
 scope, which it may still inherit from the starter's processes, and reports
@@ -863,8 +863,9 @@ only on a place that does not take it within a hang guard or that ends without
 a report; the report and a scoped starter's token go through a
 private directory the place's command names, never the place's environment,
 which a shell left there would keep. The agent waits for that handoff also
-since its scope may end with it, and may not run the chat in its own terminal, where the chat's
-processes would be its own; places drop the marks and scope token of the space
+since its scope may end with it. A chat run in the caller's terminal is the
+chat's own execution, as a workspace's agent is, which the caller's stops
+leave running; places drop the marks and scope token of the space
 that opened them, so what runs there is the new chat's. Spaces form one tree through one parent link,
 `space_parents`, which records a workspace split from another and one a chat
 opened alike: every space has at most one parent, a ready workspace or a chat

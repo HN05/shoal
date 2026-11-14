@@ -198,16 +198,10 @@ impl Options {
 
     /// These options as this process's start takes them: a scoped one's
     /// chat goes below its own space, and one without a terminal or a
-    /// scoped one's runs detached rather than beside it. A scoped process
-    /// runs a chat here only as the place a handoff carries its scope to.
+    /// scoped one's runs detached rather than beside it.
     pub fn for_caller(self, ctx: &Context) -> Result<Self> {
         ensure_scope_token(ctx)?;
-        let scoped = crate::env::is_scoped();
-        ensure!(
-            !scoped || self.place != ChatPlace::Here || crate::chat_handoff::awaited(),
-            "scoped processes start chats in a background place; leave out --here"
-        );
-        let place = self.place.for_starter(scoped, ctx.on_terminal());
+        let place = (self.place).for_starter(crate::env::is_scoped(), ctx.on_terminal());
         Ok(Self { place, ..self })
     }
 

@@ -158,7 +158,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   child of that space, or of a space its scope reaches that `start --parent`
   names, in its repository, `split` from a workspace's branch; scoped callers create only
   children, run chats only in worktrees of their tree, never take over a workspace outside their scope, and start chats in
-  a background place, waiting until the chat holds its own scope, and the user's terminal creates top-level spaces. Enforce own-worktree resource access
+  a background place, waiting until the chat holds its own scope, unless `start --here` runs it in the caller's terminal, and the user's terminal creates top-level spaces. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery other than creating a child of their own space and removing a space below it the user holds nothing below, and shared
   repository/service administration other than `config reload`. For the spaces their scope reaches but their own, scoped callers may hold them, queue
   agents and the restores of stopped agents, a workspace's or a chat's, whoever stopped them, which the daemon starts detached, a chat's in the place it ran in, unless `start --here` runs an agent in the caller's terminal under its own space's scope, restart and stop their agents, confirming a stop Shoal cannot prove, convert them, cancel and prioritize their queue

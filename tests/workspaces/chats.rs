@@ -1321,6 +1321,38 @@ fn a_background_place_below_its_starter_takes_the_handed_scope() {
     assert_eq!(error["error"]["message"], report.as_str(), "{place:?}");
 }
 
+/// A scoped caller's `start --here` runs a chat below its space in its own
+/// terminal, as the chat's agent with the chat's scope.
+#[test]
+fn a_scoped_start_runs_a_chat_here_as_its_own() {
+    let fixture = Fixture::with_config(Some(
+        "[agents.claude]\ncommand = ['sh', './chat-agent.sh']\n",
+    ));
+    let agent = r#"echo "$SHOAL_CHAT" "$SHOAL_SCOPE_TOKEN" > "$HOME/chat-env""#;
+    fs::write(fixture.repo.join("chat-agent.sh"), agent).unwrap();
+    fixture.add("parent");
+    let parent = fixture.id("parent");
+    let start = ["start", "--mode", "chat", "--here", "--agent", "claude"];
+    let (output, transcript) = fixture.interactive_command(
+        (fixture.command().current_dir(&fixture.repo))
+            .args(["run", "--workspace", &parent, "--", support::shoal_binary()])
+            .args(start.iter().chain(&["--name", "here"])),
+        "",
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let chats = fixture.ok(&["list", "--chats"]);
+    let [chat] = chats.as_array().unwrap().as_slice() else {
+        panic!("{chats}");
+    };
+    assert_eq!(chat["parent"]["id"], parent.as_str(), "{chat}");
+    let recorded = fs::read_to_string(fixture.root.path().join("chat-env")).unwrap();
+    let [id, token] = recorded.split_whitespace().collect::<Vec<_>>()[..] else {
+        panic!("{recorded:?}");
+    };
+    assert_eq!(id, chat["id"], "{chat}");
+    assert!(!token.is_empty());
+}
+
 #[test]
 fn any_space_opens_any_kind_of_child() {
     let fixture = Fixture::with_config(Some(
@@ -1354,15 +1386,7 @@ fn any_space_opens_any_kind_of_child() {
     let parent = |space: &Value| space["parent"]["name"].as_str().map(str::to_owned);
     let status = fixture.ok(&["status", &fixture.id("below")]);
     assert_eq!(parent(&status["workspace"]).as_deref(), Some("parent"));
-    // ...but not a chat in its own terminal, whose processes would be its
-    // own...
-    let here = scoped_command(
-        &fixture,
-        "parent",
-        &["start", "--mode", "chat", "--here", "--agent", "claude"],
-    );
-    assert!(!here.status.success(), "{here:?}");
-    // ...nor one in the worktree of a workspace outside its tree...
+    // ...but not a chat in the worktree of a workspace outside its tree...
     fixture.add("other");
     let args = ["start", "--in", &fixture.id("other"), "--agent", "claude"];
     let outside = scoped_command(&fixture, "parent", &args);

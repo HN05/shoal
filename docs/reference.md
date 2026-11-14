@@ -1764,8 +1764,9 @@ under it that `--parent` names, in the background, and returns once the chat
 holds its own scope, or with the error that stopped it. A start without a
 terminal also runs its chat in the background. The daemon opens the place for
 these chats, as it does for an app, unless the chat continues or forks a
-session, which the calling process starts itself. Such an agent's
-`--here` is refused, so the chat's processes are never the agent's. A
+session, which the calling process starts itself. `--here` runs the chat in
+the caller's terminal with the chat's own scope, and the caller's stops leave
+it running. A
 workspace process that cleared its scope token cannot run `shoal start` or
 `shoal rename --request`.
 A chat's agent runs as a tracked agent of the chat, as a workspace's agent

@@ -216,11 +216,6 @@ fn take_scope(path: &Path) -> Result<Option<ScopeToken>> {
     }
 }
 
-/// Whether this process is the place a starter waits on.
-pub fn awaited() -> bool {
-    RECEIVED.get().is_some()
-}
-
 /// Report to the starter that waits on this place that the chat started,
 /// or why it did not; only the first report counts.
 pub fn report<T>(outcome: &Result<T>) {
