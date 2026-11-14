@@ -42,8 +42,40 @@ impl Manager {
         if let Err(error) = self.claim_assignees(id, carried.to_vec()).await {
             warnings.push(format!("cannot record the issues' assignees: {error:#}"));
         }
-        if let Err(error) = self.record_items(id, recorded(links)).await {
-            warnings.push(format!("cannot link opened and related items: {error:#}"));
+        warnings.extend(self.relink_recorded(id, links, caller).await);
+        warnings
+    }
+
+    /// Record the opened and related items `links` carries for the space
+    /// `id`: as the user's, directly, and as a scoped `caller`'s, each
+    /// through the link it would make, under the checks of its scope.
+    /// Returns a warning for each failure.
+    async fn relink_recorded(
+        &self,
+        id: &SpaceId,
+        links: &SpaceLinks,
+        caller: Option<&Caller>,
+    ) -> Vec<String> {
+        let Some(caller) = caller else {
+            return match self.record_items(id, recorded(links)).await {
+                Ok(()) => Vec::new(),
+                Err(error) => vec![format!("cannot link opened and related items: {error:#}")],
+            };
+        };
+        let mut warnings = Vec::new();
+        for (relation, item) in recorded(links) {
+            let (selector, input) = (SpaceSelector::id(id), item.url.clone().into());
+            let linked = self.link_item(
+                &selector,
+                item.kind(),
+                &input,
+                relation,
+                item.title,
+                Some(caller),
+            );
+            if let Err(error) = linked.await {
+                warnings.push(format!("cannot link {}: {error:#}", item.url));
+            }
         }
         warnings
     }

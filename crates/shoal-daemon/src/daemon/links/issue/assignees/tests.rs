@@ -326,6 +326,42 @@ async fn a_scoped_relink_assigns_as_the_agent_and_takes_on_nothing() {
 }
 
 #[tokio::test]
+async fn a_scoped_relink_checks_its_related_items_as_links_do() {
+    let fixture = Fixture::new(&["fix"], &[], "").await;
+    let workspace = &fixture.workspaces[0];
+    let elsewhere = crate::model::LinkedItem {
+        url: "https://github.com/other/repo/issues/9".parse().unwrap(),
+        title: None,
+    };
+    let links = crate::model::SpaceLinks {
+        related: vec![elsewhere],
+        ..Default::default()
+    };
+    let caller = crate::daemon::scope::Caller {
+        space_id: workspace.id.clone(),
+        execution: None,
+    };
+    let manager = &fixture.manager;
+    let warnings = (manager.relink_space(&workspace.id, &links, Some(&caller))).await;
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    let related = |workspace: Workspace| workspace.links.related.len();
+    assert_eq!(
+        related(manager.workspace_by_id(&workspace.id).await.unwrap()),
+        0
+    );
+    // The user's relink, as a restore makes, records it as it was.
+    assert!(
+        (manager.relink_space(&workspace.id, &links, None))
+            .await
+            .is_empty()
+    );
+    assert_eq!(
+        related(manager.workspace_by_id(&workspace.id).await.unwrap()),
+        1
+    );
+}
+
+#[tokio::test]
 async fn linking_an_issue_others_are_assigned_names_them() {
     let fixture = Fixture::new(&["fix"], &["ann", "bob"], "").await;
     let workspace = &fixture.workspaces[0];
