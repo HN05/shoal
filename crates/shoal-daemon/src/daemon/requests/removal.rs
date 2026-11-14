@@ -29,7 +29,8 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::ExportSpace { .. }
         | RemovalMethod::ExportMovingSpace { .. }
         | RemovalMethod::EndMovedSpace { .. }
-        | RemovalMethod::ImportWorkspace { .. } => true,
+        | RemovalMethod::ImportWorkspace { .. }
+        | RemovalMethod::ImportChat { .. } => true,
         RemovalMethod::Cleanup { dry_run, .. } => !dry_run,
         RemovalMethod::StopTargets
         | RemovalMethod::CheckStop { .. }
@@ -164,6 +165,9 @@ pub(super) async fn handle(
                 )
                 .await?,
         )),
+        RemovalMethod::ImportChat { repository, chat } => {
+            Body::RestoredSpace(manager.import_chat(&repository, *chat).await?)
+        }
     }))
 }
 
@@ -251,7 +255,8 @@ impl Scoped for RemovalMethod {
             | RemovalMethod::ExportSpace { .. }
             | RemovalMethod::ExportMovingSpace { .. }
             | RemovalMethod::EndMovedSpace { .. }
-            | RemovalMethod::ImportWorkspace { .. } => administer(manager, caller, self).await,
+            | RemovalMethod::ImportWorkspace { .. }
+            | RemovalMethod::ImportChat { .. } => administer(manager, caller, self).await,
         }
     }
 }
@@ -265,7 +270,8 @@ async fn administer<'a>(
     method: &'a mut RemovalMethod,
 ) -> Result<Option<&'a mut SpaceSelector>> {
     let repository = match method {
-        RemovalMethod::ImportWorkspace { repository, .. } => {
+        RemovalMethod::ImportWorkspace { repository, .. }
+        | RemovalMethod::ImportChat { repository, .. } => {
             const REFUSAL: &str = "scoped processes import only into their own repository";
             *repository = manager.own_repository(caller, repository, REFUSAL).await?;
             Some(manager.repository(&*repository).await?.id)

@@ -18,9 +18,12 @@ use std::{
 use anyhow::{Context, Result, ensure};
 
 pub use crate::client::transfer::{
-    CarriedSessionFile, ExportedSpace, Manifest, PackagedChat, PackagedWorkspace, SessionFile,
-    Sessions, Space,
+    CarriedChat, CarriedSessionFile, ExportedSpace, Manifest, PackagedChat, PackagedWorkspace,
+    SessionFile, Sessions, Space,
 };
+pub use carried::{CarriedChatExt, carried_chats};
+
+mod carried;
 use crate::{
     client::transcripts::{self, Environments},
     config::Effective,
@@ -36,7 +39,8 @@ use crate::{
 /// naming its kind, 4 a workspace at a commit, which earlier importers
 /// would open on a branch, 5 a copy, which earlier importers would open as
 /// the space it copies, and 6 a chat without a repository, which earlier
-/// importers would open in one.
+/// importers would open in one, or the chats that go with the space, which
+/// they would leave out.
 pub const FORMAT: &str = "shoal workspace";
 const VERSION: u32 = 6;
 
@@ -44,6 +48,7 @@ const VERSION: u32 = 6;
 fn version(manifest: &Manifest) -> u32 {
     match (&manifest.space, manifest.session_files.is_empty()) {
         (Space::Chat(packaged), _) if packaged.outside_repositories => 6,
+        _ if !manifest.chats.is_empty() => 6,
         _ if manifest.copy.is_some() => 5,
         (Space::Workspace(packaged), _)
             if (packaged.workspace.workspace()).is_some_and(|kept| kept.at.is_some()) =>
@@ -215,6 +220,19 @@ pub trait ManifestExt: Sized {
     /// forks of their sessions, in no place of the original's.
     fn sessions_on(&self, machine: Option<&str>, keep_sessions: Option<bool>) -> Sessions;
 
+    /// The agent of the carried `chat` to import on `machine`, which keeps
+    /// its session as [`Self::sessions_on`] says.
+    fn chat_sessions_on(
+        &self,
+        chat: &CarriedChat,
+        machine: Option<&str>,
+        keep_sessions: Option<bool>,
+    ) -> Sessions;
+
+    /// The agents of the space and of the chats it carries, with their
+    /// sessions, whose files go in the package.
+    fn every_session(&self) -> Sessions;
+
     /// Whether the export carries the files of `session`.
     fn carries(&self, session: &AgentSessionId) -> bool;
 }
@@ -269,6 +287,7 @@ impl ManifestExt for Manifest {
             sessions: Some(sessions),
             session_files: Vec::new(),
             copy: None,
+            chats: Vec::new(),
         })
     }
 
@@ -294,45 +313,29 @@ impl ManifestExt for Manifest {
                 },
             };
         };
-        let exporting = machine.is_some() && sessions.machine.as_deref() == machine;
-        let keeps = |session: &Option<AgentSessionId>| {
-            session.as_ref().is_some_and(|session| {
-                keep_sessions.unwrap_or_else(|| exporting || self.carries(session))
-            })
-        };
-        let agents = sessions.agents.iter().cloned().map(|agent| {
-            if !keeps(&agent.record.session) {
-                moved_agent(agent)
-            } else if exporting {
-                agent
-            } else {
-                StoppedAgent {
-                    record: agent.record.elsewhere(),
-                    ..agent
-                }
-            }
-        });
-        let last_sessions = sessions.last_sessions.iter().cloned().map(|last| {
-            if !keeps(&last.session) {
-                last.moved()
-            } else if exporting {
-                last
-            } else {
-                LastSession {
-                    origin: None,
-                    ..last
-                }
-            }
-        });
-        let sessions = Sessions {
-            machine: sessions.machine.clone(),
-            agents: agents.collect(),
-            last_sessions: last_sessions.collect(),
-        };
+        let sessions = kept_on(self, sessions, machine, keep_sessions);
         match self.copy {
             Some(copied) => copied_sessions(sessions, copied),
             None => sessions,
         }
+    }
+
+    fn chat_sessions_on(
+        &self,
+        chat: &CarriedChat,
+        machine: Option<&str>,
+        keep_sessions: Option<bool>,
+    ) -> Sessions {
+        kept_on(self, &chat.sessions, machine, keep_sessions)
+    }
+
+    fn every_session(&self) -> Sessions {
+        let mut every = self.sessions.clone().unwrap_or_default();
+        for chat in &self.chats {
+            every.agents.extend(chat.sessions.agents.iter().cloned());
+            (every.last_sessions).extend(chat.sessions.last_sessions.iter().cloned());
+        }
+        every
     }
 
     fn carries(&self, session: &AgentSessionId) -> bool {
@@ -614,8 +617,56 @@ async fn shared_commit(repo: &Path) -> Result<Option<String>> {
     Ok(Some(commit.trim().to_owned()))
 }
 
+/// `sessions` of the package `manifest` on `machine`: each agent with a
+/// session keeps it as `keep_sessions` says, otherwise on the exporting
+/// machine or when the package carries its files; on another machine, it
+/// keeps no place or waiting wrapper there.
+fn kept_on(
+    manifest: &Manifest,
+    sessions: &Sessions,
+    machine: Option<&str>,
+    keep_sessions: Option<bool>,
+) -> Sessions {
+    let exporting = machine.is_some() && sessions.machine.as_deref() == machine;
+    let keeps = |session: &Option<AgentSessionId>| {
+        session.as_ref().is_some_and(|session| {
+            keep_sessions.unwrap_or_else(|| exporting || manifest.carries(session))
+        })
+    };
+    let agents = sessions.agents.iter().cloned().map(|agent| {
+        if !keeps(&agent.record.session) {
+            moved_agent(agent)
+        } else if exporting {
+            agent
+        } else {
+            StoppedAgent {
+                record: agent.record.elsewhere(),
+                ..agent
+            }
+        }
+    });
+    let last_sessions = sessions.last_sessions.iter().cloned().map(|last| {
+        if !keeps(&last.session) {
+            last.moved()
+        } else if exporting {
+            last
+        } else {
+            LastSession {
+                origin: None,
+                ..last
+            }
+        }
+    });
+    Sessions {
+        machine: sessions.machine.clone(),
+        agents: agents.collect(),
+        last_sessions: last_sessions.collect(),
+    }
+}
+
 /// The record for another machine, where its agents' sessions do not exist
-/// and the package carries the session files it kept.
+/// and the package carries the session files it kept: a chat's keeps no
+/// session or place there either.
 fn moved(removed: RemovedSpace) -> RemovedSpace {
     let mut moved = RemovedSpace {
         agents: removed.agents.into_iter().map(moved_agent).collect(),
@@ -626,8 +677,12 @@ fn moved(removed: RemovedSpace) -> RemovedSpace {
             .collect(),
         ..removed
     };
-    if let Ok(kept) = moved.kept_workspace_mut() {
-        kept.session_files = Vec::new();
+    match &mut moved.kind {
+        RemovedKind::Workspace(kept) => kept.session_files = Vec::new(),
+        RemovedKind::Chat { chat } => {
+            chat.session = None;
+            chat.origin = None;
+        }
     }
     moved
 }

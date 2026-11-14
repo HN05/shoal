@@ -12,7 +12,7 @@ use crate::daemon::workspace::Manager;
 use crate::refusal::{Reason, Refusal};
 use crate::{
     git,
-    model::{RemovedSpace, Repository, RestoredWorkspace},
+    model::{RemovedSpace, Repository, RestoredSpace, RestoredWorkspace},
     time::UnixTime,
     transfer::CarriedSessionFile,
 };
@@ -43,6 +43,36 @@ impl Manager {
                     "the imported workspace is recorded as removed; shoal restore {} retries",
                     removed.space_id
                 )
+            })
+    }
+
+    /// Open a chat another Shoal's package carried: record it as a removed
+    /// chat of the repository `selector` names, as its removal here would,
+    /// and restore it under its ID, below its parent and in the worktree it
+    /// ran in where those are here. A failed restore leaves the record for
+    /// `shoal restore`.
+    pub async fn import_chat(
+        &self,
+        selector: &crate::repository::Selector,
+        removed: RemovedSpace,
+    ) -> Result<RestoredSpace> {
+        ensure!(
+            removed.chat().is_some(),
+            "the export carried a workspace as a chat"
+        );
+        let repo = self
+            .repository(selector)
+            .await
+            .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
+        let removed = self.imported_record(&repo, removed).await?;
+        let id = removed.space_id.clone();
+        self.store
+            .write(move |tx| record_imported_chat(tx, &removed))
+            .await?;
+        self.restore_space(&SpaceSelector::id(&id), None)
+            .await
+            .with_context(|| {
+                format!("the imported chat is recorded as removed; shoal restore {id} retries")
             })
     }
 
@@ -85,7 +115,7 @@ impl Manager {
     }
 
     /// The exported record as this repository's, expiring after its
-    /// retention as a removal here would.
+    /// retention as a removal here would, a workspace's checkpoint with it.
     async fn imported_record(
         &self,
         repo: &Repository,
@@ -110,9 +140,10 @@ impl Manager {
             parent,
             ..removed
         };
-        let checkpoint = &mut removed.kept_workspace_mut()?.checkpoint;
-        checkpoint.repository_id = repo.id.clone();
-        checkpoint.expires_at = expires_at;
+        if let Ok(kept) = removed.kept_workspace_mut() {
+            kept.checkpoint.repository_id = repo.id.clone();
+            kept.checkpoint.expires_at = expires_at;
+        }
         Ok(removed)
     }
 
@@ -188,6 +219,16 @@ impl Manager {
         }
         Ok(removed)
     }
+}
+
+/// Record an imported chat's removal record, unless its repository is being
+/// removed.
+fn record_imported_chat(tx: &rusqlite::Transaction<'_>, removed: &RemovedSpace) -> Result<()> {
+    anyhow::ensure!(
+        !crate::daemon::store::repository_removing(tx, removed.repository()?)?,
+        "the repository is being removed"
+    );
+    super::records::record(tx, removed)
 }
 
 /// Record an imported workspace's checkpoint under its next number and its

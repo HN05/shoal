@@ -10,7 +10,7 @@ use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, request},
     executions::{Copied, LastSession, StoppedAgent},
-    model::{CheckpointNumber, RemovedSpace, RestoredWorkspace},
+    model::{CheckpointNumber, RemovedSpace, RestoredSpace, RestoredWorkspace},
     protocol::{RemovalMethod, WorkspaceMethod},
     removal::{RemovalResult, UnsavedWork},
     repository::Selector,
@@ -38,6 +38,27 @@ pub struct Manifest {
     /// of their sessions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copy: Option<Copied>,
+    /// The chats that go with the space, parents first: those in its
+    /// worktree and those below it, or below one of them, which the import
+    /// opens again after it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chats: Vec<CarriedChat>,
+}
+
+/// A chat a package carries with its space, which the import records as
+/// removed and restores under its ID, below its parent and in the worktree
+/// it ran in where those are there.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CarriedChat {
+    /// Its repository's origin, which selects the repository it goes to
+    /// when it is carried by a chat without one; otherwise it goes where
+    /// its package does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_url: Option<String>,
+    /// Its removal record, with an agent that starts a new session.
+    pub chat: RemovedSpace,
+    /// Its agent with its session as the exporting machine recorded it.
+    pub sessions: Sessions,
 }
 
 /// The space a package holds, named by its `kind`.
@@ -243,6 +264,20 @@ pub async fn import(
         workspace: Box::new(workspace),
         copy,
         session_files,
+    };
+    request(daemon, method).await
+}
+
+/// Record the chat `chat` a package carried, of `repository`, as removed,
+/// and open it again.
+pub async fn import_chat(
+    daemon: &impl Daemon,
+    repository: Selector,
+    chat: RemovedSpace,
+) -> Result<RestoredSpace> {
+    let method = RemovalMethod::ImportChat {
+        repository,
+        chat: Box::new(chat),
     };
     request(daemon, method).await
 }

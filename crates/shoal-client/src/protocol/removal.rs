@@ -134,4 +134,10 @@ pub enum RemovalMethod {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         session_files: Vec<crate::transfer::CarriedSessionFile>,
     },
+    /// Record a chat another Shoal's package carried as a removed chat of
+    /// `repository` here, and open it again.
+    ImportChat {
+        repository: crate::repository::Selector,
+        chat: Box<crate::model::RemovedSpace>,
+    },
 }

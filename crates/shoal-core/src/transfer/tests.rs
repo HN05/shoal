@@ -129,6 +129,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         sessions: Some(sessions),
         session_files: vec![session_file("p/s1.jsonl", 3)],
         copy: None,
+        chats: Vec::new(),
     };
     assert_eq!(version(&manifest), 3);
     // A chat without a repository needs an importer that starts it in
@@ -314,6 +315,7 @@ fn manifest_with_sessions() -> Manifest {
         }),
         session_files: Vec::new(),
         copy: None,
+        chats: Vec::new(),
     }
 }
 
