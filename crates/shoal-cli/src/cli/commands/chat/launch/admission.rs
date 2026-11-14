@@ -65,22 +65,31 @@ impl Launch {
             env: crate::terminal::start_environment(),
             now: self.options.now,
             priority: chat.priority,
+            records_when_waiting: self.options.place == ChatPlace::Detached,
         })
     }
 
     /// End the start of this chat, whose agent waits as `entry` behind
     /// `waiting` entries: from a terminal, the queue's start records the
-    /// chat in a place of its own; a start without one records it now, out
-    /// of the queue's reach until the launch takes it.
+    /// chat in a place of its own; a start without one records it now, and
+    /// the queue keeps the launch until it takes the chat.
     async fn wait(&self, ctx: &Context, entry: QueueEntry, waiting: usize) -> Result<Started> {
         if self.options.place != ChatPlace::Detached {
             let code = crate::cli::commands::queued_agents::report_queued(ctx, &entry, waiting)?;
             return Ok(Started::Exited(code));
         }
-        let hold = Hold::start(&ctx.paths, &entry.id).await;
         let chat = self.record_new(ctx, None).await?;
-        queue::attach(&ctx.paths, entry.id.clone(), SpaceSelector::id(&chat.id)).await?;
-        drop(hold);
+        let attached = queue::attach(&ctx.paths, entry.id.clone(), SpaceSelector::id(&chat.id));
+        if let Err(error) = attached.await {
+            let removed = crate::client::chats::remove(&ctx.paths, &chat.id, Some(Vec::new()));
+            if let Err(removal) = removed.await {
+                eprintln!(
+                    "shoal: chat {} stays without its agent: {removal:#}",
+                    chat.name
+                );
+            }
+            return Err(error);
+        }
         crate::cli::agents::link_chat(ctx, &chat, &self.chat.links).await;
         let queued = crate::client::output::chat::QueuedChat {
             chat,

@@ -340,6 +340,11 @@ pub struct ChatQueueRequest {
     /// The priority of the chat, which ranks the launch until it exists.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<crate::priority::Priority>,
+    /// The caller records the chat at once when the launch waits, and
+    /// attaches the launch to it, so the queue starts the launch only once
+    /// it has, or after a minute without it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub records_when_waiting: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

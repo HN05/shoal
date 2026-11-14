@@ -19,11 +19,18 @@ use super::Grant;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId, time::UnixTime};
 use crate::model::HeldBy;
 
+/// How long a waiting chat launch stays out of admission for the caller
+/// that records its chat, should the caller never attach it.
+const ATTACH_KEEP: Duration = Duration::from_secs(60);
+
 #[derive(Default)]
 pub(crate) struct AgentQueue {
     admission: Mutex<()>,
     /// Open holds per starting queue entry.
     holds: StdMutex<HashMap<QueueEntryId, usize>>,
+    /// Waiting chat launches kept out of admission until their caller
+    /// attaches the chat it records, with since when.
+    attach_keeps: StdMutex<HashMap<QueueEntryId, Instant>>,
     /// Executions whose stopped agent waits for its queued restore with
     /// every process stopped, with what admitted it once admission did.
     restore_waiters: StdMutex<HashMap<ExecutionId, Option<Grant>>>,
@@ -118,9 +125,27 @@ impl AgentQueue {
         }
     }
 
-    /// The entries with an open hold.
+    /// The entries with an open hold, or kept for their chat's attach for
+    /// less than [`ATTACH_KEEP`].
     pub(crate) fn held(&self) -> HashSet<QueueEntryId> {
-        self.holds.lock().unwrap().keys().cloned().collect()
+        let mut held: HashSet<QueueEntryId> = self.holds.lock().unwrap().keys().cloned().collect();
+        let mut keeps = self.attach_keeps.lock().unwrap();
+        let now = Instant::now();
+        keeps.retain(|_, since| now.duration_since(*since) < ATTACH_KEEP);
+        held.extend(keeps.keys().cloned());
+        held
+    }
+
+    /// Keep the waiting launch `id` out of admission until its chat is
+    /// attached to it.
+    pub(crate) fn keep_for_attach(&self, id: &QueueEntryId) {
+        let mut keeps = self.attach_keeps.lock().unwrap();
+        keeps.insert(id.clone(), Instant::now());
+    }
+
+    /// Let admission take the launch `id` again, its chat attached or not.
+    pub(crate) fn end_attach_keep(&self, id: &QueueEntryId) {
+        self.attach_keeps.lock().unwrap().remove(id);
     }
 
     /// Replace what held back waiting entries with the pass's `held` at

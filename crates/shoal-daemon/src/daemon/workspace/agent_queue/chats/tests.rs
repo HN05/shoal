@@ -36,6 +36,7 @@ fn chat_launch(repository: Option<&Repository>, mode: &str) -> ChatQueueRequest 
         env: BTreeMap::from([("HERDR_ENV".into(), "1".into())]),
         now: false,
         priority: None,
+        records_when_waiting: false,
     }
 }
 
@@ -63,15 +64,26 @@ async fn a_chats_launch_waits_for_a_slot_by_its_modes_weight() {
     assert_eq!(light.entry.unwrap().state, QueueState::Starting);
 }
 
-/// A waiting chat launch takes the chat recorded for it, which a slot
-/// then starts from the queue, in the place the queuing terminal names.
+/// A waiting chat launch whose caller records its chat stays out of
+/// admission until it takes the chat, even with a slot free, and then
+/// starts from the queue in that chat, in the place the queuing terminal
+/// names.
 #[tokio::test]
-async fn a_waiting_chat_launch_starts_in_its_recorded_chat_once_a_slot_frees() {
+async fn a_waiting_chat_launch_starts_only_in_its_recorded_chat() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     full_machine(&manager, &repo).await;
-    let admission = manager.queue_chat_add(chat_launch(Some(&repo), "pair"), None);
-    let entry = admission.await.unwrap().entry.unwrap();
+    let launch = ChatQueueRequest {
+        records_when_waiting: true,
+        ..chat_launch(Some(&repo), "pair")
+    };
+    let entry = manager.queue_chat_add(launch, None).await;
+    let entry = entry.unwrap().entry.unwrap();
+    let busy = manager.queue_entries().await.unwrap();
+    let busy = busy.iter().find(|queued| queued.name == "busy").unwrap();
+    manager.fail_queue_entry(&busy.id, "gone").await.unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert!(!started(&entry.id), "its chat is not attached yet");
     let chat = crate::daemon::chats::NewChat {
         name: "talk".into(),
         agent: "claude".into(),
@@ -87,9 +99,6 @@ async fn a_waiting_chat_launch_starts_in_its_recorded_chat_once_a_slot_frees() {
     (manager.queue_attach(&entry.id, &SpaceSelector::id(&chat.id)))
         .await
         .unwrap();
-    let busy = manager.queue_entries().await.unwrap();
-    let busy = busy.iter().find(|queued| queued.name == "busy").unwrap();
-    manager.fail_queue_entry(&busy.id, "gone").await.unwrap();
     manager.dispatch_queue().await.unwrap();
 
     assert!(started(&entry.id));
