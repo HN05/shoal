@@ -4275,9 +4275,9 @@ Requesting changes needs a body; any other review needs a body, a line comment
 or both. Shoal reads the PR's diff at its head commit and refuses the whole
 review before sending anything when a comment is on a file the diff does not
 change or a line none of its hunks shows, listing each such comment; the review
-is then posted of that commit. Workspace processes comment as the agent
+is then posted of that commit. Scoped processes comment as the agent
 account, and their watches do not report the review back. `--approve` and
-`--request-changes` use your own login, and for workspace processes, as their
+`--request-changes` use your own login, and for scoped processes, as their
 [`pr_review` permission](#permitted-actions) allows, the host's
 [`review_token`](config.md#forges), with no other login to fall back on:
 Shoal refuses their verdict, before sending any request, on a host without
