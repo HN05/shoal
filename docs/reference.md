@@ -1041,7 +1041,7 @@ over its [configured model and effort](#agents), which the review keeps if it st
 over; the fallback agent runs with its own configured ones. The reviews of a
 workspace, and those of each PR reviewed in it, continue one session: a review
 resumes the session the latest earlier one saved, through the tool's
-[`review_resume` template](config.md#agents), when the same agent saved it,
+[`review_resume` template](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools), when the same agent saved it,
 so the reviewer keeps what it understood and its cached prompt. Another
 agent, such as the fallback, starts a new session, as does a session that
 cannot be resumed; the session goes with the workspace. A reviewer still running after 30
