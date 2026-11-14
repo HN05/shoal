@@ -256,9 +256,10 @@ impl Manager {
             Ok((children, worktree)) => {
                 self.forget_removed_space(&space).await;
                 // The chat a conversion makes keeps the space's temporary
-                // directory.
+                // directory and attached files.
                 if !removal.converts() {
                     self.delete_removed_tmp_dir(&space).await;
+                    self.delete_unrecorded_files(&space.clone().into()).await;
                 }
                 let worktree = match worktree {
                     Some((stage, removed)) => {

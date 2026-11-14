@@ -1762,3 +1762,39 @@ async fn a_disposable_workspaces_files_outlive_it_for_the_retention_period() {
     assert!(kept.expires_at.is_some());
     assert!(added.path.exists());
 }
+
+#[tokio::test]
+async fn removal_deletes_the_directories_of_files_already_deleted() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    let file = temp.path().join("notes.md");
+    std::fs::write(&file, "notes").unwrap();
+    let added = manager
+        .add_attached_files(
+            &SpaceSelector::id(&workspace.id),
+            vec![file.into()],
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    let [added] = added.as_slice() else {
+        panic!("{added:?}");
+    };
+    manager
+        .remove_attached_files(&SpaceSelector::id(&workspace.id), vec![], vec![])
+        .await
+        .unwrap();
+    let directory = added.path.ancestors().nth(3).unwrap().to_owned();
+    assert!(directory.ends_with(workspace.id.as_str()));
+    // A leftover no record names, as a failed discard leaves.
+    std::fs::write(directory.join("leftover"), "").unwrap();
+    manager
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            crate::removal::UnsavedWork::default(),
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert!(!directory.exists());
+}

@@ -718,24 +718,28 @@ async fn a_send_waiting_through_removal_leaves_no_files() {
                 .await
         }
     });
-    // The holder, this test and the send.
+    let removal = tokio::spawn({
+        let (manager, id) = (manager.clone(), workspace.id.clone());
+        async move {
+            manager
+                .remove_workspace(
+                    &SpaceSelector::id(&id),
+                    crate::removal::UnsavedWork::default(),
+                    crate::removal::InspectionPolicy::GitOnly,
+                )
+                .await
+        }
+    });
+    // The holder, this test, the send and the removal deleting files.
     tokio::time::timeout(std::time::Duration::from_secs(60), async {
-        while std::sync::Arc::strong_count(&gate) < 3 {
+        while std::sync::Arc::strong_count(&gate) < 4 {
             tokio::task::yield_now().await;
         }
     })
     .await
-    .expect("the send reaches the gate");
-    let removal = manager
-        .remove_workspace(
-            &SpaceSelector::id(&workspace.id),
-            crate::removal::UnsavedWork::default(),
-            crate::removal::InspectionPolicy::GitOnly,
-        )
-        .await
-        .unwrap();
-    assert!(removal.removed);
+    .expect("the send and the removal reach the gate");
     drop(held);
+    assert!(removal.await.unwrap().unwrap().removed);
     assert!(send.await.unwrap().is_err());
     let repo = manager.repository(&workspace.repository_id).await.unwrap();
     let attachments = repo.workspaces_dir.unwrap().join(".attachments");

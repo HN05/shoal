@@ -256,6 +256,21 @@ pub(super) fn expired(db: &Connection, home: &HomeKey) -> Result<Vec<SpaceId>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// Whether a record names a copy in one of `directories`.
+pub(super) fn any_in(db: &Connection, directories: &[PathBuf]) -> Result<bool> {
+    for directory in directories {
+        let prefix = format!("{}/", directory.to_string_lossy());
+        if crate::daemon::store::exists(
+            db,
+            "SELECT 1 FROM workspace_files WHERE substr(path,1,length(?1))=?1",
+            [&prefix],
+        )? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// Forget the records `ids`.
 pub(super) fn forget(tx: &Transaction<'_>, ids: &[i64]) -> Result<()> {
     for id in ids {

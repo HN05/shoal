@@ -51,6 +51,34 @@ impl Manager {
         UnixTime::now() + retention
     }
 
+    /// Delete the directories of attached files of the removed `space` when
+    /// no record names a copy in them, as once `shoal files rm` deleted them
+    /// all, since no expiry would delete them later. A failure is logged,
+    /// since the removal already happened.
+    pub(crate) async fn delete_unrecorded_files(&self, space: &Space) {
+        if let Err(error) = self.try_delete_unrecorded_files(space).await {
+            log!("attached files of {} not deleted: {error:#}", space.name);
+        }
+    }
+
+    /// [`Self::delete_unrecorded_files`], returning its failure.
+    async fn try_delete_unrecorded_files(&self, space: &Space) -> Result<()> {
+        let (home, _files) = self.lock_files_home(&self.space_home(space).await?).await?;
+        let Some(layout) = home.layout() else {
+            return Ok(());
+        };
+        // A restore may have given copies there to a workspace meanwhile.
+        let directories = layout.kept(&space.id);
+        if (self.store)
+            .read(move |db| records::any_in(db, &directories))
+            .await?
+        {
+            return Ok(());
+        }
+        let id = space.id.clone();
+        tokio::task::spawn_blocking(move || layout.remove_kept(&id, &[])).await?
+    }
+
     /// Delete the files kept for removed workspaces and removed chats whose
     /// record has expired, or that never had one. A failure keeps what it
     /// concerns for the next pass and does not skip the rest.
