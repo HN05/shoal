@@ -372,6 +372,7 @@ async fn restore_refuses_what_it_would_lose_or_disturb() {
             agent_execution: None,
         }),
         granted: None,
+        read_only: false,
     };
     manager
         .restore_checkpoint(&manager.named("topic").await, checkpoint.number, Some(&own))

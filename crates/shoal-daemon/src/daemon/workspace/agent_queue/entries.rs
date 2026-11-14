@@ -446,6 +446,7 @@ impl Manager {
             space_id,
             execution: None,
             granted: None,
+            read_only: false,
         }))
     }
 

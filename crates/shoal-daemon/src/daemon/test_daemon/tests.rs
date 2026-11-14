@@ -1024,6 +1024,7 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
         space_id: child.id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     let theirs = (daemon.manager.queue_add_as(request, Some(&caller)))
         .await

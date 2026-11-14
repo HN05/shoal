@@ -15,6 +15,7 @@ fn caller(space: &crate::client::space_ids::SpaceId) -> Caller {
         space_id: space.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     }
 }
 

@@ -299,6 +299,7 @@ async fn a_chat_without_a_repository_copies_a_workspace_of_any_repository() {
         space_id: master.id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     let mut source = crate::protocol::CopySource {
         workspace: SpaceSelector::id(&user.id),

@@ -174,6 +174,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
                 space_id: workspace.id.clone(),
                 execution: None,
                 granted: None,
+                read_only: false,
             },
         )
         .await;
@@ -395,6 +396,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
                 space_id: parent.id.clone(),
                 execution: None,
                 granted: None,
+                read_only: false,
             },
         )
         .await;

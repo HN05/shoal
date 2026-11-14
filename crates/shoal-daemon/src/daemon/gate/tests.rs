@@ -68,6 +68,7 @@ async fn fixture_deciding_by(gate: &str) -> Fixture {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     Fixture {
         root,

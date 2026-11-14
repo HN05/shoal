@@ -71,6 +71,7 @@ async fn setup() -> (tempfile::TempDir, std::sync::Arc<Manager>, Caller) {
         space_id: workspace.id,
         execution: None,
         granted: None,
+        read_only: false,
     };
     (temp, manager, caller)
 }

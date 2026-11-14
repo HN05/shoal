@@ -76,6 +76,7 @@ async fn files_from_outside_any_agent_are_the_users() {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     assert_eq!(
         manager.attacher(Some(&terminal), None).await,
@@ -679,6 +680,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
                     space_id: workspace.id.clone(),
                     execution: None,
                     granted: None,
+                    read_only: false,
                 },
             )
             .await;
@@ -763,6 +765,7 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
                 space_id: top.id.clone(),
                 execution: None,
                 granted: None,
+                read_only: false,
             },
         )
         .await;
@@ -1452,6 +1455,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
                 space_id: workspace.id.clone(),
                 execution: None,
                 granted: None,
+                read_only: false,
             },
         )
         .await;
@@ -1690,6 +1694,7 @@ async fn a_chats_agent_attaches_as_its_chat_outside_any_workspace() {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     assert_eq!(
         manager.attacher(Some(&terminal), Some(&chat.id)).await,

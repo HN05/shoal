@@ -36,6 +36,7 @@ fn caller(space: &str) -> Caller {
         space_id: space.into(),
         execution: None,
         granted: None,
+        read_only: false,
     }
 }
 

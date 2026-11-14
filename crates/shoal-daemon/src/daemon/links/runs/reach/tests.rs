@@ -24,6 +24,7 @@ async fn a_scope_reaches_the_default_branch_and_its_workspaces_branches() {
             space_id: space.clone(),
             execution: None,
             granted: None,
+            read_only: false,
         };
         manager
             .branch_in_reach(&caller, &repo.id, branch)

@@ -791,6 +791,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
                     agent_execution: None,
                 }),
                 granted: None,
+                read_only: false,
             },
         )
         .await;
@@ -813,6 +814,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
                 space_id: child.id.clone(),
                 execution: None,
                 granted: None,
+                read_only: false,
             },
         )
         .await;
@@ -914,6 +916,7 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     let marks = manager
         .mark_ready(

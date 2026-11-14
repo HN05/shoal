@@ -316,6 +316,7 @@ impl Connections<'_> {
                     }),
                     space_id: workspace_id.to_owned(),
                     granted: None,
+                    read_only: false,
                 },
             )
             .await;

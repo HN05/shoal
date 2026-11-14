@@ -86,6 +86,7 @@ async fn a_scoped_caller_cannot_read_shoal_s_log() {
         space_id: "plan".into(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     assert!(manager.narrow_to_log(&caller, &mut None).await.is_err());
 }

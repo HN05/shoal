@@ -162,6 +162,7 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
                 space_id: workspace.id.clone(),
                 execution: None,
                 granted: None,
+                read_only: false,
             },
         )
         .await;

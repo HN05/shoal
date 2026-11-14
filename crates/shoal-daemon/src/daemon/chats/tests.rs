@@ -694,6 +694,7 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         space_id: chat.id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     manager.executions.issue_scope("chat".into(), caller).await;
     let listed = manager.visible_workspaces(Some(&chat.id)).await.unwrap();

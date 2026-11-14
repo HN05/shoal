@@ -357,6 +357,7 @@ impl Manager {
             space_id: coordinator.clone(),
             execution: None,
             granted: None,
+            read_only: false,
         };
         ensure!(
             self.reaches(&caller, &original.space_id).await?,

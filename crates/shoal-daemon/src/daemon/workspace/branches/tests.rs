@@ -1567,6 +1567,7 @@ async fn begin_merge_as_agent(
         execution: None,
         space_id: workspace.id.clone(),
         granted: None,
+        read_only: false,
     };
     let request = crate::daemon::workspace::ExecutionRequest {
         merge: Some(crate::model::MergeOptions {
@@ -2349,6 +2350,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
                     agent_execution: None,
                 }),
                 granted: None,
+                read_only: false,
             },
         )
         .await;

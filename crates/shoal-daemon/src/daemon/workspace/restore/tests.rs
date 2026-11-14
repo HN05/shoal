@@ -968,6 +968,7 @@ async fn a_scoped_restore_reopens_the_workspace_below_the_caller() {
         space_id: master.id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     let restored = manager
         .restore_workspace_below(&selector, &caller)

@@ -228,6 +228,7 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
                     agent_execution: None,
                 }),
                 granted: None,
+                read_only: false,
             },
         )
         .await;

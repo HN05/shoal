@@ -985,6 +985,7 @@ async fn a_scoped_launch_its_caller_starts_is_left_to_it() {
         space_id: parent.id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     let starts = |starts_in_caller: bool, name: &str| QueueRequest {
         starts_in_caller,
@@ -1016,6 +1017,7 @@ async fn a_scoped_caller_holds_and_fails_only_the_launches_it_reaches() {
         space_id: parent.id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     let own = QueueRequest {
         starts_in_caller: true,
@@ -1115,6 +1117,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
                 space_id: parent.id.clone(),
                 execution: None,
                 granted: None,
+                read_only: false,
             },
         )
         .await;
@@ -1178,6 +1181,7 @@ async fn a_launch_a_space_queued_keeps_it_and_goes_with_it() {
         space_id: parent.id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     let waiting = QueueRequest {
         blockers: vec![crate::model::Blocker::Space(blocker.id.to_string())],
@@ -1194,6 +1198,7 @@ async fn a_launch_a_space_queued_keeps_it_and_goes_with_it() {
         space_id: blocker.id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     let reached = manager.reachable_queue(Some(&sibling)).await.unwrap();
     assert!(reached.iter().all(|reached| reached.id != entry.id));
@@ -1264,6 +1269,7 @@ async fn a_space_a_removal_holds_refuses_the_launches_it_queues() {
         space_id: space_id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     let launch = |name: &str| QueueRequest {
         blockers: vec![crate::model::Blocker::Space(workspace.id.to_string())],

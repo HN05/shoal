@@ -35,6 +35,7 @@ impl Manager {
                                 space_id: row.get(0)?,
                                 execution: None,
                                 granted: None,
+                                read_only: false,
                             })
                         },
                     )

@@ -179,5 +179,6 @@ fn caller_in(id: &SpaceId) -> Caller {
         space_id: id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     }
 }

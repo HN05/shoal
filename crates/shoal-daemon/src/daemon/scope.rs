@@ -14,6 +14,7 @@ use anyhow::{Result, ensure};
 
 mod access;
 mod reach;
+mod read_only;
 
 use reach::outside_scope;
 
@@ -31,6 +32,9 @@ pub struct Caller {
     /// take, which lets the requests that command sends take actions that
     /// permission governs without asking again.
     pub granted: Option<PermissionKey>,
+    /// It only reads what its scope reaches, as the gate's runs do, and is
+    /// refused every request that would change anything.
+    pub read_only: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -59,6 +63,10 @@ pub(crate) async fn authorize(
         .caller(token)
         .await?
         .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?;
+    ensure!(
+        !caller.read_only || method.changes_nothing(),
+        "a read-only scope only reads; this request would change something"
+    );
     let reads_only = method.reads_space();
     if let Some(target) = method.scope(manager, &caller).await? {
         confine_target(manager, &caller, target, reads_only).await?;
@@ -104,6 +112,12 @@ pub(crate) trait Scoped {
     fn reads_space(&self) -> bool {
         false
     }
+
+    /// Whether the request changes nothing at all, which a read-only scope
+    /// may send.
+    fn changes_nothing(&self) -> bool {
+        false
+    }
 }
 
 impl Scoped for Operation {
@@ -146,6 +160,10 @@ impl Scoped for Operation {
     /// changes nothing of the space.
     fn reads_space(&self) -> bool {
         self.reads_only() || matches!(self, Operation::Item(ItemMethod::SelectItems { .. }))
+    }
+
+    fn changes_nothing(&self) -> bool {
+        read_only::allows(self)
     }
 }
 

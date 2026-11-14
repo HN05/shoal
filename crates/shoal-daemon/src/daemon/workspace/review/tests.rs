@@ -415,6 +415,7 @@ async fn scoped_callers_mark_only_their_own_workspace() {
                 space_id: own.id.clone(),
                 execution: None,
                 granted: None,
+                read_only: false,
             },
         )
         .await;
