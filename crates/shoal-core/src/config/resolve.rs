@@ -304,6 +304,7 @@ impl Effective {
     pub fn check_reviewer(&self, agent: &Agent) -> anyhow::Result<()> {
         let template = OneShot {
             key: "review",
+            verb: "review",
             role: "review with it",
             set: |arguments| arguments.review.is_some(),
         };
@@ -315,6 +316,7 @@ impl Effective {
     pub fn check_gate_agent(&self, agent: &Agent) -> anyhow::Result<()> {
         let template = OneShot {
             key: "gate",
+            verb: "be the gate",
             role: "make it the gate",
             set: |arguments| arguments.gate.is_some(),
         };
@@ -333,7 +335,7 @@ impl Effective {
             .tools
             .get(name)
             .filter(|tool| tool.runs_as_agent)
-            .with_context(|| format!("{name} is not an AI tool, so it cannot {}", template.role))?;
+            .with_context(|| format!("{name} is not an AI tool, so it cannot {}", template.verb))?;
         let key = template.key;
         anyhow::ensure!(
             (template.set)(&tool.launch.arguments),
@@ -363,10 +365,12 @@ impl Effective {
     }
 }
 
-/// The template a one-shot run takes: its config key, what setting it lets
-/// the user do, and whether a tool's arguments set it.
+/// The template a one-shot run takes: its config key, what the tool does
+/// in that run, what setting it lets the user do, and whether a tool's
+/// arguments set it.
 struct OneShot {
     key: &'static str,
+    verb: &'static str,
     role: &'static str,
     set: fn(&crate::ai::Arguments) -> bool,
 }
