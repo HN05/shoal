@@ -959,7 +959,8 @@ either kind, since each knows best what its children need. A parent space,
 workspace or chat, approves what a permission governs where its own
 permission for it is `direct`, anything else only where it holds an approved
 grant for it, and a hold on its child, and otherwise denies or passes the
-request up; the user
+request up, unless its `decide` permission lets it decide any request below
+as the user would; the user
 decides at the top, and a chat whose agent stops or a
 deciding space that is removed hands the user what it had not decided, since
 neither can decide any more. A space lists the requests it decides beside its
@@ -2363,7 +2364,8 @@ the repository's forge API root through the daemon the same way, for reads no
 command models. The daemon
 cannot tell what another method changes, so a scoped caller sends only GET
 unless its `api_writes` permission accepts that its writes may merge, approve or skip
-required labels, and only GET in another repository, which that setting does
+required labels, or `"propose"` asks for each write, bound to its method, path
+and body, and only GET in another repository, which that setting does
 not speak for; the path stays under the API root, so the login reaches only
 the API of the forge its repository is on. `shoal forge download` reads a file
 such as an image in a description the same way, so a client without forge
@@ -2880,9 +2882,9 @@ user talks with may be trusted with more than a worker several levels down. A
 space's set comes from its agent's mode: `[modes.NAME.permissions]` over
 `[permissions]` over the built-in mode's defaults over each key's default. Each
 key is then the narrower of that and the parent's effective value, so a child
-gets no more than its parent from its mode. The modes that coordinate default `merge` and
+gets no more than its parent from its mode. The modes that coordinate default
 `issue_other_repositories` to `"direct"` so they can decide their children's;
-`worker` keeps the key defaults. `shoal start --permission KEY=VALUE` gives an
+`worker` keeps the key defaults, and so does a mode the user defines. `shoal start --permission KEY=VALUE` gives an
 agent a permission, recorded with its mode since it belongs to that agent as
 its mode does: restores and restarts keep both, and a new agent in the space
 brings its own. A given value applies as given, whatever the mode or the
@@ -2912,6 +2914,29 @@ modes and given values and the tree, never stored, so a config change reaches
 running agents; only the push rewrites, which are
 Git environment fixed at launch, wait for a restart. A check uses the acting
 space's permissions, so a parent acting on a child acts under its own.
+
+What only the user could do, such as administering Shoal, stopping the
+daemon, releasing the user's holds, reading notifications, starting agents
+beyond the limits, approving CI runs, merging PRs and deciding any request
+below, is an action a permission key governs, because which spaces an
+agent acts on is a question of reach and which actions it takes is one of
+trust, which the user sets per mode. A master session gets every key at
+`"direct"` but those whose action stops or bypasses every agent, `daemon`
+and `api_writes`, which it proposes; other modes propose the keys whose
+action a parent can judge and are denied the rest, so the user keeps an
+action by setting its key to `"propose"` or `"deny"`. With `"propose"`
+the action becomes an approval request bound to what it does, which lets
+the same action proceed once, so an approval never covers a later, different
+action. Deciding is a key of its own, `decide`, so a master session
+decides what reached a space between it and the requester, grants
+included, as the user would, but never its own requests. The daemon checks
+every request it receives, so a protocol client cannot step around the CLI;
+the CLI asks the daemon before what a command does itself, such as writing
+the config, so the two never disagree. A command sends several requests, so
+the approval of the command grants a scope token its requests carry, which
+takes that key's actions without asking again for an hour at most and dies
+with the daemon. Forge writes these keys allow go out as the agent account,
+so the forge shows who made them.
 
 In a shared repository everything an agent opens is seen by other people, so
 the `issue_open` and `pr_open` permissions can make a scoped `issue open` or `pr open`

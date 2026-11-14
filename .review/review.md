@@ -156,8 +156,10 @@ instead of the PR delivery guidance below.
   that confines a caller another way (CLI refusals also follow ancestry
   for the same state directory); without a target a scoped command acts on the child
   whose directory it runs in, while agent hooks always report for the own workspace.
-  Workspace allocation other than a child of their own space, removal other than of a space below their own
-  the user holds nothing below, recovery and shared repository/service administration other than `config reload` stay denied. For the spaces their scope reaches but their own, scoped callers hold them, queue agents,
+  Workspace allocation other than a child of their own space and removal other than of a space below their own
+  stay denied; administering Shoal, the daemon, the user's holds and notifications, starting agents beyond the
+  limits, approving CI runs, merging PRs and deciding any request below follow the permission key that
+  governs each, as below. For the spaces their scope reaches but their own, scoped callers hold them, queue agents,
   which the daemon starts detached unless `start --here` runs one in the caller's terminal, and which hold their own space's scope, never the caller's, cancel and prioritize their queue
   entries, send agent messages,
   answer questions, stop their executions and agents, confirming a stop Shoal cannot prove, restart their agents, convert them,
@@ -168,15 +170,16 @@ instead of the PR delivery guidance below.
   linking and watching CI runs of the own repository,
   merge acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks,
   assignment completion and its withdrawal, listing issues and PRs of any repository, opening and changing
-  those of the own repository except merging, deleting a PR's branch, approving or requesting changes, rerunning or cancelling their CI jobs,
+  those of the own repository except approving or requesting changes, rerunning or cancelling their CI jobs,
   starting, rerunning or cancelling CI runs of the default branch and of the branches of the workspaces their scope reaches, and reading the own repository's,
   GET requests to any repository's forge API, or other methods to the own repository's where
   their `api_writes` permission allows them, own-repository sync and
-  effective-configuration reads are allowed, but approving CI runs that wait for approval is not;
-  only unscoped callers export or revoke environment tokens. Export requires a
+  effective-configuration reads are allowed; only unscoped callers revoke
+  environment tokens, and exporting one is the `admin` permission's. Export requires a
   ready, verified worktree; tokens persist across restart until revocation or
   workspace removal, without execution tracking or cleanup protection.
-  Notifications are read by the unscoped user only and never fail the
+  Notifications are read by the user, and by scoped callers only as their
+  `notifications` permission allows, and never fail the
   operation they record; an agent message is the operation, so its failure is
   returned, and it never records completion. Only unscoped callers, and the
   coordinating agents of the workspaces below theirs, queue messages for a workspace's agents, and delivery deletes a message. Agent hooks deliver
@@ -260,7 +263,13 @@ instead of the PR delivery guidance below.
   its agent at start, restore or restart sets, as given, computed at each check
   through one daemon operation; flag a check that reads a repository's `[permissions]` directly.
   A scoped process gives only values its own space holds, including the value a `KEY=mode` drop
-  falls back to, which the daemon checks wherever such a process brings a value in; flag a path that records one unchecked. This is cooperative, not a
+  falls back to, which the daemon checks wherever such a process brings a value in; flag a path that records one unchecked.
+  A key that governs an action takes it with `"direct"`, refuses it with `"deny"`, and with
+  `"propose"` makes it an approval request bound to what it does, which lets the same action
+  proceed once, and an approved command's own requests take its key's actions without asking
+  again. The daemon checks each request it receives and the CLI asks it before what a command
+  does itself; flag a check that branches on whether a caller is scoped where a key governs the
+  action, or a CLI refusal of what the daemon would allow. This is cooperative, not a
   security boundary, so judge it as such.
 - Simulator plans never authorize mutations by themselves: the executor rechecks
   recorded ownership and live capacity under the simulator gate. Indexed workspace
@@ -289,8 +298,9 @@ instead of the PR delivery guidance below.
   decision, or one by the nearest space above with an agent, of either kind, that
   the request was routed to: a workspace approves only with an approved grant
   for the same target and settings and otherwise denies or passes it up, as a
-  chat does. Requests a permission governs (proposals, pushes, merges and
-  unmerges) take the decider's own permission instead of a grant. That decision, which queues an agent message for the requester; failing to queue it
+  chat does. Requests a permission governs take the decider's own permission instead of a
+  grant, and a space whose `decide` permission is `direct` decides any request of a space below
+  it as the user does. That decision, which queues an agent message for the requester; failing to queue it
   never fails the decision. Pending requests reserve nothing; grant lifetime follows configuration
   and approval never bypasses capacity or simulator cleanup rules. Approval lookups
   validate their selected ID or active workspace/target/name record; grant reuse

@@ -19,19 +19,27 @@ own you may write to its agent with `shoal messages send --space <space>`
 `shoal questions <S.N> --answer <answer>`, hold it with
 `shoal acquire hold --workspace <workspace> --name <name> --reason <why>`, stop
 its agents with `shoal stop <space>`, restore the ones you or the spaces below
-you stopped with `shoal restore <space>`, and remove it with `shoal rm <space>`
-unless the user holds something there. Change or remove another agent's space
+you stopped with `shoal restore <space>`, and remove it with `shoal rm <space>`,
+releasing the user's holds there. Change or remove another agent's space
 only when the user asks or its work is finished.
 
-Approve a request routed to you with `shoal approvals --approve <S.N>`, and a
-proposed issue or PR with `--title` or `--body` to edit it first, when your own
-permission for it is `direct` (`shoal status` lists yours), when you hold
-an approved grant for a resource it asks for, or when it asks to hold a
-workspace below you. Otherwise deny it with `shoal approvals --deny <S.N>`,
-with `--reason` or `--duplicate-of` for a proposal, or pass it to the user
-with `shoal approvals --escalate <S.N>`. You cannot
-merge PRs, approve or request changes on them, approve CI runs or read the
-user's notifications; ask the user with `shoal alerts send`.
+Your permissions let you do what the user would: repair a space whose setup
+failed with `shoal setup <space>` or `shoal setup <space> --skip`, start a
+queued agent at once with `shoal queue start <entry>`, administer Shoal's
+config, repositories and cleanup, merge PRs with `shoal pr merge`, approve CI
+runs that wait for approval, read the user's notifications with
+`shoal alerts`, and decide any request of a space below you. Stopping,
+restarting or updating the daemon, which stops or interrupts every agent,
+and forge API writes through `shoal forge api` wait for the user's approval:
+the command exits 2 with `approval_pending`, and you run it again once a
+message says it was approved.
+
+Approve a request of a space below you with `shoal approvals --approve <S.N>`,
+and a proposed issue or PR with `--title` or `--body` to edit it first, deny
+it with `shoal approvals --deny <S.N>`, with `--reason` or `--duplicate-of`
+for a proposal, or pass it to the user with `shoal approvals --escalate <S.N>`
+when the user should decide it. You cannot approve or request changes on a PR;
+ask the user with `shoal alerts send`.
 
 Every registered repository counts as your own. Name the one a command acts in
 with `--repo <repository>` or an issue or PR URL: `shoal issue ls`,
