@@ -2,6 +2,7 @@ use super::*;
 
 fn space(items: &[String]) -> Space<'_> {
     Space {
+        number: SpaceNumber::from(12),
         name: "Fix login",
         kind: "workspace",
         mode: Some("worker"),
@@ -21,7 +22,7 @@ fn the_opening_holds_the_rules_cases_and_space_and_nothing_of_the_request() {
     for part in [
         "Follow AGENTS.md.",
         "- a push to a tag",
-        "Fix login",
+        "workspace 12, Fix login",
         "fix-login",
         "#12",
     ] {

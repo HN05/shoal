@@ -3,6 +3,7 @@
 //! of which a resumed session is given only what is new.
 use std::fmt::Write as _;
 
+use crate::client::space_ids::SpaceNumber;
 use crate::config::gate::GateRules;
 
 /// What the gate is told before anything else.
@@ -16,6 +17,8 @@ const LOG_LIMIT: usize = 16_000;
 
 /// The space a request comes from, as the gate's opening describes it.
 pub(crate) struct Space<'a> {
+    /// The number its `shoal` commands select it by.
+    pub number: SpaceNumber,
     pub name: &'a str,
     pub kind: &'a str,
     pub mode: Option<&'a str>,
@@ -65,7 +68,11 @@ pub(crate) fn opening(rules: &GateRules, space: &Space) -> String {
             }
         }
     }
-    let _ = write!(text, "\n## The space\n\n{} {}", space.kind, space.name);
+    let _ = write!(
+        text,
+        "\n## The space\n\n{} {}, {}",
+        space.kind, space.number, space.name
+    );
     if let Some(mode) = space.mode {
         let _ = write!(text, ", in mode {mode}");
     }

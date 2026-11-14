@@ -4502,7 +4502,12 @@ as `git log --stat`, and what the request leaves out of the repository's
 [conventions](#repository-conventions). It runs as a one-shot run of
 `[gate] agent`, else `agent.default`, through its `gate` template, read-only
 in the repository's registered checkout, whose `[gate]` rules it reads rather
-than the requesting workspace's, for at most 10 minutes. It holds no agent slot
+than the requesting workspace's, for at most 10 minutes. To look further, such
+as at another PR, CI logs or an earlier proposal, it runs the `shoal` commands
+that only read, such as `shoal view`, `shoal status`, `shoal ci ls` and
+`shoal issue ls`, under a read-only scope of the requesting space that ends
+with the run: the daemon refuses that scope every request that changes
+anything. It holds no agent slot
 and waits only for memory and disk room. Its runs keep one session per space
 and subject: the space's own branch, with its PR, merges and unmerges; its
 issue proposals for each repository; and its pushes to each other ref. A later

@@ -90,6 +90,7 @@ impl Manager {
         let opening = prompt::opening(
             &rules,
             &prompt::Space {
+                number: space.number(),
                 name: space.name().as_str(),
                 kind: &space.label(),
                 mode: space.mode().map(|mode| mode.name.as_str()),

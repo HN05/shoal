@@ -3028,7 +3028,10 @@ does; an escalation then takes the `"propose"` route. Allowing approves
 through the path a decision takes, so the gate adds no way to act. It reads
 its rules from the registered checkout, never the requesting worktree, so an
 agent cannot write the rules that judge it, and runs as a one-shot run that
-holds no agent slot, since agents wait on it. A session per space and subject
+holds no agent slot, since agents wait on it. It may look further than its
+prompt with the `shoal` commands that only read, under a scope of the
+requesting space that the daemon refuses every change and that ends with the
+run, so reading more gives it no way to act either. A session per space and subject
 keeps its understanding and the prompt cache across retries without mixing
 unrelated requests, and every session opens with the same text so a new one
 reuses that cache. A retry is a new request in that session, and the third

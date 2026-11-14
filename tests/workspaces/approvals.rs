@@ -1365,9 +1365,9 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
     );
 }
 
-#[test]
-fn an_agent_push_waits_for_approval_and_approving_runs_it() {
-    let fixture = Fixture::with_config(Some("permissions.push = \"propose\"\n"));
+/// A bare `origin` of the fixture's repository holding its `main`, as a
+/// path.
+fn bare_origin(fixture: &Fixture) -> String {
     let remote = fixture.root.path().join("remote.git");
     git(
         fixture.root.path(),
@@ -1377,11 +1377,12 @@ fn an_agent_push_waits_for_approval_and_approving_runs_it() {
     git(&fixture.repo, &["remote", "add", "origin", remote]);
     git(&fixture.repo, &["push", "-q", "origin", "main"]);
     git(&fixture.repo, &["remote", "set-head", "origin", "main"]);
-    let workspace = fixture.add("pusher");
-    let path = Path::new(workspace["path"].as_str().unwrap());
-    let head = git(path, &["rev-parse", "HEAD"]);
-    // What an agent launch adds: the helper on the PATH, and the rewrite
-    // that sends pushes to the remote through it.
+    remote.to_owned()
+}
+
+/// What an agent launch adds for pushes to `remote`: the helper on the
+/// PATH, and the rewrite that sends pushes to the remote through it.
+fn push_gate(fixture: &Fixture, command: &mut Command, remote: &str) {
     let helper = fixture.root.path().join("push-gate");
     fs::create_dir_all(&helper).unwrap();
     install_test_script(
@@ -1395,6 +1396,35 @@ fn an_agent_push_waits_for_approval_and_approving_runs_it() {
         std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
     ))
     .unwrap();
+    command
+        .env("PATH", &path_with_helper)
+        .env("GIT_CONFIG_COUNT", "1")
+        .env(
+            "GIT_CONFIG_KEY_0",
+            format!("url.shoal::{remote}.pushInsteadOf"),
+        )
+        .env("GIT_CONFIG_VALUE_0", remote);
+}
+
+/// The agent of workspace `name` pushing its HEAD to `branch` of `remote`,
+/// with the workspace's scope, as `shoal run` gives it.
+fn agent_push(fixture: &Fixture, name: &str, path: &Path, remote: &str, branch: &str) -> Output {
+    let mut push = fixture.command();
+    push_gate(fixture, push.current_dir(path), remote);
+    let destination = format!("HEAD:refs/heads/{branch}");
+    let push = push
+        .args(["run", "--workspace", &fixture.id(name), "--"])
+        .args(["git", "push", "--no-verify", "origin", &destination]);
+    fixture.output(push)
+}
+
+#[test]
+fn an_agent_push_waits_for_approval_and_approving_runs_it() {
+    let fixture = Fixture::with_config(Some("permissions.push = \"propose\"\n"));
+    let remote = &bare_origin(&fixture);
+    let workspace = fixture.add("pusher");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let head = git(path, &["rev-parse", "HEAD"]);
     let pushed = || {
         let refs = git(fixture.root.path(), &["--git-dir", remote, "for-each-ref"]);
         refs.contains("refs/heads/pusher")
@@ -1402,15 +1432,9 @@ fn an_agent_push_waits_for_approval_and_approving_runs_it() {
 
     // Your own push from the worktree carries no workspace scope, so the
     // helper pushes it at once.
-    let own = support::isolated(fixture.root.path(), "git")
-        .current_dir(path)
-        .env("PATH", &path_with_helper)
-        .env("GIT_CONFIG_COUNT", "1")
-        .env(
-            "GIT_CONFIG_KEY_0",
-            format!("url.shoal::{remote}.pushInsteadOf"),
-        )
-        .env("GIT_CONFIG_VALUE_0", remote)
+    let mut own = support::isolated(fixture.root.path(), "git");
+    push_gate(&fixture, own.current_dir(path), remote);
+    let own = own
         .args(["push", "origin", "HEAD:refs/heads/yours"])
         .output()
         .unwrap();
@@ -1422,27 +1446,8 @@ fn an_agent_push_waits_for_approval_and_approving_runs_it() {
     let refs = git(fixture.root.path(), &["--git-dir", remote, "for-each-ref"]);
     assert!(refs.contains("refs/heads/yours"), "{refs}");
 
-    // The agent's push carries the workspace's scope, as `shoal run` gives it.
-    let push = fixture
-        .command()
-        .current_dir(path)
-        .env("PATH", &path_with_helper)
-        .env("GIT_CONFIG_COUNT", "1")
-        .env(
-            "GIT_CONFIG_KEY_0",
-            format!("url.shoal::{remote}.pushInsteadOf"),
-        )
-        .env("GIT_CONFIG_VALUE_0", remote)
-        .args(["run", "--workspace", &fixture.id("pusher"), "--"])
-        .args([
-            "git",
-            "push",
-            "--no-verify",
-            "origin",
-            "HEAD:refs/heads/pusher",
-        ])
-        .output()
-        .unwrap();
+    // The agent's push carries the workspace's scope.
+    let push = agent_push(&fixture, "pusher", path, remote, "pusher");
     let stderr = String::from_utf8_lossy(&push.stderr);
     assert!(!push.status.success(), "{stderr}");
     assert!(!pushed());
@@ -1466,4 +1471,50 @@ fn an_agent_push_waits_for_approval_and_approving_runs_it() {
         .trim(),
         head.trim()
     );
+}
+
+/// A gate agent: it runs a command that reads the space it decides for and
+/// one that would change it, recording each one's exit status, then denies.
+const GATE_AGENT: &str = r#"#!/bin/sh
+dir='{dir}'
+'{shoal}' status '{space}' --json > "$dir/status.json" 2> "$dir/status.err"
+echo $? > "$dir/status.code"
+'{shoal}' rename '{space}' 'Renamed by the gate' > /dev/null 2> "$dir/rename.err"
+echo $? > "$dir/rename.code"
+echo '{"verdict":"deny","reason":"looked","rule":""}'
+"#;
+
+/// The gate's `shoal` commands read the requesting space, and the daemon
+/// refuses them any change.
+#[test]
+fn the_gate_reads_with_shoal_and_changes_nothing() {
+    let fixture = Fixture::with_config(Some(
+        "permissions.push = \"gate\"\n[gate]\nagent = \"fake\"\n\
+         [agents.fake]\nbase = \"codex\"\ncommand = [\"gate-agent\"]\n\
+         gate = [\"{prompt}\", \"{schema}\"]\n",
+    ));
+    let remote = &bare_origin(&fixture);
+    let workspace = fixture.add("pusher");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let space = fixture.id("pusher");
+    let dir = fixture.root.path().join("gate");
+    fs::create_dir_all(&dir).unwrap();
+    let agent = (GATE_AGENT.replace("{dir}", dir.to_str().unwrap()))
+        .replace("{shoal}", support::shoal_binary())
+        .replace("{space}", &space);
+    install_test_script(fixture.root.path().join("bin/gate-agent"), agent);
+
+    let push = agent_push(&fixture, "pusher", path, remote, "pusher");
+    assert!(!push.status.success());
+    let code = |command: &str| fs::read_to_string(dir.join(format!("{command}.code")));
+    let rename = wait_for("the gate's commands", || code("rename").ok());
+    assert_eq!(code("status").unwrap().trim(), "0");
+    let status: Value =
+        serde_json::from_str(&fs::read_to_string(dir.join("status.json")).unwrap()).unwrap();
+    assert_eq!(status["workspace"]["id"], space.as_str());
+    assert_ne!(rename.trim(), "0");
+    let refused = fs::read_to_string(dir.join("rename.err")).unwrap();
+    assert!(refused.contains("read-only scope"), "{refused}");
+    let status = fixture.ok(&["status", &space]);
+    assert_ne!(status["workspace"]["name"], "Renamed by the gate");
 }
