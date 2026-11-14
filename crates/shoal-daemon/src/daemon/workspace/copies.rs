@@ -129,8 +129,7 @@ impl Manager {
                     source.name, workspace.name, workspace.number, kept.number
                 )
             })?;
-        self.record_copy_start(workspace, source, Ok(false)).await?;
-        Ok(())
+        self.record_copy_checkpoint(workspace, source).await
     }
 
     /// The name of the removed workspace the copy `id` was made from, while
@@ -390,13 +389,19 @@ impl Manager {
         seeded: Result<bool>,
     ) -> Result<bool> {
         let needs_setup = seeded?;
+        self.record_copy_checkpoint(workspace, source).await?;
+        Ok(needs_setup)
+    }
+
+    /// Take the copy `workspace`'s starting checkpoint of what it now holds
+    /// and record it with what it was copied from.
+    async fn record_copy_checkpoint(&self, workspace: &Workspace, source: &Source) -> Result<()> {
         let starting = self
             .checkpoint(workspace, CheckpointCause::Start, None)
             .await?;
         let index = git::checkpoint::index_tree(&workspace.path).await?;
         self.record_copied_from(&workspace.id, source, starting.number, index)
-            .await?;
-        Ok(needs_setup)
+            .await
     }
 
     /// Give the new worktree the index, worktree config and files of the
