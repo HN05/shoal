@@ -1,6 +1,7 @@
 use super::*;
 use crate::client::assignments::Done;
 use crate::client::execution_ids::ExecutionId;
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::{
@@ -27,9 +28,9 @@ fn herdr() -> BTreeMap<String, String> {
     BTreeMap::from([("HERDR_ENV".into(), "1".into())])
 }
 
-/// Save the record of an agent stopped as `execution` in `workspace`.
-fn stop(manager: &Manager, workspace: &Workspace, execution: &str, record: &str) {
-    let path = record_path(&manager.paths, &workspace.id, &execution.into());
+/// Save the record of an agent stopped as `execution` in the space `id`.
+fn stop(manager: &Manager, id: &SpaceId, execution: &str, record: &str) {
+    let path = record_path(&manager.paths, id, &execution.into());
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(path, record).unwrap();
 }
@@ -37,9 +38,9 @@ fn stop(manager: &Manager, workspace: &Workspace, execution: &str, record: &str)
 const STOPPED: &str = r#"{"agent":"claude","stage":"stopped"}"#;
 
 /// Save the record and restore request a signal stop leaves.
-fn signal_stop(manager: &Manager, workspace: &Workspace, execution: &str) {
-    stop(manager, workspace, execution, STOPPED);
-    let request = record_path(&manager.paths, &workspace.id, &execution.into())
+fn signal_stop(manager: &Manager, id: &SpaceId, execution: &str) {
+    stop(manager, id, execution, STOPPED);
+    let request = record_path(&manager.paths, id, &execution.into())
         .with_file_name(format!("{execution}.restore-request.json"));
     std::fs::write(request, r#"{"HERDR_ENV":"1"}"#).unwrap();
 }
@@ -64,7 +65,7 @@ async fn resumed_agents_start_from_the_daemon_as_slots_free() {
     let mut workspaces = Vec::new();
     for name in ["one", "two", "three"] {
         let workspace = create(&manager, &repo, name).await;
-        stop(&manager, &workspace, &format!("{name}-agent"), STOPPED);
+        stop(&manager, &workspace.id, &format!("{name}-agent"), STOPPED);
         workspaces.push(workspace);
     }
     // Three stopped agents exceed the limit, but a queued restore holds no
@@ -127,7 +128,7 @@ async fn a_restore_started_now_starts_beyond_the_limit() {
     let workspace = create(&manager, &repo, "work").await;
     // A launch takes the only slot before the agent stops.
     assert!(add(&manager, &repo, "busy").await.start);
-    stop(&manager, &workspace, "agent", STOPPED);
+    stop(&manager, &workspace.id, "agent", STOPPED);
     let now = manager
         .start_stopped_restore(
             &manager.named("work").await,
@@ -154,7 +155,7 @@ async fn only_an_ended_execution_with_a_record_can_be_queued() {
         .await
         .unwrap_err();
     let (running, _connection) = connected_agent(&manager, &workspace).await;
-    stop(&manager, &workspace, running.as_str(), STOPPED);
+    stop(&manager, &workspace.id, running.as_str(), STOPPED);
     manager
         .queue_stopped_restore(&manager.named("work").await, &running, herdr())
         .await
@@ -169,9 +170,9 @@ async fn signal_stops_queue_their_restore_once_the_execution_has_ended() {
     let open = create(&manager, &repo, "open").await;
     let done = create(&manager, &repo, "done").await;
     let (running, _connection) = connected_agent(&manager, &open).await;
-    signal_stop(&manager, &open, running.as_str());
-    signal_stop(&manager, &open, "ended");
-    stop(&manager, &open, "manual", STOPPED);
+    signal_stop(&manager, &open.id, running.as_str());
+    signal_stop(&manager, &open.id, "ended");
+    stop(&manager, &open.id, "manual", STOPPED);
     manager
         .mark_done(
             &SpaceSelector::id(&done.id),
@@ -180,7 +181,7 @@ async fn signal_stops_queue_their_restore_once_the_execution_has_ended() {
         )
         .await
         .unwrap();
-    signal_stop(&manager, &done, "finished");
+    signal_stop(&manager, &done.id, "finished");
 
     manager.dispatch_queue().await.unwrap();
     let entries = manager.queue_entries().await.unwrap();
@@ -217,6 +218,22 @@ async fn asleep(manager: &Manager, name: &str) -> Option<Asleep> {
     manager.workspace(&id).await.unwrap().asleep
 }
 
+/// A chat's agent stopped between turns waits for an update before its
+/// restore, as a workspace's does.
+#[tokio::test]
+async fn a_signal_stopped_idle_chat_agent_waits_for_an_update() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let chat = crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
+    signal_stop(&manager, &chat.id, "idle-agent");
+    stop(&manager, &chat.id, "idle-agent", IDLE);
+
+    manager.dispatch_queue().await.unwrap();
+
+    let waiting = entry(&manager, "idle-agent").await;
+    assert!(waiting.waits_for_update && waiting.state == Queued);
+}
+
 #[tokio::test]
 async fn a_signal_stopped_idle_agent_waits_for_an_update_unless_resumed() {
     let (temp, manager) = manager().await;
@@ -226,8 +243,8 @@ async fn a_signal_stopped_idle_agent_waits_for_an_update_unless_resumed() {
     for (name, record) in [("idle", IDLE), ("resumed", IDLE), ("working", STOPPED)] {
         let workspace = create(&manager, &repo, name).await;
         let execution = ExecutionId::from(format!("{name}-agent"));
-        signal_stop(&manager, &workspace, execution.as_str());
-        stop(&manager, &workspace, execution.as_str(), record);
+        signal_stop(&manager, &workspace.id, execution.as_str());
+        stop(&manager, &workspace.id, execution.as_str(), record);
         workspaces.push(workspace);
     }
     // The idle agents hold no slot, so the one stopped mid-turn takes it.
@@ -307,7 +324,7 @@ async fn resuming_an_agent_its_wrapper_waits_for_admits_the_wrappers_restore() {
     let agents = stopped_agents(&manager, &workspaces.iter().collect::<Vec<_>>()).await;
     let mut restoring = Vec::new();
     for (workspace, (execution, _)) in workspaces.iter().zip(&agents) {
-        stop(&manager, workspace, execution.as_str(), IDLE);
+        stop(&manager, &workspace.id, execution.as_str(), IDLE);
         restoring.push(await_restore(&manager, execution).await);
     }
     manager.dispatch_queue().await.unwrap();
@@ -349,10 +366,10 @@ async fn a_queued_restore_of_an_idle_agent_keeps_its_workspace_from_no_cleanup()
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     let idle = create(&manager, &repo, "idle").await;
-    signal_stop(&manager, &idle, "idle-agent");
-    stop(&manager, &idle, "idle-agent", IDLE);
+    signal_stop(&manager, &idle.id, "idle-agent");
+    stop(&manager, &idle.id, "idle-agent", IDLE);
     let working = create(&manager, &repo, "working").await;
-    signal_stop(&manager, &working, "working-agent");
+    signal_stop(&manager, &working.id, "working-agent");
     manager.dispatch_queue().await.unwrap();
     assert!(entry(&manager, "idle-agent").await.waits_for_update);
     assert!(manager.cleanup_candidacy(&idle.id).await.unwrap().is_ok());
@@ -389,8 +406,8 @@ async fn restores_leave_the_queue_once_resolved_or_cancelled() {
     let busy = create(&manager, &repo, "busy").await;
     let (_running, _connection) = connected_agent(&manager, &busy).await;
     let workspace = create(&manager, &repo, "work").await;
-    stop(&manager, &workspace, "resumed", STOPPED);
-    stop(&manager, &workspace, "kept", STOPPED);
+    stop(&manager, &workspace.id, "resumed", STOPPED);
+    stop(&manager, &workspace.id, "kept", STOPPED);
     for execution in ["resumed", "kept"] {
         manager
             .queue_stopped_restore(&manager.named("work").await, &execution.into(), herdr())
@@ -425,7 +442,7 @@ async fn a_restore_whose_agent_never_starts_expires_and_says_so() {
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
     let workspace = create(&manager, &repo, "work").await;
-    stop(&manager, &workspace, "agent", STOPPED);
+    stop(&manager, &workspace.id, "agent", STOPPED);
     let entry = manager
         .queue_stopped_restore(
             &manager.named("work").await,
@@ -467,7 +484,7 @@ async fn a_stop_or_completion_keeps_stopped_agents_down() {
     let (_running, _connection) = connected_agent(&manager, &busy).await;
     // A signal stop's request that dispatch has not queued yet.
     let signalled = create(&manager, &repo, "signalled").await;
-    signal_stop(&manager, &signalled, "requested");
+    signal_stop(&manager, &signalled.id, "requested");
     manager
         .stop_space(
             &manager.named("signalled").await,
@@ -489,7 +506,7 @@ async fn a_stop_or_completion_keeps_stopped_agents_down() {
 
     // A restore waiting when its assignment is done is cancelled.
     let finished = create(&manager, &repo, "finished").await;
-    stop(&manager, &finished, "waiting", STOPPED);
+    stop(&manager, &finished.id, "waiting", STOPPED);
     manager
         .queue_stopped_restore(
             &manager.named("finished").await,
@@ -516,7 +533,7 @@ async fn a_manual_stop_keeps_stopped_agents_as_last_sessions() {
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
     let workspace = create(&manager, &repo, "work").await;
-    signal_stop(&manager, &workspace, "signalled");
+    signal_stop(&manager, &workspace.id, "signalled");
     manager.dispatch_queue().await.unwrap();
     assert_eq!(queue(&manager).await.len(), 1);
     manager
@@ -587,7 +604,7 @@ async fn a_stop_cancels_an_admitted_restore_before_its_agent_registers() {
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
     let workspace = create(&manager, &repo, "work").await;
-    stop(&manager, &workspace, "agent", STOPPED);
+    stop(&manager, &workspace.id, "agent", STOPPED);
     let entry = manager
         .queue_stopped_restore(
             &manager.named("work").await,
@@ -617,7 +634,7 @@ async fn a_shutdown_returns_an_admitted_restore_to_the_queue_when_its_agent_regi
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
     let workspace = create(&manager, &repo, "work").await;
-    stop(&manager, &workspace, "agent", STOPPED);
+    stop(&manager, &workspace.id, "agent", STOPPED);
     let entry = manager
         .queue_stopped_restore(
             &manager.named("work").await,
@@ -645,7 +662,7 @@ async fn a_stop_forgets_a_request_while_a_resume_holds_its_record() {
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
     let workspace = create(&manager, &repo, "work").await;
-    signal_stop(&manager, &workspace, "agent");
+    signal_stop(&manager, &workspace.id, "agent");
     let path = record_path(&manager.paths, &workspace.id, &ExecutionId::from("agent"));
     let resuming = crate::execution::recovery::claim(&path).unwrap();
     manager
@@ -668,7 +685,7 @@ async fn a_request_whose_record_is_gone_is_forgotten() {
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
     let workspace = create(&manager, &repo, "work").await;
-    signal_stop(&manager, &workspace, "agent");
+    signal_stop(&manager, &workspace.id, "agent");
     // A resume consumed the record before dispatch saw the request.
     std::fs::remove_file(record_path(
         &manager.paths,
@@ -689,7 +706,7 @@ async fn stop_all_selects_running_agents_and_pending_restores() {
     let running = create(&manager, &repo, "running").await;
     let (_execution, _connection) = connected_agent(&manager, &running).await;
     let queued = create(&manager, &repo, "queued").await;
-    stop(&manager, &queued, "waiting", STOPPED);
+    stop(&manager, &queued.id, "waiting", STOPPED);
     manager
         .queue_stopped_restore(
             &manager.named("queued").await,
@@ -699,9 +716,9 @@ async fn stop_all_selects_running_agents_and_pending_restores() {
         .await
         .unwrap();
     let requested = create(&manager, &repo, "requested").await;
-    signal_stop(&manager, &requested, "agent");
+    signal_stop(&manager, &requested.id, "agent");
     let idle = create(&manager, &repo, "idle").await;
-    stop(&manager, &idle, "manual", STOPPED);
+    stop(&manager, &idle.id, "manual", STOPPED);
 
     let mut targets: Vec<String> = manager
         .stop_targets(QueuedLaunches::Cancel)

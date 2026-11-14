@@ -271,8 +271,8 @@ impl Agent {
 impl Manager {
     /// Tell the user, or the coordinator, that the agent of `space` exited
     /// with `exit_code`, `complete` when its processes are proven stopped,
-    /// or stopped for `overload`. An attended space's agent that exits
-    /// cleanly tells no one: the user saw it end.
+    /// or stopped for `overload`. A chat's agent that exits cleanly tells
+    /// no one: the user saw it end.
     pub(crate) async fn notify_agent_exit(
         &self,
         space: &crate::model::PresentSpace,
@@ -282,7 +282,7 @@ impl Manager {
         overload: Option<(&ExecutionId, &str)>,
     ) {
         let clean = overload.is_none() && complete && exit_code.is_some();
-        if clean && space.space_kind().attended() {
+        if clean && space.space_kind() == crate::model::SpaceKind::Chat {
             return;
         }
         let message = if let Some((execution_id, reason)) = overload {
@@ -528,17 +528,6 @@ impl Manager {
         connections
             .with_agents(|agents| agents.insert(id.clone(), agent))
             .await;
-    }
-
-    /// Whether the user attends the space `id`, as its kind says; a space
-    /// that cannot be read counts as unattended.
-    pub(super) async fn attended(&self, id: &SpaceId) -> bool {
-        let id = id.to_owned();
-        let kind = self
-            .store
-            .run(move |db| crate::daemon::spaces::space_kind(db, &id))
-            .await;
-        (kind.ok().flatten()).is_some_and(crate::model::SpaceKind::attended)
     }
 
     /// Keep the name, model, effort, mode and narrowing of the agent

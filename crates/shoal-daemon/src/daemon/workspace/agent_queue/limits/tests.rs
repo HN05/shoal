@@ -551,7 +551,10 @@ fn a_chat_without_a_repository_meets_the_machines_limits_alone() {
     let in_a = Some(RepositoryId::from("a"));
     let pass =
         |occupied: &[Option<RepositoryId>], entry| super::admit(occupied, &[entry], &limits, false);
-    assert_eq!(pass(std::slice::from_ref(&in_a), chat(false)).admitted, ["chat"]);
+    assert_eq!(
+        pass(std::slice::from_ref(&in_a), chat(false)).admitted,
+        ["chat"]
+    );
     // Its slot fills the machine for a heavy chat, but not for a light one.
     let full = [in_a, None];
     let held = pass(&full, chat(false)).held;
