@@ -2439,7 +2439,10 @@ with its arguments, which the command reports with exit 2 and
 `code: "approval_pending"`, or `"approval_denied"` once denied. Once the
 request is approved, the same action proceeds once under every other check,
 and taking it again asks again; an approved command's own requests take
-what the same key governs without asking again. `user_holds` governs
+what the same key governs without asking again. `notifications`, which is
+`"deny"` or `"direct"`, governs reading, clearing and watching your
+notifications, Shoal's own log, and the untracked worktrees, cleanup errors
+and failing syncs the inbox lists; `user_holds` governs
 releasing the user's holds and removing a space the user holds, or holds
 one below; `daemon` governs installing,
 starting, stopping and restarting the daemon, and `shoal update`; `limits`
@@ -5224,8 +5227,8 @@ restarts, each config reload, with the error when the file was refused, and
 each automatic cleanup pass that removed spaces, naming them, or failed in a
 new way. `--all`, `--limit`, `--follow` and `--json` work there too. Shoal's
 own events stay for the global `cleanup.restore.retention_days`. The daemon's
-diagnostic log is not part of it. Workspace processes cannot read Shoal's
-log.
+diagnostic log is not part of it. Workspace processes read Shoal's log as
+their space's [`notifications` permission](#permitted-actions) allows.
 
 ### Workspace events
 
@@ -5372,7 +5375,8 @@ Ghostty, WezTerm, and Kitty show as a desktop notification (tmux needs
 `allow-passthrough`); other terminals ignore it. Repeated
 identical conflicts, cleanup failures and messages collapse into one entry until read;
 every agent exit is listed. `shoal status` outside a space mentions pending ones. Arbitrary `run` commands and manual `rm` are your own and record nothing.
-Scoped commands cannot read or clear notifications but may notify about their own
+Scoped commands read and clear notifications as their space's
+[`notifications` permission](#permitted-actions) allows, and may notify about their own
 workspace and withdraw those messages. Read entries older than the newest
 500 are dropped; unread ones stay.
 

@@ -5,11 +5,13 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
+    permissions::Action,
     scope::{Caller, Scoped},
     workspace::Manager,
 };
 use crate::client::space_names::SpaceSelector;
 use crate::{
+    config::permissions::PermissionKey,
     daemon::workspace::spotlight::Layout,
     protocol::{Body, RepositoryMethod},
 };
@@ -98,6 +100,12 @@ impl Scoped for RepositoryMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         let repository = match self {
             RepositoryMethod::ListRepositories => return Ok(None),
+            // The inbox lists them with the user's notifications.
+            RepositoryMethod::FailingSyncs => {
+                let action = Action::new(PermissionKey::Notifications, "the failing syncs");
+                manager.authorize_action(Some(caller), action).await?;
+                return Ok(None);
+            }
             RepositoryMethod::SyncRepository { repository } => {
                 *repository = manager
                     .own_repository(

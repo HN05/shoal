@@ -6,11 +6,15 @@ use tokio::net::UnixStream;
 
 use super::super::{
     answer::{Answer, OperationGuard},
-    scope::{Caller, Scoped, denied},
+    permissions::Action,
+    scope::{Caller, Scoped},
     workspace::Manager,
 };
 use crate::client::space_names::SpaceSelector;
-use crate::protocol::{self, Body, NotificationMethod, Response};
+use crate::{
+    config::permissions::PermissionKey,
+    protocol::{self, Body, NotificationMethod, Response},
+};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -53,15 +57,25 @@ pub(super) async fn handle(
     }))
 }
 
+/// Reading, clearing and watching the user's notifications is the
+/// `notifications` permission's.
 impl Scoped for NotificationMethod {
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut SpaceSelector>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             NotificationMethod::SendMessage { space, .. }
             | NotificationMethod::WithdrawMessage { space, .. } => Some(space),
             NotificationMethod::ListNotifications { .. }
             | NotificationMethod::MarkNotificationsRead { .. }
             | NotificationMethod::ClearNotifications
-            | NotificationMethod::WatchNotifications { .. } => return Err(denied()),
+            | NotificationMethod::WatchNotifications { .. } => {
+                let action = Action::new(PermissionKey::Notifications, "the user's notifications");
+                manager.authorize_action(Some(caller), action).await?;
+                None
+            }
         })
     }
 }

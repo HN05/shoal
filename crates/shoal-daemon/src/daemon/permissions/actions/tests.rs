@@ -210,3 +210,22 @@ async fn releasing_the_user_s_hold_follows_the_user_holds_permission() {
         .unwrap();
     assert!(manager.holds(&selector).await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn reading_the_user_s_notifications_follows_the_notifications_permission() {
+    use crate::{daemon::scope::Scoped, protocol::NotificationMethod};
+
+    let (_temp, manager) = manager().await;
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let below = chat(&manager, "below", "chat", None, Some(&master.id)).await;
+    let list = || NotificationMethod::ListNotifications {
+        unread_only: false,
+        limit: 10,
+    };
+    (list().scope(&manager, &caller(&master.id))).await.unwrap();
+    // Nothing asks approval for them: a denied space is refused.
+    let error = (list().scope(&manager, &caller(&below.id)))
+        .await
+        .unwrap_err();
+    assert!(error.downcast_ref::<Undecided>().is_none(), "{error:#}");
+}

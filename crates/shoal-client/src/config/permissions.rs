@@ -64,6 +64,16 @@ states!(
     }
 );
 
+states!(
+    #[derive(PartialOrd, Ord)]
+    /// Whether a scoped caller may take an action, which nothing asks
+    /// approval for.
+    Allowed {
+        Deny => "deny",
+        Direct => "direct",
+    }
+);
+
 /// Every permission key, once: its field, its [`PermissionKey`] variant, the
 /// name config gives it and its type of value. It defines
 /// [`PermissionsConfig`], [`PermissionKey`] and [`Permissions`] and what
@@ -184,6 +194,9 @@ permission_keys! {
     /// Removing or converting a space the user holds, and releasing the
     /// user's holds.
     user_holds: UserHolds => "user_holds", Acting;
+    /// Reading, clearing and watching the user's notifications, the
+    /// daemon-wide problems the inbox lists, and Shoal's own log.
+    notifications: Notifications => "notifications", Allowed;
 }
 
 /// Refuse `value` of `key` where it is wider than `held`.
@@ -214,6 +227,7 @@ impl PermissionsConfig {
         admin: Some(Acting::Propose),
         limits: Some(Acting::Propose),
         user_holds: Some(Acting::Propose),
+        notifications: Some(Allowed::Deny),
     };
 
     /// The defaults of a mode that coordinates rather than edits: it decides
@@ -231,6 +245,7 @@ impl PermissionsConfig {
         admin: Some(Acting::Direct),
         limits: Some(Acting::Direct),
         user_holds: Some(Acting::Direct),
+        notifications: Some(Allowed::Direct),
         ..Self::COORDINATING
     };
 

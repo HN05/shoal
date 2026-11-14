@@ -416,10 +416,11 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     };
     let merging = crate::daemon::scope::authorize(&manager, Some(&token), &mut merge).await;
     assert!(merging.is_err());
+    // A master session reads the user's notifications.
     let mut notifications = NotificationMethod::ListNotifications {
         unread_only: true,
         limit: 10,
     };
     let reading = crate::daemon::scope::authorize(&manager, Some(&token), &mut notifications).await;
-    assert!(reading.is_err());
+    reading.unwrap();
 }

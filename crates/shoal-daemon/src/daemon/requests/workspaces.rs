@@ -7,10 +7,12 @@ use tokio::net::UnixStream;
 
 use super::super::{
     answer::{Answer, OperationGuard},
+    permissions::Action,
     scope::{Caller, Scoped, denied},
     workspace::{self, Manager},
 };
 use crate::client::{events::EventCursor, space_names::SpaceSelector};
+use crate::config::permissions::PermissionKey;
 use crate::protocol::{
     self, Body, ConfigTarget, ErrorCode, RepositoryLayers, Response, WorkspaceMethod,
 };
@@ -409,10 +411,15 @@ impl Scoped for WorkspaceMethod {
             WorkspaceMethod::SpaceStatus { space } | WorkspaceMethod::SpaceSessions { space } => {
                 Some(space)
             }
+            // The inbox lists them with the user's notifications.
+            WorkspaceMethod::UntrackedWorktrees => {
+                let action = Action::new(PermissionKey::Notifications, "the untracked worktrees");
+                manager.authorize_action(Some(caller), action).await?;
+                None
+            }
             WorkspaceMethod::ReopenWorkspace { .. }
             | WorkspaceMethod::AdoptWorkspace { .. }
             | WorkspaceMethod::WorkspaceEnv { .. }
-            | WorkspaceMethod::UntrackedWorktrees
             | WorkspaceMethod::CopySpace { .. } => administer(manager, caller, self).await?,
             WorkspaceMethod::RevokeWorkspaceEnv { .. }
             | WorkspaceMethod::OwnedPlaces

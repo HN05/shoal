@@ -197,7 +197,7 @@ space is selected by its ID. Outside a space, `status` shows the daemon and
 `log` every space's entries with the daemon's.
 Notifications report agent exits, alerts, questions, busy resources, pending
 approvals and cleanup Shoal did on its own; reading them marks them read, and
-scoped callers cannot read them.
+scoped callers read them as their `notifications` permission allows.
 
 ## Space name
 
@@ -351,12 +351,14 @@ Other keys govern what was once the user's alone, each `deny`, `propose` or
 workspaces, `limits` starting agents regardless of the limits, with
 `--now`, `--focus` or `queue start`, `user_holds` releasing the user's holds
 and removing what the user holds, and `daemon` the daemon's service
-commands and `shoal update`.
+commands and `shoal update`. `notifications`, `deny` or `direct`, lets a
+space read the user's notifications, Shoal's own log and the inbox's
+daemon-wide problems.
 With `propose` the command exits 2 with `approval_pending` and the request,
 which goes to the space above whose own value is `direct`, or the user; once
 approved, the same command proceeds once. A master session has `admin`,
-`limits` and `user_holds` at `direct` and `daemon` at `propose`; other modes
-propose them and are denied `daemon`.
+`limits`, `user_holds` and `notifications` at `direct` and `daemon` at
+`propose`; other modes propose the first three and are denied the rest.
 
 ## Links and watches
 

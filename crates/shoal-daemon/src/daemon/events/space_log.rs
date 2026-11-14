@@ -12,7 +12,8 @@ use crate::{
         space_ids::SpaceId,
         space_names::SpaceSelector,
     },
-    daemon::{scope::Caller, workspace::Manager},
+    config::permissions::PermissionKey,
+    daemon::{permissions::Action, scope::Caller, workspace::Manager},
 };
 
 /// How far a removed space's log looks up for a space that still exists,
@@ -56,7 +57,8 @@ impl Manager {
         selector: &mut Option<SpaceSelector>,
     ) -> Result<()> {
         let Some(selector) = selector else {
-            anyhow::bail!("workspace processes cannot read Shoal's log; name a space");
+            let action = Action::new(PermissionKey::Notifications, "Shoal's log");
+            return self.authorize_action(Some(caller), action).await;
         };
         let id = self.log_space(selector).await?;
         let reached = match self.nearest_existing(&id).await? {
