@@ -30,6 +30,8 @@ pub struct Provider {
     /// arguments, which a launch with an effort sets to the same value.
     pub(super) effort_variable: Option<&'static str>,
     pub(super) review: Option<&'static [&'static str]>,
+    /// The arguments of a review that resumes `{session}`.
+    pub(super) review_resume: Option<&'static [&'static str]>,
     /// The arguments of the gate's one-shot run: read-only as `review` is,
     /// but able to reach the daemon for Shoal's commands.
     pub(super) gate: Option<&'static [&'static str]>,
@@ -91,6 +93,21 @@ pub const PROVIDERS: &[Provider] = &[
             "{schema}",
             "--output-last-message",
             "{output}",
+            "{prompt}",
+        ]),
+        // Resuming takes no `--sandbox`, so the config sets it.
+        review_resume: Some(&[
+            "exec",
+            "resume",
+            "-c",
+            "sandbox_mode=\"read-only\"",
+            "-c",
+            "approval_policy=\"never\"",
+            "--output-schema",
+            "{schema}",
+            "--output-last-message",
+            "{output}",
+            "{session}",
             "{prompt}",
         ]),
         // Its permissions read every file and write none, and its network
@@ -175,6 +192,21 @@ pub const PROVIDERS: &[Provider] = &[
             "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*)",
             "--settings={\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":false,\"allowUnsandboxedCommands\":false}}",
         ]),
+        review_resume: Some(&[
+            "-p",
+            "{prompt}",
+            "--output-format",
+            "json",
+            "--json-schema",
+            "{schema_json}",
+            "--setting-sources=",
+            "--permission-mode=dontAsk",
+            "--tools=Read,Grep,Glob,Bash",
+            "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*)",
+            "--settings={\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":false,\"allowUnsandboxedCommands\":false}}",
+            "--resume",
+            "{session}",
+        ]),
         // As `review`, with Shoal's commands, whose sandbox reaches Unix
         // sockets, the daemon's among them; the allowed tools reach them
         // only through `shoal`.
@@ -223,6 +255,7 @@ pub const PROVIDERS: &[Provider] = &[
         effort_args: None,
         effort_variable: None,
         review: None,
+        review_resume: None,
         gate: None,
         gate_resume: None,
         review_result: &output::PLAIN,
@@ -241,6 +274,7 @@ pub const PROVIDERS: &[Provider] = &[
         effort_args: None,
         effort_variable: None,
         review: None,
+        review_resume: None,
         gate: None,
         gate_resume: None,
         review_result: &output::PLAIN,
@@ -259,6 +293,7 @@ pub const PROVIDERS: &[Provider] = &[
         effort_args: None,
         effort_variable: None,
         review: None,
+        review_resume: None,
         gate: None,
         gate_resume: None,
         review_result: &output::PLAIN,

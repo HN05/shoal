@@ -79,11 +79,16 @@ pub fn entry(name: &str, agent: &Agent) -> Result<()> {
                 .with_context(|| format!("agents.{name}.{key}"))?;
         }
     }
-    if let Some(argv) = &agent.gate_resume {
-        validate_arguments(argv, &["{prompt}"])
-            .and_then(|()| validate_arguments(argv, &["{schema}", "{schema_json}"]))
-            .and_then(|()| validate_arguments(argv, &["{session}"]))
-            .with_context(|| format!("agents.{name}.gate_resume"))?;
+    for (key, argv) in [
+        ("review_resume", &agent.review_resume),
+        ("gate_resume", &agent.gate_resume),
+    ] {
+        if let Some(argv) = argv {
+            validate_arguments(argv, &["{prompt}"])
+                .and_then(|()| validate_arguments(argv, &["{schema}", "{schema_json}"]))
+                .and_then(|()| validate_arguments(argv, &["{session}"]))
+                .with_context(|| format!("agents.{name}.{key}"))?;
+        }
     }
     // An empty `add_dir` turns the built-in one off.
     if let Some(argv) = agent.add_dir.as_ref().filter(|argv| !argv.is_empty()) {

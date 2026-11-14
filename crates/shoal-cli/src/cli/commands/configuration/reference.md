@@ -306,6 +306,7 @@ add_dir = ["--add-dir", "{directory}"]                # Optional
 model_args = ["--model", "{model}"]                   # Optional
 effort_args = ["--reasoning-effort", "{effort}"]      # Optional
 review = ["exec", "--schema", "{schema}", "{prompt}"] # Optional
+review_resume = ["exec", "--resume", "{session}", "--schema", "{schema}", "{prompt}"] # Optional
 gate = ["exec", "--allow", "shoal", "--schema", "{schema}", "{prompt}"] # Optional
 gate_resume = ["exec", "--resume", "{session}", "--allow", "shoal", "--schema", "{schema}", "{prompt}"] # Optional
 
@@ -341,25 +342,28 @@ Each option merges on its own across layers, so a repository can replace
   through `model_args` and `effort_args`, which name `{model}` and `{effort}`;
   without them the tool uses its own defaults. The `[agent]` ones apply over
   these to the default agent, and `--model` and `--effort` over both.
-- `review` runs a [local review](../../../../../../docs/reference.md#local-reviews) once, without a
-  session: the launcher's words before `{args}`, or all of them, then these
-  arguments, which name the prompt `{prompt}` and the output schema as a file,
+- `review` runs a [local review](../../../../../../docs/reference.md#local-reviews) once: the
+  launcher's words before `{args}`, or all of them, then these arguments,
+  which name the prompt `{prompt}` and the output schema as a file,
   `{schema}`, or its text, `{schema_json}`; `{output}` names a file the result
   goes to instead of standard output. A tool without one cannot review.
+  `review_resume` runs a review again in session `{session}`, which an earlier
+  review reported, to keep one session per workspace or PR.
 - `gate` runs the [gate](../../../../../../docs/reference.md#the-gate) once, with `review`'s
   placeholders, read-only as a review but able to run `shoal`: the built-in
   ones open Unix sockets in the tool's sandbox, the daemon's among them, and
   no network host. A tool without one cannot be the gate.
   `gate_resume` runs it again in session `{session}`, which an earlier run
-  reported, to keep a session per subject. A tool without one starts a new
-  session each time, as does one whose runs report no session: Claude Code
-  reports it in its result and Codex in its header.
+  reported, to keep a session per subject.
+- A tool without `review_resume` or `gate_resume` starts a new session each
+  time, as does one whose runs report no session: Claude Code reports it in
+  its result and Codex in its header.
 - `base` makes a tool a launch profile of another, which gives it its base's
   hooks, trust entries and waking, and each of its launcher, `skill_dir`,
   `instructions`, `resume`, `resume_latest`, `fork`, `add_dir`, `model`,
-  `effort`, `model_args`, `effort_args`, `review`, `gate`, `gate_resume`, `retry`,
-  `prompt_cache_minutes` and `proxy` it does not set; a base may itself be a
-  profile.
+  `effort`, `model_args`, `effort_args`, `review`, `review_resume`, `gate`,
+  `gate_resume`, `retry`, `prompt_cache_minutes` and `proxy` it does not set;
+  a base may itself be a profile.
 - `env` sets and `env_remove` removes variables for the tool's tracked agents
   and chats, after `[env]`, the agent account and secrets. A `CLAUDE_CONFIG_DIR`
   or `CODEX_HOME` set there must be absolute or start with `~/`, and cannot be

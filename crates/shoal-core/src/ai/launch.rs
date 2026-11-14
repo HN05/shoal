@@ -74,6 +74,7 @@ pub struct Arguments {
     pub model_args: Option<Vec<String>>,
     pub effort_args: Option<Vec<String>>,
     pub review: Option<Vec<String>>,
+    pub review_resume: Option<Vec<String>>,
     pub gate: Option<Vec<String>>,
     pub gate_resume: Option<Vec<String>>,
 }
@@ -155,6 +156,20 @@ impl Arguments {
         Some(oneshot_args(self.review.as_ref()?, fields, None))
     }
 
+    /// The arguments of a one-shot review with `fields` that resumes
+    /// `session`; `None` when the tool cannot resume one.
+    pub fn review_resume_args(
+        &self,
+        fields: &ReviewFields,
+        session: &AgentSessionId,
+    ) -> Option<Vec<OsString>> {
+        Some(oneshot_args(
+            self.review_resume.as_ref()?,
+            fields,
+            Some(session),
+        ))
+    }
+
     /// The arguments of a gate run with `fields`; `None` when the tool has
     /// no gate template.
     pub fn gate_args(&self, fields: &ReviewFields) -> Option<Vec<OsString>> {
@@ -179,6 +194,12 @@ impl Arguments {
     /// output.
     pub fn review_writes_output(&self) -> bool {
         names_output(self.review.as_deref())
+    }
+
+    /// Whether a resumed review's result goes to `{output}` rather than
+    /// standard output.
+    pub fn review_resume_writes_output(&self) -> bool {
+        names_output(self.review_resume.as_deref())
     }
 
     /// Whether a gate run's result goes to `{output}` rather than standard

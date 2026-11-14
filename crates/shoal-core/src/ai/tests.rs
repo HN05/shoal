@@ -543,3 +543,51 @@ fn gate_runs_reach_shoal_and_stay_read_only() {
         "[agents.droid]\ncommand = ['droid']\ngate_resume = ['-p', '{prompt}', '{schema}']\n";
     assert!(parse(unnamed).is_err());
 }
+
+#[test]
+fn a_resumed_review_names_its_session_and_stays_read_only() {
+    let agents =
+        parse("[agents.droid]\ncommand = ['droid']\nreview = ['-p', '{prompt}', '{schema}']\n")
+            .unwrap();
+    let fields = ReviewFields {
+        prompt: "Review it",
+        schema: Path::new("/tmp/schema.json"),
+        schema_json: "{}",
+        output: Path::new("/tmp/review.json"),
+    };
+    let session = crate::agent::AgentSessionId::from("0199a2".to_owned());
+    let (codex, claude) = (arguments(&agents, "codex"), arguments(&agents, "claude"));
+    let resumed = codex.review_resume_args(&fields, &session).unwrap();
+    assert_eq!(resumed[..2], ["exec", "resume"].map(OsString::from));
+    assert!(resumed.contains(&"sandbox_mode=\"read-only\"".into()));
+    assert_eq!(
+        resumed[resumed.len() - 2..],
+        ["0199a2", "Review it"].map(OsString::from)
+    );
+    let resumed = claude.review_resume_args(&fields, &session).unwrap();
+    let resume = resumed.iter().position(|arg| arg == "--resume").unwrap();
+    assert_eq!(resumed[resume + 1], "0199a2");
+    // It allows the review's tools and no others.
+    let allowed = |args: Vec<OsString>| {
+        args.into_iter()
+            .filter(|arg| {
+                arg.to_str()
+                    .is_some_and(|arg| arg.starts_with("--allowedTools="))
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        allowed(resumed),
+        allowed(claude.review_args(&fields).unwrap())
+    );
+    assert!(codex.review_resume_writes_output());
+    assert!(!claude.review_resume_writes_output());
+    // A tool without the template starts a new review each time.
+    assert_eq!(
+        arguments(&agents, "droid").review_resume_args(&fields, &session),
+        None
+    );
+    let unnamed =
+        "[agents.droid]\ncommand = ['droid']\nreview_resume = ['-p', '{prompt}', '{schema}']\n";
+    assert!(parse(unnamed).is_err());
+}

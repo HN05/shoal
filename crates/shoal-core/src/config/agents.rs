@@ -51,6 +51,9 @@ pub struct AgentToolConfig {
     /// a file, `{schema}`, or its text, `{schema_json}`, and `{output}`, a
     /// file the result goes to instead of standard output.
     pub review: Option<Vec<String>>,
+    /// Arguments of a review that resumes the session with ID `{session}`,
+    /// with `review`'s placeholders, in place of `review`'s.
+    pub review_resume: Option<Vec<String>>,
     /// Arguments of the gate's one-shot, read-only run, with `review`'s
     /// placeholders, which also lets it run Shoal's commands.
     pub gate: Option<Vec<String>>,
@@ -167,6 +170,7 @@ pub fn describe(
                 model_args: settings.and_then(|agent| agent.model_args.clone()),
                 effort_args: settings.and_then(|agent| agent.effort_args.clone()),
                 review: settings.and_then(|agent| agent.review.clone()),
+                review_resume: settings.and_then(|agent| agent.review_resume.clone()),
                 gate: settings.and_then(|agent| agent.gate.clone()),
                 gate_resume: settings.and_then(|agent| agent.gate_resume.clone()),
                 base: settings.and_then(|agent| agent.base.clone()),
