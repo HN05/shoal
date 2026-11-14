@@ -59,6 +59,14 @@ pub async fn commits_since(repo: &Path, base: &str) -> Result<u64> {
     commits_between(repo, base, "HEAD").await
 }
 
+/// The subjects of the newest `limit` commits on HEAD that `base` does not
+/// contain, newest first.
+pub async fn subjects_since(repo: &Path, base: &str, limit: usize) -> Result<Vec<String>> {
+    let (range, limit) = (format!("{base}..HEAD"), format!("--max-count={limit}"));
+    let subjects = run(repo, &["log", "--format=%s", &limit, &range, "--"]).await?;
+    Ok(subjects.lines().map(str::to_owned).collect())
+}
+
 /// Commits reachable from `rev`.
 pub async fn commits_of(repo: &Path, rev: &str) -> Result<u64> {
     Ok(run(repo, &["rev-list", "--count", rev])

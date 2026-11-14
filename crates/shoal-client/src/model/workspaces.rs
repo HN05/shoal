@@ -306,6 +306,24 @@ pub struct OpenedWorkspace {
     pub reused: bool,
 }
 
+/// What `shoal refresh` did to a workspace: the HEAD it had and has, and
+/// what it was brought up to date with.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Refreshed {
+    pub workspace: Workspace,
+    /// What it was made from, as Git or Shoal names it, such as `main`,
+    /// `origin/topic`, `PR #9's head` or `tag v1.4.0`.
+    pub target: String,
+    pub from: CommitId,
+    pub to: CommitId,
+    /// Whether nothing moved, since it already had what `target` has, or
+    /// what it was made from never moves.
+    pub up_to_date: bool,
+    /// Whether its setup is to run again, since its source's files replaced
+    /// what its setup wrote.
+    pub setup: bool,
+}
+
 /// A workspace after it took a new name, with the name it had before.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenamedWorkspace {

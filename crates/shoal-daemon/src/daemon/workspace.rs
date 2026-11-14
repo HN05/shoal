@@ -43,6 +43,7 @@ pub(crate) mod paths;
 pub(crate) mod places;
 mod pr_gate;
 pub(crate) mod proxy_retries;
+mod refresh;
 mod registry;
 mod rename;
 mod repo_configuration;

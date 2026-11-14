@@ -259,6 +259,7 @@ response_bodies! {
     SavedPieces(Vec<super::SavedPiece>),
     SavedSummaries(Vec<crate::saved::SavedSummary>),
     FastForwarded(bool),
+    Refreshed(crate::model::Refreshed),
     Reconciled(Vec<Report>),
     Execution(ExecutionPlan),
     RemovalCheck(RemovalCheck),

@@ -154,6 +154,11 @@ pub enum WorkspaceMethod {
         workspace: SpaceSelector,
         branch: BranchName,
     },
+    /// Bring the workspace up to date with what it was made from, unless it
+    /// holds work of its own.
+    RefreshWorkspace {
+        workspace: SpaceSelector,
+    },
     /// The effective permissions of an agent starting in `mode` with
     /// `narrowing` in the workspace, which its launch's push rules follow.
     LaunchPermissions {

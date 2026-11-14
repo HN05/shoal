@@ -210,6 +210,9 @@ pub(super) async fn handle(
         WorkspaceMethod::FastForwardWorkspace { workspace, branch } => {
             Body::FastForwarded(manager.fast_forward_workspace(&workspace, &branch).await?)
         }
+        WorkspaceMethod::RefreshWorkspace { workspace } => {
+            Body::Refreshed(manager.refresh_workspace(&workspace, caller).await?)
+        }
         WorkspaceMethod::InspectWorkspace { workspace } => {
             Body::Inspection(manager.inspect_workspace(&workspace).await?)
         }
@@ -392,6 +395,7 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::VerifyWorkspace { workspace, .. }
             | WorkspaceMethod::LaunchPermissions { workspace, .. }
             | WorkspaceMethod::FastForwardWorkspace { workspace, .. }
+            | WorkspaceMethod::RefreshWorkspace { workspace }
             | WorkspaceMethod::DiffBase { workspace }
             | WorkspaceMethod::Conflicts { workspace, .. }
             | WorkspaceMethod::PreviewMerge { workspace, .. }
