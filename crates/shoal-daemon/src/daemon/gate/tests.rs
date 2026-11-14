@@ -49,9 +49,11 @@ async fn fixture_deciding_by(gate: &str) -> Fixture {
     let config = format!(
         "[agents.fake]\nbase = 'codex'\ncommand = ['{}']\ngate = ['{{prompt}}', '{{schema}}']\n\
          gate_resume = ['resume', '{{session}}', '{{prompt}}', '{{schema}}']\n\
+         [agents.reviewer]\ncommand = ['{}']\nreview = ['{{prompt}}', '{{schema}}']\n\
          [gate]\nagent = '{gate}'\nescalate = ['a push to a tag']\n\
          [permissions]\npush = 'gate'\n\
          [machine]\nmax_agents = 4\n[machine.overload.disk]\nenabled = false\n",
+        script.display(),
         script.display(),
     );
     configure(&manager, &config).await;
@@ -299,6 +301,20 @@ async fn a_gate_that_cannot_be_set_up_denies_and_tells_the_user() {
         .count();
     assert_eq!(unavailable, 1);
     assert!(fixture.runs().is_empty());
+}
+
+/// A tool that only reviews has no template to run the gate with, which
+/// only the config fixes.
+#[tokio::test]
+async fn a_tool_without_a_gate_template_cannot_be_the_gate() {
+    let fixture = fixture_deciding_by("reviewer").await;
+    fixture.push_branch().await;
+    fixture.message().await;
+    let notifications = fixture.manager.notifications(false, 100).await.unwrap();
+    assert!(
+        (notifications.iter())
+            .any(|notification| notification.kind == NotificationKind::GateUnavailable)
+    );
 }
 
 #[tokio::test]

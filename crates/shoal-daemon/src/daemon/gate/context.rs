@@ -220,9 +220,9 @@ fn gate_agents(settings: &Effective) -> Result<(Agent, Option<Agent>)> {
     let agent = (settings.gate.agent.clone())
         .or_else(|| settings.agent.default.clone())
         .context("no gate agent: set gate.agent or agent.default")?;
-    settings.check_reviewer(&agent)?;
+    settings.check_gate_agent(&agent)?;
     let fallback = (settings.gate.fallback_agent.clone())
-        .filter(|fallback| *fallback != agent && settings.check_reviewer(fallback).is_ok());
+        .filter(|fallback| *fallback != agent && settings.check_gate_agent(fallback).is_ok());
     Ok((agent, fallback))
 }
 

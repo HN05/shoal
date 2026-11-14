@@ -302,6 +302,28 @@ impl Effective {
     /// Refuse `agent` as a reviewer unless it is an AI tool with a review
     /// template that config does not turn off.
     pub fn check_reviewer(&self, agent: &Agent) -> anyhow::Result<()> {
+        let template = OneShot {
+            key: "review",
+            role: "review with it",
+            set: |arguments| arguments.review.is_some(),
+        };
+        self.check_one_shot(agent, &template)
+    }
+
+    /// Refuse `agent` as the gate unless it is an AI tool with a gate
+    /// template that config does not turn off.
+    pub fn check_gate_agent(&self, agent: &Agent) -> anyhow::Result<()> {
+        let template = OneShot {
+            key: "gate",
+            role: "make it the gate",
+            set: |arguments| arguments.gate.is_some(),
+        };
+        self.check_one_shot(agent, &template)
+    }
+
+    /// Refuse `agent` for a one-shot run unless it is an AI tool with
+    /// `template` that config does not turn off.
+    fn check_one_shot(&self, agent: &Agent, template: &OneShot) -> anyhow::Result<()> {
         let name = agent.name();
         anyhow::ensure!(
             !self.turned_off(agent),
@@ -311,10 +333,12 @@ impl Effective {
             .tools
             .get(name)
             .filter(|tool| tool.runs_as_agent)
-            .with_context(|| format!("{name} is not an AI tool, so it cannot review"))?;
+            .with_context(|| format!("{name} is not an AI tool, so it cannot {}", template.role))?;
+        let key = template.key;
         anyhow::ensure!(
-            tool.launch.arguments.review.is_some(),
-            "{name} has no review template; set agents.{name}.review to review with it"
+            (template.set)(&tool.launch.arguments),
+            "{name} has no {key} template; set agents.{name}.{key} to {}",
+            template.role
         );
         Ok(())
     }
@@ -337,6 +361,14 @@ impl Effective {
     pub fn proxy(&self, agent: &Agent) -> Option<&crate::config::proxies::Proxy> {
         self.proxies.get(agent.name())
     }
+}
+
+/// The template a one-shot run takes: its config key, what setting it lets
+/// the user do, and whether a tool's arguments set it.
+struct OneShot {
+    key: &'static str,
+    role: &'static str,
+    set: fn(&crate::ai::Arguments) -> bool,
 }
 
 #[cfg(test)]
