@@ -133,6 +133,7 @@ const REQUESTS: &[&str] = &[
     r#""chat_root""#,
     // The agent queue.
     r#"{"queue_add":{"request":{"repository":"app","name":"fix","agent":"claude","issue_title":null,"plan":"{}","env":{},"now":false,"workspace":"fix","starts_in_caller":true,"blockers":[]}}}"#,
+    r#"{"queue_chat":{"request":{"repository":"app","name":"talk","agent":"claude","mode":"chat","plan":"{}","env":{}}}}"#,
     r#"{"queue_agent":{"workspace":"fix","launch":{"agent":null,"prompt":"Fix the build"}}}"#,
     r#""list_queue""#,
     r#"{"queued_plan":{"entry":"q1"}}"#,
@@ -140,7 +141,7 @@ const REQUESTS: &[&str] = &[
     r#"{"queue_start":{"entry":"q1"}}"#,
     r#"{"started_launch":{"entry":"q1"}}"#,
     r#"{"queue_hold":{"entry":"q1"}}"#,
-    r#"{"queue_attach":{"entry":"q1","workspace":"fix"}}"#,
+    r#"{"queue_attach":{"entry":"q1","space":"fix"}}"#,
     r#"{"queue_fail":{"entry":"q1","error":"no agent"}}"#,
     r#"{"set_priority":{"space":"fix","priority":75}}"#,
     r#"{"queue_restore":{"workspace":"fix","execution":"e1","env":{}}}"#,

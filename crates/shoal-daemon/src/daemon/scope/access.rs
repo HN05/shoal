@@ -13,7 +13,10 @@ use crate::{
         approvals::ApprovalRequest, item_numbers::ItemNumber, questions::Question,
         workspace::Manager,
     },
-    model::{Chat, PresentSpace, QueueEntry, QueueRequest, Repository, RunningAgent, SpaceTarget},
+    model::{
+        Chat, ChatQueueRequest, PresentSpace, QueueEntry, QueueRequest, Repository, RunningAgent,
+        SpaceTarget,
+    },
     protocol::operations::WorkspaceStart,
     repository::Selector,
 };
@@ -441,6 +444,29 @@ impl Manager {
         let repository = self.repository(&request.repository).await?.id;
         let giver = Some(&caller.space_id);
         (self.ensure_caller_holds(giver, &request.narrowing, Some(&repository))).await
+    }
+
+    /// Confine the launch of a new chat's agent that `caller` queues: it
+    /// starts now only for the user, in the caller's own repository, with
+    /// permissions the caller holds.
+    pub(in crate::daemon) async fn confine_chat_launch(
+        &self,
+        caller: &Caller,
+        request: &mut ChatQueueRequest,
+    ) -> Result<()> {
+        const REFUSAL: &str = "workspace processes start chats only in their own repository";
+        ensure!(!request.now, NOT_NOW);
+        let repository = match &request.repository {
+            Some(selector) => {
+                let selector = self.own_repository(caller, selector, REFUSAL).await?;
+                let id = self.repository(&selector).await?.id;
+                request.repository = Some(selector);
+                Some(id)
+            }
+            None => None,
+        };
+        let giver = Some(&caller.space_id);
+        (self.ensure_caller_holds(giver, &request.narrowing, repository.as_ref())).await
     }
 
     /// Question `number` for the caller to answer, which must be one of a

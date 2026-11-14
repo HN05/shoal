@@ -21,7 +21,9 @@ use crate::client::{
 };
 use crate::{
     daemon::{notifications::NotificationKind, scope::Caller, workspace::Manager},
-    model::{QueueAdmission, QueueEntry, QueueRank, QueueRequest, QueuedPlan},
+    model::{
+        PresentSpace, QueueAdmission, QueueEntry, QueueRank, QueueRequest, QueuedPlan, Workspace,
+    },
     state::{QueueKind, QueueState},
 };
 
@@ -74,7 +76,7 @@ impl Manager {
         // existing branch, which may reopen the branch's workspace.
         let opens_new =
             target.is_none() && scope.is_none() && !opens_existing_branch(&request.plan);
-        if opens_new && request.blockers.is_empty() && !limits.apply_to(&repository.id) {
+        if opens_new && request.blockers.is_empty() && !limits.apply_to(Some(&repository.id)) {
             return Ok(QueueAdmission {
                 start: true,
                 entry: None,
@@ -94,8 +96,8 @@ impl Manager {
         };
         let launch = Launch {
             id: id.clone(),
-            repository: repository.id,
-            request,
+            repository: Some(repository.id),
+            request: request.into(),
             state,
             opens: target,
             scope,
@@ -107,17 +109,28 @@ impl Manager {
             .await?;
         let admitted = now || self.admit_waiting(Some(&id)).await?;
         // Read the response before a detached worker can take the entry.
-        let entries = self.queue_entries().await?;
+        let admission = self.admission_of(&id, admitted && !detached).await?;
         if detached && admitted {
             self.start_launches(vec![start], None).await?;
         }
+        Ok(admission)
+    }
+
+    /// The answer to the launch `id`, which the caller starts when `start`:
+    /// its entry and the entries waiting.
+    pub(super) async fn admission_of(
+        &self,
+        id: &QueueEntryId,
+        start: bool,
+    ) -> Result<QueueAdmission> {
+        let entries = self.queue_entries().await?;
         Ok(QueueAdmission {
-            start: admitted && !detached,
+            start,
             waiting: entries
                 .iter()
                 .filter(|entry| entry.state == QueueState::Queued)
                 .count(),
-            entry: entries.into_iter().find(|entry| entry.id == id),
+            entry: entries.into_iter().find(|entry| entry.id == *id),
         })
     }
 
@@ -316,14 +329,23 @@ impl Manager {
             .await
     }
 
-    /// Record the workspace a starting entry opened, or the existing one a
-    /// waiting launch opens once admitted, which the daemon then starts as
-    /// it starts any launch in an existing workspace. A launch that did not
-    /// name the workspace when it was admitted, such as one on a branch that
-    /// gained a workspace while it waited, takes it only while the workspace
-    /// has no agent of its own.
-    pub async fn queue_attach(&self, id: &QueueEntryId, workspace: &SpaceSelector) -> Result<()> {
-        let workspace = self.workspace(workspace).await?;
+    /// Record the space `space` names as the one the launch `id` starts its
+    /// agent in: a workspace as [`Self::attach_workspace`] does, a chat as
+    /// [`Self::attach_chat`] does.
+    pub async fn queue_attach(&self, id: &QueueEntryId, space: &SpaceSelector) -> Result<()> {
+        match self.space(space).await? {
+            PresentSpace::Workspace(workspace) => self.attach_workspace(id, workspace).await,
+            PresentSpace::Chat(chat) => self.attach_chat(id, &chat.id).await,
+        }
+    }
+
+    /// Record `workspace` as the one a starting entry opened, or the
+    /// existing one a waiting launch opens once admitted, which the daemon
+    /// then starts as it starts any launch in an existing workspace. A
+    /// launch that did not name the workspace when it was admitted, such as
+    /// one on a branch that gained a workspace while it waited, takes it only
+    /// while the workspace has no agent of its own.
+    async fn attach_workspace(&self, id: &QueueEntryId, workspace: Workspace) -> Result<()> {
         let opens = Self::ensure_holds_agents(&workspace).is_ok();
         let _gate = self.agent_queue.lock_admission().await;
         if !self.entry_opens(id, &workspace.id).await? {

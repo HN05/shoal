@@ -9,7 +9,7 @@ use super::blockers;
 use crate::client::time::UnixTime;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use crate::{
-    model::{QueueEntry, QueueRequest},
+    model::{ChatQueueRequest, QueueEntry, QueueRequest},
     state::{QueueKind, QueueState},
 };
 
@@ -62,14 +62,67 @@ pub(super) fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
 /// A launch to record in the queue.
 pub(super) struct Launch {
     pub id: QueueEntryId,
-    pub repository: RepositoryId,
-    pub request: QueueRequest,
+    /// The repository of the space it starts in; none for a chat without
+    /// one.
+    pub repository: Option<RepositoryId>,
+    pub request: LaunchRequest,
     pub state: QueueState,
     /// The existing workspace the launch opens.
     pub opens: Option<SpaceId>,
     /// The space whose scoped process queued the launch of a new
     /// workspace, in whose scope the launch opens it.
     pub scope: Option<SpaceId>,
+}
+
+/// What a launch asks for, a workspace's or a chat's, as its row records it.
+pub(super) struct LaunchRequest {
+    pub name: crate::client::space_names::SpaceName,
+    pub agent: crate::client::agent::Agent,
+    pub mode: Option<crate::config::modes::ModeName>,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
+    pub issue_title: Option<String>,
+    pub issue_labels: Vec<String>,
+    pub plan: String,
+    pub env: std::collections::BTreeMap<String, String>,
+    pub now: bool,
+    pub blockers: Vec<crate::model::Blocker>,
+    pub priority: Option<crate::client::priority::Priority>,
+}
+
+impl From<QueueRequest> for LaunchRequest {
+    fn from(request: QueueRequest) -> Self {
+        Self {
+            name: request.name,
+            agent: request.agent,
+            mode: request.mode,
+            narrowing: request.narrowing,
+            issue_title: request.issue_title,
+            issue_labels: request.issue_labels,
+            plan: request.plan,
+            env: request.env,
+            now: request.now,
+            blockers: request.blockers,
+            priority: request.priority,
+        }
+    }
+}
+
+impl From<ChatQueueRequest> for LaunchRequest {
+    fn from(request: ChatQueueRequest) -> Self {
+        Self {
+            name: request.name,
+            agent: request.agent,
+            mode: Some(request.mode),
+            narrowing: request.narrowing,
+            issue_title: None,
+            issue_labels: Vec::new(),
+            plan: request.plan,
+            env: request.env,
+            now: request.now,
+            blockers: Vec::new(),
+            priority: request.priority,
+        }
+    }
 }
 
 /// End the starting launches that created or opened `workspace`, whose
@@ -186,10 +239,12 @@ pub(super) fn insert_launch(
     launch: &Launch,
     removing: &crate::daemon::spaces::Removing,
 ) -> Result<()> {
-    ensure!(
-        !crate::daemon::store::repository_removing(tx, &launch.repository)?,
-        "the repository is being removed"
-    );
+    if let Some(repository) = &launch.repository {
+        ensure!(
+            !crate::daemon::store::repository_removing(tx, repository)?,
+            "the repository is being removed"
+        );
+    }
     let waits_for_setup = match &launch.opens {
         Some(workspace) => !launch.request.now && setup_failed(tx, workspace)?,
         None => false,
@@ -250,7 +305,9 @@ pub(super) fn insert_launch(
             serde_json::to_string(&request.issue_labels)?,
         ],
     )?;
-    blockers::record(tx, &launch.id, &launch.repository, &request.blockers)?;
+    if let Some(repository) = &launch.repository {
+        blockers::record(tx, &launch.id, repository, &request.blockers)?;
+    }
     if let Some(workspace) = &launch.opens
         && waits_for_setup
     {

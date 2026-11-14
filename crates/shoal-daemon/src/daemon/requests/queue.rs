@@ -37,6 +37,9 @@ pub(super) async fn handle(
         QueueMethod::QueueAdd { request } => {
             Body::QueueAdmission(manager.queue_add_as(*request, caller).await?)
         }
+        QueueMethod::QueueChat { request } => {
+            Body::QueueAdmission(manager.queue_chat_add(*request, caller).await?)
+        }
         QueueMethod::ListQueue => Body::QueueEntries(manager.visible_queue().await?),
         QueueMethod::QueuedPlan { entry } => Body::QueuedPlan(manager.queued_plan(&entry).await?),
         QueueMethod::QueueRemove { entry } => {
@@ -48,8 +51,8 @@ pub(super) async fn handle(
         QueueMethod::StartedLaunch { entry } => {
             Body::StartedLaunch(manager.started_launch(&entry).await?)
         }
-        QueueMethod::QueueAttach { entry, workspace } => {
-            manager.queue_attach(&entry, &workspace).await?;
+        QueueMethod::QueueAttach { entry, space } => {
+            manager.queue_attach(&entry, &space).await?;
             Body::Ok
         }
         QueueMethod::QueueFail { entry, error } => {
@@ -92,6 +95,10 @@ impl Scoped for QueueMethod {
             // Each answer confines the entries to those below the caller.
             QueueMethod::ListQueue | QueueMethod::QueueRemove { .. } => None,
             QueueMethod::QueueAdd { request } => manager.queue_target(caller, request).await?,
+            QueueMethod::QueueChat { request } => {
+                manager.confine_chat_launch(caller, request).await?;
+                None
+            }
             QueueMethod::SetPriority { space, .. } => Some(space),
             QueueMethod::QueueAgent {
                 workspace, launch, ..
@@ -114,9 +121,9 @@ impl Scoped for QueueMethod {
                 manager.ensure_entry_reached(caller, entry).await?;
                 None
             }
-            QueueMethod::QueueAttach { entry, workspace } => {
+            QueueMethod::QueueAttach { entry, space } => {
                 manager.ensure_entry_reached(caller, entry).await?;
-                Some(workspace)
+                Some(space)
             }
             QueueMethod::StartedLaunch { entry } => {
                 manager.ensure_started_launch_reached(caller, entry).await?;
