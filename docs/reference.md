@@ -3585,8 +3585,8 @@ forge login besides the token the forge gives the job. Once the execution ends,
 however it ended, the workspace goes whatever it holds, with its permit; after
 a daemon restart, a job whose runner is gone goes the same way and the forge
 times it out. Where the daemon runs as a systemd user service, with systemd 254
-or later, each job's wrapper runs in a transient scope of its own in the
-service's slice, so that systemd's stop of the service, as once the daemon
+or later and a user bus that starts a scope when the daemon starts, each job's
+wrapper runs in a transient scope of its own in the service's slice, so that systemd's stop of the service, as once the daemon
 exited with a failure, leaves the job running for the next daemon; launchd
 ends only the daemon's own process group, which the wrapper has left.
 Protection never stops a running job; the workflow's

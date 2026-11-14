@@ -7,7 +7,7 @@
 //! already left.
 use std::ffi::OsString;
 
-use super::control::query;
+use super::control::{command, query};
 use crate::tools::Tool;
 
 /// The first systemd whose `systemd-run` takes `--expand-environment`, which
@@ -16,8 +16,8 @@ const UNEXPANDED_ARGUMENTS: u32 = 254;
 
 /// The command that starts a program apart from the systemd user service
 /// this process runs as, in the same slice; empty where this process runs as
-/// no such service, or where `systemd-run` would change the program's
-/// arguments.
+/// no such service, where `systemd-run` would change the program's
+/// arguments, or where it cannot start a scope, as without a user bus.
 pub async fn launcher() -> Vec<OsString> {
     let Some(service) = std::fs::read_to_string("/proc/self/cgroup")
         .ok()
@@ -27,9 +27,29 @@ pub async fn launcher() -> Vec<OsString> {
         return Vec::new();
     };
     match query(Tool::SystemdRun, &["--version"]).await {
-        Ok(version) if keeps_arguments(&version) => service.launcher(),
-        _ => Vec::new(),
+        Ok(version) if keeps_arguments(&version) => {}
+        _ => return Vec::new(),
     }
+    let launcher = service.launcher();
+    if starts_scopes(&launcher).await {
+        launcher
+    } else {
+        Vec::new()
+    }
+}
+
+/// Whether `launcher` starts a program, which `true` tries once.
+async fn starts_scopes(launcher: &[OsString]) -> bool {
+    let Some(mut args) = (launcher.iter().skip(1))
+        .map(|arg| arg.to_str())
+        .collect::<Option<Vec<&str>>>()
+    else {
+        return false;
+    };
+    args.push("true");
+    command(Tool::SystemdRun, &args, false)
+        .await
+        .unwrap_or(false)
 }
 
 /// The systemd user service of a control group.
