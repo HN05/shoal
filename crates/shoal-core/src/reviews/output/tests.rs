@@ -119,3 +119,15 @@ fn claude_envelopes_carry_the_review_or_an_error() {
         Err(FailureReason::UsageLimit)
     );
 }
+
+#[test]
+fn a_run_reports_its_session_as_its_tool_does() {
+    let envelope = json!({"type": "result", "session_id": "4f2c", "result": "{}"}).to_string();
+    let claude = session(&CLAUDE, Some(envelope.as_bytes()), b"");
+    assert_eq!(claude.as_ref().map(|id| id.as_str()), Some("4f2c"));
+    let header = b"OpenAI Codex\n--------\nworkdir: /r\nsession id: 0199a2\n--------\n";
+    let codex = session(&CODEX, Some(b"{}"), header);
+    assert_eq!(codex.as_ref().map(|id| id.as_str()), Some("0199a2"));
+    assert!(session(&PLAIN, Some(envelope.as_bytes()), header).is_none());
+    assert!(session(&CLAUDE, Some(b"not json"), b"").is_none());
+}

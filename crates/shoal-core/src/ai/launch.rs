@@ -74,6 +74,7 @@ pub struct Arguments {
     pub model_args: Option<Vec<String>>,
     pub effort_args: Option<Vec<String>>,
     pub review: Option<Vec<String>>,
+    pub review_resume: Option<Vec<String>>,
 }
 
 /// What a review's arguments name.
@@ -150,29 +151,33 @@ impl Arguments {
     /// The arguments of a one-shot review with `fields`; `None` when the
     /// tool has no review template.
     pub fn review_args(&self, fields: &ReviewFields) -> Option<Vec<OsString>> {
-        let template = self.review.as_ref()?;
-        let (schema, output) = (
-            fields.schema.to_string_lossy(),
-            fields.output.to_string_lossy(),
-        );
-        Some(substitute(
-            template,
-            &[
-                ("{prompt}", fields.prompt),
-                ("{schema}", &schema),
-                ("{schema_json}", fields.schema_json),
-                ("{output}", &output),
-            ],
+        Some(oneshot_args(self.review.as_ref()?, fields, None))
+    }
+
+    /// The arguments of a one-shot run with `fields` that resumes
+    /// `session`; `None` when the tool cannot resume one.
+    pub fn review_resume_args(
+        &self,
+        fields: &ReviewFields,
+        session: &AgentSessionId,
+    ) -> Option<Vec<OsString>> {
+        Some(oneshot_args(
+            self.review_resume.as_ref()?,
+            fields,
+            Some(session),
         ))
     }
 
     /// Whether the review's result goes to `{output}` rather than standard
     /// output.
     pub fn review_writes_output(&self) -> bool {
-        self.review
-            .iter()
-            .flatten()
-            .any(|arg| arg.contains("{output}"))
+        names_output(self.review.as_deref())
+    }
+
+    /// Whether a resumed one-shot run's result goes to `{output}` rather
+    /// than standard output.
+    pub fn review_resume_writes_output(&self) -> bool {
+        names_output(self.review_resume.as_deref())
     }
 
     /// The arguments that give the agent `directory` as another working
@@ -187,6 +192,37 @@ impl Arguments {
         };
         substitute(template, &[("{directory}", directory)])
     }
+}
+
+/// Whether `template` names the output file `{output}`.
+fn names_output(template: Option<&[String]>) -> bool {
+    template
+        .into_iter()
+        .flatten()
+        .any(|arg| arg.contains("{output}"))
+}
+
+/// A one-shot run's arguments from `template`, which names `fields` and the
+/// `session` it resumes.
+fn oneshot_args(
+    template: &[String],
+    fields: &ReviewFields,
+    session: Option<&AgentSessionId>,
+) -> Vec<OsString> {
+    let (schema, output) = (
+        fields.schema.to_string_lossy(),
+        fields.output.to_string_lossy(),
+    );
+    substitute(
+        template,
+        &[
+            ("{prompt}", fields.prompt),
+            ("{schema}", &schema),
+            ("{schema_json}", fields.schema_json),
+            ("{output}", &output),
+            ("{session}", session.map_or("", AgentSessionId::as_str)),
+        ],
+    )
 }
 
 /// Each argument with every placeholder in `fields` replaced once.

@@ -1,5 +1,6 @@
 //! What a reviewer returns: the output schema it is given and the result
-//! read back from its run, as the review bot reads it.
+//! read back from its run, as the review bot reads it, and the session the
+//! run reports.
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -49,6 +50,9 @@ pub struct ResultFormat {
     unparsed: fn(&str) -> Option<FailureReason>,
     /// The review in a parsed result.
     review: fn(Value) -> Result<Value, FailureReason>,
+    /// The session the run reports: in its parsed result, or in the head
+    /// of its standard error.
+    session: fn(Option<&Value>, &str) -> Option<String>,
 }
 
 /// Claude Code's JSON result envelope, whose structured output is the
@@ -70,12 +74,29 @@ pub static CLAUDE: ResultFormat = ResultFormat {
                 .ok_or(FailureReason::InvalidOutput),
         }
     },
+    session: |raw, _| {
+        let session = raw?.as_object()?.get("session_id")?.as_str()?;
+        Some(session.to_owned())
+    },
 };
 
-/// The review as the whole result, as Codex writes its last message.
+/// The review as the whole result, from a tool that reports no session.
 pub static PLAIN: ResultFormat = ResultFormat {
     unparsed: |_| None,
     review: Ok,
+    session: |_, _| None,
+};
+
+/// The review as the whole result, as Codex writes its last message, which
+/// names its session in the header it writes to standard error.
+pub static CODEX: ResultFormat = ResultFormat {
+    session: |_, stderr| {
+        let line = stderr
+            .lines()
+            .find_map(|line| line.strip_prefix("session id:"))?;
+        Some(line.trim().to_owned()).filter(|session| !session.is_empty())
+    },
+    ..PLAIN
 };
 
 /// What a reviewer's run left to read.
@@ -93,6 +114,12 @@ pub struct Run<'a> {
 /// failure in its result's error fields, then an unsuccessful exit named
 /// by its diagnostics, then output that does not match the schema.
 pub fn read(format: &ResultFormat, run: &Run) -> Result<ReviewerOutput, FailureReason> {
+    validate(result(format, run)?).ok_or(FailureReason::InvalidOutput)
+}
+
+/// The structured result `run` returned in `format`, unchecked against any
+/// schema, or why it returned none, as [`read`] tells.
+pub fn result(format: &ResultFormat, run: &Run) -> Result<Value, FailureReason> {
     let raw = run
         .result
         .and_then(|result| serde_json::from_slice::<Value>(result).ok());
@@ -112,7 +139,19 @@ pub fn read(format: &ResultFormat, run: &Run) -> Result<ReviewerOutput, FailureR
         let reason = text.as_deref().and_then(format.unparsed);
         return Err(reason.unwrap_or(FailureReason::InvalidOutput));
     };
-    validate((format.review)(raw)?).ok_or(FailureReason::InvalidOutput)
+    (format.review)(raw)
+}
+
+/// The session the run reported in `format`, from its `result` or the head
+/// of its standard error; none from a tool that reports none.
+pub fn session(
+    format: &ResultFormat,
+    result: Option<&[u8]>,
+    stderr_head: &[u8],
+) -> Option<crate::agent::AgentSessionId> {
+    let raw = result.and_then(|result| serde_json::from_slice::<Value>(result).ok());
+    let session = (format.session)(raw.as_ref(), &String::from_utf8_lossy(stderr_head))?;
+    Some(session.into())
 }
 
 /// The review in `value` if it matches the schema, with every text present.

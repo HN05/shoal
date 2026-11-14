@@ -302,6 +302,7 @@ add_dir = ["--add-dir", "{directory}"]                # Optional
 model_args = ["--model", "{model}"]                   # Optional
 effort_args = ["--reasoning-effort", "{effort}"]      # Optional
 review = ["exec", "--schema", "{schema}", "{prompt}"] # Optional
+review_resume = ["exec", "--resume", "{session}", "--schema", "{schema}", "{prompt}"] # Optional
 
 [agents.claude-direct]
 base = "claude"
@@ -340,10 +341,15 @@ Each option merges on its own across layers, so a repository can replace
   arguments, which name the prompt `{prompt}` and the output schema as a file,
   `{schema}`, or its text, `{schema_json}`; `{output}` names a file the result
   goes to instead of standard output. A tool without one cannot review.
+- `review_resume` runs such a one-shot run again in session `{session}`, which
+  an earlier run reported, with the same placeholders; the
+  [gate](reference.md#the-gate) uses it to keep a session per subject. A tool
+  without one starts a new session each time, as does one whose runs report no
+  session: Claude Code reports it in its result and Codex in its header.
 - `base` makes a tool a launch profile of another, which gives it its base's
   hooks, trust entries and waking, and each of its launcher, `skill_dir`,
   `instructions`, `resume`, `resume_latest`, `fork`, `add_dir`, `model`,
-  `effort`, `model_args`, `effort_args`, `review`, `retry`,
+  `effort`, `model_args`, `effort_args`, `review`, `review_resume`, `retry`,
   `prompt_cache_minutes` and `proxy` it does not set; a base may itself be a
   profile.
 - `env` sets and `env_remove` removes variables for the tool's tracked agents

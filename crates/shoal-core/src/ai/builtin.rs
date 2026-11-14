@@ -30,6 +30,9 @@ pub struct Provider {
     /// arguments, which a launch with an effort sets to the same value.
     pub(super) effort_variable: Option<&'static str>,
     pub(super) review: Option<&'static [&'static str]>,
+    /// The arguments of a one-shot run that resumes `{session}`, read-only
+    /// as `review` is.
+    pub(super) review_resume: Option<&'static [&'static str]>,
     /// How its review result comes back.
     pub(super) review_result: &'static ResultFormat,
 }
@@ -88,7 +91,22 @@ pub const PROVIDERS: &[Provider] = &[
             "{output}",
             "{prompt}",
         ]),
-        review_result: &output::PLAIN,
+        // Resuming takes no `--sandbox`, so the config sets it.
+        review_resume: Some(&[
+            "exec",
+            "resume",
+            "-c",
+            "sandbox_mode=\"read-only\"",
+            "-c",
+            "approval_policy=\"never\"",
+            "--output-schema",
+            "{schema}",
+            "--output-last-message",
+            "{output}",
+            "{session}",
+            "{prompt}",
+        ]),
+        review_result: &output::CODEX,
     },
     Provider {
         name: "claude",
@@ -124,6 +142,21 @@ pub const PROVIDERS: &[Provider] = &[
             "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*)",
             "--settings={\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":false,\"allowUnsandboxedCommands\":false}}",
         ]),
+        review_resume: Some(&[
+            "-p",
+            "{prompt}",
+            "--output-format",
+            "json",
+            "--json-schema",
+            "{schema_json}",
+            "--setting-sources=",
+            "--permission-mode=dontAsk",
+            "--tools=Read,Grep,Glob,Bash",
+            "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*)",
+            "--settings={\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":false,\"allowUnsandboxedCommands\":false}}",
+            "--resume",
+            "{session}",
+        ]),
         review_result: &output::CLAUDE,
     },
     // opencode and pi also read `~/.agents/skills`, so they share Codex's copy.
@@ -141,6 +174,7 @@ pub const PROVIDERS: &[Provider] = &[
         effort_args: None,
         effort_variable: None,
         review: None,
+        review_resume: None,
         review_result: &output::PLAIN,
     },
     Provider {
@@ -157,6 +191,7 @@ pub const PROVIDERS: &[Provider] = &[
         effort_args: None,
         effort_variable: None,
         review: None,
+        review_resume: None,
         review_result: &output::PLAIN,
     },
     Provider {
@@ -173,6 +208,7 @@ pub const PROVIDERS: &[Provider] = &[
         effort_args: None,
         effort_variable: None,
         review: None,
+        review_resume: None,
         review_result: &output::PLAIN,
     },
 ];

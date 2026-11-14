@@ -480,3 +480,46 @@ fn review_templates_need_a_prompt_and_a_schema() {
         assert!(parse(&format!("[agents.claude]\nreview = {template}\n")).is_err());
     }
 }
+
+#[test]
+fn a_resumed_one_shot_run_names_its_session_and_stays_read_only() {
+    let agents =
+        parse("[agents.droid]\ncommand = ['droid']\nreview = ['-p', '{prompt}', '{schema}']\n")
+            .unwrap();
+    let fields = ReviewFields {
+        prompt: "Decide it",
+        schema: Path::new("/tmp/schema.json"),
+        schema_json: "{}",
+        output: Path::new("/tmp/verdict.json"),
+    };
+    let session = crate::agent::AgentSessionId::from("0199a2".to_owned());
+    let codex = arguments(&agents, "codex")
+        .review_resume_args(&fields, &session)
+        .unwrap();
+    assert_eq!(codex[..2], ["exec", "resume"].map(OsString::from));
+    assert!(
+        codex.contains(&"sandbox_mode=\"read-only\"".into()),
+        "{codex:?}"
+    );
+    assert_eq!(
+        codex[codex.len() - 2..],
+        ["0199a2", "Decide it"].map(OsString::from)
+    );
+    let claude = arguments(&agents, "claude")
+        .review_resume_args(&fields, &session)
+        .unwrap();
+    let resume = claude.iter().position(|arg| arg == "--resume").unwrap();
+    assert_eq!(claude[resume + 1], "0199a2");
+    // Each template says for itself where its result goes.
+    assert!(arguments(&agents, "codex").review_resume_writes_output());
+    assert!(!arguments(&agents, "claude").review_resume_writes_output());
+    assert!(claude.contains(&"--permission-mode=dontAsk".into()));
+    // A tool without the template starts a new run each time.
+    assert_eq!(
+        arguments(&agents, "droid").review_resume_args(&fields, &session),
+        None
+    );
+    let unnamed =
+        "[agents.droid]\ncommand = ['droid']\nreview_resume = ['-p', '{prompt}', '{schema}']\n";
+    assert!(parse(unnamed).is_err());
+}
