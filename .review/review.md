@@ -189,7 +189,8 @@ instead of the PR delivery guidance below.
   make room for an entry waiting for a slot or memory (lowest rank first, no
   higher priority than the entry, only one something will wake, a slot only
   from an agent that holds one), once the stop costs no prompt cache under the
-  machine's schedule; light and attended agents never sleep for room. `shoal
+  machine's schedule; light agents never sleep for room, nor stop on idle,
+  in a workspace or a chat. `shoal
   attach` wakes an asleep or stopped agent at once through its restore, never
   beside a waiting wrapper; a chat's hooks deliver its own queue of its workers'
   events, which the user receives as notifications if the chat is removed first; a workspace's own Shoal comments, thread replies,
@@ -485,9 +486,13 @@ instead of the PR delivery guidance below.
   It accepts a positive fixed value or `none`; the global value limits the
   machine while a repository's fixed value limits that repository. Slots derive from tracked
   agents, executions awaiting reattachment, resume records and starting queue
-  entries, excluding done workspaces, agents of a `light` mode and those of
-  spaces the user attends, as chats, never from a separate counter. A light agent starts past the agent limits and memory room,
-  but not past critical or failed readings or low disk. A review holds no
+  entries, excluding done spaces and agents of a `light` mode, never from a
+  separate counter; a mode's weight alone decides this, never the space's
+  kind, and a chat without a repository counts toward the machine's limit
+  alone. A light agent starts past the agent limits and memory room,
+  but not past critical or failed readings, low disk or its tool's upstream
+  limit. A heavy chat's start with no free slot queues as a new workspace's
+  does. A review holds no
   slot, but its memory counts and it waits for room and disk as a start does.
   A starting
   entry keeps its slot only while its launch holds it or within the grace
@@ -510,8 +515,8 @@ instead of the PR delivery guidance below.
 - Machine-wide memory overload protection is opt-out; sustained CPU protection is
   opt-in. The machine-only `load` level sets the CPU and memory thresholds the
   file leaves out; explicit values win. Stop one connected tracked
-  agent of a mode that is not `light`, in a space the user does not attend
-  as a chat, at a time through its wrapper, in the agent queue's rank reversed:
+  agent of a mode that is not `light`, a workspace's or a chat's, at a time
+  through its wrapper, in the agent queue's rank reversed:
   agents no terminal shows before shown ones, which still stop once no other is
   left, idle before working ones, then the space the queue would start last;
   within a space the one idle longest, otherwise the newest; with configurable thresholds

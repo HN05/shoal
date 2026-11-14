@@ -571,16 +571,17 @@ slot one that holds one, which a done space's agent does not, once that costs
 no prompt cache, as
 for [`shoal sleep`](#idle-wakes). Only an agent something will wake sleeps for
 this: one whose space watches an open PR, is blocked, or has an open question
-or a request waiting for a decision. Light agents and those the user attends
-keep running, and an agent woken from its sleep works its turn before it can
+or a request waiting for a decision. Light agents keep running, in a workspace
+or a chat, and an agent woken from its sleep works its turn before it can
 sleep again.
 
 An idle agent keeps its memory while it waits for its next update. Each
-[cleanup sweep](#automatic-cleanup) stops the [idle](#agent-state) agents of
-done workspaces that something besides their work and PRs keeps from
+[cleanup sweep](#automatic-cleanup) stops the [idle](#agent-state) heavy agents
+of done spaces that something besides their work and PRs keeps from
 [completion cleanup](#assignment-completion), such as a
 [hold](#workspace-holds) or an open [question](#questions), and with
-[`[sleep] idle`](config.md#sleep) enabled any idle agent. Only an agent idle with no processes running
+[`[sleep] idle`](config.md#sleep) enabled any idle heavy agent; a
+[light](config.md#modes-and-rules) one keeps running. Only an agent idle with no processes running
 outside its process group, with a restore command, and whose
 [prompt cache](#agent-state) has expired stops: a resumed agent's first request
 writes most of its cache again, which an expired cache costs anyway. An agent
@@ -612,8 +613,8 @@ approvals do not pause the timer.
 
 An agent that waits for something runs `shoal sleep`: from the end of its turn
 it sleeps, gets no idle wakes, and once stopping it costs no prompt cache,
-whether or not other work waits, Shoal stops it and saves it to come back once
-an update arrives, as an idle stop does. Under the `balanced` and `cache`
+whether or not other work waits, Shoal stops a heavy one and saves it to come
+back once an update arrives, as an idle stop does; a light one keeps running. Under the `balanced` and `cache`
 [schedules](config.md#machine) that is once its cache has expired, or while the
 CI jobs this machine's [runner](#runner) runs or has queued for its space are
 expected, from the longest of each job's recent runs, to outlast the cache;
@@ -1771,11 +1772,14 @@ it running. A
 workspace process that cleared its scope token cannot run `shoal start` or
 `shoal rename --request`.
 A chat's agent runs as a tracked agent of the chat, as a workspace's agent
-does, except that you attend it: it takes no slot of the
-[agent queue](#agent-queue), memory, CPU and idle stops leave it running, its
-restore waits for no update, only for a blocked chat to clear, and its agent
-exiting cleanly sends no notification, while disk-space protection, `shoal stop`, `shoal restart`, `shoal restore`,
-interrupts and the daemon's stops act on it as on a workspace's agent. The
+does: its mode's [weight](config.md#modes-and-rules) decides whether it takes
+a slot of the [agent queue](#agent-queue) and whether load, idle stops and
+`shoal sleep` stop it, and a restore of one stopped between turns waits for an
+update, which `shoal attach` and `shoal queue start` skip. Only its agent
+exiting cleanly differs: it sends no notification. A heavy chat's start
+waits in the queue when no slot is free, as a new workspace's does: from a
+terminal it records nothing until its entry starts, and without one the
+chat is recorded at once and the start reports it with its entry. The
 daemon records each chat under its name, with the session the agent's
 session-start hook last reported, which
 [`shoal move`](#move-a-space-to-another-machine) continues on another machine.
@@ -2009,8 +2013,10 @@ limit applies, so does the disk rule: below `[machine.overload.warning] disk_fre
 an agent starts only when none uses a slot, and below
 `machine.overload.disk.stop_free_gib` or without a reading none starts. That
 value counts every agent on the machine; a fixed [`agent.max_running`](config.md#agent) counts
-only one repository's agents, within the machine limit. Each tracked agent uses a slot while it runs, awaits reattachment
-after a daemon restart, or waits for `shoal restore`, unless its workspace is
+only one repository's agents, within the machine limit; a chat without a
+repository counts toward the machine's alone. Each tracked agent, a
+workspace's or a chat's, uses a slot while it runs, awaits reattachment
+after a daemon restart, or waits for `shoal restore`, unless its space is
 done, its restore waits in the queue or its mode is
 [light](config.md#modes-and-rules), which starts it at once beside the agent
 limits and whatever memory is in use, though critical or missing readings and
@@ -2049,8 +2055,7 @@ each such entry waits with `memory_kept`. While the [proxy](#agents) of a runnin
 agent finds its tool's upstream rate-limited or out of quota, queued agents of
 that tool wait with `upstream_limit` and others start ahead: until the reset
 the upstream names, or, without one, 15 minutes after the proxy last met the
-limit, unless a request through it succeeds first. A chat's restore starts
-regardless, since the user attends the chat. An entry queued from another host's pane, block
+limit, unless a request through it succeeds first. An entry queued from another host's pane, block
 or tab opens a background tab or window where it was queued; otherwise it runs where
 `terminal.default_host` puts it, by default a detached zmx session that `shoal attach`
 reaches. A start keeps its slot through setup until

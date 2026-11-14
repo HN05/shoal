@@ -279,7 +279,9 @@ policy does not apply. Stopping any idle agent works the same way and is
 opt-in (`[sleep] idle`), since timers the agent keeps itself end with it, which
 only a done assignment leaves nothing to do. Either stops an agent once its
 prompt cache has expired and not before, since a resumed session's first
-request writes most of the cache again.
+request writes most of the cache again, and only a heavy one, as only heavy
+agents stop for load: a light agent uses too little of the machine to be
+worth a restore, so `shoal sleep` only ends its idle wakes.
 An agent Shoal stopped on its own and brings back on its own is asleep, and one
 that waits for `shoal restore` is stopped, so the user tells an agent that comes
 back from one that needs them. Every stop that queues a restore Shoal starts on its
@@ -1605,12 +1607,21 @@ agents, executions awaiting reattachment, resume records and starting queue
 entries, excluding completed workspaces. A one-shot run such as a review is
 short and holds no slot, so no count limits reviews, but its memory counts
 toward dynamic admission and it waits for room and disk as a start does.
-Agents therefore count however they started. A chat's agent, which waits for
-the user, is not tracked and counts nowhere; a workspace agent of a `light`
-mode counts nowhere either: it starts at once, holds no slot and load never
-stops it, so a mode whose agents use little of the machine, such as a plan
-run in a workspace, is not held up while heavy work fills it. The built-in
-modes that start chats are light, so they stay so in a workspace. A one-shot run's
+Agents therefore count however they started. A mode's `weight` alone decides
+how its agent takes capacity, whatever the kind of space it runs in, since a
+heavy chat uses the machine as a heavy workspace agent does: an agent of a
+`light` mode counts nowhere, starting at once, holding no slot, and never
+stopped for load or on idle, so a mode whose agents use little of the
+machine, such as a plan run in a workspace, is not held up while heavy work
+fills it, and a heavy chat's agent waits for a slot and holds one as a
+workspace's does. Critical or missing readings, low disk and its tool's
+upstream limit hold every start, light ones too. The built-in modes that
+start chats are light, so they stay so in a workspace. A chat without a
+repository resolves its mode, and so its weight, in the global config, and
+its slot counts toward `machine.max_agents` alone. A heavy chat's start with
+no free slot follows a new workspace's: from a terminal nothing is recorded
+until its entry starts, since its place opens then, and without one the chat
+is recorded at once so the caller can address it, its launch attached to it. A one-shot run's
 admission is its in-memory request, which ends with the run, or with the daemon
 for a run whose processes could not be proven stopped, so none outlives a
 restart. `machine.max_agents`
@@ -2542,17 +2553,14 @@ A chat's agent
 runs under the execution wrapper as a tracked execution of its chat, through
 the path a workspace's agent takes, so launches, stops, restores, wakes, exit
 reports, turn state and restarts are one code path, and the chat runs while
-that execution is recorded. Lifecycle policy differs only by whether the user
-attends the space, as a chat's: its agent takes no slot of the agent queue or
-`max_agents`, memory, CPU and idle stops leave it running, its restore waits
-for no update, only for a blocked space to clear, and its clean exit notifies
-no one, since the user is in that conversation, while disk-space and blocked stops, shutdown, `shoal
-stop`, `shoal restore`, `shoal restart`, interrupts, turn retries and the
-wrapper's wake prompt apply as to a workspace's agent. A stop that keeps the
-wrapper restores the agent in place; one that ends it leaves its stop record
-for `shoal restore`, or for the agent queue when the agent is to come back on
-its own, which starts an attended space's restore in the place the chat ran
-in without admission. Once the chat's agent ends, the requests the chat
+that execution is recorded. Its agent's weight decides its capacity as for a
+workspace's agent, including a restore between turns waiting for an update,
+which the user who wants it sooner gets by attaching; only its clean exit
+differs by kind, notifying no one, since the user is in that conversation. A
+stop that keeps the wrapper restores the agent in place; one that ends it
+leaves its stop record for `shoal restore`, or for the agent queue when the
+agent is to come back on its own, which starts the chat's restore in the
+place the chat ran in. Once the chat's agent ends, the requests the chat
 decided go to the user, since no one attends them there. A stopped chat keeps
 its record, and with it its name, links, files, messages, questions,
 workspaces and temporary directory, until a restore runs its agent again. Only
