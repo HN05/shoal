@@ -1,7 +1,7 @@
 //! Ranking the queue: the snapshot the rank reads, from the store and from
 //! what the daemon keeps in memory, the waiting entries in rank order, and
 //! spaces in the order their agents would start.
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map};
 
 use anyhow::Result;
 use rusqlite::Transaction;
@@ -10,8 +10,11 @@ use super::{
     rank::{self, Ranked, Snapshot},
     state::WaitingOneShot,
 };
-use crate::client::{priority::Priority, queue::QueueEntryId, space_ids::SpaceId, time::UnixTime};
-use crate::config::machine::Schedule;
+use crate::client::{
+    priority::Priority, queue::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId,
+    time::UnixTime,
+};
+use crate::config::{Effective, machine::Schedule};
 use crate::daemon::{approvals::Target, workspace::Manager};
 
 mod edges;
@@ -45,34 +48,31 @@ impl Manager {
                 ))
             })
             .await?;
-        let priorities = self.label_priorities(labelled).await;
+        let repositories = labelled.iter().map(|space| space.repository.clone());
+        let settings = self.settings_of(repositories.collect()).await;
+        let priorities = spaces::label_priorities(labelled, &settings);
         spaces::prioritize(&mut snapshot.spaces, priorities);
         Ok(snapshot)
     }
 
-    /// The priority each of the `labelled` spaces takes from its issue's
-    /// labels under its repository's `[priority.labels]`, where one maps. A
-    /// repository whose settings do not resolve maps none, so its config,
-    /// which every command there reports, holds up no other repository's
-    /// work.
-    async fn label_priorities(&self, labelled: Vec<spaces::Labelled>) -> Vec<(SpaceId, Priority)> {
-        let mut settings = HashMap::new();
-        let mut priorities = Vec::new();
-        for space in labelled {
-            if !settings.contains_key(&space.repository) {
-                let resolved = self.repository_settings(&space.repository).await;
-                let labels = resolved.ok().map(|resolved| resolved.priority.clone());
-                settings.insert(space.repository.clone(), labels);
-            }
-            let labels = space.labels.iter().map(String::as_str);
-            let mapped = settings[&space.repository].as_ref();
-            if let Some(priority) = mapped.and_then(|mapped| mapped.of_labels(labels)) {
-                priorities.push((space.id, priority));
+    /// The settings of each of `repositories`, none for one whose settings
+    /// do not resolve, so that its config, which every command there
+    /// reports, holds up no other repository's work.
+    async fn settings_of(&self, repositories: Vec<RepositoryId>) -> Settings {
+        let mut settings = Settings::new();
+        for repository in repositories {
+            if let hash_map::Entry::Vacant(vacant) = settings.entry(repository) {
+                let resolved = self.repository_settings(vacant.key()).await.ok();
+                vacant.insert(resolved);
             }
         }
-        priorities
+        settings
     }
 }
+
+/// The settings of the repositories ranking reads, none for one whose
+/// settings do not resolve.
+type Settings = HashMap<RepositoryId, Option<Effective>>;
 
 /// What ranking reads now, with the spaces each waiting job serves now by
 /// its entry's ID in `jobs`, the `oneshots` waiting for admission, the spaces

@@ -6,7 +6,10 @@ use std::collections::HashMap;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::super::rank::{Space, Steps};
+use super::{
+    super::rank::{Space, Steps},
+    Settings,
+};
 use crate::client::{
     events::EventKind, priority::Priority, repository_ids::RepositoryId, space_ids::SpaceId,
     time::UnixTime,
@@ -140,6 +143,24 @@ pub(super) fn labelled(db: &Connection) -> Result<Vec<Labelled>> {
     }
     labelled.retain(|space| !space.labels.is_empty());
     Ok(labelled)
+}
+
+/// The priority each of the `labelled` spaces takes from its issue's
+/// labels under its repository's `[priority.labels]` in `settings`, where
+/// one maps; a repository without settings maps none.
+pub(super) fn label_priorities(
+    labelled: Vec<Labelled>,
+    settings: &Settings,
+) -> Vec<(SpaceId, Priority)> {
+    let mut priorities = Vec::new();
+    for space in labelled {
+        let labels = space.labels.iter().map(String::as_str);
+        let mapped = settings.get(&space.repository).and_then(Option::as_ref);
+        if let Some(priority) = mapped.and_then(|mapped| mapped.priority.of_labels(labels)) {
+            priorities.push((space.id, priority));
+        }
+    }
+    priorities
 }
 
 /// Give each space of `priorities` its priority.
