@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, LazyLock, Mutex, PoisonError},
 };
 
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use shoal_refs::CommitId;
@@ -14,7 +14,7 @@ use shoal_states::states;
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Reviews,
+    backends::{Items as _, Reviews},
     items::{
         action::{Acted, after_post},
         link::ItemKind,
@@ -58,6 +58,25 @@ impl std::fmt::Display for HeadMoved {
 }
 
 impl std::error::Error for HeadMoved {}
+
+/// A review with a verdict refused before anything was sent because its
+/// account opened the PR, which forges take no verdict from.
+#[derive(Debug)]
+pub struct OwnPull {
+    pub login: String,
+}
+
+impl std::fmt::Display for OwnPull {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} opened the PR, and a forge takes no approval or change request from a PR's author",
+            self.login
+        )
+    }
+}
+
+impl std::error::Error for OwnPull {}
 
 states!(ReviewVerdict {
     /// Comments without approving or requesting changes.
@@ -304,6 +323,25 @@ impl ForgeRepo {
             authored,
             edited: Edited::default(),
         })
+    }
+
+    /// The head commit of PR `number` that a review with a verdict as
+    /// `account` would be of, refusing an account without a login of its
+    /// own for the host, and with [`OwnPull`] one that opened the PR, before
+    /// anything is sent.
+    pub async fn verdict_head(
+        &self,
+        account: &Account,
+        number: PullNumber,
+    ) -> Result<Option<CommitId>> {
+        account.require_login(self)?;
+        let login = (self.kind.own_assignee(self, account).await?)
+            .context("the forge did not report the account's login")?;
+        let current = self.read(account, ItemKind::Pr, number.get()).await?;
+        if (current.author.as_ref()).is_some_and(|author| author.eq_ignore_ascii_case(&login)) {
+            return Err(OwnPull { login }.into());
+        }
+        Ok(current.head_sha)
     }
 
     /// The activity keys of what `submitted` posted of `review`. Without
