@@ -345,6 +345,20 @@ pub(in crate::cli::commands) async fn authorize_key(
     Ok(())
 }
 
+/// Whether this process may take what the permission `key` governs, at once
+/// or after approval: always for the user.
+pub(in crate::cli::commands) async fn permits(
+    ctx: &Context,
+    key: crate::config::permissions::PermissionKey,
+) -> Result<bool> {
+    use crate::config::permissions::Acting;
+    if !env::inherits_scope(&ctx.paths.state) {
+        return Ok(true);
+    }
+    let held = crate::client::workspaces::held_permissions(&ctx.paths, None).await?;
+    Ok(held.acting(key) != Acting::Deny)
+}
+
 /// This command as the user typed it, which an approval of it names.
 fn command_line() -> String {
     let words: Vec<String> = std::iter::once("shoal".to_owned())

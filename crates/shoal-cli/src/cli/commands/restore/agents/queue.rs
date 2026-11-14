@@ -29,6 +29,7 @@ pub(super) async fn queue_below(
     selected: Selected,
     execution: Option<ExecutionId>,
     change: Option<&PermissionChange>,
+    now: bool,
 ) -> Result<i32> {
     let stopped = match selected.spaces.clone() {
         Some(selectors) => {
@@ -42,7 +43,7 @@ pub(super) async fn queue_below(
     };
     permission_change::apply(ctx, &stopped, &selected.setups, change).await?;
     let resumed = super::set_up(ctx, &selected, Vec::new(), false).await;
-    queue_all(ctx, stopped, resumed, false).await
+    queue_all(ctx, stopped, resumed, now).await
 }
 
 /// Executions stopped so their workspaces could move, by workspace.

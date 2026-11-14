@@ -10,8 +10,8 @@ use super::Caller;
 use crate::{
     client::space_names::SpaceSelector,
     daemon::{
-        approvals::ApprovalRequest, item_numbers::ItemNumber, questions::Question,
-        workspace::Manager,
+        approvals::ApprovalRequest, item_numbers::ItemNumber, permissions::Action,
+        questions::Question, workspace::Manager,
     },
     model::{Chat, PresentSpace, QueueEntry, QueueRequest, Repository, RunningAgent, SpaceTarget},
     protocol::operations::WorkspaceStart,
@@ -22,10 +22,6 @@ use crate::{
 /// tree.
 const WORKER_REFUSAL: &str =
     "workspace processes can start agents only in the workspaces split from theirs";
-
-/// Why a scoped caller cannot start an agent regardless of the limits.
-pub(in crate::daemon) const NOT_NOW: &str =
-    "workspace processes start agents when a slot is free; leave out --now";
 
 impl Manager {
     /// Put a space `caller` starts below the space `parent` names, which
@@ -389,13 +385,17 @@ impl Manager {
     /// The workspace `request` starts an agent in, which must be one below
     /// the caller's, or none for the launch of a new workspace in the
     /// caller's repository, which opens it in the caller's scope; a start
-    /// regardless of the limits is refused.
+    /// regardless of the limits is the `limits` permission's.
     pub(in crate::daemon) async fn queue_target<'a>(
         &self,
         caller: &Caller,
         request: &'a mut QueueRequest,
     ) -> Result<Option<&'a mut SpaceSelector>> {
-        ensure!(!request.now, NOT_NOW);
+        if request.now {
+            let start = format!("start the agent of {} now", request.name);
+            self.authorize_action(Some(caller), Action::beyond_limits(start))
+                .await?;
+        }
         if request.workspace.is_none() {
             self.confine_new_launch(caller, request).await?;
             return Ok(None);

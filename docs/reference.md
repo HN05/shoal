@@ -354,8 +354,8 @@ session](#master-session). It stops them with `shoal stop <space>` or `--all`,
 or a picker, forgets their stopped work with `shoal restore --forget`, and
 queues with `shoal restore <space>`, `--all` or the current space the restores
 of their stopped agents, whoever stopped them, which the daemon starts
-detached. Starting regardless of the limits, with `--now` or `--focus`, stays
-yours. A space outside the scope is refused with an error naming it.
+detached, and start them regardless of the limits, with `--now` or
+`--focus`, as their space's [`limits` permission](#permitted-actions) allows. A space outside the scope is refused with an error naming it.
 
 `shoal stop --interrupt [space...]` cancels the current turn of each agent
 in the selected workspaces and running chats and keeps the agent running with
@@ -2037,8 +2037,8 @@ from the workspace's own settings, except that an agent Happy runs opens in
 place when the limits admit it, otherwise waiting in the queue. The
 daemon starts a queued agent, and the call returns reporting the entry
 (`--json` emits the workspace record, then the entry). `--now` starts that agent
-regardless of the limits, which a scoped caller cannot ask, and `--focus` is
-refused. A detached start that waits for other work queues as a whole as from
+regardless of the limits, as does `--focus` for a scoped caller, as its
+space's [`limits` permission](#permitted-actions) allows. A detached start that waits for other work queues as a whole as from
 a terminal, starting in the background once the work is complete; a scoped
 caller's opens its workspace below the caller, or the space `--parent` names,
 with the checks the caller's own start would meet, and queue `--json` names
@@ -2157,7 +2157,8 @@ start` and `cancel` take. On a terminal, `shoal queue` picks a waiting entry and
 then starts it, with or without attaching, or cancels it.
 
 `queue start` starts a waiting entry, by its ID or, for a queued restore, by
-its space's number or ID, now regardless of the limits, as `--now` does, or restores an idle agent waiting for an update; it refuses a launch
+its space's number or ID, now regardless of the limits, as `--now` does, and
+for a scoped caller one its scope reaches, as its [`limits` permission](#permitted-actions) allows, or restores an idle agent waiting for an update; it refuses a launch
 still waiting for work, whose branch it builds on, and a restore whose agent's
 processes have not stopped yet. With `--attach` on a terminal it then waits, up
 to ten minutes since setup comes first, for the session the agent runs in and
@@ -2439,7 +2440,9 @@ with its arguments, which the command reports with exit 2 and
 request is approved, the same action proceeds once under every other check,
 and taking it again asks again; an approved command's own requests take
 what the same key governs without asking again. `daemon` governs installing,
-starting, stopping and restarting the daemon, and `shoal update`; `admin`
+starting, stopping and restarting the daemon, and `shoal update`; `limits`
+starting agents regardless of `max_agents` and memory, with `--now`,
+`--focus`, `queue start` or the queue picker's start; `admin`
 governs the rest of administering Shoal, its config, repositories and
 cleanup, and repairing, adopting, restoring and moving workspaces, in the
 caller's own repository where the action names one.

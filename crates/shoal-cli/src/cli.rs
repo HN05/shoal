@@ -296,6 +296,10 @@ impl Command {
                     | ConfigCommand::Setup(_)
                     | ConfigCommand::Unset { .. },
             }) => Some(PermissionKey::Admin),
+            Command::Create(CreateCommand::Start(args)) if args.now => Some(PermissionKey::Limits),
+            Command::Sessions(SessionsCommand::Restore { now, focus, .. }) if *now || *focus => {
+                Some(PermissionKey::Limits)
+            }
             _ => None,
         }
     }

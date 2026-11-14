@@ -312,7 +312,7 @@ async fn an_app_queues_an_agent_once_it_can_run() {
     assert_eq!(queued.agent, "probe");
 
     // A workspace's agent queues agents only in the workspaces below its own,
-    // when a slot is free.
+    // and regardless of the limits as its limits permission allows.
     let parent = daemon.workspace("parent").await;
     let split = WorkspaceMethod::SplitWorkspace {
         workspace: SpaceSelector::id(&parent.id),
@@ -334,10 +334,15 @@ async fn an_app_queues_an_agent_once_it_can_run() {
         now: true,
         ..probe()
     };
-    assert!(
-        connection::request::<QueueEntry>(&agent, queue_worker(child.id.as_str(), now))
-            .await
-            .is_err()
+    let error = (connection::request::<QueueEntry>(&agent, queue_worker(child.id.as_str(), now)))
+        .await
+        .unwrap_err();
+    let Some(crate::client::approvals::Undecided(request)) = error.downcast_ref() else {
+        panic!("expected an approval request: {error:#}");
+    };
+    assert_eq!(
+        request.target,
+        crate::client::approvals::Target::Action(crate::config::permissions::PermissionKey::Limits)
     );
     let child: QueueEntry = connection::request(&agent, queue_worker(child.id.as_str(), probe()))
         .await

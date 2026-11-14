@@ -179,6 +179,8 @@ permission_keys! {
     /// Administering Shoal: its config, repositories, cleanup, the repair,
     /// adoption, restoring and moving of workspaces.
     admin: Admin => "admin", Acting;
+    /// Starting agents regardless of `max_agents` and memory.
+    limits: Limits => "limits", Acting;
 }
 
 /// Refuse `value` of `key` where it is wider than `held`.
@@ -207,6 +209,7 @@ impl PermissionsConfig {
         api_writes: Some(ApiWrites::Deny),
         daemon: Some(Acting::Deny),
         admin: Some(Acting::Propose),
+        limits: Some(Acting::Propose),
     };
 
     /// The defaults of a mode that coordinates rather than edits: it decides
@@ -222,6 +225,7 @@ impl PermissionsConfig {
     pub const ORCHESTRATING: Self = Self {
         daemon: Some(Acting::Propose),
         admin: Some(Acting::Direct),
+        limits: Some(Acting::Direct),
         ..Self::COORDINATING
     };
 

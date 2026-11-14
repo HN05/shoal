@@ -133,12 +133,6 @@ pub(super) async fn ensure_detachable(
     if plan.agent_name().is_none() {
         return Ok(());
     }
-    if crate::env::is_scoped() {
-        ensure!(
-            !options.now && !options.focus,
-            "scoped processes start agents when a slot is free; leave out --now and --focus"
-        );
-    }
     ensure!(
         !options.focus,
         "a call without a terminal starts its agent detached, with nothing to focus; leave out --focus, or pass --here to run it in place"

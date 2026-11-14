@@ -347,12 +347,14 @@ With `push = "deny"`, `pr open` and `git push` fail with the reason.
 Other keys govern what was once the user's alone, each `deny`, `propose` or
 `direct`: `admin` administering Shoal, such as `config set`, `repo add`,
 `cleanup`, `setup --skip`, `contribute`, `move`, and restoring removed
-workspaces, and `daemon` the daemon's service commands and `shoal update`.
+workspaces, `limits` starting agents regardless of the limits, with
+`--now`, `--focus` or `queue start`, and `daemon` the daemon's service
+commands and `shoal update`.
 With `propose` the command exits 2 with `approval_pending` and the request,
 which goes to the space above whose own value is `direct`, or the user; once
-approved, the same command proceeds once. A master session has `admin` at
-`direct` and `daemon` at `propose`; other modes propose `admin` and are
-denied `daemon`.
+approved, the same command proceeds once. A master session has `admin` and
+`limits` at `direct` and `daemon` at `propose`; other modes propose `admin`
+and `limits` and are denied `daemon`.
 
 ## Links and watches
 

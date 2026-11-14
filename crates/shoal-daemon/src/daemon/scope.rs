@@ -15,7 +15,6 @@ use anyhow::{Result, ensure};
 mod access;
 mod reach;
 
-pub(in crate::daemon) use access::NOT_NOW;
 use reach::outside_scope;
 
 /// A new scope token, which no other caller holds.

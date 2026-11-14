@@ -9,11 +9,9 @@ use crate::{cli::context::Context, model::QueueEntry, state::QueueKind};
 /// `shoal queue start`: start the entry now, regardless of the limits, and
 /// with `attach` attach this terminal to its agent's session.
 pub(super) async fn start(ctx: &Context, entry: Option<String>, attach: bool) -> Result<i32> {
-    // A process that cleared its scope token is still the workspace's.
-    ensure!(
-        !crate::env::inherits_scope(&ctx.paths.state),
-        "start queued agents outside scoped executions"
-    );
+    require_scope_token(ctx)?;
+    let limits = crate::config::permissions::PermissionKey::Limits;
+    crate::cli::commands::authorize_key(ctx, limits).await?;
     ensure!(!attach || ctx.on_terminal(), "--attach requires a terminal");
     // A CI job runs without a session to attach.
     let offered = |queued: &QueueEntry| !attach || queued.kind != QueueKind::Job;

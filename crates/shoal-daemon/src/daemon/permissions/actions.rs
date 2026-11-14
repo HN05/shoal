@@ -44,6 +44,15 @@ impl Action {
         }
     }
 
+    /// `start`, which starts an agent regardless of `max_agents` and memory,
+    /// as the `limits` permission governs.
+    pub(crate) fn beyond_limits(start: String) -> Self {
+        Self::new(
+            PermissionKey::Limits,
+            format!("{start}, regardless of the agent limits"),
+        )
+    }
+
     /// Sending `request`, which `key` governs, in `repository`: the request
     /// as it goes over the wire, or for a long one its kind and a digest of
     /// it, so that another request is another action.

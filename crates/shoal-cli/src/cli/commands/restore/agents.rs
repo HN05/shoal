@@ -72,7 +72,8 @@ pub(super) async fn restore(
         permission_change::check(ctx, &selected, options.execution.as_ref(), change).await?;
     }
     if scoped && restores_agents {
-        return queue::queue_below(ctx, selected, options.execution, change).await;
+        let now = options.now || options.focus;
+        return queue::queue_below(ctx, selected, options.execution, change, now).await;
     }
     ensure_one_agent(&selected, &options)?;
     let reopened = super::reopen::reopen_each(ctx, &selected.removed).await?;
@@ -248,16 +249,16 @@ async fn continue_turns(
     continuation.submit(ctx).await.map(Some)
 }
 
-/// Refuse a restore in a scoped process, a workspace's or a chat's agent,
-/// that restores in this terminal or regardless of the limits, `here`: it
-/// only queues the restores of the agents of the spaces its scope reaches,
-/// which the daemon starts, or forgets their stopped work.
-pub(super) fn ensure_queued(here: bool) -> Result<()> {
+/// Refuse a restore in a process below a scoped one that cleared its scope
+/// token: a scoped process only queues the restores of the agents of the
+/// spaces its scope reaches, which the daemon starts, or forgets their
+/// stopped work.
+pub(super) fn ensure_queued() -> Result<()> {
     // The daemon checks that each space is in the caller's scope, which
     // needs the scope token: a process that cleared it stays refused.
     ensure!(
-        crate::env::is_scoped() && !here,
-        "scoped processes queue the restores of the spaces their scope reaches, without --now or --focus"
+        crate::env::is_scoped(),
+        "scoped processes queue the restores of the spaces their scope reaches only with their scope token"
     );
     Ok(())
 }

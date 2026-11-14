@@ -15,8 +15,8 @@ enum Action {
     Cancel,
 }
 
-/// Pick a waiting entry, then an action. Workspace processes may not start
-/// one; with nothing waiting, list the queue.
+/// Pick a waiting entry, then an action, starting one only where the
+/// `limits` permission lets; with nothing waiting, list the queue.
 pub(super) async fn choose(ctx: &Context) -> Result<i32> {
     let waiting = selection::waiting(ctx).await?;
     if waiting.is_empty() {
@@ -24,7 +24,8 @@ pub(super) async fn choose(ctx: &Context) -> Result<i32> {
     }
     let entry = selection::pick_entry(ctx, &waiting, "Queue> ").await?;
     let mut actions = vec![(Action::Cancel, "Cancel")];
-    if !crate::env::inherits_scope(&ctx.paths.state) {
+    let limits = crate::config::permissions::PermissionKey::Limits;
+    if crate::cli::commands::permits(ctx, limits).await? {
         actions.insert(0, (Action::Start, "Start now"));
         // A CI job runs without a session.
         if entry.kind != QueueKind::Job {

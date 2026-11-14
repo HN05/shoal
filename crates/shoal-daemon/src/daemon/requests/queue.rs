@@ -1,12 +1,13 @@
 //! The daemon's answers to [`QueueMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::super::{
     answer::Answer,
+    permissions::Action,
     queued_starts,
-    scope::{Caller, NOT_NOW, Scoped, denied},
+    scope::{Caller, Scoped, denied},
     workspace::Manager,
 };
 use crate::client::space_names::SpaceSelector;
@@ -96,17 +97,33 @@ impl Scoped for QueueMethod {
             QueueMethod::QueueAgent {
                 workspace, launch, ..
             } => {
-                ensure!(!launch.now, NOT_NOW);
                 let (mode, given) = (launch.mode.as_ref(), &launch.narrowing);
-                Some(
-                    manager
-                        .worker_target(caller, workspace, mode, given)
-                        .await?,
-                )
+                let target = manager.worker_target(caller, workspace, mode, given);
+                let target = target.await?;
+                if launch.now {
+                    let start = format!("start the agent of {target} now");
+                    let action = Action::beyond_limits(start);
+                    manager.authorize_action(Some(caller), action).await?;
+                }
+                Some(target)
             }
             QueueMethod::QueueRestore { workspace, now, .. } => {
-                ensure!(!*now, NOT_NOW);
-                Some(manager.stopped_below(caller, workspace).await?)
+                let target = manager.stopped_below(caller, workspace).await?;
+                if *now {
+                    let start = format!("restore the agent of {target} now");
+                    let action = Action::beyond_limits(start);
+                    manager.authorize_action(Some(caller), action).await?;
+                }
+                Some(target)
+            }
+            QueueMethod::QueueStart { entry, .. } => {
+                manager
+                    .ensure_entry_reached(caller, &entry.clone().into())
+                    .await?;
+                let start = format!("start queue entry {entry} now");
+                let action = Action::beyond_limits(start);
+                manager.authorize_action(Some(caller), action).await?;
+                None
             }
             // A caller holds, fails and attaches the launches it starts
             // itself, which its scope reaches.
@@ -122,7 +139,7 @@ impl Scoped for QueueMethod {
                 manager.ensure_started_launch_reached(caller, entry).await?;
                 None
             }
-            QueueMethod::QueuedPlan { .. } | QueueMethod::QueueStart { .. } => {
+            QueueMethod::QueuedPlan { .. } => {
                 return Err(denied());
             }
         })
