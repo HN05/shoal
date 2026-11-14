@@ -4,17 +4,16 @@ use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Runners,
-    capability::{self, Capability, Support},
-    ci::{check_state::CheckState, id},
-    numbers::RunNumber,
-    repo::locator::ItemRoute,
+    capability::{self, Support},
     transport::{
         api::{Request, TransportRequests, encode, full_page},
         response::Response,
     },
+};
+use shoal_forge_types::{
+    ForgeRepo, backends::gitlab::GitLab, capability::Capability, ci::check_state::CheckState,
 };
 
 mod activity;
@@ -27,45 +26,7 @@ mod reactions;
 mod reviews;
 mod runs;
 
-use super::{Backend, LoginHint, Routes, rest};
-
-#[derive(Clone, Copy)]
-pub(crate) struct GitLab;
-
-impl Routes for GitLab {
-    fn name(&self) -> &'static str {
-        "GitLab"
-    }
-
-    fn nests_groups(&self) -> bool {
-        true
-    }
-
-    fn issue_route(&self) -> ItemRoute {
-        ItemRoute::GitLabIssue
-    }
-
-    fn pull_route(&self) -> ItemRoute {
-        ItemRoute::MergeRequest
-    }
-
-    fn branch_route(&self) -> &'static str {
-        "/-/tree/"
-    }
-
-    fn run_route(&self) -> Option<&'static str> {
-        Some("/-/pipelines/")
-    }
-
-    /// A pipeline's URL holds its API ID.
-    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
-        let parts = repo.repository_path(target, "/-/pipelines/")?;
-        let [pipeline] = parts.as_slice() else {
-            return None;
-        };
-        id(pipeline).map(RunNumber::new)
-    }
-}
+use super::{Backend, LoginHint, rest};
 
 impl Backend for GitLab {
     /// GitLab reports its version with the revision it was built from.
@@ -150,7 +111,9 @@ impl Backend for GitLab {
     ) -> Result<Response> {
         let url = format!(
             "{}://{}/api/v4/{}",
-            repo.web_scheme, repo.host, request.endpoint
+            repo.web_scheme(),
+            repo.host,
+            request.endpoint
         );
         let authorization = account.authorization(repo).await?;
         repo.curl_send(&url, authorization, request).await

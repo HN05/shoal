@@ -1,7 +1,8 @@
 use super::*;
 use crate::items::item::ItemRequests;
-use crate::updates::{SnapshotKind, SnapshotState, UpdateKind};
 use serde_json::json;
+use shoal_forge_types::updates::UpdateKind;
+use shoal_forge_types::updates::{SnapshotKind, SnapshotState};
 use shoal_time::UnixTime;
 
 fn pull(mergeable: Value) -> Current {

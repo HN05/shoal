@@ -1,5 +1,6 @@
 use super::*;
 use serde_json::json;
+use shoal_forge_types::review::submit::LineComment;
 
 #[test]
 fn changed_files_keep_their_former_path_and_lack_lines_without_a_patch() -> Result<()> {
@@ -28,7 +29,7 @@ async fn reviews_post_their_verdict_line_comments_and_head_in_one_request() -> R
         "filename": "a.rs",
         "patch": "@@ -1,2 +1,2 @@\n-a\n+b\n c",
     }))?]);
-    let comments = [crate::review::submit::LineComment {
+    let comments = [LineComment {
         path: "a.rs".into(),
         line: 1,
         side: Side::Old,

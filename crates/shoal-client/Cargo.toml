@@ -24,7 +24,7 @@ rusqlite = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 shoal-config-derive.workspace = true
-shoal-forge.workspace = true
+shoal-forge-types.workspace = true
 shoal-refs.workspace = true
 shoal-states.workspace = true
 shoal-time.workspace = true

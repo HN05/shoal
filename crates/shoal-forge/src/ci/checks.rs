@@ -1,45 +1,29 @@
 //! Failed CI job logs resolved from a PR's current check, using its agent account.
 pub(crate) mod plain;
 
-use crate::items::{link::LinkKind, reference::ItemRef};
 use anyhow::{Context, Result, ensure};
-use serde::{Deserialize, Serialize};
+use shoal_forge_types::items::{link::LinkKind, reference::ItemRef};
 use shoal_refs::CommitId;
 
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Checks,
-    capability::{Capability, CapabilityRequests},
-    ci::{CiCheck, CiSteps, JobState, Location},
-    items::{action::ActionRequests, link::ItemKind},
-    numbers::PullNumber,
-    review::view::ItemView,
+    capability::CapabilityRequests,
+    ci::{CiCheck, CiSteps, Location},
+    items::action::ActionRequests,
     transport::api::{Request, TransportRequests},
 };
+use shoal_forge_types::{
+    ForgeRepo,
+    capability::Capability,
+    ci::{JobState, checks::CheckLog},
+    items::link::ItemKind,
+    numbers::PullNumber,
+    review::view::ItemView,
+};
 
-/// The most of a log's end a [`CheckLog`] keeps, in bytes.
-pub const TAIL_BYTES: usize = 8192;
-/// The most of one line a [`CheckLog`]'s tail keeps, in bytes.
-const LINE_BYTES: usize = 1024;
-/// The longest job URL a [`CheckLog`] keeps, in bytes.
-pub const JOB_URL_BYTES: usize = 512;
 /// The most of a job log Shoal downloads, in bytes.
 pub(crate) const MAX_LOG_BYTES: usize = 8 * 1024 * 1024;
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CheckLog {
-    /// The PR's.
-    pub url: String,
-    pub name: String,
-    /// The web page of the check's job, unless longer than [`JOB_URL_BYTES`].
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub job_url: Option<String>,
-    pub text: String,
-    pub truncated: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub failed_step: Option<String>,
-}
 
 /// A check that reports no CI job in the repository, such as an external
 /// service's, so it has no log Shoal can read.
@@ -103,7 +87,9 @@ impl ForgeRepo {
     ) -> Result<CheckLog> {
         self.require(Capability::ReadJobLogs)?;
         pull.belongs_to(self)?;
-        self.kind.failed_check_log(self, account, pull, name).await
+        self.kind()
+            .failed_check_log(self, account, pull, name)
+            .await
     }
 
     /// Add the logs of the failed checks of the PRs among `views` in this
@@ -146,10 +132,10 @@ impl ForgeRepo {
         name: &str,
     ) -> Result<CheckLog> {
         let head = self.pull_head(account, pull).await?;
-        let checks = self.kind.ci_checks(self, account, head.as_str()).await?;
+        let checks = self.kind().ci_checks(self, account, head.as_str()).await?;
         let (location, target) = self.failed_job(&checks, name)?;
         let log = self.job_log(account, location).await?;
-        let step = self.kind.failed_step(&log);
+        let step = self.kind().failed_step(&log);
         Ok(CheckLog::from_text(pull.url(), name, &log, step).with_job(target))
     }
 
@@ -175,14 +161,14 @@ impl ForgeRepo {
     /// The log of the job at `location` as plain text, refused beyond
     /// [`MAX_LOG_BYTES`].
     pub(crate) async fn job_log(&self, account: &Account, location: Location) -> Result<String> {
-        let endpoint = self.repo_endpoint(&self.kind.job_log_endpoint(location)?);
+        let endpoint = self.repo_endpoint(&self.kind().job_log_endpoint(location)?);
         // GitHub answers with a redirect to where it keeps the log.
         let request = Request::get(endpoint).limited(MAX_LOG_BYTES).redirected();
         let log = self
             .read_text(account, &request)
             .await
             .context("fetch job log (maximum 8 MiB)")?;
-        Ok(self.kind.plain_log(&log))
+        Ok(self.kind().plain_log(&log))
     }
 
     /// The job and web URL of the failed check `name` among `checks`.
@@ -200,73 +186,6 @@ impl ForgeRepo {
             .ok_or_else(|| NoJobLog { name: name.into() })?;
         Ok((location, target.clone()))
     }
-}
-
-impl CheckLog {
-    /// The [`Self::tail`] of the log `text`.
-    pub(crate) fn from_text(
-        url: &str,
-        name: &str,
-        text: &str,
-        failed_step: Option<String>,
-    ) -> Self {
-        Self::whole(url, name, text.into(), failed_step).tail()
-    }
-
-    /// The whole log `text`.
-    pub(crate) fn whole(url: &str, name: &str, text: String, failed_step: Option<String>) -> Self {
-        Self {
-            url: url.into(),
-            name: name.into(),
-            job_url: None,
-            text,
-            truncated: false,
-            failed_step,
-        }
-    }
-
-    /// The log's last whole lines within [`TAIL_BYTES`], each longer than
-    /// [`LINE_BYTES`] shortened to its start and end, so that one long line
-    /// leaves room for the lines around it; marked truncated when it left
-    /// anything out.
-    pub fn tail(mut self) -> Self {
-        let mut lines = Vec::new();
-        let mut size = 0;
-        for line in self.text.split_inclusive('\n').rev() {
-            let line = shortened(line);
-            if size + line.len() > TAIL_BYTES {
-                break;
-            }
-            size += line.len();
-            lines.push(line);
-        }
-        lines.reverse();
-        let tail = lines.concat();
-        self.truncated |= tail.len() < self.text.len();
-        self.text = tail;
-        self
-    }
-
-    pub(crate) fn with_job(self, job_url: String) -> Self {
-        Self {
-            job_url: Some(job_url).filter(|url| url.len() <= JOB_URL_BYTES),
-            ..self
-        }
-    }
-}
-
-/// What stands for the middle a long line's tail leaves out.
-const ELLIPSIS: &str = " … ";
-
-/// `line` within [`LINE_BYTES`], its middle left out when it is longer.
-fn shortened(line: &str) -> std::borrow::Cow<'_, str> {
-    if line.len() <= LINE_BYTES {
-        return line.into();
-    }
-    let kept = (LINE_BYTES - ELLIPSIS.len()) / 2;
-    let start = line.floor_char_boundary(kept);
-    let end = line.ceil_char_boundary(line.len() - kept);
-    format!("{}{ELLIPSIS}{}", &line[..start], &line[end..]).into()
 }
 
 #[cfg(test)]

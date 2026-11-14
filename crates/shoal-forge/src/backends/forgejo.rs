@@ -19,53 +19,22 @@ mod runs;
 pub(crate) mod threads;
 mod version;
 
-use super::{Backend, LoginHint, Routes, github_rest};
+use super::{Backend, LoginHint, github_rest};
 use crate::{
-    ForgeRepo,
     account::Account,
-    capability::{self, Capability, Support},
-    numbers::RunNumber,
-    repo::locator::ItemRoute,
+    capability::{self, Support},
     transport::{
         api::{Request, TransportRequests, full_page},
         response::Response,
     },
 };
+use shoal_forge_types::{ForgeRepo, backends::forgejo::Forgejo, capability::Capability};
 
 /// Why an older Forgejo, or Gitea, runs no jobs on Shoal's runner.
 const RUNNER_RELEASE: &str = "that needs Forgejo 15 or later";
 
 /// Forgejo's default maximum page size.
 const PAGE_SIZE: usize = 50;
-
-#[derive(Clone, Copy)]
-pub(crate) struct Forgejo;
-
-impl Routes for Forgejo {
-    fn name(&self) -> &'static str {
-        "Forgejo or Gitea"
-    }
-
-    fn nests_groups(&self) -> bool {
-        false
-    }
-
-    fn issue_route(&self) -> ItemRoute {
-        ItemRoute::Issue
-    }
-
-    fn pull_route(&self) -> ItemRoute {
-        ItemRoute::Pulls
-    }
-
-    fn branch_route(&self) -> &'static str {
-        "/src/branch/"
-    }
-
-    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
-        run_number(repo, target)
-    }
-}
 
 impl Backend for Forgejo {
     /// Forgejo and Gitea report their version under `/api/v1`.
@@ -171,7 +140,9 @@ impl Backend for Forgejo {
     ) -> Result<Response> {
         let url = format!(
             "{}://{}/api/v1/{}",
-            repo.web_scheme, repo.host, request.endpoint
+            repo.web_scheme(),
+            repo.host,
+            request.endpoint
         );
         let authorization = account.authorization(repo).await?;
         repo.curl_send(&url, authorization, request).await
@@ -253,26 +224,3 @@ fn first_page(endpoint: String) -> String {
 
 #[cfg(test)]
 mod tests;
-
-/// The run number of a run's or job's web URL in the repository, which may
-/// be relative to the host.
-pub(crate) fn run_number(repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
-    let parts = runs_path(repo, target)?;
-    parts
-        .first()?
-        .parse()
-        .ok()
-        .filter(|number| *number > 0)
-        .map(RunNumber::new)
-}
-
-/// The path components of `target` after the repository's runs. A host may
-/// link relative to itself, or over HTTPS while its remote uses HTTP.
-pub(crate) fn runs_path<'a>(repo: &ForgeRepo, target: &'a str) -> Option<Vec<&'a str>> {
-    let relative = ["https", "http"]
-        .iter()
-        .find_map(|scheme| target.strip_prefix(&format!("{scheme}://{}", repo.host)))
-        .unwrap_or(target);
-    let rest = relative.strip_prefix(&format!("/{}/actions/runs/", repo.path))?;
-    Some(rest.split('/').collect())
-}

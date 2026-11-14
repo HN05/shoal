@@ -4,21 +4,25 @@ use serde_json::Value;
 
 use super::{Forgejo, actions};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{
         Activity, LoginHint,
         rest::{self, RestCheck, RestReads, fingerprints},
     },
-    ci::check_state::CheckState,
-    items::{item::Current, link::ItemKind},
-    numbers::{IssueNumber, PullNumber},
     review::{
-        status::{PrStatus, Verdict, forgejo_reviews},
-        view::{Details, Review, login},
+        status::{Verdict, forgejo_reviews},
+        view::login,
     },
     transport::api::{Request, TransportRequests},
     updates::{Entry, Snapshot},
+};
+use shoal_forge_types::review::view::{Details, Review};
+use shoal_forge_types::{
+    ForgeRepo,
+    ci::check_state::CheckState,
+    items::{item::Current, link::ItemKind},
+    numbers::{IssueNumber, PullNumber},
+    review::status::PrStatus,
 };
 
 mod view;
@@ -47,7 +51,7 @@ impl Activity for Forgejo {
         repo: &ForgeRepo,
         account: &Account,
         number: PullNumber,
-        pull: &crate::items::reference::ItemRef,
+        pull: &shoal_forge_types::items::reference::ItemRef,
     ) -> Result<PrStatus> {
         rest::pr_status(self, repo, account, number, pull).await
     }

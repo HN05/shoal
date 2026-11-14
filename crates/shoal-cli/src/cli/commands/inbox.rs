@@ -14,7 +14,7 @@ use super::listing::ListFilter;
 use crate::client::output::inbox::Item;
 use crate::{
     cli::{
-        client::{self},
+        client,
         context::Context,
         list_status::ListStatus,
         output::{self, Palette, Style},

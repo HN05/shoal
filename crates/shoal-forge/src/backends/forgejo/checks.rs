@@ -3,15 +3,15 @@ use anyhow::Result;
 
 use super::{Forgejo, actions};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{Checks, github_rest},
-    ci::{
-        CiAction, CiCheck, Job, Location, Operation,
-        checks::{CheckLog, plain},
-    },
-    numbers::JobId,
+    ci::{CiCheck, Job, Location, Operation, checks::plain},
     transport::api::{Request, TransportRequests},
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    ci::{CiAction, checks::CheckLog},
+    numbers::JobId,
 };
 
 impl Checks for Forgejo {
@@ -82,7 +82,7 @@ impl Checks for Forgejo {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        pull: &crate::items::reference::ItemRef,
+        pull: &shoal_forge_types::items::reference::ItemRef,
         name: &str,
     ) -> Result<CheckLog> {
         actions::failed_check_log(repo, account, pull, name).await

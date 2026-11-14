@@ -7,11 +7,13 @@ use futures_util::StreamExt;
 use serde_json::Value;
 
 use crate::{
-    ForgeRepo,
     account::Account,
+    transport::api::{Request, TransportRequests},
+};
+use shoal_forge_types::{
+    ForgeRepo,
     numbers::{CommentId, PullNumber},
     review::thread::{Target, Thread},
-    transport::api::{Request, TransportRequests},
 };
 
 /// How many reviews' comments are read at once; a burst of connections can

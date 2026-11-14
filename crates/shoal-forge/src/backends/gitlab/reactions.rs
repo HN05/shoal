@@ -5,16 +5,18 @@ use serde_json::{Value, json};
 
 use super::{GitLab, username};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Reactions,
     items::{
         item::{ItemRequests, text},
-        link::ItemKind,
-        reaction::{Listed, Subject, allowed::AllowedReactions},
+        reaction::{Listed, Subject},
     },
-    raw::HttpMethod,
     transport::api::{Request, TransportRequests},
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    items::{link::ItemKind, reaction::allowed::AllowedReactions},
+    raw::HttpMethod,
 };
 
 impl Reactions for GitLab {

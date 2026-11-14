@@ -2,8 +2,10 @@
 use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::Opening,
-    daemon::test_support::manager,
-    daemon::{chats::NewChat, links::proposals::tests::store_issue_proposal, workspace::Manager},
+    daemon::{
+        chats::NewChat, links::proposals::tests::store_issue_proposal, test_support::manager,
+        workspace::Manager,
+    },
     forge::items::create::NewIssue,
     model::{Chat, Repository},
     protocol::{ItemContext, ItemMethod},

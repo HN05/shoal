@@ -3,19 +3,20 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{
         github::threads::{GitHubThread, threads},
         github_rest,
     },
-    items::{
-        action::{ActionSteps, MergeMethod},
-        link::ItemKind,
-    },
-    numbers::{CommentId, PullNumber},
-    review::view::{AutoMerge, Details, Review, login, review_comment, review_state, text_field},
+    items::action::ActionSteps,
+    review::view::{login, review_comment, review_state, text_field},
     transport::api::TransportRequests,
+};
+use shoal_forge_types::review::view::{AutoMerge, Details, Review};
+use shoal_forge_types::{
+    ForgeRepo,
+    items::{action::MergeMethod, link::ItemKind},
+    numbers::{CommentId, PullNumber},
 };
 
 pub(crate) async fn details(

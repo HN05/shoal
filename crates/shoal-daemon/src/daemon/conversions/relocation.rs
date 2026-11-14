@@ -9,7 +9,10 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
 
-use super::{Pending, record::ChatRow, record::ConvertedChat};
+use super::{
+    Pending,
+    record::{ChatRow, ConvertedChat},
+};
 use crate::protocol::operations::{Ended, Failure};
 use crate::{
     config::modes::ModeName,

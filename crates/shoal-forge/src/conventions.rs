@@ -9,11 +9,11 @@ use std::path::Path;
 
 use anyhow::{Result, bail};
 
-use crate::{
-    ForgeKind, ForgeRepo,
-    account::Account,
-    backends::Conventions,
-    conventions::labels::{Label, LabelRequests},
+use crate::{account::Account, backends::Conventions, conventions::labels::LabelRequests};
+use shoal_forge_types::{
+    ForgeRepo,
+    backends::ForgeKind,
+    conventions::labels::Label,
     items::{item::Item, link::ItemKind},
     numbers::IssueNumber,
 };
@@ -88,7 +88,7 @@ pub fn proposal_warnings(
     let missing = missing(required, labels);
     let labels =
         (!missing.is_empty()).then(|| format!("no label starting with {}", missing.join(", ")));
-    let templates = templates(forge.kind, kind, worktree);
+    let templates = templates(forge.kind(), kind, worktree);
     let template = unmet(&templates, &headings(body))
         .map(|unmet| format!("the description {}", unmet_gap(&unmet)));
     labels.into_iter().chain(template).collect()
@@ -148,7 +148,7 @@ fn unlabeled_warning(item: &Item) -> String {
 /// forge's template for its kind, or of every issue template; none when the
 /// repository has no template or the description follows one.
 fn template_warning(forge: &ForgeRepo, worktree: &Path, item: &Item, body: &str) -> Option<String> {
-    let templates = templates(forge.kind, item.kind, worktree);
+    let templates = templates(forge.kind(), item.kind, worktree);
     let unmet = unmet(&templates, &headings(body))?;
     Some(unmet_warning(item, &unmet))
 }

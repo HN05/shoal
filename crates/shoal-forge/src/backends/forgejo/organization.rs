@@ -4,10 +4,10 @@ use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 use crate::{
-    ForgeRepo,
     account::Account,
     transport::api::{Request, TransportRequests},
 };
+use shoal_forge_types::ForgeRepo;
 
 /// The labels of the organization that owns the repository; none when a
 /// user owns it.

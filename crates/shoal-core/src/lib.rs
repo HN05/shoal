@@ -60,7 +60,7 @@ use shoal_client::{
     agent, approvals, connection, demos, model, priority, protocol, resources, sim, space_names,
     state, validate,
 };
-use shoal_forge as forge;
+use shoal_forge_types as forge;
 use shoal_subprocess as subprocess;
 
 /// Tokio worker threads get more stack than its 2 MiB default: the daemon

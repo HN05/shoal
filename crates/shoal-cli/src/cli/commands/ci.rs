@@ -16,12 +16,13 @@ use crate::{
         ui,
     },
     forge::{
-        capability::{Capability, CapabilityRequests},
+        capability::Capability,
         ci::{CiAction, run_view::RunFilter},
         items::reference::ItemRef,
     },
     protocol::ItemContext,
 };
+use shoal_forge::capability::CapabilityRequests;
 
 pub(super) async fn run(ctx: &Context, command: CiCommand) -> Result<i32> {
     match command {

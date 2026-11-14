@@ -18,20 +18,26 @@ use crate::{
     daemon::{events, reviews::gate::Gate, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
-        account::Account,
-        conventions,
         items::{
-            action::{Action, ActionRequests, Edit, Sent},
-            attach::AttachRequests,
-            create::{CreateRequests, NewPull, PullOptions},
+            action::{Action, Edit},
+            create::{NewPull, PullOptions},
             item::{Item, ItemState, Opened},
             link::ItemKind,
             reference::{ItemInput, ItemRef},
         },
-        updates::Edited,
     },
     model::{Relation, ReviewMark, Workspace},
     protocol::ItemContext,
+};
+use shoal_forge::{
+    account::Account,
+    conventions,
+    items::{
+        action::{ActionRequests, Sent},
+        attach::AttachRequests,
+        create::CreateRequests,
+    },
+    updates::Edited,
 };
 
 mod accounts;
@@ -287,7 +293,7 @@ impl Manager {
         };
         self.record_own_action(id, target, action.name(), own)
             .await
-            .map_err(|error| crate::forge::items::action::after_send(error, true))?;
+            .map_err(|error| shoal_forge::items::action::after_send(error, true))?;
         Ok(acted.item)
     }
 

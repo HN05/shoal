@@ -4,15 +4,11 @@ use serde_json::Value;
 
 use super::GitHub;
 use crate::{
-    ForgeRepo,
     backends::{Reactions, github_rest},
-    items::{
-        link::ItemKind,
-        reaction::{Listed, Subject},
-    },
-    raw::HttpMethod,
+    items::reaction::{Listed, Subject},
     transport::api::Request,
 };
+use shoal_forge_types::{ForgeRepo, items::link::ItemKind, raw::HttpMethod};
 
 impl Reactions for GitHub {
     fn reactions_endpoint(

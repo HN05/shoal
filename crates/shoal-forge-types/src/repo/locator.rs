@@ -4,12 +4,12 @@ use anyhow::{Context, Result, ensure};
 
 use crate::{ForgeRepo, IssueInput, backends::ForgeKind};
 
-pub(crate) const ISSUE_URL: &str = "expected an issue URL ending in /issues/<number>";
-pub(crate) const PULL_URL: &str = "expected a PR URL ending in /pull/<number>, /pulls/<number>, \
+pub const ISSUE_URL: &str = "expected an issue URL ending in /issues/<number>";
+pub const PULL_URL: &str = "expected a PR URL ending in /pull/<number>, /pulls/<number>, \
     /-/merge_requests/<number> or /pull-requests/<number>";
 
 #[derive(Clone, Copy)]
-pub(crate) enum ItemRoute {
+pub enum ItemRoute {
     Issue,
     /// GitLab keeps item routes under `/-/`, which no project path can contain.
     GitLabIssue,
@@ -19,14 +19,14 @@ pub(crate) enum ItemRoute {
     PullRequests,
 }
 
-pub(crate) struct ItemUrl<'a> {
+pub struct ItemUrl<'a> {
     pub repository: &'a str,
     number: &'a str,
     url: &'a str,
 }
 
 impl ItemRoute {
-    pub(crate) fn marker(self) -> &'static str {
+    pub fn marker(self) -> &'static str {
         match self {
             Self::Issue => "/issues/",
             Self::GitLabIssue => "/-/issues/",
@@ -61,7 +61,7 @@ impl ItemRoute {
     }
 
     /// The URL of the item numbered `number` in `repo` by this route.
-    pub(crate) fn url_of(self, repo: &ForgeRepo, number: impl std::fmt::Display) -> String {
+    pub fn url_of(self, repo: &ForgeRepo, number: impl std::fmt::Display) -> String {
         format!(
             "{}://{}/{}{marker}{number}",
             repo.web_scheme,
@@ -104,7 +104,7 @@ impl ItemRoute {
 }
 
 /// An item URL without its query, fragment or trailing slash.
-pub(crate) fn item_path(input: &str) -> &str {
+pub fn item_path(input: &str) -> &str {
     input
         .split(['?', '#'])
         .next()
@@ -116,7 +116,7 @@ pub(crate) fn item_path(input: &str) -> &str {
 /// gives each forge, and the forge that alone uses that route. Of the
 /// routes `url` has, the one that ends last is taken, and of those that end
 /// there the longest, as GitLab's `/-/issues/` over `/issues/`.
-pub(crate) fn locate(
+pub fn locate(
     url: &str,
     route_of: impl Fn(ForgeKind) -> Option<&'static str>,
 ) -> Option<(&str, Option<ForgeKind>)> {

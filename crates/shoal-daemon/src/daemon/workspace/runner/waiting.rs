@@ -16,13 +16,14 @@ use crate::client::space_names::SpaceName;
 use crate::{
     daemon::{log, workspace::Manager},
     forge::{
-        ForgeRepo, RepoRequests,
-        ci::runner::{JobRun, RunnerRequests, Trigger},
+        ForgeRepo,
+        ci::runner::{JobRun, Trigger},
     },
     git::default_branch::{self, DefaultBranchLookup},
     model::{QueuedJob, Repository},
     state::{QueueKind, QueueState},
 };
+use shoal_forge::{RepoRequests, ci::runner::RunnerRequests};
 
 impl Manager {
     /// Read the forge's waiting jobs while one could start, and every

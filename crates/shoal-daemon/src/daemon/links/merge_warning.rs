@@ -10,9 +10,9 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::{Manager, conflicts::recorded},
     forge::{
-        ForgeRepo, RepoRequests,
+        ForgeRepo,
         items::{
-            action::{Action, ActionRequests},
+            action::Action,
             item::Item,
             link::ItemKind,
             reference::{ItemInput, ItemRef},
@@ -22,6 +22,7 @@ use crate::{
     model::{ChangedOnBothSides, ConfirmedWarning, MergeWarning},
     protocol::ItemContext,
 };
+use shoal_forge::{RepoRequests, items::action::ActionRequests};
 
 impl Manager {
     /// The warning for merging the PR `input` names in the repository of

@@ -8,7 +8,11 @@ use rusqlite::params;
 use super::super::{Manager, NewWorkspace};
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::{scope::Caller, spaces, spaces::Removing, store},
+    daemon::{
+        scope::Caller,
+        spaces::{self, Removing},
+        store,
+    },
     model::{OpenedWorkspace, SpaceKind, Workspace},
 };
 

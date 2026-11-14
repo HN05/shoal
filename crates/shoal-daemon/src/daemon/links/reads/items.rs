@@ -11,23 +11,25 @@ use crate::{
         workspace::Manager,
     },
     forge::{
-        PullRequest, RepoRequests,
-        account::Account,
-        capability::{Capability, CapabilityRequests},
+        PullRequest,
+        capability::Capability,
         items::{
-            action::ActionRequests,
-            issue::{IssueDetails, IssueRequests},
+            issue::IssueDetails,
             link::{ItemKind, LinkKind, Selection},
             reference::{ItemInput, ItemRef},
         },
         numbers::CommentId,
-        review::{
-            reviewers::{Reviewer, ReviewerRequests},
-            thread::{Thread, ThreadRequests},
-        },
+        review::{reviewers::Reviewer, thread::Thread},
     },
     model::{Blocker, Repository, Selected, SelectedItem},
     protocol::ItemContext,
+};
+use shoal_forge::{
+    RepoRequests,
+    account::Account,
+    capability::CapabilityRequests,
+    items::{action::ActionRequests, issue::IssueRequests},
+    review::{reviewers::ReviewerRequests, thread::ThreadRequests},
 };
 
 impl Manager {

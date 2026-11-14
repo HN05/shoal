@@ -276,8 +276,8 @@ fn link_events_from_before_relations_were_assignments() {
 
 /// A server for the Forgejo repository `team/repo` that shows each issue and
 /// PR but number 9, titled by its kind and number.
-fn titled_items() -> crate::forge::test_support::Server {
-    crate::forge::test_support::Server::start(|request| {
+fn titled_items() -> shoal_forge::test_support::Server {
+    shoal_forge::test_support::Server::start(|request| {
         let path = request.line.strip_prefix("GET /api/v1/repos/team/repo/");
         let item = path.and_then(|path| {
             (path.strip_prefix("issues/").map(|number| ("Issue", number)))

@@ -8,17 +8,15 @@ use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde_json::Value;
 
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Runners,
-    capability::{self, Capability, Support},
-    numbers::RunNumber,
-    repo::locator::ItemRoute,
+    capability::{self, Support},
     transport::{
         api::{Request, TransportRequests, encode},
         response::Response,
     },
 };
+use shoal_forge_types::{ForgeRepo, backends::bitbucket::Bitbucket, capability::Capability};
 
 mod activity;
 mod attachments;
@@ -30,7 +28,7 @@ mod reactions;
 mod reviews;
 mod runs;
 
-use super::{Backend, Routes};
+use super::Backend;
 
 /// Bitbucket Cloud's API, which is not served from its web host.
 const API: &str = "https://api.bitbucket.org/2.0";
@@ -39,39 +37,6 @@ const API: &str = "https://api.bitbucket.org/2.0";
 const HOST: &str = "bitbucket.org";
 /// The page size Bitbucket's lists take by default.
 const PAGE_SIZE: usize = 50;
-
-#[derive(Clone, Copy)]
-pub(crate) struct Bitbucket;
-
-impl Routes for Bitbucket {
-    fn name(&self) -> &'static str {
-        "Bitbucket Cloud"
-    }
-
-    fn nests_groups(&self) -> bool {
-        false
-    }
-
-    fn issue_route(&self) -> ItemRoute {
-        ItemRoute::Issue
-    }
-
-    fn pull_route(&self) -> ItemRoute {
-        ItemRoute::PullRequests
-    }
-
-    fn branch_route(&self) -> &'static str {
-        "/branch/"
-    }
-
-    fn run_route(&self) -> Option<&'static str> {
-        None
-    }
-
-    fn locate_run(&self, _repo: &ForgeRepo, _target: &str) -> Option<RunNumber> {
-        None
-    }
-}
 
 impl Backend for Bitbucket {
     /// Bitbucket Cloud serves only `bitbucket.org`, which is known by name.

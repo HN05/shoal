@@ -6,12 +6,10 @@ use crate::{
         scope::Caller,
         test_support::{configure, git, manager, repository},
     },
-    forge::{
-        raw::{HttpMethod, RawRequest},
-        test_support::Server,
-    },
+    forge::raw::{HttpMethod, RawRequest},
     protocol::ItemContext,
 };
+use shoal_forge::test_support::Server;
 
 #[tokio::test]
 async fn agents_read_as_their_account_and_write_only_when_allowed() {

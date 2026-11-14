@@ -5,16 +5,17 @@ use anyhow::{Context, Result, ensure};
 
 use super::GitLab;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Attachments,
-    items::attach::{Attachment, Holder},
+    items::attach::Holder,
     transport::{
         api::{Request, TransportRequests, Upload, encode},
         download,
         response::Fetched,
     },
 };
+use shoal_forge_types::ForgeRepo;
+use shoal_forge_types::items::attach::Attachment;
 
 impl Attachments for GitLab {
     async fn check_uploads(
@@ -30,7 +31,7 @@ impl Attachments for GitLab {
     /// is read from the API route that serves the same upload.
     async fn download(&self, repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
         let endpoint = api_route(url)?;
-        let url = format!("{}://{}/api/v4/{endpoint}", repo.web_scheme, repo.host);
+        let url = format!("{}://{}/api/v4/{endpoint}", repo.web_scheme(), repo.host);
         let authorization = account.authorization(repo).await?;
         download::with_curl(&url, authorization).await
     }

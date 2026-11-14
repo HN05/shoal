@@ -1,24 +1,12 @@
 //! Look up issue state.
 use anyhow::{Result, ensure};
-use serde::{Deserialize, Serialize};
 
-use crate::{
-    ForgeRepo, RepoRequests,
-    account::Account,
-    backends::Items,
-    items::{item::ItemState, link::LinkKind, reference::ItemRef},
+use crate::{RepoRequests, account::Account, backends::Items};
+use shoal_forge_types::{
+    ForgeRepo,
+    items::{issue::IssueDetails, item::ItemState, link::LinkKind, reference::ItemRef},
     numbers::IssueNumber,
 };
-
-/// An issue's title, description and labels, with the URL of its number.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct IssueDetails {
-    pub number: IssueNumber,
-    pub url: ItemRef,
-    pub title: String,
-    pub details: String,
-    pub labels: Vec<String>,
-}
 
 /// Reading issues.
 #[shoal_forge_derive::extension(pub IssueRequests, pub(crate) IssueSteps)]
@@ -53,7 +41,7 @@ impl ForgeRepo {
         &self,
         account: &Account,
         number: IssueNumber,
-    ) -> Result<crate::items::item::Current> {
+    ) -> Result<shoal_forge_types::items::item::Current> {
         let issue = self.issue_details(account, number).await?;
         require_open(issue.item.state)?;
         Ok(issue)
@@ -72,7 +60,10 @@ impl ForgeRepo {
         account: &Account,
         number: IssueNumber,
     ) -> Result<Vec<ItemRef>> {
-        let urls = self.kind.open_issue_blockers(self, account, number).await?;
+        let urls = self
+            .kind()
+            .open_issue_blockers(self, account, number)
+            .await?;
         (urls.iter())
             .map(|url| ItemRef::parse_kind(LinkKind::Issue, url))
             .collect()
@@ -84,7 +75,7 @@ impl ForgeRepo {
         account: &Account,
         number: IssueNumber,
     ) -> Result<ItemState> {
-        self.kind.issue_state(self, account, number).await
+        self.kind().issue_state(self, account, number).await
     }
 }
 

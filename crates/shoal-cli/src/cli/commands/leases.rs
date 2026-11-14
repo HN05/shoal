@@ -2,7 +2,11 @@
 
 use anyhow::{Context as _, Result, ensure};
 
-use super::{ports, resources, resources::Members, secrets, simulators, workspace_overviews};
+use super::{
+    ports,
+    resources::{self, Members},
+    secrets, simulators, workspace_overviews,
+};
 use crate::client::output::leases::{Held, Leases, Releases};
 use crate::client::space_names::SpaceSelector;
 use crate::{

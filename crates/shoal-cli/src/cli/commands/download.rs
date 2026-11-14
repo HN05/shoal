@@ -16,7 +16,7 @@ use crate::{
 
 pub(super) async fn download(ctx: &Context, args: DownloadArgs) -> Result<i32> {
     // Refuse a bad URL before the picker asks for anything.
-    crate::forge::download::check_url(&args.url)?;
+    shoal_forge::download::check_url(&args.url)?;
     let (context, repository) = select_repo_context(ctx, args.repo).await?;
     let download = ctx
         .progress(

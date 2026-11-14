@@ -23,17 +23,23 @@ use crate::{
         workspace::Manager,
     },
     forge::{
-        ForgeRepo, RepoRequests,
-        account::Account,
-        conventions,
+        ForgeRepo,
         items::{
-            attach::AttachRequests,
-            create::{CreateRequests, Created, NewIssue},
+            create::NewIssue,
             item::{Item, Opened},
             link::ItemKind,
         },
     },
     protocol::ItemContext,
+};
+use shoal_forge::{
+    RepoRequests,
+    account::Account,
+    conventions,
+    items::{
+        attach::AttachRequests,
+        create::{CreateRequests, Created},
+    },
 };
 
 /// Why `--link` is refused outside a workspace or chat.

@@ -8,9 +8,10 @@ use crate::{
         scope::{self, Caller},
         test_support::{commit, configure, git, install_test_script, manager, repository},
     },
-    forge::{ForgeRepo, items::reference::ItemRef, test_support::Server},
+    forge::{ForgeRepo, items::reference::ItemRef},
     protocol::AssignmentMethod,
 };
+use shoal_forge::test_support::Server;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},

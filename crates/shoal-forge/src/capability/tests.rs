@@ -15,10 +15,8 @@ fn a_refusal_names_the_capability() -> Result<()> {
 
 #[tokio::test]
 async fn forgejo_reruns_jobs_from_release_17_and_runs_them_from_release_15() -> Result<()> {
-    use crate::{
-        backends::ForgeKind,
-        test_support::{Server, agent_on, repo_on},
-    };
+    use crate::test_support::{Server, agent_on, repo_on};
+    use shoal_forge_types::backends::ForgeKind;
     for (version, reruns, runs) in [
         ("17.0.1+gitea-1.22.0", true, true),
         ("15.0.0+gitea-1.22.0", false, true),

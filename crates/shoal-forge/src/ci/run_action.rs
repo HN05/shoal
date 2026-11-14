@@ -1,63 +1,27 @@
 //! Rerunning and cancelling one CI workflow run, by its web URL or the
 //! number in it, as the workspace's agent account. A PR's checks are acted
-//! on through [`crate::ci::CiAction`] on its head instead.
+//! on through [`shoal_forge_types::ci::CiAction`] on its head instead.
 use anyhow::{Context, Result, ensure};
-use serde::{Deserialize, Serialize};
-use shoal_refs::CommitId;
 
 use crate::{
-    ForgeRepo, RepoRequests,
+    RepoRequests,
     account::Account,
-    backends::{Routes, Runs},
-    capability::{Capability, CapabilityRequests, Unsupported},
-    ci::{CiAction, JobState, id, run_view::RunViewSteps},
-    items::{link::LinkKind, reference::ItemRef},
-    numbers::{JobId, PullNumber, RunId, RunNumber},
-    raw::HttpMethod,
+    backends::Runs,
+    capability::CapabilityRequests,
+    ci::run_view::RunViewSteps,
     transport::api::{Request, TransportRequests},
 };
-
-/// A workflow run in the repository, as its forge reports it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Run {
-    /// The ID its API acts on.
-    #[serde(skip)]
-    pub(crate) id: RunId,
-    pub url: String,
-    /// The branch it ran on, when it ran on one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub branch: Option<String>,
-    /// Its workflow file, where the forge runs several per branch.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workflow: Option<String>,
-    /// The commit it ran on.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub commit: Option<CommitId>,
-    /// The PR of this repository it ran for, where the forge says.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pull: Option<PullNumber>,
-    pub state: JobState,
-    /// The forge reports it succeeded, which a finished run that was
-    /// skipped or waits for manual action has not.
-    #[serde(skip)]
-    pub(crate) succeeded: bool,
-    /// The forge holds the run until a maintainer approves it.
-    #[serde(skip)]
-    pub(crate) waiting: bool,
-}
-
-impl Run {
-    /// Whether it started after `other`: forges number runs in the order
-    /// they start.
-    pub fn started_after(&self, other: &Run) -> bool {
-        self.id > other.id
-    }
-
-    /// Whether it finished and succeeded.
-    pub fn passed(&self) -> bool {
-        !self.waiting && self.succeeded
-    }
-}
+use shoal_forge_types::{
+    ForgeRepo,
+    capability::Capability,
+    ci::{
+        CiAction,
+        run_action::{Run, RunActed},
+    },
+    items::{link::LinkKind, reference::ItemRef},
+    numbers::JobId,
+    raw::HttpMethod,
+};
 
 /// The requests that apply an action to a run.
 pub(crate) enum RunOperation {
@@ -66,40 +30,6 @@ pub(crate) enum RunOperation {
     /// POST to the endpoint under the repository's that each failed job's ID
     /// gives, one job at a time.
     EachFailedJob(fn(JobId) -> String),
-}
-
-/// A run an action reached.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RunActed {
-    pub url: String,
-    pub action: CiAction,
-}
-
-impl ForgeRepo {
-    /// The number of the run `input`, its web URL or the number in it, names,
-    /// and the run's web URL without a job.
-    pub(crate) fn run(&self, input: &str) -> Result<(RunNumber, String)> {
-        ensure!(
-            id(input).is_some() || input.starts_with("https://") || input.starts_with("http://"),
-            "name a CI run by its web URL or the number in it"
-        );
-        let number = id(input)
-            .map(RunNumber::new)
-            .or_else(|| self.kind.locate_run(self, input))
-            .with_context(|| format!("{input} is not a CI run of {}", self.repository_url()))?;
-        Ok((number, self.run_url(number)?))
-    }
-
-    /// The web URL of the run numbered `number`, without a job. A forge
-    /// whose runs have no web URL is one Shoal reads no runs of.
-    pub(crate) fn run_url(&self, number: RunNumber) -> Result<String> {
-        let route = self.kind.run_route().ok_or(Unsupported {
-            forge: self.kind.name(),
-            capability: Capability::ReadRuns,
-            hint: None,
-        })?;
-        Ok(format!("{}{route}{number}", self.repository_url()))
-    }
 }
 
 /// Finding runs and acting on them.
@@ -121,9 +51,9 @@ impl ForgeRepo {
     pub(crate) async fn read_run(&self, account: &Account, run: &ItemRef) -> Result<Run> {
         run.belongs_to(self)?;
         let number = run.run()?;
-        let read = Request::get(self.repo_endpoint(&self.kind.run_path(number)));
+        let read = Request::get(self.repo_endpoint(&self.kind().run_path(number)));
         let value = self.send(account, &read).await?;
-        self.kind.run(self, number, &value)
+        self.kind().run(self, number, &value)
     }
 
     /// The branch of this repository `run` is of: the head branch of the PR
@@ -158,7 +88,7 @@ impl ForgeRepo {
         action: CiAction,
         failed: bool,
     ) -> Result<RunActed> {
-        match self.kind.run_operation(run, action, failed)? {
+        match self.kind().run_operation(run, action, failed)? {
             RunOperation::Post(endpoint) => self.post(account, &endpoint).await?,
             RunOperation::EachFailedJob(endpoint) => {
                 self.rerun_failed_jobs(account, run, endpoint).await?

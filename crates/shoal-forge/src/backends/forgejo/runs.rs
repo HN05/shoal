@@ -6,20 +6,21 @@ use shoal_refs::CommitId;
 
 use super::{Forgejo, actions};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{Checks, Runs},
+    ci::{approval::RUNS_PAGE, run::NewRun, run_action::RunOperation},
+    items::item::text,
+    transport::api::{Request, TransportRequests, encode},
+};
+use shoal_forge_types::{
+    ForgeRepo,
     ci::{
         CiAction,
-        approval::RUNS_PAGE,
-        run::NewRun,
-        run_action::{Run, RunOperation},
+        run_action::Run,
         run_view::{RunFilter, RunJob},
     },
-    items::item::text,
     numbers::{JobId, PullNumber, RunId, RunNumber},
     raw::HttpMethod,
-    transport::api::{Request, TransportRequests, encode},
 };
 
 impl Runs for Forgejo {

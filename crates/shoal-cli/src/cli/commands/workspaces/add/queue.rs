@@ -11,7 +11,7 @@ use super::{
 };
 use crate::{
     cli::{
-        client::{self},
+        client,
         commands::{self, issues, queued_agents},
         context::Context,
     },

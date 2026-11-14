@@ -13,13 +13,12 @@ use crate::{
     daemon::workspace::Manager,
     forge::{
         ForgeRepo,
-        ci::runner::{
-            JobRun, RunnerRequests, TookRun, WaitingJob, answer_took_run, reported_run, took_run,
-        },
+        ci::runner::{JobRun, WaitingJob},
         numbers::{RunId, RunnerId},
     },
     model::QueuedJob,
 };
+use shoal_forge::ci::runner::{RunnerRequests, TookRun, answer_took_run, reported_run, took_run};
 
 impl Manager {
     /// Follow each running job whose runner reported the run of the job it

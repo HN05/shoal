@@ -2,12 +2,11 @@
 use anyhow::Result;
 
 use crate::{
-    ForgeRepo,
     account::Account,
     items::item::text,
-    review::reviewers::Reviewer,
     transport::api::{Request, TransportRequests},
 };
+use shoal_forge_types::{ForgeRepo, review::reviewers::Reviewer};
 
 /// The users GitHub can assign the repository's items to.
 pub(super) async fn users(repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>> {

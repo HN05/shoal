@@ -3,8 +3,8 @@
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
+use crate::agent::{Agent, AgentSessionId};
 use crate::client::{approvals::GateVerdict, space_ids::SpaceId, time::UnixTime};
-use crate::{agent::Agent, agent::AgentSessionId};
 
 /// A subject's saved session.
 #[derive(Debug, Clone, PartialEq, Eq)]

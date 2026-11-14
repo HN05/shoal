@@ -7,9 +7,10 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use super::value::Value;
-use crate::forge::{
+use crate::forge::backends::ForgeKind;
+use shoal_forge::{
     account::{Login, Logins, Missing, Token},
-    backends::{ForgeKind, SignIn},
+    backends::SignIn,
 };
 
 /// Bounds a token command, which may wait on a password manager.

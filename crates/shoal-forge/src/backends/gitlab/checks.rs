@@ -4,12 +4,15 @@ use serde_json::Value;
 
 use super::{GitLab, latest_statuses, status_state};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Checks,
-    ci::{CiAction, CiCheck, Job, Location, Operation, check, checks::plain, id},
-    numbers::JobId,
+    ci::{CiCheck, Job, Location, Operation, check, checks::plain},
     transport::api::TransportRequests,
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    ci::{CiAction, id},
+    numbers::JobId,
 };
 
 impl Checks for GitLab {

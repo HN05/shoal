@@ -8,7 +8,6 @@ use crate::{
     daemon::{scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
-        account::Account,
         items::{
             link::ItemKind,
             reference::{ItemInput, ItemRef},
@@ -17,6 +16,7 @@ use crate::{
     model::Repository,
     protocol::ItemContext,
 };
+use shoal_forge::account::Account;
 
 mod items;
 mod repository;

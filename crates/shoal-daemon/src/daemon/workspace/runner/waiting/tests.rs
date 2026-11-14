@@ -10,9 +10,10 @@ use serde_json::{Value, json};
 use super::*;
 use crate::{
     daemon::test_support::{configure, git, manager, repository},
-    forge::{backends::ForgeKind, test_support::Server},
+    forge::backends::ForgeKind,
     model::QueueEntry,
 };
+use shoal_forge::test_support::Server;
 
 /// A Forgejo whose waiting jobs are `jobs`, each in the run its `run_id`
 /// names: run 1 for PR 12, run 2 on branch `topic`.

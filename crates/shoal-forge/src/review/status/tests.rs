@@ -1,6 +1,7 @@
 use shoal_time::UnixTime;
 
 use super::*;
+use shoal_forge_types::review::status::PrState;
 
 #[test]
 fn rate_limited_checks_are_reported_as_unread() {

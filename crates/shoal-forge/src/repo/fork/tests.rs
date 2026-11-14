@@ -1,8 +1,6 @@
 use super::*;
-use crate::{
-    backends::ForgeKind,
-    test_support::{Server, agent_on, repo_on},
-};
+use crate::test_support::{Server, agent_on, repo_on};
+use shoal_forge_types::backends::ForgeKind;
 
 #[test]
 fn a_fork_remote_keeps_the_origin_url_form() {

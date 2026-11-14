@@ -20,15 +20,11 @@ use crate::{
         workspace::{Manager, turn_retry},
         workspace_files,
     },
-    forge::{
-        ForgeRepo, RepoRequests,
-        account::Account,
-        items::{issue::IssueRequests, reference::ItemRef},
-        review::status::PrStatus,
-    },
+    forge::{ForgeRepo, items::reference::ItemRef, review::status::PrStatus},
     model::{Attention, Completion, IssueStatus, PresentSpace, SpaceDetail, SpaceStatus},
     repository,
 };
+use shoal_forge::{RepoRequests, account::Account, items::issue::IssueRequests};
 
 /// What a space records about its links and work, which its status shows
 /// with their state on the forge.

@@ -16,7 +16,7 @@ use crate::client::{forge_reads, items};
 use crate::{
     cli::{
         args::changes::{RevertArgs, RevertedPr},
-        client::{self},
+        client,
         commands::split,
         context::Context,
         ui,
@@ -25,10 +25,7 @@ use crate::{
     execution,
     forge::{
         capability::Capability,
-        items::{
-            create::PullOptions,
-            revert::{MergedPull, revert_options},
-        },
+        items::{create::PullOptions, revert::MergedPull},
     },
     git::revert::{self as git_revert, Merge, Merged, Reverted},
     model::{Chat, PresentSpace, Workspace},
@@ -37,6 +34,7 @@ use crate::{
     removal::UnsavedWork,
     repository::Selector,
 };
+use shoal_forge::items::revert::revert_options;
 
 pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs) -> Result<i32> {
     let options = revert_args(args)?;

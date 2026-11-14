@@ -4,25 +4,32 @@ use serde_json::Value;
 
 use super::{GitLab, latest_statuses, notes, status_state, username};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{
         Activity, LoginHint,
         rest::{self, RestCheck, RestReads, fingerprints},
     },
+    items::{
+        action::ActionSteps,
+        item::{ItemRequests, text},
+    },
+    review::status::Verdict,
+    transport::api::{Request, TransportRequests},
+    updates::{Entry, Snapshot},
+};
+use shoal_forge_types::review::view::{
+    AutoMerge, Comment, Details, PrDetails, Review, ReviewComment,
+};
+use shoal_forge_types::{
+    ForgeRepo,
     ci::check_state::CheckState,
     items::{
-        action::{ActionSteps, MergeMethod},
-        item::{Current, ItemRequests, ItemState, text},
+        action::MergeMethod,
+        item::{Current, ItemState},
         link::ItemKind,
     },
     numbers::{CommentId, IssueNumber, PullNumber},
-    review::{
-        status::{PrStatus, Verdict},
-        view::{AutoMerge, Comment, Details, PrDetails, Review, ReviewComment},
-    },
-    transport::api::{Request, TransportRequests},
-    updates::{Entry, Snapshot},
+    review::status::PrStatus,
 };
 
 impl Activity for GitLab {
@@ -49,7 +56,7 @@ impl Activity for GitLab {
         repo: &ForgeRepo,
         account: &Account,
         number: PullNumber,
-        pull: &crate::items::reference::ItemRef,
+        pull: &shoal_forge_types::items::reference::ItemRef,
     ) -> Result<PrStatus> {
         rest::pr_status(self, repo, account, number, pull).await
     }

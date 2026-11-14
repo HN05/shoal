@@ -4,18 +4,22 @@ use serde_json::json;
 
 use super::GitLab;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Merging,
-    capability::{self, Capability},
+    capability,
+    items::item::ItemRequests,
+    transport::api::{Request, TransportRequests, encode},
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    capability::Capability,
     items::{
         action::{MergeMethod, UpdateMethod},
-        item::{Current, ItemRequests},
+        item::Current,
         link::ItemKind,
     },
     numbers::PullNumber,
     raw::HttpMethod,
-    transport::api::{Request, TransportRequests, encode},
 };
 
 impl Merging for GitLab {

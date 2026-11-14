@@ -3,9 +3,10 @@
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 
-use crate::{
+use crate::ci::{CiCheck, Job, Location, Operation, check};
+use shoal_forge_types::{
     ForgeRepo,
-    ci::{CiAction, CiCheck, Job, JobState, Location, Operation, check, id},
+    ci::{CiAction, JobState, id},
     numbers::{JobId, RunId},
 };
 

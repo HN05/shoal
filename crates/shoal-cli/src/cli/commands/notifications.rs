@@ -11,7 +11,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::diagnostics::AlertsArgs,
-        client::{self},
+        client,
         context::Context,
         installed::arguments_with,
         output::{Palette, Style},

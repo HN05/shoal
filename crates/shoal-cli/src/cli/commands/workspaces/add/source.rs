@@ -5,18 +5,13 @@ use shoal_refs::BranchName;
 
 use super::target::AddTarget;
 use crate::{
-    cli::{
-        client::{self},
-        commands::issues,
-        context::Context,
-        ui,
-    },
+    cli::{client, commands::issues, context::Context, ui},
     forge::items::{
         link::ItemKind,
         list::Search,
         reference::{ItemInput, ItemRef},
     },
-    git::{self},
+    git,
     protocol::ItemContext,
     start_plan::{AddPlan, Creation},
     state::WorkspaceState,

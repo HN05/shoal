@@ -17,13 +17,11 @@ use crate::{
         log,
         workspace::Manager,
     },
-    forge::{
-        conventions,
-        items::link::{ItemKind, Selection},
-    },
+    forge::items::link::{ItemKind, Selection},
     model::{PresentSpace, Repository},
     protocol::ItemContext,
 };
+use shoal_forge::conventions;
 
 /// The configuration gives the gate no agent it can run, which only the
 /// user fixes.

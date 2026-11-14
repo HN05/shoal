@@ -6,7 +6,7 @@ use crate::backends::Runs;
 #[test]
 fn each_forge_lists_the_runs_that_may_wait_its_own_way() -> Result<()> {
     let path = |remote: &str| -> Result<Option<String>> {
-        Ok(ForgeRepo::parse(remote)?.kind.waiting_runs_path("abc", 2))
+        Ok(ForgeRepo::parse(remote)?.kind().waiting_runs_path("abc", 2))
     };
     assert_eq!(
         path("https://github.com/team/repo")?.as_deref(),
@@ -34,27 +34,25 @@ fn a_run_waits_where_its_forge_says() -> Result<()> {
     };
     assert!(
         github
-            .kind
+            .kind()
             .run_item(&github, &run("action_required"))?
             .waiting
     );
-    assert!(!github.kind.run_item(&github, &run("success"))?.waiting);
+    assert!(!github.kind().run_item(&github, &run("success"))?.waiting);
     let forgejo = ForgeRepo::parse("https://codeberg.org/team/repo")?;
     let run = |need_approval: bool| {
         json!({"id": 9331, "index_in_repo": 2765, "status": "waiting",
             "need_approval": need_approval})
     };
-    assert!(forgejo.kind.run_item(&forgejo, &run(true))?.waiting);
-    assert!(!forgejo.kind.run_item(&forgejo, &run(false))?.waiting);
+    assert!(forgejo.kind().run_item(&forgejo, &run(true))?.waiting);
+    assert!(!forgejo.kind().run_item(&forgejo, &run(false))?.waiting);
     Ok(())
 }
 
 #[tokio::test]
 async fn approving_runs_stops_at_the_first_that_fails() {
-    use crate::{
-        backends::ForgeKind,
-        test_support::{Server, agent_on, repo_on},
-    };
+    use crate::test_support::{Server, agent_on, repo_on};
+    use shoal_forge_types::backends::ForgeKind;
     let server = Server::start(|request| {
         if request.line.starts_with("POST") {
             let status = if request.line.contains("/runs/2/") {

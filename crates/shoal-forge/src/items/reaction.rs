@@ -2,61 +2,32 @@
 //! views, and added or removed as the acting account's own.
 pub mod allowed;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use futures_util::{StreamExt as _, TryStreamExt as _};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{Backend, Reactions},
     items::{
         action::{Acted, ActionRequests},
         comment::{self, CommentRequests},
+    },
+    transport::api::{Request, TransportRequests},
+    updates::Edited,
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    items::{
         link::ItemKind,
+        reaction::{Reaction, ReactionChange},
     },
     numbers::CommentId,
     review::view::Details,
-    transport::api::{Request, TransportRequests},
-    updates::Edited,
 };
 
 /// Reaction lists read at once for a view.
 const CONCURRENT_READS: usize = 8;
-
-/// The reactions on an item or comment with one content, as a view lists
-/// them.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Reaction {
-    /// GitHub's name for it, such as `+1` or `heart`; GitLab's name for an
-    /// emoji GitHub has no reaction for.
-    pub content: String,
-    pub count: u64,
-    /// Whether the login the view reads as is among them.
-    pub reacted: bool,
-}
-
-/// Adding or removing the acting account's reaction on an item, or on one
-/// of its comments.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReactionChange {
-    /// The ID of a comment or inline comment, as `shoal view` shows it.
-    pub comment: Option<CommentId>,
-    /// GitHub's name for the reaction, or the forge's own.
-    pub content: String,
-    pub remove: bool,
-}
-
-impl ReactionChange {
-    pub(crate) fn validate(&self) -> Result<()> {
-        ensure!(
-            !self.content.is_empty() && !self.content.contains(char::is_whitespace),
-            "name the reaction, such as +1 or heart"
-        );
-        Ok(())
-    }
-}
 
 /// What a reaction is on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,7 +69,7 @@ impl ForgeRepo {
         kind: ItemKind,
         details: &mut Details,
     ) -> Result<()> {
-        let login = self.kind.own_login(self, account).await?;
+        let login = self.kind().own_login(self, account).await?;
         let subjects = subjects(details);
         let reactions = self
             .tallied_reactions(account, kind, details.number, &subjects, login.as_deref())
@@ -169,8 +140,8 @@ impl ForgeRepo {
         subject: Subject,
         change: &ReactionChange,
     ) -> Result<Option<Request>> {
-        let content = self.kind.reaction_content(&change.content);
-        let login = (self.kind.own_login(self, account).await?)
+        let content = self.kind().reaction_content(&change.content);
+        let login = (self.kind().own_login(self, account).await?)
             .context("reacting needs a login on the forge")?;
         let listed = self
             .listed_reactions(account, kind, number, subject)
@@ -178,10 +149,12 @@ impl ForgeRepo {
         let own = listed.iter().find(|reaction| {
             reaction.content == content && reaction.login.eq_ignore_ascii_case(&login)
         });
-        let endpoint = self.kind.reactions_endpoint(self, kind, number, subject)?;
+        let endpoint = self
+            .kind()
+            .reactions_endpoint(self, kind, number, subject)?;
         Ok(match (own, change.remove) {
-            (None, false) => Some(self.kind.add_reaction(endpoint, &content)?),
-            (Some(own), true) => Some(self.kind.remove_reaction(endpoint, own)?),
+            (None, false) => Some(self.kind().add_reaction(endpoint, &content)?),
+            (Some(own), true) => Some(self.kind().remove_reaction(endpoint, own)?),
             (Some(_), false) | (None, true) => None,
         })
     }
@@ -194,15 +167,17 @@ impl ForgeRepo {
         number: u64,
         subject: Subject,
     ) -> Result<Vec<Listed>> {
-        let endpoint = self.kind.reactions_endpoint(self, kind, number, subject)?;
-        let reactions = if self.kind.pages_reactions(subject) {
+        let endpoint = self
+            .kind()
+            .reactions_endpoint(self, kind, number, subject)?;
+        let reactions = if self.kind().pages_reactions(subject) {
             self.pages(account, &endpoint).await?
         } else {
             self.whole_list(account, &endpoint).await?
         };
         reactions
             .iter()
-            .map(|reaction| self.kind.listed_reaction(reaction))
+            .map(|reaction| self.kind().listed_reaction(reaction))
             .collect()
     }
 }

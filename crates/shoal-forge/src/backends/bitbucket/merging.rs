@@ -4,16 +4,20 @@ use serde_json::json;
 
 use super::Bitbucket;
 use crate::{
-    ForgeRepo,
     backends::Merging,
-    capability::{self, Capability},
+    capability,
+    items::item::ItemRequests,
+    transport::api::{Request, TransportRequests, encode},
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    capability::Capability,
     items::{
         action::{MergeMethod, UpdateMethod},
-        item::{Current, ItemRequests},
+        item::Current,
         link::ItemKind,
     },
     raw::HttpMethod,
-    transport::api::{Request, TransportRequests, encode},
 };
 
 impl Merging for Bitbucket {

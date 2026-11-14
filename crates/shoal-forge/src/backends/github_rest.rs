@@ -6,24 +6,33 @@ use shoal_refs::BranchName;
 
 use super::LoginHint;
 use crate::{
-    ForgeRepo,
     account::Account,
-    ci::{CiCheck, JobState, check},
+    ci::{CiCheck, check},
     conventions::draft::DraftMarker,
     items::{
-        action::{ActionRequests, Edit, MilestoneChange},
-        create::{Head, NewPull},
-        item::{Current, Item, ItemRequests, ItemState, PrSummary, text, user_names},
-        link::ItemKind,
+        action::ActionRequests,
+        create::Head,
+        item::{ItemRequests, text, user_names},
         reaction::{Listed, Subject},
+    },
+    review::{
+        reviewers::team_name,
+        view::{labels, login, required, text_field},
+    },
+    transport::api::{Request, TransportRequests, encode},
+};
+use shoal_forge_types::review::view::{Comment, Details, PrDetails};
+use shoal_forge_types::{
+    ForgeRepo,
+    ci::JobState,
+    items::{
+        action::{Edit, MilestoneChange},
+        create::NewPull,
+        item::{Current, Item, ItemState, PrSummary},
+        link::ItemKind,
     },
     numbers::{CommentId, PullNumber},
     raw::HttpMethod,
-    review::{
-        reviewers::team_name,
-        view::{Comment, Details, PrDetails, labels, login, required, text_field},
-    },
-    transport::api::{Request, TransportRequests, encode},
 };
 
 /// What a forge serving GitHub's REST shapes serves its own way. The
@@ -430,7 +439,7 @@ pub(crate) async fn pushable(repo: &ForgeRepo, account: &crate::account::Account
     let read = repo
         .send(account, &Request::get(format!("repos/{}", repo.path)))
         .await
-        .hint_login(&repo.kind)?;
+        .hint_login(&repo.kind())?;
     Ok(read["permissions"]["push"] == true)
 }
 
@@ -481,7 +490,7 @@ pub(crate) async fn open_blockers(
     let issues = repo
         .pages(account, &repo.repo_endpoint(endpoint))
         .await
-        .hint_login(&repo.kind)?;
+        .hint_login(&repo.kind())?;
     open_urls(&issues)
 }
 

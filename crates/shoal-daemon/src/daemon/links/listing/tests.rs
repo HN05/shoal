@@ -4,15 +4,13 @@ use crate::{
         scope::Caller,
         test_support::{configure, git, manager, repository},
     },
-    forge::{
-        items::{
-            link::ItemKind,
-            list::{Search, StateFilter},
-        },
-        test_support::Server,
+    forge::items::{
+        link::ItemKind,
+        list::{Search, StateFilter},
     },
     protocol::ItemContext,
 };
+use shoal_forge::test_support::Server;
 
 #[tokio::test]
 async fn a_scoped_chat_lists_items_as_the_agent_account() {

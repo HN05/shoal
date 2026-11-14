@@ -2,7 +2,7 @@ use serde_json::json;
 
 use super::*;
 use crate::items::item::ItemRequests;
-use crate::numbers::CommentId;
+use shoal_forge_types::numbers::CommentId;
 
 fn gitlab() -> ForgeRepo {
     ForgeRepo::parse("git@gitlab.com:group/sub/project.git").unwrap()
@@ -65,8 +65,8 @@ fn open_blocking_issues_are_the_open_is_blocked_by_links() {
 
 #[test]
 fn closed_merge_request_searches_list_all_to_include_merged_ones() {
-    let mut search = list::Search {
-        state: list::StateFilter::Closed,
+    let mut search = Search {
+        state: StateFilter::Closed,
         labels: vec!["bug".into(), "ui".into()],
         author: Some("dev".into()),
         text: Some("crash on start".into()),
@@ -83,7 +83,7 @@ fn closed_merge_request_searches_list_all_to_include_merged_ones() {
         search_endpoint(ItemKind::Issue, &search),
         "issues?state=closed"
     );
-    search.state = list::StateFilter::Open;
+    search.state = StateFilter::Open;
     assert_eq!(
         search_endpoint(ItemKind::Pr, &search),
         "merge_requests?state=opened"

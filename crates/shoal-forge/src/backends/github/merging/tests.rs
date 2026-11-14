@@ -1,5 +1,5 @@
 use super::*;
-use crate::items::item::{Item, ItemState};
+use shoal_forge_types::items::item::{Item, ItemState};
 
 #[test]
 fn reverts_go_through_graphql_and_report_the_new_branch() {

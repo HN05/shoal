@@ -1,117 +1,28 @@
 //! Open issues and PRs through the forge's REST API, and find a branch's
 //! open PR.
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use shoal_refs::{BranchName, CommitId};
 
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{Backend, Items},
-    capability::{Capability, CapabilityRequests},
+    capability::CapabilityRequests,
     items::{
-        action::{Action, ActionRequests, ActionSteps, Edit, MilestoneChange},
-        attach::{AttachRequests, AttachSteps, Attachment, Pending},
-        item::{Item, ItemState, PrSummary},
-        link::ItemKind,
+        action::{ActionRequests, ActionSteps},
+        attach::{AttachRequests, AttachSteps, Pending},
     },
     transport::api::{Request, TransportRequests},
 };
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NewIssue {
-    pub title: String,
-    pub body: String,
-    pub labels: Vec<String>,
-    #[serde(default)]
-    pub assignees: Vec<String>,
-    /// The milestone's title.
-    #[serde(default)]
-    pub milestone: Option<String>,
-    #[serde(default)]
-    pub attachments: Vec<Attachment>,
-}
-
-/// What `shoal pr open` was told about a new PR; unset fields take defaults
-/// from the workspace.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct PullOptions {
-    pub title: Option<String>,
-    pub body: Option<String>,
-    pub base: Option<BranchName>,
-    /// Overrides `[pr] draft` when set.
-    pub draft: Option<bool>,
-    pub labels: Vec<String>,
-    pub reviewers: Vec<String>,
-    pub assignees: Vec<String>,
-    /// The milestone's title.
-    pub milestone: Option<String>,
-    pub attachments: Vec<Attachment>,
-}
-
-/// A PR to open from `head` into `base`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NewPull {
-    pub title: String,
-    pub body: String,
-    pub head: BranchName,
-    /// `owner/repository` of the fork `head` is in; unset for this repository.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub head_repository: Option<String>,
-    pub base: BranchName,
-    pub draft: bool,
-    pub labels: Vec<String>,
-    pub reviewers: Vec<String>,
-    #[serde(default)]
-    pub assignees: Vec<String>,
-    /// The milestone's title.
-    #[serde(default)]
-    pub milestone: Option<String>,
-    pub attachments: Vec<Attachment>,
-}
-
-impl NewIssue {
-    /// The capabilities the forge needs to open the issue, besides
-    /// attachments, which uploads check.
-    fn needs(&self) -> Vec<Capability> {
-        let labels = (!self.labels.is_empty()).then_some(Capability::Labels);
-        let assignment = assignment_needs(ItemKind::Issue, &self.assignees, &self.milestone);
-        labels.into_iter().chain(assignment).collect()
-    }
-}
-
-impl NewPull {
-    /// The capabilities the forge needs to open the PR, besides attachments.
-    fn needs(&self) -> Vec<Capability> {
-        let labels = (!self.labels.is_empty()).then_some(Capability::Labels);
-        let draft = self.draft.then_some(Capability::DraftPrs);
-        let fork = self
-            .head_repository
-            .is_some()
-            .then_some(Capability::ForkPrs);
-        let assignment = assignment_needs(ItemKind::Pr, &self.assignees, &self.milestone);
-        labels
-            .into_iter()
-            .chain(draft)
-            .chain(fork)
-            .chain(assignment)
-            .collect()
-    }
-}
-
-/// The capabilities a new item of `kind` needs for its assignees and
-/// milestone.
-fn assignment_needs(
-    kind: ItemKind,
-    assignees: &[String],
-    milestone: &Option<String>,
-) -> impl Iterator<Item = Capability> {
-    let assignees = (!assignees.is_empty()).then_some(Capability::assignees(kind));
-    let milestone = milestone.as_ref().map(|_| Capability::milestones(kind));
-    assignees.into_iter().chain(milestone)
-}
+use shoal_forge_types::{
+    ForgeRepo,
+    items::{
+        action::{Action, Edit, MilestoneChange},
+        create::{NewIssue, NewPull},
+        item::{Item, ItemState, PrSummary},
+        link::ItemKind,
+    },
+};
 
 /// An item Shoal opened, as the forge reports it once finished, or after
 /// finishing it failed, which leaves it as posted when it cannot be read.
@@ -121,26 +32,6 @@ pub struct Created {
     /// Why finishing the item failed after the forge opened it, so it may
     /// lack labels, reviewers, assignees, its milestone or files.
     pub unfinished: Option<String>,
-}
-
-/// A PR tests fill in, from and into empty branch names.
-#[cfg(any(test, feature = "test-support"))]
-impl Default for NewPull {
-    fn default() -> Self {
-        Self {
-            title: String::new(),
-            body: String::new(),
-            head: BranchName::from(""),
-            head_repository: None,
-            base: BranchName::from(""),
-            draft: false,
-            labels: Vec::new(),
-            reviewers: Vec::new(),
-            assignees: Vec::new(),
-            milestone: None,
-            attachments: Vec::new(),
-        }
-    }
 }
 
 /// A PR's head: a branch in the PR's repository or in a fork of it.
@@ -158,25 +49,13 @@ impl Head<'_> {
     }
 }
 
-impl ForgeRepo {
-    /// Another repository on the same forge, such as a fork.
-    pub fn sibling(&self, path: &str) -> ForgeRepo {
-        ForgeRepo {
-            host: self.host.clone(),
-            path: path.to_owned(),
-            kind: self.kind,
-            web_scheme: self.web_scheme,
-        }
-    }
-}
-
 /// Opening issues and PRs.
 #[shoal_forge_derive::extension(pub CreateRequests, pub(crate) CreateSteps)]
 impl ForgeRepo {
     /// The commit `branch` points to, as the forge reports it: what a PR
     /// with it as its head would contain.
     pub async fn branch_commit(&self, account: &Account, branch: &BranchName) -> Result<CommitId> {
-        let (request, pointer) = self.kind.branch_read(self, branch.as_str());
+        let (request, pointer) = self.kind().branch_read(self, branch.as_str());
         let read = self
             .send(account, &request)
             .await
@@ -199,10 +78,10 @@ impl ForgeRepo {
             repository: head_repository.unwrap_or(&self.path),
             branch,
         };
-        let pulls = self.kind.open_pulls_from(self, account, &head).await?;
+        let pulls = self.kind().open_pulls_from(self, account, &head).await?;
         pulls
             .iter()
-            .find(|pull| self.kind.has_head(self, pull, &head))
+            .find(|pull| self.kind().has_head(self, pull, &head))
             .map(|pull| self.created_number(pull))
             .transpose()
     }
@@ -250,7 +129,7 @@ impl ForgeRepo {
     }
 
     fn create_pull_request(&self, pull: &NewPull) -> Request {
-        self.kind.new_pull(self, pull)
+        self.kind().new_pull(self, pull)
     }
 
     /// Open the issue; only failing to post it fails.
@@ -310,7 +189,7 @@ impl ForgeRepo {
             .send(account, &self.issue_request(&issue))
             .await
             .context("could not open the issue")?;
-        let (posted_labels, add_labels) = if self.kind.labels_issue_after_opening() {
+        let (posted_labels, add_labels) = if self.kind().labels_issue_after_opening() {
             (Vec::new(), issue.labels)
         } else {
             (issue.labels, Vec::new())
@@ -376,12 +255,12 @@ impl ForgeRepo {
     }
 
     fn issue_request(&self, issue: &NewIssue) -> Request {
-        self.kind.new_issue(self, issue)
+        self.kind().new_issue(self, issue)
     }
 
     /// The number of the item a creation or list response describes.
     fn created_number(&self, created: &Value) -> Result<u64> {
-        created[self.kind.number_field()]
+        created[self.kind().number_field()]
             .as_u64()
             .context("the forge did not report the new item's number")
     }

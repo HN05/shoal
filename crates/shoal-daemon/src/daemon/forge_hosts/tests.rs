@@ -5,10 +5,10 @@ use crate::{
     config::Config,
     forge::{
         backends::ForgeKind,
-        hosts::HostType,
         items::{link::LinkKind, reference::ItemRef},
     },
 };
+use shoal_forge::hosts::HostType;
 
 #[tokio::test]
 async fn a_lookup_waiting_on_the_host_takes_the_answer_the_first_one_records() {

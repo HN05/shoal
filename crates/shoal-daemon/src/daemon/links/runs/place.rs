@@ -10,8 +10,6 @@ use crate::{
     daemon::{links::actions::Place, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
-        account::Account,
-        ci::workflow::{WorkflowRequests, is_workflow_url},
         items::{
             link::{LinkKind, Selection},
             reference::{ItemInput, ItemRef},
@@ -19,6 +17,10 @@ use crate::{
     },
     model::Workspace,
     protocol::ItemContext,
+};
+use shoal_forge::{
+    account::Account,
+    ci::workflow::{WorkflowRequests, is_workflow_url},
 };
 
 /// The refusal of a workspace process's request about another repository.

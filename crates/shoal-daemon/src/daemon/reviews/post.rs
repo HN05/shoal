@@ -12,18 +12,16 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{log, workspace::Manager},
     forge::{
-        items::{
-            action::{Action, ActionRequests},
-            link::ItemKind,
-        },
-        review::{
-            diff::DiffRequests,
-            submit::{HeadMoved, LineComment, NewReview, ReviewVerdict, Side},
-        },
+        items::{action::Action, link::ItemKind},
+        review::submit::{LineComment, NewReview, ReviewVerdict, Side},
     },
     model::Workspace,
     protocol::ItemContext,
     reviews::{AUTOMATED_NOTE, Finding, Posted, Review, ReviewTarget, Severity, severity_counts},
+};
+use shoal_forge::{
+    items::action::ActionRequests,
+    review::{diff::DiffRequests, submit::HeadMoved},
 };
 
 impl Manager {

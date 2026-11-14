@@ -4,11 +4,14 @@ use anyhow::Result;
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
     forge::{
-        capability::{Capabilities, CapabilityRequests},
-        conventions::labels::{Label, LabelRequests},
-        items::reaction::allowed::{AllowedReactionRequests, AllowedReactions},
+        capability::Capabilities, conventions::labels::Label,
+        items::reaction::allowed::AllowedReactions,
     },
     protocol::ItemContext,
+};
+use shoal_forge::{
+    capability::CapabilityRequests, conventions::labels::LabelRequests,
+    items::reaction::allowed::AllowedReactionRequests,
 };
 
 impl Manager {

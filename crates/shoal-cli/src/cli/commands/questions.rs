@@ -14,8 +14,10 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Cell, Entries, Fallback, WidthLimit},
     },
-    client::item_numbers::ItemNumber,
-    client::questions::{self, Ask, Question, QuestionStatus},
+    client::{
+        item_numbers::ItemNumber,
+        questions::{self, Ask, Question, QuestionStatus},
+    },
     installed::Executable,
 };
 

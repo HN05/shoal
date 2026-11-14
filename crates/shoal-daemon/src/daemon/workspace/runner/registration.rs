@@ -10,14 +10,11 @@ use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
 
 use crate::daemon::workspace::Manager;
-use crate::{
-    daemon::notifications::NotificationKind,
-    forge::{
-        ForgeRepo, RepoRequests,
-        account::Account,
-        ci::runner::{RegisteredRunner, RunnerRequests},
-    },
-    model::Repository,
+use crate::{daemon::notifications::NotificationKind, forge::ForgeRepo, model::Repository};
+use shoal_forge::{
+    RepoRequests,
+    account::Account,
+    ci::runner::{RegisteredRunner, RunnerRequests},
 };
 
 /// A repository's runner as the daemon keeps it.

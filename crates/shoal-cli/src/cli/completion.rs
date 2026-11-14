@@ -25,9 +25,9 @@ use crate::{
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     client::leases,
-    config::modes::ModeName,
     config::{
         Config,
+        modes::ModeName,
         named_commands::{self, Commands},
         repo::ConfigLayers,
         resolve::Stack,

@@ -16,10 +16,13 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Cell},
     },
-    client::approvals::{
-        self, ApprovalRequest, DecisionStatus, Duplicate, GateStep, ProposalDecision, Specification,
+    client::{
+        approvals::{
+            self, ApprovalRequest, DecisionStatus, Duplicate, GateStep, ProposalDecision,
+            Specification,
+        },
+        item_numbers::ItemNumber,
     },
-    client::item_numbers::ItemNumber,
 };
 
 pub(super) async fn run(ctx: &Context, args: ApprovalsArgs) -> Result<i32> {

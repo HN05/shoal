@@ -6,8 +6,9 @@ use rusqlite::{Connection, params};
 use crate::client::{repository_ids::RepositoryId, space_ids::SpaceId};
 use crate::{
     daemon::{links::pr::watched_prs, store},
-    forge::{items::reference::ItemRef, updates},
+    forge::items::reference::ItemRef,
 };
+use shoal_forge::updates;
 
 /// Work of a repository with the labels that rank it.
 pub(super) struct Labelled<Id> {

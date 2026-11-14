@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::*;
-use crate::ci::JobState;
+use shoal_forge_types::ci::JobState;
 
 #[test]
 fn retried_jobs_report_their_newest_attempt() {

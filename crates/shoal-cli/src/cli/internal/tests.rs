@@ -12,8 +12,10 @@ use std::{
 use crate::{
     cli::{
         Cli, Command,
-        args::approvals::Decision,
-        args::internal::{AddWorkerArgs, InternalCommand},
+        args::{
+            approvals::Decision,
+            internal::{AddWorkerArgs, InternalCommand},
+        },
     },
     paths::Paths,
     sessions::HostName,

@@ -11,8 +11,10 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    client::preparation::{self, Preparing, Unprepared},
-    client::recovery::ReconcileOptions,
+    client::{
+        preparation::{self, Preparing, Unprepared},
+        recovery::ReconcileOptions,
+    },
     env,
     model::{QueueEntry, Workspace},
     paths::CommandPaths,

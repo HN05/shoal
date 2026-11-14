@@ -8,17 +8,16 @@ use crate::{
     daemon::{scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
-        account::Account,
-        ci::checks::CheckRequests,
         items::{
             link::Selection,
             reference::{ItemInput, ItemRef},
         },
-        review::view::{ItemView, ViewRequests},
+        review::view::ItemView,
     },
     model::SelectedItem,
     protocol::ItemContext,
 };
+use shoal_forge::{account::Account, ci::checks::CheckRequests, review::view::ViewRequests};
 
 impl Manager {
     /// The items `selection` names in `context`, each issue and PR among

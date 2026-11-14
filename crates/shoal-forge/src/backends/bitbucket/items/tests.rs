@@ -2,7 +2,7 @@ use serde_json::json;
 
 use super::*;
 use crate::items::item::ItemRequests;
-use crate::numbers::CommentId;
+use shoal_forge_types::numbers::CommentId;
 
 fn percent_decoded(text: &str) -> String {
     let bytes = text.as_bytes();
@@ -172,14 +172,14 @@ fn comment_edits_replace_the_raw_content_of_inline_and_issue_comments() {
 
 #[test]
 fn searches_query_states_text_and_author_newest_first() {
-    let mut search = list::Search {
-        state: list::StateFilter::Open,
+    let mut search = Search {
+        state: StateFilter::Open,
         labels: Vec::new(),
         author: None,
         text: None,
         limit: 30,
     };
-    let decoded = |kind, search: &list::Search| {
+    let decoded = |kind, search: &Search| {
         let endpoint = search_endpoint(kind, search);
         let (path, query) = endpoint.split_once("&q=").unwrap_or((&endpoint, ""));
         (path.to_owned(), percent_decoded(query))
@@ -198,7 +198,7 @@ fn searches_query_states_text_and_author_newest_first() {
             String::new()
         )
     );
-    search.state = list::StateFilter::Closed;
+    search.state = StateFilter::Closed;
     search.text = Some(r#"say "hi""#.into());
     search.author = Some("dev".into());
     assert_eq!(
@@ -209,7 +209,7 @@ fn searches_query_states_text_and_author_newest_first() {
                 .into()
         )
     );
-    search.state = list::StateFilter::All;
+    search.state = StateFilter::All;
     assert_eq!(
         decoded(ItemKind::Issue, &search).1,
         r#"(title ~ "say \"hi\"" OR content.raw ~ "say \"hi\"") AND reporter.nickname="dev""#

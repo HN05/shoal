@@ -3,8 +3,10 @@ use crate::client::space_names::SpaceSelector;
 use crate::paths::StateFiles;
 use crate::{
     config::permissions::{PermissionChange, PermissionsConfig},
-    daemon::test_support::{chat, manager, repository},
-    daemon::workspace::PermissionTargets,
+    daemon::{
+        test_support::{chat, manager, repository},
+        workspace::PermissionTargets,
+    },
     execution::{
         TrackedAgent,
         recovery::{LastSession, LastSessionExt},

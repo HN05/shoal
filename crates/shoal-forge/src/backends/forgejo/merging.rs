@@ -4,17 +4,20 @@ use serde_json::json;
 
 use super::Forgejo;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{Merging, github_rest},
+    items::item::ItemRequests,
+    transport::api::{Request, TransportRequests, encode},
+};
+use shoal_forge_types::{
+    ForgeRepo,
     items::{
         action::{MergeMethod, UpdateMethod},
-        item::{Current, ItemRequests},
+        item::Current,
         link::ItemKind,
     },
     numbers::PullNumber,
     raw::HttpMethod,
-    transport::api::{Request, TransportRequests, encode},
 };
 
 impl Merging for Forgejo {

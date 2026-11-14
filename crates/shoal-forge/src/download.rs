@@ -5,22 +5,15 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Attachments,
-    capability::{Capability, CapabilityRequests},
+    capability::CapabilityRequests,
     transport::{
         api::{TransportRequests, http_body},
         response::{Fetched, Headed},
     },
 };
-
-/// A downloaded file and the content type the forge served it as.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Download {
-    pub content_type: Option<String>,
-    pub bytes: Vec<u8>,
-}
+use shoal_forge_types::{ForgeRepo, capability::Capability, download::Download};
 
 /// Downloading files from the repository's forge.
 #[shoal_forge_derive::extension(pub DownloadRequests)]
@@ -29,7 +22,8 @@ impl ForgeRepo {
     pub async fn download(&self, account: &Account, url: &str) -> Result<Download> {
         self.require(Capability::Downloads)?;
         self.check_download(url)?;
-        let fetched = self.kind.download(self, account, url);
+        let kind = self.kind();
+        let fetched = kind.download(self, account, url);
         async { self.limited(account, fetched).await?.into_download() }
             .await
             .with_context(|| format!("download {url}"))
@@ -40,7 +34,7 @@ impl ForgeRepo {
     pub fn check_download(&self, url: &str) -> Result<()> {
         let (scheme, authority) = split_url(url)?;
         ensure!(
-            (scheme == "https" || scheme == self.web_scheme)
+            (scheme == "https" || scheme == self.web_scheme())
                 && authority.eq_ignore_ascii_case(&self.host),
             "{url} is not on the repository's forge at {}",
             self.host

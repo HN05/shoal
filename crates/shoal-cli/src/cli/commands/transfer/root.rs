@@ -16,7 +16,7 @@ use crate::{
     cli::{
         agents,
         args::transfer::RootArgs,
-        client::{self},
+        client,
         context::Context,
         output::{Palette, Style},
         ui,

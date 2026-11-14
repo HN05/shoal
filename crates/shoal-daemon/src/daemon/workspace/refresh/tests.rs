@@ -350,9 +350,9 @@ async fn a_prs_workspace_at_a_commit_moves_to_the_head_its_forge_reports() {
 fn forge_of(
     origin: &Path,
     head: Arc<std::sync::Mutex<String>>,
-) -> crate::forge::test_support::Server {
+) -> shoal_forge::test_support::Server {
     let git_dir = origin.join(".git");
-    crate::forge::test_support::Server::start(move |request| {
+    shoal_forge::test_support::Server::start(move |request| {
         let path = request.line.split(' ').nth(1).unwrap_or_default();
         let path = path.split('?').next().unwrap_or_default();
         if path == "/api/v1/repos/team/repo/pulls/9" {

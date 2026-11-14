@@ -1,6 +1,7 @@
 use super::*;
-use crate::{backends::Items, capability::Unsupported, items::item::ItemRequests};
+use crate::{backends::Items, items::item::ItemRequests};
 use serde_json::json;
+use shoal_forge_types::capability::Unsupported;
 
 #[tokio::test]
 async fn forges_without_a_revert_refuse_before_sending_anything() {
@@ -21,7 +22,7 @@ async fn forges_without_a_revert_refuse_before_sending_anything() {
 
 #[test]
 fn pr_heads_stay_fetchable_where_the_forge_keeps_a_ref() {
-    let kind = |remote: &str| ForgeRepo::parse(remote).unwrap().kind;
+    let kind = |remote: &str| ForgeRepo::parse(remote).unwrap().kind();
     assert_eq!(
         kind("https://forge.example/team/repo")
             .pull_head_ref(PullNumber::new(7))

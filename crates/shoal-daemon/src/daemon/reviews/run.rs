@@ -25,11 +25,11 @@ use crate::{
             agent_queue::{self, OneShotAdmission, Serving},
         },
     },
-    forge::review::view::ViewRequests,
     model::{Repository, Workspace},
     reviews::{FailureReason, Review, ReviewId, ReviewState, ReviewTarget},
     shoal_dirs::{Contents, ShoalDir, remove_if_empty},
 };
+use shoal_forge::review::view::ViewRequests;
 
 /// Where earlier versions kept the runs, in the state directory.
 const OLD_RUNS: &str = "reviews";

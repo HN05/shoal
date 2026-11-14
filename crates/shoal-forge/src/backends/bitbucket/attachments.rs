@@ -3,13 +3,10 @@ use anyhow::Result;
 
 use super::Bitbucket;
 use crate::{
-    ForgeRepo,
-    account::Account,
-    backends::Attachments,
-    capability::{self, Capability},
-    items::attach::{Attachment, Holder},
+    account::Account, backends::Attachments, capability, items::attach::Holder,
     transport::api::Request,
 };
+use shoal_forge_types::{ForgeRepo, capability::Capability, items::attach::Attachment};
 
 impl Attachments for Bitbucket {
     async fn check_uploads(

@@ -20,8 +20,7 @@ use crate::{
         HostName, Origin,
         tmux::{Opened, Shell, Tmux as Server, parse_tmux_var, var},
     },
-    tools::Tool,
-    tools::ensure_program,
+    tools::{Tool, ensure_program},
 };
 
 /// The variable naming the pane a process runs in.

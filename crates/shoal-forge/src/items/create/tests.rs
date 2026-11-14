@@ -1,12 +1,12 @@
 use super::*;
 use crate::{
-    backends::{ForgeKind, Items},
+    backends::Items,
     capability::CapabilityRequests,
-    raw::HttpMethod,
     test_support::{Server, agent_on, repo_on},
     transport::memory::Memory,
 };
 use serde_json::json;
+use shoal_forge_types::{backends::ForgeKind, raw::HttpMethod};
 
 #[tokio::test]
 async fn an_issue_whose_read_fails_after_posting_comes_back_as_posted() {
@@ -197,14 +197,14 @@ fn gitlab_opens_merge_requests_with_draft_titles_and_labeled_issues() {
         branch: &topic,
     };
     let listed = json!({"source_branch": "topic", "source_project_id": 1, "target_project_id": 1});
-    assert!(gitlab.kind.has_head(&gitlab, &listed, &head));
+    assert!(gitlab.kind().has_head(&gitlab, &listed, &head));
     let fork = json!({"source_branch": "topic", "source_project_id": 2, "target_project_id": 1});
-    assert!(!gitlab.kind.has_head(&gitlab, &fork, &head));
+    assert!(!gitlab.kind().has_head(&gitlab, &fork, &head));
     let forked = Head {
         repository: "someone/repo",
         ..head
     };
-    assert!(!gitlab.kind.has_head(&gitlab, &listed, &forked));
+    assert!(!gitlab.kind().has_head(&gitlab, &listed, &forked));
 }
 
 #[test]
@@ -255,17 +255,17 @@ fn bitbucket_opens_pull_requests_and_issues_without_labels() {
     let head = |repository, branch| Head { repository, branch };
     assert!(
         bitbucket
-            .kind
+            .kind()
             .has_head(&bitbucket, &listed, &head("workspace/repo", &topic))
     );
     assert!(
         !bitbucket
-            .kind
+            .kind()
             .has_head(&bitbucket, &listed, &head("workspace/repo", &other))
     );
     assert!(
         !bitbucket
-            .kind
+            .kind()
             .has_head(&bitbucket, &listed, &head("someone/repo", &topic))
     );
     let forked = NewPull {
@@ -329,8 +329,12 @@ fn github_and_forgejo_name_a_fork_head_by_its_owner() {
             repository,
             branch: &topic,
         };
-        assert!(forge.kind.has_head(&forge, &listed, &head("someone/repo")));
-        assert!(!forge.kind.has_head(&forge, &listed, &head("team/repo")));
+        assert!(
+            forge
+                .kind()
+                .has_head(&forge, &listed, &head("someone/repo"))
+        );
+        assert!(!forge.kind().has_head(&forge, &listed, &head("team/repo")));
     }
 }
 
@@ -359,7 +363,7 @@ fn each_forge_reads_a_branch_commit_from_its_own_route() {
         ),
     ] {
         let forge = ForgeRepo::parse(remote).unwrap();
-        let (request, read) = forge.kind.branch_read(&forge, "fix/a");
+        let (request, read) = forge.kind().branch_read(&forge, "fix/a");
         assert_eq!((request.endpoint.as_str(), read), (endpoint, pointer));
     }
     let fork = ForgeRepo::parse("https://github.com/team/repo")
@@ -369,22 +373,4 @@ fn each_forge_reads_a_branch_commit_from_its_own_route() {
         fork,
         ForgeRepo::parse("https://github.com/someone/repo").unwrap()
     );
-}
-
-#[test]
-fn new_items_need_the_assignee_and_milestone_capabilities_of_their_kind() {
-    let issue = NewIssue {
-        assignees: vec!["kim".into()],
-        milestone: Some("v2".into()),
-        ..NewIssue::default()
-    };
-    assert_eq!(
-        issue.needs(),
-        [Capability::IssueAssignees, Capability::IssueMilestones]
-    );
-    let pull = NewPull {
-        assignees: vec!["kim".into()],
-        ..NewPull::default()
-    };
-    assert_eq!(pull.needs(), [Capability::PrAssignees]);
 }

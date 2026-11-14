@@ -65,4 +65,4 @@ pub mod validate;
 pub mod views;
 pub mod workspaces;
 
-pub use shoal_forge as forge;
+pub use shoal_forge_types as forge;

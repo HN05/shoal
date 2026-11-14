@@ -20,10 +20,11 @@ use crate::{
         log::log,
         workspace::Manager,
     },
-    forge::items::attach::{self, Attachment},
+    forge::items::attach::Attachment,
     model::Repository,
     shoal_dirs::{Contents, ShoalDir, remove_if_empty},
 };
+use shoal_forge::items::attach;
 
 /// Where earlier versions kept the copies in the state directory.
 const OLD_DIRECTORY: &str = "proposals";

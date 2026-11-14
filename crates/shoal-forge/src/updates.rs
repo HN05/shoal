@@ -1,6 +1,5 @@
 //! Issue, PR and CI run activity as snapshots, and the updates between two
 //! of them.
-use crate::items::reference::ItemNumber;
 use std::{
     collections::{BTreeMap, BTreeSet},
     time::Duration,
@@ -12,14 +11,18 @@ use shoal_refs::CommitId;
 use shoal_time::UnixTime;
 
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{Activity, rest::RestCheck},
-    ci::{check_state::CheckState, run_view::RunViewRequests},
-    items::{item::Current, link::LinkKind},
+    ci::run_view::RunViewRequests,
+    transport::limits::{RateLimited, rate_limited},
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    ci::check_state::{self, CheckState},
+    items::{item::Current, link::LinkKind, reference::ItemNumber},
     numbers::{IssueNumber, PullNumber},
     review::status::CheckResult,
-    transport::limits::{RateLimited, rate_limited},
+    updates::{SnapshotKind, SnapshotState, Update, UpdateKind},
 };
 
 /// How long after a source's failure was reported it is not reported again,
@@ -42,50 +45,8 @@ mod commits;
 mod details;
 pub use details::{Edited, ItemDetails, saved_labels};
 mod held;
-mod state;
-pub use state::{SnapshotKind, SnapshotState};
 mod watch;
 pub use watch::WatchRecord;
-
-shoal_states::states!(UpdateKind {
-    Comment => "comment",
-    CiCompleted => "ci_completed",
-    MergeConflict => "merge_conflict",
-    Closed => "closed",
-    Merged => "merged",
-    Reopened => "reopened",
-    /// The title, description, labels or other details changed.
-    Edited => "edited",
-    LookupFailed => "lookup_failed",
-    /// The base workspace's PRs merged; rebase onto their target branch.
-    BaseMerged => "base_merged",
-});
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Update {
-    pub url: String,
-    pub kind: UpdateKind,
-    pub message: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub delivery: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub check: Option<crate::review::status::CheckResult>,
-    /// The child workspace whose item this is, when its parent's agent
-    /// receives the update.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workspace: Option<String>,
-}
-
-/// One line naming the item, the kind of change and the change, after the
-/// child workspace it belongs to.
-impl std::fmt::Display for Update {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(workspace) = &self.workspace {
-            write!(f, "{workspace}: ")?;
-        }
-        write!(f, "{} [{}]: {}", self.url, self.kind, self.message)
-    }
-}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Snapshot {
@@ -183,7 +144,7 @@ pub(crate) struct MergeRevision {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Check {
     pub(crate) name: String,
-    #[serde(deserialize_with = "crate::ci::check_state::saved")]
+    #[serde(deserialize_with = "check_state::saved")]
     pub(crate) state: CheckState,
     pub(crate) revision: String,
 }
@@ -610,7 +571,7 @@ impl ForgeRepo {
     pub async fn item_activity(
         &self,
         account: &Account,
-        item: &crate::items::reference::ItemRef,
+        item: &shoal_forge_types::items::reference::ItemRef,
     ) -> Result<Snapshot> {
         match item.number() {
             ItemNumber::Issue(number) => self.issue_activity(account, number).await,
@@ -620,14 +581,14 @@ impl ForgeRepo {
     }
 
     pub async fn issue_activity(&self, account: &Account, number: IssueNumber) -> Result<Snapshot> {
-        self.kind
+        self.kind()
             .issue_activity(self, account, number)
             .await?
             .complete()
     }
 
     pub async fn activity(&self, account: &Account, number: PullNumber) -> Result<Snapshot> {
-        self.kind
+        self.kind()
             .pr_activity(self, account, number)
             .await?
             .complete()

@@ -1,8 +1,6 @@
 use super::*;
-use crate::{
-    backends::ForgeKind,
-    test_support::{Reply, Server, agent_on, repo_on},
-};
+use crate::test_support::{Reply, Server, agent_on, repo_on};
+use shoal_forge_types::backends::ForgeKind;
 
 /// A GitHub on a loopback port that answers every request with `reply`,
 /// one of its repositories, and the URL of a file it serves.

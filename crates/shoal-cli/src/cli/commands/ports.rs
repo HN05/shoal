@@ -11,8 +11,7 @@ use crate::{
         ui,
     },
     client::leases::{self, PortAcquisition},
-    model::PortRequest,
-    model::{PortCatalog, PortOverview, PortReservation},
+    model::{PortCatalog, PortOverview, PortRequest, PortReservation},
 };
 
 use super::workspace_overviews;

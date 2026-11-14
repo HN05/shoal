@@ -85,16 +85,22 @@ for delivering a PR, under Committing near the end, decide when work is done.
   A command that prints a list and exits is named `ls`; `list` names a picker.
   A new kind joins the cross-kind verbs that apply to it instead of growing its
   own `view` or `watch`.
-- Forge requests, and logic that reads forge data without the daemon's state,
-  such as check states, item snapshots, item URLs and run IDs, live in
-  `crates/shoal-forge`, which depends on no Shoal crate but
-  `shoal-subprocess`, `shoal-forge-derive`, `shoal-refs`, `shoal-states` and
-  `shoal-time`; it takes the account to act as, while scope, approvals,
-  identity choice and workspace records stay in the daemon. What one forge
-  does its own way belongs in its implementation of `Backend` or of the area
-  trait over it that covers it, such as `Runs`, in that area's module of the
-  forge, never in a match on the forge kind, and reading an issue, PR or run
-  by its kind goes through `ForgeRepo`'s one operation for it.
+- Forge requests live in `crates/shoal-forge`, and the forge data the
+  protocol carries, with the logic that reads it without a request or the
+  daemon's state, such as repositories, item URLs, check states, item
+  snapshots and run IDs, in `crates/shoal-forge-types`, at the module path
+  the type has in `shoal-forge`, which re-exports none of them and adds its
+  requests on them as each module's extension trait.
+  `shoal-forge-types` depends on no Shoal crate but `shoal-forge-derive`,
+  `shoal-refs`, `shoal-states` and `shoal-time`; `shoal-forge` on those,
+  `shoal-forge-types` and `shoal-subprocess`. It takes the account to act
+  as, while scope, approvals, identity choice and workspace records stay in
+  the daemon. What one forge does its own way belongs in its implementation
+  of `Routes` in `shoal-forge-types`, where reading a URL needs it, or of
+  `Backend` or the area trait over it that covers it, such as `Runs`, in
+  that area's module of `shoal-forge`, never in a match on the forge kind,
+  and reading an issue, PR or run by its kind goes through `ForgeRepo`'s one
+  operation for it.
 - Apps use Shoal's protocol through the `shoal-client` crate, with no
   compatibility promise: the protocol changes freely and only the exact
   version match protects a client. The CLI and apps share that crate's
@@ -103,7 +109,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   itself. What the CLI alone needs, such as parsing, prompting and printing,
   stays in `shoal-cli`, and parsing and resolving config, which the protocol
   carries without reading, lives in `shoal-core`. `shoal-client` depends on
-  no Shoal crate but `shoal-forge`, `shoal-refs`, `shoal-states`,
+  no Shoal crate but `shoal-forge-types`, `shoal-refs`, `shoal-states`,
   `shoal-time` and `shoal-config-derive`.
 - `crates/shoal-time` holds the wall-clock timestamp type,
   `crates/shoal-refs` the commit and branch name types, and
@@ -116,8 +122,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   or through code they call, lives in `crates/shoal-core`, in a top-level
   module named for what it does; it names neither the CLI nor the daemon and
   depends on no Shoal crate but `shoal-client`, `shoal-config-derive`,
-  `shoal-forge`, `shoal-proxy`, `shoal-refs`, `shoal-states` and
-  `shoal-subprocess`. Its items are `pub`
+  `shoal-forge`, `shoal-forge-types`, `shoal-proxy`, `shoal-refs`,
+  `shoal-states` and `shoal-subprocess`. Its items are `pub`
   only where another Shoal crate uses them, and fixtures the other crates'
   tests share sit behind its `test-support` feature.
 - `crates/shoal-cli` serves only the CLI. Code that the daemon, the execution

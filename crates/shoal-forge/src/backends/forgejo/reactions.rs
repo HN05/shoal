@@ -4,15 +4,15 @@ use serde_json::{Value, json};
 
 use super::Forgejo;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{Reactions, github_rest},
-    items::{
-        link::ItemKind,
-        reaction::{Listed, Subject, allowed::AllowedReactions},
-    },
-    raw::HttpMethod,
+    items::reaction::{Listed, Subject},
     transport::api::{Request, TransportRequests},
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    items::{link::ItemKind, reaction::allowed::AllowedReactions},
+    raw::HttpMethod,
 };
 
 impl Reactions for Forgejo {

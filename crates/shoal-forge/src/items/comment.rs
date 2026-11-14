@@ -1,37 +1,23 @@
 //! The comments of an issue or PR: finding one among its discussion and
 //! inline comments, and replacing the body of one the acting login wrote.
 use anyhow::{Result, bail, ensure};
-use serde::{Deserialize, Serialize};
 
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{Activity, Items},
     items::{
         action::{Acted, ActionRequests},
-        link::ItemKind,
         reaction::Subject,
     },
-    numbers::CommentId,
-    review::view::Details,
     transport::api::TransportRequests,
     updates::Edited,
 };
-
-/// A new body for a comment or inline comment.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CommentEdit {
-    /// The ID of a comment or inline comment, as `shoal view` shows it.
-    pub comment: CommentId,
-    pub body: String,
-}
-
-impl CommentEdit {
-    pub(crate) fn validate(&self) -> Result<()> {
-        ensure!(!self.body.trim().is_empty(), "the comment is empty");
-        Ok(())
-    }
-}
+use shoal_forge_types::{
+    ForgeRepo,
+    items::{comment::CommentEdit, link::ItemKind},
+    numbers::CommentId,
+    review::view::Details,
+};
 
 /// A comment of an item as its view shows it.
 pub(crate) struct Shown<'a> {
@@ -61,12 +47,12 @@ impl ForgeRepo {
         comment: CommentId,
     ) -> Result<Found> {
         let mut details = self
-            .kind
+            .kind()
             .view_details(self, account, kind, number, true)
             .await?;
         let mut errors = Vec::new();
         details.reviews = self
-            .kind
+            .kind()
             .view_discussion(self, account, kind, number, &mut details, &mut errors)
             .await?;
         let found = comments(&details).find(|shown| {
@@ -129,7 +115,9 @@ impl ForgeRepo {
         comment: CommentId,
     ) -> Result<()> {
         ensure!(
-            self.kind.wrote(self, account, kind, number, found).await?,
+            self.kind()
+                .wrote(self, account, kind, number, found)
+                .await?,
             "comment {comment} was written by {}, not by the login Shoal acts as",
             found.author
         );
@@ -147,13 +135,13 @@ impl ForgeRepo {
         body: &str,
     ) -> Result<Vec<String>> {
         let request = self
-            .kind
+            .kind()
             .edit_comment(self, kind, number, found.subject, body)?
             .repeatable();
         let response = self.send(account, &request).await?;
         let key = match found.subject {
-            Subject::ReviewComment(_) => self.kind.reply_key(),
-            _ => self.kind.comment_key(),
+            Subject::ReviewComment(_) => self.kind().reply_key(),
+            _ => self.kind().comment_key(),
         };
         Ok(crate::updates::posted_key(key, &response)
             .into_iter()

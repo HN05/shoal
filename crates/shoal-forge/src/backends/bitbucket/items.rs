@@ -6,23 +6,30 @@ use shoal_refs::BranchName;
 
 use super::{Bitbucket, literal};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{Items, rest},
-    capability::{self, Capability},
+    capability,
+    items::{
+        comment::Found,
+        create::Head,
+        item::{ItemRequests, text},
+        reaction::Subject,
+    },
+    transport::api::{Request, TransportRequests, encode},
+    updates::DISCUSSION,
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    capability::Capability,
     items::{
         action::{Edit, MilestoneChange, changed_set},
-        comment::Found,
-        create::{Head, NewIssue, NewPull},
-        item::{Current, Item, ItemRequests, ItemState, PrSummary, text},
+        create::{NewIssue, NewPull},
+        item::{Current, Item, ItemState, PrSummary},
         link::ItemKind,
-        list,
-        reaction::Subject,
+        list::{Search, StateFilter},
     },
     numbers::PullNumber,
     raw::HttpMethod,
-    transport::api::{Request, TransportRequests, encode},
-    updates::DISCUSSION,
 };
 
 impl Items for Bitbucket {
@@ -103,7 +110,7 @@ impl Items for Bitbucket {
         repo: &ForgeRepo,
         account: &Account,
         kind: ItemKind,
-        search: &list::Search,
+        search: &Search,
     ) -> Result<Vec<Item>> {
         let endpoint = search_endpoint(kind, search);
         rest::list_items(repo, account, kind, &endpoint, search).await
@@ -326,7 +333,7 @@ fn same_account(user: &Value, author: &Value) -> Result<bool> {
 
 /// The list endpoint that runs `search` for items of `kind`, newest first,
 /// as a Bitbucket query. Bitbucket has no labels.
-fn search_endpoint(kind: ItemKind, search: &list::Search) -> String {
+fn search_endpoint(kind: ItemKind, search: &Search) -> String {
     let (resource, text_fields) = match kind {
         ItemKind::Issue => ("issues", ["title", "content.raw"]),
         ItemKind::Pr => ("pullrequests", ["title", "description"]),
@@ -336,9 +343,9 @@ fn search_endpoint(kind: ItemKind, search: &list::Search) -> String {
     match kind {
         ItemKind::Issue => {
             let states: &[&str] = match search.state {
-                list::StateFilter::Open => &OPEN_ISSUE_STATES,
-                list::StateFilter::Closed => &CLOSED_ISSUE_STATES,
-                list::StateFilter::All => &[],
+                StateFilter::Open => &OPEN_ISSUE_STATES,
+                StateFilter::Closed => &CLOSED_ISSUE_STATES,
+                StateFilter::All => &[],
             };
             if !states.is_empty() {
                 let states: Vec<String> = states
@@ -351,9 +358,9 @@ fn search_endpoint(kind: ItemKind, search: &list::Search) -> String {
         // Without a state Bitbucket lists only open pull requests.
         ItemKind::Pr => {
             let states: &[&str] = match search.state {
-                list::StateFilter::Open => &["OPEN"],
-                list::StateFilter::Closed => &["MERGED", "DECLINED", "SUPERSEDED"],
-                list::StateFilter::All => &["OPEN", "MERGED", "DECLINED", "SUPERSEDED"],
+                StateFilter::Open => &["OPEN"],
+                StateFilter::Closed => &["MERGED", "DECLINED", "SUPERSEDED"],
+                StateFilter::All => &["OPEN", "MERGED", "DECLINED", "SUPERSEDED"],
             };
             for state in states {
                 endpoint += &format!("&state={state}");

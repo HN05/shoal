@@ -12,10 +12,11 @@ use crate::{
     daemon::{permissions, workspace::Manager},
     forge::{
         items::reference::ItemInput,
-        review::submit::{LineComment, NewReview, OwnPull, ReviewVerdict, SubmitRequests},
+        review::submit::{LineComment, NewReview, ReviewVerdict},
     },
     protocol::ItemContext,
 };
+use shoal_forge::review::submit::{OwnPull, SubmitRequests};
 
 /// What approving a review with a verdict binds.
 #[derive(Serialize)]

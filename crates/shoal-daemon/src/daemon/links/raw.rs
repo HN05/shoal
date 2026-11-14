@@ -10,12 +10,12 @@ use crate::{
     daemon::{links::space::LinkSpace, permissions::Action, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
-        account::Account,
-        download::{Download, DownloadRequests},
-        raw::{HttpMethod, RawRequest, RawRequests},
+        download::Download,
+        raw::{HttpMethod, RawRequest},
     },
     protocol::ItemContext,
 };
+use shoal_forge::{account::Account, download::DownloadRequests, raw::RawRequests};
 
 impl Manager {
     /// The forge's response to `request` in the repository of `context`, or

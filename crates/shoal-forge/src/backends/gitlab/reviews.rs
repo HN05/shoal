@@ -6,23 +6,23 @@ use serde_json::{Value, json};
 
 use super::{GitLab, notes};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Reviews,
-    items::{
-        item::{Current, ItemRequests, text},
-        link::ItemKind,
-    },
-    numbers::{CommentId, PullNumber},
-    raw::HttpMethod,
+    items::item::{ItemRequests, text},
     review::{
         diff::{Bases, Diff, FileDiff, Placed},
-        reviewers::Reviewer,
-        submit::{PlacedReview, ReviewVerdict, Submission},
-        thread::{Target, Thread},
+        submit::{PlacedReview, Submission},
     },
     transport::api::{Request, TransportRequests},
     updates::discussion_key,
+};
+use shoal_forge_types::review::{submit::ReviewVerdict, thread::Target};
+use shoal_forge_types::{
+    ForgeRepo,
+    items::{item::Current, link::ItemKind},
+    numbers::{CommentId, PullNumber},
+    raw::HttpMethod,
+    review::{reviewers::Reviewer, thread::Thread},
 };
 
 impl Reviews for GitLab {

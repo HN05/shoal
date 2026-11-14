@@ -1,40 +1,26 @@
 //! CI runs a forge holds until a maintainer approves them, as it does for
 //! the PRs of forks and first-time contributors, and approving them with the
 //! account the caller passes, which is the user's.
-use crate::items::{link::LinkKind, reference::ItemRef};
 use anyhow::{Context, Result, ensure};
-use serde::{Deserialize, Serialize};
+use shoal_forge_types::items::{link::LinkKind, reference::ItemRef};
 
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Runs,
-    capability::{Capability, CapabilityRequests},
-    ci::{
-        CiSteps,
-        run_action::{Run, RunActionSteps},
-    },
+    capability::CapabilityRequests,
+    ci::{CiSteps, run_action::RunActionSteps},
+    transport::api::{Request, TransportRequests},
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    capability::Capability,
+    ci::{approval::WaitingRun, run_action::Run},
     numbers::PullNumber,
     raw::HttpMethod,
-    transport::api::{Request, TransportRequests},
 };
 
 /// The runs one page of a commit's runs holds.
 pub(crate) const RUNS_PAGE: usize = 50;
-
-/// The runs an approval reached.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RunsApproved {
-    pub approved: Vec<String>,
-}
-
-/// A run the forge holds for approval.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WaitingRun {
-    pub url: ItemRef,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workflow: Option<String>,
-}
 
 /// Reading and approving runs that wait for approval.
 #[shoal_forge_derive::extension(pub ApprovalRequests)]
@@ -45,18 +31,18 @@ impl ForgeRepo {
     pub async fn waiting_runs(&self, account: &Account, head: &str) -> Result<Vec<WaitingRun>> {
         let mut waiting = Vec::new();
         for page in 1.. {
-            let Some(path) = self.kind.waiting_runs_path(head, page) else {
+            let Some(path) = self.kind().waiting_runs_path(head, page) else {
                 break;
             };
             let value = self
                 .send(account, &Request::get(self.repo_endpoint(&path)))
                 .await?;
             let runs = self
-                .kind
+                .kind()
                 .listed_runs(&value)
                 .context("CI runs are not a list")?;
             for run in runs {
-                let run = self.kind.run_item(self, run)?;
+                let run = self.kind().run_item(self, run)?;
                 if run.waiting {
                     waiting.push(WaitingRun {
                         url: ItemRef::parse_kind(LinkKind::Ci, &run.url)?,
@@ -90,7 +76,7 @@ impl ForgeRepo {
     /// Approve the run `run`, which [`Self::waiting_run`] read, and return
     /// its URL.
     pub async fn approve_waiting(&self, account: &Account, run: Run) -> Result<String> {
-        let endpoint = self.repo_endpoint(&self.kind.approve_endpoint(&run)?);
+        let endpoint = self.repo_endpoint(&self.kind().approve_endpoint(&run)?);
         self.send(account, &Request::new(HttpMethod::Post, endpoint, None))
             .await?;
         Ok(run.url)

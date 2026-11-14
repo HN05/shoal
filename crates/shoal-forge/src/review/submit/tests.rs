@@ -1,63 +1,14 @@
 use super::*;
-use crate::raw::HttpMethod;
-
-fn review(verdict: ReviewVerdict, body: &str, comments: &[(&str, u64, &str)]) -> NewReview {
-    NewReview {
-        verdict,
-        body: body.into(),
-        comments: comments
-            .iter()
-            .map(|&(path, line, body)| LineComment {
-                path: path.into(),
-                line,
-                side: Side::New,
-                body: body.into(),
-            })
-            .collect(),
-        commit: None,
-    }
-}
-
-#[test]
-fn reviews_need_a_body_or_line_comments_and_change_requests_a_body() {
-    assert!(
-        review(ReviewVerdict::Comment, "", &[("a.rs", 1, "x")])
-            .validate()
-            .is_ok()
-    );
-    assert!(
-        review(ReviewVerdict::Approve, "Fine", &[])
-            .validate()
-            .is_ok()
-    );
-    for refused in [
-        review(ReviewVerdict::Approve, " ", &[]),
-        review(ReviewVerdict::RequestChanges, "", &[("a.rs", 1, "x")]),
-        review(ReviewVerdict::Comment, "", &[("a.rs", 0, "x")]),
-        review(ReviewVerdict::Comment, "", &[("a.rs", 3, "\n")]),
-    ] {
-        assert!(refused.validate().is_err(), "{refused:?}");
-    }
-}
-
-#[test]
-fn line_comments_read_from_json_default_to_the_new_side_and_refuse_unknowns() {
-    let comments: Vec<LineComment> = serde_json::from_str(
-        r#"[{"path": "a.rs", "line": 4, "body": "x"},
-            {"path": "b.rs", "line": 7, "side": "old", "body": "y"}]"#,
-    )
-    .unwrap();
-    assert_eq!(comments[0].side, Side::New);
-    assert_eq!(comments[1].side, Side::Old);
-    let unknown_field = r#"[{"path": "a.rs", "line": 4, "body": "x", "start_line": 2}]"#;
-    assert!(serde_json::from_str::<Vec<LineComment>>(unknown_field).is_err());
-    let unknown_side = r#"[{"path": "a.rs", "line": 4, "body": "x", "side": "left"}]"#;
-    assert!(serde_json::from_str::<Vec<LineComment>>(unknown_side).is_err());
-}
 
 /// A submission of `drafts` and `requests`, each a POST to its endpoint.
 fn submission(drafts: &[&str], requests: &[&str]) -> Submission {
-    let post = |endpoint: &&str| Request::new(HttpMethod::Post, (*endpoint).into(), None);
+    let post = |endpoint: &&str| {
+        Request::new(
+            shoal_forge_types::raw::HttpMethod::Post,
+            (*endpoint).into(),
+            None,
+        )
+    };
     Submission {
         drafts: drafts.iter().map(post).collect(),
         requests: requests.iter().map(post).collect(),
@@ -81,7 +32,11 @@ impl Exchange for Scripted {
 
     fn discard(&self, draft: &Value) -> Result<Request> {
         let endpoint = format!("drafts/{}", draft["id"]);
-        Ok(Request::new(HttpMethod::Delete, endpoint, None))
+        Ok(Request::new(
+            shoal_forge_types::raw::HttpMethod::Delete,
+            endpoint,
+            None,
+        ))
     }
 }
 
@@ -142,7 +97,8 @@ async fn submissions_to_one_pr_take_turns_and_leave_no_lock_behind() {
 
 #[tokio::test]
 async fn a_verdict_is_refused_to_the_account_that_opened_the_pr() {
-    use crate::{backends::ForgeKind, test_support::Server};
+    use crate::test_support::Server;
+    use shoal_forge_types::backends::ForgeKind;
 
     let server = Server::start(|request| {
         let body = match request.line.split_whitespace().nth(1) {

@@ -4,13 +4,9 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
-    ForgeRepo,
-    account::Account,
-    backends::{Backend, ForgeKind},
-    conventions::Lookup,
-    items::link::ItemKind,
-    transport::api::TransportRequests,
+    account::Account, backends::Backend, conventions::Lookup, transport::api::TransportRequests,
 };
+use shoal_forge_types::{ForgeRepo, backends::ForgeKind, items::link::ItemKind};
 
 /// The forge's description templates, labels and milestones.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]

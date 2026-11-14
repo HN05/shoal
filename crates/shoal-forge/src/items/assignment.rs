@@ -4,12 +4,14 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ForgeRepo, RepoRequests,
-    account::Account,
-    backends::Items,
-    capability::{Capability, CapabilityRequests},
+    RepoRequests, account::Account, backends::Items, capability::CapabilityRequests,
+    items::action::ActionSteps,
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    capability::Capability,
     items::{
-        action::{Action, ActionSteps, Edit},
+        action::{Action, Edit},
         item::{Item, ItemState},
         link::ItemKind,
         reference::ItemRef,
@@ -47,7 +49,7 @@ impl ForgeRepo {
             return Ok(None);
         }
         self.require(Capability::IssueAssignees)?;
-        let login = (self.kind.own_assignee(self, account).await?)
+        let login = (self.kind().own_assignee(self, account).await?)
             .context("the forge did not report the account's login")?;
         let current = self.issue_details(account, number).await?.item;
         let assigned = has_assignee(&current, &login);

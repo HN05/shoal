@@ -1,5 +1,5 @@
 use super::*;
-use crate::review::view::{Comment, Review, ReviewComment};
+use shoal_forge_types::review::view::{Comment, Review, ReviewComment};
 
 #[test]
 fn comments_list_discussion_then_inline_comments_with_their_authors_and_bodies() {

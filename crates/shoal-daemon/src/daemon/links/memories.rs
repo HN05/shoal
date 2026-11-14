@@ -4,7 +4,7 @@ use std::{
     sync::{Mutex, PoisonError},
 };
 
-use crate::forge::transport::memory::Memory;
+use shoal_forge::transport::memory::Memory;
 
 #[derive(Default)]
 pub(crate) struct ForgeMemories(Mutex<HashMap<String, Memory>>);

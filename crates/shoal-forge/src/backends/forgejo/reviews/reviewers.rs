@@ -2,13 +2,12 @@
 use anyhow::{Context, Result};
 
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::forgejo::organization,
     items::item::text,
-    review::reviewers::Reviewer,
     transport::api::{Request, TransportRequests},
 };
+use shoal_forge_types::{ForgeRepo, review::reviewers::Reviewer};
 
 /// The users Forgejo offers as reviewers.
 pub(super) async fn users(repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>> {

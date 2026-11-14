@@ -15,12 +15,13 @@ use crate::{
         workspace::{Manager, record_base_changed},
     },
     forge::{
-        PullRequest, RepoRequests,
-        items::{link::ItemKind, retarget::RetargetRequests},
-        updates::{Edited, Update, UpdateKind},
+        PullRequest,
+        items::link::ItemKind,
+        updates::{Update, UpdateKind},
     },
     model::{Workspace, WorkspaceRef},
 };
+use shoal_forge::{RepoRequests, items::retarget::RetargetRequests, updates::Edited};
 
 impl Manager {
     /// Once every watched PR of `base` has merged, retarget the PRs of the

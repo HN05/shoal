@@ -6,22 +6,25 @@ use serde_json::{Value, json};
 
 use super::{Forgejo, threads};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Reviews,
-    capability::{self, Capability},
-    items::item::Current,
-    numbers::{CommentId, PullNumber},
-    raw::HttpMethod,
+    capability,
     review::{
         diff::Diff,
-        reviewers::Reviewer,
-        submit::{PlacedReview, ReviewVerdict, Side, Submission},
-        thread::{Target, Thread},
+        submit::{PlacedReview, Submission},
     },
     transport::api::{Request, TransportRequests},
     updates::activity_key,
 };
+use shoal_forge_types::review::{submit::ReviewVerdict, thread::Target};
+use shoal_forge_types::{
+    ForgeRepo,
+    capability::Capability,
+    items::item::Current,
+    numbers::{CommentId, PullNumber},
+    review::{reviewers::Reviewer, thread::Thread},
+};
+use shoal_forge_types::{raw::HttpMethod, review::submit::Side};
 
 mod reviewers;
 

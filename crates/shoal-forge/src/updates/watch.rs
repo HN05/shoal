@@ -6,8 +6,9 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 use shoal_time::UnixTime;
 
-use super::{Edited, Snapshot, Update, held::HeldPasses};
-use crate::items::item::ItemState;
+use super::{Edited, Snapshot, held::HeldPasses};
+use shoal_forge_types::items::item::ItemState;
+use shoal_forge_types::updates::Update;
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct WatchRecord {

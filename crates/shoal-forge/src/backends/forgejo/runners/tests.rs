@@ -3,7 +3,7 @@ use std::path::Path;
 use serde_json::json;
 
 use super::*;
-use crate::numbers::PullNumber;
+use shoal_forge_types::numbers::PullNumber;
 
 fn repo() -> ForgeRepo {
     ForgeRepo::parse("https://forge.example/team/repo").unwrap()

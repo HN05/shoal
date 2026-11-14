@@ -1,50 +1,14 @@
 //! Review threads on a PR: an inline comment and the replies to it, and
 //! whether the forge marks them resolved.
 use anyhow::{Context, Result, ensure};
-use serde::{Deserialize, Serialize};
 
-use crate::{
+use crate::{account::Account, backends::Reviews, transport::api::Request};
+use shoal_forge_types::{
     ForgeRepo,
-    account::Account,
-    backends::Reviews,
     items::action::ThreadChange,
     numbers::{CommentId, PullNumber},
-    transport::api::Request,
+    review::thread::Thread,
 };
-
-/// A review thread, found from any of its comments.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Thread {
-    /// The comment that starts the thread.
-    pub first: CommentId,
-    /// The comments after the first.
-    pub replies: usize,
-    /// Unknown where the forge does not report it.
-    pub resolved: Option<bool>,
-    pub(crate) target: Target,
-}
-
-/// What a forge's reply and resolution requests name besides the first comment.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum Target {
-    /// The GraphQL node its resolution mutations take.
-    GitHub {
-        node: String,
-    },
-    GitLab {
-        discussion: String,
-    },
-    Bitbucket,
-    /// A reply is a comment of the thread's review on the first comment's
-    /// lines: `line` starts them, negative on the old side.
-    Forgejo {
-        review: u64,
-        path: String,
-        line: i64,
-        extra_lines: i64,
-    },
-}
 
 /// Reading and acting on review threads.
 #[shoal_forge_derive::extension(pub ThreadRequests, pub(crate) ThreadSteps)]
@@ -56,7 +20,7 @@ impl ForgeRepo {
         number: PullNumber,
         comment: CommentId,
     ) -> Result<Thread> {
-        let thread = self.kind.thread(self, account, number, comment).await?;
+        let thread = self.kind().thread(self, account, number, comment).await?;
         thread.with_context(|| format!("comment {comment} is not in a review thread of #{number}"))
     }
 
@@ -76,14 +40,14 @@ impl ForgeRepo {
                     thread.first,
                     if resolved { "resolved" } else { "unresolved" }
                 );
-                Some(self.kind.resolution(self, number, thread, resolved)?)
+                Some(self.kind().resolution(self, number, thread, resolved)?)
             }
             None => None,
         };
         let reply = change
             .reply
             .as_deref()
-            .map(|body| self.kind.reply(self, number, thread, body))
+            .map(|body| self.kind().reply(self, number, thread, body))
             .transpose()?;
         Ok(reply.into_iter().chain(resolution).collect())
     }

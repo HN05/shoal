@@ -1,4 +1,5 @@
 use super::*;
+use shoal_forge_types::review::view::ItemView;
 
 #[test]
 fn failed_views_omit_details_and_round_trip() {

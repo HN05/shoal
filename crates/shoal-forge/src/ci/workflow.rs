@@ -3,14 +3,14 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    ForgeRepo, IssueInput, RepoRequests,
+    RepoRequests,
     account::Account,
     backends::Backend,
     ci::run::workflow_segment,
     hosts::HostTypes,
-    items::link::decode_branch,
     transport::api::{Request, TransportRequests},
 };
+use shoal_forge_types::{ForgeRepo, IssueInput, items::link::decode_branch};
 
 const WORKFLOW_URL: &str = "expected a workflow URL ending in /actions/workflows/<file> or \
     /actions?workflow=<file>, or a workflow file's URL";
@@ -111,7 +111,7 @@ impl ForgeRepo {
         let endpoint = self.repo_endpoint("");
         let read = Request::get(endpoint.trim_end_matches('/').into());
         let value = self.send(account, &read).await?;
-        let branch = self.kind.default_branch(&value);
+        let branch = self.kind().default_branch(&value);
         branch
             .map(Into::into)
             .with_context(|| format!("{} reports no default branch", self.repository_url()))

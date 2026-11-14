@@ -6,11 +6,12 @@ use anyhow::{Context, Result};
 use crate::{
     daemon::{events, workspace::Manager},
     forge::{
-        ci::{CiActed, CiAction, CiRequests, checks::validate_check_name},
+        ci::{CiActed, CiAction},
         items::{link::ItemKind, reference::ItemInput},
     },
     protocol::ItemContext,
 };
+use shoal_forge::ci::{CiRequests, checks::validate_check_name};
 
 impl Manager {
     /// Rerun the failed, or cancel the running, `checks` of a PR in the

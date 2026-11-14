@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use super::*;
 use crate::backends::Attachments;
 
@@ -9,38 +11,14 @@ fn attachment(path: &str, alt: Option<&str>) -> Attachment {
 }
 
 #[test]
-fn arguments_split_the_alt_text_at_the_first_hash() {
-    let cwd = Path::new("/work");
-    assert_eq!(
-        Attachment::parse("shots/a.png#The login error", cwd),
-        attachment("/work/shots/a.png", Some("The login error"))
-    );
-    assert_eq!(
-        Attachment::parse("/tmp/a.png#", cwd),
-        attachment("/tmp/a.png", None)
-    );
-}
-
-#[test]
-fn checks_refuse_empty_and_oversized_files() {
+fn checks_refuse_a_file_given_twice() {
     let dir = tempfile::tempdir().unwrap();
-    let write = |name: &str, len: u64| {
-        let path = dir.path().join(name);
-        std::fs::File::create(&path).unwrap().set_len(len).unwrap();
-        Attachment { path, alt: None }
-    };
-    assert!(write("a.PNG", 10).check().is_ok());
-    assert!(write("b.mp4", MAX_IMAGE_BYTES + 1).check().is_ok());
-    assert_eq!(write("b.mp4", 1).media(), Media::Video);
-    let ledger = write("c.tsv", MAX_IMAGE_BYTES + 1);
-    assert!(ledger.check().is_ok());
-    assert_eq!(ledger.media(), Media::File);
-    assert_eq!(write("c.unknown", 1).content_type(), OTHER_TYPE);
-    assert!(write("d.png", 0).check().is_err());
-    assert!(write("e.png", MAX_IMAGE_BYTES + 1).check().is_err());
-    assert!(write("f.webm", MAX_FILE_BYTES + 1).check().is_err());
-    assert!(attachment("relative.png", None).check().is_err());
-    let twice = [write("g.png", 1), write("g.png", 1)];
+    let path = dir.path().join("g.png");
+    std::fs::write(&path, "x").unwrap();
+    let twice = [
+        attachment(path.to_str().unwrap(), None),
+        attachment(path.to_str().unwrap(), None),
+    ];
     assert!(check_all(&twice).is_err());
 }
 
@@ -93,18 +71,18 @@ fn forges_keep_uploads_per_repository_item_or_comment() {
     let ledger = attachment("/t/ledger.tsv", None);
     let gitlab = ForgeRepo::parse("git@gitlab.com:group/repo.git").unwrap();
     let request = gitlab
-        .kind
+        .kind()
         .upload(&gitlab, Holder::Repository, &png, None)
         .unwrap();
     assert_eq!(request.endpoint, "projects/group%2Frepo/uploads");
     assert_eq!(request.upload.unwrap().field, Some("file"));
     assert_eq!(
-        gitlab.kind.markup(&video, "c", "/uploads/x/c.mp4"),
+        gitlab.kind().markup(&video, "c", "/uploads/x/c.mp4"),
         "![c](/uploads/x/c.mp4)"
     );
     assert_eq!(
         gitlab
-            .kind
+            .kind()
             .markup(&ledger, "ledger.tsv", "/uploads/x/ledger.tsv"),
         "[ledger.tsv](/uploads/x/ledger.tsv)"
     );
@@ -112,12 +90,12 @@ fn forges_keep_uploads_per_repository_item_or_comment() {
     let github = ForgeRepo::parse("git@github.com:team/repo.git").unwrap();
     assert!(
         github
-            .kind
+            .kind()
             .upload(&github, Holder::Repository, &png, None)
             .is_err()
     );
     let request = github
-        .kind
+        .kind()
         .upload(&github, Holder::Repository, &png, Some(42))
         .unwrap();
     assert_eq!(
@@ -125,17 +103,17 @@ fn forges_keep_uploads_per_repository_item_or_comment() {
         "https://uploads.github.com/user-attachments/assets?name=a%20b.png&content_type=image%2Fpng&repository_id=42"
     );
     assert_eq!(request.upload.unwrap().field, None);
-    assert_eq!(github.kind.markup(&png, "a [b]", "u"), "![a b](u)");
-    assert_eq!(github.kind.markup(&ledger, "a [b]", "u"), "[a b](u)");
+    assert_eq!(github.kind().markup(&png, "a [b]", "u"), "![a b](u)");
+    assert_eq!(github.kind().markup(&ledger, "a [b]", "u"), "[a b](u)");
 
     let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
     assert!(
         forgejo
-            .kind
+            .kind()
             .upload(&forgejo, Holder::Repository, &png, None)
             .is_err()
     );
-    assert_eq!(forgejo.kind.markup(&ledger, "ledger", "u"), "[ledger](u)");
+    assert_eq!(forgejo.kind().markup(&ledger, "ledger", "u"), "[ledger](u)");
 }
 
 #[tokio::test]

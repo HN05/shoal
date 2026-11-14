@@ -7,8 +7,8 @@ use crate::{
     daemon::{links::space::LinkSpace, workspace::Manager},
     forge::{
         ForgeRepo,
-        capability::{Capability, CapabilityRequests},
-        ci::checks::{CheckLog, CheckRequests, failed_log_summary, validate_check_name},
+        capability::Capability,
+        ci::checks::CheckLog,
         items::{
             link::{LinkKind, Selection},
             reference::ItemRef,
@@ -16,6 +16,10 @@ use crate::{
         updates::Update,
     },
     protocol::ItemContext,
+};
+use shoal_forge::{
+    capability::CapabilityRequests,
+    ci::checks::{CheckRequests, failed_log_summary, validate_check_name},
 };
 
 impl Manager {

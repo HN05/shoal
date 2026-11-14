@@ -11,8 +11,9 @@ use crate::{
         notifications::Notification,
         test_support::{configure, git, manager, repository},
     },
-    forge::{backends::ForgeKind, test_support::Server},
+    forge::backends::ForgeKind,
 };
+use shoal_forge::test_support::Server;
 
 /// A Forgejo that registers runner 5 as `u` and deletes it, and the
 /// requests it saw that changed something.

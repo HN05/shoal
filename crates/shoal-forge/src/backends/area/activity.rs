@@ -2,17 +2,14 @@
 //! views.
 use anyhow::Result;
 
-use crate::{
+use crate::{account::Account, backends::Backend, updates::Snapshot};
+use shoal_forge_types::review::view::{Details, Review};
+use shoal_forge_types::{
     ForgeRepo,
-    account::Account,
-    backends::{Backend, ForgeKind},
+    backends::ForgeKind,
     items::link::ItemKind,
     numbers::{IssueNumber, PullNumber},
-    review::{
-        status::PrStatus,
-        view::{Details, Review},
-    },
-    updates::Snapshot,
+    review::status::PrStatus,
 };
 
 /// How the forge reads an item's activity, a PR's status and an item's
@@ -41,7 +38,7 @@ pub(crate) trait Activity: Backend {
         repo: &ForgeRepo,
         account: &Account,
         number: PullNumber,
-        pull: &crate::items::reference::ItemRef,
+        pull: &shoal_forge_types::items::reference::ItemRef,
     ) -> Result<PrStatus>;
 
     /// The item's content for a view, with its comments when `comments` is

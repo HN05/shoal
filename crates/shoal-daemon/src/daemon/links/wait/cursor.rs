@@ -6,7 +6,8 @@ use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
 
-use crate::forge::updates::{Update, WatchRecord};
+use crate::forge::updates::Update;
+use shoal_forge::updates::WatchRecord;
 
 /// The item's record on the workspace's watch cursor, if it has one: what
 /// its watch saw of the item, or updates queued from it before any watch did.

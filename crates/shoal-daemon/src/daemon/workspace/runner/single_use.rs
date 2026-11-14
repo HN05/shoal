@@ -9,13 +9,8 @@ use rusqlite::params;
 
 use super::ends::ClaimedJob;
 use crate::client::queue::QueueEntryId;
-use crate::{
-    daemon::workspace::Manager,
-    forge::{
-        ci::runner::{RunnerRequests, took_job},
-        numbers::RunnerId,
-    },
-};
+use crate::{daemon::workspace::Manager, forge::numbers::RunnerId};
+use shoal_forge::ci::runner::{RunnerRequests, took_job};
 
 /// How long a runner may wait for the forge to give it a job before the
 /// daemon asks whether one is left for it.

@@ -14,10 +14,11 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     config::Effective,
     daemon::{store, workspace::Manager},
-    forge::{ForgeRepo, RepoRequests},
+    forge::ForgeRepo,
     model::{Chat, PresentSpace, Repository, Workspace},
     protocol::ItemContext,
 };
+use shoal_forge::RepoRequests;
 
 #[allow(
     clippy::large_enum_variant,

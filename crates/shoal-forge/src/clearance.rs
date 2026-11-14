@@ -1,19 +1,20 @@
 //! Whether an issue, PR or CI run that blocks work has cleared: an issue
 //! once it closes, a PR once it merges or closes, and a CI run once it, or a
 //! run of its workflow on the default branch that started after it, passes.
-use crate::items::reference::ItemRef;
 use std::collections::HashMap;
 
 use anyhow::Result;
 
 use crate::{
-    ForgeRepo,
     account::Account,
-    ci::{run_action::Run, run_view::RunViewRequests, workflow::WorkflowRequests},
+    ci::{run_view::RunViewRequests, workflow::WorkflowRequests},
     hosts::HostTypes,
-    items::{
-        action::ActionRequests, item::ItemState, link::ItemKind, reference::ReferenceRequests,
-    },
+    items::{action::ActionRequests, reference::ReferenceRequests},
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    ci::run_action::Run,
+    items::{item::ItemState, link::ItemKind, reference::ItemRef},
 };
 
 /// What a blocker's lookup found.

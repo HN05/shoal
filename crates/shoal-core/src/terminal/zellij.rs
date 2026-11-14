@@ -26,8 +26,7 @@ use crate::{
             Zellij as Server, pane_of_number, parse_place, place_id, var,
         },
     },
-    tools::Tool,
-    tools::ensure_program,
+    tools::{Tool, ensure_program},
 };
 
 /// Lines of scrollback a demo's screen read returns.

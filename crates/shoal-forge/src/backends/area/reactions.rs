@@ -3,14 +3,15 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
-    ForgeRepo,
     account::Account,
-    backends::{Backend, ForgeKind},
-    items::{
-        link::ItemKind,
-        reaction::{Listed, Subject, allowed::AllowedReactions},
-    },
+    backends::Backend,
+    items::reaction::{Listed, Subject},
     transport::api::Request,
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    backends::ForgeKind,
+    items::{link::ItemKind, reaction::allowed::AllowedReactions},
 };
 
 /// How the forge lists, adds and removes reactions.

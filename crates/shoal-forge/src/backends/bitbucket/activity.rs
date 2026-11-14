@@ -4,25 +4,26 @@ use serde_json::Value;
 
 use super::{Bitbucket, listed, roots};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{
         Activity, LoginHint,
         rest::{self, RestCheck, RestReads, fingerprints},
     },
-    ci::check_state::CheckState,
     items::{
         action::ActionSteps,
-        item::{Current, ItemRequests, text},
-        link::ItemKind,
+        item::{ItemRequests, text},
     },
-    numbers::{CommentId, IssueNumber, PullNumber},
-    review::{
-        status::{PrStatus, Verdict},
-        view::{Comment, Details, PrDetails, Review, ReviewComment},
-    },
+    review::status::Verdict,
     transport::api::TransportRequests,
     updates::{Entry, Snapshot},
+};
+use shoal_forge_types::review::view::{Comment, Details, PrDetails, Review, ReviewComment};
+use shoal_forge_types::{
+    ForgeRepo,
+    ci::check_state::CheckState,
+    items::{item::Current, link::ItemKind},
+    numbers::{CommentId, IssueNumber, PullNumber},
+    review::status::PrStatus,
 };
 
 impl Activity for Bitbucket {
@@ -49,7 +50,7 @@ impl Activity for Bitbucket {
         repo: &ForgeRepo,
         account: &Account,
         number: PullNumber,
-        pull: &crate::items::reference::ItemRef,
+        pull: &shoal_forge_types::items::reference::ItemRef,
     ) -> Result<PrStatus> {
         rest::pr_status(self, repo, account, number, pull).await
     }

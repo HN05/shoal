@@ -61,8 +61,8 @@ async fn item_waits_close_unanswered_while_an_update_restarts_the_daemon() {
 
 /// A Forgejo where PR 7 was opened by the review account's login and PR 8
 /// by someone else, which accepts every review.
-fn reviewed_forge() -> crate::forge::test_support::Server {
-    crate::forge::test_support::Server::start(|request| {
+fn reviewed_forge() -> shoal_forge::test_support::Server {
+    shoal_forge::test_support::Server::start(|request| {
         let pull = |number: u64, author: &str| {
             serde_json::json!({
                 "number": number, "title": "Fix", "state": "open", "user": {"login": author},

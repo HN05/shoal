@@ -3,19 +3,20 @@ use anyhow::{Context, Result, ensure};
 
 use super::GitHub;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{
         Attachments,
         area::{image, link},
     },
-    items::attach::{Attachment, Holder, Media},
+    items::attach::Holder,
     transport::{
         api::{Request, Upload, encode},
         download,
         response::Fetched,
     },
 };
+use shoal_forge_types::ForgeRepo;
+use shoal_forge_types::items::attach::{Attachment, Media};
 
 impl Attachments for GitHub {
     async fn check_uploads(

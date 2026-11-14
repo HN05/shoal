@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use shoal_refs::BranchName;
 
-use crate::items::item::Current;
+use shoal_forge_types::items::item::Current;
 
 /// The parts of an issue or PR that people edit, as one read of the item
 /// reports them. Labels and assignees are sorted, so a forge listing them

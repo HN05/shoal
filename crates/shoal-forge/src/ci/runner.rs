@@ -3,8 +3,6 @@
 //! repository's runner, and the command of the forge's own runner that runs
 //! one job. Shoal decides which job runs when; the forge's runner runs its
 //! steps.
-use crate::items::{link::LinkKind, reference::ItemRef};
-use shoal_refs::CommitId;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -14,71 +12,19 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Runners,
-    capability::{Capability, CapabilityRequests},
+    capability::CapabilityRequests,
     ci::checks::CheckRequests,
-    numbers::{JobId, PullNumber, RunId, RunnerId},
-    raw::HttpMethod,
     transport::api::{Request, TransportRequests},
 };
-
-/// A job waiting in the forge's queue for a runner with its labels.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WaitingJob {
-    /// What claims this attempt of the job and no other.
-    pub handle: String,
-    /// The job's ID, which grows with each job the forge queues.
-    pub id: JobId,
-    /// The API ID of the run it belongs to.
-    pub run: RunId,
-    pub name: String,
-    /// The labels it runs on.
-    pub labels: Vec<String>,
-}
-
-/// What started a run.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Trigger {
-    /// PR `number`, at its head when the run started.
-    Pull { number: PullNumber },
-    /// A push to, or a run started on, `branch`.
-    Branch(String),
-    /// Anything else, such as a tag or a schedule.
-    Other,
-}
-
-/// The run a job belongs to.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct JobRun {
-    pub url: ItemRef,
-    /// Its workflow file.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workflow: Option<String>,
-    /// The commit it runs on.
-    pub commit: CommitId,
-    pub trigger: Trigger,
-    /// The ref the repository's remote serves the commit under, if any.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reference: Option<String>,
-}
-
-impl JobRun {
-    /// The PR a PR event started it for.
-    pub fn pull(&self) -> Option<PullNumber> {
-        match self.trigger {
-            Trigger::Pull { number } => Some(number),
-            Trigger::Branch(_) | Trigger::Other => None,
-        }
-    }
-
-    /// Whether its PR, whose head is `head` now, moved past its commit.
-    pub fn superseded_by(&self, head: &CommitId) -> bool {
-        self.commit != *head
-    }
-}
+use shoal_forge_types::{
+    ForgeRepo,
+    capability::Capability,
+    ci::runner::{JobRun, WaitingJob},
+    numbers::{RunId, RunnerId},
+    raw::HttpMethod,
+};
 
 /// A runner the forge registered for the repository, with what it connects
 /// as. A forge whose runners each take one job registers none for the
@@ -149,26 +95,13 @@ pub struct Installation {
     pub entries: Vec<OsString>,
 }
 
-impl ForgeRepo {
-    /// The web URL of the run with API ID `id`, which a forge whose runner
-    /// takes another run's job serves the run's page under.
-    pub fn run_page(&self, id: RunId) -> Result<ItemRef> {
-        ItemRef::numbered(self, LinkKind::Ci, id.get())
-    }
-
-    /// The web URL of the forge instance the repository is on.
-    pub fn instance_url(&self) -> String {
-        format!("{}://{}", self.web_scheme, self.host)
-    }
-}
-
 /// Running the forge's jobs on this machine.
 #[shoal_forge_derive::extension(pub RunnerRequests)]
 impl ForgeRepo {
     /// The program that runs one job, which must be on `PATH`, or why the
     /// forge cannot run jobs here.
     pub fn runner_program(&self) -> Result<&'static str> {
-        self.kind.runner_program()
+        self.kind().runner_program()
     }
 
     /// Refuse running jobs where the repository's server cannot.
@@ -182,16 +115,16 @@ impl ForgeRepo {
         account: &Account,
         labels: &[String],
     ) -> Result<Vec<WaitingJob>> {
-        let mut jobs = self.kind.waiting_jobs(self, account, labels).await?;
+        let mut jobs = self.kind().waiting_jobs(self, account, labels).await?;
         jobs.sort_by_key(|job| job.id);
         Ok(jobs)
     }
 
     /// The run with API ID `id`.
     pub async fn job_run(&self, account: &Account, id: RunId) -> Result<JobRun> {
-        let read = Request::get(self.repo_endpoint(&self.kind.job_run_path(id)?));
+        let read = Request::get(self.repo_endpoint(&self.kind().job_run_path(id)?));
         let value = self.send(account, &read).await?;
-        self.kind.job_run(self, &value)
+        self.kind().job_run(self, &value)
     }
 
     /// Whether `run` is for a PR whose head moved past its commit.
@@ -210,12 +143,12 @@ impl ForgeRepo {
         account: &Account,
         name: &str,
     ) -> Result<Option<RegisteredRunner>> {
-        self.kind.register_runner(self, account, name).await
+        self.kind().register_runner(self, account, name).await
     }
 
     /// Delete the repository's runner `id`; one already gone counts as deleted.
     pub async fn delete_runner(&self, account: &Account, id: RunnerId) -> Result<()> {
-        let request = self.kind.delete_runner(self, id)?;
+        let request = self.kind().delete_runner(self, id)?;
         // A refusal's only possible status is that the runner is gone.
         let _gone = self.read_refusable(account, &request, &[404]).await?;
         Ok(())
@@ -228,7 +161,7 @@ impl ForgeRepo {
         account: &Account,
         launch: &JobLaunch<'_>,
     ) -> Result<JobCommand> {
-        self.kind.job_command(self, account, launch).await
+        self.kind().job_command(self, account, launch).await
     }
 
     /// The state of the runner `id`, or `None` once it is gone.
@@ -237,7 +170,7 @@ impl ForgeRepo {
         account: &Account,
         id: RunnerId,
     ) -> Result<Option<RunnerState>> {
-        self.kind.runner_state(self, account, id).await
+        self.kind().runner_state(self, account, id).await
     }
 
     /// The job of the run with API ID `run` that the runner `runner` took,
@@ -248,7 +181,7 @@ impl ForgeRepo {
         run: RunId,
         runner: RunnerId,
     ) -> Result<Option<WaitingJob>> {
-        self.kind.runner_job(self, account, run, runner).await
+        self.kind().runner_job(self, account, run, runner).await
     }
 }
 

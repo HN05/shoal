@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::*;
-use crate::backends::ForgeKind;
+use shoal_forge_types::backends::ForgeKind;
 
 fn parsed(url: &str) -> Result<(&str, String, Option<String>)> {
     let (repository, link) = WorkflowLink::parse(url)?;

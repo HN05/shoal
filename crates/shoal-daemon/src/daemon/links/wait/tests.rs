@@ -34,10 +34,11 @@ use crate::{
             item::ItemState,
             link::{ItemKind, LinkKind, Selection},
         },
-        updates::{Edited, Snapshot, Update, UpdateKind},
+        updates::{Update, UpdateKind},
     },
     model::Workspace,
 };
+use shoal_forge::updates::{Edited, Snapshot};
 
 impl Manager {
     async fn wait_prs(&self, selector: &str, seconds: Option<u64>) -> Result<Updates> {
@@ -98,8 +99,8 @@ impl Manager {
 
 /// A forge that serves nothing, which every item the tests link belongs
 /// to, so a lookup of one fails at once.
-static FORGE: LazyLock<crate::forge::test_support::Server> = LazyLock::new(|| {
-    let server = crate::forge::test_support::Server::start(|_| (404, Vec::new(), Vec::new()));
+static FORGE: LazyLock<shoal_forge::test_support::Server> = LazyLock::new(|| {
+    let server = shoal_forge::test_support::Server::start(|_| (404, Vec::new(), Vec::new()));
     crate::forge::hosts::learn(&server.host, crate::forge::backends::ForgeKind::Forgejo);
     server
 });
@@ -651,7 +652,7 @@ async fn a_chat_without_a_repository_watches_one_kind_below_it() {
 /// A chat without a repository beside a registered repository on a forge
 /// that serves its open issues, each with a comment.
 struct ServedChat {
-    _forge: crate::forge::test_support::Server,
+    _forge: shoal_forge::test_support::Server,
     chat: SpaceSelector,
     repository: crate::model::Repository,
     /// The repository's URL on the forge.
@@ -662,7 +663,7 @@ async fn chat_beside_served_repository(
     manager: &Arc<Manager>,
     root: &std::path::Path,
 ) -> ServedChat {
-    let server = crate::forge::test_support::Server::start(|request| {
+    let server = shoal_forge::test_support::Server::start(|request| {
         let Some(path) = request
             .line
             .strip_prefix("GET /api/v1/repos/team/repo/issues/")
@@ -3127,8 +3128,8 @@ async fn the_background_poll_reads_spaces_together() {
         .await
         .unwrap();
     // Each workspace's issue is answered only once both are being read.
-    let arrived = crate::forge::test_support::together(2);
-    let server = crate::forge::test_support::Server::start(move |request| {
+    let arrived = shoal_forge::test_support::together(2);
+    let server = shoal_forge::test_support::Server::start(move |request| {
         let Some(number) = request
             .line
             .strip_prefix("GET /api/v1/repos/team/repo/issues/")

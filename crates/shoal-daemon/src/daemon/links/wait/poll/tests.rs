@@ -4,7 +4,7 @@ use crate::forge::updates::UpdateKind;
 #[test]
 fn a_rate_limited_poll_waits_for_the_limit_but_at_least_the_interval() {
     let limit = |until| {
-        anyhow::Error::new(crate::forge::transport::limits::RateLimited {
+        anyhow::Error::new(shoal_forge::transport::limits::RateLimited {
             host: "forge.example".into(),
             until,
         })
@@ -37,7 +37,7 @@ async fn a_rate_limited_watch_keeps_polling_after_the_limit() {
     let result = wait_for_updates(None, &mut tokio::sync::watch::channel(0).1, || async {
         match attempts.fetch_add(1, std::sync::atomic::Ordering::Relaxed) {
             0 => Err(anyhow::Error::new(
-                crate::forge::transport::limits::RateLimited {
+                shoal_forge::transport::limits::RateLimited {
                     host: "forge.example".into(),
                     until: UnixTime::EPOCH,
                 },

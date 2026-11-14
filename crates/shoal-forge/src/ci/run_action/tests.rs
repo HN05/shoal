@@ -1,7 +1,12 @@
 use serde_json::{Value, json};
 
 use super::*;
-use crate::backends::{Routes, Runs};
+use crate::CommitId;
+use crate::backends::Runs;
+use shoal_forge_types::ci::JobState;
+use shoal_forge_types::numbers::PullNumber;
+use shoal_forge_types::numbers::RunId;
+use shoal_forge_types::numbers::RunNumber;
 
 fn run(id: u64) -> Run {
     Run {
@@ -18,51 +23,10 @@ fn run(id: u64) -> Run {
 }
 
 #[test]
-fn run_urls_locate_runs_only_in_the_repository() -> Result<()> {
-    let locate = |remote: &str, target: &str| -> Result<Option<u64>> {
-        let repo = ForgeRepo::parse(remote)?;
-        Ok(repo.kind.locate_run(&repo, target).map(RunNumber::get))
-    };
-    let github = "https://github.com/team/repo";
-    assert_eq!(
-        locate(github, &format!("{github}/actions/runs/12"))?,
-        Some(12)
-    );
-    assert_eq!(
-        locate(github, &format!("{github}/actions/runs/12/job/34"))?,
-        Some(12)
-    );
-    assert_eq!(
-        locate(github, "https://github.com/other/repo/actions/runs/12")?,
-        None
-    );
-    let gitlab = "https://gitlab.com/group/sub/repo";
-    assert_eq!(
-        locate(gitlab, &format!("{gitlab}/-/pipelines/56"))?,
-        Some(56)
-    );
-    assert_eq!(locate(gitlab, &format!("{gitlab}/-/jobs/56"))?, None);
-    let forgejo = "https://forge.example/team/repo";
-    assert_eq!(
-        locate(forgejo, &format!("{forgejo}/actions/runs/2765"))?,
-        Some(2765)
-    );
-    assert_eq!(
-        locate(forgejo, "/team/repo/actions/runs/2765/jobs/1")?,
-        Some(2765)
-    );
-    assert_eq!(
-        locate(forgejo, "https://forge.example/team/repo/issues/3")?,
-        None
-    );
-    Ok(())
-}
-
-#[test]
 fn each_forge_acts_on_a_run_its_own_way() -> Result<()> {
     let endpoint = |remote: &str, action, failed| -> Result<String> {
         let operation = ForgeRepo::parse(remote)?
-            .kind
+            .kind()
             .run_operation(&run(9), action, failed)?;
         Ok(match operation {
             RunOperation::Post(endpoint) => endpoint,
@@ -113,7 +77,7 @@ fn each_forge_acts_on_a_run_its_own_way() -> Result<()> {
 fn runs_read_their_branch_workflow_commit_and_state_from_the_forge() -> Result<()> {
     let read = |remote: &str, value| -> Result<Run> {
         let repo = ForgeRepo::parse(remote)?;
-        repo.kind.run(&repo, RunNumber::new(12), &value)
+        repo.kind().run(&repo, RunNumber::new(12), &value)
     };
     assert_eq!(
         read(
@@ -181,7 +145,7 @@ fn runs_read_their_branch_workflow_commit_and_state_from_the_forge() -> Result<(
 fn runs_name_the_pr_of_their_repository_they_ran_for() -> Result<()> {
     let pull = |remote: &str, value| -> Result<Option<u64>> {
         let repo = ForgeRepo::parse(remote)?;
-        let run = repo.kind.run(&repo, RunNumber::new(12), &value)?;
+        let run = repo.kind().run(&repo, RunNumber::new(12), &value)?;
         Ok(run.pull.map(PullNumber::get))
     };
     // Forgejo names a PR run's branch as the PR, and its PR only in the
@@ -210,22 +174,12 @@ fn runs_name_the_pr_of_their_repository_they_ran_for() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn run_references_are_positive_numbers() {
-    let repo = ForgeRepo::parse("https://github.com/team/repo").unwrap();
-    assert!(repo.run("12").is_ok());
-    assert!(repo.run("ci.yml").is_err());
-    assert!(repo.run("0").is_err());
-}
-
 #[tokio::test]
 async fn forgejo_reruns_each_failed_job_once_skipping_those_a_rerun_restarted() -> Result<()> {
     use std::sync::{Arc, Mutex};
 
-    use crate::{
-        backends::ForgeKind,
-        test_support::{Server, agent_on, repo_on},
-    };
+    use crate::test_support::{Server, agent_on, repo_on};
+    use shoal_forge_types::backends::ForgeKind;
     // `deploy` needs `test`, so rerunning `test` blocks it again; `lint`
     // was cancelled.
     let statuses = Arc::new(Mutex::new(vec![
@@ -289,7 +243,7 @@ async fn forgejo_reruns_each_failed_job_once_skipping_those_a_rerun_restarted() 
 fn only_a_run_the_forge_reports_successful_passes() -> Result<()> {
     let read = |remote: &str, value| -> Result<Run> {
         let repo = ForgeRepo::parse(remote)?;
-        repo.kind.run(&repo, RunNumber::new(12), &value)
+        repo.kind().run(&repo, RunNumber::new(12), &value)
     };
     let gitlab = |status: &str| {
         json!({"id": 12, "web_url": "https://gitlab.com/team/repo/-/pipelines/12",

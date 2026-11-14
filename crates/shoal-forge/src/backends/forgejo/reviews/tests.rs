@@ -1,8 +1,7 @@
 use super::*;
-use crate::review::{
-    diff::FileDiff,
-    submit::{LineComment, Side},
-};
+use crate::review::diff::FileDiff;
+use shoal_forge_types::review::submit::LineComment;
+use shoal_forge_types::review::submit::Side;
 
 #[test]
 fn reviews_place_each_comment_on_its_side_and_are_keyed_by_review() -> Result<()> {

@@ -2,26 +2,21 @@
 //! branches for PRs instead.
 use anyhow::{Context, Result};
 
-use crate::{
-    ForgeRepo,
-    account::Account,
-    backends::Backend,
-    capability::{Capability, CapabilityRequests},
-    repo::remote_url::RemoteUrl,
-};
+use crate::{account::Account, backends::Backend, capability::CapabilityRequests};
+use shoal_forge_types::{ForgeRepo, capability::Capability, repo::remote_url::RemoteUrl};
 
 /// Forking the repository.
 #[shoal_forge_derive::extension(pub ForkRequests)]
 impl ForgeRepo {
     /// Whether `account` may push branches to the repository.
     pub async fn pushable(&self, account: &Account) -> Result<bool> {
-        self.kind.pushable(self, account).await
+        self.kind().pushable(self, account).await
     }
 
     /// `account`'s fork of the repository, created when it has none.
     pub async fn fork(&self, account: &Account) -> Result<ForgeRepo> {
         self.require(Capability::Forks)?;
-        let path = self.kind.fork(self, account).await?;
+        let path = self.kind().fork(self, account).await?;
         Ok(self.sibling(&path))
     }
 

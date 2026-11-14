@@ -25,6 +25,7 @@ shoal-core = { path = "crates/shoal-core" }
 shoal-daemon = { path = "crates/shoal-daemon" }
 shoal-forge = { path = "crates/shoal-forge" }
 shoal-forge-derive = { path = "crates/shoal-forge-derive" }
+shoal-forge-types = { path = "crates/shoal-forge-types" }
 shoal-proxy = { path = "crates/shoal-proxy" }
 shoal-refs = { path = "crates/shoal-refs" }
 shoal-states = { path = "crates/shoal-states" }

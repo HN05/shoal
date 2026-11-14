@@ -1,6 +1,12 @@
 use super::*;
-use crate::{backends::ForgeKind, items::item::PrSummary};
 use serde_json::{Value, json};
+use shoal_forge_types::{
+    backends::ForgeKind,
+    items::{
+        action::{MergeMethod, MilestoneChange, ThreadChange, UpdateMethod},
+        item::PrSummary,
+    },
+};
 
 fn pr(forge: &ForgeRepo, draft: bool, labels: &[&str]) -> Current {
     Current {
@@ -8,7 +14,7 @@ fn pr(forge: &ForgeRepo, draft: bool, labels: &[&str]) -> Current {
             kind: ItemKind::Pr,
             number: 7,
             url: "https://forge.example/team/repo/pulls/1".parse().unwrap(),
-            title: if draft && forge.kind == ForgeKind::Forgejo {
+            title: if draft && forge.kind() == ForgeKind::Forgejo {
                 "WIP: Fix".into()
             } else {
                 "Fix".into()
@@ -514,79 +520,6 @@ fn automatic_merges_use_each_forges_requests() {
 }
 
 #[test]
-fn actions_refuse_what_the_item_cannot_take() {
-    assert!(
-        Action::edit(Edit::default())
-            .validate(ItemKind::Pr)
-            .is_err()
-    );
-    let base = Action::edit(Edit {
-        base: Some("main".into()),
-        ..Edit::default()
-    });
-    assert!(base.validate(ItemKind::Issue).is_err());
-    assert!(base.validate(ItemKind::Pr).is_ok());
-    let merge = Action::Merge {
-        method: MergeMethod::Merge,
-        delete_branch: false,
-    };
-    assert!(merge.validate(ItemKind::Issue).is_err());
-    assert!(
-        Action::Comment {
-            body: " ".into(),
-            attachments: Vec::new()
-        }
-        .validate(ItemKind::Issue)
-        .is_err()
-    );
-    let thread = |reply: Option<&str>, resolve| {
-        Action::Thread(ThreadChange {
-            comment: CommentId::new(5),
-            reply: reply.map(str::to_owned),
-            resolve,
-        })
-    };
-    assert!(thread(Some("Why"), None).validate(ItemKind::Pr).is_ok());
-    assert!(thread(None, Some(true)).validate(ItemKind::Pr).is_ok());
-    assert!(thread(None, Some(true)).validate(ItemKind::Issue).is_err());
-    assert!(thread(None, None).validate(ItemKind::Pr).is_err());
-    assert!(
-        thread(Some(" "), Some(true))
-            .validate(ItemKind::Pr)
-            .is_err()
-    );
-}
-
-#[test]
-fn actions_need_the_capabilities_they_use() {
-    let rebase = Action::Merge {
-        method: MergeMethod::Rebase,
-        delete_branch: false,
-    };
-    assert_eq!(rebase.needs(ItemKind::Pr), [Capability::RebaseMerge]);
-    let auto = Action::AutoMerge {
-        method: MergeMethod::Rebase,
-        delete_branch: false,
-    };
-    assert_eq!(
-        auto.needs(ItemKind::Pr),
-        [Capability::AutoMerge, Capability::RebaseMerge]
-    );
-    assert!(Action::CancelAutoMerge.validate(ItemKind::Issue).is_err());
-    assert_eq!(Action::Reopen.needs(ItemKind::Pr), [Capability::ReopenPrs]);
-    assert!(Action::Reopen.needs(ItemKind::Issue).is_empty());
-    let labels = Action::edit(Edit {
-        remove_labels: vec!["bug".into()],
-        draft: Some(true),
-        ..Edit::default()
-    });
-    assert_eq!(
-        labels.needs(ItemKind::Pr),
-        [Capability::Labels, Capability::DraftPrs]
-    );
-}
-
-#[test]
 fn edits_fail_when_the_forge_shows_their_labels_unchanged() {
     let [_, forgejo] = forges();
     let item = pr(&forgejo, false, &["Bug", "complexity/small"]).item;
@@ -617,44 +550,6 @@ fn edits_fail_when_the_forge_shows_their_labels_unchanged() {
     );
     let bare = pr(&forgejo, false, &[]).item;
     assert!(edit(&["ready"], &[]).ensure_applied(&bare, false).is_err());
-}
-
-#[test]
-fn reviews_need_line_comments_and_their_verdict_and_only_prs_take_them() {
-    use crate::review::submit::{LineComment, NewReview, ReviewVerdict, Side};
-    let review = |verdict, comments: usize| {
-        Action::Review(NewReview {
-            verdict,
-            body: "Body".into(),
-            comments: (0..comments)
-                .map(|_| LineComment {
-                    path: "a.rs".into(),
-                    line: 1,
-                    side: Side::New,
-                    body: "Why?".into(),
-                })
-                .collect(),
-            commit: None,
-        })
-    };
-    assert!(
-        review(ReviewVerdict::Comment, 0)
-            .needs(ItemKind::Pr)
-            .is_empty()
-    );
-    assert_eq!(
-        review(ReviewVerdict::Approve, 1).needs(ItemKind::Pr),
-        [Capability::LineComments, Capability::ApprovePrs]
-    );
-    assert_eq!(
-        review(ReviewVerdict::RequestChanges, 0).needs(ItemKind::Pr),
-        [Capability::RequestChanges]
-    );
-    assert!(
-        review(ReviewVerdict::Comment, 0)
-            .validate(ItemKind::Issue)
-            .is_err()
-    );
 }
 
 #[test]
@@ -782,24 +677,6 @@ fn bitbucket_gives_an_issue_one_assignee_and_a_milestone_by_name() {
     );
     let second = edit(&["{sam}"], &[], None);
     assert!(bitbucket.plan(&current, &second).is_err());
-}
-
-#[test]
-fn assignees_and_milestones_need_the_capability_for_the_items_kind() {
-    let edit = Action::edit(Edit {
-        add_assignees: vec!["sam".into()],
-        milestone: Some(MilestoneChange::Clear),
-        ..Edit::default()
-    });
-    assert_eq!(
-        edit.needs(ItemKind::Issue),
-        [Capability::IssueAssignees, Capability::IssueMilestones]
-    );
-    assert_eq!(
-        edit.needs(ItemKind::Pr),
-        [Capability::PrAssignees, Capability::PrMilestones]
-    );
-    assert!(edit.validate(ItemKind::Issue).is_ok() && edit.validate(ItemKind::Pr).is_ok());
 }
 
 #[test]

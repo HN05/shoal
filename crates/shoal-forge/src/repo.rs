@@ -1,4 +1,2 @@
-//! Which repository and item a remote or URL names, without network access.
+//! Forking a repository.
 pub mod fork;
-pub(crate) mod locator;
-pub mod remote_url;

@@ -1,44 +1,11 @@
 //! Who a PR can ask for a review, named as `pr edit --add-reviewer` takes
 //! them, so a client can offer the choices without knowing the forge.
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 
-use crate::{
-    ForgeRepo,
-    account::Account,
-    backends::Reviews,
-    items::{action::ActionRequests, link::ItemKind},
-    numbers::PullNumber,
+use crate::{account::Account, backends::Reviews, items::action::ActionRequests};
+use shoal_forge_types::{
+    ForgeRepo, items::link::ItemKind, numbers::PullNumber, review::reviewers::Reviewer,
 };
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Reviewer {
-    /// What a reviewer change takes: a username, `owner/team` for a team,
-    /// or an account ID where the forge names users by one.
-    pub name: String,
-    /// The name the forge shows, when it has one apart from `name`.
-    pub display_name: String,
-    pub team: bool,
-}
-
-impl Reviewer {
-    pub(crate) fn user(name: impl Into<String>, display_name: Option<&str>) -> Self {
-        Self {
-            name: name.into(),
-            display_name: display_name.unwrap_or_default().to_owned(),
-            team: false,
-        }
-    }
-
-    /// The team `team` of the organization `owner`, shown as `display_name`.
-    pub(crate) fn team(owner: &str, team: &str, display_name: Option<&str>) -> Self {
-        Self {
-            name: format!("{owner}/{team}"),
-            display_name: display_name.unwrap_or_default().to_owned(),
-            team: true,
-        }
-    }
-}
 
 /// A reviewer name that names a team, split into its organization and team;
 /// a username names no team.
@@ -53,9 +20,10 @@ impl ForgeRepo {
     /// order, leaving out its author.
     pub async fn reviewers(&self, account: &Account, number: PullNumber) -> Result<Vec<Reviewer>> {
         // Boxed so each forge's user and team reads stay off the caller's stack.
+        let kind = self.kind();
         let (pr, candidates) = tokio::try_join!(
             self.read(account, ItemKind::Pr, number.get()),
-            Box::pin(self.kind.reviewers(self, account)),
+            Box::pin(kind.reviewers(self, account)),
         )?;
         Ok(candidates
             .into_iter()

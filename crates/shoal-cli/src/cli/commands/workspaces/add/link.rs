@@ -8,8 +8,8 @@ use anyhow::{Context as _, Result, ensure};
 use super::{AddOptions, AgentLaunch};
 use crate::{
     agent::Agent,
-    cli::args::target::StartTarget,
     cli::{
+        args::target::StartTarget,
         client,
         commands::{issues, review},
         context::Context,

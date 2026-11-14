@@ -9,15 +9,12 @@ use crate::{
     daemon::{
         links::space::LinkSpace, notifications::NotificationKind, scope::Caller, workspace::Manager,
     },
-    forge::{
-        ForgeRepo,
-        account::Account,
-        items::{
-            assignment::{Assignment, AssignmentRequests},
-            reference::ItemRef,
-        },
-    },
+    forge::{ForgeRepo, items::reference::ItemRef},
     model::{Assigner, IssueAssignee},
+};
+use shoal_forge::{
+    account::Account,
+    items::assignment::{Assignment, AssignmentRequests},
 };
 
 /// The account a caller assigns an issue as.

@@ -1,7 +1,11 @@
 //! View descriptions, initial picker bindings and in-place transitions.
 use anyhow::{Context as _, Result};
 
-use super::{Entries, Key, Picked, picker::entry_id, picker::fzf_output, picker_width, wrapped};
+use super::{
+    Entries, Key, Picked,
+    picker::{entry_id, fzf_output},
+    picker_width, wrapped,
+};
 use crate::cli::context::Context;
 
 /// The presentation and available actions of one picker view.

@@ -9,8 +9,10 @@ use tokio::signal::unix::{SignalKind, signal};
 
 use crate::{
     cli::{context::Context, progress::Spinner},
-    client::operations::{Followed, Following},
-    client::preparation::{Preparing, Unprepared},
+    client::{
+        operations::{Followed, Following},
+        preparation::{Preparing, Unprepared},
+    },
     paths::CommandPaths,
     protocol::operations::{Ended, OperationSpec, Outcome, Prepared, Progress, Step, Stream},
 };

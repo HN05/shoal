@@ -1,10 +1,10 @@
 use serde_json::json;
 
 use super::*;
-use crate::{
-    backends::Runs,
+use crate::backends::Runs;
+use shoal_forge_types::{
     items::{link::LinkKind, reference::ItemRef},
-    numbers::RunId,
+    numbers::{JobId, RunId},
 };
 
 fn filter(branch: Option<&str>, workflow: Option<&str>) -> RunFilter {
@@ -17,7 +17,7 @@ fn filter(branch: Option<&str>, workflow: Option<&str>) -> RunFilter {
 }
 
 fn path(remote: &str, filter: &RunFilter) -> Result<String> {
-    ForgeRepo::parse(remote)?.kind.runs_path(filter)
+    ForgeRepo::parse(remote)?.kind().runs_path(filter)
 }
 
 #[test]
@@ -101,8 +101,8 @@ fn listed_runs_are_read_like_one_run() -> Result<()> {
     let repo = ForgeRepo::parse("https://gitlab.com/team/repo")?;
     let value = json!([{"id": 12, "web_url": "https://gitlab.com/team/repo/-/pipelines/12",
             "ref": "topic", "tag": false, "status": "failed"}]);
-    let listed = repo.kind.listed_runs(&value).unwrap_or_default();
-    let run = repo.kind.run_item(&repo, &listed[0])?;
+    let listed = repo.kind().listed_runs(&value).unwrap_or_default();
+    let run = repo.kind().run_item(&repo, &listed[0])?;
     assert_eq!(
         (run.branch.as_deref(), run.state),
         (Some("topic"), JobState::Failed)
@@ -124,7 +124,7 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
         succeeded: false,
         waiting: false,
     };
-    let jobs = github.kind.run_jobs(
+    let jobs = github.kind().run_jobs(
         &run,
         0,
         &json!({"jobs": [
@@ -158,7 +158,7 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
         ]
     );
     let gitlab = ForgeRepo::parse("https://gitlab.com/team/repo")?;
-    let jobs = gitlab.kind.run_jobs(
+    let jobs = gitlab.kind().run_jobs(
         &run,
         0,
         &json!([{"id": 1, "name": "rust", "status": "failed"},
@@ -176,7 +176,7 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
         url: "https://codeberg.org/team/repo/actions/runs/2765".into(),
         ..run
     };
-    let jobs = forgejo.kind.run_jobs(
+    let jobs = forgejo.kind().run_jobs(
         &run,
         100,
         &json!([{"id": 1, "name": "audit", "status": "success", "run_id": 9331},
@@ -255,29 +255,6 @@ fn jobs_are_selected_by_id_or_by_a_name_no_other_job_has() -> Result<()> {
 }
 
 #[test]
-fn a_failed_run_whose_only_stopped_jobs_were_cancelled_was_cancelled() {
-    let job = |state| RunJob {
-        id: JobId::new(1),
-        name: "rust".into(),
-        state,
-        url: None,
-    };
-    let states = |states: &[JobState]| states.iter().copied().map(job).collect::<Vec<_>>();
-    assert_eq!(
-        stopped_run_state(&states(&[JobState::Finished, JobState::Cancelled])),
-        JobState::Cancelled
-    );
-    assert_eq!(
-        stopped_run_state(&states(&[JobState::Failed, JobState::Cancelled])),
-        JobState::Failed
-    );
-    assert_eq!(
-        stopped_run_state(&states(&[JobState::Finished])),
-        JobState::Failed
-    );
-}
-
-#[test]
 fn filters_need_a_bounded_limit_and_nonempty_names() {
     assert!(validate_filter(&filter(Some("topic"), Some("ci.yml"))).is_ok());
     assert!(validate_filter(&filter(Some(" "), None)).is_err());
@@ -288,10 +265,8 @@ fn filters_need_a_bounded_limit_and_nonempty_names() {
 
 #[tokio::test]
 async fn a_run_whose_jobs_were_cancelled_reports_it_and_keeps_their_logs() -> Result<()> {
-    use crate::{
-        backends::ForgeKind,
-        test_support::{Server, agent_on, repo_on},
-    };
+    use crate::test_support::{Server, agent_on, repo_on};
+    use shoal_forge_types::backends::ForgeKind;
     let server = Server::start(|request| {
         let body = match request.line.as_str() {
             "GET /api/v1/repos/team/repo/actions/runs?run_number=7" => json!({"workflow_runs": [
@@ -337,10 +312,8 @@ async fn a_run_whose_jobs_were_cancelled_reports_it_and_keeps_their_logs() -> Re
 
 #[tokio::test]
 async fn a_listed_failed_run_takes_the_state_its_jobs_show() -> Result<()> {
-    use crate::{
-        backends::ForgeKind,
-        test_support::{Server, agent_on, repo_on},
-    };
+    use crate::test_support::{Server, agent_on, repo_on};
+    use shoal_forge_types::backends::ForgeKind;
     let run = |id: u64, status: &str| {
         json!({"id": id, "index_in_repo": id, "status": status, "prettyref": "main",
             "workflow_id": "ci.yml", "commit_sha": "abc"})

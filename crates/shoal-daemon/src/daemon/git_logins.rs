@@ -6,8 +6,8 @@ use crate::{
     client::agents::GitCredential,
     config::forges::Whose,
     daemon::{scope::Caller, workspace::Manager},
-    forge::backends::SignIn,
 };
+use shoal_forge::backends::SignIn;
 
 impl Manager {
     /// The agent token `[machine.forges]` sets for `host`, as Git names it,

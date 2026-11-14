@@ -78,7 +78,7 @@ impl CheckState {
 
 /// A saved check's state, in any casing: saved snapshots spell states as
 /// `Success` or `SUCCESS`.
-pub(crate) fn saved<'de, D: Deserializer<'de>>(deserializer: D) -> Result<CheckState, D::Error> {
+pub fn saved<'de, D: Deserializer<'de>>(deserializer: D) -> Result<CheckState, D::Error> {
     let text = String::deserialize(deserializer)?;
     CheckState::parse(&text)
         .ok_or_else(|| serde::de::Error::custom(format!("unknown CI check state {text}")))

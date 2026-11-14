@@ -6,24 +6,27 @@ use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 
 use super::GitHub;
-use crate::review::status::StatusRecords;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{Activity, LoginHint, rest::read_pull},
+    items::action::ActionRequests,
+    review::{
+        status::{StatusRecords, github_reviews},
+        view::login,
+    },
+    transport::api::{Request, TransportRequests},
+    updates::{Check, DISCUSSION, Entry, Snapshot, id_text},
+};
+use shoal_forge_types::review::view::{Details, Review};
+use shoal_forge_types::{
+    ForgeRepo,
     ci::check_state::CheckState,
     items::{
-        action::ActionRequests,
         item::{Current, ItemState},
         link::ItemKind,
     },
     numbers::{IssueNumber, PullNumber},
-    review::{
-        status::{PrState, PrStatus, github_reviews},
-        view::{Details, Review, login},
-    },
-    transport::api::{Request, TransportRequests},
-    updates::{Check, DISCUSSION, Entry, Snapshot, id_text},
+    review::status::{PrState, PrStatus},
 };
 
 mod view;
@@ -52,7 +55,7 @@ impl Activity for GitHub {
         repo: &ForgeRepo,
         account: &Account,
         number: PullNumber,
-        pull: &crate::items::reference::ItemRef,
+        pull: &shoal_forge_types::items::reference::ItemRef,
     ) -> Result<PrStatus> {
         pr_status(repo, account, number, pull)
             .await
@@ -120,7 +123,7 @@ async fn pr_status(
     repo: &ForgeRepo,
     account: &Account,
     number: PullNumber,
-    pull_ref: &crate::items::reference::ItemRef,
+    pull_ref: &shoal_forge_types::items::reference::ItemRef,
 ) -> Result<PrStatus> {
     let pull = repo.read(account, ItemKind::Pr, number.get()).await?;
     let (checks, reviews) = tokio::join!(

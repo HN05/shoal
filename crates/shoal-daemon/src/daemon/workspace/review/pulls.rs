@@ -9,9 +9,10 @@ use shoal_refs::CommitId;
 use super::super::Manager;
 use crate::{
     daemon::links::{space::LinkSpace, wait::linked_items},
-    forge::items::{action::ActionRequests, item::unmarkable_reason, link::ItemKind},
+    forge::items::{item::unmarkable_reason, link::ItemKind},
     model::SkippedPr,
 };
+use shoal_forge::items::action::ActionRequests;
 
 /// The linked PRs a mark covers, sorted by whether they can be marked.
 #[derive(Default)]

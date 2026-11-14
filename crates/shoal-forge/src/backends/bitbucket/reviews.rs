@@ -6,23 +6,23 @@ use serde_json::{Value, json};
 
 use super::{Bitbucket, listed, roots};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Reviews,
-    items::{
-        item::{Current, ItemRequests, text},
-        link::ItemKind,
-    },
-    numbers::{CommentId, PullNumber},
-    raw::HttpMethod,
+    items::item::{ItemRequests, text},
     review::{
         diff::Diff,
-        reviewers::Reviewer,
-        submit::{PlacedReview, ReviewVerdict, Side, Submission},
-        thread::{Target, Thread},
+        submit::{PlacedReview, Submission},
     },
     transport::api::{Request, TransportRequests},
 };
+use shoal_forge_types::review::{submit::ReviewVerdict, thread::Target};
+use shoal_forge_types::{
+    ForgeRepo,
+    items::{item::Current, link::ItemKind},
+    numbers::{CommentId, PullNumber},
+    review::{reviewers::Reviewer, thread::Thread},
+};
+use shoal_forge_types::{raw::HttpMethod, review::submit::Side};
 
 impl Reviews for Bitbucket {
     /// The members of the repository's workspace, by Atlassian account ID.

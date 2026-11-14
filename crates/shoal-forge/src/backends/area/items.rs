@@ -4,20 +4,22 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::{
-    ForgeRepo,
     account::Account,
-    backends::{Backend, ForgeKind, LoginHint, rest},
+    backends::{Backend, LoginHint, rest},
+    items::{action::ActionRequests, comment::Found, create::Head, reaction::Subject},
+    transport::api::Request,
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    backends::ForgeKind,
     items::{
-        action::{ActionRequests, Edit},
-        comment::Found,
-        create::{Head, NewIssue, NewPull},
+        action::Edit,
+        create::{NewIssue, NewPull},
         item::{Current, Item, ItemState},
         link::ItemKind,
-        list,
-        reaction::Subject,
+        list::Search,
     },
     numbers::{IssueNumber, PullNumber},
-    transport::api::Request,
 };
 
 /// How the forge reads, lists, opens, edits and comments on issues
@@ -46,7 +48,7 @@ pub(crate) trait Items: Backend {
         repo: &ForgeRepo,
         account: &Account,
         kind: ItemKind,
-        search: &list::Search,
+        search: &Search,
     ) -> Result<Vec<Item>>;
 
     /// An issue's state; a PR's number is refused.

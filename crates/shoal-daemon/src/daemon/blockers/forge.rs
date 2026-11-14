@@ -5,12 +5,10 @@ use std::collections::HashSet;
 use super::{Lookup, Lookups, Target};
 use crate::{
     daemon::workspace::Manager,
-    forge::{
-        clearance::{Clearance, NewestRuns, clearance},
-        items::{link::LinkKind, reference::ItemRef},
-    },
+    forge::items::{link::LinkKind, reference::ItemRef},
     state::BlockerKind,
 };
+use shoal_forge::clearance::{Clearance, NewestRuns, clearance};
 
 impl Manager {
     /// What the forge says of each of the forge blockers among `targets`.

@@ -40,17 +40,14 @@ use crate::{
         scope::Caller,
         workspace::{Manager, review},
     },
-    forge::{
-        ci::run_view::RunViewRequests,
-        items::{
-            action::ActionRequests,
-            link::{ItemKind, LinkKind},
-            reference::{ItemInput, ItemRef},
-        },
+    forge::items::{
+        link::{ItemKind, LinkKind},
+        reference::{ItemInput, ItemRef},
     },
     model::{LinkedItem, Relation},
     state::WorkspaceState,
 };
+use shoal_forge::{ci::run_view::RunViewRequests, items::action::ActionRequests};
 
 impl Manager {
     /// Link the item `input` names with `relation`; an issue or PR linked

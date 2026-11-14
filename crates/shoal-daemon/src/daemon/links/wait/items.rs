@@ -13,16 +13,14 @@ use crate::{
         },
         workspace::Manager,
     },
-    forge::{
-        items::{
-            link::{ItemKind, LinkKind, Selection},
-            reference::{ItemInput, ItemRef},
-        },
-        updates::Snapshot,
+    forge::items::{
+        link::{ItemKind, LinkKind, Selection},
+        reference::{ItemInput, ItemRef},
     },
     model::PresentSpace,
     repository,
 };
+use shoal_forge::updates::Snapshot;
 
 pub(super) const NO_LINKED_ITEMS: &str =
     "no linked items of the selected kind; register one with shoal link";

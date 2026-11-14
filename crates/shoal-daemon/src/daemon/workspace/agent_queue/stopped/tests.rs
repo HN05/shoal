@@ -19,8 +19,10 @@ use crate::{
     execution::recovery::record_path,
     model::Workspace,
     protocol::QueuedLaunches,
-    state::QueueKind::Restore,
-    state::QueueState::{Queued, Starting},
+    state::{
+        QueueKind::Restore,
+        QueueState::{Queued, Starting},
+    },
 };
 
 /// The variables the restores of these tests start with.

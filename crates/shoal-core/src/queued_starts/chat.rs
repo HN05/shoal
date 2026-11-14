@@ -11,7 +11,11 @@ use crate::client::{
     repository_ids::RepositoryId,
     space_names::{SpaceName, SpaceSelector},
 };
-use crate::{model::Repository, paths::CommandPaths, protocol::ChatStart, protocol::ConfigTarget};
+use crate::{
+    model::Repository,
+    paths::CommandPaths,
+    protocol::{ChatStart, ConfigTarget},
+};
 
 /// What the queue's start of a chat launch runs, which a launch of a new
 /// workspace's plan tells apart by its `chat_start`.

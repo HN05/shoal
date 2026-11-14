@@ -3,11 +3,11 @@ use anyhow::{Result, bail};
 
 use super::Bitbucket;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Checks,
-    ci::{CiAction, CiCheck, Job, Location, Operation},
+    ci::{CiCheck, Job, Location, Operation},
 };
+use shoal_forge_types::{ForgeRepo, ci::CiAction};
 
 impl Checks for Bitbucket {
     /// No CI job Shoal can act on, since it reads no Pipelines jobs.

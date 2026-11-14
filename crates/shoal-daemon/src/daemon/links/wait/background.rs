@@ -15,12 +15,10 @@ use crate::{
         links::space::{LinkSpace, require_ready_space},
         workspace::Manager,
     },
-    forge::{
-        items::link::Selection,
-        updates::{Snapshot, UpdateKind},
-    },
+    forge::{items::link::Selection, updates::UpdateKind},
     time::UnixTime,
 };
+use shoal_forge::updates::Snapshot;
 
 /// How many spaces the background poll reads at once: a slow forge must not
 /// hold back every other space's poll.

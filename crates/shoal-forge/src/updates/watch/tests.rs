@@ -1,7 +1,8 @@
 use serde_json::{Value, json};
 
 use super::*;
-use crate::updates::{SnapshotState, UpdateKind};
+use shoal_forge_types::updates::SnapshotState;
+use shoal_forge_types::updates::UpdateKind;
 
 fn snapshot(comments: Value, state: &str) -> Snapshot {
     serde_json::from_value(json!({"kind": "pr", "comments": comments, "checks": {},

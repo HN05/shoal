@@ -7,22 +7,24 @@ use futures_util::{StreamExt, TryStreamExt};
 use serde_json::Value;
 use shoal_refs::CommitId;
 
-use crate::review::status::StatusRecords;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{Backend, LoginHint},
-    ci::check_state::CheckState,
-    items::{
-        action::ActionRequests,
-        item::{Current, Item, ItemRequests, ItemState},
-        link::ItemKind,
-        list,
-    },
-    numbers::{IssueNumber, PullNumber},
-    review::status::{PrState, PrStatus, Verdict},
+    items::{action::ActionRequests, item::ItemRequests},
+    review::status::{StatusRecords, Verdict},
     transport::api::TransportRequests,
     updates::{DISCUSSION, Entry, Snapshot, verdict_entries},
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    ci::check_state::CheckState,
+    items::{
+        item::{Current, Item, ItemState},
+        link::ItemKind,
+        list::Search,
+    },
+    numbers::{IssueNumber, PullNumber},
+    review::status::{PrState, PrStatus},
 };
 
 /// A CI check, by its name.
@@ -128,7 +130,7 @@ pub(crate) async fn pr_status(
     repo: &ForgeRepo,
     account: &Account,
     number: PullNumber,
-    pull_ref: &crate::items::reference::ItemRef,
+    pull_ref: &shoal_forge_types::items::reference::ItemRef,
 ) -> Result<PrStatus> {
     async {
         let pull = repo.read(account, ItemKind::Pr, number.get()).await?;
@@ -190,8 +192,8 @@ pub(crate) async fn merged_commits(
     let commits = repo
         .pages(account, &endpoint)
         .await
-        .hint_login(&repo.kind)?;
-    commit_shas(&commits, repo.kind.commit_field()).map(Some)
+        .hint_login(&repo.kind())?;
+    commit_shas(&commits, repo.kind().commit_field()).map(Some)
 }
 
 /// The PR, suggesting logging in when the request fails.
@@ -202,7 +204,7 @@ pub(crate) async fn read_pull(
 ) -> Result<Current> {
     repo.read(account, ItemKind::Pr, number.get())
         .await
-        .hint_login(&repo.kind)
+        .hint_login(&repo.kind())
 }
 
 /// Up to `search.limit` items of `kind` that a list endpoint under the
@@ -212,7 +214,7 @@ pub(crate) async fn list_items(
     account: &Account,
     kind: ItemKind,
     endpoint: &str,
-    search: &list::Search,
+    search: &Search,
 ) -> Result<Vec<Item>> {
     listed(repo, account, endpoint, search.limit, |value| {
         let item = repo.current(kind, listed_number(repo, value)?, value)?.item;
@@ -270,13 +272,13 @@ async fn listed<T>(
         Ok(entries.len() < limit)
     })
     .await
-    .hint_login(&repo.kind)?;
+    .hint_login(&repo.kind())?;
     entries.truncate(limit);
     Ok(entries)
 }
 
 fn listed_number(repo: &ForgeRepo, value: &Value) -> Result<u64> {
-    value[repo.kind.number_field()]
+    value[repo.kind().number_field()]
         .as_u64()
         .filter(|number| *number > 0)
         .context("listed item has no number")
@@ -291,7 +293,7 @@ pub(crate) async fn issue_state(
     Ok(repo
         .read(account, ItemKind::Issue, number.get())
         .await
-        .hint_login(&repo.kind)?
+        .hint_login(&repo.kind())?
         .item
         .state)
 }
@@ -304,7 +306,7 @@ pub(crate) async fn issue_details(
 ) -> Result<Current> {
     repo.read(account, ItemKind::Issue, number.get())
         .await
-        .hint_login(&repo.kind)
+        .hint_login(&repo.kind())
 }
 
 /// Full commit IDs, refusing anything else so cleanup never matches a prefix.

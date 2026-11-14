@@ -6,21 +6,24 @@ use shoal_refs::CommitId;
 
 use super::{GitLab, status_state};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Runs,
     ci::{
-        CiAction, JobState, Location,
-        check_state::CheckState,
-        checks::CheckSteps,
-        run::NewRun,
-        run_action::{Run, RunOperation},
-        run_view::{JOBS_PAGE, RunFilter, RunJob},
+        Location, checks::CheckSteps, run::NewRun, run_action::RunOperation, run_view::JOBS_PAGE,
     },
     items::item::text,
+    transport::api::{Request, TransportRequests, encode},
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    ci::{
+        CiAction, JobState,
+        check_state::CheckState,
+        run_action::Run,
+        run_view::{RunFilter, RunJob},
+    },
     numbers::{JobId, RunId, RunNumber},
     raw::HttpMethod,
-    transport::api::{Request, TransportRequests, encode},
 };
 
 impl Runs for GitLab {

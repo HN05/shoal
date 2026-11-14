@@ -1,7 +1,9 @@
 use serde_json::json;
 
 use super::*;
-use crate::{ci::check_state::CheckState, review::status::CheckResult, updates::UpdateKind};
+use shoal_forge_types::{
+    ci::check_state::CheckState, review::status::CheckResult, updates::UpdateKind,
+};
 
 /// An open PR at `head` with `checks` by name and state, `pending` unfinished.
 fn snapshot(head: &str, checks: &[(&str, &str)]) -> Snapshot {

@@ -4,13 +4,17 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
-    ForgeRepo,
     account::Account,
-    backends::{Backend, ForgeKind},
-    capability::Capability,
-    ci::runner::{JobCommand, JobLaunch, JobRun, RegisteredRunner, RunnerState, WaitingJob},
-    numbers::{RunId, RunnerId},
+    backends::Backend,
+    ci::runner::{JobCommand, JobLaunch, RegisteredRunner, RunnerState},
     transport::api::Request,
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    backends::ForgeKind,
+    capability::Capability,
+    ci::runner::{JobRun, WaitingJob},
+    numbers::{RunId, RunnerId},
 };
 
 /// How the forge registers runners on this machine and has them take

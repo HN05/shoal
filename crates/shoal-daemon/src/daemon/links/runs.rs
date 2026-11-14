@@ -13,13 +13,13 @@ use crate::{
     daemon::{links::actions::Place, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
-        capability::{Capability, CapabilityRequests},
+        capability::Capability,
         ci::{
             CiAction,
-            checks::{CheckLog, CheckRequests},
-            run::{NewRun, RunRequests, StartedRun},
-            run_action::{Run, RunActed, RunActionRequests},
-            run_view::{JobRef, RunFilter, RunJob, RunViewRequests, validate_filter},
+            checks::CheckLog,
+            run::StartedRun,
+            run_action::{Run, RunActed},
+            run_view::{JobRef, RunFilter, RunJob},
         },
         items::{
             link::{ItemKind, LinkKind},
@@ -28,6 +28,15 @@ use crate::{
     },
     model::{LinkedItem, Relation},
     protocol::ItemContext,
+};
+use shoal_forge::{
+    capability::CapabilityRequests,
+    ci::{
+        checks::CheckRequests,
+        run::{NewRun, RunRequests},
+        run_action::RunActionRequests,
+        run_view::{RunViewRequests, validate_filter},
+    },
 };
 
 impl Manager {

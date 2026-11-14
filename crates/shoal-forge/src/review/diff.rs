@@ -2,11 +2,10 @@
 //! are checked against it before anything is posted.
 use anyhow::{Context, Result, bail, ensure};
 
-use crate::{
+use crate::{account::Account, backends::Reviews, items::action::ActionRequests};
+use shoal_forge_types::{
     ForgeRepo,
-    account::Account,
-    backends::Reviews,
-    items::{action::ActionRequests, item::Current, link::ItemKind},
+    items::{item::Current, link::ItemKind},
     review::submit::{LineComment, Side},
 };
 
@@ -87,7 +86,7 @@ impl ForgeRepo {
     /// the PR gained commits while the forge was asked.
     pub async fn pr_diff(&self, account: &Account, current: &Current) -> Result<Diff> {
         let number = current.item.number;
-        let diff = self.kind.pr_diff(self, account, current).await?;
+        let diff = self.kind().pr_diff(self, account, current).await?;
         let now = self.read(account, ItemKind::Pr, number).await?;
         ensure!(
             now.head_sha == current.head_sha,

@@ -99,7 +99,7 @@ pub fn is_item_link(input: &str) -> bool {
 impl ForgeRepo {
     /// The number and canonical URL of the `kind` item `input`, its number
     /// or URL, names.
-    pub(crate) fn item(&self, kind: LinkKind, input: &str) -> Result<(u64, String)> {
+    pub fn item(&self, kind: LinkKind, input: &str) -> Result<(u64, String)> {
         match kind {
             LinkKind::Issue => self.issue(input).map(|(number, url)| (number.get(), url)),
             LinkKind::Pr => self.pull(input).map(|(number, url)| (number.get(), url)),
@@ -108,7 +108,7 @@ impl ForgeRepo {
     }
 
     /// The URL of the `kind` item numbered `number` in this repository.
-    pub(crate) fn numbered_url(&self, kind: LinkKind, number: u64) -> Result<String> {
+    pub fn numbered_url(&self, kind: LinkKind, number: u64) -> Result<String> {
         Ok(match kind {
             LinkKind::Issue => self.kind.issue_route().url_of(self, number),
             LinkKind::Pr => self.kind.pull_route().url_of(self, number),
@@ -117,7 +117,7 @@ impl ForgeRepo {
     }
 
     /// The repository a `kind` item URL belongs to.
-    pub(crate) fn from_item_url(kind: LinkKind, url: &str) -> Result<Self> {
+    pub fn from_item_url(kind: LinkKind, url: &str) -> Result<Self> {
         let (repository, forge) = item_repository(kind, url)?;
         Self::parse_linked(repository, forge)
     }
@@ -195,7 +195,7 @@ fn contained_routes(forge: ForgeKind) -> usize {
         .count()
 }
 
-pub(crate) fn decode_branch(input: &str) -> Result<String> {
+pub fn decode_branch(input: &str) -> Result<String> {
     let mut bytes = Vec::new();
     let mut input = input.bytes();
     while let Some(byte) = input.next() {

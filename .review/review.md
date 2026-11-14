@@ -24,23 +24,27 @@ instead of the PR delivery guidance below.
   request through a named client operation and never builds one itself.
   Parsing and resolving config live in `shoal-core`; the protocol carries a
   target's repository layers without reading them. `shoal-client` depends on
-  no Shoal crate but `shoal-forge`, `shoal-refs`, `shoal-states`, `shoal-time`
-  and `shoal-config-derive`.
+  no Shoal crate but `shoal-forge-types`, `shoal-refs`, `shoal-states`,
+  `shoal-time` and `shoal-config-derive`.
 - The CLI (`crates/shoal-cli`) and the daemon (`crates/shoal-daemon`) depend
   on neither each other; the `shoal` package's `main` joins them. Code they
   share lives in `crates/shoal-core`, which names neither and depends on no
   Shoal crate but `shoal-client`, `shoal-config-derive`, `shoal-forge`,
-  `shoal-proxy`, `shoal-refs`, `shoal-states` and `shoal-subprocess`. Flag an item there made `pub` that no
+  `shoal-forge-types`, `shoal-proxy`, `shoal-refs`, `shoal-states` and
+  `shoal-subprocess`. Flag an item there made `pub` that no
   other Shoal crate uses, and test fixtures outside its `test-support` feature that other
   crates' tests need.
 - `crates/shoal-cli` serves only the CLI: flag code there that the daemon, the
   execution wrapper, the proxy or the workers need.
-- Forge requests, and logic that reads forge data without the daemon's state,
-  such as check states, item snapshots, item URLs and run IDs, live in
-  `crates/shoal-forge`, never in `shoal-daemon` or `shoal-cli`; scope, approvals,
-  identity choice and workspace records stay in the daemon. Flag a match on
-  the forge kind outside a forge's implementation of `Backend` or an area
-  trait over it, a backend `impl` that spans several areas, and a match that picks
+- Forge requests live in `crates/shoal-forge`, and the forge data the
+  protocol carries, with the logic that reads it without a request or the
+  daemon's state, such as item URLs, check states, item snapshots and run IDs,
+  in `crates/shoal-forge-types`, never in `shoal-daemon` or `shoal-cli`;
+  scope, approvals, identity choice and workspace records stay in the daemon.
+  Flag a request, or a dependency that sends one, in `shoal-forge-types`, a
+  re-export of its types from `shoal-forge`, and a match on the forge kind
+  outside a forge's implementation of `Routes`, `Backend` or an area trait
+  over it, a backend `impl` that spans several areas, and a match that picks
   `issue`, `pull` or `run` by an item's kind outside `ForgeRepo`'s one
   operation for it.
 - The minimum Rust version follows current stable; keep the manifest and CI

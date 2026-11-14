@@ -7,8 +7,10 @@ use anyhow::{Context as _, Result};
 
 use super::{
     Beside, current_origin, enabled_host, groups, naming,
-    opening::{chat_place_env, open_add, open_in_background, rerun_in_host, reusable_place},
-    opening::{shoal_command, start_in_background},
+    opening::{
+        chat_place_env, open_add, open_in_background, rerun_in_host, reusable_place, shoal_command,
+        start_in_background,
+    },
 };
 use crate::client::space_names::SpaceSelector;
 use crate::{

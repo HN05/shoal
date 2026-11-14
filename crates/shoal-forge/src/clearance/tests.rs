@@ -1,5 +1,5 @@
 use super::*;
-use crate::{ci::JobState, items::link::LinkKind, numbers::RunId};
+use shoal_forge_types::{ci::JobState, items::link::LinkKind, numbers::RunId};
 
 fn run(id: u64, state: JobState) -> Run {
     Run {
@@ -70,11 +70,9 @@ fn a_run_clears_once_a_later_run_on_the_default_branch_passes() {
 
 #[tokio::test]
 async fn blocking_runs_of_one_workflow_share_one_read_of_the_default_branch() -> Result<()> {
-    use crate::{
-        backends::ForgeKind,
-        test_support::{Server, agent_on, repo_on},
-    };
+    use crate::test_support::{Server, agent_on, repo_on};
     use serde_json::json;
+    use shoal_forge_types::backends::ForgeKind;
     let forgejo_run = |id: u64, number: u64, branch: &str, status: &str| {
         json!({"id": id, "index_in_repo": number, "prettyref": branch,
             "workflow_id": "ci.yml", "commit_sha": "0123456789abcdef", "status": status})

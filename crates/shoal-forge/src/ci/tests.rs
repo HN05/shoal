@@ -1,5 +1,5 @@
 use super::*;
-use crate::backends::{forgejo::Forgejo, github::GitHub};
+use shoal_forge_types::backends::{forgejo::Forgejo, github::GitHub};
 
 fn job(name: &str, state: JobState, location: Option<Location>) -> Job {
     Job {

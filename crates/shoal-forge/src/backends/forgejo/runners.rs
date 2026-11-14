@@ -1,6 +1,6 @@
 //! Forgejo's runner API and `forgejo-runner`: the job search, a run's event,
 //! repository runners, and `forgejo-runner one-job` on the host backend.
-use crate::items::{link::LinkKind, reference::ItemRef};
+use shoal_forge_types::items::{link::LinkKind, reference::ItemRef};
 use std::ffi::OsString;
 
 use anyhow::{Context, Result};
@@ -8,16 +8,16 @@ use serde_json::Value;
 
 use super::Forgejo;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Runners,
-    ci::runner::{
-        JobCommand, JobLaunch, JobRun, RegisteredRunner, Trigger, WaitingJob, file_url,
-        registration,
-    },
+    ci::runner::{JobCommand, JobLaunch, RegisteredRunner, file_url, registration},
+    transport::api::{Request, TransportRequests, encode},
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    ci::runner::{JobRun, Trigger, WaitingJob},
     numbers::{JobId, RunId, RunnerId},
     raw::HttpMethod,
-    transport::api::{Request, TransportRequests, encode},
 };
 
 impl Runners for Forgejo {

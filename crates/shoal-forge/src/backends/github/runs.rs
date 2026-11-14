@@ -6,21 +6,28 @@ use shoal_refs::CommitId;
 
 use super::{GitHub, actions};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Runs,
     ci::{
-        CiAction, Location,
+        Location,
         approval::RUNS_PAGE,
         checks::CheckSteps,
         run::{NewRun, workflow_segment},
-        run_action::{Run, RunOperation},
-        run_view::{JOBS_PAGE, RunFilter, RunJob},
+        run_action::RunOperation,
+        run_view::JOBS_PAGE,
     },
     items::item::text,
+    transport::api::{Request, TransportRequests, encode},
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    ci::{
+        CiAction,
+        run_action::Run,
+        run_view::{RunFilter, RunJob},
+    },
     numbers::{JobId, PullNumber, RunId, RunNumber},
     raw::HttpMethod,
-    transport::api::{Request, TransportRequests, encode},
 };
 
 impl Runs for GitHub {

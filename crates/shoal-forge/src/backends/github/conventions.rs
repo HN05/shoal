@@ -5,8 +5,9 @@ use super::GitHub;
 use crate::{
     backends::Conventions,
     conventions::{Lookup, shared_lookups},
-    items::{item::text, link::ItemKind},
+    items::item::text,
 };
+use shoal_forge_types::items::link::ItemKind;
 
 impl Conventions for GitHub {
     fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {

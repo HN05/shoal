@@ -17,13 +17,16 @@ use crate::{
     client::{repository_ids::RepositoryId, space_ids::SpaceId, space_names::SpaceSelector},
     daemon::{links::space::LinkSpace, notifications::NotificationKind, workspace::Manager},
     forge::{
-        account::Account,
         items::link::{LinkKind, Selection},
-        transport::limits::rate_limited,
-        updates::{Snapshot, Update, UpdateRequests},
+        updates::Update,
     },
     model::PresentSpace,
     time::UnixTime,
+};
+use shoal_forge::{
+    account::Account,
+    transport::limits::rate_limited,
+    updates::{Snapshot, UpdateRequests},
 };
 
 pub(super) const POLL_INTERVAL: Duration = Duration::from_secs(30);

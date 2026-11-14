@@ -1,7 +1,7 @@
 //! Git remote syntax, separate from registration and forge lookup policy.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Transport<'a> {
+pub enum Transport<'a> {
     Http,
     Https,
     Ssh,
@@ -15,7 +15,7 @@ pub struct RemoteUrl<'a> {
     source: &'a str,
     pub host: Option<&'a str>,
     pub path: Option<&'a str>,
-    pub(crate) transport: Transport<'a>,
+    pub transport: Transport<'a>,
 }
 
 impl<'a> RemoteUrl<'a> {
@@ -80,7 +80,7 @@ pub fn source_name(source: &str) -> &str {
     repository_path(source.rsplit(['/', ':']).next().unwrap_or(source))
 }
 
-pub(crate) fn repository_path(path: &str) -> &str {
+pub fn repository_path(path: &str) -> &str {
     let path = path.trim_end_matches('/');
     path.strip_suffix(".git").unwrap_or(path)
 }

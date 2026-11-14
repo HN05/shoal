@@ -23,17 +23,23 @@ use crate::{
     },
     forge::{
         ForgeRepo,
-        account::Account,
-        conventions,
         items::{
-            action::{Action, ActionRequests, Edit, Sent},
-            create::{CreateRequests, NewIssue, NewPull},
+            action::{Action, Edit},
+            create::{NewIssue, NewPull},
             item::{Item, Opened},
             link::{ItemKind, LinkKind},
             reference::{ItemInput, ItemRef},
         },
     },
     model::Workspace,
+};
+use shoal_forge::{
+    account::Account,
+    conventions,
+    items::{
+        action::{ActionRequests, Sent},
+        create::CreateRequests,
+    },
 };
 
 /// Operations on the client type [`OpenOutcome`] that only the `shoal` command uses.

@@ -6,7 +6,6 @@ use shoal_refs::BranchName;
 
 use super::{Forgejo, actions};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{
         Items, LoginHint,
@@ -14,18 +13,21 @@ use crate::{
         rest,
     },
     conventions::{draft::DraftMarker, labels::LabelRequests},
+    items::{create::Head, item::text, reaction::Subject},
+    transport::api::{Request, TransportRequests, encode},
+    updates::DISCUSSION,
+};
+use shoal_forge_types::{
+    ForgeRepo,
     items::{
         action::Edit,
-        create::{Head, NewIssue, NewPull},
-        item::{Current, Item, ItemState, text},
+        create::{NewIssue, NewPull},
+        item::{Current, Item, ItemState},
         link::ItemKind,
-        list,
-        reaction::Subject,
+        list::Search,
     },
     numbers::{CommentId, IssueNumber, PullNumber},
     raw::HttpMethod,
-    transport::api::{Request, TransportRequests, encode},
-    updates::DISCUSSION,
 };
 
 impl Items for Forgejo {
@@ -50,7 +52,7 @@ impl Items for Forgejo {
         repo: &ForgeRepo,
         account: &Account,
         kind: ItemKind,
-        search: &list::Search,
+        search: &Search,
     ) -> Result<Vec<Item>> {
         let endpoint = search_endpoint(kind, search);
         if kind == ItemKind::Issue {
@@ -254,7 +256,7 @@ fn exclusive_scope(name: &str) -> Option<&str> {
 }
 
 /// The issue list endpoint that runs `search` for items of `kind`.
-fn search_endpoint(kind: ItemKind, search: &list::Search) -> String {
+fn search_endpoint(kind: ItemKind, search: &Search) -> String {
     let kind = match kind {
         ItemKind::Issue => "issues",
         ItemKind::Pr => "pulls",

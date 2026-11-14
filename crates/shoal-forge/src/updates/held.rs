@@ -3,7 +3,8 @@
 use serde::{Deserialize, Serialize};
 use shoal_refs::CommitId;
 
-use crate::updates::{Snapshot, Update};
+use crate::updates::Snapshot;
+use shoal_forge_types::updates::Update;
 
 /// The passing checks of a head commit that are not delivered yet.
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

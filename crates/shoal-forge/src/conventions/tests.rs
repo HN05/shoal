@@ -1,5 +1,5 @@
 use super::*;
-use crate::items::item::ItemState;
+use shoal_forge_types::items::item::ItemState;
 
 fn item(kind: ItemKind) -> Item {
     Item {

@@ -9,13 +9,13 @@ use super::{
     store::{self, Session},
     verdict::Verdict,
 };
+use crate::agent::{Agent, AgentSessionId};
 use crate::client::{approvals::GateVerdict, events::GateEvent, time::UnixTime};
 use crate::daemon::{
     approvals::{ApprovalRequest, gated, proposals::ProposalDecision},
     events, log,
     workspace::{Manager, Source},
 };
-use crate::{agent::Agent, agent::AgentSessionId};
 
 /// A verdict as the gate's records keep it.
 struct Recorded<'a> {

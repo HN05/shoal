@@ -3,12 +3,12 @@ use std::sync::{Arc, Mutex};
 use super::*;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{configure, git, manager, repository};
-use crate::forge::test_support::Server;
 use crate::{
     model::Workspace,
     removal::{InspectionPolicy, UnsavedWork},
 };
 use serde_json::{Value, json};
+use shoal_forge::test_support::Server;
 
 /// Which assignee edits the scripted forge refuses.
 #[derive(Clone, Copy, PartialEq)]

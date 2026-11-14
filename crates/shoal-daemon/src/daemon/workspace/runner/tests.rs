@@ -4,8 +4,7 @@ use crate::client::space_ids::SpaceId;
 use std::{
     collections::HashMap,
     ffi::OsString,
-    os::unix::fs::PermissionsExt as _,
-    os::unix::process::CommandExt as _,
+    os::unix::{fs::PermissionsExt as _, process::CommandExt as _},
     sync::{Arc, LazyLock, Mutex},
 };
 
@@ -19,10 +18,11 @@ use crate::{
         test_support::{configure, git, manager, repository},
         workspace::{Ending, ExecutionKind, Manager, StartedExecution},
     },
-    forge::{RepoRequests, backends::ForgeKind, ci::runner::JobCommand, test_support::Server},
+    forge::backends::ForgeKind,
     model::{QueueEntry, Workspace},
     state::{QueueKind, QueueState},
 };
+use shoal_forge::{RepoRequests, ci::runner::JobCommand, test_support::Server};
 
 /// A test launch's command and the execution standing in for it.
 type Launched = (JobCommand, StartedExecution);

@@ -6,11 +6,8 @@ use anyhow::{Result, bail, ensure};
 use futures_util::future::BoxFuture;
 use tokio::sync::OnceCell;
 
-use crate::{
-    ForgeRepo,
-    backends::{Backend, ForgeKind},
-    transport::memory::Memory,
-};
+use crate::{backends::Backend, transport::memory::Memory};
+use shoal_forge_types::{ForgeRepo, backends::ForgeKind};
 /// Fetches the token of one login, such as by running a command; the
 /// caller owns where it comes from and what a failure names.
 pub trait Token: Send + Sync {
@@ -119,7 +116,7 @@ impl Account {
         let Some(signer) = self.signer(&repo.host) else {
             return Ok(None);
         };
-        signer.authorization(repo.kind).await.map(Some)
+        signer.authorization(repo.kind()).await.map(Some)
     }
 
     /// Refuse a change to `repo` without the account's own login for its

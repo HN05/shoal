@@ -1,10 +1,8 @@
 use serde_json::json;
 
 use super::*;
-use crate::{
-    backends::ForgeKind,
-    test_support::{Server, agent_on, repo_on},
-};
+use crate::test_support::{Server, agent_on, repo_on};
+use shoal_forge_types::backends::ForgeKind;
 
 #[tokio::test]
 async fn requests_carry_their_method_and_body_and_return_the_json() {

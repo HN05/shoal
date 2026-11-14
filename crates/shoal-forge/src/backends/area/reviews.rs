@@ -4,18 +4,20 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
-    ForgeRepo,
     account::Account,
-    backends::{ForgeKind, Items},
-    items::item::Current,
-    numbers::{CommentId, PullNumber},
+    backends::Items,
     review::{
         diff::Diff,
-        reviewers::Reviewer,
         submit::{PlacedReview, Submission},
-        thread::Thread,
     },
     transport::api::Request,
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    backends::ForgeKind,
+    items::item::Current,
+    numbers::{CommentId, PullNumber},
+    review::{reviewers::Reviewer, thread::Thread},
 };
 
 /// How the forge asks for reviews, answers review threads and submits

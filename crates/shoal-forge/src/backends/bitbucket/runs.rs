@@ -5,19 +5,22 @@ use serde_json::{Value, json};
 
 use super::Bitbucket;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Runs,
-    capability::{self, Capability},
+    capability,
+    ci::{run::NewRun, run_action::RunOperation},
+    transport::api::{Request, TransportRequests},
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    capability::Capability,
     ci::{
         CiAction,
-        run::NewRun,
-        run_action::{Run, RunOperation},
+        run_action::Run,
         run_view::{RunFilter, RunJob},
     },
     numbers::RunNumber,
     raw::HttpMethod,
-    transport::api::{Request, TransportRequests},
 };
 
 impl Runs for Bitbucket {

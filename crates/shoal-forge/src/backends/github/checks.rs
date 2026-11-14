@@ -3,11 +3,11 @@ use anyhow::Result;
 
 use super::{GitHub, actions, activity};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{Checks, github_rest},
-    ci::{CiAction, CiCheck, Job, Location, Operation, checks::plain},
+    ci::{CiCheck, Job, Location, Operation, checks::plain},
 };
+use shoal_forge_types::{ForgeRepo, ci::CiAction};
 
 impl Checks for GitHub {
     /// Only each check's latest attempt, not those reruns replaced, and

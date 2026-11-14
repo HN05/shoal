@@ -13,13 +13,14 @@ use crate::{
     forge::{
         ci::{
             run_action::Run,
-            run_view::{JobRef, RunFilter, RunView, validate_filter},
+            run_view::{JobRef, RunFilter, RunView},
         },
         items::reference::ItemInput,
     },
     model::Relation,
     protocol::ItemContext,
 };
+use shoal_forge::ci::run_view::validate_filter;
 
 /// Show the run `items` selects after `ci` with the log tails of its failed
 /// jobs, only the log of `job`, or open it in the browser.

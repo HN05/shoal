@@ -1288,6 +1288,7 @@ dependencies = [
  "shoal-client",
  "shoal-core",
  "shoal-forge",
+ "shoal-forge-types",
  "shoal-refs",
  "shoal-subprocess",
  "tempfile",
@@ -1308,7 +1309,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shoal-config-derive",
- "shoal-forge",
+ "shoal-forge-types",
  "shoal-refs",
  "shoal-states",
  "shoal-time",
@@ -1349,6 +1350,7 @@ dependencies = [
  "shoal-client",
  "shoal-config-derive",
  "shoal-forge",
+ "shoal-forge-types",
  "shoal-proxy",
  "shoal-refs",
  "shoal-states",
@@ -1376,6 +1378,7 @@ dependencies = [
  "shoal-client",
  "shoal-core",
  "shoal-forge",
+ "shoal-forge-types",
  "shoal-refs",
  "shoal-subprocess",
  "socket2",
@@ -1394,12 +1397,11 @@ dependencies = [
  "anyhow",
  "base64",
  "futures-util",
- "rusqlite",
  "serde",
  "serde_json",
  "shoal-forge-derive",
+ "shoal-forge-types",
  "shoal-refs",
- "shoal-states",
  "shoal-subprocess",
  "shoal-time",
  "tempfile",
@@ -1414,6 +1416,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "shoal-forge-types"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "shoal-forge-derive",
+ "shoal-refs",
+ "shoal-states",
+ "tempfile",
 ]
 
 [[package]]

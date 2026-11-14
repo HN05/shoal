@@ -5,7 +5,6 @@ use serde_json::{Value, json};
 
 use super::GitHub;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{
         Items, LoginHint,
@@ -13,18 +12,21 @@ use crate::{
         rest,
     },
     conventions::draft::DraftMarker,
+    items::{create::Head, item::ItemRequests, reaction::Subject},
+    transport::api::{Request, TransportRequests, encode},
+    updates::DISCUSSION,
+};
+use shoal_forge_types::{
+    ForgeRepo,
     items::{
         action::Edit,
-        create::{Head, NewIssue, NewPull},
-        item::{Current, Item, ItemRequests, ItemState},
+        create::{NewIssue, NewPull},
+        item::{Current, Item, ItemState},
         link::ItemKind,
-        list,
-        reaction::Subject,
+        list::{Search, StateFilter},
     },
     numbers::{CommentId, IssueNumber, PullNumber},
     raw::HttpMethod,
-    transport::api::{Request, TransportRequests, encode},
-    updates::DISCUSSION,
 };
 
 impl Items for GitHub {
@@ -49,7 +51,7 @@ impl Items for GitHub {
         repo: &ForgeRepo,
         account: &Account,
         kind: ItemKind,
-        search: &list::Search,
+        search: &Search,
     ) -> Result<Vec<Item>> {
         let found = searched(repo, account, kind, search)
             .await
@@ -186,7 +188,7 @@ async fn searched(
     repo: &ForgeRepo,
     account: &Account,
     kind: ItemKind,
-    search: &list::Search,
+    search: &Search,
 ) -> Result<Vec<Value>> {
     let query = encode(&search_query(repo, kind, search), false);
     let mut found = Vec::new();
@@ -208,17 +210,17 @@ async fn searched(
 }
 
 /// GitHub's search query for `search` among the repository's items of `kind`.
-fn search_query(repo: &ForgeRepo, kind: ItemKind, search: &list::Search) -> String {
+fn search_query(repo: &ForgeRepo, kind: ItemKind, search: &Search) -> String {
     let kind = match kind {
         ItemKind::Issue => "issue",
         ItemKind::Pr => "pr",
     };
     let mut terms = vec![format!("repo:{}", repo.path), format!("is:{kind}")];
     match search.state {
-        list::StateFilter::Open => terms.push("is:open".into()),
+        StateFilter::Open => terms.push("is:open".into()),
         // GitHub counts merged PRs as closed.
-        list::StateFilter::Closed => terms.push("is:closed".into()),
-        list::StateFilter::All => {}
+        StateFilter::Closed => terms.push("is:closed".into()),
+        StateFilter::All => {}
     }
     terms.extend(
         search

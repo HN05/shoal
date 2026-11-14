@@ -3,14 +3,18 @@
 use anyhow::Result;
 
 use crate::{
-    ForgeRepo,
     account::Account,
-    backends::{Backend, ForgeKind},
-    capability::Capability,
+    backends::Backend,
     ci::{
-        CiAction, CiCheck, Job, Location, Operation,
-        checks::{CheckLog, CheckSteps, plain},
+        CiCheck, Job, Location, Operation,
+        checks::{CheckSteps, plain},
     },
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    backends::ForgeKind,
+    capability::Capability,
+    ci::{CiAction, checks::CheckLog},
     numbers::JobId,
 };
 
@@ -60,7 +64,7 @@ pub(crate) trait Checks: Backend {
         &self,
         repo: &ForgeRepo,
         account: &Account,
-        pull: &crate::items::reference::ItemRef,
+        pull: &shoal_forge_types::items::reference::ItemRef,
         name: &str,
     ) -> Result<CheckLog> {
         repo.failed_job_log(account, pull, name).await

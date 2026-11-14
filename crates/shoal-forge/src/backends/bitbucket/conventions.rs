@@ -3,12 +3,10 @@ use serde_json::Value;
 
 use super::Bitbucket;
 use crate::{
-    ForgeRepo,
-    backends::Conventions,
-    conventions::Lookup,
-    items::{item::text, link::ItemKind},
+    backends::Conventions, conventions::Lookup, items::item::text,
     transport::api::TransportRequests,
 };
+use shoal_forge_types::{ForgeRepo, items::link::ItemKind};
 
 impl Conventions for Bitbucket {
     fn template_lookups(&self, _kind: ItemKind) -> Vec<(&'static str, Lookup)> {

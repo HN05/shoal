@@ -243,7 +243,7 @@ async fn a_confirmed_merge_keeps_the_pr_whose_warning_it_read() {
     let reads = std::sync::atomic::AtomicUsize::new(0);
     // Answering the merge's read of PR 1's warning, the second after the
     // user's, links PR 2 instead.
-    let server = crate::forge::test_support::Server::start(move |request| {
+    let server = shoal_forge::test_support::Server::start(move |request| {
         let read = request.line == "GET /api/v1/repos/team/repo/pulls/1";
         if read && reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 1 {
             let other = format!("http://{}/team/repo/pulls/2", served.get().unwrap());

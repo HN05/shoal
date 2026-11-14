@@ -16,53 +16,20 @@ mod runners;
 mod runs;
 pub(crate) mod threads;
 
-use super::{Backend, Routes, github_rest};
+use super::{Backend, github_rest};
 use crate::{
-    ForgeRepo,
     account::Account,
-    capability::{Capability, Support},
-    ci::id,
-    numbers::RunNumber,
-    repo::locator::ItemRoute,
+    capability::Support,
     transport::{
         api::{Request, TransportRequests, full_page},
         response::Response,
     },
 };
-
-#[derive(Clone, Copy)]
-pub(crate) struct GitHub;
+use shoal_forge_types::{ForgeRepo, backends::github::GitHub, capability::Capability};
 
 /// GitHub.com's API host; an Enterprise Server serves its API under
 /// `/api/v3` of its own host.
 const API: &str = "https://api.github.com";
-
-impl Routes for GitHub {
-    fn name(&self) -> &'static str {
-        "GitHub"
-    }
-
-    fn nests_groups(&self) -> bool {
-        false
-    }
-
-    fn issue_route(&self) -> ItemRoute {
-        ItemRoute::Issue
-    }
-
-    fn pull_route(&self) -> ItemRoute {
-        ItemRoute::Pull
-    }
-
-    fn branch_route(&self) -> &'static str {
-        "/tree/"
-    }
-
-    /// A run's URL holds its API ID.
-    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
-        id(repo.repository_path(target, "/actions/runs/")?.first()?).map(RunNumber::new)
-    }
-}
 
 impl Backend for GitHub {
     /// GitHub's metadata names its SSH keys' password policy, and an
@@ -193,7 +160,7 @@ fn api_url(repo: &ForgeRepo, endpoint: &str) -> String {
     if repo.host == "github.com" {
         return format!("{API}/{endpoint}");
     }
-    let root = format!("{}://{}/api", repo.web_scheme, repo.host);
+    let root = format!("{}://{}/api", repo.web_scheme(), repo.host);
     match endpoint {
         "graphql" => format!("{root}/graphql"),
         _ => format!("{root}/v3/{endpoint}"),

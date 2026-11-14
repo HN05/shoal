@@ -3,7 +3,7 @@
 //! each job, which takes one job its labels match and ends with it. GitHub
 //! picks that job, so a job-started hook reports the run it belongs to and
 //! waits for the daemon when it is not the claimed one's.
-use crate::items::{link::LinkKind, reference::ItemRef};
+use shoal_forge_types::items::{link::LinkKind, reference::ItemRef};
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context, Result};
@@ -11,17 +11,19 @@ use serde_json::{Value, json};
 
 use super::GitHub;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Runners,
     ci::runner::{
-        Installation, JobCommand, JobLaunch, JobRun, RegisteredRunner, RunnerState, Trigger,
-        WaitingJob, quote, took_run_hook,
+        Installation, JobCommand, JobLaunch, RegisteredRunner, RunnerState, quote, took_run_hook,
     },
     items::item::text,
+    transport::api::{Request, TransportRequests},
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    ci::runner::{JobRun, Trigger, WaitingJob},
     numbers::{JobId, PullNumber, RunId, RunnerId},
     raw::HttpMethod,
-    transport::api::{Request, TransportRequests},
 };
 
 impl Runners for GitHub {

@@ -22,11 +22,12 @@ use crate::{
         notifications::NotificationKind,
         workspace::{Manager, capacity::Activity},
     },
-    forge::ci::{CiAction, run_action::RunActionRequests},
+    forge::ci::CiAction,
     model::QueuedJob,
     process::{execution::Processes, identity},
     state::{ExecutionState, QueueKind, QueueState},
 };
+use shoal_forge::ci::run_action::RunActionRequests;
 
 /// A job the runner claimed.
 #[derive(Debug, Clone)]

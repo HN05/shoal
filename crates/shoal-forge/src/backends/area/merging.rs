@@ -4,17 +4,21 @@ use anyhow::{Context, Result};
 use shoal_refs::{BranchName, CommitId};
 
 use crate::{
-    ForgeRepo, MERGED_HINT,
+    MERGED_HINT,
     account::Account,
-    backends::{Backend, ForgeKind, rest},
+    backends::{Backend, rest},
+    items::revert::NewRevert,
+    transport::api::Request,
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    backends::ForgeKind,
     capability::Capability,
     items::{
         action::{MergeMethod, UpdateMethod},
         item::Current,
-        revert::NewRevert,
     },
     numbers::PullNumber,
-    transport::api::Request,
 };
 
 /// How the forge merges and reverts PRs and deletes their branches.

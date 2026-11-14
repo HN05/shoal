@@ -4,28 +4,32 @@ use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 use tokio::process::Command;
 
-use super::runs_path;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Checks,
     ci::{
-        CiAction, Job, JobState, Location, Operation,
-        checks::{CheckLog, MAX_LOG_BYTES, NoJobLog},
+        Job, Location, Operation,
+        checks::{MAX_LOG_BYTES, NoJobLog},
     },
-    items::{action::ActionSteps, link::ItemKind},
-    numbers::{JobId, RunId, RunNumber},
+    items::action::ActionSteps,
     transport::{
         api::{Request, TIMEOUT, TransportRequests, curl_body},
         programs,
     },
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    backends::forgejo::runs_path,
+    ci::{CiAction, JobState, checks::CheckLog},
+    items::link::ItemKind,
+    numbers::{JobId, RunId, RunNumber},
 };
 
 /// The log of the failed check `name` on the current head of PR `url`.
 pub(crate) async fn failed_check_log(
     repo: &ForgeRepo,
     account: &Account,
-    pull: &crate::items::reference::ItemRef,
+    pull: &shoal_forge_types::items::reference::ItemRef,
     name: &str,
 ) -> Result<CheckLog> {
     let url = pull.url();
@@ -56,7 +60,7 @@ pub(crate) async fn failed_check_log(
     let job_id = failed_job_id(repo, account, head, run_number, job_index).await?;
     let endpoint = repo.repo_endpoint(&format!("actions/jobs/{job_id}/logs"));
     let log = job_log(repo, account, &endpoint).await?;
-    let log = repo.kind.plain_log(&log);
+    let log = repo.kind().plain_log(&log);
     let step = match listed_failed_step(repo, account, job_id).await {
         None => failed_step(&log),
         listed => listed,
@@ -184,7 +188,7 @@ pub(crate) fn failed_step(log: &str) -> Option<String> {
 /// Forgejo links a job by its path on the host.
 fn job_url(repo: &ForgeRepo, target: &str) -> String {
     if target.starts_with('/') {
-        format!("{}://{}{target}", repo.web_scheme, repo.host)
+        format!("{}://{}{target}", repo.web_scheme(), repo.host)
     } else {
         target.into()
     }
@@ -297,7 +301,7 @@ pub(crate) fn job_location(repo: &ForgeRepo, target: &str) -> Result<(RunNumber,
 /// Read plaintext logs without following redirects or exposing the login.
 pub(crate) async fn job_log(repo: &ForgeRepo, account: &Account, endpoint: &str) -> Result<String> {
     let authorization = account.authorization(repo).await?;
-    let url = format!("{}://{}/api/v1/{endpoint}", repo.web_scheme, repo.host);
+    let url = format!("{}://{}/api/v1/{endpoint}", repo.web_scheme(), repo.host);
     let mut curl = Command::new(programs::CURL);
     curl.args([
         "-q",

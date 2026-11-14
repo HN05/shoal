@@ -13,10 +13,11 @@ use crate::{
     daemon::{links::space::require_ready_space, workspace::Manager},
     forge::{
         items::{item::ItemState, link::Selection},
-        updates::{Edited, Snapshot, Update},
+        updates::Update,
     },
     time::UnixTime,
 };
+use shoal_forge::updates::{Edited, Snapshot};
 
 impl Manager {
     /// Record `observations` from a poll that started at `observed_at`,

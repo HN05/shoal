@@ -1,139 +1,22 @@
 //! An issue's or PR's content, status and discussion, read on request so
 //! callers need not know which forge serves it.
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use shoal_refs::BranchName;
 
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{Activity, Merging},
-    capability::{Capability, CapabilityRequests},
-    ci::approval::WaitingRun,
-    items::{
-        action::MergeMethod,
-        link::ItemKind,
-        reaction::{Reaction, ReactionRequests},
-    },
-    numbers::{CommentId, PullNumber},
-    review::status::{CheckResult, PrStatus, ReviewState, StatusRequests},
+    capability::CapabilityRequests,
+    items::reaction::ReactionRequests,
+    review::status::StatusRequests,
 };
-
-/// A failed lookup leaves `details` empty, or the discussion it would have
-/// filled, and records its error instead of failing the request.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ItemView {
-    pub url: crate::items::reference::ItemRef,
-    pub kind: ItemKind,
-    #[serde(flatten)]
-    pub details: Option<Details>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub check_logs: Vec<crate::ci::checks::CheckLog>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub errors: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Details {
-    pub number: u64,
-    pub title: String,
-    /// `open`, `closed`, or `merged` for a PR.
-    pub state: String,
-    pub author: String,
-    pub created_at: String,
-    pub labels: Vec<String>,
-    /// Named as edits take them: logins, or Bitbucket account IDs.
-    #[serde(default)]
-    pub assignees: Vec<String>,
-    /// The milestone's title.
-    #[serde(default)]
-    pub milestone: Option<String>,
-    pub body: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pr: Option<PrDetails>,
-    /// Absent when comments were not requested or their lookup failed.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub comments: Option<Vec<Comment>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reviews: Option<Vec<Review>>,
-    /// Read with the comments, where the forge has reactions.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub reactions: Vec<Reaction>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PrDetails {
-    pub head: BranchName,
-    pub base: BranchName,
-    pub draft: bool,
-    /// Unknown while the forge computes mergeability, and for drafts and closed PRs.
-    pub merge_conflicts: Option<bool>,
-    /// How many commits the base has that the head lacks; unknown for closed
-    /// PRs and where the forge cannot tell.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub behind: Option<u64>,
-    pub checks: Vec<CheckResult>,
-    /// The runs on the open PR's head that wait for approval.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub waiting_runs: Vec<WaitingRun>,
-    pub review: Option<ReviewState>,
-    /// The users and teams the forge lists as the PR's reviewers, named as
-    /// `pr edit --add-reviewer` takes them. GitHub lists only those whose
-    /// review is still requested; Forgejo also those who approved or
-    /// requested changes unasked.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub reviewers: Vec<String>,
-    /// Set while the forge is to merge the open PR once it can.
-    #[serde(default)]
-    pub auto_merge: Option<AutoMerge>,
-}
-
-/// A merge the forge makes once the PR's required checks and approvals pass.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AutoMerge {
-    /// Unknown where the forge does not report it.
-    pub method: Option<MergeMethod>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Comment {
-    /// The forge's ID for the comment.
-    pub id: CommentId,
-    pub author: String,
-    pub created_at: String,
-    pub body: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub reactions: Vec<Reaction>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Review {
-    pub author: String,
-    /// `approved`, `changes_requested`, `commented` or `dismissed`.
-    pub state: String,
-    pub submitted_at: String,
-    pub body: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub comments: Vec<ReviewComment>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReviewComment {
-    /// The ID `shoal pr reply` and `pr resolve` take.
-    pub id: CommentId,
-    /// The ID of the comment that starts the thread; its own for a first comment.
-    pub thread: CommentId,
-    pub author: String,
-    pub created_at: String,
-    pub path: String,
-    pub line: Option<u64>,
-    pub body: String,
-    /// Whether the thread is resolved; unknown where the forge does not say.
-    pub resolved: Option<bool>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub reactions: Vec<Reaction>,
-}
+use shoal_forge_types::{
+    ForgeRepo,
+    capability::Capability,
+    items::link::ItemKind,
+    numbers::{CommentId, PullNumber},
+    review::view::{Details, ItemView, ReviewComment},
+};
 
 /// Reading items as views.
 #[shoal_forge_derive::extension(pub ViewRequests, pub(crate) ViewSteps)]
@@ -144,7 +27,7 @@ impl ForgeRepo {
         &self,
         account: &Account,
         kind: ItemKind,
-        item: &crate::items::reference::ItemRef,
+        item: &shoal_forge_types::items::reference::ItemRef,
         comments: bool,
     ) -> ItemView {
         let mut errors = Vec::new();
@@ -171,20 +54,19 @@ impl ForgeRepo {
         &self,
         account: &Account,
         kind: ItemKind,
-        item: &crate::items::reference::ItemRef,
+        item: &shoal_forge_types::items::reference::ItemRef,
         comments: bool,
         errors: &mut Vec<String>,
     ) -> Result<Details> {
         item.belongs_to(self)?;
         let number = item.number().get();
-        let content = self
-            .kind
-            .view_details(self, account, kind, number, comments);
+        let forge = self.kind();
+        let content = forge.view_details(self, account, kind, number, comments);
         let status = async {
             match kind {
                 ItemKind::Pr => Some(tokio::join!(
                     self.pr_status(account, item),
-                    self.kind.behind(self, account, PullNumber::new(number))
+                    forge.behind(self, account, PullNumber::new(number))
                 )),
                 ItemKind::Issue => None,
             }
@@ -200,7 +82,7 @@ impl ForgeRepo {
         }
         if comments {
             let discussion = self
-                .kind
+                .kind()
                 .view_discussion(self, account, kind, number, &mut details, errors)
                 .await;
             match discussion {
@@ -215,39 +97,6 @@ impl ForgeRepo {
             }
         }
         Ok(details)
-    }
-}
-
-impl PrDetails {
-    fn record(&mut self, status: PrStatus, errors: &mut Vec<String>) {
-        self.merge_conflicts = status.merge_conflicts;
-        self.checks = status.checks;
-        self.waiting_runs = status.waiting_runs;
-        self.review = status.review;
-        errors.extend(status.errors);
-    }
-
-    pub(crate) fn new(head: BranchName, base: BranchName, draft: bool) -> Self {
-        Self {
-            head,
-            base,
-            draft,
-            merge_conflicts: None,
-            behind: None,
-            checks: Vec::new(),
-            waiting_runs: Vec::new(),
-            review: None,
-            reviewers: Vec::new(),
-            auto_merge: None,
-        }
-    }
-
-    pub(crate) fn read(head: &Value, base: &Value, draft: bool) -> Result<Self> {
-        Ok(Self::new(
-            head.as_str().context("PR has no head branch")?.into(),
-            base.as_str().context("PR has no base branch")?.into(),
-            draft,
-        ))
     }
 }
 

@@ -6,7 +6,6 @@ pub mod comment;
 pub mod create;
 pub mod issue;
 pub mod item;
-pub mod link;
 pub mod list;
 mod milestone;
 pub mod reaction;

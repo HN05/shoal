@@ -27,7 +27,7 @@ async fn only_bitbucket_org_reaches_the_cloud_api() {
     let other = ForgeRepo::host(
         "bitbucket.example",
         "https",
-        crate::backends::ForgeKind::Bitbucket,
+        shoal_forge_types::backends::ForgeKind::Bitbucket,
     );
     let request = Request::get("user".into());
     let sent = Bitbucket.send(&other, &Account::default(), &request).await;

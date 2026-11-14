@@ -4,13 +4,13 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::{
-    ForgeRepo,
     account::Account,
-    backends::{Backend, ForgeKind},
-    capability::Capability,
-    items::attach::{Attachment, Holder, Media},
+    backends::Backend,
+    items::attach::Holder,
     transport::{api::Request, response::Fetched},
 };
+use shoal_forge_types::items::attach::{Attachment, Media};
+use shoal_forge_types::{ForgeRepo, backends::ForgeKind, capability::Capability};
 
 /// How the forge uploads, serves and shows attached files.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]

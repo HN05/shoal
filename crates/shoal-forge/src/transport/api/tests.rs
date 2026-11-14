@@ -1,9 +1,6 @@
 use super::*;
-use crate::raw::HttpMethod;
-use crate::{
-    backends::ForgeKind,
-    test_support::{Server, agent_on, repo_on},
-};
+use crate::test_support::{Server, agent_on, repo_on};
+use shoal_forge_types::backends::ForgeKind;
 
 #[tokio::test]
 async fn repeated_reads_send_the_validators_and_keep_the_unchanged_body() {

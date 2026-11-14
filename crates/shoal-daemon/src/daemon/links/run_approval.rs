@@ -10,8 +10,7 @@ use crate::{
     daemon::{events, permissions::Action, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
-        account::Account,
-        ci::approval::{ApprovalRequests, RunsApproved},
+        ci::approval::RunsApproved,
         items::{
             link::{ItemKind, LinkKind},
             reference::{ItemInput, ItemRef},
@@ -20,6 +19,7 @@ use crate::{
     model::Workspace,
     protocol::ItemContext,
 };
+use shoal_forge::{account::Account, ci::approval::ApprovalRequests};
 
 impl Manager {
     /// Approve the run `run` names in the repository of `context`, otherwise

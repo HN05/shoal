@@ -8,9 +8,7 @@ use serde_json::Value;
 use shoal_time::UnixTime;
 use tokio::process::Command;
 
-use crate::raw::HttpMethod;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Backend,
     transport::{
@@ -19,6 +17,8 @@ use crate::{
         response::{Headed, Response, WRITE_OUT, split_output},
     },
 };
+use shoal_forge_types::ForgeRepo;
+use shoal_forge_types::raw::HttpMethod;
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(30);
 /// Bounds sending or fetching a file, which may be a large video.
@@ -150,14 +150,14 @@ impl Request {
 impl ForgeRepo {
     /// The API endpoint for `path` under this repository.
     pub(crate) fn repo_endpoint(&self, path: &str) -> String {
-        self.kind.repo_endpoint(self, path)
+        self.kind().repo_endpoint(self, path)
     }
 
     /// The response body, or null for an empty one.
     pub(crate) async fn send(&self, account: &Account, request: &Request) -> Result<Value> {
         async {
             let body = resending(request.resend, || self.exchange(account, request)).await?;
-            if let Some(failure) = self.kind.reported_failure(&body) {
+            if let Some(failure) = self.kind().reported_failure(&body) {
                 bail!("{failure}");
             }
             if let Some(field) = request.confirm {
@@ -240,7 +240,7 @@ impl ForgeRepo {
         if request.changes {
             account.require_login(self)?;
         }
-        self.limited(account, self.kind.send(self, account, request))
+        self.limited(account, self.kind().send(self, account, request))
             .await
     }
 
@@ -332,7 +332,7 @@ impl ForgeRepo {
     /// The list an endpoint that ignores pages answers, read as `account`.
     pub(crate) async fn whole_list(&self, account: &Account, endpoint: &str) -> Result<Vec<Value>> {
         let response = self.send(account, &Request::get(endpoint.into())).await?;
-        let (list, _) = (self.kind.page(&response, usize::MAX))
+        let (list, _) = (self.kind().page(&response, usize::MAX))
             .with_context(|| format!("{endpoint} is not a list"))?;
         Ok(list.to_vec())
     }
@@ -346,14 +346,14 @@ impl ForgeRepo {
         mut visit: impl FnMut(&[Value]) -> Result<bool>,
     ) -> Result<()> {
         let separator = if endpoint.contains('?') { '&' } else { '?' };
-        let (size, page_size) = self.kind.page_size();
+        let (size, page_size) = self.kind().page_size();
         for page in 1.. {
             let request = Request::get(format!(
                 "{endpoint}{separator}{size}={page_size}&page={page}"
             ));
             let response = self.send(account, &request).await?;
             let (batch, more) = self
-                .kind
+                .kind()
                 .page(&response, page_size)
                 .with_context(|| format!("{endpoint} is not a list"))?;
             if !visit(batch)? || !more {

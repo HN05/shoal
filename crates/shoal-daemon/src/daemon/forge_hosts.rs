@@ -9,12 +9,12 @@ use rusqlite::{OptionalExtension, params};
 use crate::{
     config::forges::{self, Forges},
     daemon::{log, workspace::Manager},
-    forge::{
-        ForgeRepo, RepoRequests,
-        backends::ForgeKind,
-        hosts::{self, HostType, HostTypes},
-        items::reference::{ItemRef, ReferenceRequests},
-    },
+    forge::{ForgeRepo, backends::ForgeKind, items::reference::ItemRef},
+};
+use shoal_forge::{
+    RepoRequests,
+    hosts::{self, HostType, HostTypes},
+    items::reference::ReferenceRequests,
 };
 
 /// The daemon's answers, asking new hosts with the user's logins.
@@ -83,7 +83,7 @@ impl Manager {
     /// so links of those hosts parse as their forges before a lookup.
     pub(crate) async fn learn_recorded_forge_hosts(&self) -> Result<()> {
         for (host, kind, _) in self.recorded_forge_hosts().await? {
-            hosts::learn(&host, kind);
+            crate::forge::hosts::learn(&host, kind);
         }
         Ok(())
     }
@@ -100,7 +100,7 @@ impl Manager {
                 )
             })?;
         self.record_forge_host(host, kind, scheme).await?;
-        hosts::learn(host, kind);
+        crate::forge::hosts::learn(host, kind);
         Ok(kind)
     }
 
@@ -189,7 +189,7 @@ impl Manager {
 /// went is parsed as what it was learned to serve.
 pub(super) fn learn_forge_pins(previous: &Forges, pins: &Forges) {
     if pins != previous {
-        hosts::pin(pins.pins());
+        crate::forge::hosts::pin(pins.pins());
     }
 }
 

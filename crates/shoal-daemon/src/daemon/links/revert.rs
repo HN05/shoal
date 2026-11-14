@@ -13,16 +13,13 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::{Opening, Pushes},
     daemon::{scope::Caller, workspace::Manager},
-    forge::{
-        conventions,
-        items::{
-            create::PullOptions,
-            item::Opened,
-            link::ItemKind,
-            reference::ItemInput,
-            revert::{MergedPull, NewRevert, RevertRequests, revert_options},
-        },
+    forge::items::{
+        create::PullOptions, item::Opened, link::ItemKind, reference::ItemInput, revert::MergedPull,
     },
+};
+use shoal_forge::{
+    conventions,
+    items::revert::{NewRevert, RevertRequests, revert_options},
 };
 
 impl Manager {

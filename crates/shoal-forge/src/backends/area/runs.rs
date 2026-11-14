@@ -4,18 +4,21 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
-    ForgeRepo,
     account::Account,
-    backends::{Backend, ForgeKind},
+    backends::Backend,
+    ci::{run::NewRun, run_action::RunOperation},
+    transport::api::Request,
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    backends::ForgeKind,
     capability::Capability,
     ci::{
         CiAction,
-        run::NewRun,
-        run_action::{Run, RunOperation},
+        run_action::Run,
         run_view::{RunFilter, RunJob},
     },
     numbers::RunNumber,
-    transport::api::Request,
 };
 
 /// How the forge starts, lists and reads workflow runs and their jobs,

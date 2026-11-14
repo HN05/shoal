@@ -2,11 +2,11 @@ use std::sync::{Arc, Mutex};
 
 use super::*;
 use crate::{
-    backends::ForgeKind,
     test_support::{Server, agent_on, repo_on},
     transport::memory::Memory,
 };
 use serde_json::{Value, json};
+use shoal_forge_types::backends::ForgeKind;
 
 /// A GitHub issue 7 in `state` whose assignees start as `assignees`, and
 /// change as edits replace them.

@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::*;
-use crate::ci::check_state::CheckState;
+use shoal_forge_types::ci::check_state::CheckState;
 
 #[test]
 fn merges_when_the_pipeline_succeeds_keep_their_squash_setting() {

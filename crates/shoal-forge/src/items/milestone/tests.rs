@@ -1,10 +1,11 @@
 use super::*;
 use crate::{
-    backends::{Conventions, ForgeKind},
+    backends::Conventions,
     test_support::{Server, agent_on, repo_on},
     transport::memory::Memory,
 };
 use serde_json::json;
+use shoal_forge_types::backends::ForgeKind;
 
 #[test]
 fn each_forge_lists_milestones_and_names_their_ids_its_way() {
@@ -13,24 +14,24 @@ fn each_forge_lists_milestones_and_names_their_ids_its_way() {
     let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
     let gitlab = ForgeRepo::parse("git@gitlab.com:group/sub/repo.git").unwrap();
     let bitbucket = ForgeRepo::parse("git@bitbucket.org:workspace/repo.git").unwrap();
-    assert_eq!(github.kind.milestone(&listed), Some(("v2".into(), 5)));
-    assert_eq!(forgejo.kind.milestone(&listed), Some(("v2".into(), 101)));
-    assert_eq!(gitlab.kind.milestone(&listed), Some(("v2".into(), 101)));
+    assert_eq!(github.kind().milestone(&listed), Some(("v2".into(), 5)));
+    assert_eq!(forgejo.kind().milestone(&listed), Some(("v2".into(), 101)));
+    assert_eq!(gitlab.kind().milestone(&listed), Some(("v2".into(), 101)));
     assert_eq!(
-        bitbucket.kind.milestone(&json!({"id": 3, "name": "v2"})),
+        bitbucket.kind().milestone(&json!({"id": 3, "name": "v2"})),
         Some(("v2".into(), 3))
     );
-    assert_eq!(forgejo.kind.milestone(&json!({"title": "v2"})), None);
+    assert_eq!(forgejo.kind().milestone(&json!({"title": "v2"})), None);
     assert_eq!(
-        github.kind.milestones_endpoint(&github),
+        github.kind().milestones_endpoint(&github),
         "repos/team/repo/milestones?state=all"
     );
     assert_eq!(
-        gitlab.kind.milestones_endpoint(&gitlab),
+        gitlab.kind().milestones_endpoint(&gitlab),
         "projects/group%2Fsub%2Frepo/milestones?include_ancestors=true"
     );
     assert_eq!(
-        bitbucket.kind.milestones_endpoint(&bitbucket),
+        bitbucket.kind().milestones_endpoint(&bitbucket),
         "repositories/workspace/repo/milestones"
     );
 }

@@ -17,18 +17,18 @@ use crate::{
         workspace::{Manager, PrGuard},
     },
     forge::{
-        ForgeRepo, RepoRequests,
-        account::Account,
+        ForgeRepo,
         items::{
             link::{ItemKind, LinkKind},
             reference::{ItemInput, ItemRef},
         },
-        review::status::{PrStatus, StatusRequests},
+        review::status::PrStatus,
     },
     git,
     model::Workspace,
     repository,
 };
+use shoal_forge::{RepoRequests, account::Account, review::status::StatusRequests};
 
 pub(crate) mod titles;
 

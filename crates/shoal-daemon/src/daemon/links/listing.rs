@@ -5,13 +5,10 @@ use anyhow::Result;
 
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
-    forge::items::{
-        item::Item,
-        link::ItemKind,
-        list::{ListRequests, Search},
-    },
+    forge::items::{item::Item, link::ItemKind, list::Search},
     protocol::ItemContext,
 };
+use shoal_forge::items::list::ListRequests;
 
 impl Manager {
     /// Issues or PRs that `search` matches in the repository of `context`,

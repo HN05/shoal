@@ -18,15 +18,15 @@ use crate::{
         workspace::Manager,
     },
     forge::{
-        ForgeRepo, RepoRequests,
+        ForgeRepo,
         items::{
-            issue::IssueRequests,
             link::{ItemKind, LinkKind},
             reference::{ItemInput, ItemRef},
         },
     },
 };
 pub(crate) use assignees::{AssignerOf, Dropped, of_space as assignees_of};
+use shoal_forge::{RepoRequests, items::issue::IssueRequests};
 
 /// An open issue a new workspace is assigned.
 #[derive(Debug, Clone)]

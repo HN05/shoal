@@ -4,15 +4,16 @@ use serde_json::Value;
 
 use super::Bitbucket;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Reactions,
-    capability::{self, Capability},
-    items::{
-        link::ItemKind,
-        reaction::{Listed, Subject, allowed::AllowedReactions},
-    },
+    capability,
+    items::reaction::{Listed, Subject},
     transport::api::Request,
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    capability::Capability,
+    items::{link::ItemKind, reaction::allowed::AllowedReactions},
 };
 
 impl Reactions for Bitbucket {

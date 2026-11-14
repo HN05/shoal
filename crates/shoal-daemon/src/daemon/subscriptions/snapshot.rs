@@ -8,10 +8,12 @@ use anyhow::Result;
 
 use super::agents;
 use crate::{
-    client::log::LogTopic,
-    client::subscriptions::records::{
-        Check, Link, LookupError, Message, MessageRecipient, Record, RecordKey, ReportedSessions,
-        Topic, WorkspaceRecord,
+    client::{
+        log::LogTopic,
+        subscriptions::records::{
+            Check, Link, LookupError, Message, MessageRecipient, Record, RecordKey,
+            ReportedSessions, Topic, WorkspaceRecord,
+        },
     },
     daemon::{
         agent_messages::AgentMessage,
@@ -20,9 +22,9 @@ use crate::{
         scope::Caller,
         workspace::Manager,
     },
-    forge::updates::Snapshot,
     model::{Chat, PresentSpace, Relation, Workspace},
 };
+use shoal_forge::updates::Snapshot;
 
 /// Records by key, each with its JSON, which tells a changed one apart.
 pub(super) type Records = BTreeMap<RecordKey, (Record, serde_json::Value)>;

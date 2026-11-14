@@ -26,13 +26,14 @@ use crate::{
     client::resources::ResourceRequest,
     config::Runner,
     daemon::{allocation::Allocation, notifications::NotificationKind, workspace::Manager},
-    forge::{
-        ForgeRepo, RepoRequests,
-        ci::runner::{Installation, JobCommand, JobLaunch, RunnerRequests},
-    },
+    forge::ForgeRepo,
     model::{QueueEntry, QueuedJob, Workspace},
     removal::InspectionPolicy,
     state::{QueueKind, QueueState},
+};
+use shoal_forge::{
+    RepoRequests,
+    ci::runner::{Installation, JobCommand, JobLaunch, RunnerRequests},
 };
 
 /// The name of the lease a job holds from the repository's permit pool.

@@ -11,8 +11,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::client::output::configured::CommandDefinition;
 use crate::{
     cli::{
-        agents,
-        client::{self},
+        agents, client,
         context::Context,
         recent,
         scoping::Scoping,

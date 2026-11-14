@@ -1,7 +1,6 @@
 //! Rerunning failed and cancelling running CI jobs on a PR's current head,
 //! as the workspace's agent account.
 pub mod approval;
-pub mod check_state;
 pub mod checks;
 pub mod run;
 pub mod run_action;
@@ -10,35 +9,24 @@ pub mod runner;
 pub mod workflow;
 
 use anyhow::{Context, Result, ensure};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use shoal_refs::CommitId;
-use shoal_states::states;
 
-use crate::ci::check_state::CheckState;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Checks,
-    capability::{Capability, CapabilityRequests},
-    items::{action::ActionRequests, item::ItemState, link::ItemKind},
-    numbers::{JobId, PullNumber, RunId, RunNumber},
-    raw::HttpMethod,
+    capability::CapabilityRequests,
+    items::action::ActionRequests,
     transport::api::{Request, TransportRequests},
 };
-
-states!(CiAction: ValueEnum {
-    Rerun => "rerun",
-    Cancel => "cancel",
-});
-
-/// The checks an action reached on a PR.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CiActed {
-    pub url: String,
-    pub action: CiAction,
-    pub checks: Vec<String>,
-}
+use shoal_forge_types::{
+    ForgeRepo,
+    capability::Capability,
+    ci::{CiAction, JobState},
+    items::{item::ItemState, link::ItemKind},
+    numbers::{JobId, PullNumber, RunId, RunNumber},
+    raw::HttpMethod,
+};
 
 /// A check on a PR's head under the name the forge shows, and the CI job it
 /// reports when Shoal can act on that job.
@@ -47,44 +35,6 @@ pub(crate) struct Job {
     pub(crate) name: String,
     pub(crate) state: JobState,
     pub(crate) location: Option<Location>,
-}
-
-states!(
-    /// Whether a CI job or run waits for a runner, is running or, once it
-    /// finished, whether it failed.
-    JobState {
-        Failed => "failed",
-        Waiting => "waiting",
-        Running => "running",
-        Finished => "finished",
-        /// A job cancelled before it finished, whether or not a runner
-        /// took it.
-        Cancelled => "cancelled",
-    }
-);
-
-impl JobState {
-    /// Whether the job or run has yet to finish.
-    pub fn unfinished(self) -> bool {
-        matches!(self, Self::Waiting | Self::Running)
-    }
-
-    /// Whether the job stopped without succeeding, so a rerun applies to it.
-    pub(crate) fn rerunnable(self) -> bool {
-        matches!(self, Self::Failed | Self::Cancelled)
-    }
-}
-
-/// A cancelled check failed to finish, so it can be rerun.
-impl From<CheckState> for JobState {
-    fn from(state: CheckState) -> Self {
-        match state {
-            CheckState::Waiting | CheckState::Queued => Self::Waiting,
-            state if !state.complete() => Self::Running,
-            state if state.failed() || state == CheckState::Cancelled => Self::Failed,
-            _ => Self::Finished,
-        }
-    }
 }
 
 /// A CI job in the repository, by the IDs its forge acts on.
@@ -127,33 +77,6 @@ pub struct Plan {
     pub checks: Vec<String>,
 }
 
-impl CiAction {
-    /// Whether the action applies to a job in a state, and those states.
-    pub(crate) fn applies_to(self) -> (fn(JobState) -> bool, &'static str) {
-        match self {
-            Self::Rerun => (JobState::rerunnable, "failed"),
-            Self::Cancel => (JobState::unfinished, "running or waiting"),
-        }
-    }
-}
-
-impl ForgeRepo {
-    /// The path components of `target` after this repository's `section`.
-    /// Forges link jobs over HTTPS even when the remote uses HTTP.
-    pub(crate) fn repository_path<'a>(
-        &self,
-        target: &'a str,
-        section: &str,
-    ) -> Option<Vec<&'a str>> {
-        let path = target
-            .strip_prefix("https://")
-            .or_else(|| target.strip_prefix("http://"))?
-            .strip_prefix(&format!("{}/{}", self.host, self.path))?
-            .strip_prefix(section)?;
-        Some(path.split('/').collect())
-    }
-}
-
 /// Planning and posting actions on a PR's CI jobs.
 #[shoal_forge_derive::extension(pub CiRequests, pub(crate) CiSteps)]
 impl ForgeRepo {
@@ -171,11 +94,11 @@ impl ForgeRepo {
         let head = self.open_head(account, number).await?;
         let jobs = self.ci_jobs(account, head.as_str()).await?;
         let selected = select(&jobs, action, names)?;
-        let (operations, checks) = operations(&self.kind, &jobs, &selected, action)?;
+        let (operations, checks) = operations(&self.kind(), &jobs, &selected, action)?;
         let mut endpoints = Vec::new();
         for operation in operations {
             let endpoint = self
-                .kind
+                .kind()
                 .ci_endpoint(self, account, head.as_str(), operation)
                 .await?;
             push_new(&mut endpoints, endpoint);
@@ -197,7 +120,7 @@ impl ForgeRepo {
 
     /// Each check's latest attempt on `head`, with the job it links.
     async fn ci_jobs(&self, account: &Account, head: &str) -> Result<Vec<Job>> {
-        let checks = self.kind.ci_checks(self, account, head).await?;
+        let checks = self.kind().ci_checks(self, account, head).await?;
         Ok(checks
             .into_iter()
             .map(|(name, state, target)| Job {
@@ -210,7 +133,7 @@ impl ForgeRepo {
 
     /// The CI job a check's web URL links in this repository, if any.
     fn locate(&self, target: &str) -> Option<Location> {
-        self.kind.locate_job(self, target)
+        self.kind().locate_job(self, target)
     }
 
     pub(crate) async fn open_head(
@@ -222,11 +145,6 @@ impl ForgeRepo {
         ensure!(pull.item.state == ItemState::Open, "#{number} is not open");
         pull.head_sha.context("PR has no head commit")
     }
-}
-
-/// A positive ID in a job URL.
-pub(crate) fn id(text: &str) -> Option<u64> {
-    text.parse::<u64>().ok().filter(|id| *id > 0)
 }
 
 /// The jobs `action` applies to: those of the named checks, at least one per

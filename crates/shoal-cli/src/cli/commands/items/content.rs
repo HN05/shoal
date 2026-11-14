@@ -12,12 +12,13 @@ use crate::{
     forge::{
         items::{
             action::{Action, Edit, MilestoneChange},
-            attach::{self, Attachment},
+            attach::Attachment,
             comment::CommentEdit,
         },
         numbers::CommentId,
     },
 };
+use shoal_forge::items::attach;
 
 /// The edit of a PR, with the changes only PRs take.
 pub(super) fn pr_edit(edit: PrEditArgs) -> Result<Edit> {

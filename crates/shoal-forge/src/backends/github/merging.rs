@@ -5,18 +5,23 @@ use shoal_refs::BranchName;
 
 use super::GitHub;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{Merging, github_rest},
     items::{
-        action::{MergeMethod, UpdateMethod},
-        item::{Current, ItemRequests, text},
-        link::ItemKind,
+        item::{ItemRequests, text},
         revert::NewRevert,
+    },
+    transport::api::{Request, TransportRequests, encode},
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    items::{
+        action::{MergeMethod, UpdateMethod},
+        item::Current,
+        link::ItemKind,
     },
     numbers::PullNumber,
     raw::HttpMethod,
-    transport::api::{Request, TransportRequests, encode},
 };
 
 impl Merging for GitHub {

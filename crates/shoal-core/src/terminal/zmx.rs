@@ -27,8 +27,7 @@ use crate::{
         zmx::{CHAT_LABEL, CREATED, Fields, WORKSPACE_LABEL, field, find, kill, list},
     },
     subprocess::Run,
-    tools::Tool,
-    tools::ensure_program,
+    tools::{Tool, ensure_program},
 };
 
 /// zmx sets this inside a session; a launch there runs in place.

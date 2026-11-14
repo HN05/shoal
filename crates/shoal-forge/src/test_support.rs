@@ -127,13 +127,14 @@ pub fn together(parts: usize) -> impl Fn() -> bool + Send + Sync {
 }
 
 /// The repository `path` of a `kind` forge that `server` stands in for.
-pub fn repo_on(server: &Server, kind: crate::backends::ForgeKind, path: &str) -> crate::ForgeRepo {
-    crate::ForgeRepo {
-        kind,
-        host: server.host.clone(),
-        path: path.into(),
-        web_scheme: "http",
-    }
+pub fn repo_on(
+    server: &Server,
+    kind: shoal_forge_types::backends::ForgeKind,
+    path: &str,
+) -> shoal_forge_types::ForgeRepo {
+    let mut repo = shoal_forge_types::ForgeRepo::host(&server.host, "http", kind);
+    repo.path = path.into();
+    repo
 }
 
 /// A token that is always the one it holds.

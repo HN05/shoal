@@ -20,7 +20,8 @@ pub(crate) use crate::client::approvals::{
     PushSpecification,
 };
 use crate::daemon::{item_numbers, links::space::require_ready_space, store};
-use crate::forge::items::attach::{self, Attachment};
+use crate::forge::items::attach::Attachment;
+use shoal_forge::items::attach;
 
 /// A stored proposal, and whether this call recorded it.
 pub type Recorded = (ApprovalRequest, bool);

@@ -6,22 +6,28 @@ use shoal_refs::BranchName;
 
 use super::GitLab;
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::{Items, LoginHint, rest},
     conventions::draft::DraftMarker,
     items::{
-        action::{Edit, MilestoneChange, changed_set},
-        create::{Head, NewIssue, NewPull},
-        item::{Current, Item, ItemRequests, ItemState, PrSummary, text},
-        link::ItemKind,
-        list,
+        create::Head,
+        item::{ItemRequests, text},
         reaction::Subject,
+    },
+    transport::api::{Request, TransportRequests, encode},
+    updates::DISCUSSION,
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    items::{
+        action::{Edit, MilestoneChange, changed_set},
+        create::{NewIssue, NewPull},
+        item::{Current, Item, ItemState, PrSummary},
+        link::ItemKind,
+        list::{Search, StateFilter},
     },
     numbers::{IssueNumber, PullNumber},
     raw::HttpMethod,
-    transport::api::{Request, TransportRequests, encode},
-    updates::DISCUSSION,
 };
 
 impl Items for GitLab {
@@ -117,7 +123,7 @@ impl Items for GitLab {
         repo: &ForgeRepo,
         account: &Account,
         kind: ItemKind,
-        search: &list::Search,
+        search: &Search,
     ) -> Result<Vec<Item>> {
         let endpoint = search_endpoint(kind, search);
         rest::list_items(repo, account, kind, &endpoint, search).await
@@ -371,11 +377,11 @@ fn labels(labels: &Value) -> Vec<String> {
 /// The list endpoint that runs `search` for items of `kind`. GitLab keeps
 /// merged merge requests apart from closed ones, so a search for closed ones
 /// lists all and leaves the open ones for the caller to drop.
-fn search_endpoint(kind: ItemKind, search: &list::Search) -> String {
+fn search_endpoint(kind: ItemKind, search: &Search) -> String {
     let state = match (search.state, kind) {
-        (list::StateFilter::Open, _) => "opened",
-        (list::StateFilter::Closed, ItemKind::Issue) => "closed",
-        (list::StateFilter::Closed, ItemKind::Pr) | (list::StateFilter::All, _) => "all",
+        (StateFilter::Open, _) => "opened",
+        (StateFilter::Closed, ItemKind::Issue) => "closed",
+        (StateFilter::Closed, ItemKind::Pr) | (StateFilter::All, _) => "all",
     };
     let resource = match kind {
         ItemKind::Issue => "issues",

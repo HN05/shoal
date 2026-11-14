@@ -3,10 +3,10 @@
 use anyhow::{Context, Result};
 
 use crate::{
-    ForgeRepo,
     account::Account,
     transport::api::{Request, TransportRequests},
 };
+use shoal_forge_types::ForgeRepo;
 
 /// The first release whose API reruns runs and jobs.
 const RERUNS_SINCE: u64 = 17;

@@ -2,8 +2,7 @@ use super::*;
 use crate::paths::StateFiles;
 use crate::{
     agents::hook_reports::Sending,
-    client::notifications::NotificationKind,
-    client::space_ids::SpaceId,
+    client::{notifications::NotificationKind, space_ids::SpaceId},
     daemon::test_support::{manager, repository},
     model::{AgentStatus, Workspace},
     protocol::TurnEnd,

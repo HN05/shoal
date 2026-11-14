@@ -4,10 +4,10 @@ use serde_json::json;
 
 use super::*;
 use crate::{
-    backends::ForgeKind,
     ci::runner::{RunnerRequests, TookRun, answer_took_run, took_run},
     test_support::{Server, agent_on, repo_on},
 };
+use shoal_forge_types::backends::ForgeKind;
 
 fn job(id: u64, run: u64, status: &str, labels: &[&str]) -> Value {
     json!({"id": id, "run_id": run, "name": "rust", "status": status, "labels": labels})

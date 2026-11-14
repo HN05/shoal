@@ -5,12 +5,10 @@ use anyhow::Result;
 
 use crate::{
     daemon::file_access,
-    forge::{
-        items::link::{LinkKind, Selection},
-        updates::{MergeCheck, Snapshot},
-    },
+    forge::items::link::{LinkKind, Selection},
     model::ConflictCheck,
 };
+use shoal_forge::updates::{MergeCheck, Snapshot};
 
 /// Conflicted paths named in a branch conflict message; `shoal conflicts` lists all.
 const MAX_LISTED_FILES: usize = 10;

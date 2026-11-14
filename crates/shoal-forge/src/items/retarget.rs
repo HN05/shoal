@@ -2,11 +2,11 @@
 use anyhow::{Context, Result};
 use shoal_refs::BranchName;
 
-use crate::{
+use crate::{account::Account, items::action::ActionSteps};
+use shoal_forge_types::{
     ForgeRepo,
-    account::Account,
     items::{
-        action::{Action, ActionSteps, Edit},
+        action::{Action, Edit},
         link::ItemKind,
     },
     numbers::PullNumber,

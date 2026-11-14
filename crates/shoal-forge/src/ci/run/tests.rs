@@ -1,7 +1,8 @@
 use serde_json::json;
 
 use super::*;
-use crate::{backends::Runs, raw::HttpMethod};
+use crate::backends::Runs;
+use shoal_forge_types::raw::HttpMethod;
 
 fn run(workflow: Option<&str>) -> NewRun {
     NewRun {
@@ -14,7 +15,7 @@ fn run(workflow: Option<&str>) -> NewRun {
 /// The method, endpoint and body of the request that starts `run`.
 fn request(remote: &str, run: &NewRun) -> Result<(HttpMethod, String, serde_json::Value)> {
     let repo = ForgeRepo::parse(remote)?;
-    let request = repo.kind.start_run(&repo, run)?;
+    let request = repo.kind().start_run(&repo, run)?;
     Ok((
         request.method,
         request.endpoint,
@@ -82,7 +83,7 @@ fn a_run_names_a_workflow_only_where_the_forge_takes_one() -> Result<()> {
 fn started_runs_link_the_run_where_the_forge_reports_it() -> Result<()> {
     let url = |remote: &str, response| -> Result<Option<String>> {
         let repo = ForgeRepo::parse(remote)?;
-        Ok(repo.kind.started_run_url(&repo, &response))
+        Ok(repo.kind().started_run_url(&repo, &response))
     };
     assert_eq!(url("https://github.com/team/repo", json!(null))?, None);
     assert_eq!(

@@ -4,12 +4,14 @@ use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
 use crate::{
-    ForgeRepo,
     account::Account,
+    transport::api::{Request, TransportRequests},
+};
+use shoal_forge_types::{
+    ForgeRepo,
     numbers::{CommentId, PullNumber},
     raw::HttpMethod,
     review::thread::{Target, Thread},
-    transport::api::{Request, TransportRequests},
 };
 
 /// A GitHub review thread, which only GraphQL reports.

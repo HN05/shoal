@@ -1,5 +1,6 @@
 use super::*;
-use crate::backends::{Checks, ForgeKind};
+use crate::backends::Checks;
+use shoal_forge_types::backends::ForgeKind;
 
 #[test]
 fn escapes_controls_and_redrawn_text_are_removed() {

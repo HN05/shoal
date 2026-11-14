@@ -4,7 +4,8 @@ use std::{ffi::OsStr, path::Path};
 
 use anyhow::{Result, ensure};
 
-use crate::{forge::transport::programs, fsutil};
+use crate::fsutil;
+use shoal_forge::transport::programs;
 
 #[derive(Clone, Copy)]
 pub enum Dependency {

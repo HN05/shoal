@@ -1,5 +1,6 @@
 use super::*;
-use crate::review::submit::{LineComment, Side};
+use shoal_forge_types::review::submit::LineComment;
+use shoal_forge_types::review::submit::Side;
 
 #[test]
 fn the_diff_is_the_version_at_the_head_with_the_commits_it_compares() -> Result<()> {

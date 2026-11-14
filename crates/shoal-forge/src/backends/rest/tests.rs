@@ -43,10 +43,10 @@ fn fingerprints_key_items_by_id_and_ignore_other_fields() {
 #[tokio::test]
 async fn a_prs_discussion_reviews_and_checks_are_read_together() {
     use crate::{
-        backends::ForgeKind,
         test_support::{Server, agent_on, repo_on, together},
         transport::memory::Memory,
     };
+    use shoal_forge_types::backends::ForgeKind;
     let arrived = together(3);
     let server = Server::start(move |request| {
         let body = if request.line == "GET /api/v1/repos/team/repo/pulls/7" {

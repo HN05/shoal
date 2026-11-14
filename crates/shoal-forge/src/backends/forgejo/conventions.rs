@@ -4,13 +4,12 @@ use serde_json::Value;
 
 use super::{Forgejo, organization};
 use crate::{
-    ForgeRepo,
     account::Account,
     backends::Conventions,
     conventions::{Lookup, shared_lookups},
-    items::link::ItemKind,
     transport::api::TransportRequests,
 };
+use shoal_forge_types::{ForgeRepo, items::link::ItemKind};
 
 impl Conventions for Forgejo {
     fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {

@@ -10,10 +10,11 @@ use crate::{
         forges::{Forges, Whose},
     },
     daemon::workspace::Manager,
-    forge::{ForgeRepo, RepoRequests, account::Account},
+    forge::ForgeRepo,
     model::{Repository, Workspace},
     protocol::ItemContext,
 };
+use shoal_forge::{RepoRequests, account::Account};
 
 /// Where an action on a repository's items runs: a workspace, its worktree
 /// verified, a chat in its repository's registered checkout, or the

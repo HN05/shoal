@@ -58,7 +58,10 @@ would not fit with an error saying so.
 The protocol is the one protocol for the CLI and for apps. Apps use it through
 the `shoal-client` library, which holds the requests and responses with the
 types they carry, the connection the CLI makes, and the client-side logic the
-CLI shares with apps. Config files are parsed and resolved in `shoal-core`: the
+CLI shares with apps. The forge data they carry, such as item references, CI
+runs and review threads, comes from `shoal-forge-types`, which reads it
+without a request, so a client builds no forge's requests; `shoal-forge` sends
+them and depends on it. Config files are parsed and resolved in `shoal-core`: the
 protocol carries a target's repository layers as JSON the caller reads, and
 the daemon resolves what a launch needs. A layer's `same_as` references travel
 in it, taken out of its file before its options are read and followed once
@@ -1995,7 +1998,7 @@ normally, so an idle agent whose turns fail is never silent and a run of failure
 is one notification.
 The retrying proxy lives in `crates/shoal-proxy`, which knows the wire protocols
 and depends on no Shoal crate but `shoal-time`, as `shoal-forge` depends only on
-leaf crates such as `shoal-subprocess` and `shoal-time`. Each tracked agent that names one gets its
+`shoal-forge-types` and leaf crates such as `shoal-subprocess` and `shoal-time`. Each tracked agent that names one gets its
 own, run by its wrapper, so a daemon restart never cuts a stream and the proxy
 ends with the agent; Shoal points the agent at it through the integration, which
 knows how that agent takes a base URL. An upstream is a server root that every
