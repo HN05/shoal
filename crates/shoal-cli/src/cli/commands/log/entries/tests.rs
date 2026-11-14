@@ -93,6 +93,13 @@ fn shoal_s_and_the_forge_s_changes_name_the_item_and_change() {
         (label.as_str(), details.as_str()),
         ("PR changed", "#7 delete branch")
     );
+    let (label, details) = describe(&event(serde_json::json!({"kind": "item_changed",
+        "item": {"kind": "pr", "url": "https://forge.example/team/repo/pulls/7",
+            "action": "request_changes"}})));
+    assert_eq!(
+        (label.as_str(), details.as_str()),
+        ("PR changes requested", "#7")
+    );
     let (label, _) = describe(&event(serde_json::json!({"kind": "item_activity",
         "item_activity": {"kind": "issue", "url": "https://forge.example/team/repo/issues/3",
             "update": {"kind": "closed", "message": "Closed"}}})));
