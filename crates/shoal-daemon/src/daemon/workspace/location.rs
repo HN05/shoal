@@ -104,18 +104,9 @@ impl Manager {
                 ensure!(
                     !directory.starts_with(&path)
                         && (other.id == repo.id || !path.starts_with(directory))
-                        && !overlaps(&path, crate::seed::Layout::new(directory, &other.id).root())
-                        && !overlaps(
-                            &path,
-                            crate::caches::Layout::new(directory, &other.id).root(),
-                        )
                         && !Contents::ALL.into_iter().any(|contents| {
                             overlaps(&path, ShoalDir::new(directory, &other.id, contents).root())
                         })
-                        && !overlaps(
-                            &path,
-                            super::imported_sessions::Layout::new(directory, &other.id).root(),
-                        )
                         && !overlaps(&path, &directory.join(crate::config::repo::LOCAL_DIR)),
                     "workspace path overlaps a reserved repository directory"
                 );

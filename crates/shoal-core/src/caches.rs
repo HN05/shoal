@@ -11,13 +11,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 
 use crate::{
     config::repo::Cache,
-    fsutil::marked_dirs::{create_marked_dir, is_marked_dir},
     model::Repository,
-    shoal_dirs::remove_dir,
+    shoal_dirs::{Contents, ShoalDir, remove_dir},
 };
 
 /// Holds the caches, apart from the owner marker.
@@ -29,35 +28,31 @@ const TRASH: &str = "trash";
 /// The directory of one repository's shared caches.
 #[derive(Debug, Clone)]
 pub struct Layout {
-    root: PathBuf,
-    owner: RepositoryId,
+    dir: ShoalDir,
 }
 
 impl Layout {
     pub fn new(workspaces_dir: &Path, repository_id: &RepositoryId) -> Self {
         Self {
-            root: workspaces_dir.join(".caches"),
-            owner: repository_id.to_owned(),
+            dir: ShoalDir::new(workspaces_dir, repository_id, Contents::Caches),
         }
     }
 
     /// The repository's caches; registrations from before the repository
     /// directory layout have none.
     pub fn of(repo: &Repository) -> Option<Self> {
-        repo.workspaces_dir
-            .as_deref()
-            .map(|directory| Self::new(directory, &repo.id))
+        ShoalDir::of(repo, Contents::Caches).map(|dir| Self { dir })
     }
 
     pub fn root(&self) -> &Path {
-        &self.root
+        self.dir.root()
     }
 
     /// Each configured cache's directory, without creating it.
     pub fn locate(&self, caches: &BTreeMap<String, Cache>) -> BTreeMap<String, PathBuf> {
         caches
             .keys()
-            .map(|name| (name.clone(), self.root.join(SHARED).join(name)))
+            .map(|name| (name.clone(), self.root().join(SHARED).join(name)))
             .collect()
     }
 
@@ -65,13 +60,12 @@ impl Layout {
     /// one Shoal created for this repository and no symlink leads out of it
     /// on the way, so its entries may be deleted.
     pub fn owned(&self, name: &str) -> Option<PathBuf> {
-        let shared = self.root.join(SHARED);
+        let shared = self.root().join(SHARED);
         let cache = shared.join(name);
         let real = |directory: &Path| {
             fs::symlink_metadata(directory).is_ok_and(|metadata| metadata.is_dir())
         };
-        (is_marked_dir(&self.root, self.owner.as_str()) && real(&shared) && real(&cache))
-            .then_some(cache)
+        (self.dir.is_own() && real(&shared) && real(&cache)).then_some(cache)
     }
 
     /// Each configured cache's directory, created when missing.
@@ -82,9 +76,7 @@ impl Layout {
         if caches.is_empty() {
             return Ok(BTreeMap::new());
         }
-        create_marked_dir(&self.root, self.owner.as_str())
-            .with_context(|| format!("create {}", self.root.display()))?;
-        self.ensure_owned()?;
+        self.dir.create()?;
         let directories = self.locate(caches);
         for (name, directory) in &directories {
             fs::create_dir_all(directory)
@@ -98,7 +90,7 @@ impl Layout {
     /// fills only with its own files, which emptying keeps: processes
     /// started with an exported environment still name them.
     pub fn list(&self) -> Result<Vec<String>> {
-        let shared = self.root.join(SHARED);
+        let shared = self.root().join(SHARED);
         let entries = match fs::read_dir(&shared) {
             Ok(entries) => entries,
             Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
@@ -121,10 +113,13 @@ impl Layout {
         if names.is_empty() {
             return Ok(names);
         }
-        self.ensure_owned()?;
-        let batch = self.root.join(TRASH).join(uuid::Uuid::new_v4().to_string());
+        self.dir.ensure_own()?;
+        let batch = self
+            .root()
+            .join(TRASH)
+            .join(uuid::Uuid::new_v4().to_string());
         fs::create_dir_all(&batch)?;
-        let shared = self.root.join(SHARED);
+        let shared = self.root().join(SHARED);
         for name in &names {
             let cache = shared.join(name);
             fs::rename(&cache, batch.join(name))
@@ -136,28 +131,16 @@ impl Layout {
     /// Delete the caches [`Self::move_aside`] moved, including any an
     /// interrupted pass left behind; a directory Shoal did not create stays.
     pub fn purge(&self) -> Result<()> {
-        if !is_marked_dir(&self.root, self.owner.as_str()) {
+        if !self.dir.is_own() {
             return Ok(());
         }
-        remove_dir(&self.root.join(TRASH))
+        remove_dir(&self.root().join(TRASH))
     }
 
     /// Delete every cache with the directory itself, when the repository
     /// goes; a directory Shoal did not create is the user's and stays.
     pub fn remove(&self) -> Result<()> {
-        if !is_marked_dir(&self.root, self.owner.as_str()) {
-            return Ok(());
-        }
-        remove_dir(&self.root)
-    }
-
-    fn ensure_owned(&self) -> Result<()> {
-        ensure!(
-            is_marked_dir(&self.root, self.owner.as_str()),
-            "{} is not a cache directory Shoal created; move it away to share caches",
-            self.root.display()
-        );
-        Ok(())
+        self.dir.remove()
     }
 }
 

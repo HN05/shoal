@@ -1,5 +1,4 @@
-//! The directories Shoal keeps beside workspaces for files it gives the
-//! user, agents and reviewers to work with. Each is in its repository's
+//! The directories Shoal keeps beside workspaces. Each is in its repository's
 //! directory, marked with the repository's ID, or for what belongs to no
 //! repository in `root_dir`, marked with the state directory of the daemon
 //! that keeps it, so a daemon sharing `root_dir` neither uses nor sweeps
@@ -13,7 +12,9 @@ use std::{
 use anyhow::{Context, Result, bail, ensure};
 
 use crate::{
-    fsutil::marked_dirs::{check_marked_dir, create_marked_dir, is_marked_dir, marked_owner},
+    fsutil::marked_dirs::{
+        OWNER_MARKER, check_marked_dir, create_marked_dir, is_marked_dir, marked_owner,
+    },
     model::Repository,
 };
 
@@ -28,14 +29,24 @@ pub enum Contents {
     ProposalFiles,
     /// Each running local review's checkout and its reviewer's output.
     ReviewRuns,
+    /// The tool caches every workspace of a repository shares.
+    Caches,
+    /// The agents' session files an import carried, until a restore puts
+    /// them in place.
+    ImportedSessions,
+    /// The seed build new workspaces start from.
+    Seed,
 }
 
 impl Contents {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 7] = [
         Self::TmpDirs,
         Self::Attachments,
         Self::ProposalFiles,
         Self::ReviewRuns,
+        Self::Caches,
+        Self::ImportedSessions,
+        Self::Seed,
     ];
 
     fn directory(self) -> &'static str {
@@ -44,6 +55,9 @@ impl Contents {
             Self::Attachments => ".attachments",
             Self::ProposalFiles => ".proposals",
             Self::ReviewRuns => ".reviews",
+            Self::Caches => ".caches",
+            Self::ImportedSessions => ".sessions",
+            Self::Seed => ".seed",
         }
     }
 
@@ -53,6 +67,9 @@ impl Contents {
             Self::Attachments => "attached files",
             Self::ProposalFiles => "proposals' files",
             Self::ReviewRuns => "review runs",
+            Self::Caches => "shared caches",
+            Self::ImportedSessions => "imported session files",
+            Self::Seed => "seed build",
         }
     }
 }
@@ -98,6 +115,11 @@ impl ShoalDir {
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// The repository ID, or state directory, the directory is marked as.
+    pub fn owner(&self) -> &str {
+        &self.owner
     }
 
     /// Create the directory marked as its owner's when it is missing, and
@@ -147,6 +169,13 @@ impl ShoalDir {
         }
         remove_dir(&self.root)
     }
+
+    /// Delete the directory's mark, then the directory when nothing else is
+    /// left in it; what is left is no longer Shoal's.
+    pub fn unmark(&self) -> Result<()> {
+        remove_file(&self.root.join(OWNER_MARKER))?;
+        remove_if_empty(&self.root)
+    }
 }
 
 /// Delete `directory` with everything in it, when it exists.
@@ -154,6 +183,16 @@ pub fn remove_dir(directory: &Path) -> Result<()> {
     match std::fs::remove_dir_all(directory) {
         Err(error) if error.kind() != ErrorKind::NotFound => {
             Err(error).with_context(|| format!("delete {}", directory.display()))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Delete `file` when it exists.
+pub fn remove_file(file: &Path) -> Result<()> {
+    match std::fs::remove_file(file) {
+        Err(error) if error.kind() != ErrorKind::NotFound => {
+            Err(error).with_context(|| format!("delete {}", file.display()))
         }
         _ => Ok(()),
     }

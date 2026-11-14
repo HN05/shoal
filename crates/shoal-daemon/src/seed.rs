@@ -17,10 +17,12 @@ use std::{
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::fsutil::{
-    copy::clone_tree,
-    marked_dirs::{OWNER_MARKER, create_marked_dir, is_marked_dir},
-    subvolume::{self, Btrfs, Subvolumes},
+use crate::{
+    fsutil::{
+        copy::clone_tree,
+        subvolume::{self, Btrfs, Subvolumes},
+    },
+    shoal_dirs::{Contents, ShoalDir, remove_file},
 };
 
 pub mod build;
@@ -34,24 +36,20 @@ const SPARE_TAKEN: &str = "spare.taken";
 /// Where one repository's seed lives, beside its workspaces.
 #[derive(Debug, Clone)]
 pub struct Layout {
-    root: PathBuf,
-    owner: RepositoryId,
+    dir: ShoalDir,
 }
 
 impl Layout {
     pub fn new(workspaces_dir: &Path, repository_id: &RepositoryId) -> Self {
         Self {
-            root: workspaces_dir.join(".seed"),
-            owner: repository_id.to_owned(),
+            dir: ShoalDir::new(workspaces_dir, repository_id, Contents::Seed),
         }
     }
 
     /// The repository's seed; registrations from before the repository
     /// directory layout have none.
     pub fn of(repo: &crate::model::Repository) -> Option<Self> {
-        repo.workspaces_dir
-            .as_deref()
-            .map(|directory| Self::new(directory, &repo.id))
+        ShoalDir::of(repo, Contents::Seed).map(|dir| Self { dir })
     }
 
     /// Whether `path`, as Git lists worktrees, is this seed's worktree.
@@ -61,45 +59,39 @@ impl Layout {
     }
 
     pub fn root(&self) -> &Path {
-        &self.root
+        self.dir.root()
     }
 
     pub fn worktree(&self) -> PathBuf {
-        self.root.join("worktree")
+        self.root().join("worktree")
     }
 
     /// Create the seed directory, or require the existing one to be this
     /// repository's.
     pub fn claim(&self) -> Result<()> {
-        create_marked_dir(&self.root, self.owner.as_str())?;
-        self.ensure_owned()
+        self.dir.create()
     }
 
     /// Require the seed directory to be marked as this repository's, so Shoal
     /// never builds in or deletes from one it did not create.
     pub fn ensure_owned(&self) -> Result<()> {
-        anyhow::ensure!(
-            is_marked_dir(&self.root, self.owner.as_str()),
-            "{} is not a seed directory Shoal created; move it away to use the seed",
-            self.root.display()
-        );
-        Ok(())
+        self.dir.ensure_own()
     }
 
     /// The owner marker of the seed worktree's Git admin directory.
     pub fn worktree_owner(&self) -> String {
-        format!("seed:{}", self.owner)
+        format!("seed:{}", self.dir.owner())
     }
 
     /// The lock reason that keeps Git from pruning the seed worktree.
     pub fn lock_reason(&self) -> String {
-        format!("Shoal seed of repository {}", self.owner)
+        format!("Shoal seed of repository {}", self.dir.owner())
     }
 
     /// Delete what Shoal keeps beside the seed worktree, then the seed
     /// directory if nothing else is left in it.
     pub fn remove_owned(&self) -> Result<()> {
-        if self.root.symlink_metadata().is_err() {
+        if self.root().symlink_metadata().is_err() {
             return Ok(());
         }
         self.ensure_owned()?;
@@ -109,53 +101,36 @@ impl Layout {
         for directory in [self.converted(), self.subvolume_probe()] {
             remove_tree(&directory, &[])?;
         }
-        for file in [self.log(), self.root.join(OWNER_MARKER)] {
-            match fs::remove_file(&file) {
-                Err(error) if error.kind() != ErrorKind::NotFound => {
-                    return Err(error).with_context(|| format!("delete {}", file.display()));
-                }
-                _ => {}
-            }
-        }
-        match fs::remove_dir(&self.root) {
-            Err(error)
-                if !matches!(
-                    error.kind(),
-                    ErrorKind::NotFound | ErrorKind::DirectoryNotEmpty
-                ) =>
-            {
-                Err(error).with_context(|| format!("delete {}", self.root.display()))
-            }
-            _ => Ok(()),
-        }
+        remove_file(&self.log())?;
+        self.dir.unmark()
     }
 
     /// Output of the latest seed build, for diagnosing a failure.
     pub fn log(&self) -> PathBuf {
-        self.root.join("build.log")
+        self.root().join("build.log")
     }
 
     fn snapshot(&self) -> PathBuf {
-        self.root.join("snapshot")
+        self.root().join("snapshot")
     }
 
     fn staging(&self) -> PathBuf {
-        self.root.join("snapshot.new")
+        self.root().join("snapshot.new")
     }
 
     fn retired(&self) -> PathBuf {
-        self.root.join("snapshot.old")
+        self.root().join("snapshot.old")
     }
 
     /// Where a freeze moves the plain output directories it replaced with
     /// subvolumes.
     fn converted(&self) -> PathBuf {
-        self.root.join("converted")
+        self.root().join("converted")
     }
 
     /// Where a freeze tries whether it can make and remove subvolumes.
     fn subvolume_probe(&self) -> PathBuf {
-        self.root.join("subvolume.probe")
+        self.root().join("subvolume.probe")
     }
 
     /// Delete the snapshot a new one replaced, and the output directories

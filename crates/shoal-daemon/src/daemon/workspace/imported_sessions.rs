@@ -12,15 +12,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 use super::Manager;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    fsutil::marked_dirs::{create_marked_dir, is_marked_dir},
     model::{RemovedWorkspace, Repository, Workspace},
+    shoal_dirs::{Contents, ShoalDir, remove_dir},
     transfer::{CarriedSessionFile, SessionFile, SessionSource},
 };
 
@@ -170,35 +170,31 @@ pub(super) async fn remove_imported_sessions(repo: &Repository) -> Result<()> {
 const LIST: &str = "files.json";
 
 /// The directory of one repository's kept session files.
-pub(super) struct Layout {
-    root: PathBuf,
-    owner: RepositoryId,
+struct Layout {
+    dir: ShoalDir,
 }
 
 impl Layout {
-    pub(super) fn new(workspaces_dir: &Path, repository_id: &RepositoryId) -> Self {
+    fn new(workspaces_dir: &Path, repository_id: &RepositoryId) -> Self {
         Self {
-            root: workspaces_dir.join(".sessions"),
-            owner: repository_id.to_owned(),
+            dir: ShoalDir::new(workspaces_dir, repository_id, Contents::ImportedSessions),
         }
     }
 
-    pub(super) fn root(&self) -> &Path {
-        &self.root
+    fn root(&self) -> &Path {
+        self.dir.root()
     }
 
     /// The repository's kept session files; registrations from before the
     /// repository directory layout have none until an import reserves it.
     fn of(repo: &Repository) -> Option<Self> {
-        repo.workspaces_dir
-            .as_deref()
-            .map(|directory| Self::new(directory, &repo.id))
+        ShoalDir::of(repo, Contents::ImportedSessions).map(|dir| Self { dir })
     }
 
     /// The session files `files` kept for the workspace `id`, each named by
     /// its place among them.
     fn kept(&self, id: &SpaceId, files: &[SessionFile]) -> Vec<CarriedSessionFile> {
-        let directory = self.root.join(id);
+        let directory = self.root().join(id);
         files
             .iter()
             .enumerate()
@@ -223,14 +219,8 @@ impl Layout {
         if copies.is_empty() {
             return Ok(());
         }
-        create_marked_dir(&self.root, self.owner.as_str())
-            .with_context(|| format!("create {}", self.root.display()))?;
-        ensure!(
-            is_marked_dir(&self.root, self.owner.as_str()),
-            "{} is not a directory Shoal created for session files; move it away",
-            self.root.display()
-        );
-        let directory = self.root.join(id);
+        self.dir.create()?;
+        let directory = self.root().join(id);
         std::fs::create_dir(&directory)
             .with_context(|| format!("create {}", directory.display()))?;
         let written = copies
@@ -253,10 +243,10 @@ impl Layout {
 
     /// The list of the files kept for the workspace `id`.
     fn listed(&self, id: &SpaceId) -> Result<Vec<SessionFile>> {
-        if !is_marked_dir(&self.root, self.owner.as_str()) {
+        if !self.dir.is_own() {
             return Ok(Vec::new());
         }
-        let list = self.root.join(id).join(LIST);
+        let list = self.root().join(id).join(LIST);
         match std::fs::read(&list) {
             Ok(bytes) => {
                 serde_json::from_slice(&bytes).with_context(|| format!("read {}", list.display()))
@@ -268,29 +258,25 @@ impl Layout {
 
     /// Move the files kept for the workspace `from` to the workspace `to`.
     fn hand_over(&self, from: &SpaceId, to: &SpaceId) -> Result<()> {
-        ensure!(
-            is_marked_dir(&self.root, self.owner.as_str()),
-            "{} is not a directory Shoal created for session files",
-            self.root.display()
-        );
-        let (from, to) = (self.root.join(from), self.root.join(to));
+        self.dir.ensure_own()?;
+        let (from, to) = (self.root().join(from), self.root().join(to));
         std::fs::rename(&from, &to)
             .with_context(|| format!("move {} to {}", from.display(), to.display()))
     }
 
     fn remove_one(&self, id: &SpaceId) -> Result<()> {
-        if !is_marked_dir(&self.root, self.owner.as_str()) {
+        if !self.dir.is_own() {
             return Ok(());
         }
-        remove_dir(&self.root.join(id))
+        remove_dir(&self.root().join(id))
     }
 
     /// Delete the files kept for workspaces other than `owners`.
     fn remove_unowned(&self, owners: &HashSet<String>) -> Result<()> {
-        if !is_marked_dir(&self.root, self.owner.as_str()) {
+        if !self.dir.is_own() {
             return Ok(());
         }
-        for entry in std::fs::read_dir(&self.root)? {
+        for entry in std::fs::read_dir(self.root())? {
             let entry = entry?;
             if entry.file_type()?.is_dir()
                 && !owners.contains(entry.file_name().to_string_lossy().as_ref())
@@ -302,19 +288,7 @@ impl Layout {
     }
 
     fn remove(&self) -> Result<()> {
-        if !is_marked_dir(&self.root, self.owner.as_str()) {
-            return Ok(());
-        }
-        remove_dir(&self.root)
-    }
-}
-
-fn remove_dir(directory: &Path) -> Result<()> {
-    match std::fs::remove_dir_all(directory) {
-        Err(error) if error.kind() != ErrorKind::NotFound => {
-            Err(error).with_context(|| format!("delete {}", directory.display()))
-        }
-        _ => Ok(()),
+        self.dir.remove()
     }
 }
 
