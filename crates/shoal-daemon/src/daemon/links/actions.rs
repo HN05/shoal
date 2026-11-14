@@ -89,7 +89,7 @@ impl Manager {
         let _gate = self.lock_change_gates(space.id(), &[]).await?;
         let target = Target { kind, number, url };
         let item = self
-            .apply_own(space.id(), &forge, &account, target, &action)
+            .apply_own(space.id(), &forge, &account, target, &action, caller)
             .await?;
         self.sync_after_merge(space.repository_id(), &action, &item);
         Ok(item)
@@ -188,7 +188,7 @@ impl Manager {
                     number: number.get(),
                     url,
                 };
-                self.apply_own(space.id(), &forge, &account, target, &action)
+                self.apply_own(space.id(), &forge, &account, target, &action, None)
                     .await?;
             }
         }
@@ -226,7 +226,7 @@ impl Manager {
             number: number.get(),
             url,
         };
-        self.apply_own(space.id(), &forge, &account, target, &action)
+        self.apply_own(space.id(), &forge, &account, target, &action, None)
             .await?;
         Ok(())
     }
@@ -256,7 +256,8 @@ impl Manager {
     }
 
     /// Apply `action` and record it as the workspace's own change, as well as
-    /// a comment it posted before failing. The caller holds the gates
+    /// a comment it posted before failing; `caller` takes it, `None` for the
+    /// user and for Shoal's own changes. The caller holds the gates
     /// [`Manager::lock_change_gates`] takes for the workspace.
     pub(super) async fn apply_own(
         &self,
@@ -265,6 +266,7 @@ impl Manager {
         account: &Account,
         target: Target,
         action: &Action,
+        caller: Option<&Caller>,
     ) -> Result<Item> {
         let acted = match forge
             .apply(account, target.kind, target.number, action)
@@ -273,12 +275,13 @@ impl Manager {
             Ok(acted) => acted,
             Err(error) => {
                 let error = error.context(format!("could not {} {}", action.verb(), target.url));
-                return Err(self.record_failed_post(id, target, action, error).await);
+                let failed = self.record_failed_post(id, target, action, caller, error);
+                return Err(failed.await);
             }
         };
         let own = Own {
             state: own_state(action).then_some(acted.item.state),
-            authored: own_posts(action, acted.authored),
+            authored: own_posts(action, caller, acted.authored),
             edited: own_edits(action, acted.edited),
         };
         self.record_own_action(id, target, action.name(), own)
@@ -294,11 +297,12 @@ impl Manager {
         id: &SpaceId,
         target: Target,
         action: &Action,
+        caller: Option<&Caller>,
         error: anyhow::Error,
     ) -> anyhow::Error {
         let Some(authored) = error
             .downcast_ref::<Sent>()
-            .map(|sent| own_posts(action, sent.authored.clone()))
+            .map(|sent| own_posts(action, caller, sent.authored.clone()))
             .filter(|authored| !authored.is_empty())
         else {
             return error;
@@ -389,11 +393,12 @@ fn has_verdict(action: &Action) -> bool {
     matches!(action, Action::Review(review) if review.has_verdict())
 }
 
-/// The activity keys of what `action` posted that are the agent's own, so
-/// its watches do not report them back: none of the user's decisions,
-/// which the agent still hears about.
-fn own_posts(action: &Action, authored: Vec<String>) -> Vec<String> {
-    if users_decision(action) {
+/// The activity keys of what `action`, which `caller` took, posted that are
+/// the agent's own, so its watches do not report them back: none of the
+/// user's decisions, which the agent still hears about, but a scoped
+/// caller's verdict.
+fn own_posts(action: &Action, caller: Option<&Caller>, authored: Vec<String>) -> Vec<String> {
+    if caller.is_none() && users_decision(action) {
         Vec::new()
     } else {
         authored
