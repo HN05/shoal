@@ -138,7 +138,7 @@ without changing either file; installation needs no daemon. `shoal config` edits
 installs and resets apply to a running daemon at once; after editing the file by
 hand, run `shoal config reload`, which scoped processes may also run. Reloading
 keeps running agents and leases, and an invalid file leaves the daemon's previous
-settings in place. [Configuration](config.md) describes the config files, their
+settings in place. [Configuration](../crates/shoal-cli/src/cli/commands/configuration/reference.md) describes the config files, their
 layers and every option. Setup preserves compatible
 daemons and commands until restart; incompatible daemons restart automatically.
 Changing the service state directory requires stopping it with its existing
@@ -201,7 +201,7 @@ then suggests `shoal restore --all`.
 ### Overload protection
 
 At the configured memory threshold, the daemon asks one connected tracked agent
-of a mode that is not [light](config.md#modes-and-rules) to stop, in the
+of a mode that is not [light](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) to stop, in the
 [agent queue's](#queue-order) order reversed: one you are not attached to while
 there is one, an idle one before a working one, then the one whose space ranks
 last, lowest priority first; within a space the one idle longest, otherwise the
@@ -253,13 +253,13 @@ disk warning wakes it. Warnings stop and remove
 nothing; a failed reading warns about nothing. Warning thresholds are not checked
 against stop thresholds; a warning at or above one arrives with the stop.
 
-[`[machine.overload]`](config.md#overload) sets the thresholds, from defaults
-that [`load`](config.md#machine) chooses, and `config reload` applies them.
+[`[machine.overload]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#overload) sets the thresholds, from defaults
+that [`load`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) chooses, and `config reload` applies them.
 A failed reading resets that signal’s timer and cannot authorize a stop;
 memory protection remains independent of CPU readings.
 
 An agent restores through its tool's
-[`resume_command`](config.md#ai-tools). Without one, an AI tool with resume
+[`resume_command`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools). Without one, an AI tool with resume
 arguments (`resume` and `resume_latest`, built in for Claude and Codex)
 continues the session its
 hooks last reported, otherwise the latest session in the workspace, without a
@@ -540,7 +540,7 @@ and a Claude Code agent runs both forms without a permission prompt.
 
 ### Keeping the machine awake
 
-With [`machine.keep_awake`](config.md#machine) set, the daemon keeps the machine from sleeping while an
+With [`machine.keep_awake`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) set, the daemon keeps the machine from sleeping while an
 [agent's turn](#agent-state) is working, or while an idle agent receives the
 activity of a [watched](#linked-items-and-cleanup) PR not yet seen merged or
 closed, from its own workspace or chat or a [child](#child-workspaces) without an agent,
@@ -585,8 +585,8 @@ An idle agent keeps its memory while it waits for its next update. Each
 of done spaces that something besides their work and PRs keeps from
 [completion cleanup](#assignment-completion), such as a
 [hold](#workspace-holds) or an open [question](#questions), and with
-[`[sleep] idle`](config.md#sleep) enabled any idle heavy agent; a
-[light](config.md#modes-and-rules) one keeps running. Only an agent idle with no processes running
+[`[sleep] idle`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#sleep) enabled any idle heavy agent; a
+[light](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) one keeps running. Only an agent idle with no processes running
 outside its process group, with a restore command, and whose
 [prompt cache](#agent-state) has expired stops: a resumed agent's first request
 writes most of its cache again, which an expired cache costs anyway. An agent
@@ -620,7 +620,7 @@ An agent that waits for something runs `shoal sleep`: from the end of its turn
 it sleeps, gets no idle wakes, and once stopping it costs no prompt cache,
 whether or not other work waits, Shoal stops a heavy one and saves it to come
 back once an update arrives, as an idle stop does; a light one keeps running. Under the `balanced` and `cache`
-[schedules](config.md#machine) that is once its cache has expired, or while the
+[schedules](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) that is once its cache has expired, or while the
 CI jobs this machine's [runner](#runner) runs or has queued for its space are
 expected, from the longest of each job's recent runs, to outlast the cache;
 Shoal waits for expiry when a job has no recorded run. Under `speed` it is at
@@ -954,7 +954,7 @@ Scoped callers find only their own workspace and its child workspaces.
 
 ### Configured commands
 
-Workspace shortcuts are [`[commands]`](config.md#commands) entries. Use `shoal run -- <command> <arguments>` for arbitrary commands and
+Workspace shortcuts are [`[commands]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#commands) entries. Use `shoal run -- <command> <arguments>` for arbitrary commands and
 `shoal run check [--workspace W] -- <extra arguments>` for configured ones, whatever
 built-in command shares the name; `shoal check` runs nothing, and an unknown
 top-level name prints a line pointing to `shoal run <name>`. Omit
@@ -968,7 +968,7 @@ Execution preserves terminal I/O, scope, reserved-port variables, and exit statu
 just like arbitrary `run` commands. `{diff_base}` resolves lazily through the same
 daemon fork-point/merge-base lookup as `shoal diff`; failure prevents launch.
 
-Agents' launchers are the [`command`](config.md#ai-tools) of their AI tool.
+Agents' launchers are the [`command`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) of their AI tool.
 Overriding the `command` of Claude or Codex changes the executable or flags;
 prompt templates, trust setup, and agent exit notifications still apply. Agents
 are not commands: `shoal run <name>` runs only `[commands]` entries, which may
@@ -1000,7 +1000,7 @@ while preserving other project settings. When the daemon removes a
 followed by the workspace path and the forwarded arguments.
 
 For local review with [tuicr](https://github.com/agavra/tuicr), install it on PATH
-and set the `review` and `review-worktree` [commands](config.md#commands).
+and set the `review` and `review-worktree` [commands](../crates/shoal-cli/src/cli/commands/configuration/reference.md#commands).
 
 `shoal review run [space]` asks whether to review with the `review` command or
 an agent (see [local reviews](#local-reviews)); `--manual` or `--agent <name>` skips
@@ -1032,7 +1032,7 @@ with the workspace it reviews, for the memory and disk an agent's start needs,
 but takes no agent slot; `shoal queue` does not list it. A
 chat has no changes of its own; see [chat reviews](#chat-reviews) below.
 
-The reviewer is `--agent`, else [`[review] agent`](config.md#reviews), else `agent.default`, else one you
+The reviewer is `--agent`, else [`[review] agent`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#reviews), else `agent.default`, else one you
 pick, and needs a [`review` template](#agents). It runs with `--model` and `--effort`
 over its [configured model and effort](#agents), which the review keeps if it starts
 over; the fallback agent runs with its own configured ones. A reviewer still running after 30
@@ -1104,7 +1104,7 @@ workspace's latest review state. `review resolve` takes one outcome with its dat
 A finding that needs your decision stays unresolved while the agent asks with
 `shoal questions ask`, which keeps the gates below closed until you answer.
 
-With [`[review] require_for_pr`](config.md#reviews), a workspace process's `shoal pr open` that would open a new
+With [`[review] require_for_pr`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#reviews), a workspace process's `shoal pr open` that would open a new
 PR is checked before it pushes, and before a [proposal](#approval-for-agent-issues-and-prs); linking an
 existing PR is not. With `require_for_ready`, its `shoal ready` is checked, not
 `ready --undo`. A gate passes once a finished review covers HEAD exactly and every
@@ -1278,7 +1278,7 @@ a [space's name](#workspaces) replaces either.
 terminal run in place, except that their agent starts detached as
 [Agents](#agents) describes.
 
-[`[terminal.herdr]`](config.md#herdr) configures it. New tabs stay in the
+[`[terminal.herdr]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#herdr) configures it. New tabs stay in the
 background by default when launching an agent with an issue prompt or forwarded
 arguments, and focus otherwise, so a workspace
 shell or an agent waiting for its first prompt is ready to type into;
@@ -1330,7 +1330,7 @@ loads the worker and its variables from a private file and deletes it, so
 nothing shows on screen or in shell history. Your login shell starts in the
 block once the worker exits, as in a Herdr tab.
 
-[`[terminal.rex]`](config.md#rex) configures it; with `enabled = false` Shoal
+[`[terminal.rex]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#rex) configures it; with `enabled = false` Shoal
 treats a Rex terminal as a plain terminal.
 
 With `[terminal] default_host = "rex"`, launches from a terminal no host serves
@@ -1370,7 +1370,7 @@ closing the terminal leaves the agent running. The new window runs the agent
 directly, with nothing typed on screen, then your login shell, which stays
 after the worker exits and enters the workspace as a Herdr tab's shell does. A place of a host
 that claims a terminal before tmux, such as a zmx session, keeps its own
-behavior inside tmux. [`[terminal.tmux]`](config.md#tmux) configures it.
+behavior inside tmux. [`[terminal.tmux]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#tmux) configures it.
 
 With `[terminal] default_host = "tmux"`, which also turns `enabled` on, launches
 from a terminal no host serves open their windows in the `session_name` session
@@ -1417,7 +1417,7 @@ terminal leaves the agent running. The new tab runs the agent directly, with
 nothing typed on screen, then your login shell, which stays after the worker
 exits and enters the workspace as a Herdr tab's shell does. A place of a host
 that claims a terminal before Zellij, such as a tmux pane, keeps its own
-behavior inside Zellij. [`[terminal.zellij]`](config.md#zellij) configures it.
+behavior inside Zellij. [`[terminal.zellij]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#zellij) configures it.
 
 Zellij 0.45 drops a tab opened in a session no client shows, so a place for
 such a session opens as the first pane of a background session of its own,
@@ -1462,7 +1462,7 @@ Besides Claude and Codex, Shoal includes [opencode](https://opencode.ai)
 (`opencode --prompt {prompt} {args}`), [pi](https://github.com/badlogic/pi-mono)
 (`pi`) and [Grok Build](https://docs.x.ai/build/overview) (`grok`); pi and Grok
 take the prompt as their first argument. Each starts with `--agent <name>` once
-its executable is on PATH. An [`[agents.<name>]`](config.md#ai-tools) table in
+its executable is on PATH. An [`[agents.<name>]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) table in
 global or repository config adds another AI tool, such as `droid`:
 `--agent droid` then starts it, such as `shoal start --in 3 --agent droid` in
 an existing workspace. The picker and
@@ -1470,11 +1470,11 @@ completion offer AI tools only, and leave out a tool whose agents
 `enabled = false` turns off; their launches and reviews are refused, and a
 stopped agent's restore waits until the tool is on again. It stops no running
 agent, and that agent's wrapper may still restart it in place. A
-[`base`](config.md#ai-tools) makes a tool a launch profile of another, such as
+[`base`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) makes a tool a launch profile of another, such as
 Claude on its own claude.ai login while `claude` keeps going through a proxy.
 
 `--model` and `--effort` on `shoal start`, `contribute`, `review run` and
-`repo setup` override the [configured model and effort](config.md#ai-tools) for
+`repo setup` override the [configured model and effort](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) for
 that launch. The tool receives the values through `model_args` and
 `effort_args`: Claude Code
 gets `--model` and `--effort`, with `CLAUDE_CODE_EFFORT_LEVEL` set to the same
@@ -1490,11 +1490,11 @@ One whose tool no longer has the templates for them is not restored until it
 does. A desktop app takes
 neither.
 Trust entries and skills follow a `CLAUDE_CONFIG_DIR` or `CODEX_HOME` that a
-tool's [`env`](config.md#ai-tools) sets. Unsetting a variable does not undo one
+tool's [`env`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) sets. Unsetting a variable does not undo one
 the agent's own settings file sets, such as the `env` of Claude's
 `settings.json`, which a separate `CLAUDE_CONFIG_DIR` avoids.
 
-With a tool's [`retry`](config.md#ai-tools), on by default for Claude Code,
+With a tool's [`retry`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools), on by default for Claude Code,
 Shoal retries a turn an API error ended, for agents whose failed turns Shoal
 learns of: Claude
 Code, through its `StopFailure` hook, and any agent whose turn its
@@ -1521,12 +1521,12 @@ turns ends normally. A pending retry outlasts a daemon restart;
 `due_at` and `delivered`.
 
 `status` shows when an idle agent's [cache expires](#agent-state) from its
-tool's [`prompt_cache_minutes`](config.md#ai-tools), which by default keeps
+tool's [`prompt_cache_minutes`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools), which by default keeps
 [`[sleep] idle`](#sleep) from stopping an agent the moment its turn ends.
 
-A tool's [`proxy`](config.md#agent-tools-on-this-machine) sends its tracked
+A tool's [`proxy`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#agent-tools-on-this-machine) sends its tracked
 agents' API requests through Shoal's retrying proxy to the `upstream` of a
-[`[machine.proxies.<name>]`](config.md#proxies). Claude Code names `/v1` in each
+[`[machine.proxies.<name>]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#proxies). Claude Code names `/v1` in each
 request's path, and Codex gets the proxy's URL with `/v1` as its base URL, as
 gateways such as CLIProxyAPI, LiteLLM and OpenRouter serve the OpenAI API.
 
@@ -1596,14 +1596,14 @@ so a proxied Claude agent gets `ENABLE_PROMPT_CACHING_1H=1` unless the
 environment it runs with sets that variable; a lifetime in
 `CLAUDE_CODE_PROMPT_CACHE_TTL` or Claude's `promptCacheTtl` setting still wins. Only Claude Code and Codex, and their launch profiles, can go through it; a launch of another tool that names one is refused. A configured `resume_command`, which gets none of Shoal's hooks, still gets the arguments that point it at the proxy, before a `--` or at its end. An agent its wrapper restores in place, as `shoal restart` or an automatic restore does, runs through the proxy its restore command was resolved with: the same one keeps running, another upstream or key, or another default for a proxy without one, replaces it, and one removed since stops. Chats and desktop apps run without it.
 
-[`add_dir`](config.md#ai-tools) gives an agent, fresh or restored, other working
+[`add_dir`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) gives an agent, fresh or restored, other working
 directories, so a sandbox or a setting such as Claude Code's
 `blockReadsOutsideWorkingDirectories` lets it work there: each `agent.dirs`
 entry for every agent and chat, for a workspace's agent the repository's
 workspaces directory, where `shoal split` puts children, its [temporary
 directory](#temporary-directories) and the local config lie, and for a chat its temporary
 directory, plus the global config's directory for a [setup](#set-up-config) chat.
-Claude Code's [`review`](config.md#ai-tools) prints its JSON result with Claude's
+Claude Code's [`review`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) prints its JSON result with Claude's
 `--json-schema`, loads no user, project or local settings, denies every tool but
 reading, searching and `git diff`, `log`, `show` and `blame`, and runs commands in
 Claude's sandbox, so it stays read-only whatever those settings allow; without a
@@ -1625,7 +1625,7 @@ next launch. `shoal run <name>` for a `[commands]`
 shortcut remains a plain command invocation without agent prompts or exit
 notifications, expanding `{prompt}` to an empty string.
 
-`shoal open` without `--app` opens the workspace's [`app.default`](config.md#desktop-apps),
+`shoal open` without `--app` opens the workspace's [`app.default`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#desktop-apps),
 else the only
 installed desktop app, and on a terminal offers a picker when several are
 installed. `--app codex|t3` runs
@@ -1638,7 +1638,7 @@ tracking, scope token, port variables or output default (so automatic cleanup ca
 T3's app must already be running.
 
 Happy sessions are an optional integration: off until
-[`agents.happy.enabled = true`](config.md#ai-tools). While off, pickers and completion leave Happy out and
+[`agents.happy.enabled = true`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools). While off, pickers and completion leave Happy out and
 launches are refused before any work starts.
 
 `start --agent happy-claude|happy-codex`, with `--in <workspace>` for an
@@ -1672,7 +1672,7 @@ leaves it.
 A demo is a command Shoal keeps running in a workspace so you can try a
 change, usually from another machine over SSH, where windows an agent opens
 stay out of sight. A repository names its demos in
-[`[demos.NAME]`](config.md#demos) tables. A demo's `ports` are
+[`[demos.NAME]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#demos) tables. A demo's `ports` are
 [reservations](#port-reservations) made before it starts, taking another free
 port when a configured one is in use, and its `preset` sets up how it reaches
 you:
@@ -1778,7 +1778,7 @@ it running. A
 workspace process that cleared its scope token cannot run `shoal start` or
 `shoal rename --request`.
 A chat's agent runs as a tracked agent of the chat, as a workspace's agent
-does: its mode's [weight](config.md#modes-and-rules) decides whether it takes
+does: its mode's [weight](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) decides whether it takes
 a slot of the [agent queue](#agent-queue) and whether load, idle stops and
 `shoal sleep` stop it, and a restore of one stopped between turns waits for an
 update, which `shoal attach` and `shoal queue start` skip. Only its agent
@@ -1979,7 +1979,7 @@ implementing agent receives only the body, swaps `plan_label` for
 plan splits off. You start an agent on it when you want one, with
 `shoal start --issue`. On a terminal, `shoal start --issue ISSUE` without
 `--mode` starts this chat for an issue labelled `plan_label`. Both labels are
-[`[issue]`](config.md#issues) options.
+[`[issue]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#issues) options.
 
 ### Agent queue
 
@@ -2001,7 +2001,7 @@ shoal priority urgent [space]                 # Ranks the space's queued work ah
 shoal priority 30 [space]                     # Any number from 0 to 100; low is 25, normal 50
 ```
 
-[`machine.max_agents`](config.md#machine) limits the agents that run at once. It defaults to `dynamic`,
+[`machine.max_agents`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) limits the agents that run at once. It defaults to `dynamic`,
 which starts one agent at a time, at least 10 seconds apart, while measured
 memory and disk leave room below the
 [`[machine.overload.warning]`](#overload-protection) memory and disk
@@ -2021,13 +2021,13 @@ protection ignores that signal. While a fixed
 limit applies, so does the disk rule: below `[machine.overload.warning] disk_free_gib`
 an agent starts only when none uses a slot, and below
 `machine.overload.disk.stop_free_gib` or without a reading none starts. That
-value counts every agent on the machine; a fixed [`agent.max_running`](config.md#agent) counts
+value counts every agent on the machine; a fixed [`agent.max_running`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#agent) counts
 only one repository's agents, within the machine limit; a chat without a
 repository counts toward the machine's alone. Each tracked agent, a
 workspace's or a chat's, uses a slot while it runs, awaits reattachment
 after a daemon restart, or waits for `shoal restore`, unless its space is
 done, its restore waits in the queue or its mode is
-[light](config.md#modes-and-rules), which starts it at once beside the agent
+[light](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules), which starts it at once beside the agent
 limits and whatever memory is in use, though critical or missing readings and
 low disk hold it as they hold every start; `shoal done`, the agent's exit,
 `restore --forget` and removal free it.
@@ -2197,7 +2197,7 @@ Waiting entries start by priority, highest first: a space's priority, from 0
 to 100, is the one set on it, else the highest its issues' labels map to under
 `[priority.labels]`, else 50, and a queued launch has the one it was queued
 with, or else the highest its issue's labels map to, until its space exists.
-Within a priority, [`machine.schedule`](config.md#machine) may put other work
+Within a priority, [`machine.schedule`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) may put other work
 first: under `speed`, the work with the longest chain of work waiting on it,
 counted through the waits below; under `cache`, restores of agents whose prompt
 cache, as their hooks last reported it, has not expired, the latest to expire
@@ -2209,7 +2209,7 @@ jobs on PRs and on the default branch; `started`, restores of agents that have
 worked in their space; `new`, other launches and CI jobs. An entry rises one
 tier for each full hour it waits, but never to a higher priority. Within a
 tier, a launch of a new workspace whose issue shares fewer
-[areas](config.md#issues) with the workspaces of its repository goes first:
+[areas](../crates/shoal-cli/src/cli/commands/configuration/reference.md#issues) with the workspaces of its repository goes first:
 an area is a label with the `[issue] area_prefix`, a workspace holds those of
 its assigned issues and PRs until it is removed, and a chat holds none. Then
 the space with the larger share of its plan steps done goes first, then the
@@ -2233,11 +2233,11 @@ as in `sharing area/daemon: 12, 15; area/cli: 3`.
 
 ### Agent accounts
 
-[`agent.git_profile`](config.md#agent) names one of the global
+[`agent.git_profile`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#agent) names one of the global
 [Git profiles](#git-profiles) for agents' Git commands.
 
 Issue and PR changes and other forge writes Shoal makes for a workspace or a
-chat use the agent account: the host's [`agent_token`](config.md#forges), with
+chat use the agent account: the host's [`agent_token`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#forges), with
 `agent_email` for a Bitbucket API token. Without an `agent_token`, Shoal
 refuses the change and names `agent_token`; set
 `agent_token = { same_as = "user_token" }` for agents to make changes with your
@@ -2273,7 +2273,7 @@ the agent's [`push` permission](#approval-for-agent-pushes) at launch is
 
 ### Agent secrets
 
-[`[secrets]`](config.md#secrets) gives tracked agents values that commands fetch
+[`[secrets]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#secrets) gives tracked agents values that commands fetch
 from your secret store.
 
 Commands run without input. Without
@@ -2304,7 +2304,7 @@ ends a lease grant.
 ### Modes and rules
 
 A mode decides what an agent is told and the kind of space it starts in;
-[`[modes.<name>]` and `[rules.<name>]`](config.md#modes-and-rules) configure
+[`[modes.<name>]` and `[rules.<name>]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) configure
 them. A mode's rules join the agent's system text, which a workspace agent
 restored with its built-in resume arguments receives again (a configured
 `resume_command` is the user's own and gets none), and its instructions follow
@@ -2358,7 +2358,7 @@ for any rule. `review` holds the style of a [local review](#local-reviews), and
 text of their own.
 
 Mode instructions and rule text may also live in
-[Markdown files](config.md#modes-and-rules), and a repository's text joins the
+[Markdown files](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules), and a repository's text joins the
 global text. `config show` reports the combined text and the
 highest layer that configured it, with the file that layer read it from, and
 warns for each layer whose rule repeats the opening of a space's facts; the
@@ -2383,7 +2383,7 @@ mode's rules follow. No layer replaces or suppresses the guidance. A launch's fi
 message is its subject, an issue or the prompt it was given, worded the same in
 every mode, followed by its mode's instructions; without a subject it has no
 first message. Rules and instructions take the
-[placeholders](config.md#modes-and-rules) of the space and its subject;
+[placeholders](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) of the space and its subject;
 `{updates}` says how the agent receives issue and PR activity, delivered by its
 hooks for Claude Code, and for a workspace's Codex in a place of a host that
 types into its places, such as a zmx session, otherwise by running
@@ -2394,7 +2394,7 @@ subject). Desktop handoffs receive neither. User prompt arguments are preserved.
 
 #### Mode permissions
 
-[`[permissions]`](config.md#permissions) and `[modes.<name>.permissions]` set
+[`[permissions]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#permissions) and `[modes.<name>.permissions]` set
 what a mode's agents may do, under the keys the sections on
 [issues and PRs](#approval-for-agent-issues-and-prs),
 [pushes](#approval-for-agent-pushes), [merges](#merge-into-the-default-branch),
@@ -2828,7 +2828,7 @@ repository gets `~/shoal/<name>/`, named by `--name` or the source basename with
 `.git`, suffixed `-2`, `-3` on conflict with files or recorded paths; its workspaces
 default to it and a URL clone lives there as `.checkout`. A local checkout
 already at `~/shoal/<name>/<anything>` keeps that directory.
-[`machine.root_dir`](config.md#machine) changes the parent for new
+[`machine.root_dir`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) changes the parent for new
 registrations; symlinks and `..` are resolved before checking and creating the root,
 even across missing components. Existing registrations keep their paths until
 [`move root`](#move-repositories-to-a-new-root) moves them, as do workspaces
@@ -2871,7 +2871,7 @@ the built-in `setup` mode that writes the repository's config. It works in the
 repository's `shoal-setup` workspace, which Shoal opens on that branch when none
 exists, with the worker mode's rules. A setup agent studies how the project or
 machine is used, asks you about each setting it would write, reading the options
-from [`shoal config reference`](config.md), and writes only what you agree to.
+from [`shoal config reference`](../crates/shoal-cli/src/cli/commands/configuration/reference.md), and writes only what you agree to.
 Before it saves the repository's config, it asks you with `shoal questions ask`
 whether to commit it or save it locally, unless you have said already, and
 mentions a committed or local config the repository has.
@@ -2937,7 +2937,7 @@ refused.
 
 ### Git profiles
 
-[`[machine.git_profiles]`](config.md#git-profiles) names Git settings, and a
+[`[machine.git_profiles]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#git-profiles) names Git settings, and a
 top-level `git_profile` in repository or global config selects one for new
 worktrees. Override it for one creation with `shoal start <repo> --git-profile work`.
 With no selection, Git settings stay unchanged. An unknown flag value is rejected before creation; an unknown
@@ -2960,7 +2960,7 @@ checkout from any directory. Named tables
 such as commands and ports show one entry per name. `--json` returns `key`, `value`,
 and `layer` for each entry, and `file` for a template read from a file.
 
-`shoal config reference` prints the [configuration reference](config.md) as
+`shoal config reference` prints the [configuration reference](../crates/shoal-cli/src/cli/commands/configuration/reference.md) as
 bundled with the installed release, so agents without network access can read
 the options; `--json` returns it as `reference`.
 
@@ -2992,7 +2992,7 @@ A repository's local config is `.shoal/config.toml` in its own directory, beside
 its workspaces and `.checkout` (`~/shoal/my-project/.shoal/config.toml`), for a
 repository that won't accept `.shoal.toml` or settings only you want. It is
 outside every Git tree, so nothing ignores it and `git clean` never touches it.
-It takes the options of a [repository file](config.md#files-and-layers), with
+It takes the options of a [repository file](../crates/shoal-cli/src/cli/commands/configuration/reference.md#files-and-layers), with
 untracked scripts beside it.
 
 Shoal reads the file in place on every request, so an edit applies to every
@@ -3001,7 +3001,7 @@ it is fixed. `shoal config set KEY VALUE... --repo NAME` and
 `shoal config unset KEY... --repo NAME` edit it like global edits, keeping
 comments and the previous file as `config.toml.backup` and saving only a valid
 result. Its options layer over every workspace's worktree file as
-[configuration](config.md#files-and-layers) describes. A worktree file that the current format rejects, such as
+[configuration](../crates/shoal-cli/src/cli/commands/configuration/reference.md#files-and-layers) describes. A worktree file that the current format rejects, such as
 one a branch kept from before a format change, is ignored: the workspace
 resolves its options from the other layers, `shoal config show` warns about
 it, and the daemon logs the error and notifies you once per error while it
@@ -3103,7 +3103,7 @@ replaces the request; a sync of the default branch from its upstream does not.
 Approving a request after its branch moved is refused as stale, and a denied commit stays refused
 with `"approval_denied"`.
 
-With [`[merge] push`](config.md#merges), or `--push` for one run, Shoal pushes the default branch to
+With [`[merge] push`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#merges), or `--push` for one run, Shoal pushes the default branch to
 its upstream after merging; `--no-push` keeps one merge local. A default branch without an
 upstream is refused before merging, and a failed push keeps the merge.
 
@@ -3257,7 +3257,7 @@ Git 2.38 or newer.
 Some files hold a number each change picks for itself, such as a schema
 migration or protocol version. Two branches that pick the same number make
 identical edits, which Git merges cleanly. A repository lists such files in
-[`[conflicts] sensitive`](config.md#conflicts), and `shoal conflicts` also lists, under
+[`[conflicts] sensitive`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#conflicts), and `shoal conflicts` also lists, under
 "Changed on both sides", each listed file that both HEAD and the target changed
 since their merge base, unless the target already has HEAD's changes as
 [removal](#remove-a-workspace) decides merges. Update the branch from the
@@ -3268,8 +3268,8 @@ Exits 1 on either; `--json` returns `target`, `target_commit`, `head`,
 
 ### Workspace setup and hooks
 
-A repository's [`setup.command`](config.md#setup) prepares each new worktree,
-and [`[hooks]`](config.md#hooks), also global defaults, name untracked lifecycle
+A repository's [`setup.command`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#setup) prepares each new worktree,
+and [`[hooks]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hooks), also global defaults, name untracked lifecycle
 executables. Hooks that run while the worktree exists use it as their working
 directory.
 
@@ -3282,7 +3282,7 @@ Tracked setup starts by copying the repository checkout's ignored files, such as
 `.env` or local signing settings, into the workspace before `setup.command`,
 cloning them where the filesystem can. It runs without a `setup.command`, and a
 failure fails setup. It prints how many files it copied, and nothing when it
-copied none. [`[setup] copy_ignored = false`](config.md#setup) turns it off.
+copied none. [`[setup] copy_ignored = false`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#setup) turns it off.
 Files the workspace already has are kept, including paths cloned from a
 [seed](#seed-builds), and nothing is written through a symbolic link to outside
 the workspace. A [copy](#copies) of a workspace's current files skips it, since
@@ -3355,7 +3355,7 @@ following a daemon restart. Use a pre-remove hook when failure must retain owner
 
 ### Build tool presets
 
-[`setup.presets`](config.md#setup) names the build tools a repository uses, and
+[`setup.presets`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#setup) names the build tools a repository uses, and
 Shoal sets each one up so its workspaces stop repeating the same work:
 
 | Preset | Sets up |
@@ -3438,7 +3438,7 @@ registered checkout, an existing worktree or the default branch's tip.
 
 A repository can keep a build of its default branch that new workspaces start
 from, so a branch rebuilds only what it changed and shares the rest on disk.
-[`[setup.seed]`](config.md#seed-builds) and the [presets](#build-tool-presets)
+[`[setup.seed]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#seed-builds) and the [presets](#build-tool-presets)
 name its build commands and the outputs it keeps.
 
 The daemon keeps a locked, detached worktree at the local default branch's tip in
@@ -3493,7 +3493,7 @@ too.
 ### Shared caches
 
 Tool caches that lock or address their entries by content can serve every
-workspace of a repository at once. Each [`[caches.NAME]`](config.md#shared-caches) is a directory in the repository directory's
+workspace of a repository at once. Each [`[caches.NAME]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#shared-caches) is a directory in the repository directory's
 `.caches/shared`, which `{cache.NAME}` names in `[env]`, so every process Shoal
 starts in a workspace, and the seed build, uses it. The daemon creates the directory when it starts a process or exports the
 environment, and marks `.caches` with the repository, refusing to start one while
@@ -3511,7 +3511,7 @@ Removing the repository deletes `.caches`.
 
 ### Runner
 
-While [`runner.enabled`](config.md#runner) is on for a registered repository, the daemon runs its
+While [`runner.enabled`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#runner) is on for a registered repository, the daemon runs its
 CI jobs with your own login, the `user_token` of its [forge host](#forges), which
 must be allowed to administer the repository's Actions. On Forgejo it registers
 a runner for the repository and keeps the runner's UUID and token in its state;
@@ -3538,7 +3538,7 @@ its run links, ahead of a queued agent of the same space. The daemon reads them 
 while a job could start and every minute while none can, so new jobs show in
 the queue and the entries of jobs the forge no longer lists, which another
 runner took or a cancel ended, leave it. `machine.max_jobs`
-limits jobs as [`machine.max_agents`](config.md#machine) limits agents, counting only jobs. Under
+limits jobs as [`machine.max_agents`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) limits agents, counting only jobs. Under
 `dynamic`, agents and jobs start through one admission, one at a time at least
 10 seconds apart, while measured memory and disk leave room below the
 `[machine.overload.warning]` thresholds: a job counts at the most resident
@@ -3803,7 +3803,7 @@ starts a new one, with a warning. Links cannot change once removal
 starts, so the record holds the final ones. Removal stops agents as `shoal stop`
 does, keeping their recovery records in the removal record; interrupted commands
 are not saved. When the removal's checkpoint keeps HEAD only, merged cleanup keeps the workspace instead.
-[`[cleanup.restore]`](config.md#cleanup) sets `retention_days` and `archive_max_mb`.
+[`[cleanup.restore]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup) sets `retention_days` and `archive_max_mb`.
 
 ### Move a space to another machine
 
@@ -3939,7 +3939,7 @@ import there is reported while the rest are copied.
 `shoal done [space]` records that the assignment is finished and notifies the
 user. It replaces the whole recorded completion when anything it records differs, and fails when it would change nothing: the same
 completion with no open question to close and no `hooks.post_done` to rerun.
-[`[cleanup.done] enabled`](config.md#cleanup) defaults to true; `--cleanup` requests cleanup when it is
+[`[cleanup.done] enabled`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup) defaults to true; `--cleanup` requests cleanup when it is
 false. It first stops the workspace's [demos](#demos) unless `--keep-demos` leaves
 them running until cleanup. `--integrated` records that another branch has the
 work under new commits, as after a cherry-pick or a rebase that edited them: until
@@ -4060,10 +4060,10 @@ GitHub's `meta`, GitLab's `version` and Forgejo's or Gitea's `version` on that
 host, with the host's token below, and records the answer. The daemon asks recorded hosts
 again when it starts or reloads its config, and records an alert when one now
 answers as another forge. A host that answers as none of them fails until you
-set its [`type`](config.md#forges), which also stops Shoal asking it.
+set its [`type`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#forges), which also stops Shoal asking it.
 
 Shoal sends every request to the forge's API with curl, signed in with the
-host's [`user_token`](config.md#forges): GitHub.com at `api.github.com`, a
+host's [`user_token`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#forges): GitHub.com at `api.github.com`, a
 GitHub Enterprise Server under `/api/v3`, GitLab under `/api/v4`, Forgejo and
 Gitea under `/api/v1`, and Bitbucket Cloud at `api.bitbucket.org`. It runs no
 forge CLI. Changes Shoal makes
@@ -4153,7 +4153,7 @@ refused. A new PR's title is
 subject; its description is the supplied `--body` or `--body-file`, or else a
 `Closes #<number>` line for each assigned issue; its base is `--base`, else the base
 workspace's branch, else the default branch. It is a draft with `--draft` or
-[`[pr] draft = true`](config.md#prs), which `--no-draft` overrides. Draft state, repeated
+[`[pr] draft = true`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#prs), which `--no-draft` overrides. Draft state, repeated
 `--label`, repeated `--reviewer`, repeated `--assignee` and `--milestone TITLE`
 apply only to a new PR. Its JSON adds
 `created` (false for a PR it found), `linked`, and the `warnings` it prints on
@@ -4319,7 +4319,7 @@ is then posted of that commit. Scoped processes comment as the agent
 account, and their watches do not report back a review they posted. `--approve` and
 `--request-changes` use your own login, and for scoped processes, as their
 [`pr_review` permission](#permitted-actions) allows, the host's
-[`review_token`](config.md#forges), with no other login to fall back on:
+[`review_token`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#forges), with no other login to fall back on:
 Shoal refuses their verdict, before sending any request, on a host without
 one or on a PR its account opened, naming `review_token`, and posts it of the
 head commit it read, which an approval also binds. A forge that refuses a
@@ -4524,7 +4524,7 @@ quoted. It never edits a proposal. It is no code reviewer: it checks that the
 action follows the repository's conventions and is not a mistake, such as a
 push to the wrong ref, a merge with failing checks, a duplicate issue or work
 unrelated to the space's. It decides every request itself, unsure or not, and
-passes one on only for a case the [`[gate]` table](config.md#gate) lists in
+passes one on only for a case the [`[gate]` table](../crates/shoal-cli/src/cli/commands/configuration/reference.md#gate) lists in
 `escalate`, quoting it word for word; an escalation quoting none is refused
 and the gate asked once more, told why.
 
@@ -4579,7 +4579,7 @@ scope; Bitbucket has no labels. Processes inside a workspace and a chat's agent
 read them as the [agent account](#agent-accounts), anyone else with your own
 logins.
 
-[`[pr] required_labels`](config.md#prs) and [`[issue] required_labels`](config.md#issues) name entries that every new
+[`[pr] required_labels`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#prs) and [`[issue] required_labels`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#issues) name entries that every new
 item's labels must each start with, so `area/` takes any area label. `pr open`
 and `issue open` refuse a new item missing one before creating it, listing the
 repository's labels that would satisfy it; an empty list in a higher layer turns
@@ -4828,7 +4828,7 @@ the error.
 Linking an open issue as assigned, however the link is made, also adds the
 account that links it to its assignees on the forge: the agent account for a
 scoped caller, the user's own login for the user's terminal, unless
-[`[issue] assign`](config.md#issues) is off or that account has no token of its
+[`[issue] assign`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#issues) is off or that account has no token of its
 own for the forge. A warning on stderr and in the JSON `warnings` names the
 issue's other assignees, or why the forge did not assign it; the link stands
 either way. When a space drops the link, by unlinking it or being removed,
@@ -4988,7 +4988,7 @@ errors in `pr_cleanup`. Invalid registrations retain the workspace.
 `shoal unlink <relation>` removes the relation's items; `unlink pr <relation>`,
 `unlink issue <relation>` or `unlink ci <relation>` removes one kind, and an explicit number or URL removes
 just that item; unlinking fails when it selects nothing linked. Removing the last
-link does not mark done or undo recorded completion. [`[cleanup.pr] enabled = false`](config.md#cleanup) pauses PR completion independently of idle
+link does not mark done or undo recorded completion. [`[cleanup.pr] enabled = false`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup) pauses PR completion independently of idle
 cleanup, globally on reload or per repository immediately; linking and unlinking
 remain available.
 
@@ -5038,7 +5038,7 @@ the JSON array of marks just recorded. Failure records `hook_failed` and keeps
 the marks; every `shoal ready` runs it again.
 
 Before the hook, `shoal ready` takes each marked open PR that is a draft out of
-draft, as `shoal pr edit --no-draft` would; [`[pr] undraft_on_ready = false`](config.md#prs) keeps marks
+draft, as `shoal pr edit --no-draft` would; [`[pr] undraft_on_ready = false`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#prs) keeps marks
 local. `shoal ready --undo --draft`, or `[pr] draft_on_unready = true`, returns the open PRs
 whose marks it withdraws to draft first; `--no-draft` overrides that setting.
 A failed change reports the forge's error and exits non-zero, keeping the marks
@@ -5196,7 +5196,7 @@ Each change is a `progress_changed` [event](#workspace-events), which
 change. Progress never notifies, and coordinating agents read their
 children's progress on demand.
 
-With [`[pr] progress = true`](config.md#prs), while a space has an open draft
+With [`[pr] progress = true`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#prs), while a space has an open draft
 PR it opened or was assigned, Shoal writes the status line and the steps into
 a section at the end of the PR's body, as the agent account:
 
@@ -5227,7 +5227,7 @@ that of the spaces below it.
 ### Automatic cleanup
 
 Idle, clean, fully pushed worktrees are removed after
-[`[cleanup.auto] idle_minutes`](config.md#cleanup), 10 by default, or sooner when [disk space](#overload-protection) runs low.
+[`[cleanup.auto] idle_minutes`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup), 10 by default, or sooner when [disk space](#overload-protection) runs low.
 Deleted directories are forgotten even when disabled, releasing resources and
 retaining branches; moved worktrees or recorded commands need manual recovery.
 HEAD and commands reset the timer; file changes, including ignored files, restart
@@ -5260,7 +5260,7 @@ agent.
 
 #### Grace period
 
-Every automatic removal except for low disk space waits [`grace_minutes`](config.md#cleanup) from the
+Every automatic removal except for low disk space waits [`grace_minutes`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup) from the
 first sweep that would remove the workspace, so its agent keeps running while you
 decide to take the work back: idle, merged and PR cleanup, and cleanup after
 `shoal done`. A workspace that would not pass removal's checks, such as one with
@@ -5272,7 +5272,7 @@ time survives restarts, except that idle cleanup starts over with its timers. `s
 #### Merged workspaces
 
 A workspace whose branch merged into the default branch is removed once nothing
-has used it for [`[cleanup.merged] idle_minutes`](config.md#cleanup), whether or not its agent ran `shoal done` or it
+has used it for [`[cleanup.merged] idle_minutes`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup), whether or not its agent ran `shoal done` or it
 has linked issues and PRs. Merged has the meaning [removal](#remove-a-workspace)
 gives it, against the default branch's remote-tracking branch as the
 [sync](#repositories) last fetched it, fetching it again when no sync has for ten
@@ -5611,7 +5611,7 @@ messages and send messages only to the agents of the [workspaces below their own
 notifications that its unread messages about the spaces below it stand for, and
 deletes its messages.
 The hooks, `shoal watch` and the prompt that wakes Codex hold a workspace's or
-chat's unread messages until none has arrived for [`[messages] settle_seconds`](config.md#messages), and at
+chat's unread messages until none has arrived for [`[messages] settle_seconds`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#messages), and at
 most six times as long after the first, so a run of them, such as several
 approval decisions, reaches the agent in one delivery; `shoal messages` shows
 them at once, and 0 delivers each message as it arrives.
@@ -5784,11 +5784,11 @@ same port (`--reason` may update it); changing the number or variable requires
 release first. Workspace environment exports and tracked commands receive
 `SHOAL_PORT_<NAME>` or the `--env` variable; running processes keep their
 environment, and nested executions drop the parent's port variables. Automatic
-allocation uses [`[ports]`](config.md#ports) `start`–`end`, 49152–65535 by default; `--port` may name any nonzero port. Shoal probes IPv4/IPv6 availability and
+allocation uses [`[ports]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ports) `start`–`end`, 49152–65535 by default; `--port` may name any nonzero port. Shoal probes IPv4/IPv6 availability and
 prevents duplicates within the daemon, but reservations are cooperative and
 unrelated processes can still bind. UDP is not supported.
 
-Named ports such as `web` are [`[ports.<name>]`](config.md#ports) entries.
+Named ports such as `web` are [`[ports.<name>]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ports) entries.
 `shoal acquire port web` allocates on request; CLI flags override. A conflict
 suggests a free port: fzf offers to accept it, `--json` returns `reserved:
 false` with exit 2, and `--port <suggested>` or `--on-conflict auto` accepts.
@@ -5917,7 +5917,7 @@ Git operations.
 `shoal internal env [workspace] --json` returns an object mapping environment variable names
 to strings, using the same workspace identity and current port exports as tracked
 executions, with a fresh `SHOAL_SCOPE_TOKEN` and no `SHOAL_EXECUTION_ID`.
-The [`[env]`](config.md#environment) variables join this exported environment as
+The [`[env]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#environment) variables join this exported environment as
 they join tracked executions and lifecycle hooks. `{workspace}` there is the
 last part of `{path}`, which never changes. Desktop handoffs may reuse an existing process and do
 not receive these variables.
@@ -5933,7 +5933,7 @@ token provides no cleanup protection, and removing the workspace stops them.
 ## Simulators (macOS)
 
 Shoal creates, boots, shares, and deletes its own Xcode simulators.
-[`[machine.simulators]`](config.md#simulators) sets their limits and profiles,
+[`[machine.simulators]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#simulators) sets their limits and profiles,
 and `config reload` applies them.
 
 Omitting `runtime` from a profile or `--runtime` with `--device` selects the latest
@@ -5941,7 +5941,7 @@ installed, available iOS runtime compatible with the device. `shoal catalog sim`
 lists the profiles, limits and the repository's preferences with the installed
 device types and runtimes; nothing is downloaded. Where simctl cannot run, it
 lists the configuration with the reason the inventory is missing.
-[`[simulators] preferred`](config.md#simulator-preferences) orders the profiles;
+[`[simulators] preferred`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#simulator-preferences) orders the profiles;
 flags override it, and `allow_any` permits unconfigured `--device` requests with
 a `--reason`.
 
@@ -5982,7 +5982,7 @@ see only their own entries. Erasing devices outside Shoal bypasses this audit.
 
 Global config defines resources shared across repositories; repository config
 defines resources shared across that repository's branches, both as
-[`[resources]` and `[resource_pools]`](config.md#resource-pools) entries.
+[`[resources]` and `[resource_pools]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#resource-pools) entries.
 
 ```sh
 shoal catalog resource                       # Pools, members and approval settings
@@ -6006,7 +6006,7 @@ resource before releasing it.
 
 ### Related repository paths
 
-A [resource of kind `repo`](config.md#related-repositories), in global or
+A [resource of kind `repo`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#related-repositories), in global or
 repository config, names a registered repository. A URL keeps tracked config independent of local registration names. It matches
 the registration with the same remote over any transport, and is never cloned:
 register it first with `shoal repo add <url>`.
@@ -6028,7 +6028,7 @@ discard the lease, leaving the related checkout untouched.
 
 ### Resource hooks
 
-Global or repository config can name [`hooks.post_resource_acquire`](config.md#hooks) and
+Global or repository config can name [`hooks.post_resource_acquire`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hooks) and
 `hooks.pre_resource_release`, using the [hook path and environment rules](#workspace-setup-and-hooks).
 They apply to generic permits, run in the daemon without a terminal, and have a
 60-second limit. `SHOAL_RESOURCE_LEASE` contains the lease as JSON, including its
@@ -6046,7 +6046,7 @@ lifecycle changes in the same workspace fail while a resource hook is running.
 
 ### Resource approvals
 
-[`requires_approval`](config.md#approvals) on a resource, named port, simulator
+[`requires_approval`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#approvals) on a resource, named port, simulator
 profile, `[simulators]` or tool-scoped secret gates scoped acquisition, for as
 long as its `approval_lifetime` says. A protected machine profile cannot be
 relaxed by selecting its device/runtime directly; where policies overlap, lease
@@ -6146,7 +6146,7 @@ absolute `CLAUDE_CONFIG_DIR`), `~/.grok/skills` for Grok, and `~/.agents/skills`
 for Codex, opencode and pi, which share one copy. Without a tool name, Shoal
 installs only into skill directories that already exist and skips a configured
 tool without `skill_dir`; create a directory, or name the tool, to install for
-it. [`[machine.agents.<name>] skill_dir`](config.md#agent-tools-on-this-machine)
+it. [`[machine.agents.<name>] skill_dir`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#agent-tools-on-this-machine)
 sets or overrides a tool's directory. Names are portable identifiers; `all` is
 reserved. Each `SKILL.md` is a regular copy
 of the packaged or embedded skill, since Codex skips a linked one; a linked

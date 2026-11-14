@@ -201,10 +201,20 @@ jobs:
           # The signing key stays outside the published files, readable only by
           # this job, and leaves with the step.
           pem=$(mktemp)
-          trap 'rm -f "$pem"' EXIT
+          staged=$(mktemp -d)
+          trap 'rm -rf "$pem" "$staged"' EXIT
           printf '%s\n' "$MACOS_SIGNING_PEM" > "$pem"
           unset MACOS_SIGNING_PEM
           cd source
+          # Archives hold the skill as skills/shoal/SKILL.md, which Homebrew
+          # and `shoal skill install` read. Tags from before the skill moved
+          # into shoal-cli keep that directory at their root.
+          if [ -d skills ]; then
+            cp -R skills "$staged/"
+          else
+            mkdir -p "$staged/skills/shoal"
+            cp crates/shoal-cli/src/cli/commands/skill/shoal.md "$staged/skills/shoal/SKILL.md"
+          fi
           . .forgejo/scripts/lock-target-dir.sh
           mkdir -p dist
           # Archives are reproducible for a tag (fixed mtime, owner and order, no
@@ -224,7 +234,7 @@ jobs:
             esac
             tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
               -cf - "${entries[@]}" \
-              -C "$PWD" skills \
+              -C "$staged" skills \
               | gzip -n -9 > "dist/shoal-$RELEASE_TAG-$platform.tar.gz"
           done 3< ../release-targets.txt
           (cd dist && sha256sum shoal-*.tar.gz > SHA256SUMS && cat SHA256SUMS)

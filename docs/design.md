@@ -1,7 +1,7 @@
 # Shoal design
 
 Decisions and proposals; usage: [README.md](../README.md), behavior:
-[docs/reference.md](reference.md), configuration: [docs/config.md](config.md),
+[docs/reference.md](reference.md), configuration: [the configuration reference](../crates/shoal-cli/src/cli/commands/configuration/reference.md),
 contributor rules: [AGENTS.md](../AGENTS.md).
 
 ## Purpose and boundaries

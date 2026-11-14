@@ -20,7 +20,7 @@ fn cli(home: &Path) -> Command {
     command
 }
 
-const SKILL: &[u8] = include_bytes!("../skills/shoal/SKILL.md");
+const SKILL: &[u8] = include_bytes!("../crates/shoal-cli/src/cli/commands/skill/shoal.md");
 const SKILLS: [(&str, &[u8]); 1] = [("shoal", SKILL)];
 
 fn write_skills(directory: &Path, contents: &str) {
