@@ -125,7 +125,7 @@ impl Manager {
             .await
             .with_context(|| {
                 format!(
-                    "copying {}'s files into {} again failed; shoal restore {} {} returns it to what it held",
+                    "copying {}'s files into {} again failed; shoal restore {} --checkpoint {} returns it to what it held",
                     source.name, workspace.name, workspace.number, kept.number
                 )
             })?;
