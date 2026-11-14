@@ -4752,7 +4752,8 @@ who approved or requested changes unasked), how many commits its base has that i
 left out for a closed PR and on Bitbucket), its `auto_merge` while the forge is to
 merge it once it can, with the `method` where the forge reports it (Forgejo and
 Gitea do not), the merge conflicts, CI checks, runs waiting for approval and
-review state `status` reports, plus the last 8 KiB of each failed CI job's log, where the forge
+review state `status` reports, plus the last whole lines, up to 8 KiB, of each failed CI job's
+log, each line over 1 KiB shortened to its start and end, where the forge
 [reads job logs](#forges), with the job's URL and its failing step when recorded
 by the runner or listed by Forgejo 17 and later. The tail is taken after removing terminal escape sequences, text
 a carriage return redrew, GitLab's section markers and the timestamps GitHub and
