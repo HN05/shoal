@@ -1,5 +1,6 @@
 //! `[machine.forges."<host>"]`: what a forge host serves, set instead of
-//! asking it, and the tokens the user and the agent account sign in with.
+//! asking it, and the tokens the user, the agent account and agents'
+//! verdict reviews sign in with.
 use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::{Context, Result, ensure};
@@ -31,10 +32,13 @@ pub struct Forge {
     pub user_token: Option<Value>,
     /// The agent account's token for the host.
     pub agent_token: Option<Value>,
+    /// The token agents approve and request changes on PRs with.
+    pub review_token: Option<Value>,
     /// The account a token belongs to, where the forge signs it in with
     /// the account's email.
     pub user_email: Option<String>,
     pub agent_email: Option<String>,
+    pub review_email: Option<String>,
 }
 
 /// Whose tokens a set of logins holds.
@@ -42,6 +46,9 @@ pub struct Forge {
 pub enum Whose {
     User,
     Agent,
+    /// The account agents' reviews that approve or request changes go out
+    /// as.
+    Review,
 }
 
 impl Forges {
@@ -161,11 +168,12 @@ impl Forge {
         match whose {
             Whose::User => (self.user_token.as_ref(), &self.user_email),
             Whose::Agent => (self.agent_token.as_ref(), &self.agent_email),
+            Whose::Review => (self.review_token.as_ref(), &self.review_email),
         }
     }
 
     fn validate(&self, host: &str, kind: Option<ForgeKind>) -> Result<()> {
-        for whose in [Whose::User, Whose::Agent] {
+        for whose in [Whose::User, Whose::Agent, Whose::Review] {
             let (token, email) = self.credentials(whose);
             let setting = |key: &str| format!("machine.forges.{host:?}.{key}");
             if let Some(token) = token {
@@ -198,13 +206,17 @@ impl Forge {
 impl Whose {
     /// What a change to a host without a token of `self`'s says: which token
     /// to set, and that the daemon reads the global config only on reload.
-    /// An agent's changes may take the user's login only by name.
+    /// An agent's changes may take the user's login only by name, and its
+    /// verdicts need an account other than the one that opens its PRs.
     pub fn missing(self) -> Missing {
         let key = self.token_key();
         let alternative = match self {
             Self::User => "",
             Self::Agent => {
                 ", or agent_token = { same_as = \"user_token\" } to make agents' changes with your login"
+            }
+            Self::Review => {
+                " to an account that does not open the PRs agents review, such as review_token = { same_as = \"user_token\" }"
             }
         };
         Box::new(move |host| {
@@ -218,6 +230,7 @@ impl Whose {
         match self {
             Self::User => "user_token",
             Self::Agent => "agent_token",
+            Self::Review => "review_token",
         }
     }
 
@@ -225,6 +238,7 @@ impl Whose {
         match self {
             Self::User => "user_email",
             Self::Agent => "agent_email",
+            Self::Review => "review_email",
         }
     }
 }

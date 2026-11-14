@@ -181,6 +181,7 @@ extensions. The top-level `git_profile` selects one for new worktrees and
 type = "forgejo"   # "github", "gitlab", "forgejo" (also Gitea) or "bitbucket"
 user_token = { cmd = ["security", "find-generic-password", "-s", "forgejo", "-w"] }
 agent_token = { cmd = ["op", "read", "op://dev/agent/token"] }
+review_token = { cmd = ["op", "read", "op://dev/reviewer/token"] }
 
 [machine.forges."bitbucket.org"]
 user_token = { cmd = ["security", "find-generic-password", "-s", "bitbucket", "-w"] }
@@ -191,8 +192,11 @@ user_email = "you@example.com"   # An Atlassian API token's account; omit for an
 than `github.com`, `gitlab.com` and `bitbucket.org` once. `user_token` is your
 login on the host, and `agent_token` the [agent account](reference.md#agent-accounts)'s,
 which agents' changes need: `agent_token = { same_as = "user_token" }` makes
-them with your login;
-`user_email` and `agent_email` apply only to Bitbucket. A `{ cmd }` runs at most once
+them with your login. `review_token` is the login agents approve and request
+changes on PRs with, as their [`pr_review` permission](#permissions) allows,
+and nothing else; it must not be the account that opened the PR, which forges
+refuse, so `{ same_as = "agent_token" }` suits only PRs agents did not open;
+`user_email`, `agent_email` and `review_email` apply only to Bitbucket. A `{ cmd }` runs at most once
 per operation that needs the token and for at most a minute, and its output is
 never stored; an `{ env }` reads the daemon's environment for its own requests.
 Without a token only public repositories are readable. See
