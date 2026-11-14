@@ -70,7 +70,7 @@ jobs:
     if: github.event.action == 'edited' && !github.event.pull_request.draft
     runs-on: docker
     container:
-      # The cross-build job's image; it carries curl and jq.
+      # The CI image carries curl and jq.
       image: git.henriknordvik.com/hn05/ci-shoal:1.100
     outputs:
       run: ${{ steps.statuses.outputs.run }}
@@ -268,7 +268,7 @@ jobs:
           fi
 
       # One step, because the /ci-target slot lasts as long as the step's
-      # shell. The slot keeps its build, unlike the cross-build's, so the
+      # shell. The slot keeps its build, unlike cross-build.yml's, so the
       # dependencies stay warm. Instead of `cargo clean`, the tracked files are
       # touched once the slot is held: newer than any build already in it,
       # Cargo rebuilds the workspace's packages rather than take another
@@ -302,37 +302,3 @@ jobs:
           else
             echo "the PR leaves the identity module and the dependencies alone: skipping the musl test"
           fi
-
-  # Release targets need every Rust target and the pinned Zig, which the CI
-  # image has and Shoal runners need not.
-  cross-build:
-    name: cross-build release binaries (manual runs)
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: docker
-    container:
-      # Built from .forgejo/ci-image/Containerfile on the runner host; the tag is
-      # the Rust version.
-      image: git.henriknordvik.com/hn05/ci-shoal:1.100
-    env:
-      # Runner-mounted volume; a plain directory when unmounted.
-      CARGO_TARGET_DIR: /ci-target
-      RUSTFLAGS: '-D warnings'
-    steps:
-      - name: Checkout
-        run: |
-          git init -q .
-          git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
-          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:${{ github.token }}' | base64 | tr -d '\n')" \
-            fetch -q --depth 1 origin "${{ github.sha }}"
-          git checkout -q FETCH_HEAD
-
-      # One step, because the /ci-target slot lasts as long as the step's shell.
-      - name: Cross-build (holding a /ci-target slot)
-        shell: bash
-        run: |
-          set -euo pipefail
-          . .forgejo/scripts/lock-target-dir.sh
-          cargo clean --workspace
-          while read -r target _platform _selectors <&3; do
-            .forgejo/scripts/cross-build.sh "$target" 3<&-
-          done 3< .forgejo/scripts/release-targets.txt

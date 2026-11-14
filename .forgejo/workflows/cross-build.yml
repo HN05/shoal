@@ -1,0 +1,46 @@
+# Cross-builds every release target on a branch, without a release:
+# `shoal ci run cross-build.yml --branch <branch>`. Kept out of ci.yml so that
+# dispatching the checks never starts it; release.yml builds the released
+# binaries itself.
+
+name: cross-build
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Release targets need every Rust target and the pinned Zig, which the CI
+  # image has and Shoal runners need not.
+  cross-build:
+    name: cross-build release binaries
+    runs-on: docker
+    container:
+      # Built from .forgejo/ci-image/Containerfile on the runner host; the tag is
+      # the Rust version.
+      image: git.henriknordvik.com/hn05/ci-shoal:1.100
+    env:
+      # Runner-mounted volume; a plain directory when unmounted.
+      CARGO_TARGET_DIR: /ci-target
+      RUSTFLAGS: '-D warnings'
+    steps:
+      - name: Checkout
+        run: |
+          git init -q .
+          git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:${{ github.token }}' | base64 | tr -d '\n')" \
+            fetch -q --depth 1 origin "${{ github.sha }}"
+          git checkout -q FETCH_HEAD
+
+      # One step, because the /ci-target slot lasts as long as the step's shell.
+      - name: Cross-build (holding a /ci-target slot)
+        shell: bash
+        run: |
+          set -euo pipefail
+          . .forgejo/scripts/lock-target-dir.sh
+          cargo clean --workspace
+          while read -r target _platform _selectors <&3; do
+            .forgejo/scripts/cross-build.sh "$target" 3<&-
+          done 3< .forgejo/scripts/release-targets.txt

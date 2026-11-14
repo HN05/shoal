@@ -32,7 +32,7 @@ class CrossBuildTests(unittest.TestCase):
             signer = root / "sign-macos.sh"
             signer.write_text('#!/bin/sh\nprintf "signed %s %s into %s with %s\\n" "$2" "$3" "$4" "$1"\n')
             signer.chmod(0o755)
-            for workflow in ("ci.yml", "release.yml"):
+            for workflow in ("cross-build.yml", "release.yml"):
                 with self.subTest(workflow=workflow):
                     text = (SCRIPTS.parent / "workflows" / workflow).read_text()
                     loop = re.search(r"          while read.*?\n          done[^\n]*", text, re.S)[0]
@@ -138,7 +138,7 @@ class CrossBuildTests(unittest.TestCase):
             cargo.chmod(0o755)
             env = {key: value for key, value in os.environ.items() if key not in ("SDKROOT", "RUSTFLAGS")}
             env.update(PATH=f"{bin_dir}{os.pathsep}{env['PATH']}", CARGO_TARGET_DIR=str(root / "target"))
-            # The release sets no RUSTFLAGS; ci.yml's manual cross-build sets some.
+            # The release sets no RUSTFLAGS; cross-build.yml sets some.
             for target, rustflags in [(row[0], rustflags) for row in release_targets()
                                       for rustflags in (None, "-D warnings")]:
                 with self.subTest(target=target, rustflags=rustflags):
