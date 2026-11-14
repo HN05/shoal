@@ -82,12 +82,12 @@ pub struct RemovedSpace {
 pub enum RemovedKind {
     /// Its fields sit beside the shared ones, as in the records workspaces
     /// had before chats had any.
-    Workspace(Box<RemovedWorkspace>),
+    Workspace(Box<KeptWorkspace>),
 }
 
 /// What a removal keeps of a workspace only.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RemovedWorkspace {
+pub struct KeptWorkspace {
     /// The checkpoint taken at removal.
     pub checkpoint: Checkpoint,
     pub base_ref: Option<String>,
@@ -108,19 +108,19 @@ pub struct RemovedWorkspace {
 
 impl RemovedSpace {
     /// What it keeps as a workspace; `None` for a chat.
-    pub fn workspace(&self) -> Option<&RemovedWorkspace> {
+    pub fn workspace(&self) -> Option<&KeptWorkspace> {
         match &self.kind {
             RemovedKind::Workspace(workspace) => Some(workspace),
         }
     }
 
     /// What it keeps as a workspace, which a chat refuses.
-    pub fn kept_workspace(&self) -> anyhow::Result<&RemovedWorkspace> {
+    pub fn kept_workspace(&self) -> anyhow::Result<&KeptWorkspace> {
         (self.workspace()).with_context(|| format!("{} was not a workspace", self.space_id))
     }
 
     /// [`Self::kept_workspace`], to change.
-    pub fn kept_workspace_mut(&mut self) -> anyhow::Result<&mut RemovedWorkspace> {
+    pub fn kept_workspace_mut(&mut self) -> anyhow::Result<&mut KeptWorkspace> {
         match &mut self.kind {
             RemovedKind::Workspace(workspace) => Ok(workspace),
         }

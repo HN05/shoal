@@ -4,6 +4,7 @@ use std::fs;
 use super::*;
 use crate::client::space_names::SpaceSelector;
 use crate::{
+    daemon::events::EventCause,
     daemon::test_support::{commit, git, manager, repository},
     model::CheckpointCause,
     removal::{InspectionPolicy, UnsavedWork},

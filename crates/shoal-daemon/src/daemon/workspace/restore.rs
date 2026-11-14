@@ -1,7 +1,4 @@
-//! Removal records: every removal of an existing worktree takes a checkpoint
-//! and records what `shoal restore` needs to reopen the workspace, until the
-//! record expires.
-use crate::client::execution_ids::ExecutionId;
+//! Restoring a removed workspace from its removal record.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
@@ -9,132 +6,19 @@ use shoal_refs::{BranchName, CommitId};
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
-use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
 use super::commits::NewRecord;
 use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::scope::Caller;
-use crate::refusal::{Reason, Refusal};
 use crate::{
-    daemon::events::EventCause,
     git,
-    model::{
-        CheckpointCause, OpenedWorkspace, RemovedKind, RemovedSpace, RemovedWorkspace, Repository,
-        RestoredWorkspace, Workspace,
-    },
-    time::UnixTime,
+    model::{OpenedWorkspace, RemovedSpace, RestoredWorkspace},
     transfer::CarriedSessionFile,
 };
 
 impl Manager {
-    /// Take the removal's checkpoint and record what `shoal restore` reopens
-    /// before any file is deleted, so an interrupted or failed removal stays
-    /// restorable, leaving out the agent `carried_on` ran as, which carries on
-    /// elsewhere, as in the chat a workspace becomes. Records of workspaces
-    /// that still exist are not listed.
-    pub(super) async fn save_removal_record(
-        &self,
-        workspace: &Workspace,
-        cause: EventCause,
-        carried_on: Option<&ExecutionId>,
-    ) -> Result<RemovedSpace> {
-        let checkpoint = self
-            .checkpoint(workspace, CheckpointCause::Removal, None)
-            .await?;
-        // Removal refuses link changes, so links read now are final, unlike
-        // those of the snapshot taken before it started; the spaces below go
-        // first, so its parent is still there.
-        let Workspace { links, parent, .. } = self.workspace_by_id(&workspace.id).await?;
-        // Removal has stopped every agent, and deletes the state their
-        // records are in.
-        let mut agents = crate::execution::recovery::stopped_agents(&self.paths, &workspace.id)?;
-        agents.retain(|agent| Some(&agent.execution) != carried_on);
-        // An unreadable last session is not worth keeping the workspace for.
-        let mut last_sessions =
-            crate::execution::recovery::LastSession::all(&self.paths, &workspace.id)
-                .unwrap_or_default();
-        last_sessions.retain(|last| Some(&last.execution) != carried_on);
-        let removed = RemovedSpace {
-            space_id: workspace.id.clone(),
-            repository_id: Some(workspace.repository_id.clone()),
-            name: workspace.name.clone(),
-            expires_at: checkpoint.expires_at,
-            parent,
-            links,
-            agents,
-            last_sessions,
-            cause,
-            removed_at: UnixTime::now(),
-            kind: RemovedKind::Workspace(Box::new(RemovedWorkspace {
-                checkpoint,
-                base_ref: workspace.base_ref.clone(),
-                base_commit: workspace.base_commit.clone(),
-                at: workspace.at.clone(),
-                setup_skipped: workspace.setup_skipped,
-                session_files: self.unplaced_sessions(workspace).await,
-            })),
-        };
-        let record = removed.clone();
-        self.store.run(move |db| self::record(db, &record)).await?;
-        Ok(removed)
-    }
-
-    /// Whether a checkpoint would keep all of the workspace's unsaved files:
-    /// within the archive limit, or a copy's starting files whatever their
-    /// size, which its starting checkpoint already holds.
-    pub(crate) async fn archives_unsaved_files(&self, workspace: &Workspace) -> Result<bool> {
-        if crate::removal::holds_starting_files(workspace).await? {
-            return Ok(true);
-        }
-        let settings = self
-            .workspace_settings(workspace)
-            .await?
-            .into_settings()
-            .cleanup
-            .restore;
-        Ok(git::checkpoint::unsaved_bytes(&workspace.path)
-            .await?
-            .is_some_and(|bytes| bytes <= settings.archive_max_bytes()))
-    }
-
-    /// Whether merged cleanup may archive the workspace's unsaved files: the
-    /// branch has commits of its own, so they are left over from merged work
-    /// rather than work never committed, and a checkpoint keeps them.
-    pub(super) async fn unsaved_files_are_leftovers(&self, workspace: &Workspace) -> Result<bool> {
-        let Some(base) = &workspace.base_commit else {
-            return Ok(false);
-        };
-        Ok(
-            git::status::commits_since(&workspace.path, base.as_str()).await? > 0
-                && self.archives_unsaved_files(workspace).await?,
-        )
-    }
-
-    /// The workspaces among [`Self::removed_spaces`].
-    pub(crate) async fn removed_workspaces(&self) -> Result<Vec<RemovedSpace>> {
-        let mut removed = self.removed_spaces().await?;
-        removed.retain(|removed| removed.workspace().is_some());
-        Ok(removed)
-    }
-
-    /// Restorable spaces, newest first; expired ones are gone even before
-    /// the sweep deletes them.
-    pub async fn removed_spaces(&self) -> Result<Vec<RemovedSpace>> {
-        self.store
-            .run(|db| {
-                db.prepare(
-                    "SELECT record FROM removed_spaces WHERE expires_at > unixepoch()
-                     AND space_id NOT IN (SELECT id FROM workspaces) ORDER BY rowid DESC",
-                )?
-                .query_map([], |row| row.get::<_, String>(0))?
-                .map(|record| Ok(serde_json::from_str(&record?)?))
-                .collect()
-            })
-            .await
-    }
-
     /// Open a removed workspace again on its branch at the removed HEAD, with
     /// its unsaved files, checkpoints, linked issue, opened and related items,
     /// and stopped agents; the caller sets it up and links its PRs. The
@@ -339,188 +223,6 @@ impl Manager {
         Ok(opened)
     }
 
-    /// Open a workspace another Shoal exported: record it as removed here
-    /// with its checkpoint, fetched from `bundle` or else on the default
-    /// branch, and its agents' `session_files`, and restore it; a `copy` as
-    /// a new workspace of its own. A failed restore leaves the record for
-    /// `shoal restore`.
-    pub async fn import_workspace(
-        &self,
-        selector: &crate::repository::Selector,
-        bundle: Option<&Path>,
-        prerequisite: Option<&str>,
-        removed: RemovedSpace,
-        copy: bool,
-        session_files: &[CarriedSessionFile],
-    ) -> Result<RestoredWorkspace> {
-        let removed = self
-            .record_package(selector, bundle, prerequisite, removed, copy, session_files)
-            .await
-            .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
-        self.restore_workspace(&SpaceSelector::id(&removed.space_id))
-            .await
-            .with_context(|| {
-                format!(
-                    "the imported workspace is recorded as removed; shoal restore {} retries",
-                    removed.space_id
-                )
-            })
-    }
-
-    /// Record the packaged `removed` as a removed workspace of the
-    /// repository `selector` names, as [`Self::import_workspace`] does
-    /// before opening it; an error leaves no record.
-    async fn record_package(
-        &self,
-        selector: &crate::repository::Selector,
-        bundle: Option<&Path>,
-        prerequisite: Option<&str>,
-        removed: RemovedSpace,
-        copy: bool,
-        session_files: &[CarriedSessionFile],
-    ) -> Result<RemovedSpace> {
-        let repo = self.repository(selector).await?;
-        ensure!(
-            removed.kept_workspace()?.checkpoint.workspace_id == removed.space_id,
-            "the export's checkpoint belongs to another workspace"
-        );
-        if let Some(commit) = prerequisite {
-            self.fetch_missing(&repo, &commit.into()).await?;
-        }
-        let removed = self.imported_record(&repo, removed).await?;
-        // A repository move holds this gate; the checkout may have moved.
-        let (repo, _git) = self.lock_repository(&repo.id).await?;
-        self.record_import(&repo, bundle, removed, copy, session_files)
-            .await
-    }
-
-    /// Fetch the default branch when the repository lacks `commit`, which
-    /// the export builds on.
-    async fn fetch_missing(&self, repo: &Repository, commit: &CommitId) -> Result<()> {
-        if git::has_commit(&repo.path, commit.as_str()).await? {
-            return Ok(());
-        }
-        self.fetch_default_branch(&repo.id)
-            .await
-            .context("fetch the default branch the export builds on")
-    }
-
-    /// The exported record as this repository's, expiring after its
-    /// retention as a removal here would.
-    async fn imported_record(
-        &self,
-        repo: &Repository,
-        removed: RemovedSpace,
-    ) -> Result<RemovedSpace> {
-        let retention = self
-            .repository_settings(&repo.id)
-            .await?
-            .cleanup
-            .restore
-            .retention();
-        let expires_at = UnixTime::now() + retention;
-        let mut removed = RemovedSpace {
-            repository_id: Some(repo.id.clone()),
-            expires_at,
-            ..removed
-        };
-        let checkpoint = &mut removed.kept_workspace_mut()?.checkpoint;
-        checkpoint.repository_id = repo.id.clone();
-        checkpoint.expires_at = expires_at;
-        Ok(removed)
-    }
-
-    /// The exported `removed` as a new workspace of `repo` that copies it:
-    /// with its own ID, on a branch of its own named after the original's,
-    /// created at its HEAD, and without the PRs and CI runs, which stay with
-    /// the original's branch. The caller holds the repository's Git gate,
-    /// so a concurrent import takes another branch.
-    async fn copied_record(
-        &self,
-        repo: &Repository,
-        removed: RemovedSpace,
-    ) -> Result<RemovedSpace> {
-        let id = SpaceId::generate();
-        let mut removed = removed;
-        let checkpoint = &mut removed.kept_workspace_mut()?.checkpoint;
-        checkpoint.workspace_id = id.clone();
-        let name = match &checkpoint.branch {
-            Some(branch) => {
-                let branch = self.copy_branch(repo, branch.as_str()).await?;
-                git::branch::create(&repo.path, &branch, checkpoint.head.as_str()).await?;
-                checkpoint.branch = Some(branch.as_str().into());
-                SpaceName::derive(branch.as_str(), "workspace")
-            }
-            None => removed.name.clone(),
-        };
-        Ok(RemovedSpace {
-            space_id: id,
-            name,
-            links: removed.links.copied(),
-            ..removed
-        })
-    }
-
-    /// Point the checkpoint's ref at its commit, keep the agents'
-    /// `session_files`, then record the checkpoint and the removal in one
-    /// transaction, as a removal would; a `copy` as the new workspace that
-    /// copies it. The caller holds the repository's Git gate.
-    async fn record_import(
-        &self,
-        repo: &Repository,
-        bundle: Option<&Path>,
-        removed: RemovedSpace,
-        copy: bool,
-        session_files: &[CarriedSessionFile],
-    ) -> Result<RemovedSpace> {
-        let _refs = self.gates.lock_checkpoints().await;
-        let commit = &removed.kept_workspace()?.checkpoint.commit;
-        let reference = git::checkpoint::reference(commit);
-        match bundle {
-            Some(bundle) => git::bundle::fetch(&repo.path, bundle, &reference).await?,
-            None => git::checkpoint::save(&repo.path, &reference, commit)
-                .await
-                .with_context(|| format!("the default branch has no commit {commit}"))?,
-        }
-        let removed = match copy {
-            true => self.copied_record(repo, removed).await?,
-            false => removed,
-        };
-        let removed = self
-            .keep_imported_sessions(repo, removed, session_files)
-            .await?;
-        let record = removed.clone();
-        if let Err(error) = self
-            .store
-            .write(move |tx| record_imported(tx, record))
-            .await
-        {
-            let _ = self
-                .discard_imported_sessions(repo, &removed.space_id)
-                .await;
-            return Err(error);
-        }
-        Ok(removed)
-    }
-
-    /// The removal record to reopen, kept with its checkpoints for at least
-    /// [`RESTORE_CLAIM`] in the same transaction, so expiry cannot delete
-    /// them while the restore runs.
-    pub(super) async fn claim_removed_workspace(
-        &self,
-        selector: &SpaceSelector,
-    ) -> Result<RemovedSpace> {
-        let id = (selector.given_id().cloned()).with_context(|| {
-            format!("no restorable workspace {selector}; a removed workspace has no number, so select it by its ID")
-        })?;
-        self.store
-            .write(move |tx| claim(tx, &id))
-            .await?
-            .with_context(|| {
-                format!("no restorable workspace {selector}; shoal restore lists them")
-            })
-    }
-
     /// The branch to open: one at the removed HEAD, or at a later commit when
     /// nothing unsaved has to be applied, created at HEAD when it was deleted.
     async fn restore_branch(&self, removed: &RemovedSpace) -> Result<BranchName> {
@@ -604,88 +306,11 @@ pub(super) async fn write_files(worktree: &Path, files: &RestoredFiles) -> Resul
     git::checkpoint::apply(worktree, files.snapshot.as_str()).await
 }
 
-/// Persist a removal record, replacing one an earlier attempt left.
-fn record(db: &Connection, removed: &RemovedSpace) -> Result<()> {
-    db.execute(
-        "INSERT OR REPLACE INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record)
-            VALUES (?1,?2,?3,?4,?5,?6)",
-        params![
-            removed.space_id,
-            removed.repository_id,
-            removed.workspace().is_none(),
-            removed.name,
-            removed.expires_at,
-            serde_json::to_string(removed)?,
-        ],
-    )?;
-    Ok(())
-}
+mod imports;
+mod records;
 
-/// Record an imported workspace's checkpoint under its next number and its
-/// removal record naming that number, unless the repository is being removed.
-fn record_imported(tx: &rusqlite::Transaction<'_>, mut removed: RemovedSpace) -> Result<()> {
-    anyhow::ensure!(
-        !crate::daemon::store::repository_removing(tx, removed.repository()?)?,
-        "the repository is being removed"
-    );
-    let checkpoint = &mut removed.kept_workspace_mut()?.checkpoint;
-    checkpoint.number = super::checkpoints::insert_numbered(tx, checkpoint)?;
-    record(tx, &removed)?;
-    Ok(())
-}
-
-/// How long a restore that started keeps its removal record, checkpoints and
-/// attached files from expiring.
-pub(super) const RESTORE_CLAIM: std::time::Duration = std::time::Duration::from_secs(3600);
-
-/// Find a removal record and keep it, its checkpoints and its attached files
-/// for at least [`RESTORE_CLAIM`].
-fn claim(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<Option<RemovedSpace>> {
-    let Some(mut removed) = find(tx, id)? else {
-        return Ok(None);
-    };
-    let until = UnixTime::now() + RESTORE_CLAIM;
-    for (table, column) in [
-        ("removed_spaces", "space_id"),
-        ("checkpoints", "workspace_id"),
-    ] {
-        tx.execute(
-            &format!(
-                "UPDATE {table} SET expires_at=?2, record=json_set(record, '$.expires_at', ?2)
-                 WHERE {column}=?1 AND expires_at < ?2"
-            ),
-            params![removed.space_id, until],
-        )?;
-    }
-    tx.execute(
-        "UPDATE removed_spaces
-         SET record=json_set(record, '$.checkpoint.expires_at', ?2)
-         WHERE space_id=?1 AND json_extract(record, '$.checkpoint.expires_at') < ?2",
-        params![removed.space_id, until],
-    )?;
-    crate::daemon::workspace_files::claim(tx, &removed.space_id, until)?;
-    removed.expires_at = removed.expires_at.max(until);
-    if let Ok(kept) = removed.kept_workspace_mut() {
-        kept.checkpoint.expires_at = kept.checkpoint.expires_at.max(until);
-    }
-    Ok(Some(removed))
-}
-
-/// The unexpired removal record of the removed workspace `id`.
-fn find(db: &Connection, id: &SpaceId) -> Result<Option<RemovedSpace>> {
-    let record: Option<String> = db
-        .query_row(
-            "SELECT record FROM removed_spaces WHERE space_id=?1
-                AND expires_at > unixepoch() AND space_id NOT IN (SELECT id FROM workspaces)
-                ORDER BY rowid DESC LIMIT 1",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    Ok(record
-        .map(|record| serde_json::from_str(&record))
-        .transpose()?)
-}
+#[cfg(test)]
+use records::RESTORE_CLAIM;
 
 #[cfg(test)]
 pub(super) mod tests;

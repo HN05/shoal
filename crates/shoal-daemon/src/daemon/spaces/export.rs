@@ -18,7 +18,7 @@ use crate::{
     },
     execution::recovery::{LastSession, StoppedAgent},
     model::{
-        Chat, Checkpoint, PresentSpace, RemovedKind, RemovedSpace, RemovedWorkspace, Repository,
+        Chat, Checkpoint, KeptWorkspace, PresentSpace, RemovedKind, RemovedSpace, Repository,
         SpaceKind, Workspace,
     },
     paths::Paths,
@@ -366,7 +366,7 @@ fn packaged_record(
         last_sessions: LastSession::all(paths, &workspace.id).unwrap_or_default(),
         cause: EventCause::Manual,
         removed_at: UnixTime::now(),
-        kind: RemovedKind::Workspace(Box::new(RemovedWorkspace {
+        kind: RemovedKind::Workspace(Box::new(KeptWorkspace {
             checkpoint,
             base_ref: workspace.base_ref.clone(),
             base_commit: workspace.base_commit.clone(),
