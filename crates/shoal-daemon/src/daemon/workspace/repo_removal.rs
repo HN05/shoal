@@ -116,6 +116,8 @@ impl Manager {
         // A run its review left may still have its reviewer's processes in
         // the directory `.reviews` would delete.
         self.ensure_no_review_runs_left(&repo.id).await?;
+        // A gate run works in the checkout and writes into `.gate`.
+        self.ensure_no_gate_runs_in(&repo.id).await?;
         self.delete_runner_of_removed(&repo).await?;
         let progress = match self.removal_progress(&repo.id).await? {
             Some(progress) => progress,
@@ -149,6 +151,7 @@ impl Manager {
         delete_caches(&repo).await?;
         delete_shoal_dir(&repo, Contents::TmpDirs).await?;
         delete_shoal_dir(&repo, Contents::ReviewRuns).await?;
+        delete_shoal_dir(&repo, Contents::GateRuns).await?;
         self.delete_proposal_files(&repo).await?;
         super::imported_sessions::remove_imported_sessions(&repo).await?;
         self.delete_repository_files(&repo).await?;

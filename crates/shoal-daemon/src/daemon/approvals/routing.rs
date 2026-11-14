@@ -22,11 +22,12 @@ use crate::{
 };
 
 /// The permissions that govern `request`, each of which a coordinator needs
-/// as `direct` to approve it instead of a grant; none for a request a grant
+/// as `direct` to approve it instead of a grant, and whose narrowest value
+/// sends it to the gate when it is `gate`; none for a request a grant
 /// governs. They are those whose value made the space ask instead of act: an
 /// issue in another repository is governed by `issue_other_repositories`
 /// alone, what pushes by `push` too, and an action by its own key.
-fn governing(request: &ApprovalRequest) -> Vec<PermissionKey> {
+pub(crate) fn governing(request: &ApprovalRequest) -> Vec<PermissionKey> {
     use PermissionKey::{IssueOpen, IssueOtherRepositories, Merge, PrOpen, Push};
     match request.target {
         Target::IssueOpen
@@ -414,10 +415,11 @@ impl Manager {
             .await
     }
 
-    /// Tell whoever decides a pending request about it: the space directly
-    /// above its workspace, a parent workspace with an agent or the chat that
-    /// opened it, or else the user. A request is routed once; repeating it
-    /// tells its decider again.
+    /// Tell whoever decides a pending request about it: the gate, when the
+    /// requesting space's permissions give it the request, else the space
+    /// directly above its workspace, a parent workspace with an agent or the
+    /// chat that opened it, or else the user. A request is routed once;
+    /// repeating it tells its decider again.
     pub async fn notify_approval(&self, request: &ApprovalRequest) {
         let _gate = self.gates.lock_announcements().await;
         // It may have been withdrawn or decided since it was requested.
@@ -430,6 +432,14 @@ impl Manager {
             }
         };
         let request = &request;
+        match self.give_gate(request).await {
+            Ok(true) => return,
+            Ok(false) => {}
+            Err(error) => log!(
+                "approval {} not given to the gate: {error:#}",
+                request.number
+            ),
+        }
         let routed = match request.routed {
             true => Ok(request.clone()),
             false => self.route_approval(request, None).await,

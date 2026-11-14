@@ -4,17 +4,19 @@
 use crate::{client::space_ids::SpaceId, daemon::item_numbers::ItemNumber};
 
 mod delivery;
+pub(crate) mod gated;
 pub mod proposals;
 mod routing;
 mod store;
 mod text;
 
 pub(crate) use crate::client::approvals::{
-    ActionSpecification, ApprovalRequest, DecisionStatus, HoldSpecification, Lifetime, MERGE,
-    MergeSpecification, PortSpecification, PushSpecification, ResourceSpecification,
+    ActionSpecification, ApprovalRequest, DecisionStatus, GateStep, HoldSpecification, Lifetime,
+    MERGE, MergeSpecification, PortSpecification, PushSpecification, ResourceSpecification,
     SecretSpecification, SimulatorSpecification, Specification, Target, Undecided,
     UnmergeSpecification,
 };
+pub(crate) use routing::governing;
 pub use store::{ReasonRequired, check, current, release, request_action};
 pub(crate) use store::{pending_count, release_decided_by};
 

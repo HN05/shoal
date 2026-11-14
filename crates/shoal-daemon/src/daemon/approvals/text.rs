@@ -1,6 +1,6 @@
 //! The text shown for a request: the user's notifications and the agent
 //! messages that ask for or report a decision.
-use super::{ApprovalRequest, DecisionStatus};
+use super::{ApprovalRequest, DecisionStatus, GateStep};
 
 /// The text shown for a request to the user and to agents.
 pub(super) trait RequestText {
@@ -23,10 +23,11 @@ pub(super) trait RequestText {
 impl RequestText for ApprovalRequest {
     fn notification(&self) -> String {
         format!(
-            "approval {}: {}{}; approve with shoal approvals --approve {}",
+            "approval {}: {}{}{}; approve with shoal approvals --approve {}",
             self.number,
             self.subject(),
             reason_suffix(self),
+            gate_suffix(self),
             self.number
         )
     }
@@ -41,10 +42,11 @@ impl RequestText for ApprovalRequest {
 
     fn routed_message(&self) -> String {
         format!(
-            "{}: approval {id}: {}: {}; decide with shoal approvals --approve {id} or shoal approvals --deny {id}, or pass it up with shoal approvals --escalate {id}",
+            "{}: approval {id}: {}: {}{}; decide with shoal approvals --approve {id} or shoal approvals --deny {id}, or pass it up with shoal approvals --escalate {id}",
             self.space_name(),
             self.subject(),
             self.reason,
+            gate_suffix(self),
             id = self.number
         )
     }
@@ -68,5 +70,19 @@ fn reason_suffix(request: &ApprovalRequest) -> String {
     match request.reason.as_str() {
         "" => String::new(),
         reason => format!(": {reason}"),
+    }
+}
+
+/// What the gate did with a request that reaches its decider from it: why
+/// it passed it on and the case it quoted, why carrying out its allow
+/// failed, or why it did not judge it.
+fn gate_suffix(request: &ApprovalRequest) -> String {
+    match &request.gate {
+        Some(GateStep::Escalated { reason, rule }) => {
+            format!(" (the gate passed it on: {reason}; case: {rule})")
+        }
+        Some(GateStep::Unapplied { error }) => format!(" (the gate allowed it, then: {error})"),
+        Some(GateStep::Unjudged { reason }) => format!(" (the gate did not judge it: {reason})"),
+        _ => String::new(),
     }
 }

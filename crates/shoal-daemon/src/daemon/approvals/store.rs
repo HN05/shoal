@@ -259,7 +259,7 @@ pub fn retire(tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()> {
 }
 
 /// Keep `request` undecidable with `status` until its workspace is removed.
-fn close(
+pub(super) fn close(
     tx: &Transaction<'_>,
     mut request: ApprovalRequest,
     status: DecisionStatus,

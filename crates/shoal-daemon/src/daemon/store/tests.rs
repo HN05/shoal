@@ -561,6 +561,9 @@ fn historical_database(version: i64) -> Result<Connection> {
         chat_approvals(&db)?;
         db.execute_batch(include_str!("chat_approvals.sql"))?;
     }
+    if version >= 178 {
+        db.execute_batch(include_str!("gate.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"

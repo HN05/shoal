@@ -22,6 +22,7 @@ mod exit_wait;
 pub(crate) mod file_access;
 mod file_copies;
 pub(crate) mod forge_hosts;
+pub(crate) mod gate;
 mod git_logins;
 pub(crate) mod idle_wakes;
 pub(crate) mod item_numbers;
@@ -203,6 +204,7 @@ pub async fn run(
         progress::run,
     );
     spawn_supervised(&mut background, &manager, "reviews", reviews::run);
+    spawn_supervised(&mut background, &manager, "gate", gate::run);
     spawn_supervised(
         &mut background,
         &manager,
@@ -314,6 +316,10 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
         .step("removing interrupted reviews' checkouts", reviews)
         .await
     {
+        log!("{error:#}");
+    }
+    let gate = manager.recover_gate_runs();
+    if let Err(error) = startup.step("stopping interrupted gate runs", gate).await {
         log!("{error:#}");
     }
     let chat_files = manager.rekey_chat_files();

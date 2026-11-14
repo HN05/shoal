@@ -277,6 +277,10 @@ for delivering a PR, under Committing near the end, decide when work is done.
   Issue proposals belong to the repository and outlive the space that made them.
   `issue_other_repositories` (`"propose"` by default, `"direct"` or `"deny"`)
   does the same for a scoped issue in another repository, which is never linked.
+  A `"gate"` value, between `"direct"` and `"propose"`, sends a request whose
+  narrowest governing key is `"gate"` to the gate agent first, which allows it
+  through the approval path, denies it, or passes it on only for an
+  `[gate] escalate` case it quotes, which then takes the `"propose"` route.
 - Permissions belong to spaces. A space's are its agent's mode's
   (`[modes.NAME.permissions]` over `[permissions]` over the built-in mode's
   defaults over the key's), each narrowed to its parent's effective value,

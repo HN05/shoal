@@ -62,6 +62,7 @@ impl Manager {
 
     /// Request `request`, refusing until the user approves it.
     async fn await_merge_decision(&self, request: ApprovalRequest) -> Result<()> {
+        self.ensure_gate_hears(&request).await?;
         match self.request_merge_approval(request).await? {
             Some(request) => Err(Undecided(Box::new(request)).into()),
             None => Ok(()),

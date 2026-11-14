@@ -3000,6 +3000,27 @@ whatever the `merge` permission says, since it may push the default branch, and 
 forge's `pr revert`, which pushes at once, is refused for scoped callers. A
 pending push request keeps the workspace from unattended removal. Approving a merge
 request whose branch moved since it was requested is refused as stale and marks it outdated.
+Most requests the user approves only check routine things, so a permission
+of `"gate"`, between `"direct"` and `"propose"`, has an agent decide them
+first, opt-in since no built-in mode sets it. The gate is not a reviewer: it
+checks conventions and mistakes, and the user's attention is what it saves, so
+it decides even when unsure, denying with a reason the agent can answer by
+asking again, and passes a request on only for a case the user wrote down in
+`[gate] escalate`, which the daemon checks it quoted word for word. It decides
+before a coordinator, since a coordinator's attention costs as the user's
+does; an escalation then takes the `"propose"` route. Allowing approves
+through the path a decision takes, so the gate adds no way to act. It reads
+its rules from the registered checkout, never the requesting worktree, so an
+agent cannot write the rules that judge it, and runs as a one-shot run that
+holds no agent slot, since agents wait on it. A session per space and subject
+keeps its understanding and the prompt cache across retries without mixing
+unrelated requests, and every session opens with the same text so a new one
+reuses that cache. A retry is a new request in that session, and the third
+denial of one action stands until the action changes, so an agent cannot wear
+the gate down. A failure denies, since nothing is allowed without a verdict,
+and notifies no one: the agent can retry or ask. A gate that cannot be set up,
+as without an agent to run, notifies the user too, since only the config fixes
+it.
 Agents also find problems that belong to another repository, such as a tool the
 project uses, so `issue open --repo` files an issue there, on any forge, as the
 agent account; every other item action stays within the workspace's repository.

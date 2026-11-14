@@ -158,6 +158,7 @@ pub struct Manager {
     pub(crate) seeds: super::seed::Seeds,
     pub(crate) forge_memories: crate::daemon::links::ForgeMemories,
     pub(crate) reviews: crate::daemon::reviews::Reviews,
+    pub(crate) gate: crate::daemon::gate::Gatekeeper,
     pub(crate) runners: crate::daemon::runner::Runners,
     /// One-shot agent runs whose processes may still be running.
     pub(crate) oneshot_runs: crate::daemon::oneshot::Runs,
@@ -218,6 +219,7 @@ impl Manager {
             seeds: Default::default(),
             forge_memories: Default::default(),
             reviews: Default::default(),
+            gate: Default::default(),
             runners: Default::default(),
             oneshot_runs: Default::default(),
             proxy_retries: Default::default(),

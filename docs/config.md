@@ -500,7 +500,7 @@ The gate is the agent that decides a request under a permission of `"gate"`;
 see [the gate](reference.md#the-gate). Shoal reads this table from the
 repository's checkout and the layers beside it, never from the requesting
 workspace's worktree. `fallback_agent` decides once more when the first agent
-fails for a reason other than running too long. `instructions` follow the
+fails. `instructions` follow the
 gate's built-in instructions, and `escalate` lists the cases it passes to the
 user, each quoted word for word in the verdict; with none, it decides every
 request itself. `[gate.issue_open]`, `[gate.pr_open]`,

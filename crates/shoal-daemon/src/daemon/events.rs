@@ -390,6 +390,16 @@ pub(crate) fn record_approval(
     record_with(db, &request.space_id, kind, "approval", &approval)
 }
 
+/// Record the gate's verdict on the request's space's request, in the
+/// transaction that records it.
+pub(crate) fn record_gate(
+    db: &Connection,
+    request: &crate::client::approvals::ApprovalRequest,
+    gate: &crate::client::events::GateEvent,
+) -> Result<()> {
+    record_with(db, &request.space_id, EventKind::GateDecided, "gate", gate)
+}
+
 impl Manager {
     /// Record an agent's start, stop or exit in the space `id`'s log; a
     /// failure is logged, never returned, as it must not fail the agent's

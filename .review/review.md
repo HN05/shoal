@@ -256,6 +256,11 @@ instead of the PR delivery guidance below.
   approval pushes exactly that, with no agent present, and a branch that moved
   outdates it. Nothing decides, withdraws or replaces a request while its push runs.
   `"deny"` refuses those pushes and records nothing.
+  Under a value of `"gate"`, between `"direct"` and `"propose"`, the gate agent decides such a
+  request first, with rules read from the registered checkout, never the requesting worktree:
+  an allow approves through the path a decision takes, a deny ends it with a reason, and an
+  escalation must quote an `[gate] escalate` case word for word before it takes the `"propose"`
+  route; a failed run denies, and the third denial of one action refuses it until it changes.
   The `issue_other_repositories` permission governs a scoped issue in another repository the same
   way (`"propose"` by default) or refuses it with `"deny"`; it is never linked. These permissions
   are the acting caller's space's, from its agent's mode (`[modes.NAME.permissions]` over

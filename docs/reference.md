@@ -4457,6 +4457,65 @@ workspace, are refused until it ends. The agent hears the outcome as an
 `shoal pr revert` through the forge is refused, since the forge pushes its
 branch at once.
 
+#### The gate
+
+A permission of `"gate"`, between `"direct"` and `"propose"`, has an agent, the
+gate, decide an agent's issue and PR proposals, pushes, merges and unmerges
+before anyone else sees them. It applies to `issue_open`, `pr_open`,
+`issue_other_repositories`, `merge` and `push`; no built-in mode sets it. A
+request is the gate's when the narrowest of the permissions that govern it is
+`"gate"`, such as both `merge` and `push` for a merge; with one of them
+`"propose"`, it is routed as the sections above describe. A space holding
+`"gate"` or `"direct"` may give a child `"gate"`.
+
+The command records the request as it would for approval, and the gate decides
+it at once, in the background: it allows it, which approves it as your approval
+would, pushing, opening or merging; denies it with a reason; or passes it on,
+which routes it as a `"propose"` request to the nearest space above with an
+agent, and to you at the top, carrying the gate's reason and the case it
+quoted. It never edits a proposal. It is no code reviewer: it checks that the
+action follows the repository's conventions and is not a mistake, such as a
+push to the wrong ref, a merge with failing checks, a duplicate issue or work
+unrelated to the space's. It decides every request itself, unsure or not, and
+passes one on only for a case the [`[gate]` table](config.md#gate) lists in
+`escalate`, quoting it word for word; an escalation quoting none is refused
+and the gate asked once more, told why.
+
+The gate reads the request in full, the space's name, mode and linked issues
+and PRs with their labels, CI and review state, the commits the request brings
+as `git log --stat`, and what the request leaves out of the repository's
+[conventions](#repository-conventions). It runs as a one-shot run of
+`[gate] agent`, else `agent.default`, through its `review` template, read-only
+in the repository's registered checkout, whose `[gate]` rules it reads rather
+than the requesting workspace's, for at most 10 minutes. It holds no agent slot
+and waits only for memory and disk room. Its runs keep one session per space
+and subject: the space's own branch, with its PR, merges and unmerges; its
+issue proposals for each repository; and its pushes to each other ref. A later
+request of a subject resumes its session through the tool's `review_resume`
+template and is given only what is new, such as the commits since the last
+verdict; a change of the agent or of its rules, or a session the tool can no
+longer resume, starts a new session, and the
+sessions go with the space.
+
+A denial reaches the agent as an [agent message](#agent-messages) with the
+reason; the agent changes what it names and runs the command again, which is a
+new request. After three denials of the same action, the same ref at the same
+commit, a PR proposal with the same title, description and labels at the same
+commit, or an issue by its repository and title, the command is
+refused without asking the gate until the action changes. When the gate times
+out, crashes or returns no verdict, and then `fallback_agent` does too, the
+request is denied with the failure, which does not count toward the three; you
+are not notified, and the agent may tell you with `shoal alerts send` or ask with
+`shoal questions ask`. When the gate cannot be set up at all, as without an
+agent it can run, the request is denied too and you are notified, since only the
+config fixes that. An allowed request that cannot be carried out, as when its
+push cannot start, takes the normal route instead, with the error, and its agent
+is told, and so does an issue proposal whose space is gone, which the gate does
+not judge. Only those and escalations reach you, as approval requests in
+`shoal approvals` and the inbox. Every verdict goes to the space's
+[log](#space-log) as `gate_decided`, with the reason, agent and session, to
+the agent as a message, and to its coordinator as one line.
+
 #### Repository conventions
 
 `shoal repo labels` lists the labels the workspace repository's items can take
@@ -5268,7 +5327,7 @@ the UUID of the workspace or chat it records (`workspace_id` or `chat_id`, the
 other null), `repository_id` (null for a chat without a repository), `name`,
 `path` and `branch` (null for a chat), `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
-`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `question_asked`, `question_answered`, `approval_requested`, `approval_decided`, `alert_sent`, `progress_changed`, `child_created`, `child_removed` and `job_ended`; history from earlier versions may also contain `continued` and `chat_changed`. Review events add a `review` object with the mark's `kind`,
+`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `question_asked`, `question_answered`, `approval_requested`, `approval_decided`, `gate_decided`, `alert_sent`, `progress_changed`, `child_created`, `child_removed` and `job_ended`; history from earlier versions may also contain `continued` and `chat_changed`. Review events add a `review` object with the mark's `kind`,
 `url` (both null for a workspace mark) and `head`. Link events add a `link`
 object with the linked issue or PR's `kind` and canonical `url`. Agent state
 events add `agent_state` with the reported `state`, null when its execution ended.
@@ -5294,7 +5353,10 @@ with its `name`, `execution_id` and `exit_code`, null for a start or stop
 and when the wrapper reported none. `question_asked` and `question_answered`
 events add `question` with its `number`, `question` and `answer`.
 `approval_requested` and `approval_decided` events add `approval` with its
-`number`, `target`, `subject` and `status`. `alert_sent` events add `alert`
+`number`, `target`, `subject` and `status`. `gate_decided` events add `gate`
+with its `number`, `subject`, `verdict` (`allow`, `deny`, `escalate` or
+`failed`), `reason`, and the `rule` an escalation quoted, the `agent` and its
+`session`. `alert_sent` events add `alert`
 with its `message`. `progress_changed` events add `progress` as
 `shoal progress --json` shows it, with empty `steps` and a null `status` once
 both are cleared. `child_created` and `child_removed` events, in the log of

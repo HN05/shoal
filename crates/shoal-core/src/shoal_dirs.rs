@@ -29,6 +29,8 @@ pub enum Contents {
     ProposalFiles,
     /// Each running local review's checkout and its reviewer's output.
     ReviewRuns,
+    /// Each running gate decision's schema and output.
+    GateRuns,
     /// The tool caches every workspace of a repository shares.
     Caches,
     /// The agents' session files an import carried, until a restore puts
@@ -39,11 +41,12 @@ pub enum Contents {
 }
 
 impl Contents {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::TmpDirs,
         Self::Attachments,
         Self::ProposalFiles,
         Self::ReviewRuns,
+        Self::GateRuns,
         Self::Caches,
         Self::ImportedSessions,
         Self::Seed,
@@ -55,6 +58,7 @@ impl Contents {
             Self::Attachments => ".attachments",
             Self::ProposalFiles => ".proposals",
             Self::ReviewRuns => ".reviews",
+            Self::GateRuns => ".gate",
             Self::Caches => ".caches",
             Self::ImportedSessions => ".sessions",
             Self::Seed => ".seed",
@@ -67,6 +71,7 @@ impl Contents {
             Self::Attachments => "attached files",
             Self::ProposalFiles => "proposals' files",
             Self::ReviewRuns => "review runs",
+            Self::GateRuns => "gate runs",
             Self::Caches => "shared caches",
             Self::ImportedSessions => "imported session files",
             Self::Seed => "seed build",

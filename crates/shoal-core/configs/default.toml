@@ -383,22 +383,23 @@ escalate = []
 [conflicts]
 sensitive = []
 
-# What agents may do: "direct" at once, "propose" after your approval, or
-# "deny" where it applies. Issues and PRs in the workspace's repository:
+# What agents may do: "direct" at once, "gate" after the [gate] agent allows
+# it, "propose" after your approval, or "deny" where it applies. Issues and PRs in the workspace's repository:
 [permissions]
 issue_open = "direct"
 pr_open = "direct"
 # Pushes to the repository's remotes, by shoal pr open or git push: "direct",
-# "propose" or "deny". Unless "direct", shoal merge needs your approval too.
+# "gate", "propose" or "deny". Unless "direct", shoal merge needs approval too.
 push = "direct"
 # The keys below default per mode, and `orchestrate`, a master session, gets
 # more than the values shown, which are a worker's; a value set here applies
 # to every mode, over those defaults, and [modes.NAME.permissions] sets one
 # mode's.
-# Issues in other repositories than the workspace's: "deny", "propose" or "direct".
+# Issues in other repositories than the workspace's: "deny", "propose", "gate"
+# or "direct".
 # issue_other_repositories = "propose"
 # shoal merge and unmerge, and merging a PR or deleting its branch:
-# "propose" or "direct".
+# "propose", "gate" or "direct".
 # merge = "propose"
 # Requests through shoal forge api that are not reads, which you may always
 # send: "deny", "propose" or "direct".

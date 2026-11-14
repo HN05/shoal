@@ -302,6 +302,14 @@ pub(crate) fn read_bounded(path: &Path, limit: u64) -> std::io::Result<Option<Ve
     }
 }
 
+/// The first `limit` bytes of the file.
+pub(crate) fn read_head(path: &Path, limit: u64) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    let mut head = Vec::new();
+    fs::File::open(path)?.take(limit).read_to_end(&mut head)?;
+    Ok(head)
+}
+
 /// The last `limit` bytes of the file.
 pub(crate) fn read_tail(path: &Path, limit: u64) -> std::io::Result<Vec<u8>> {
     use std::io::{Read, Seek, SeekFrom};

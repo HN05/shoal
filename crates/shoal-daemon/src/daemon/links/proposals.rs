@@ -153,6 +153,7 @@ impl Manager {
         record: fn(&rusqlite::Transaction<'_>, ApprovalRequest) -> Result<Recorded>,
         files: tokio::sync::MutexGuard<'_, ()>,
     ) -> Result<Proposed> {
+        self.ensure_gate_hears(&request).await?;
         let (request, new) = self.store_proposal(request, record).await?;
         drop(files);
         self.prune_proposal_files(&request).await;

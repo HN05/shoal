@@ -351,6 +351,14 @@ approved commit and opens the PR that waited for it. A new commit outdates the
 request until the next push or `pr open`. A pending push keeps the workspace.
 With `push = "deny"`, `pr open` and `git push` fail with the reason.
 
+Under a permission of `gate`, the gate, an agent, decides such a request at
+once instead of the user: an allowed one goes ahead as an approved one does,
+and a denial arrives as a message with the reason. Running the command again
+asks again; after three denials of the same action, a push of one commit, a PR
+proposal with the same title, description and labels at one commit, or an
+issue by its title, the command is refused until it changes. A request the gate passes on goes to the space
+above or the user, and a failed gate run denies it without telling the user.
+
 ### Permitted actions
 
 Other keys govern administering Shoal and the actions that reach beyond a
