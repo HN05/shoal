@@ -762,8 +762,8 @@ removing it moves its stacked workspaces down to its own base and journals the
 change. When every watched PR of the base merges and covers its HEAD, the PR sweep does the same
 before cleanup can remove it, retargets stacked PRs still targeting the head
 branch of one of its merged PRs,
-and queues a watch update; agents rebase their own branches, since Shoal never
-moves workspace branches. Retargeting goes through the same REST transport as
+and queues a watch update; agents rebase their own branches, since Shoal moves
+a workspace branch only by the fast-forward `shoal refresh` makes when asked. Retargeting goes through the same REST transport as
 issue and PR actions. Adoption
 takes a path; the CLI infers its repository from the owning checkout, then a unique
 `origin` remote match, then a picker, with `--repo` as the override. Explicit
@@ -1106,7 +1106,7 @@ which moving or removing the repository also takes, and only then fast-forwards
 the local default branch to what it fetched under the repository's Git gate, so
 creation never waits on a sync's fetch, advancing a clean registered checkout where
 `git fetch` into the checked-out branch is refused; it never pushes or moves workspace branches, so updating
-a workspace from it stays plain Git. Commands that only read the default branch
+a workspace from it stays plain Git or an explicit `shoal refresh`. Commands that only read the default branch
 never sync, so none waits on a fetch or handles a failed sync; workspace
 status shows a failing sync, and one failing for 30 minutes of awake time, which
 a brief outage or a wake before the network does not reach, needs the user and
