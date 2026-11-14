@@ -106,3 +106,23 @@ async fn head_state_names_the_tree_and_no_branch_when_detached() {
     git(&repo, &["checkout", "-q", "--detach"]);
     assert_eq!(head_state(&repo).await.unwrap().branch, None);
 }
+
+#[tokio::test]
+async fn a_rebased_branchs_log_leaves_out_its_base_and_what_was_seen() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let commit = |message: &str| git(&repo, &["commit", "-q", "--allow-empty", "-m", message]);
+    let rev = |name: &str| git(&repo, &["rev-parse", name]).trim().to_owned();
+    git(&repo, &["switch", "-q", "-c", "topic"]);
+    commit("Topic work");
+    let seen = rev("HEAD");
+    git(&repo, &["switch", "-q", "main"]);
+    commit("Main work");
+    git(&repo, &["switch", "-q", "topic"]);
+    git(&repo, &["rebase", "-q", "main"]);
+    commit("More topic work");
+    let (head, base) = (rev("HEAD"), rev("main"));
+    let log = log_stat(&repo, &head, &[&seen, &base], 50).await.unwrap();
+    assert!(log.contains("More topic work"), "{log}");
+    assert!(!log.contains("Main work"), "{log}");
+}

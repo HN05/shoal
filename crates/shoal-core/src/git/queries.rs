@@ -231,5 +231,24 @@ pub async fn latest_subject(repo: &Path) -> Result<String> {
     run(repo, &["log", "-1", "--format=%s"]).await
 }
 
+/// The commits `head` has that none of `excluded` has, newest first and at
+/// most `limit` of them, each with its subject and body and the files it
+/// changed, as `git log --stat` shows them.
+pub async fn log_stat(repo: &Path, head: &str, excluded: &[&str], limit: usize) -> Result<String> {
+    let limit = format!("--max-count={limit}");
+    let excluded: Vec<String> = excluded.iter().map(|commit| format!("^{commit}")).collect();
+    let mut args = vec![
+        "log",
+        "--stat",
+        "--no-color",
+        "--format=commit %H%n%n%B",
+        &limit,
+        head,
+    ];
+    args.extend(excluded.iter().map(String::as_str));
+    args.push("--");
+    run(repo, &args).await
+}
+
 #[cfg(test)]
 mod tests;

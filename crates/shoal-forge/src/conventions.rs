@@ -74,6 +74,26 @@ pub async fn warnings(
     labels.into_iter().chain(template).collect()
 }
 
+/// What a proposed item of `kind` with `labels` and `body` leaves out of
+/// the repository's conventions, before it exists: required labels and the
+/// headings of the forge's templates in `worktree`.
+pub fn proposal_warnings(
+    forge: &ForgeRepo,
+    worktree: &Path,
+    kind: ItemKind,
+    labels: &[String],
+    body: &str,
+    required: &[String],
+) -> Vec<String> {
+    let missing = missing(required, labels);
+    let labels =
+        (!missing.is_empty()).then(|| format!("no label starting with {}", missing.join(", ")));
+    let templates = templates(forge.kind, kind, worktree);
+    let template = unmet(&templates, &headings(body))
+        .map(|unmet| format!("the description {}", unmet_gap(&unmet)));
+    labels.into_iter().chain(template).collect()
+}
+
 /// The required entries none of `labels` satisfies; a label satisfies an
 /// entry it starts with, so `area/` takes any area label.
 fn missing<'a>(required: &'a [String], labels: &[String]) -> Vec<&'a str> {
@@ -151,16 +171,24 @@ fn unmet<'a>(templates: &'a [Template], written: &[String]) -> Option<Vec<Unmet<
 /// description could have followed.
 fn unmet_warning(item: &Item, unmet: &[Unmet]) -> String {
     let fix = edit(item, "--body-file");
+    format!(
+        "the description of {} {}; {fix} rewrites it",
+        name(item),
+        unmet_gap(unmet)
+    )
+}
+
+/// What a description leaves out of the one template it could follow, or
+/// that it follows none of several.
+fn unmet_gap(unmet: &[Unmet]) -> String {
     match unmet {
         [(template, missing)] => format!(
-            "the description of {} lacks the headings of {}: {}; {fix} rewrites it",
-            name(item),
+            "lacks the headings of {}: {}",
             template.path,
             missing.join(", ")
         ),
         several => format!(
-            "the description of {} follows none of the templates {}; {fix} rewrites it",
-            name(item),
+            "follows none of the templates {}",
             several
                 .iter()
                 .map(|(template, _)| template.path.as_str())
