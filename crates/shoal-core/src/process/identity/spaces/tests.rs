@@ -4,8 +4,7 @@ use super::super::{
 };
 use super::*;
 use crate::test_support::{
-    Adopted, Detached, copy_test_binary, isolated_command, printed, run_until_stopped_in,
-    runs_until_stopped,
+    Adopted, Detached, copy_test_binary, isolated_command, run_until_stopped_in, runs_until_stopped,
 };
 
 /// This test binary, which runs until stopped as [`runs_until_stopped`]
@@ -76,7 +75,11 @@ async fn detached_processes_a_subreaper_adopted_are_leftovers() {
     .output()
     .await
     .unwrap();
-    assert!(output.status.success(), "{}", printed(&output));
+    assert!(
+        output.status.success(),
+        "{}",
+        crate::test_support::printed(&output)
+    );
 }
 
 /// Adopt this helper's orphans, as a subreaper, and survey a detached shell.
