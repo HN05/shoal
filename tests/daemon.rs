@@ -1,6 +1,6 @@
 mod support;
 
-use support::{daemon::DaemonGuard, prompt};
+use support::{daemon::DaemonGuard, printed, prompt};
 
 use std::{
     fs,
@@ -306,8 +306,8 @@ fn message_hook_gives_up_on_a_daemon_that_does_not_answer() {
         hook.try_wait().unwrap().is_some()
     });
     let output = hook.wait_with_output().unwrap();
-    assert!(output.status.success(), "{output:?}");
-    assert!(output.stdout.is_empty(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(output.stdout.is_empty(), "{}", printed(&output));
 }
 
 #[test]
@@ -345,7 +345,7 @@ fn failed_startup_recovery_never_serves() {
     for state in ["preparing", "ready"] {
         let daemon = Daemon::start();
         let stopped = daemon.run(&["daemon", "stop"]);
-        assert!(stopped.status.success(), "{stopped:?}");
+        assert!(stopped.status.success(), "{}", printed(&stopped));
         let Daemon { mut guard, root } = daemon;
         assert!(guard.child.wait().unwrap().success());
         rusqlite::Connection::open(root.path().join("state/state.db"))
@@ -573,7 +573,7 @@ fn daemon_start_offers_to_install_a_missing_service() {
     assert!(output.status.success(), "{transcript}");
     assert!(manager.pid.exists());
     let status = manager.command().args(["status"]).output().unwrap();
-    assert!(status.status.success(), "{status:?}");
+    assert!(status.status.success(), "{}", printed(&status));
 }
 
 #[test]
@@ -586,7 +586,7 @@ fn install_only_shows_shell_hint_without_startup_initialization() {
             .args(["daemon", "install"])
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         let text = String::from_utf8(output.stdout).unwrap();
         assert_eq!(text.contains("Add this line"), expected, "{text}");
     };
@@ -626,7 +626,7 @@ fn install_preserves_a_loaded_service_with_another_state_directory() {
         .args(["--json", "daemon", "install"])
         .output()
         .unwrap();
-    assert!(installed.status.success(), "{installed:?}");
+    assert!(installed.status.success(), "{}", printed(&installed));
     let installed: Value = serde_json::from_slice(&installed.stdout).unwrap();
     let definition = Path::new(installed["service_file"].as_str().unwrap());
     let original = fs::read_to_string(definition).unwrap();
@@ -656,16 +656,20 @@ fn install_preserves_a_loaded_service_with_another_state_directory() {
         Some(""),
     ] {
         let refused = install_other(state);
-        assert!(!refused.status.success(), "{state:?}: {refused:?}");
+        assert!(
+            !refused.status.success(),
+            "{state:?}: {}",
+            printed(&refused)
+        );
         assert_eq!(fs::read_to_string(definition).unwrap(), original);
         assert_eq!(fs::read_to_string(&manager.pid).unwrap(), pid);
     }
     let status = manager.command().args(["status"]).output().unwrap();
-    assert!(status.status.success(), "{status:?}");
+    assert!(status.status.success(), "{}", printed(&status));
     let stopped = manager.command().args(["daemon", "stop"]).output().unwrap();
-    assert!(stopped.status.success(), "{stopped:?}");
+    assert!(stopped.status.success(), "{}", printed(&stopped));
     let replaced = install_other(None);
-    assert!(replaced.status.success(), "{replaced:?}");
+    assert!(replaced.status.success(), "{}", printed(&replaced));
     let status = manager
         .command()
         .arg("--state-dir")
@@ -673,7 +677,7 @@ fn install_preserves_a_loaded_service_with_another_state_directory() {
         .args(["status"])
         .output()
         .unwrap();
-    assert!(status.status.success(), "{status:?}");
+    assert!(status.status.success(), "{}", printed(&status));
     let stopped = manager
         .command()
         .arg("--state-dir")
@@ -681,7 +685,7 @@ fn install_preserves_a_loaded_service_with_another_state_directory() {
         .args(["daemon", "stop"])
         .output()
         .unwrap();
-    assert!(stopped.status.success(), "{stopped:?}");
+    assert!(stopped.status.success(), "{}", printed(&stopped));
 }
 
 #[test]
@@ -1075,7 +1079,7 @@ fn inbox_reads_untracked_worktrees_failing_syncs_over_several_frames_and_failing
         .output()
         .unwrap();
     daemon.join().unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let items: Value = serde_json::from_slice(&output.stdout).unwrap();
     let items = items.as_array().unwrap();
     let paths: Vec<_> = items
@@ -1165,7 +1169,7 @@ fn a_scoped_process_starts_no_daemon_while_none_answers_for_its_permission() {
         .args(["daemon", "start"])
         .output()
         .unwrap();
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("daemon permission"), "{stderr}");
 }

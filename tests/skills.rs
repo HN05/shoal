@@ -6,6 +6,7 @@ use std::{
     path::Path,
     process::{Command, Output},
 };
+use support::printed;
 
 use serde_json::json;
 
@@ -87,7 +88,7 @@ fn packaged_binary_runs_from_deleted_cwd_and_installs_skill_copies() {
             .args(&args)
             .output()
             .unwrap();
-        assert!(output.stderr.is_empty(), "{output:?}");
+        assert!(output.stderr.is_empty(), "{}", printed(&output));
         if args.contains(&"status") {
             // No daemon runs in this home, which status reports without failing to start.
             assert_eq!(output.status.code(), Some(1));
@@ -299,7 +300,7 @@ fn unscoped_commands_update_installed_skills_after_upgrade() {
     assert_installed(&installed);
     // Up to date skills and other tools' directories are left alone.
     let output = run(None, &["shell", "completions", "bash"]);
-    assert!(output.stderr.is_empty(), "{output:?}");
+    assert!(output.stderr.is_empty(), "{}", printed(&output));
     assert!(!home.path().join(".claude").exists());
 }
 

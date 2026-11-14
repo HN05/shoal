@@ -51,7 +51,11 @@ pub(crate) fn save_running_chat(fixture: &Fixture, stop: impl FnOnce(&Fixture)) 
         let chats = fixture.ok(&["list", "--chats"]);
         stop(fixture);
         let (output, transcript) = chat.join().unwrap();
-        assert!(output.status.success(), "{output:?}\n{transcript}");
+        assert!(
+            output.status.success(),
+            "{}\n{transcript}",
+            printed(&output)
+        );
         chats[0].clone()
     });
     assert_eq!(chat["name"], "talk", "{chat}");
@@ -71,9 +75,9 @@ fn a_saved_chats_open_question_stays_in_the_inbox() {
             .args(["--recommend", "SQLite"])
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         let output = fixture.run(&["daemon", "stop"]);
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
     });
     assert!(fixture.daemon.child.wait().unwrap().success());
     fixture.restart();
@@ -90,7 +94,7 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     // `shoal daemon stop` saves the chat for `shoal restore`.
     let chat = save_running_chat(&fixture, |fixture| {
         let output = fixture.run(&["daemon", "stop"]);
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
     });
     assert!(fixture.daemon.child.wait().unwrap().success());
     fixture.restart();
@@ -114,7 +118,7 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
         .arg(support::shoal_binary())
         .output()
         .unwrap();
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     let saved = fixture.ok(&["list", "--chats"]);
     assert_eq!(saved[0]["id"], id, "{saved}");
     assert_eq!(saved[0]["name"], "talk", "{saved}");
@@ -127,7 +131,11 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
             .args(["restore", &fixture.id("talk"), "--focus"]),
         "",
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let args = fs::read_to_string(home.join("chat-args")).unwrap();
     assert!(args.contains("--resume\nchat-session\n"), "{args}");
     // Nothing waits for it, so it starts no turn of its own.
@@ -151,7 +159,7 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
         let _ = fs::remove_file(home.join("chat-started"));
         let chat = save_running_chat(fixture, |fixture| {
             let output = fixture.run(&["daemon", "stop"]);
-            assert!(output.status.success(), "{output:?}");
+            assert!(output.status.success(), "{}", printed(&output));
         });
         assert!(fixture.daemon.child.wait().unwrap().success());
         fixture.restart();
@@ -200,7 +208,7 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
     stop_agent(&fixture, &worker);
     let both = format!("{chat} {}", worker["id"].as_str().unwrap());
     let (output, rows) = fixture.pick(&["restore", "--forget"], &both, "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let rows = rows.lines().collect::<Vec<_>>();
     assert_eq!(rows.len(), 2, "{rows:?}");
     assert!(rows[0].contains("worker"), "{rows:?}");
@@ -284,7 +292,7 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let opened: Value = serde_json::from_slice(&output.stdout).unwrap();
     // A workspace that a chat below the chat opened is below it too.
     let (mut nested_agent, nested) = fixture.run_chat("nested", &["--parent", &chat]);
@@ -301,7 +309,7 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let deeper: Value = serde_json::from_slice(&output.stdout).unwrap();
     let other = fixture.add("other");
     let rename_in = |directory: &Value, name: &str| {
@@ -312,7 +320,7 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
             .args(["--json", "rename", name])
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         serde_json::from_slice::<Value>(&output.stdout).unwrap()["id"].clone()
     };
 
@@ -398,7 +406,7 @@ fn status_shows_a_chat_without_the_parts_a_worktree_has() {
             "status",
             other,
         ]);
-        assert!(!output.status.success(), "{other}: {output:?}");
+        assert!(!output.status.success(), "{other}: {}", printed(&output));
     }
     agent.kill().unwrap();
     agent.wait().unwrap();
@@ -455,12 +463,12 @@ fn a_chat_records_its_work_done_and_withdraws_it() {
     // The branch and demo options are a workspace's.
     for flag in ["--integrated", "--keep-demos"] {
         let output = fixture.run(&["done", &fixture.id("planning"), flag]);
-        assert!(!output.status.success(), "{flag}: {output:?}");
+        assert!(!output.status.success(), "{flag}: {}", printed(&output));
     }
     // Done again at the same HEAD with nothing new changes nothing.
     fixture.ok(&["done", &fixture.id("planning")]);
     let output = fixture.run(&["done", &fixture.id("planning")]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     let completion = fixture.ok(&[
         "done",
         &fixture.id("planning"),
@@ -499,7 +507,7 @@ fn a_chat_records_its_work_done_and_withdraws_it() {
         .current_dir(&fixture.repo)
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let files = fixture.ok(&["files", &fixture.id("planning")]);
     assert_eq!(files[1]["name"], "notes.md", "{files}");
     assert_eq!(files[1]["attached_by"]["kind"], "chat", "{files}");
@@ -509,7 +517,7 @@ fn a_chat_records_its_work_done_and_withdraws_it() {
     let finished = fixture.ok(&["list", "--chats", "--status", "finished"]);
     assert!(!finished.to_string().contains("planning"), "{finished}");
     let output = fixture.run(&["done", "--undo", &fixture.id("planning")]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     agent.kill().unwrap();
     agent.wait().unwrap();
 }
@@ -531,7 +539,7 @@ fn completion_cleanup_removes_a_done_chat_with_the_workspaces_below_it() {
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 
     let completion = fixture.ok(&["done", &fixture.id("planning")]);
     assert_eq!(completion["cleanup"], true, "{completion}");
@@ -569,7 +577,7 @@ pub(crate) fn journal(fixture: &Fixture) -> Vec<Value> {
         .args(["--json", "internal", "events"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     String::from_utf8(output.stdout)
         .unwrap()
         .lines()
@@ -636,7 +644,11 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
         "--model",
         "fast",
     ]));
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let calls = zmx_calls(&fixture);
     assert_eq!(calls[0], ["list"]);
     // The session takes an opaque name, since nothing is built from the
@@ -750,7 +762,11 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
                 "outer-chat",
             ]),
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let calls = zmx_calls(&fixture);
     assert_eq!(calls[before], ["list"]);
     assert_eq!(calls[before + 1][..2], ["set", "outer"]);
@@ -792,7 +808,11 @@ fn a_chat_replaces_workspace_ownership_in_a_reused_zmx_session() -> anyhow::Resu
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let sessions = fs::read_to_string(home.join("zmx-sessions"))?;
     assert!(sessions.contains("shoal.chat="), "{sessions}");
     assert!(sessions.contains("user.label=keep"), "{sessions}");
@@ -834,7 +854,11 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         "\n",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let started = journal(&fixture)
         .into_iter()
         .find(|event| event["kind"] == "chat_started")
@@ -901,7 +925,7 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     fixture.ok(&["split", "below", "--workspace", &fixture.id("opened")]);
     // Another chat runs in the opened workspace's worktree.
     let opened = fixture.id("opened");
@@ -955,7 +979,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
             .unwrap()
     };
     let output = add(&fixture.repo, "opened");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     fixture.ok(&["split", "below", "--workspace", &fixture.id("opened")]);
 
     // One parent link names the chat or the workspace above, of either kind.
@@ -975,7 +999,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
     let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     let output = add(&other, "foreign");
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     // Refused before an agent's launch is planned or queued.
     let output = fixture
         .command()
@@ -991,7 +1015,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
     // Nor is registering another repository offered there.
     let unregistered = init_repo(fixture.root.path(), "third", &[("tracked", "third\n")]);
@@ -1064,7 +1088,11 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
         fs::write(home.join("worker-reported"), "").unwrap();
         chat.join().unwrap()
     });
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let refused = fs::read_to_string(home.join("chat-report")).unwrap();
     assert_ne!(refused.trim(), "0", "the chat reported its worker's state");
     let hook: Value =
@@ -1119,7 +1147,11 @@ run remove rm "$below" --yes --wait
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let status = |name: &str| {
         let code = fs::read_to_string(home.join(name)).unwrap();
         let error = fs::read_to_string(home.join(format!("{name}.err"))).unwrap();
@@ -1173,7 +1205,11 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     // It reports the workspace, then the agent queued there.
     let added = fs::read_to_string(home.join("add.json")).unwrap();
     let error = fs::read_to_string(home.join("add.err")).unwrap();
@@ -1252,7 +1288,11 @@ fn a_chats_agent_adds_a_workspace_for_an_issue_it_reads_in_its_chat() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let added = fs::read_to_string(home.join("add.json")).unwrap();
     let error = fs::read_to_string(home.join("add.err")).unwrap();
     let report: Value = serde_json::from_str(added.lines().next().unwrap_or_default())
@@ -1279,7 +1319,7 @@ fn a_workspaces_agent_reads_the_issue_it_adds_or_plans_in_its_workspace() {
     // workspace, never in the repository's registered checkout.
     let repo = fixture.repo.to_str().unwrap();
     let added = scoped_command(&fixture, "parent", &["start", repo, "--issue", "12"]);
-    assert!(added.status.success(), "{added:?}");
+    assert!(added.status.success(), "{}", printed(&added));
     let worker = fixture.ok(&["status", &fixture.id("Clarify retries")]);
     assert_eq!(worker["workspace"]["parent"]["name"], "parent", "{worker}");
     // Planning the issue reads it there too.
@@ -1290,7 +1330,7 @@ fn a_workspaces_agent_reads_the_issue_it_adds_or_plans_in_its_workspace() {
             "start", "--mode", "plan", "--issue", "12", "--agent", "claude",
         ],
     );
-    assert!(planned.status.success(), "{planned:?}");
+    assert!(planned.status.success(), "{}", printed(&planned));
 }
 
 /// A background place may still run below its scoped starter's processes,
@@ -1326,11 +1366,16 @@ fn a_background_place_below_its_starter_takes_the_handed_scope() {
         .unwrap();
     // Without a terminal the chat does not start, after the place took the
     // token, and the starter learns why.
-    assert!(!place.status.success(), "{place:?}");
-    assert!(!handoff.join("scope").exists(), "{place:?}");
+    assert!(!place.status.success(), "{}", printed(&place));
+    assert!(!handoff.join("scope").exists(), "{}", printed(&place));
     let error: Value = serde_json::from_slice(&place.stderr).unwrap();
     let report = fs::read_to_string(handoff.join("report")).unwrap_or_default();
-    assert_eq!(error["error"]["message"], report.as_str(), "{place:?}");
+    assert_eq!(
+        error["error"]["message"],
+        report.as_str(),
+        "{}",
+        printed(&place)
+    );
 }
 
 /// A scoped caller's `start --here` runs a chat below its space in its own
@@ -1352,7 +1397,11 @@ fn a_scoped_start_runs_a_chat_here_as_its_own() {
             .env("SHOAL", support::shoal_binary()),
         "",
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let chats = fixture.ok(&["list", "--chats"]);
     let [chat] = chats.as_array().unwrap().as_slice() else {
         panic!("{chats}");
@@ -1399,7 +1448,7 @@ fn any_space_opens_any_kind_of_child() {
     // A workspace's agent opens a workspace below its own...
     let repo = fixture.repo.to_str().unwrap();
     let below = scoped_command(&fixture, "parent", &["start", repo, "--branch", "below"]);
-    assert!(below.status.success(), "{below:?}");
+    assert!(below.status.success(), "{}", printed(&below));
     let parent = |space: &Value| space["parent"]["name"].as_str().map(str::to_owned);
     let status = fixture.ok(&["status", &fixture.id("below")]);
     assert_eq!(parent(&status["workspace"]).as_deref(), Some("parent"));
@@ -1407,7 +1456,7 @@ fn any_space_opens_any_kind_of_child() {
     fixture.add("other");
     let args = ["start", "--in", &fixture.id("other"), "--agent", "claude"];
     let outside = scoped_command(&fixture, "parent", &args);
-    assert!(!outside.status.success(), "{outside:?}");
+    assert!(!outside.status.success(), "{}", printed(&outside));
     // ...rather a chat below it, which opens in the background, as its agent
     // cannot hand over a terminal; that chat's agent opens one below its own.
     // The process returns once the chat holds its own scope, which outlasts
@@ -1419,7 +1468,7 @@ fn any_space_opens_any_kind_of_child() {
             "start", "--mode", "chat", "--agent", "claude", "--name", "sub",
         ],
     );
-    assert!(sub.status.success(), "{sub:?}");
+    assert!(sub.status.success(), "{}", printed(&sub));
     // The nested start, like sub's, returns once its chat holds its own
     // scope, or says why it did not.
     let status = wait_for("sub's agent's start of nested", || {
@@ -1477,7 +1526,7 @@ fn a_workspace_agent_starts_a_chat_in_its_own_worktree() {
         "start", "--in", &parent, "--mode", "chat", "--agent", "claude", "--name", "reader",
     ];
     let reader = scoped_command(&fixture, "parent", &args);
-    assert!(reader.status.success(), "{reader:?}");
+    assert!(reader.status.success(), "{}", printed(&reader));
     let chats = fixture.ok(&["list", "--chats"]);
     assert_eq!(chats[0]["parent"]["id"], parent.as_str(), "{chats}");
     assert_eq!(chats[0]["workspace"]["id"], parent.as_str(), "{chats}");
@@ -1522,7 +1571,7 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
             "start", "--mode", "chat", "--agent", "claude", "--name", "middle",
         ],
     );
-    assert!(middle.status.success(), "{middle:?}");
+    assert!(middle.status.success(), "{}", printed(&middle));
     wait_until("the chat's workspace", || home.join("chat-ready").exists());
     let deep = fixture.ok(&["status", &fixture.id("deep")]);
     assert_eq!(deep["workspace"]["parent"]["name"], "middle", "{deep}");
@@ -1569,7 +1618,7 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
             "deep",
             &["messages", "send", "--space", &fixture.id(space), "hi"],
         );
-        assert!(!refused.status.success(), "{space}: {refused:?}");
+        assert!(!refused.status.success(), "{space}: {}", printed(&refused));
     }
     fs::write(home.join("release"), "").unwrap();
     assert!(worker.wait().unwrap().success());
@@ -1608,7 +1657,11 @@ fn chat_instructions_append_the_chat_rules_to_shoals_description() {
             "\n",
             true,
         );
-        assert!(output.status.success(), "{output:?}\n{transcript}");
+        assert!(
+            output.status.success(),
+            "{}\n{transcript}",
+            printed(&output)
+        );
         chat_args(&fixture)
     };
     let name = checkout.file_name().unwrap().to_str().unwrap();
@@ -1669,7 +1722,11 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
         "\n",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     assert_eq!(
         fs::read_to_string(home.join("chat-cwd")).unwrap().trim(),
         worktree.to_str().unwrap()
@@ -1703,7 +1760,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
             .unwrap()
     };
     let status = in_chat(&["status"]);
-    assert!(status.status.success(), "{status:?}");
+    assert!(status.status.success(), "{}", printed(&status));
     let status: Value = serde_json::from_slice(&status.stdout).unwrap();
     assert_eq!(status["workspace"]["name"], "worker", "{status}");
     assert!(in_chat(&["conflicts"]).status.success());
@@ -1713,13 +1770,13 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     )
     .unwrap();
     let diff = in_chat(&["diff"]);
-    assert!(diff.status.success(), "{diff:?}");
+    assert!(diff.status.success(), "{}", printed(&diff));
     let diff = String::from_utf8_lossy(&diff.stdout);
     assert!(diff.contains("+changed by the workspace's agent"), "{diff}");
     let view = in_chat(&["view", "--space", &fixture.id("worker"), "--no-comments"]);
-    assert!(view.status.success(), "{view:?}");
+    assert!(view.status.success(), "{}", printed(&view));
     let change = in_chat(&["branch", "base", "clear"]);
-    assert!(!change.status.success(), "{change:?}");
+    assert!(!change.status.success(), "{}", printed(&change));
     // A chat in a workspace takes its repository from it.
     let both = fixture.run(&[
         "start",
@@ -1730,7 +1787,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
         "--branch",
         &fixture.id("worker"),
     ]);
-    assert!(!both.status.success(), "{both:?}");
+    assert!(!both.status.success(), "{}", printed(&both));
 
     // Each status names the other.
     assert_eq!(
@@ -1747,7 +1804,11 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
             .args(["restore", &fixture.id("worker chat"), "--focus"]),
         "",
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     assert_eq!(
         fs::read_to_string(home.join("chat-cwd")).unwrap().trim(),
         worktree.to_str().unwrap()
@@ -1761,7 +1822,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
         "{prompt}"
     );
     let removed = fixture.run(&["rm", "--wait", &fixture.id("worker"), "--yes"]);
-    assert!(removed.status.success(), "{removed:?}");
+    assert!(removed.status.success(), "{}", printed(&removed));
     assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
 }
 
@@ -1790,7 +1851,11 @@ fn chat_starts_from_the_checkout_without_syncing() {
             "\n",
             true,
         );
-        assert!(output.status.success(), "{output:?}\n{transcript}");
+        assert!(
+            output.status.success(),
+            "{}\n{transcript}",
+            printed(&output)
+        );
         let head = fs::read_to_string(home.join("chat-head")).unwrap();
         (
             head,
@@ -1853,7 +1918,7 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
         ],
         "\n",
     );
-    assert!(caller.status.success(), "{caller:?} {transcript}");
+    assert!(caller.status.success(), "{} {transcript}", printed(&caller));
     let create = &herdr_calls(&fixture)[0];
     assert_eq!(create[..2], ["tab", "create"]);
     let option = |name: &str| {
@@ -1899,7 +1964,7 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
             .env("HERDR_PANE_ID", "w1:p9"),
         "",
     );
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     let chats = fixture.ok(&["list", "--chats"]);
     let recorded: Value = serde_json::from_slice(&fs::read(&history).unwrap()).unwrap();
     assert_eq!(
@@ -1962,7 +2027,11 @@ fn chat_agents_without_an_instructions_template_get_them_as_their_first_message(
             ]),
             "\n",
         );
-        assert!(output.status.success(), "{output:?}\n{transcript}");
+        assert!(
+            output.status.success(),
+            "{}\n{transcript}",
+            printed(&output)
+        );
         chat_args(&fixture)
     };
     // The message leads the arguments, and asks the agent to wait for the user.
@@ -2004,7 +2073,11 @@ fn a_chat_on_an_issue_is_assigned_the_issue() {
             .current_dir(&fixture.repo),
         "",
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let viewed: Value =
         serde_json::from_str(&fs::read_to_string(fixture.root.path().join("plan-view")).unwrap())
             .unwrap();
@@ -2021,7 +2094,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     let repo = fixture.repo.to_str().unwrap();
     // Without a default agent a picker offers the installed agents that can run.
     let (output, rows) = fixture.pick(&["start", repo, "--mode", "chat"], "0", "\n");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(
         rows.lines()
             .map(|row| row.split('\t').nth(1).unwrap())
@@ -2031,11 +2104,11 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     // An agent that cannot run a chat is refused before the mode picker.
     let args = ["start", "--mode", "chat", repo, "--agent", "happy-claude"];
     let (output, rows) = fixture.pick(&args, "chat", "");
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert!(rows.is_empty(), "a picker opened: {rows}");
     // Without a terminal, the daemon starts the chat in a background place.
     let output = fixture.run(&["start", "--mode", "chat", repo, "--agent", "claude"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let chats = fixture.ok(&["list", "--chats"]);
     assert_eq!(chats[0]["agent"], "claude", "{chats}");
     // The checkout has no value for a workspace's placeholders.
@@ -2078,16 +2151,24 @@ fn attach_returns_to_chats_by_name() {
     };
 
     let (output, transcript) = fixture.interactive(&["attach", &fixture.id("talk")], "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     assert_eq!(attached(), ["attach", "second"]);
     let (output, transcript) = fixture.interactive(&["attach", &fixture.id("plan-7")], "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     assert_eq!(attached(), ["attach", "first"]);
 
     // In a checkout with two chats running, the picker offers the chats with
     // sessions by name.
     let (output, rows) = fixture.pick_in(&fixture.repo, &["attach"], talk, "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let rows = rows.lines().collect::<Vec<_>>();
     assert_eq!(rows.len(), 2, "{rows:?}");
     for (id, name) in [(&talk, "talk"), (&plan, "plan-7")] {
@@ -2141,7 +2222,11 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
     assert_eq!(renamed["id"], talk.as_str());
     assert_eq!(renamed["name"], "topic");
     let (output, transcript) = fixture.interactive(&["attach", &fixture.id("topic")], "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
 
     // The chat this runs in, as its agent would.
     let output = fixture
@@ -2150,7 +2235,7 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
         .args(["rename", "repo-plan-8"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 
     // The checkout's only chat, else one from a picker.
     let output = fixture
@@ -2159,7 +2244,7 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
         .args(["rename", "calm"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     // A name is one line.
     let output = fixture
         .command()
@@ -2169,7 +2254,7 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
         .unwrap();
     assert!(!output.status.success());
     let (output, rows) = fixture.pick_in(&fixture.repo, &["rename", "picked"], &talk, "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(rows.lines().count(), 3, "{rows}");
     assert_eq!(names(), ["picked", "repo-plan-8", "calm"]);
 }
@@ -2179,7 +2264,7 @@ fn a_name_request_reaches_the_chats_agent() {
     let fixture = Fixture::new();
     let (_agent, chat) = fixture.run_chat("talk", &[]);
     let output = fixture.run(&["rename", "--request", &chat]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     // The chat's agent reads it as a message from the user, about no
     // workspace.
     let output = fixture
@@ -2188,13 +2273,13 @@ fn a_name_request_reaches_the_chats_agent() {
         .args(["--json", "messages"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let messages: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(messages.as_array().map(Vec::len), Some(1), "{messages}");
     // Workspace processes do not reach chats.
     fixture.add("worker");
     let output = scoped_command(&fixture, "worker", &["rename", "--request", "talk"]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
 }
 
 #[test]
@@ -2203,7 +2288,7 @@ fn a_restored_chat_continues_its_session_with_its_messages_waiting() {
     let home = fixture.root.path().to_owned();
     save_running_chat(&fixture, |fixture| {
         let output = fixture.run(&["stop", &fixture.id("talk")]);
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
     });
     let talk = fixture.id("talk");
     let output = fixture.run(&[
@@ -2213,11 +2298,15 @@ fn a_restored_chat_continues_its_session_with_its_messages_waiting() {
         &talk,
         "What blocked you cleared",
     ]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 
     let (output, transcript) =
         fixture.interactive_command(fixture.command().args(["restore", &talk, "--focus"]), "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let args = fs::read_to_string(home.join("chat-args")).unwrap();
     assert!(args.contains("--resume\nchat-session\n"), "{args}");
     // They wait for its hook or its wrapper's wake.
@@ -2233,6 +2322,6 @@ fn chat_messages(fixture: &Fixture, id: &str) -> String {
         .args(["--json", "messages"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     String::from_utf8_lossy(&output.stdout).into_owned()
 }

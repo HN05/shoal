@@ -65,7 +65,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
         .env("PATH", fixture.restricted_path(&bin))
         .output()
         .unwrap();
-    assert_eq!(agent.status.code(), Some(7), "{agent:?}");
+    assert_eq!(agent.status.code(), Some(7), "{}", printed(&agent));
     // Plain commands are the user's own; only agent shortcuts announce their exit.
     assert!(
         fixture
@@ -79,7 +79,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     // The listing leaves the count to alerts and status.
     let list = fixture.run(&["list"]);
     assert!(list.status.success());
-    assert!(list.stderr.is_empty(), "{list:?}");
+    assert!(list.stderr.is_empty(), "{}", printed(&list));
     let scoped = fixture
         .command()
         .args([
@@ -102,7 +102,8 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
         .unwrap();
     assert!(
         String::from_utf8_lossy(&first.stderr).starts_with("2 more"),
-        "{first:?}"
+        "{}",
+        printed(&first)
     );
     let first: Value = serde_json::from_slice(&first.stdout).unwrap();
     assert_eq!(first[0]["kind"], "resource_busy", "{first}");
@@ -217,7 +218,7 @@ fn a_chats_alert_names_it_until_withdrawn() {
             .args(args)
             .output()
             .unwrap();
-        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
     let sent = in_chat(&["alerts", "send", "Plan ready"]);
@@ -254,14 +255,14 @@ fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
         "sender",
         &["alerts", "send", "PR #12 is ready to merge"],
     );
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     // A message that stopped applying is withdrawn by the number alerts send gave.
     let output = scoped_command(&fixture, "sender", &["alerts", "send", "tests are failing"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let sent: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let id = sent["notification"].as_i64().unwrap().to_string();
     let output = scoped_command(&fixture, "sender", &["alerts", "withdraw", &id]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     for args in [
         &["alerts", "withdraw", &id][..],
         &["alerts", "send", "hello", "--space", &fixture.id("other")][..],
@@ -298,7 +299,7 @@ fn notifications_kept_unread_stay_new() {
     fixture.add("sender");
     for message in ["first", "second"] {
         let output = scoped_command(&fixture, "sender", &["alerts", "send", message]);
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
     }
     let unread = || fixture.ok(&["status"])["daemon"]["unread_notifications"].clone();
     let messages = |notifications: &[Value]| -> Vec<(i64, String)> {
@@ -417,7 +418,7 @@ fn a_chats_hooks_report_its_failed_turn_and_wake_it_for_its_messages() {
     stdin.write_all(event.as_bytes()).unwrap();
     drop(stdin);
     let output = report.wait_with_output().unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let status: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(status["state"], "idle", "{status}");
     let chats = fixture.request(serde_json::json!("list_chats"));
@@ -447,7 +448,7 @@ fn a_chats_hooks_report_its_failed_turn_and_wake_it_for_its_messages() {
         hook.try_wait().unwrap().is_some()
     });
     let output = hook.wait_with_output().unwrap();
-    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert_eq!(output.status.code(), Some(2), "{}", printed(&output));
     let woken = String::from_utf8(output.stderr).unwrap();
     assert!(woken.contains("Plan the next step"), "{woken}");
     agent.kill().unwrap();
@@ -526,7 +527,7 @@ fn a_message_to_all_reaches_running_chats_but_not_workspaces_without_an_agent() 
         .current_dir(&fixture.repo)
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let sent: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(sent, reached);
     // --all reaches every repository, from outside any of them.
@@ -551,7 +552,7 @@ fn a_message_to_all_reaches_running_chats_but_not_workspaces_without_an_agent() 
             "idle",
             "hi",
         ]);
-        assert!(!output.status.success(), "{output:?}");
+        assert!(!output.status.success(), "{}", printed(&output));
     }
 }
 
@@ -578,11 +579,15 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
             &fixture.id("receiver"),
         ],
     );
-    assert!(!output.status.success(), "agents cannot send: {output:?}");
+    assert!(
+        !output.status.success(),
+        "agents cannot send: {}",
+        printed(&output)
+    );
     let output = scoped_command(&fixture, "receiver", &["messages", &fixture.id("other")]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     let output = scoped_command(&fixture, "receiver", &["messages"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let messages: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(messages[0]["message"], "Stop the dev server");
     assert_eq!(messages.as_array().unwrap().len(), 1);
@@ -615,7 +620,7 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
             .write_all(stdin.as_bytes())
             .unwrap();
         let output = child.wait_with_output().unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         String::from_utf8(output.stdout).unwrap()
     };
     let event = r#"{"hook_event_name":"PostToolUse","tool_name":"Bash"}"#;
@@ -685,7 +690,7 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
         .arg(std::process::id().to_string())
         .output()
         .unwrap();
-    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert_eq!(output.status.code(), Some(2), "{}", printed(&output));
     let woken = String::from_utf8(output.stderr).unwrap();
     assert!(woken.contains("Rebase onto main"), "{woken}");
     let status: Value = serde_json::from_slice(&output.stdout).unwrap();
@@ -714,7 +719,7 @@ fn messages_carry_copies_of_attached_files() {
         ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     fs::remove_file(fixture.root.path().join("shot.png")).unwrap();
     let messages = fixture.ok(&["messages", &fixture.id("receiver")]);
     assert_eq!(messages[0]["message"], "");
@@ -754,7 +759,7 @@ fn messages_reach_a_chat_with_their_files() {
         .args(["--attach", "shot.png#Login screen"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let messages = fixture.ok(&["messages", &fixture.id("planning")]);
     assert_eq!(messages[0]["message"], "Look at this", "{messages}");
     let copy = Path::new(messages[0]["attachments"][0].as_str().unwrap());
@@ -771,7 +776,7 @@ fn messages_reach_a_chat_with_their_files() {
         "worker",
         &["messages", "send", "hi", "--space", &fixture.id("planning")],
     );
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     agent.kill().unwrap();
     agent.wait().unwrap();
 }
@@ -794,7 +799,7 @@ fn files_add_attaches_copies_without_a_message() {
         ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let added: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(added[0]["source"], "added", "{added}");
     assert!(added[0].get("title").is_none(), "{added}");
@@ -816,7 +821,7 @@ fn files_add_attaches_copies_without_a_message() {
         ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let titled: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(titled[0]["name"], "chart.html", "{titled}");
     assert_eq!(titled[0]["title"], "Latency by region", "{titled}");
@@ -840,7 +845,7 @@ fn files_add_attaches_copies_without_a_message() {
         "--space",
         &fixture.id("receiver"),
     ]);
-    assert!(!missing.status.success(), "{missing:?}");
+    assert!(!missing.status.success(), "{}", printed(&missing));
 
     // An idle workspace's files go without asking; every workspace's only
     // once confirmed.
@@ -854,7 +859,7 @@ fn files_add_attaches_copies_without_a_message() {
     assert_eq!(deleted, added);
     assert!(!copy.exists());
     let unconfirmed = fixture.run(&["files", "rm", "--all"]);
-    assert!(!unconfirmed.status.success(), "{unconfirmed:?}");
+    assert!(!unconfirmed.status.success(), "{}", printed(&unconfirmed));
     assert_eq!(
         fixture.ok(&["files", "rm", "--all", "--yes"]),
         serde_json::json!([])
@@ -875,7 +880,7 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
             .args(args)
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
 
@@ -918,19 +923,20 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
         .env("_CLAP_COMPLETE_INDEX", (words.len() - 1).to_string())
         .output()
         .unwrap();
-    assert!(completed.status.success(), "{completed:?}");
+    assert!(completed.status.success(), "{}", printed(&completed));
     let completed = String::from_utf8(completed.stdout).unwrap();
     let number = fixture.ok(&["status", &chat])["chat"]["number"].to_string();
     assert!(completed.lines().any(|line| line == number), "{completed}");
     let (output, rows) = fixture.pick(&["files", "--print"], &chat, "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(
         rows.lines().any(|row| row.starts_with(chat.as_str())),
         "{rows}"
     );
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("report.md"),
-        "{output:?}"
+        "{}",
+        printed(&output)
     );
 
     // A stopped chat keeps its files; once it is removed, they stay listed
@@ -962,7 +968,7 @@ fn done_hands_back_files_that_shoal_files_lists() {
         "--attach",
         "/missing/report.md",
     ]);
-    assert!(!missing.status.success(), "{missing:?}");
+    assert!(!missing.status.success(), "{}", printed(&missing));
     assert!(fixture.ok(&["status", &fixture.id("audit")])["completion"].is_null());
 
     let output = fixture
@@ -977,7 +983,7 @@ fn done_hands_back_files_that_shoal_files_lists() {
         ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let completion: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(
         completion["results"][0]["name"], "report.md",
@@ -1014,7 +1020,7 @@ fn files_rm_refuses_unknown_names_before_asking() {
     ]);
     command.kill().unwrap();
     command.wait().unwrap();
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     let printed = format!(
         "{}{}",
         String::from_utf8_lossy(&output.stdout),
@@ -1046,7 +1052,7 @@ fn a_turns_end_shows_when_the_agents_prompt_cache_expires() {
         .env("CLAUDE_CODE_PROMPT_CACHE_TTL", "5m")
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let status: Value = serde_json::from_slice(&output.stdout).unwrap();
     let state = &status["workspace"]["agent_state"];
     assert_eq!(
@@ -1072,7 +1078,7 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
             &fixture.id("other"),
         ],
     );
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     // The execution reports, then lists itself while its state is current.
     let output = fixture
         .command()
@@ -1088,7 +1094,7 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
         .arg(support::shoal_binary())
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let shown: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(
         shown["workspace"]["agent_state"]["state"], "waiting",
@@ -1145,7 +1151,7 @@ fn agents_report_their_turn_state_from_an_unreadable_directory() {
         .arg(outside.path())
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let shown: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(
         shown["workspace"]["agent_state"]["state"], "waiting",
@@ -1229,7 +1235,11 @@ fn agent_state_reports_from_an_input_that_never_closes() {
     }
     drop(stdin);
     let output = child.wait_with_output().unwrap();
-    assert!(status.is_some_and(|status| status.success()), "{output:?}");
+    assert!(
+        status.is_some_and(|status| status.success()),
+        "{}",
+        printed(&output)
+    );
     assert_eq!(
         fixture.ok(&["status", &fixture.id("reporter")])["workspace"]["agent_state"]["state"],
         "waiting"
@@ -1243,7 +1253,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
     fixture.add("other");
     let path = Path::new(added["path"].as_str().unwrap());
     let output = scoped_command(&fixture, "reviewed", &["ready"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let marks: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert!(marks[0]["url"].is_null() && marks[0]["stale"] == false);
     for args in [
@@ -1273,7 +1283,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
     );
 
     let output = scoped_command(&fixture, "reviewed", &["ready", "--undo"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(
         serde_json::from_slice::<Value>(&output.stdout)
             .unwrap()
@@ -1288,7 +1298,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
             .is_none()
     );
     let output = scoped_command(&fixture, "reviewed", &["ready", "--undo"]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
 }
 
 #[test]
@@ -1306,17 +1316,17 @@ fn agents_withdraw_questions_they_no_longer_need_answered() {
             "SQLite",
         ],
     );
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let question: Value = serde_json::from_slice(&output.stdout).unwrap();
     let id = question["number"].as_str().unwrap().to_owned();
     let output = scoped_command(&fixture, "asker", &["questions", "withdraw", &id]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(
         fixture.ok(&["questions"]),
         serde_json::json!({"questions": [], "omitted": 0})
     );
     let refused = fixture.run(&["questions", &id, "--answer", "Postgres"]);
-    assert!(!refused.status.success(), "{refused:?}");
+    assert!(!refused.status.success(), "{}", printed(&refused));
 }
 
 #[test]
@@ -1332,7 +1342,7 @@ fn a_chats_agent_asks_the_user_and_reads_the_answer_in_its_inbox() {
             .args(args)
             .output()
             .unwrap();
-        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
     let asked = in_chat(&[
@@ -1405,12 +1415,16 @@ fn agents_wait_for_the_answer_to_their_question() {
     let id = question["number"].as_str().unwrap().to_owned();
 
     let output = scoped_command(&fixture, "asker", &["questions", &id, "--answer", "1"]);
-    assert!(!output.status.success(), "agents cannot answer: {output:?}");
+    assert!(
+        !output.status.success(),
+        "agents cannot answer: {}",
+        printed(&output)
+    );
     let renamed = fixture.rename("asker", "renamed");
     assert_eq!(renamed["data"]["branch"], "renamed", "{renamed}");
     fixture.ok(&["questions", &id, "--answer", "2"]);
     let output = asker.wait_with_output().unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let answered: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(answered["answer"], "Postgres");
     // The wait printed the answer, so its message is not delivered again.
@@ -1428,7 +1442,7 @@ fn agents_wait_for_the_answer_to_their_question() {
         "asker",
         &["questions", "ask", "Which cache?", "--recommend", "None"],
     );
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let open: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(open["answer"], Value::Null);
     // The delivered answer freed the first question's number.
@@ -1463,7 +1477,7 @@ fn agents_wait_for_the_answer_to_their_question() {
         .unwrap();
     fixture.ok(&["questions", &id, "--answer", "Redis"]);
     let output = resumed.wait_with_output().unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let answered: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(answered["answer"], "Redis");
     assert_eq!(

@@ -62,7 +62,7 @@ impl TmuxServer {
             ])
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         let started = String::from_utf8(output.stdout).unwrap();
         let fields: Vec<&str> = started.trim_end().splitn(4, ' ').collect();
         let [users, session, pid, socket] = fields[..] else {
@@ -88,7 +88,11 @@ impl TmuxServer {
 
     fn lines(&self, args: &[&str]) -> Vec<String> {
         let output = self.tmux(args);
-        assert!(output.status.success(), "tmux {args:?}: {output:?}");
+        assert!(
+            output.status.success(),
+            "tmux {args:?}: {}",
+            printed(&output)
+        );
         String::from_utf8(output.stdout)
             .unwrap()
             .lines()
@@ -131,9 +135,9 @@ impl TmuxServer {
             fixture.root.path().join("state").display()
         );
         let output = self.tmux(&["send-keys", "-t", pane, "-l", "--", &line]);
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         let output = self.tmux(&["send-keys", "-t", pane, "Enter"]);
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
     }
 }
 
@@ -194,7 +198,7 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_panes() {
         ),
         "",
     );
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     wait_for_agent(&fixture, "placed");
     assert!(tmux.windows().contains(&"placed".to_owned()));
     assert_eq!(sessions(&fixture, "placed"), ["placed"]);
@@ -235,7 +239,7 @@ fn split_placement_opens_additions_beside_the_callers_pane() {
         ),
         "",
     );
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     wait_for_agent(&fixture, "placed");
     // The split leaves the user's window its name.
     assert_eq!(tmux.windows(), windows);
@@ -271,7 +275,7 @@ fn tmux_off_leaves_launches_from_its_panes_to_zmx() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     let zmx_calls = fs::read_to_string(fixture.root.path().join("zmx-calls")).unwrap_or_default();
     assert!(zmx_calls.contains("attach"), "{zmx_calls} {transcript}");
     assert_eq!(tmux.panes(), std::slice::from_ref(&tmux.users));
@@ -386,7 +390,7 @@ fn demos_open_in_the_configured_session_outside_tmux_and_take_input() {
             .args(args)
             .output()
             .unwrap();
-        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
     demo(&[
@@ -415,7 +419,7 @@ fn demos_open_in_the_configured_session_outside_tmux_and_take_input() {
         .find(|(_, window)| window.contains("demo"))
         .unwrap_or_else(|| panic!("{panes:?}"));
     let output = tmux.tmux(&["copy-mode", "-t", pane]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     demo(&[
         "send",
         "demo",

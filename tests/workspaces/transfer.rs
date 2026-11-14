@@ -101,7 +101,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     wait_until("moved record consumed", || !record.exists());
     fs::write(path.join("release"), "").unwrap();
     let resumed = resumed.wait_with_output().unwrap();
-    assert!(resumed.status.success(), "{resumed:?}");
+    assert!(resumed.status.success(), "{}", printed(&resumed));
     assert!(!path.join("resumed").exists());
 
     // Without a file, a piped export writes to standard output and a piped
@@ -226,7 +226,7 @@ fn import_restore_queues_the_agents_the_export_stopped_once_post_setup_succeeds(
         repo,
         "--restore",
     ]);
-    assert!(!failed.status.success(), "{failed:?}");
+    assert!(!failed.status.success(), "{}", printed(&failed));
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
     assert!(path.exists() && !path.join("post-setup-done").exists());
 
@@ -413,7 +413,7 @@ fn a_failed_move_leaves_the_workspace_here_and_restarts_its_agent() {
         "--shoal",
         shoal,
     ]);
-    assert!(!failed.status.success(), "{failed:?}");
+    assert!(!failed.status.success(), "{}", printed(&failed));
     let report: Value = serde_json::from_slice(&failed.stdout).unwrap();
     assert_eq!(report["moved"], serde_json::json!([]), "{report}");
     assert!(agent.wait_with_output().unwrap().status.success());
@@ -439,7 +439,7 @@ fn a_failed_move_leaves_the_chat_here_and_restores_its_agent() {
         let shoal = support::shoal_binary();
         let talk = here.id("talk");
         let failed = here.run(&["move", "ssh", "mini", &talk, "--shoal", shoal, "--yes"]);
-        assert!(!failed.status.success(), "{failed:?}");
+        assert!(!failed.status.success(), "{}", printed(&failed));
     });
     wait_until("chat restored", || home.join("chat-restored").exists());
     assert!(!keeps_unmoved_packages(&here));
@@ -473,7 +473,7 @@ fn failed_move(here: &Fixture, space: &str) -> String {
     let shoal = support::shoal_binary();
     let id = here.id(space);
     let moved = here.run(&["--json", "move", "ssh", "mini", &id, "--shoal", shoal]);
-    assert!(!moved.status.success(), "{moved:?}");
+    assert!(!moved.status.success(), "{}", printed(&moved));
     let report: Value = serde_json::from_slice(&moved.stdout).unwrap();
     report["failed"][0].to_string()
 }
@@ -647,7 +647,7 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     set_state("ready");
 
     let exported = export(&["--yes", "--json"]);
-    assert!(exported.status.success(), "{exported:?}");
+    assert!(exported.status.success(), "{}", printed(&exported));
     let exported: Value = serde_json::from_slice(&exported.stdout).unwrap();
     let names: Vec<_> = exported["exported"]
         .as_array()
@@ -676,7 +676,7 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
         ])
         .output()
         .unwrap();
-    assert_eq!(imported.status.code(), Some(1), "{imported:?}");
+    assert_eq!(imported.status.code(), Some(1), "{}", printed(&imported));
     let imported: Value = serde_json::from_slice(&imported.stdout).unwrap();
     let names: Vec<_> = imported["imported"]
         .as_array()
@@ -732,7 +732,7 @@ fn export_all_keep_copies_every_space_past_one_that_cannot_be_copied() {
         .args(["-o", directory.to_str().unwrap()])
         .output()
         .unwrap();
-    assert_eq!(copied.status.code(), Some(1), "{copied:?}");
+    assert_eq!(copied.status.code(), Some(1), "{}", printed(&copied));
     let copied: Value = serde_json::from_slice(&copied.stdout).unwrap();
     let names: Vec<_> = copied["exported"]
         .as_array()
@@ -793,7 +793,7 @@ fn export_of_several_workspaces_writes_a_file_each_to_the_directory() {
         "",
         "",
     );
-    assert!(!refused.status.success(), "{refused:?}");
+    assert!(!refused.status.success(), "{}", printed(&refused));
     assert!(rows.is_empty(), "{rows}");
     // An existing directory takes the workspaces the picker selects.
     let third = fixture.ok(&["status", &fixture.id("third")])["workspace"]["id"]
@@ -801,7 +801,7 @@ fn export_of_several_workspaces_writes_a_file_each_to_the_directory() {
         .unwrap()
         .to_owned();
     let (picked, _) = fixture.pick(&["move", "export", "-o", output, "--yes"], &third, "");
-    assert!(picked.status.success(), "{picked:?}");
+    assert!(picked.status.success(), "{}", printed(&picked));
     assert!(directory.join(format!("{}.shoal", ids[2])).exists());
     assert!(!paths[2].exists());
 }
@@ -818,8 +818,8 @@ fn streaming_export_to_a_closed_reader_removes_its_temporary_archive() {
         .env("TMPDIR", &temporary)
         .output()
         .unwrap();
-    assert_eq!(exported.status.code(), Some(141), "{exported:?}");
-    assert!(exported.stderr.is_empty(), "{exported:?}");
+    assert_eq!(exported.status.code(), Some(141), "{}", printed(&exported));
+    assert!(exported.stderr.is_empty(), "{}", printed(&exported));
     assert_eq!(fs::read_dir(&temporary).unwrap().count(), 0);
 }
 
@@ -865,7 +865,7 @@ fn streaming_export_refuses_a_herdr_tab_that_closes_with_the_workspace() {
     fs::write(state.join("closing-herdr-w1:p7"), "").unwrap();
     // A pane of another tab keeps its stream.
     let exported = export("w1:p8");
-    assert!(exported.status.success(), "{exported:?}");
+    assert!(exported.status.success(), "{}", printed(&exported));
     assert!(exported.stdout.starts_with(b"shoal workspace 1\n"));
     assert!(!path.exists());
 }
@@ -941,7 +941,7 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let file = fixture.root.path().join("carried.shoal");
     let file = file.to_str().unwrap();
     let repo = fixture.repo.to_str().unwrap();
@@ -953,7 +953,7 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
             .stdin(Stdio::null())
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
     };
 
     let exported = fixture.ok(&["move", "export", &fixture.id("carried"), "-o", file]);
@@ -1021,7 +1021,7 @@ fn export_carries_session_files_that_import_puts_back() {
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     // Claude Code keeps the transcript in its project's directory, beside a
     // directory of the session's subagents, and another session's files.
     let projects = fixture.root.path().join(".claude/projects");
@@ -1073,7 +1073,7 @@ fn export_carries_session_files_that_import_puts_back() {
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(
         fs::read_to_string(path.join("resumed")).unwrap(),
         "moved-session"
@@ -1140,12 +1140,12 @@ fn a_chat_moves_with_its_session_and_continues_it() {
             .stdin(Stdio::null())
             .output()
             .unwrap();
-        assert!(!inside.status.success(), "{inside:?}");
+        assert!(!inside.status.success(), "{}", printed(&inside));
         assert_eq!(fixture.ok(&["list", "--chats"])[0]["name"], "talk");
 
         // Ending a chat the user talks with needs a confirmation.
         let unconfirmed = fixture.run(&["move", "export", &fixture.id("talk"), "-o", file]);
-        assert!(!unconfirmed.status.success(), "{unconfirmed:?}");
+        assert!(!unconfirmed.status.success(), "{}", printed(&unconfirmed));
         assert_eq!(fixture.ok(&["list", "--chats"])[0]["name"], "talk");
         let exported = fixture.ok(&["move", "export", &fixture.id("talk"), "-o", file, "--yes"]);
         assert_eq!(exported["manifest"]["kind"], "chat", "{exported}");
@@ -1155,7 +1155,11 @@ fn a_chat_moves_with_its_session_and_continues_it() {
             "{exported}"
         );
         let (output, transcript) = chat.join().unwrap();
-        assert!(output.status.success(), "{output:?}\n{transcript}");
+        assert!(
+            output.status.success(),
+            "{}\n{transcript}",
+            printed(&output)
+        );
     });
     assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
 
@@ -1169,7 +1173,11 @@ fn a_chat_moves_with_its_session_and_continues_it() {
             .args(["move", "import", file, "--repo", repo]),
         "",
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let args = fs::read_to_string(home.join("chat-args")).unwrap();
     assert!(args.contains("\n--resume\nchat-session\n"), "{args}");
     assert_eq!(
@@ -1211,7 +1219,7 @@ fn the_sessions_of_a_profile_only_the_workspace_defines_move_with_it() {
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let project = fixture.root.path().join(".claude/projects/-elsewhere");
     fs::create_dir_all(&project).unwrap();
     fs::write(project.join("profiled-session.jsonl"), "{}\n").unwrap();
@@ -1270,7 +1278,7 @@ fn a_restore_that_places_no_session_files_keeps_them_for_the_next() {
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let project = fixture.root.path().join(".claude/projects/-elsewhere");
     fs::create_dir_all(&project).unwrap();
     fs::write(project.join("unplaced-session.jsonl"), "{}\n").unwrap();
@@ -1288,7 +1296,7 @@ fn a_restore_that_places_no_session_files_keeps_them_for_the_next() {
         .args(["--json", "restore", &fixture.id("unplaced"), "--no-agents"])
         .output()
         .unwrap();
-    assert!(restored.status.success(), "{restored:?}");
+    assert!(restored.status.success(), "{}", printed(&restored));
     assert!(!project.join("unplaced-session.jsonl").exists());
     let kept = path.parent().unwrap().join(".sessions");
     let left: Vec<_> = fs::read_dir(&kept)
@@ -1326,7 +1334,7 @@ fn import_without_opening(fixture: &Fixture, file: &str, branch: &str) {
         .args(["--json", "move", "import", file, "--repo", repo])
         .output()
         .unwrap();
-    assert!(!imported.status.success(), "{imported:?}");
+    assert!(!imported.status.success(), "{}", printed(&imported));
     git(&fixture.repo, &["branch", "-D", branch]);
 }
 
@@ -1339,7 +1347,7 @@ fn restore_with_user_files(fixture: &Fixture, workspace: &str) {
         .args(["--json", "restore", &fixture.id(workspace), "--no-agents"])
         .output()
         .unwrap();
-    assert!(restored.status.success(), "{restored:?}");
+    assert!(restored.status.success(), "{}", printed(&restored));
 }
 
 #[test]

@@ -177,7 +177,7 @@ fn start_completes_branches_of_the_current_repository() {
         &["branch", "feature/login"],
     ] {
         let git = support::isolated(&repo, "git").args(args).output().unwrap();
-        assert!(git.status.success(), "{git:?}");
+        assert!(git.status.success(), "{}", support::printed(&git));
     }
     let mut command = completion(home.path(), "bash", &["shoal", "start", "--branch", "feat"]);
     command.current_dir(&repo);

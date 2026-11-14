@@ -230,7 +230,7 @@ fn stop_saves_agents_and_commands_preserving_work_and_leases() {
     assert!(workspace.pending());
 
     let output = workspace.resume(&fixture, &["--focus"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let handoff = workspace.handoff();
     assert!(names_the_command(&handoff), "{handoff}");
     assert!(!workspace.pending());
@@ -256,7 +256,7 @@ fn a_restored_stopped_agent_is_told_the_commands_stopped_with_it() {
     );
 
     let output = workspace.resume(&fixture, &["--focus"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let handoff = workspace.handoff();
     assert!(names_the_command(&handoff), "{handoff}");
     assert!(!workspace.pending());
@@ -271,7 +271,7 @@ fn resume_without_an_agent_reports_stopped_commands_once() {
     assert!(workspace.pending());
 
     let output = workspace.resume(&fixture, &["--focus"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(!workspace.pending());
     assert!(!workspace.resume(&fixture, &["--focus"]).status.success());
 }
@@ -319,7 +319,7 @@ fn resume_continues_an_agent_that_exited_on_its_own() {
     let agent = workspace.start_agent(&fixture);
     fs::write(workspace.path.join("exit"), "").unwrap();
     let output = agent.wait_with_output().unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(
         workspace.last_sessions(),
         [("claude".into(), "quit-session".into(), false)]
@@ -327,7 +327,7 @@ fn resume_continues_an_agent_that_exited_on_its_own() {
     assert!(!workspace.pending());
 
     let output = workspace.resume(&fixture, &["--focus"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(workspace.path.join("restored").exists());
     // The restored agent exited on its own too; finishing the assignment
     // forgets it.
@@ -360,7 +360,7 @@ fn forget_clears_pending_recovery_without_launching_an_agent() {
     .unwrap();
 
     let output = workspace.resume(&fixture, &["--forget"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(!workspace.pending());
     assert!(!workspace.path.join("restored").exists());
     assert!(workspace.path.is_dir());
@@ -382,7 +382,7 @@ fn manual_resume_consumes_the_record_on_start_even_if_other_commands_run_or_rest
     let unrelated = workspace.start_command(&fixture);
 
     let output = workspace.resume(&fixture, &["--focus"]);
-    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    assert_eq!(output.status.code(), Some(7), "{}", printed(&output));
     assert_eq!(workspace.handoff(), "changed");
     assert!(!workspace.record(&execution).exists());
     workspace.stop(&fixture, vec![unrelated]);

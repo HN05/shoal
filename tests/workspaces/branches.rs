@@ -228,7 +228,7 @@ fn merge_into_main_without_a_remote_needs_approval_in_scoped_processes() {
         "merge",
         "--no-push",
     ]);
-    assert!(merged.status.success(), "{merged:?}");
+    assert!(merged.status.success(), "{}", printed(&merged));
     let result: serde_json::Value = serde_json::from_slice(&merged.stdout).unwrap();
     assert_eq!(result["updated"], true);
     assert_eq!(result["fast_forward"], true);
@@ -293,7 +293,7 @@ fn unmerge_moves_main_back_after_an_agents_request_is_approved() {
         pending["request"]["number"].as_str().unwrap(),
     ]);
     let unmerged = as_agent(&["--json", "unmerge"]);
-    assert!(unmerged.status.success(), "{unmerged:?}");
+    assert!(unmerged.status.success(), "{}", printed(&unmerged));
     let unmerged: serde_json::Value = serde_json::from_slice(&unmerged.stdout).unwrap();
     assert_eq!(unmerged["commit"], before.trim());
     assert_eq!(unmerged["replayed"], 0);
@@ -305,7 +305,8 @@ fn unmerge_moves_main_back_after_an_agents_request_is_approved() {
     assert!(!again.status.success());
     assert!(
         String::from_utf8_lossy(&again.stderr).contains("no local merge of worker"),
-        "{again:?}"
+        "{}",
+        printed(&again)
     );
 
     // A workspace cleanup removed comes back before its merge is undone.
@@ -317,7 +318,8 @@ fn unmerge_moves_main_back_after_an_agents_request_is_approved() {
     assert!(
         String::from_utf8_lossy(&removed.stderr)
             .contains(&format!("restore it with shoal restore {worker}")),
-        "{removed:?}"
+        "{}",
+        printed(&removed)
     );
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), head);
     fixture.ok(&["restore", &fixture.id("worker")]);

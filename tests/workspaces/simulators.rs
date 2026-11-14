@@ -997,10 +997,11 @@ fn simulator_mutations_observe_persisted_audits_and_failure_retains_ownership(fa
         "--reason",
         "Test persistent mutation ordering",
     ]);
-    assert!(!output.status.success(), "{failure}: {output:?}");
+    assert!(!output.status.success(), "{failure}: {}", printed(&output));
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("injected"),
-        "{output:?}"
+        "{}",
+        printed(&output)
     );
     let events = fs::read_to_string(fixture.root.path().join("sim-persistence-events")).unwrap();
     let events: Vec<Value> = events

@@ -151,7 +151,7 @@ fn stopping_processes_refuses_a_stopped_chat_first() {
     let output = fixture.run(&["stop", "--processes", &planned, &talk]);
 
     let error = String::from_utf8_lossy(&output.stderr);
-    assert!(error.contains("talk stopped"), "{output:?}");
+    assert!(error.contains("talk stopped"), "{}", printed(&output));
 }
 
 /// `parent` is refused its own space and the chat `other` outside its tree,
@@ -163,7 +163,7 @@ fn stops_and_resumes_the_chats_below(fixture: &Fixture, parent: &Parent) {
     let (mut other, _) = start_test_chat(fixture, "other");
     for refused in [parent.name(), "other"] {
         let output = parent.run(fixture, &["stop", &fixture.id(refused)]);
-        assert!(!output.status.success(), "{refused}: {output:?}");
+        assert!(!output.status.success(), "{refused}: {}", printed(&output));
     }
     assert!(chat_runs(fixture, "other"));
 

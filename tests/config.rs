@@ -1,6 +1,6 @@
 mod support;
 
-use support::pty;
+use support::{printed, pty};
 
 use std::{fs, path::Path, process::Command};
 
@@ -16,7 +16,7 @@ fn inline_edits_validate_preserve_comments_and_work_without_a_daemon() {
     let config = home.path().join("xdg/shoal/config.toml");
     let run = |args: &[&str]| command(home.path()).args(args).output().unwrap();
     let output = run(&["--json", "config", "set", "agent.default", "codex"]);
-    assert!(output.status.success(), "{:?}", output);
+    assert!(output.status.success(), "{}", printed(&output));
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["config"], config.to_str().unwrap());
     assert!(result["backup"].is_null());
@@ -25,7 +25,7 @@ fn inline_edits_validate_preserve_comments_and_work_without_a_daemon() {
         "# policy\nagent.default = 'codex' # chosen\n[ports]\nstart = 3000\nend = 4000\n";
     fs::write(&config, original).unwrap();
     let output = run(&["config", "set", "agent.default", "claude"]);
-    assert!(output.status.success(), "{:?}", output);
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(
         fs::read_to_string(config.with_extension("toml.backup")).unwrap(),
         original
@@ -105,7 +105,7 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
     }
     assert!(!home.path().join("xdg").exists());
     let output = run(config, Some(&home.path().join("other-state")));
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 }
 
 /// Runs `CHILD_ARGS` with the scope token cleared, as an agent's child could,
@@ -192,7 +192,7 @@ fn install_picks_an_omitted_packaged_config() {
         .args(["config", "install"])
         .output()
         .unwrap();
-    assert!(!missing.status.success(), "{missing:?}");
+    assert!(!missing.status.success(), "{}", printed(&missing));
     let fzf = home.path().join("bin/fzf");
     support::install_test_script(
         &fzf,
@@ -205,7 +205,7 @@ fn install_picks_an_omitted_packaged_config() {
         .stderr(slave)
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let rows = fs::read_to_string(home.path().join("rows")).unwrap();
     assert!(rows.contains("default\tdefault"), "{rows:?}");
     assert!(config.exists());

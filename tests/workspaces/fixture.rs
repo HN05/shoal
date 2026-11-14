@@ -482,7 +482,7 @@ pub(crate) fn scoped_hook(
         .write_all(input.to_string().as_bytes())
         .unwrap();
     let output = child.wait_with_output().unwrap();
-    assert!(output.status.success(), "{command}: {output:?}");
+    assert!(output.status.success(), "{command}: {}", printed(&output));
     String::from_utf8(output.stdout).unwrap()
 }
 

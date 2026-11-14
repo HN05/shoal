@@ -205,11 +205,12 @@ fn execution_lets_its_command_stop_for_the_terminal_where_shoal_ignores_that() {
         )
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),
         "False False",
-        "whether SIGTTIN and SIGTTOU are ignored: {output:?}"
+        "whether SIGTTIN and SIGTTOU are ignored: {}",
+        printed(&output)
     );
 }
 
@@ -273,7 +274,7 @@ fn configured_environment_renders_for_tracked_commands() {
         ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let lines: Vec<_> = String::from_utf8(output.stdout)
         .unwrap()
         .lines()
@@ -297,7 +298,7 @@ fn configured_environment_renders_for_tracked_commands() {
         ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let output = String::from_utf8(output.stdout).unwrap();
     let (ports, cache) = output.rsplit_once('|').unwrap();
     assert_eq!(
@@ -358,7 +359,7 @@ fn stop_and_manual_removal_terminate_connected_executions() {
             .args((operation == "rm").then_some("--wait"))
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         let output = child.wait_with_output().unwrap();
         assert!(!output.status.success());
         if operation == "stop" {

@@ -137,7 +137,7 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
         .args(["--json", "repo", "add", repo.to_str().unwrap()])
         .output()
         .unwrap();
-    assert!(added.status.success(), "{added:?}");
+    assert!(added.status.success(), "{}", printed(&added));
 
     let mut follower = shoal()
         .args(["--json", "internal", "events", "--follow"])
@@ -187,7 +187,7 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
     fs::rename(next, &launcher).unwrap();
     fs::write(&gate, "").unwrap();
     let request = request.wait_with_output().unwrap();
-    assert!(request.status.success(), "{request:?}");
+    assert!(request.status.success(), "{}", printed(&request));
     let workspace: Value = serde_json::from_slice(&request.stdout).unwrap();
     assert_eq!(workspace["state"], "ready");
     let mut seen = receive_until_ready("before");
@@ -209,7 +209,7 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
         ])
         .output()
         .unwrap();
-    assert!(after.status.success(), "{after:?}");
+    assert!(after.status.success(), "{}", printed(&after));
     seen.extend(receive_until_ready("after"));
     follower.kill().unwrap();
     follower.wait().unwrap();

@@ -2,6 +2,7 @@ mod support;
 
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
+use support::printed;
 use tokio::{
     net::{UnixListener, UnixStream},
     sync::Notify,
@@ -106,9 +107,10 @@ async fn all_workspace_overviews_preserve_json_text_scope_and_exit_status() {
                 assert_eq!(
                     output.status.code(),
                     Some(i32::from(count > 1)),
-                    "{output:?}"
+                    "{}",
+                    printed(&output)
                 );
-                assert!(output.stderr.is_empty(), "{output:?}");
+                assert!(output.stderr.is_empty(), "{}", printed(&output));
                 if json {
                     let values: Vec<Value> = serde_json::from_slice(&output.stdout).unwrap();
                     assert_eq!(values.len(), count);

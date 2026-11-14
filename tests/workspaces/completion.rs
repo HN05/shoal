@@ -51,7 +51,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
         "--agent",
         "helper",
     ]);
-    assert_eq!(agent.status.code(), Some(7), "{agent:?}");
+    assert_eq!(agent.status.code(), Some(7), "{}", printed(&agent));
     let events = fixture.root.path().join("agent-exits");
     wait_until("agent exit hook", || {
         fs::read_to_string(&events).is_ok_and(|events| {
@@ -88,7 +88,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
         "--agent",
         "helper",
     ]);
-    assert_eq!(agent.status.code(), Some(7), "{agent:?}");
+    assert_eq!(agent.status.code(), Some(7), "{}", printed(&agent));
     wait_until("failed agent exit hook", || {
         fixture
             .ok(&["alerts", "--all"])
@@ -126,7 +126,7 @@ fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
         "--agent",
         "helper",
     ]);
-    assert_eq!(agent.status.code(), Some(7), "{agent:?}");
+    assert_eq!(agent.status.code(), Some(7), "{}", printed(&agent));
     wait_until("completion from exit hook", || {
         fixture.ok(&["status", &fixture.id("agent-work")])["completion"]["cleanup"] == false
     });
@@ -314,7 +314,7 @@ fn post_done_hook_observes_persisted_completion_and_excludes_lifecycle_and_permi
         ],
     ] {
         let output = fixture.run(&args);
-        assert!(!output.status.success(), "{args:?}: {output:?}");
+        assert!(!output.status.success(), "{args:?}: {}", printed(&output));
     }
     fs::write(&barrier, "release\n").unwrap();
     assert!(done.wait().unwrap().success());

@@ -16,7 +16,7 @@ fn proxied_claude() -> Fixture {
     );
     fs::write(&config, text).unwrap();
     let reload = fixture.run(&["config", "reload"]);
-    assert!(reload.status.success(), "{reload:?}");
+    assert!(reload.status.success(), "{}", printed(&reload));
     fixture.ok(&[
         "repo",
         "add",
@@ -54,7 +54,7 @@ fn a_proxied_agent_takes_its_key_from_its_environment_or_does_not_start() {
         .env_remove("CLIPROXY_TEST_KEY")
         .output()
         .unwrap();
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert!(!home.join("claude-args").exists());
     let status = fixture.ok(&["status", &fixture.id("proxied")]);
     assert_eq!(status["executions"], serde_json::json!([]), "{status}");
@@ -73,7 +73,7 @@ fn a_proxied_agent_takes_its_key_from_its_environment_or_does_not_start() {
         .env("CLIPROXY_TEST_KEY", "sk-test")
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let args = fs::read_to_string(home.join("claude-args")).unwrap();
     let settings = fs::read_to_string(home.join("claude-settings")).unwrap();
     assert!(
@@ -124,7 +124,7 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
         "--agent",
         "claude",
     ]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(output.stdout, b"global secret|AGENT_TOKEN\n");
     let output = fixture.run(&[
         "run",
@@ -134,7 +134,7 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
         "printenv",
         "AGENT_TOKEN",
     ]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
 
     // Setup and its hook started beneath an agent never get the secrets it
     // inherited: the daemon starts them, and none travel through it.
@@ -145,7 +145,7 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
         .args(["setup", &fixture.id("secrets")])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(
         fs::read_to_string(worktree.join("hook-env")).unwrap(),
         "unset|unset"
@@ -171,7 +171,7 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
         "--agent",
         "claude",
     ]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(output.stdout, b"tracked secret|AGENT_TOKEN\n");
 
     // The local config replaces the worktree file's; a failing command
@@ -221,7 +221,7 @@ fn tool_secrets_reach_only_their_tools() {
         "--agent",
         "claude",
     ]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
         "unset\ntool secret|TOOL_TOKEN|two words -x\n"
@@ -233,7 +233,7 @@ fn tool_secrets_reach_only_their_tools() {
         "--",
         "show-token",
     ]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(output.stdout, b"unset||\n");
     assert!(
         fs::read_dir(fixture.root.path().join("state"))
@@ -259,7 +259,7 @@ fn tool_secrets_reach_only_their_tools() {
         .args(["setup", &fixture.id("tool-secrets")])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(
         fs::read_to_string(worktree.join("hook-output")).unwrap(),
         "unset||hook\nunset"
@@ -307,7 +307,7 @@ fn tool_secrets_reach_only_their_tools() {
         .args(["show-tokens", "--"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(output.stdout, b"INNER|OUTER|INNER_TOKEN:OUTER_TOKEN\n");
 }
 
@@ -329,7 +329,7 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
     .unwrap();
     // The catalog shows what an agent may request, never how it is fetched.
     let catalog = scoped_command(&fixture, "gated", &["catalog", "secret"]);
-    assert!(catalog.status.success(), "{catalog:?}");
+    assert!(catalog.status.success(), "{}", printed(&catalog));
     assert_eq!(
         serde_json::from_slice::<Value>(&catalog.stdout).unwrap(),
         serde_json::json!({"secrets": [{

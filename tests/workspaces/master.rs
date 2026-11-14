@@ -40,7 +40,7 @@ fn orchestrate_starts_a_chat_without_a_repository_in_root_dir() {
         "orchestrate",
         fixture.repo.to_str().unwrap(),
     ]);
-    assert!(!named.status.success(), "{named:?}");
+    assert!(!named.status.success(), "{}", printed(&named));
     let refusal = String::from_utf8_lossy(&named.stderr);
     assert!(refusal.contains("<repository>"), "{refusal}");
     let started = run_agent(
@@ -122,7 +122,11 @@ fn run_agent(fixture: &Fixture, args: &[&str]) -> Ran {
             .unwrap();
         assert!(ended.success());
         let (output, transcript) = chat.join().unwrap();
-        assert!(output.status.success(), "{output:?}\n{transcript}");
+        assert!(
+            output.status.success(),
+            "{}\n{transcript}",
+            printed(&output)
+        );
         ran
     })
 }

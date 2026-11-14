@@ -36,7 +36,7 @@ fn execution_scope_limits_management_and_expires() {
     assert_eq!(list.as_array().unwrap().len(), 1);
     assert_eq!(list[0]["name"], "worker");
     let output = scoped(&["--json", "config", "show"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let config: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert!(
         config
@@ -62,7 +62,7 @@ fn execution_scope_limits_management_and_expires() {
         .unwrap();
     wait_until("sibling execution", || sibling_started.exists());
     let output = scoped(&["setup", &fixture.id("worker")]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     fixture.ok(&["stop", &fixture.id("worker")]);
     assert!(!sibling.wait().unwrap().success());
     // An agent's output default does not reach the hook its setup runs.
@@ -209,7 +209,11 @@ fn redirected_requests_are_inspected_without_prompting_or_deciding() {
     ] {
         let (output, transcript) =
             fixture.interactive_command(fixture.command().args(&args), "y\n");
-        assert!(output.status.success(), "{args:?}: {output:?} {transcript}");
+        assert!(
+            output.status.success(),
+            "{args:?}: {} {transcript}",
+            printed(&output)
+        );
         let details = String::from_utf8_lossy(&output.stdout);
         assert!(
             details.contains("serve preview") || details.contains("Which database?"),
@@ -235,7 +239,7 @@ fn redirected_requests_are_inspected_without_prompting_or_deciding() {
             .args(["approvals", pending["number"].as_str().unwrap(), "--deny"]),
         "",
     );
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     assert_eq!(
         fixture.ok(&["approvals", pending["number"].as_str().unwrap()])["status"],
         "denied"
@@ -255,7 +259,7 @@ fn approval_picker_inspects_before_deciding_the_selected_request() {
     let id = pending["number"].as_str().unwrap().to_owned();
     assert_eq!(fixture.ok(&["approvals", &id])["status"], "pending");
     let (output, rows) = fixture.pick(&["approvals"], &approval_row(&fixture, &pending), "Y\n");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.contains("serve preview"), "{rows}");
     assert_eq!(fixture.ok(&["approvals", &id])["status"], "approved");
 }
@@ -366,14 +370,14 @@ fn approval_list_shortcuts_refuse_a_request_that_changed_since_it_was_listed() {
         .args(["internal", "approval-decide", "approve", &stale])
         .output()
         .unwrap();
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert_eq!(fixture.ok(&["approvals", &id])["status"], "pending");
     let output = fixture
         .command()
         .args(["internal", "approval-decide", "approve", &row])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(fixture.ok(&["approvals", &id])["status"], "approved");
 }
 
@@ -383,7 +387,7 @@ fn approval_list_shortcuts_find_requests_of_workspaces_below_the_caller() {
     set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
     fixture.add("parent");
     let split = scoped_command(&fixture, "parent", &["split", "child"]);
-    assert!(split.status.success(), "{split:?}");
+    assert!(split.status.success(), "{}", printed(&split));
     let pending = pending_approval(scoped_command(
         &fixture,
         "child",
@@ -398,7 +402,7 @@ fn approval_list_shortcuts_find_requests_of_workspaces_below_the_caller() {
         &["internal", "approval-decide", "approve", &row],
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert!(stderr.contains("routed to them"), "{stderr}");
 }
 
@@ -422,7 +426,7 @@ fn question_picker_answers_the_selected_question_with_a_suggestion() {
     let id = question["number"].as_str().unwrap().to_owned();
     assert_eq!(fixture.ok(&["questions", &id])["answer"], Value::Null);
     let (output, rows) = fixture.pick(&["questions"], &id, "1\n");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.contains("Which database?"), "{rows}");
     assert_eq!(fixture.ok(&["questions", &id])["answer"], "SQLite");
 }
@@ -467,7 +471,7 @@ fn approval_decisions_pick_an_omitted_pending_request() {
     set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
     fixture.add("agent");
     let none = fixture.run(&["approvals", "--approve"]);
-    assert!(!none.status.success(), "{none:?}");
+    assert!(!none.status.success(), "{}", printed(&none));
     let signing = pending_approval(scoped_command(
         &fixture,
         "agent",
@@ -485,10 +489,10 @@ fn approval_decisions_pick_an_omitted_pending_request() {
     let number = |request: &Value| request["number"].as_str().unwrap().to_owned();
     let (signing, web) = (number(&signing), number(&web));
     let (output, rows) = fixture.pick(&["approvals", "--approve"], &web_row, "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.contains(&format!("{signing_row}\t")) && rows.contains(&format!("{web_row}\t")));
     let (output, rows) = fixture.pick(&["approvals", "--deny"], &signing_row, "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(!rows.contains(&format!("{web_row}\t")), "{rows:?}");
     let statuses: Vec<_> = fixture
         .ok(&["approvals"])
@@ -518,10 +522,10 @@ fn agents_withdraw_requests_they_no_longer_need() {
     ));
     let id = web["number"].as_str().unwrap().to_owned();
     let output = scoped_command(&fixture, "agent", &["approvals", "withdraw", &id]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(fixture.ok(&["approvals"])[0]["status"], "withdrawn");
     let refused = fixture.run(&["approvals", "--approve", &id]);
-    assert!(!refused.status.success(), "{refused:?}");
+    assert!(!refused.status.success(), "{}", printed(&refused));
 }
 
 /// The picker row id of an approval request as `fixture` lists it now: its
@@ -1134,11 +1138,11 @@ fn tampered_resource_approvals_fail_instead_of_selecting_a_member() {
     };
     tamper(&record);
     let output = scoped_command(&fixture, "agent", &args);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     record["specification"] = serde_json::json!({"member": "signing"});
     tamper(&record);
     let output = scoped_command(&fixture, "agent", &args);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert!(
         fixture.ok(&["leases", "resource", "--workspace", &fixture.id("agent")])["leases"]
             .as_array()
@@ -1258,12 +1262,12 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         vec!["run", "--", support::shoal_binary(), "leases", "port"],
     ] {
         let output = scoped(&args);
-        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
     }
     // A process with the exported environment opens workspaces only below
     // its own.
     let below = scoped(&["start", fixture.repo.to_str().unwrap(), "--branch", "below"]);
-    assert!(below.status.success(), "{below:?}");
+    assert!(below.status.success(), "{}", printed(&below));
     let below = fixture.ok(&["status", &fixture.id("below")]);
     assert_eq!(below["workspace"]["parent"]["name"], "external", "{below}");
     for args in [
@@ -1282,7 +1286,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         ],
     ] {
         let output = scoped(&args);
-        assert!(!output.status.success(), "{args:?}: {output:?}");
+        assert!(!output.status.success(), "{args:?}: {}", printed(&output));
     }
     fixture.restart();
     let output = fixture
@@ -1291,7 +1295,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         .args(["status", &fixture.id("external")])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 }
 
 #[test]

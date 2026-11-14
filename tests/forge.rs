@@ -6,6 +6,7 @@ use support::{
     fixture::Base,
     forge::{Server, github_search},
     git::{git, git_with_identity, init_repo},
+    printed,
 };
 
 use serde_json::{Value, json};
@@ -840,7 +841,7 @@ fn a_chat_opens_issues_and_acts_on_its_linked_items() {
             .args(args)
             .output()
             .unwrap();
-        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
     // The chat opens an issue and assigns it to itself, which is its only
@@ -1001,7 +1002,7 @@ fn pr_update_takes_in_the_base_on_the_forge_for_workspace_processes_too() {
         "update",
         "8",
     ]);
-    assert!(scoped.status.success(), "{scoped:?}");
+    assert!(scoped.status.success(), "{}", printed(&scoped));
     let sent: Vec<_> = fixture
         .requests()
         .into_iter()
@@ -1133,7 +1134,7 @@ fn pr_review_takes_line_comments_from_arguments_and_a_file_and_watches_skip_it()
         "--body",
         "Hm",
     ]);
-    assert!(!unjudged.status.success(), "{unjudged:?}");
+    assert!(!unjudged.status.success(), "{}", printed(&unjudged));
     let file = fixture.root.path().join("comments.json");
     fs::write(
         &file,
@@ -1246,7 +1247,7 @@ fn review_threads_take_replies_and_ask_before_resolving_without_one() {
 
     // Without a reply, a non-interactive resolve asks for one or for --yes.
     let unanswered = fixture.run(&[&["pr", "resolve", "5"][..], &pr].concat());
-    assert!(!unanswered.status.success(), "{unanswered:?}");
+    assert!(!unanswered.status.success(), "{}", printed(&unanswered));
     let sent: Vec<_> = fixture
         .requests()
         .into_iter()
@@ -1298,7 +1299,7 @@ fn review_threads_take_replies_and_ask_before_resolving_without_one() {
     );
 
     let nothing = fixture.run(&[&["pr", "reply", "7"][..], &pr].concat());
-    assert!(!nothing.status.success(), "{nothing:?}");
+    assert!(!nothing.status.success(), "{}", printed(&nothing));
 }
 
 #[test]
@@ -1320,7 +1321,7 @@ fn forgejo_threads_take_replies_but_cannot_be_resolved() {
         "token usertoken"
     ])));
     let refused = fixture.run(&[&["pr", "resolve", "5", "--body", "Kept"][..], &pr].concat());
-    assert!(!refused.status.success(), "{refused:?}");
+    assert!(!refused.status.success(), "{}", printed(&refused));
     assert!(
         fixture
             .requests()
@@ -1539,7 +1540,7 @@ fn views_read_another_repositorys_item_by_its_url() {
         "--timeout",
         "1",
     ]);
-    assert!(!watched.status.success(), "{watched:?}");
+    assert!(!watched.status.success(), "{}", printed(&watched));
 }
 
 #[test]
@@ -1583,7 +1584,7 @@ fn github_reactions_find_inline_comments_and_remove_by_id() {
     // Another item's comment, and a PR named as an issue, are refused
     // before anything is sent.
     let missing = fixture.run(&[&["pr", "react", "+1", "--comment", "99"][..], &pr].concat());
-    assert!(!missing.status.success(), "{missing:?}");
+    assert!(!missing.status.success(), "{}", printed(&missing));
     let issue = ["issue", "react", "+1", "--space", &fixture.id("topic"), "8"];
     assert!(!fixture.run(&issue).status.success());
     let mut writes = writes(&fixture);
@@ -1655,7 +1656,7 @@ fn forgejo_reactions_are_removed_by_content_and_left_when_already_as_asked() {
         ]
     );
     let refused = fixture.run(&[&["issue", "react", "two words"][..], &target].concat());
-    assert!(!refused.status.success(), "{refused:?}");
+    assert!(!refused.status.success(), "{}", printed(&refused));
 }
 
 #[test]
@@ -1703,17 +1704,17 @@ fn comment_edits_change_only_the_logins_own_comments_and_are_not_reported_back()
         fixture.run(&[&args[..], &["--body-file", body]].concat())
     };
     let edited = edit("2");
-    assert!(edited.status.success(), "{edited:?}");
+    assert!(edited.status.success(), "{}", printed(&edited));
     // Someone else's comment, and another item's, are refused before
     // anything is sent.
     let others = edit("1");
-    assert!(!others.status.success(), "{others:?}");
+    assert!(!others.status.success(), "{}", printed(&others));
     let missing = edit("99");
-    assert!(!missing.status.success(), "{missing:?}");
+    assert!(!missing.status.success(), "{}", printed(&missing));
     // A comment that already says the body is left unchanged.
     fs::write(&note, "Fixd").unwrap();
     let unchanged = edit("2");
-    assert!(unchanged.status.success(), "{unchanged:?}");
+    assert!(unchanged.status.success(), "{}", printed(&unchanged));
     assert_eq!(
         writes(&fixture),
         [json!(["PATCH repos/team/project/issues/comments/2", {"body": "Fixed"}])]
@@ -1848,7 +1849,7 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
         "--attach",
         text.to_str().unwrap(),
     ]);
-    assert!(!refused.status.success(), "{refused:?}");
+    assert!(!refused.status.success(), "{}", printed(&refused));
     assert!(fixture.requests().is_empty());
 
     // Without files nothing needs the working directory, which may be gone.
@@ -1875,7 +1876,7 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
         ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 }
 
 #[test]
@@ -2145,7 +2146,8 @@ fn forgejo_refuses_files_its_settings_refuse_before_posting() {
                 fixture.run(&[args, &["--space", &fixture.id("topic"), "--attach", file]].concat());
             assert!(
                 String::from_utf8_lossy(&refused.stderr).contains(refusal),
-                "{refused:?}"
+                "{}",
+                printed(&refused)
             );
             let sent: Vec<_> = fixture
                 .requests()
@@ -2286,7 +2288,7 @@ fn watches_report_a_failed_item_lookup_without_failing() {
         "--timeout",
         "600",
     ]);
-    assert!(!named.status.success(), "{named:?}");
+    assert!(!named.status.success(), "{}", printed(&named));
 
     fixture.respond(json!({
         "GET repos/team/project/issues/8": issue,
@@ -2532,7 +2534,7 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
         "GET repos/team/project/pulls/9": {"body": merged},
     }));
     let output = fixture.run(&["ready", "--space", &fixture.id("topic"), "--json"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let marks: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(marks.as_array().unwrap().len(), 1, "{marks}");
     assert_eq!(marks[0]["kind"], "issue", "{marks}");
@@ -2609,7 +2611,7 @@ fn a_pr_from_another_branch_of_the_worktree_is_assigned_and_watched() {
         &fixture.id("topic"),
     ]);
     let refused = fixture.run(&["link", "pr", "8", "opened", "--space", &fixture.id("topic")]);
-    assert!(!refused.status.success(), "{refused:?}");
+    assert!(!refused.status.success(), "{}", printed(&refused));
     let output = fixture.run(&[
         "view",
         "--space",
@@ -2661,7 +2663,7 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
     fixture.requests();
 
     let nothing = fixture.run(&["pr", "edit", "--space", &fixture.id("topic")]);
-    assert!(!nothing.status.success(), "{nothing:?}");
+    assert!(!nothing.status.success(), "{}", printed(&nothing));
     let edited = fixture.ok(&[
         "pr",
         "edit",
@@ -2714,7 +2716,7 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
         ]
         .concat(),
     );
-    assert_eq!(scoped.status.code(), Some(2), "{scoped:?}");
+    assert_eq!(scoped.status.code(), Some(2), "{}", printed(&scoped));
     let requests = fixture.requests();
     assert!(
         (requests.iter()).all(|request| request[0]
@@ -3024,7 +3026,7 @@ fn pr_open_refuses_unverified_or_switched_worktrees_before_pushing() {
     let path = Path::new(workspace["path"].as_str().unwrap());
     let refused = || {
         let output = fixture.run(&["pr", "open", "--workspace", &fixture.id("topic")]);
-        assert!(!output.status.success(), "{output:?}");
+        assert!(!output.status.success(), "{}", printed(&output));
         let pushed = support::isolated(root, "git")
             .args([
                 "-C",
@@ -3071,7 +3073,8 @@ fn an_unconfirmed_github_merge_fails_and_keeps_the_branch() {
     assert!(!output.status.success());
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("Head branch was modified"),
-        "{output:?}"
+        "{}",
+        printed(&output)
     );
     let sent: Vec<_> = fixture
         .requests()
@@ -3171,7 +3174,7 @@ fn delete_branch_deletes_an_ended_prs_branch_unless_it_moved() {
         "delete-branch",
         "8",
     ]);
-    assert!(!scoped.status.success(), "{scoped:?}");
+    assert!(!scoped.status.success(), "{}", printed(&scoped));
     assert!(fixture.requests().is_empty());
 }
 
@@ -3285,14 +3288,14 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         .args(["issue", "ls"])
         .output()
         .unwrap();
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     let output = fixture
         .command()
         .current_dir(fixture.root.path())
         .args(["--json", "issue", "ls", "--repo", "repo", "flaky", "watch"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     // A listing longer than one protocol frame arrives in several.
     let pages: serde_json::Map<String, Value> = (0..4)
         .map(|page| {
@@ -3610,7 +3613,7 @@ fn check_logs_read_github_and_gitlab_jobs_as_the_agent_and_refuse_external_check
         );
 
         let output = fixture.run(&[&read[..], &["coverage"]].concat());
-        assert!(!output.status.success(), "{output:?}");
+        assert!(!output.status.success(), "{}", printed(&output));
         assert!(
             !fixture.requests().iter().any(|request| request[0]
                 .as_str()
@@ -3702,7 +3705,7 @@ fn check_logs_are_read_from_a_registered_checkout_as_its_agent_account() {
             .args(args)
             .output()
             .unwrap();
-        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
     let agent_read_log = |fixture: &Fixture| {
@@ -3729,7 +3732,7 @@ fn check_logs_are_read_from_a_registered_checkout_as_its_agent_account() {
         .args(["view", "pr", "--check", "rust"])
         .output()
         .unwrap();
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
 }
 
 #[test]
@@ -4279,7 +4282,8 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
         assert!(!output.status.success());
         assert!(
             String::from_utf8_lossy(&output.stderr).contains(error),
-            "{output:?}"
+            "{}",
+            printed(&output)
         );
     }
 }
@@ -4342,10 +4346,11 @@ fn workflow_links_start_runs_in_their_repository_on_their_branch() {
         String::from_utf8_lossy(&output.stdout).contains(
             "find it in the forge's web UI and follow it with shoal link ci <URL> opened"
         ),
-        "{output:?}"
+        "{}",
+        printed(&output)
     );
     let output = fixture.run(&["ci", "run", "https://github.com/team/project/pull/8"]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
 }
 
 #[test]
@@ -4424,7 +4429,7 @@ fn ci_runs_are_started_viewed_and_listed_from_a_registered_checkout() {
             .args(args)
             .output()
             .unwrap();
-        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
     let url = format!("{}/actions/runs/2765", fixture.web);
@@ -4551,7 +4556,7 @@ fn forgejo_ci_runs_link_the_run_they_start() {
         "{links}"
     );
     let output = fixture.run(&["ci", "run", "--space", &fixture.id("topic")]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
 }
 
 #[test]
@@ -4581,7 +4586,7 @@ fn linked_runs_are_viewed_and_watched_until_they_finish() {
         "--space",
         &fixture.id("topic"),
     ]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     let job = format!("{url}/jobs/0");
     fixture.ok(&["link", &job, "related", "--space", &fixture.id("topic")]);
     let viewed = fixture.ok(&["view", "--space", &fixture.id("topic")]);
@@ -4634,11 +4639,11 @@ fn linked_runs_are_viewed_and_watched_until_they_finish() {
         "--timeout",
         "600",
     ]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     let viewed = fixture.ok(&["view", "ci", "--space", &fixture.id("topic")]);
     assert_eq!(viewed[0]["state"], "failed", "{viewed}");
     let output = fixture.run(&["ready", "ci", "--space", &fixture.id("topic")]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     fixture.ok(&[
         "unlink",
         "ci",
@@ -4842,10 +4847,10 @@ fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
     // It reads which runs wait, which its approval request names, and
     // approves none until a decision approves them.
     let proposed = scoped(&["ci", "approve", "--pr", "8"]);
-    assert_eq!(proposed.status.code(), Some(2), "{proposed:?}");
+    assert_eq!(proposed.status.code(), Some(2), "{}", printed(&proposed));
     // A run that waits for nothing is refused before anything asks.
     let refused = scoped(&["ci", "approve", &url(22)]);
-    assert_eq!(refused.status.code(), Some(1), "{refused:?}");
+    assert_eq!(refused.status.code(), Some(1), "{}", printed(&refused));
     let requests = fixture.requests();
     assert!(
         (requests.iter()).all(|request| request[0]
@@ -4870,7 +4875,7 @@ fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
         ])]
     );
     let output = fixture.run(&["ci", "approve", "22", "--space", &fixture.id("topic")]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert!(writes(&fixture).is_empty());
 }
 
@@ -4959,7 +4964,7 @@ fn forgejo_lists_runs_waiting_for_approval_but_leaves_approving_to_its_web_ui() 
         "--space",
         &fixture.id("topic"),
     ]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert!(fixture.requests().is_empty());
 }
 
@@ -5039,7 +5044,7 @@ fn ci_run_actions_rerun_and_cancel_runs_of_the_workspace_branch() {
     assert_eq!(other["type"], "error", "{other}");
     assert!(fixture.requests().is_empty());
     let output = fixture.run(&["ci", "cancel", "ci.yml"]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
 }
 
 #[test]
@@ -5151,7 +5156,7 @@ fn forgejo_ci_run_actions_cancel_by_run_number_and_rerun_from_release_17() {
     );
     // The fixture's server runs Forgejo 11, which cannot rerun.
     let output = fixture.run(&["ci", "rerun", "2765", "--space", &fixture.id("topic")]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert!(fixture.requests().is_empty());
 
     fixture.respond(json!({
@@ -5346,7 +5351,7 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
     let output = fixture.run(&["ci", "ls", "--pr", "8", "--branch", "topic"]);
     assert!(!output.status.success());
     let output = fixture.run(&["ci", "ls", "--limit", "0"]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
 }
 
 #[test]
@@ -5393,7 +5398,7 @@ fn ci_run_views_read_every_page_of_jobs_and_tell_apart_jobs_of_one_name() {
         "--space",
         &fixture.id("topic"),
     ]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     let log = fixture.ok(&[
         "view",
         "ci",
@@ -5411,7 +5416,7 @@ fn ci_run_views_read_every_page_of_jobs_and_tell_apart_jobs_of_one_name() {
         &["view", "8", "--job", "test"],
     ] {
         let output = fixture.run(args);
-        assert!(!output.status.success(), "{output:?}");
+        assert!(!output.status.success(), "{}", printed(&output));
     }
 }
 
@@ -5432,7 +5437,7 @@ fn scoped(fixture: &Fixture, args: &[&str]) -> Value {
         ]
         .concat(),
     );
-    assert!(output.status.success(), "{args:?}: {output:?}");
+    assert!(output.status.success(), "{args:?}: {}", printed(&output));
     serde_json::from_slice(&output.stdout).unwrap()
 }
 
@@ -5504,7 +5509,7 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     fs::write(&marker, "another-workspace\n").unwrap();
     let id = proposed["number"].as_str().unwrap().to_owned();
     let refused = fixture.run(&["approvals", "--approve", &id]);
-    assert!(!refused.status.success(), "{refused:?}");
+    assert!(!refused.status.success(), "{}", printed(&refused));
     assert!(writes(&fixture).is_empty());
     fs::write(&marker, owner).unwrap();
 
@@ -5573,7 +5578,7 @@ fn chat_issue_open(config: &str) -> (std::process::Output, Vec<Value>) {
 #[test]
 fn a_chats_change_signs_in_with_the_agent_token() {
     let (output, posts) = chat_issue_open(AGENT_TOKEN);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(posts, [json!("token agenttoken")]);
 }
 
@@ -5584,7 +5589,7 @@ fn a_chats_change_without_an_agent_token_names_it() {
     let (output, posts) = chat_issue_open(
         "[machine.forges.\"{forge}\"]\ntype = \"{type}\"\nuser_token = \"usertoken\"\n",
     );
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("set agent_token under [machine.forges.")
@@ -5602,7 +5607,7 @@ fn a_chats_change_takes_the_users_login_by_same_as() {
         "[machine.forges.\"{forge}\"]\ntype = \"{type}\"\nuser_token = \"usertoken\"\n\
          agent_token = { same_as = \"user_token\" }\n",
     );
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(posts, [json!("token usertoken")]);
 }
 
@@ -5630,7 +5635,7 @@ fn a_chats_proposed_issue_opens_from_its_checkout_on_approval() {
             .args(args)
             .output()
             .unwrap();
-        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
     let proposed = in_chat(&["issue", "open", "--title", "Flaky", "--link"])["proposed"].clone();
@@ -5718,7 +5723,7 @@ fn a_parent_with_the_permission_opens_a_proposal_below_it_with_its_edits() {
         "Seen twice",
     ];
     let output = fixture.run(&open);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let proposed: Value = serde_json::from_slice(&output.stdout).unwrap();
     let id = proposed["proposed"]["number"].as_str().unwrap().to_owned();
     assert!(writes(&fixture).is_empty());
@@ -5745,7 +5750,7 @@ fn a_parent_with_the_permission_opens_a_proposal_below_it_with_its_edits() {
         ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let approved: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(approved["status"], "approved", "{approved}");
     assert_eq!(
@@ -5837,11 +5842,11 @@ fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspac
     assert_eq!(filtered(&fixture.repo).as_array().unwrap().len(), 1);
     // Invalid details are refused before the picker would ask which request.
     let blank = fixture.run(&["approvals", "--approve", "--title", " "]);
-    assert!(!blank.status.success(), "{blank:?}");
+    assert!(!blank.status.success(), "{}", printed(&blank));
     let comment = json!(["POST repos/team/project/issues/40/comments",
         {"body": finding("Flaky again", "\nAlso on CI\n")}]);
     let failed = fixture.run(&["approvals", "--approve", &flaky]);
-    assert!(!failed.status.success(), "{failed:?}");
+    assert!(!failed.status.success(), "{}", printed(&failed));
     assert_eq!(
         writes(&fixture),
         [
@@ -5899,7 +5904,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
     git_with_identity(&path, &["commit", "-q", "--allow-empty", "-m", "more"]);
     let first_id = first["number"].as_str().unwrap().to_owned();
     let stale = fixture.run(&["approvals", "--approve", &first_id]);
-    assert!(!stale.status.success(), "{stale:?}");
+    assert!(!stale.status.success(), "{}", printed(&stale));
     assert!(writes(&fixture).is_empty());
     assert_eq!(messages(&fixture).len(), 1);
     let second = scoped(&fixture, &["pr", "open"])["proposed"].clone();
@@ -5922,7 +5927,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
     git(&path, &["push", "-q", remote.to_str().unwrap(), &target]);
     let second_id = second["number"].as_str().unwrap().to_owned();
     let stale = fixture.run(&["approvals", "--approve", &second_id]);
-    assert!(!stale.status.success(), "{stale:?}");
+    assert!(!stale.status.success(), "{}", printed(&stale));
     assert!(writes(&fixture).is_empty());
     assert_eq!(messages(&fixture).len(), 1);
     git(&path, &["reset", "-q", "--hard", pushed.trim()]);
@@ -5993,7 +5998,7 @@ fn a_proposed_fork_pr_opens_only_at_the_commit_the_fork_has() {
     };
     let outdated = |id: &Value| {
         let stale = fixture.run(&["approvals", "--approve", id.as_str().unwrap()]);
-        assert!(!stale.status.success(), "{stale:?}");
+        assert!(!stale.status.success(), "{}", printed(&stale));
         assert!(writes(&fixture).is_empty());
     };
     respond(&head);
@@ -6139,7 +6144,7 @@ fn an_issue_approval_that_fails_after_opening_finishes_on_retry() {
         .unwrap()
         .to_owned();
     let failed = fixture.run(&["approvals", "--approve", &id]);
-    assert!(!failed.status.success(), "{failed:?}");
+    assert!(!failed.status.success(), "{}", printed(&failed));
     let url = format!("{}/issues/40", fixture.web);
     assert_eq!(fixture.ok(&["approvals"])[0]["url"], url);
     let posted: Vec<_> = writes(&fixture).iter().map(|w| w[0].clone()).collect();
@@ -6184,7 +6189,7 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
         .unwrap()
         .to_owned();
     let failed = fixture.run(&["approvals", "--approve", &id]);
-    assert!(!failed.status.success(), "{failed:?}");
+    assert!(!failed.status.success(), "{}", printed(&failed));
     let url = format!("{}/pull/9", fixture.web);
     assert_eq!(fixture.ok(&["approvals"])[0]["url"], url);
     let posted: Vec<_> = writes(&fixture).iter().map(|w| w[0].clone()).collect();
@@ -6215,11 +6220,11 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
             "rename",
             to,
         ]);
-        assert!(renamed.status.success(), "{renamed:?}");
+        assert!(renamed.status.success(), "{}", printed(&renamed));
     };
     rename("renamed");
     let refused = fixture.run(&["approvals", "--approve", &id]);
-    assert!(!refused.status.success(), "{refused:?}");
+    assert!(!refused.status.success(), "{}", printed(&refused));
     rename("topic");
     assert_eq!(fixture.ok(&["approvals", "--approve", &id])["url"], url);
     assert_eq!(
@@ -6366,7 +6371,7 @@ fn checkout_comment(config: &str) -> (std::process::Output, Vec<Value>) {
 #[test]
 fn the_users_checkout_changes_use_the_users_login() {
     let (output, posts) = checkout_comment(AGENT_TOKEN);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(posts, [json!("token usertoken")]);
 }
 
@@ -6376,7 +6381,7 @@ fn the_users_checkout_changes_need_no_agent_token() {
     let (output, posts) = checkout_comment(
         "[machine.forges.\"{forge}\"]\ntype = \"{type}\"\nuser_token = \"usertoken\"\n",
     );
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(posts, [json!("token usertoken")]);
 }
 
@@ -6407,7 +6412,7 @@ fn item_commands_act_from_a_registered_checkout() {
     };
 
     let commented = in_checkout(&["--json", "issue", "comment", "40", "--body", "Seen"]);
-    assert!(commented.status.success(), "{commented:?}");
+    assert!(commented.status.success(), "{}", printed(&commented));
     assert_eq!(
         writes(&fixture),
         [json!(["POST repos/team/project/issues/40/comments", {"body": "Seen"}])]
@@ -6423,7 +6428,7 @@ fn item_commands_act_from_a_registered_checkout() {
     let reviewers: Value = serde_json::from_slice(&reviewers.stdout).unwrap();
     assert_eq!(reviewers[0]["name"], "kim", "{reviewers}");
     let resolved = in_checkout(&["--json", "pr", "resolve", "6", "8"]);
-    assert!(resolved.status.success(), "{resolved:?}");
+    assert!(resolved.status.success(), "{}", printed(&resolved));
     // Another repository's reads work there as in a workspace.
     fixture.respond(json!({
         "GET repos/team/tool/labels?per_page=100&page=1": {"body": [{"name": "bug"}]},
@@ -6445,7 +6450,7 @@ fn item_commands_act_from_a_registered_checkout() {
     // A checkout links nothing, so the item must be named.
     for args in [&["issue", "close"][..], &["view"]] {
         let refused = in_checkout(args);
-        assert!(!refused.status.success(), "{args:?}: {refused:?}");
+        assert!(!refused.status.success(), "{args:?}: {}", printed(&refused));
     }
 }
 
@@ -6481,7 +6486,7 @@ fn item_commands_act_in_a_named_repository_without_a_workspace() {
     };
     let read = |args: &[&str]| {
         let output = outside(&[&["--json"][..], args].concat());
-        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
 
@@ -6522,7 +6527,7 @@ fn item_commands_act_in_a_named_repository_without_a_workspace() {
 
     let refused = |args: &[&str]| {
         let output = outside(args);
-        assert!(!output.status.success(), "{args:?}: {output:?}");
+        assert!(!output.status.success(), "{args:?}: {}", printed(&output));
     };
     // Nothing is linked without a workspace, so the PR must be named.
     refused(&["ci", "rerun", "--repo", "repo"]);
@@ -6639,7 +6644,7 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
     let shoal = support::shoal_binary();
     let exec = ["run", "--workspace", &fixture.id("topic"), "--", shoal];
     let linked = fixture.run(&[&exec[..], &open, &["--link"]].concat());
-    assert!(!linked.status.success(), "{linked:?}");
+    assert!(!linked.status.success(), "{}", printed(&linked));
 
     let id = proposed["number"].as_str().unwrap().to_owned();
     let approved = fixture.ok(&["approvals", "--approve", &id]);
@@ -6673,7 +6678,7 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
         repo,
     ]);
     let denied = fixture.run(&[&exec[..], &open].concat());
-    assert!(!denied.status.success(), "{denied:?}");
+    assert!(!denied.status.success(), "{}", printed(&denied));
     assert!(writes(&fixture).is_empty());
     let direct = fixture.ok(&[&open[..], &["--space", &fixture.id("topic")]].concat());
     assert_eq!(direct["url"], url);
@@ -6818,7 +6823,7 @@ fn api_requests_reach_any_path_and_agents_only_read() {
         "--input",
         body,
     ]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert!(fixture.requests().is_empty());
 }
 
@@ -6839,7 +6844,7 @@ fn downloads_read_files_on_the_forge_with_its_login() {
     );
     assert_eq!(fs::read(&saved).unwrap(), b"PNG");
     let output = fixture.run_in_topic(&["forge", "download", &url, "-o", "-"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(output.stdout, b"PNG");
     // A workspace process downloads as its agent account, and a chat in the
     // registered checkout with the user's logins.
@@ -6850,7 +6855,7 @@ fn downloads_read_files_on_the_forge_with_its_login() {
         .args(["forge", "download", &url, "-o", saved_arg])
         .output()
         .unwrap();
-    assert!(in_checkout.status.success(), "{in_checkout:?}");
+    assert!(in_checkout.status.success(), "{}", printed(&in_checkout));
     assert_eq!(
         fixture.requests(),
         [
@@ -6880,7 +6885,7 @@ fn downloads_read_files_on_the_forge_with_its_login() {
         "-o",
         saved_arg,
     ]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert!(fixture.requests().is_empty());
 }
 
@@ -6946,7 +6951,7 @@ fn the_git_credential_helper_answers_scoped_processes_with_the_agent_token() {
         let request = format!("protocol={protocol}\nhost={host}\n\n");
         std::io::Write::write_all(&mut child.stdin.take().unwrap(), request.as_bytes()).unwrap();
         let output = child.wait_with_output().unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         String::from_utf8(output.stdout).unwrap()
     };
 

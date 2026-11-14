@@ -119,7 +119,7 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
         &["review", "run", &fixture.id("changes"), "--agent", "absent"],
     ] {
         let output = fixture.run(args);
-        assert!(!output.status.success(), "{output:?}");
+        assert!(!output.status.success(), "{}", printed(&output));
     }
     // Nothing was queued.
     assert_eq!(
@@ -209,7 +209,7 @@ fn a_review_watch_outlasts_a_daemon_restart() {
         let _ = watch.kill();
     }
     let output = watch.wait_with_output().unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let review: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(review["state"], "finished", "{review}");
 }
@@ -306,7 +306,7 @@ fn a_chat_reviews_its_linked_pr_and_lists_and_cancels_that_review() {
         "--agent",
         "reviewer",
     ]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     let output = run(&[
         "link",
         "pr",
@@ -315,11 +315,11 @@ fn a_chat_reviews_its_linked_pr_and_lists_and_cancels_that_review() {
         "--space",
         &fixture.id("planning"),
     ]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     // The linked PR is reviewed in the workspace that owns its head, and
     // posting applies to it.
     let output = run(&["review", "run", &fixture.id("planning"), "--no-post"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let ended = fixture.ok(&["watch", "review", "1"]);
     let url = "https://forge.example/team/project/pulls/7";
     assert_eq!(ended["target"]["url"], url, "{ended}");
@@ -327,7 +327,7 @@ fn a_chat_reviews_its_linked_pr_and_lists_and_cancels_that_review() {
     let listed = fixture.ok(&["review", "ls", &fixture.id("planning")]);
     assert_eq!(listed[0]["id"], 1, "{listed}");
     let output = run(&["review", "cancel", "--space", &fixture.id("planning")]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     agent.kill().unwrap();
     agent.wait().unwrap();
 }
@@ -370,7 +370,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
             .unwrap()
     };
     let output = review(&["--pr", "7"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     // The review covers the PR's head against its base, both from origin.
     let ended = fixture.ok(&["watch", "review", "1"]);
     assert_eq!(ended["target"]["head"], "stack/top", "{ended}");
@@ -410,7 +410,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         .env("PATH", &path)
         .output()
         .unwrap();
-    assert!(added.status.success(), "{added:?}");
+    assert!(added.status.success(), "{}", printed(&added));
     assert_eq!(linked_prs(), serde_json::json!([pr]));
     let added: Value = serde_json::from_slice(&added.stdout).unwrap();
     assert_eq!(added["branch"], "stack/top");
@@ -443,7 +443,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     commit("more");
     git(&author, &["push", "origin", "stack/top"]);
     let output = review(&["https://forge.example/team/project/pulls/7", "--no-post"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(linked_prs(), serde_json::json!([pr]));
     assert_eq!(
         fixture.ok(&["watch", "review", "2"])["target"]["post"],
@@ -488,7 +488,7 @@ fn link_picks_an_omitted_open_issue_or_pull_request() {
             format!("#!/bin/sh\nawk -F '\\t' '$2 == \"{kind}\" || $1 == \"{number}\" {{print}}'\n"),
         );
         let (output, transcript) = fixture.interactive_command(fixture.command().args(&args), "");
-        assert!(output.status.success(), "{output:?} {transcript}");
+        assert!(output.status.success(), "{} {transcript}", printed(&output));
     }
     let workspace = fixture.ok(&["status", &fixture.id("topic")]);
     assert_eq!(
@@ -720,7 +720,7 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
         fixture.restart();
         assert!(fixture.ok(&["status", &fixture.id(name)])["pr_cleanup"].is_null());
         let again = fixture.run(&["unlink", "pr", "assigned", "--space", &fixture.id(name)]);
-        assert!(!again.status.success(), "{again:?}");
+        assert!(!again.status.success(), "{}", printed(&again));
         assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
     }
 }
@@ -1694,7 +1694,7 @@ fn merge_asks_before_merging_files_changed_on_both_sides() {
     let before = git(&fixture.repo, &["rev-parse", "main"]);
 
     let check = fixture.run(&["--json", "conflicts", "--workspace", &fixture.id("worker")]);
-    assert_eq!(check.status.code(), Some(1), "{check:?}");
+    assert_eq!(check.status.code(), Some(1), "{}", printed(&check));
     let check: serde_json::Value = serde_json::from_slice(&check.stdout)
         .unwrap_or_else(|_| panic!("{}", String::from_utf8_lossy(&check.stderr)));
     assert_eq!(check["conflicts"], false);
@@ -1990,10 +1990,11 @@ cat "$HOME/release" > /dev/null
         ])
         .output()
         .unwrap();
-    assert!(!missing.status.success(), "{missing:?}");
+    assert!(!missing.status.success(), "{}", printed(&missing));
     assert!(
         String::from_utf8_lossy(&missing.stdout).contains(issue),
-        "{missing:?}"
+        "{}",
+        printed(&missing)
     );
     // A workspace process cannot open windows on the user's screen.
     let scoped = fixture.run(&[
@@ -2394,7 +2395,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     assert!(refused.is_err(), "expected a refusal: {refused:?}");
     assert_eq!(fixture.ok(&["list"]), before);
     let output = run(&["review", "run", "--pr", "8", "--agent", "reviewer"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let ended = fixture.ok(&["watch", "review", "1"]);
     assert_eq!(ended["head"], first, "{ended}");
     // Named after the PR's title, in a directory named after its number.
@@ -2413,7 +2414,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
 
     // Adding the PR reuses its workspace; it holds no agent.
     let output = run(&["--json", "start", url]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let added: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(added["id"], workspace["id"]);
     let output = run(&["start", url, "--agent", "reviewer"]);
@@ -2427,7 +2428,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
             .env("PATH", &path),
         "",
     );
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     assert!(!transcript.contains("Workspace>"), "{transcript}");
     let output = run(&["start", url, "--git-profile", "work"]);
     assert!(!output.status.success());
@@ -2436,7 +2437,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     let second = push_fork_head("second");
     script(&second);
     let output = run(&["review", "run", url, "--agent", "reviewer", "--no-post"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     fixture.ok(&["watch", "review", &review_number(&output)]);
     let moved = &fixture.ok(&["status", &fixture.id("PR 8")])["workspace"];
     assert_eq!(moved["id"], workspace["id"]);
@@ -2444,7 +2445,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
     // A manual review compares the PR's head with its base.
     let output = run(&["review", "run", url, "--manual"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let main = git(&remote, &["rev-parse", "main"]);
     assert_eq!(String::from_utf8_lossy(&output.stdout), main);
 
@@ -2454,7 +2455,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     git(&moved_path, &["add", "local"]);
     git_with_identity(&moved_path, &["commit", "-qm", "local"]);
     let output = run(&["review", "run", url, "--agent", "reviewer", "--no-post"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let ended = fixture.ok(&["watch", "review", &review_number(&output)]);
     assert_eq!(ended["head"], second, "{ended}");
     // A manual review reads the checkout, so it refuses one past the PR's head.
@@ -2470,9 +2471,9 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     fs::write(&local, format!("hooks.post_setup = '{}'\n", hook.display())).unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &local);
     let output = run(&["start", url]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let output = run(&["review", "run", url, "--agent", "reviewer", "--no-post"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let ran = fs::read_to_string(fixture.root.path().join("post-setup-ran")).unwrap();
     assert_eq!(ran, "ran\n");
 }

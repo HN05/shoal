@@ -1899,7 +1899,7 @@ fn acquire_picks_an_omitted_resource_of_its_kind() {
         &fixture.id("consumer"),
     ];
     let (output, rows) = fixture.pick(&args, "workers", "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(
         rows.contains("lock\t") && rows.contains("workers\t"),
         "{rows:?}"
@@ -1910,7 +1910,7 @@ fn acquire_picks_an_omitted_resource_of_its_kind() {
         "server",
         "",
     );
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(rows.lines().count(), 1, "{rows:?}");
     let pools: Vec<_> = fixture.ok(&["status", &fixture.id("consumer")])["resources"]
         .as_array()
@@ -1927,14 +1927,14 @@ fn acquire_port_picks_an_omitted_configured_port() {
     let fixture = Fixture::new();
     fixture.add("server");
     let none = fixture.run(&["acquire", "port", "--workspace", &fixture.id("server")]);
-    assert!(!none.status.success(), "{none:?}");
+    assert!(!none.status.success(), "{}", printed(&none));
     set_repository_toml(&fixture, "[ports.web]\n[ports.api]\n");
     let (output, rows) = fixture.pick(
         &["acquire", "port", "--workspace", &fixture.id("server")],
         "web",
         "",
     );
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.contains("api\t") && rows.contains("web\t"), "{rows:?}");
     let reserved =
         fixture.ok(&["leases", "port", "--workspace", &fixture.id("server")])["reserved"].clone();

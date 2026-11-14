@@ -1,6 +1,6 @@
 mod support;
 
-use support::pty;
+use support::{printed, pty};
 
 use std::{
     io::Read,
@@ -112,8 +112,8 @@ fn root_help_entry_points_are_grouped_and_subcommand_help_stays_specific() {
             .stdin(Stdio::null())
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
-        assert!(output.stderr.is_empty(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
+        assert!(output.stderr.is_empty(), "{}", printed(&output));
         let help = String::from_utf8(output.stdout).unwrap();
         assert!(help.contains("Workspaces:\n"), "{help}");
         assert!(!help.contains('\x1b'));
@@ -124,7 +124,7 @@ fn root_help_entry_points_are_grouped_and_subcommand_help_stays_specific() {
         .args(["cd", "--help"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let help = String::from_utf8(output.stdout).unwrap();
     assert!(!help.contains("Workspaces:\n"), "{help}");
     assert!(!root.path().join("state").exists());
@@ -146,7 +146,7 @@ fn help_of_every_command_needs_no_daemon() {
             .arg("--help")
             .output()
             .unwrap();
-        assert!(output.status.success(), "{path:?}: {output:?}");
+        assert!(output.status.success(), "{path:?}: {}", printed(&output));
         let help = String::from_utf8(output.stdout).unwrap();
         for name in subcommands(&help) {
             pending.push(path.iter().cloned().chain([name]).collect());
@@ -195,8 +195,13 @@ fn a_closed_stdout_ends_commands_quietly() {
             .stderr(Stdio::piped())
             .output()
             .unwrap();
-        assert_eq!(output.status.code(), Some(141), "{args:?}: {output:?}");
-        assert!(output.stderr.is_empty(), "{args:?}: {output:?}");
+        assert_eq!(
+            output.status.code(),
+            Some(141),
+            "{args:?}: {}",
+            printed(&output)
+        );
+        assert!(output.stderr.is_empty(), "{args:?}: {}", printed(&output));
     }
 }
 
@@ -220,8 +225,8 @@ fn a_closed_stdout_ends_unterminated_output_quietly() {
         .output()
         .unwrap();
     server.join().unwrap();
-    assert_eq!(output.status.code(), Some(141), "{output:?}");
-    assert!(output.stderr.is_empty(), "{output:?}");
+    assert_eq!(output.status.code(), Some(141), "{}", printed(&output));
+    assert!(output.stderr.is_empty(), "{}", printed(&output));
 }
 
 #[test]
@@ -248,7 +253,7 @@ fn repository_progress_respects_output_mode_and_clears_before_errors() {
         }
         let (output, text) =
             run_with_reply(&args, terminal, &env, Some((visible, success.clone())));
-        assert!(output.status.success(), "{output:?} {text:?}");
+        assert!(output.status.success(), "{} {text:?}", printed(&output));
         assert_eq!(text.contains("Registering repository"), visible, "{text:?}");
         assert!(!output.stdout.contains(&b'\r'));
         assert!(output.stderr.is_empty());
@@ -319,7 +324,8 @@ fn terminal_styles_respect_redirection_json_and_environment() {
         assert!(!output.status.success());
         assert!(
             text.contains('\x1b'),
-            "args={args:?} text={text:?} output={output:?}"
+            "args={args:?} text={text:?} output={}",
+            printed(&output)
         );
         let (piped, _) = run(&args, Some(!stdout), &[]);
         let bytes = if stdout { piped.stdout } else { piped.stderr };
@@ -352,7 +358,7 @@ fn shoal_output_selects_the_format_of_results_and_errors() {
         &json,
         Some((false, added.clone())),
     );
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(value["id"], "test");
     let (output, _) = run_with_reply(
@@ -361,17 +367,18 @@ fn shoal_output_selects_the_format_of_results_and_errors() {
         &json,
         Some((false, added)),
     );
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(
         serde_json::from_slice::<serde_json::Value>(&output.stdout).is_err(),
-        "{output:?}"
+        "{}",
+        printed(&output)
     );
 
     let (output, _) = run(&["repo", "ls"], None, &[("SHOAL_OUTPUT", "yaml")]);
-    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert_eq!(output.status.code(), Some(2), "{}", printed(&output));
     assert!(output.stdout.is_empty());
     let (output, _) = run(&["--json", "skill"], None, &[("SHOAL_OUTPUT", "yaml")]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 }
 
 /// A human on stdin and stderr is not asked to confirm under `SHOAL_OUTPUT=json`,
@@ -439,7 +446,7 @@ fn a_program_reads_json_output_with_the_librarys_types() {
         &[],
         Some((false, added)),
     );
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let repository: Repository = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(repository.id, "test");
 
@@ -456,7 +463,7 @@ fn a_program_reads_json_output_with_the_librarys_types() {
         "data": {"code": "scope_denied", "message": "outside the workspace"}
     });
     let (output, _) = run_with_reply(&["--json", "repo", "ls"], None, &[], Some((false, refused)));
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     let failed: CommandError = serde_json::from_slice(&output.stderr).unwrap();
     assert_eq!(failed.error.code, "scope_denied");
 }
@@ -474,7 +481,7 @@ fn status_shows_a_busy_daemon_s_own_status_when_it_refuses_the_space_lookup() {
         &[],
         vec![(false, status.clone()), (false, busy), (false, status)],
     );
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let shown: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(shown["daemon"]["pid"], 7, "{shown}");
     assert!(String::from_utf8_lossy(&output.stderr).contains("the daemon is busy"));

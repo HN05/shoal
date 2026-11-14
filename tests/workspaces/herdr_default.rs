@@ -43,7 +43,7 @@ fn background_additions_open_tabs_in_the_repository_workspace() {
             &fixture,
             &["start", repo, "--branch", name, "--agent", "pi"],
         );
-        assert!(output.status.success(), "{output:?} {transcript}");
+        assert!(output.status.success(), "{} {transcript}", printed(&output));
     }
     // The workspace is created once, then found by its label.
     let created = calls_of(&fixture, &["workspace", "create"]);
@@ -76,7 +76,7 @@ fn launches_from_a_terminal_need_no_zmx_while_herdr_is_the_default() {
         &fixture,
         &["start", repo, "--branch", "first", "--agent", "pi"],
     );
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     assert_eq!(calls_of(&fixture, &["tab", "create"]).len(), 1);
 }
 
@@ -96,7 +96,7 @@ fn a_fixed_workspace_name_is_reused_as_herdr_lists_it() {
         &fixture,
         &["start", repo, "--branch", "fixed", "--agent", "pi"],
     );
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     assert!(calls_of(&fixture, &["workspace", "create"]).is_empty());
     assert_eq!(
         calls_of(&fixture, &["tab", "create"])[0][2..4],
@@ -128,7 +128,11 @@ fn focused_starts_attach_the_terminal_to_their_herdr_tab() {
     ] {
         fs::remove_file(fixture.root.path().join("herdr-calls")).unwrap_or_default();
         let (output, transcript) = plain_terminal(&fixture, &args);
-        assert!(output.status.success(), "{args:?}: {output:?} {transcript}");
+        assert!(
+            output.status.success(),
+            "{args:?}: {} {transcript}",
+            printed(&output)
+        );
         let tab = &calls_of(&fixture, &["tab", "create"])[0];
         assert!(tab.iter().any(|arg| arg == "--focus"), "{args:?}: {tab:?}");
         // The tab's pane runs the start, then the terminal shows its tab.
@@ -177,7 +181,7 @@ fn a_herdr_only_herdr_bin_path_names_serves_a_focused_start() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     assert_eq!(
         calls_of(&fixture, &["session", "attach"]),
         [["session", "attach", "default"]]
@@ -219,7 +223,7 @@ fn a_start_queued_outside_herdr_keeps_the_herdr_session_it_chose() {
         ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let stdout = String::from_utf8(output.stdout).unwrap();
     let queued: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
     assert_eq!(queued["state"], "queued", "{queued}");

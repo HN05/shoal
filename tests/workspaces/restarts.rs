@@ -123,7 +123,11 @@ fn restart_restores_a_chat_in_a_new_place() {
         );
         // The first agent ended, and the restored one continues its session.
         let (output, transcript) = chat.join().unwrap();
-        assert!(output.status.success(), "{output:?}\n{transcript}");
+        assert!(
+            output.status.success(),
+            "{}\n{transcript}",
+            printed(&output)
+        );
     });
     wait_until("chat restored", || home.join("chat-restored").exists());
     let args = fs::read_to_string(home.join("chat-args")).unwrap();
@@ -150,7 +154,7 @@ fn restart_gives_a_workspaces_agent_permissions() {
         "--permission",
         "pushes=propose",
     ]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert!(!running.path.join("restored").exists());
     assert_eq!(wait_registered_execution(&fixture, "narrowed")["id"], first);
 
@@ -208,7 +212,7 @@ fn restart_gives_a_chats_agent_permissions() {
             "--permission",
             "pushes=propose",
         ]);
-        assert!(!output.status.success(), "{output:?}");
+        assert!(!output.status.success(), "{}", printed(&output));
         assert_eq!(fixture.ok(&["list", "--chats"])[0]["restore"], Value::Null);
         fixture.ok(&[
             "restart",
@@ -217,7 +221,11 @@ fn restart_gives_a_chats_agent_permissions() {
             "push=propose",
         ]);
         let (output, transcript) = chat.join().unwrap();
-        assert!(output.status.success(), "{output:?}\n{transcript}");
+        assert!(
+            output.status.success(),
+            "{}\n{transcript}",
+            printed(&output)
+        );
     });
     wait_until("chat restored", || restored.exists());
     assert_eq!(narrowing(), serde_json::json!({"push": "propose"}));
@@ -310,7 +318,7 @@ fn a_workspaces_agent_resumes_the_agents_below_whoever_stopped_them() {
     // No new wrapper can start, so the restart leaves the agent stopped.
     install_test_script(&zmx, "#!/bin/sh\nexit 1\n");
     let output = fixture.run(&["restart", &fixture.id("child")]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     install_test_script(&zmx, terminal_zmx());
 
     parent.ok(&fixture, &["restore", &fixture.id("child")]);
@@ -393,7 +401,7 @@ impl Parent {
     /// [`Self::run`], which must succeed, returning what it printed.
     pub(super) fn ok(&self, fixture: &Fixture, args: &[&str]) -> Value {
         let output = self.run(fixture, args);
-        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
         serde_json::from_slice(&output.stdout).unwrap()
     }
 }
@@ -416,7 +424,7 @@ fn restarts_the_agents_below(fixture: &Fixture, parent: &Parent) {
     let mut agent = Running::start(fixture, "child", &child);
     for refused in [parent.name(), "other"] {
         let output = parent.run(fixture, &["restart", &fixture.id(refused)]);
-        assert!(!output.status.success(), "{refused}: {output:?}");
+        assert!(!output.status.success(), "{refused}: {}", printed(&output));
     }
 
     let restarted = parent.ok(fixture, &["restart", "--all"]);
@@ -456,7 +464,11 @@ fn restarts_the_agents_below(fixture: &Fixture, parent: &Parent) {
         let restarted = parent.ok(fixture, &["restart", &fixture.id("talk")]);
         assert_eq!(restarted["restarted"][0]["space"], "talk", "{restarted}");
         let (output, transcript) = chat.join().unwrap();
-        assert!(output.status.success(), "{output:?}\n{transcript}");
+        assert!(
+            output.status.success(),
+            "{}\n{transcript}",
+            printed(&output)
+        );
     });
     wait_until("chat restored", || home.join("chat-restored").exists());
     fixture.ok(&["rm", "--wait", &fixture.id("talk"), "--yes"]);
@@ -497,7 +509,7 @@ fn resumes_the_chats_below(fixture: &Fixture, parent: &Parent) {
         wait_until("chat started", || home.join("chat-started").exists());
         install_test_script(&zmx, FAILING_ZMX);
         let output = fixture.run(&["restart", &fixture.id("talk")]);
-        assert!(!output.status.success(), "{output:?}");
+        assert!(!output.status.success(), "{}", printed(&output));
         chat.join().unwrap();
     });
     install_test_script(&zmx, terminal_zmx());

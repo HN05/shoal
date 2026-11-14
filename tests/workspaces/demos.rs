@@ -52,7 +52,11 @@ fn failed_demo_handoffs_only_close_the_original_known_session(after: &str) -> an
                 "true",
             ])
             .output()?;
-        assert!(!output.status.success(), "{stage}/{after}: {output:?}");
+        assert!(
+            !output.status.success(),
+            "{stage}/{after}: {}",
+            printed(&output)
+        );
         let calls: Vec<Vec<String>> = fs::read_to_string(home.join("handoff-calls.jsonl"))?
             .lines()
             .map(serde_json::from_str)

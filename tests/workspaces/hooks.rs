@@ -51,7 +51,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
         .env("SHOAL_SHELL_DIRECTIVE", home.join("directive"))
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(workspace["state"], "ready");
     assert!(String::from_utf8_lossy(&output.stderr).contains("post-setup output"));
@@ -303,7 +303,7 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
         vec!["rm", "--wait", &fixture.id("hooked"), "--yes"],
     ] {
         let output = fixture.run(&args);
-        assert!(!output.status.success(), "{output:?}");
+        assert!(!output.status.success(), "{}", printed(&output));
     }
     fs::write(fixture.root.path().join("hook-continue"), "").unwrap();
     assert!(acquire.wait_with_output().unwrap().status.success());

@@ -176,7 +176,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
             .env("SHOAL_OUTPUT", "text"),
         "",
     );
-    assert!(caller.status.success(), "{caller:?}");
+    assert!(caller.status.success(), "{}", printed(&caller));
     assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
     assert_eq!(fs::read_to_string(directive).unwrap(), "unchanged");
     let calls = herdr_changes(&fixture);
@@ -200,7 +200,12 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
         ]
     );
     let (agent, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
-    assert_eq!(agent.status.code(), Some(7), "{agent:?} {transcript}");
+    assert_eq!(
+        agent.status.code(),
+        Some(7),
+        "{} {transcript}",
+        printed(&agent)
+    );
     // The tab's shell, not the caller's, enters the workspace after the agent.
     let tab_directive = herdr_tab_directive(&fixture);
     let workspace = fixture.ok(&["status", &fixture.id("herdr-agent")]);
@@ -258,7 +263,7 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
             .env("SHOAL_OUTPUT", "text"),
         "",
     );
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     let calls = herdr_calls(&fixture);
     assert_eq!(calls.len(), 6, "{calls:?}");
     let resumed =
@@ -327,7 +332,7 @@ fn herdr_resume_honors_new_tab_and_enabled_settings() {
     }
     // Without new tabs, an idle recorded pane is still reused.
     let (output, transcript) = herdr_call(&fixture, &["restore", "--all", "--now"], "");
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("--execution second-agent"), "{stdout}");
     let calls = herdr_calls(&fixture);
@@ -343,7 +348,7 @@ fn herdr_resume_honors_new_tab_and_enabled_settings() {
     )
     .unwrap();
     let (output, transcript) = herdr_call(&fixture, &["restore", "--all", "--now"], "");
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("--execution first-agent"), "{stdout}");
     assert!(stdout.contains("--execution second-agent"), "{stdout}");
@@ -365,7 +370,11 @@ fn herdr_reports_issue_lookup_errors_before_the_agent_picker() {
         "#!/bin/sh\necho \"$*\" >&2\nhead -n 1\n",
     );
     let (caller, transcript) = herdr_call(&fixture, &["start", "34"], "");
-    assert!(!caller.status.success(), "{caller:?} {transcript}");
+    assert!(
+        !caller.status.success(),
+        "{} {transcript}",
+        printed(&caller)
+    );
     assert!(transcript.contains("Repository>"), "{transcript}");
     assert!(transcript.contains("lookup-failed"), "{transcript}");
     assert!(!transcript.contains("Agent>"), "{transcript}");
@@ -448,14 +457,14 @@ fn herdr_tabs_take_the_name_of_their_space() {
             fs::remove_file(&marker).unwrap();
         }
         let (caller, transcript) = herdr_call(&fixture, &args, "");
-        assert!(caller.status.success(), "{caller:?} {transcript}");
+        assert!(caller.status.success(), "{} {transcript}", printed(&caller));
         let calls = herdr_changes(&fixture);
         let create = &calls[calls.len() - 2];
         let label = create.iter().position(|arg| arg == "--label").unwrap();
         assert_eq!(create[label + 1], initial);
         let (worker, transcript) =
             fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
-        assert!(worker.status.success(), "{worker:?} {transcript}");
+        assert!(worker.status.success(), "{} {transcript}", printed(&worker));
         assert_eq!(transcript.contains("rename-failed"), fail_rename);
         let calls = herdr_calls(&fixture);
         assert_eq!(calls.last().unwrap(), &["tab", "rename", "w1:t9", renamed]);
@@ -515,7 +524,7 @@ fn herdr_tab_name_templates_survive_handoff() {
             args.extend(["--issue", url]);
         }
         let (caller, transcript) = herdr_call(&fixture, &args, "");
-        assert!(caller.status.success(), "{caller:?} {transcript}");
+        assert!(caller.status.success(), "{} {transcript}", printed(&caller));
         let calls = herdr_changes(&fixture);
         let create = &calls[calls.len() - 2];
         let label = create.iter().position(|arg| arg == "--label").unwrap();
@@ -530,7 +539,7 @@ fn herdr_tab_name_templates_survive_handoff() {
         ]);
         let (worker, transcript) =
             fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
-        assert!(worker.status.success(), "{worker:?} {transcript}");
+        assert!(worker.status.success(), "{} {transcript}", printed(&worker));
         let calls = herdr_calls(&fixture);
         assert_eq!(calls.last().unwrap(), &["tab", "rename", "w1:t9", renamed]);
         assert!(!fixture.root.path().join("injected").exists());
@@ -571,13 +580,13 @@ fn a_rename_renames_the_herdr_tab_shoal_opened_for_it() {
         "pi",
     ];
     let (caller, transcript) = herdr_call(&fixture, &args, "");
-    assert!(caller.status.success(), "{caller:?} {transcript}");
+    assert!(caller.status.success(), "{} {transcript}", printed(&caller));
     let (worker, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
-    assert!(worker.status.success(), "{worker:?} {transcript}");
+    assert!(worker.status.success(), "{} {transcript}", printed(&worker));
 
     let topic = fixture.id("topic");
     let renamed = rename_in_herdr(&fixture, &topic, "Agent tab names");
-    assert!(renamed.status.success(), "{renamed:?}");
+    assert!(renamed.status.success(), "{}", printed(&renamed));
     let record: Value = serde_json::from_slice(&renamed.stdout).unwrap();
     assert_eq!(record["name"], "Agent tab names");
     assert_eq!(
@@ -597,7 +606,7 @@ fn a_rename_renames_the_herdr_tab_shoal_opened_for_it() {
     .unwrap();
     let before = herdr_changes(&fixture).len();
     let renamed = rename_in_herdr(&fixture, &topic, "Tab names");
-    assert!(renamed.status.success(), "{renamed:?}");
+    assert!(renamed.status.success(), "{}", printed(&renamed));
     assert_eq!(herdr_changes(&fixture).len(), before);
 
     // A tab the user closed keeps the name on the record only, though it
@@ -610,7 +619,7 @@ fn a_rename_renames_the_herdr_tab_shoal_opened_for_it() {
     fs::write(fixture.root.path().join("closed-tabs"), "w1:t9\n").unwrap();
     let before = herdr_changes(&fixture).len();
     let renamed = rename_in_herdr(&fixture, &topic, "Renamed later");
-    assert!(renamed.status.success(), "{renamed:?}");
+    assert!(renamed.status.success(), "{}", printed(&renamed));
     assert!(
         renamed.stderr.is_empty(),
         "{}",
@@ -644,7 +653,7 @@ fn herdr_plans_carry_issue_urls_instead_of_bodies() {
         "start", "34", "--repo", repo, "--agent", "codex", "--base", "HEAD",
     ];
     let (caller, transcript) = herdr_call(&fixture, &args, "");
-    assert!(caller.status.success(), "{caller:?} {transcript}");
+    assert!(caller.status.success(), "{} {transcript}", printed(&caller));
     let calls = herdr_calls(&fixture);
     let plan = calls[0]
         .iter()
@@ -677,7 +686,7 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
             args.push("--focus");
         }
         let (caller, transcript) = herdr_call(&fixture, &args, "");
-        assert!(caller.status.success(), "{caller:?} {transcript}");
+        assert!(caller.status.success(), "{} {transcript}", printed(&caller));
         assert!(herdr_calls(&fixture)[0].iter().any(|arg| arg == expected));
     }
 
@@ -701,7 +710,7 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
         ],
         "",
     );
-    assert!(caller.status.success(), "{caller:?} {transcript}");
+    assert!(caller.status.success(), "{} {transcript}", printed(&caller));
     assert!(herdr_calls(&fixture)[0].iter().any(|arg| arg == "--focus"));
 }
 
@@ -721,10 +730,10 @@ fn a_json_start_opens_its_tab_only_from_a_terminal() {
         .env("HERDR_ENV", "1")
         .output()
         .unwrap();
-    assert!(!refused.status.success(), "{refused:?}");
+    assert!(!refused.status.success(), "{}", printed(&refused));
     assert!(!fixture.root.path().join("herdr-calls").exists());
     let (caller, transcript) = herdr_call(&fixture, &args("shown"), "");
-    assert!(caller.status.success(), "{caller:?} {transcript}");
+    assert!(caller.status.success(), "{} {transcript}", printed(&caller));
     let started: Value = serde_json::from_slice(&caller.stdout).unwrap();
     assert_eq!(
         (&started["workspace"], &started["agent"]),
@@ -747,7 +756,7 @@ fn a_json_start_opens_its_tab_only_from_a_terminal() {
         "task",
     ];
     let (caller, transcript) = herdr_call(&fixture, &background, "");
-    assert!(caller.status.success(), "{caller:?} {transcript}");
+    assert!(caller.status.success(), "{} {transcript}", printed(&caller));
     let started: Value = serde_json::from_slice(&caller.stdout).unwrap();
     assert_eq!(started["workspace"], "background", "{started}");
     assert!(!herdr_calls(&fixture)[1].iter().any(|arg| arg == "--focus"));
@@ -772,10 +781,10 @@ fn attach_previous_returns_to_the_herdr_tab_a_focused_add_opened() {
             args.push("--focus");
         }
         let (caller, transcript) = herdr_call(&fixture, &args, "");
-        assert!(caller.status.success(), "{caller:?} {transcript}");
+        assert!(caller.status.success(), "{} {transcript}", printed(&caller));
         let (worker, transcript) =
             fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
-        assert!(worker.status.success(), "{worker:?} {transcript}");
+        assert!(worker.status.success(), "{} {transcript}", printed(&worker));
     };
     // A tab opened in the background shows nothing to return to.
     add("hidden", false);
@@ -784,7 +793,11 @@ fn attach_previous_returns_to_the_herdr_tab_a_focused_add_opened() {
     add("shown", true);
     let before = herdr_calls(&fixture).len();
     let (output, transcript) = herdr_call(&fixture, &["attach", "-"], "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     assert_eq!(
         herdr_calls(&fixture)[before..],
         [vec!["tab", "focus", "w1:t9"]]
@@ -815,7 +828,7 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
     install_test_script(&shell, "#!/bin/sh\npwd > \"$HOME/shell-cwd\"\n");
     let (worker, transcript) =
         fixture.interactive_command(herdr_worker_command(&fixture).env("SHELL", shell), "");
-    assert!(worker.status.success(), "{worker:?} {transcript}");
+    assert!(worker.status.success(), "{} {transcript}", printed(&worker));
     let workspace = fixture.ok(&["status", &fixture.id("herdr-shell")]);
     assert_eq!(
         fs::read_to_string(fixture.root.path().join("shell-cwd"))
@@ -845,7 +858,7 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
             "outside" => fixture.interactive_command(&mut command, "").0,
             _ => command.output().unwrap(),
         };
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
     }
     let (help, _) = herdr_call(&fixture, &["start", "--help"], "");
     assert!(help.status.success());
@@ -860,7 +873,7 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
             &["start", fixture.repo.to_str().unwrap(), "--branch", name],
             "",
         );
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         assert!(!fixture.root.path().join("herdr-calls").exists());
     }
 }
@@ -890,7 +903,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
             .any(|arg| arg == "--close-when-done")
     );
     let (worker, _) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
-    assert!(worker.status.success(), "{worker:?}");
+    assert!(worker.status.success(), "{}", printed(&worker));
     assert_eq!(herdr_changes(&fixture).len(), 3);
     fixture.ok(&["done", &fixture.id("retain")]);
     assert_eq!(herdr_changes(&fixture).len(), 3);
@@ -948,7 +961,12 @@ fn herdr_closes_when_done_cleanup_terminates_the_agent() {
         herdr_worker_command(&fixture).env("SHOAL_TEST_BINARY", support::shoal_binary()),
         "",
     );
-    assert_eq!(worker.status.code(), Some(143), "{worker:?} {transcript}");
+    assert_eq!(
+        worker.status.code(),
+        Some(143),
+        "{} {transcript}",
+        printed(&worker)
+    );
     wait_for_herdr_close(&fixture);
     wait_until("done cleanup", || {
         fixture.ok(&["list"]).as_array().unwrap().is_empty()
@@ -983,7 +1001,7 @@ fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
     );
     assert!(caller.status.success());
     let (worker, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
-    assert!(worker.status.success(), "{worker:?} {transcript}");
+    assert!(worker.status.success(), "{} {transcript}", printed(&worker));
     wait_until("Happy execution exit", || {
         fixture.root.path().join("happy-exited").exists()
     });
@@ -1086,7 +1104,7 @@ fn herdr_removal_and_cleanup_close_the_pane_shoal_opened_without_a_watcher() {
     );
     assert!(caller.status.success());
     let (worker, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
-    assert!(worker.status.success(), "{worker:?} {transcript}");
+    assert!(worker.status.success(), "{} {transcript}", printed(&worker));
     let closes = |fixture: &Fixture| {
         herdr_calls(fixture)
             .iter()
@@ -1181,7 +1199,11 @@ fn attach_shows_a_herdr_tab_and_attaches_its_session_from_outside_herdr() {
         false => 0,
     };
     let (output, transcript) = fixture.interactive(&["attach", &fixture.id("talk")], "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     assert_eq!(
         calls_since(started),
         [
@@ -1199,7 +1221,11 @@ fn attach_shows_a_herdr_tab_and_attaches_its_session_from_outside_herdr() {
         .env("HERDR_SOCKET_PATH", socket)
         .env("HERDR_PANE_ID", "w1:p1");
     let (output, transcript) = fixture.interactive_command(&mut same, "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     assert_eq!(
         calls_since(before).last().unwrap(),
         &["tab", "focus", "w1:t4"]
@@ -1254,11 +1280,19 @@ fn attach_previous_returns_to_a_herdr_tab_an_agent_launch_left_open() {
     };
     record("other", "w1:p4");
     let (output, transcript) = fixture.interactive(&["attach", &fixture.id("other")], "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let previous = || {
         let before = herdr_calls(&fixture).len();
         let (output, transcript) = fixture.interactive(&["attach", "-"], "");
-        assert!(output.status.success(), "{output:?}\n{transcript}");
+        assert!(
+            output.status.success(),
+            "{}\n{transcript}",
+            printed(&output)
+        );
         herdr_calls(&fixture)[before..]
             .iter()
             .find(|call| call[..2] == ["tab", "focus"])
@@ -1277,7 +1311,11 @@ fn attach_previous_returns_to_a_herdr_tab_an_agent_launch_left_open() {
         "claude",
     ]);
     let (output, transcript) = fixture.terminal_command(&mut launch, "", true);
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     // The fake Herdr runs no worker to record the tab it opened.
     record("shown", "w1:p9");
     assert_eq!(previous(), "w1:t9");
@@ -1301,9 +1339,17 @@ fn attach_previous_returns_to_a_herdr_tab_after_its_client_detaches() {
             .count()
     };
     let (output, transcript) = fixture.interactive(&["attach", &fixture.id("tabbed")], "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     assert_eq!(attached(), 1);
     let (output, transcript) = fixture.interactive(&["attach", "-"], "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     assert_eq!(attached(), 2);
 }

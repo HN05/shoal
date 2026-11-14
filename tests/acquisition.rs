@@ -2,6 +2,7 @@ mod support;
 
 use serde_json::{Value, json};
 use std::{process::Output, thread};
+use support::printed;
 
 // Exercise the CLI protocol on every host without allocating real resources or simulators.
 fn acquire(kind: &str, queue: bool, json: bool, replies: Vec<Value>) -> (Output, Vec<Value>) {
@@ -68,8 +69,8 @@ fn busy() -> Value {
 }
 
 fn value(output: &Output, exit: i32) -> Value {
-    assert_eq!(output.status.code(), Some(exit), "{output:?}");
-    assert!(output.stderr.is_empty(), "{output:?}");
+    assert_eq!(output.status.code(), Some(exit), "{}", printed(output));
+    assert!(output.stderr.is_empty(), "{}", printed(output));
     serde_json::from_slice(&output.stdout).unwrap()
 }
 
@@ -86,7 +87,7 @@ fn acquisition_responses_keep_exit_codes_json_details_and_human_approval_text() 
                 })
             );
             let (output, _) = acquire(kind, false, false, vec![reply]);
-            assert_eq!(output.status.code(), Some(2), "{output:?}");
+            assert_eq!(output.status.code(), Some(2), "{}", printed(&output));
             let target = if kind == "resource" {
                 "resource workers"
             } else {

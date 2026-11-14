@@ -1,6 +1,7 @@
 mod support;
 
 use std::{fs, io::Read, os::unix::fs::PermissionsExt, process::Command};
+use support::printed;
 
 #[test]
 fn installed_scripts_preserve_literal_paths_contents_and_modes() {
@@ -17,7 +18,7 @@ fn installed_scripts_preserve_literal_paths_contents_and_modes() {
         .arg("quote ' ; $(touch injected)")
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(output.stdout, b"quote ' ; $(touch injected)");
     assert!(!root.path().join("injected").exists());
 
@@ -81,7 +82,7 @@ fn processes_ignore_launching_environment_and_allow_explicit_overrides() {
         .env("GIT_CONFIG_GLOBAL", outside.join("config.toml"))
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(fs::read_dir(outside).unwrap().count(), 1);
 }
 
@@ -132,7 +133,7 @@ fn isolation_probe() {
         .args(["config", "install", "default"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let output = support::cli(root)
         .env("SHOAL_SCOPE_TOKEN", "explicit-scope")
         .args(["config", "install", "default"])

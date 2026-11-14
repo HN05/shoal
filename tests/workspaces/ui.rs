@@ -21,7 +21,7 @@ fn setup_completion_exempts_only_the_callers_own_execution() {
         words.extend(["env", "SHOAL_COMPLETE=zsh", "_CLAP_COMPLETE_INDEX=2"]);
         words.extend([shoal, "--", "shoal", "setup", ""]);
         let output = fixture.command().args(&words[1..]).output().unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         String::from_utf8(output.stdout).unwrap()
     };
     // Spaces complete by number, described by their name.
@@ -127,7 +127,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             .env("_CLAP_COMPLETE_INDEX", "2")
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         String::from_utf8(output.stdout).unwrap()
     };
     fixture.save_stopped_command(&first);
@@ -145,7 +145,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             .env("_CLAP_COMPLETE_INDEX", (words.len() - 1).to_string())
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         String::from_utf8(output.stdout)
             .unwrap()
             .lines()
@@ -226,7 +226,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         .current_dir(cwd)
         .output()
         .unwrap();
-    assert!(names.status.success(), "{names:?}");
+    assert!(names.status.success(), "{}", printed(&names));
     assert!(
         String::from_utf8_lossy(&names.stdout)
             .lines()
@@ -373,7 +373,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
     ] {
         for args in [vec!["--json", "run"], vec!["--json", "config", "show"]] {
             let output = command(cwd, scoped, false).args(&args).output().unwrap();
-            assert!(output.status.success(), "{args:?}: {output:?}");
+            assert!(output.status.success(), "{args:?}: {}", printed(&output));
             let text = String::from_utf8(output.stdout).unwrap();
             assert!(text.contains("own-only"), "{text}");
             assert!(!text.contains("other-only"), "{text}");
@@ -382,7 +382,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
             .args(["--json", "status"])
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         let result: Value = serde_json::from_slice(&output.stdout).unwrap();
         assert_eq!(result["workspace"]["id"], own["id"]);
 
@@ -390,7 +390,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
             .args(["--", "shoal", "run", "own"])
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         assert!(
             String::from_utf8_lossy(&output.stdout)
                 .lines()
@@ -695,17 +695,17 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
             if picker && action == ["stop"] {
                 // Stop leaves the idle workspaces out of its picker, which
                 // has nothing to offer.
-                assert!(!output.status.success(), "{output:?}");
+                assert!(!output.status.success(), "{}", printed(&output));
                 assert!(!picked.exists());
                 continue;
             }
             if picker && action == ["status"] {
                 // Outside a space, status shows Shoal's own.
-                assert!(output.status.success(), "{output:?}");
+                assert!(output.status.success(), "{}", printed(&output));
                 assert!(!picked.exists());
                 continue;
             }
-            assert!(output.status.success(), "{action:?}: {output:?}");
+            assert!(output.status.success(), "{action:?}: {}", printed(&output));
             assert_eq!(picked.exists(), picker);
             if picker {
                 fs::remove_file(&picked).unwrap();
@@ -737,7 +737,7 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
                 .stderr(slave)
                 .output()
                 .unwrap();
-            assert!(!output.status.success(), "{output:?}");
+            assert!(!output.status.success(), "{}", printed(&output));
             assert!(!picked.exists());
         }
     }
@@ -753,7 +753,7 @@ fn status_without_a_target_outside_a_space_shows_shoal() {
         .current_dir(fixture.root.path())
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let status: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(status["running"], true, "{status}");
     assert!(status["daemon"]["pid"].is_u64(), "{status}");
@@ -772,7 +772,7 @@ fn log_without_a_space_shows_the_space_here_else_shoal_s() {
             .current_dir(cwd)
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         let stdout = String::from_utf8(output.stdout).unwrap();
         stdout
             .lines()
@@ -805,7 +805,7 @@ fn rename_without_arguments_picks_a_space_and_asks_for_its_name() {
     fixture.add("other");
     let id = fixture.add("topic")["id"].as_str().unwrap().to_owned();
     let (output, rows) = fixture.pick(&["rename"], &id, "Login retries\n");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.contains("other"), "{rows}");
     assert_eq!(
         fixture.ok(&["status", &id])["workspace"]["name"],
@@ -870,8 +870,8 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
         let mut transcript = String::new();
         let _ = master.read_to_string(&mut transcript);
         drop(slave);
-        assert!(output.status.success(), "{output:?}");
-        assert!(output.stderr.is_empty(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
+        assert!(output.stderr.is_empty(), "{}", printed(&output));
         let stdout = String::from_utf8(output.stdout).unwrap();
         if args[0] == "attach" {
             let attached = zmx_calls(&fixture)
@@ -923,7 +923,7 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
                 command.arg("--json");
             }
             let output = command.args(args).output().unwrap();
-            assert!(!output.status.success(), "{args:?}: {output:?}");
+            assert!(!output.status.success(), "{args:?}: {}", printed(&output));
             assert!(!picked.exists(), "{args:?}");
         }
     }
@@ -1139,7 +1139,7 @@ fn cd_previous_returns_to_the_workspace_left_and_navigates_with_json() {
         .args([support::shoal_binary(), &fixture.id("second")])
         .output()
         .unwrap();
-    assert!(scoped.status.success(), "{scoped:?}");
+    assert!(scoped.status.success(), "{}", printed(&scoped));
     assert_eq!(fs::read_to_string(&directive).unwrap(), "");
     fixture.ok(&["rm", "--wait", &fixture.id("first")]);
     let removed = cd(Path::new(&second_path), &["cd", "-"]);
@@ -1270,7 +1270,8 @@ head -n 1 "$HOME/picker-input"
     assert!(!fixture.root.path().join("picker-input").exists());
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("menu-worker"),
-        "{output:?}"
+        "{}",
+        printed(&output)
     );
 }
 
@@ -1390,7 +1391,7 @@ esac
         .arg(support::shoal_binary())
         .output()
         .unwrap();
-    assert!(!cleared.status.success(), "{cleared:?}");
+    assert!(!cleared.status.success(), "{}", printed(&cleared));
     assert!(!String::from_utf8_lossy(&cleared.stdout).contains("agent only"));
     assert_eq!(
         fixture.ok(&["alerts"]).as_array().unwrap().len(),
@@ -1406,7 +1407,7 @@ esac
         .arg(support::shoal_binary())
         .output()
         .unwrap();
-    assert!(!cleared.status.success(), "{cleared:?}");
+    assert!(!cleared.status.success(), "{}", printed(&cleared));
     assert!(!String::from_utf8_lossy(&cleared.stdout).contains("Which database?"));
     fs::remove_file(fixture.root.path().join("picker-input")).unwrap();
     let mut scoped = fixture.command();
@@ -1480,7 +1481,11 @@ esac
     let workspace = agent["id"].as_str().unwrap();
     // A request listed with another creation time is not the one shown.
     let (output, transcript) = decide(&format!("=approval:{workspace}:{id}:1"));
-    assert!(!output.status.success(), "{output:?} {transcript}");
+    assert!(
+        !output.status.success(),
+        "{} {transcript}",
+        printed(&output)
+    );
     assert_eq!(fixture.ok(&["approvals"])[0]["status"], "pending");
     let (output, transcript) = decide("approval:");
     assert!(output.status.success(), "{transcript}");
@@ -1493,7 +1498,7 @@ fn workspace_pickers_offer_all_workspaces_after_the_workspaces() {
     let fixture = Fixture::new();
     fixture.add("first");
     let (output, rows) = fixture.pick(&["leases", "hold"], "--all", "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.contains("first"), "{rows}");
     assert!(
         rows.lines()
@@ -1503,7 +1508,7 @@ fn workspace_pickers_offer_all_workspaces_after_the_workspaces() {
     );
     // Stop leaves out workspaces with nothing running.
     let (output, rows) = fixture.pick(&["stop"], "", "");
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert!(rows.is_empty(), "{rows}");
 }
 
@@ -1517,7 +1522,7 @@ fn restore_picker_describes_what_each_space_would_restore() {
     let idle_path = Path::new(idle["path"].as_str().unwrap());
     // Nothing to restore: no picker.
     let (output, rows) = fixture.pick(&["restore"], "--all", "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.is_empty(), "{rows}");
     fixture.ok(&["rm", "--wait", &fixture.id("gone"), "--yes"]);
     let gone = gone["id"].as_str().unwrap();
@@ -1525,7 +1530,7 @@ fn restore_picker_describes_what_each_space_would_restore() {
     // then the removed workspaces, by ID; idle workspaces stay out.
     fixture.save_stopped_command(&second);
     let (output, rows) = fixture.pick(&["restore"], second["id"].as_str().unwrap(), "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let rows = rows.lines().collect::<Vec<_>>();
     assert_eq!(rows.len(), 2, "{rows:?}");
     assert!(
@@ -1536,18 +1541,20 @@ fn restore_picker_describes_what_each_space_would_restore() {
     assert!(
         String::from_utf8_lossy(&output.stdout)
             .contains(&format!("Stopped commands in {} second", second["number"])),
-        "{output:?}"
+        "{}",
+        printed(&output)
     );
     // A current workspace without stopped work falls back to the picker.
     fixture.save_stopped_command(&first);
     let (output, rows) =
         fixture.pick_in(idle_path, &["restore"], first["id"].as_str().unwrap(), "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(rows.lines().count(), 2, "{rows}");
     assert!(
         String::from_utf8_lossy(&output.stdout)
             .contains(&format!("Stopped commands in {} first", first["number"])),
-        "{output:?}"
+        "{}",
+        printed(&output)
     );
     // Several workspaces restore together, each with stopped work.
     fixture.save_stopped_command(&first);
@@ -1568,7 +1575,7 @@ fn restore_picker_describes_what_each_space_would_restore() {
         second["id"].as_str().unwrap()
     );
     let (output, _) = fixture.pick(&["restore"], &picked, "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let stdout = String::from_utf8_lossy(&output.stdout);
     for workspace in [&first, &second] {
         let label = format!(
@@ -1594,13 +1601,13 @@ fn repository_commands_pick_an_omitted_repository() {
     assert!(!missing.status.success());
 
     let (output, rows) = fixture.pick(&["repo", "config"], &id, "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.starts_with(&format!("{id}\t")), "{rows:?}");
     let (output, _) = fixture.pick(&["repo", "rename"], &id, "renamed\n");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(fixture.ok(&["repo", "ls"])[0]["name"], "renamed");
     let (output, _) = fixture.pick(&["repo", "rm", "--yes"], &id, "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(fixture.ok(&["repo", "ls"]), serde_json::json!([]));
 }
 
@@ -1618,19 +1625,19 @@ fn omitted_repositories_come_from_the_current_checkout() {
             .unwrap()
     };
     let output = run(&["repo", "config"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let output = run(&["--json", "start", "--branch", "topic"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     for args in [&["start"][..], &["repo", "rename"]] {
         assert!(!run(args).status.success(), "{args:?}");
     }
     // Following the hints passes the branch and the name, not a repository.
     let repo = fixture.repo.to_str().unwrap();
     let output = run(&["--json", "start", repo, "--branch", "fresh"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
     let output = run(&["repo", "rename", repo, "renamed"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(fixture.ok(&["repo", "ls"])[0]["name"], "renamed");
 }
 
@@ -1648,7 +1655,7 @@ fn base_set_picks_a_workspace_of_the_same_repository() {
         lower,
         "",
     );
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.contains(&format!("{lower}\t")), "{rows:?}");
     assert_eq!(rows.lines().count(), 1, "{rows:?}");
     assert!(!rows.contains(foreign["id"].as_str().unwrap()));
@@ -1778,7 +1785,7 @@ fn inbox_lists_untracked_worktrees_until_they_are_adopted() {
         ])
         .output()
         .unwrap();
-    assert!(scoped.status.success(), "{scoped:?}");
+    assert!(scoped.status.success(), "{}", printed(&scoped));
     assert!(!String::from_utf8_lossy(&scoped.stdout).contains("untracked"));
 
     fixture.ok(&["adopt", stray.to_str().unwrap()]);
@@ -1917,7 +1924,7 @@ fn hold_release_picks_an_omitted_hold() {
         "demo",
         "",
     );
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.contains("demo\tdemo (show)") && rows.contains("review\t"));
     let holds = fixture.ok(&["leases", "hold", "--workspace", &fixture.id("upper")]);
     assert_eq!(holds.as_array().unwrap().len(), 1);
@@ -1930,7 +1937,7 @@ fn config_show_picks_a_workspace_outside_any_checkout() {
     let workspace = fixture.add("configured");
     let id = workspace["id"].as_str().unwrap();
     let (output, rows) = fixture.pick(&["config", "show"], id, "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.starts_with(&format!("{id}\t")), "{rows:?}");
     assert!(String::from_utf8_lossy(&output.stdout).contains("agent.default"));
 }
@@ -2088,7 +2095,7 @@ fn text_listings_lead_with_the_ids_their_commands_take() {
     let entry = queued[0]["id"].as_str().unwrap();
     let text = |args: &[&str]| {
         let output = fixture.command().arg("--text").args(args).output().unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         String::from_utf8(output.stdout).unwrap()
     };
 

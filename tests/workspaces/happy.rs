@@ -80,7 +80,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                 .env("HAPPY_RECORD", &record)
                 .output()
                 .unwrap();
-            assert!(output.status.success(), "{output:?}");
+            assert!(output.status.success(), "{}", printed(&output));
             let mut lines = output
                 .stdout
                 .split(|b| *b == b'\n')
@@ -136,8 +136,8 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                 .env("HAPPY_RECORD", &record)
                 .output()
                 .unwrap();
-            assert!(output.status.success(), "{output:?}");
-            assert_eq!(output.stderr, b"", "{output:?}");
+            assert!(output.status.success(), "{}", printed(&output));
+            assert_eq!(output.stderr, b"", "{}", printed(&output));
             let launch: Value = happy_launch(&output);
             assert_eq!(launch["workspace"]["id"], workspace["id"]);
             assert_eq!(launch["happy_daemon_recorded"], true);
@@ -252,7 +252,7 @@ fn happy_issue_prompts_reach_claude_as_arguments_and_codex_as_its_first_message(
             .env("HAPPY_RECORD", &record)
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         let launch: Value =
             serde_json::from_slice(output.stdout.split(|b| *b == b'\n').nth(1).unwrap()).unwrap();
         let name = launch["workspace"]["name"].as_str().unwrap().to_owned();
@@ -460,7 +460,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
             .env("HAPPY_RECONNECT_ENCRYPTION_VARIANT", "legacy")
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         let launch: Value = happy_launch(&output);
         let session_id = launch["happy_session_id"].as_str().unwrap().to_owned();
         assert!(session_id.starts_with("session-"));
@@ -577,7 +577,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     fs::remove_file(&happy).unwrap();
     let requests = server.state()["requests"].as_array().unwrap().len();
     let output = launch_orphan();
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert_eq!(
         server.state()["requests"].as_array().unwrap().len(),
         requests
@@ -585,7 +585,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     // An executable that cannot start fails only after seeding.
     install_test_script_with_mode(&happy, "#!/nonexistent/interpreter\n", 0o700);
     let output = launch_orphan();
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     let state = server.state();
     let methods: Vec<&str> = state["requests"]
         .as_array()
@@ -615,7 +615,7 @@ fn a_happy_codex_launch_happy_cannot_seed_is_refused_before_it_starts() {
             .env("HAPPY_RECORD", &record)
             .output()
             .unwrap();
-        assert!(!output.status.success(), "{output:?}");
+        assert!(!output.status.success(), "{}", printed(&output));
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains("logged in to Happy"), "{stderr}");
     };
@@ -653,7 +653,7 @@ fn a_happy_codex_session_that_misses_its_first_message_is_stopped() {
         .env("HAPPY_RECORD", &record)
         .output()
         .unwrap();
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     // The session ran and attached before its message was refused.
     assert!(record.exists());
     wait_until("the session to stop", || {
@@ -711,7 +711,7 @@ done
         .env("HAPPY_RECORD", &record)
         .output()
         .unwrap();
-    assert!(started.status.success(), "{started:?}");
+    assert!(started.status.success(), "{}", printed(&started));
     let started: Value = serde_json::from_slice(&started.stdout).unwrap();
     wait_until("the Happy fixture to publish its launch", || {
         record.exists()
@@ -726,7 +726,7 @@ done
     });
     fs::write(fixture.root.path().join("setup-release"), "").unwrap();
     let output = setup.wait_with_output().unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(workspace["state"], "ready");
 }
@@ -756,7 +756,7 @@ fn happy_chats_get_the_agent_token_helper_for_git() {
         .output()
         .unwrap();
 
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     wait_until("fake happy record", || record.exists());
     let recorded = fs::read_to_string(&record).unwrap();
     let git_config = recorded
@@ -801,7 +801,7 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
             .env("REX_BIN_DIR", &rex_bin)
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         let started: Value = serde_json::from_slice(&output.stdout).unwrap();
         wait_until("fake happy record", || record.exists());
         (started, fs::read_to_string(&record).unwrap())
@@ -897,7 +897,7 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
 /// The launch report of a start whose agent Happy took over, its last
 /// line, as opposed to a queue entry.
 fn happy_launch(output: &Output) -> Value {
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(output));
     let stdout = String::from_utf8_lossy(&output.stdout);
     let launch: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
     assert!(launch.get("happy_daemon_recorded").is_some(), "{stdout}");
@@ -998,7 +998,7 @@ fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let stdout = String::from_utf8(output.stdout).unwrap();
     let entry: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
     assert_eq!(entry["state"], "queued", "{stdout}");

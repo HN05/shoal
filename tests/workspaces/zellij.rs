@@ -106,7 +106,7 @@ impl ZellijServer {
                 .current_dir(&fixture.repo)
                 .args(["attach", "--create-background", "caller"]),
         );
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
     }
 
     /// Wait until the client shows the user's session, which Shoal opens
@@ -217,7 +217,11 @@ impl ZellijServer {
         if reported_missing(&output) {
             return None;
         }
-        assert!(output.status.success(), "zellij list-clients: {output:?}");
+        assert!(
+            output.status.success(),
+            "zellij list-clients: {}",
+            printed(&output)
+        );
         let clients = String::from_utf8_lossy(&output.stdout)
             .lines()
             .skip(1)
@@ -249,9 +253,13 @@ impl ZellijServer {
         if reported_missing(&output) || output.stdout.trim_ascii().is_empty() {
             return None;
         }
-        assert!(output.status.success(), "zellij list-panes: {output:?}");
+        assert!(
+            output.status.success(),
+            "zellij list-panes: {}",
+            printed(&output)
+        );
         let panes: Value = serde_json::from_slice(&output.stdout)
-            .unwrap_or_else(|error| panic!("zellij list-panes: {error}: {output:?}"));
+            .unwrap_or_else(|error| panic!("zellij list-panes: {error}: {}", printed(&output)));
         let panes = panes
             .as_array()?
             .iter()
@@ -313,7 +321,7 @@ impl ZellijServer {
             .args(["--session", "caller", "action", "write", "--pane-id", USERS])
             .args(line.bytes().map(|byte| byte.to_string()));
         let output = support::run::output(&mut write);
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
     }
 
     /// What Zellij shows of the user's session: its client, its panes, the
@@ -526,7 +534,7 @@ fn add_inside(fixture: &Fixture, zellij: &mut ZellijServer, workspace: &str) {
         ),
         "",
     );
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     wait_for_agent(fixture, workspace);
 }
 
@@ -613,7 +621,7 @@ fn zellij_off_leaves_launches_from_its_panes_to_zmx() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     let zmx_calls = fs::read_to_string(fixture.root.path().join("zmx-calls")).unwrap_or_default();
     assert!(zmx_calls.contains("attach"), "{zmx_calls} {transcript}");
     assert_eq!(zellij.panes("caller").len(), 1);
@@ -694,7 +702,7 @@ impl ZellijServer {
             "--name",
             name,
         ]));
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         wait_for("the new tab to show", || {
             self.listed_panes("caller")?
                 .into_iter()
@@ -776,7 +784,7 @@ fn demos_open_in_sessions_of_their_own_outside_zellij_and_take_input() {
                 .arg("demo")
                 .args(args),
         );
-        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
     demo(&[

@@ -370,7 +370,7 @@ fn migrate_moves_workspaces_into_a_saved_root() {
     let output = fixture.run(&["move", "root", "~/moved", "--yes"]);
     inside.kill().unwrap();
     inside.wait().unwrap();
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert!(!fixture.run(&["move", "root", "~/moved"]).status.success());
     assert!(old.exists());
 
@@ -1161,7 +1161,8 @@ fn repository_removal_serializes_with_workspace_creation() {
     if !add.status.success() {
         assert!(
             String::from_utf8_lossy(&add.stderr).contains("repository"),
-            "unexpected add failure: {add:?}"
+            "unexpected add failure: {}",
+            printed(&add)
         );
     }
     assert!(fixture.ok(&["repo", "ls"]).as_array().unwrap().is_empty());
@@ -1319,7 +1320,7 @@ fn repository_setup_starts_a_setup_agent_on_the_setup_branch() {
             .unwrap()
     };
     let output = setup();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 
     // The agent works in a workspace on the setup branch, in setup mode.
     let workspace = &fixture.ok(&["status", &fixture.id("shoal-setup")])["workspace"];
@@ -1345,7 +1346,7 @@ fn repository_setup_starts_a_setup_agent_on_the_setup_branch() {
 
     // A later setup reopens the same workspace.
     let output = setup();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 }
 
@@ -1381,7 +1382,7 @@ fn repository_setup_starts_its_agent_past_max_agents() {
         .args(["repo", "setup", repo, "--agent", "claude", "--here"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     // The setup agent ran instead of waiting for the first agent's slot.
     assert!(!chat_args(&fixture).is_empty());
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
@@ -1400,7 +1401,7 @@ fn repository_setup_refuses_named_arguments_before_any_picker() {
         &["repo", "setup", repo, "--agent", "missing-agent"],
     ] {
         let (output, rows) = fixture.pick(args, "1", "");
-        assert!(!output.status.success(), "{args:?}: {output:?}");
+        assert!(!output.status.success(), "{args:?}: {}", printed(&output));
         assert!(rows.is_empty(), "{args:?} opened the picker: {rows}");
     }
 }

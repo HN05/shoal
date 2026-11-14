@@ -136,7 +136,7 @@ fn restore_refuses_focus_without_one_agent_before_reopening() {
     fixture.ok(&["rm", "--wait", &fixture.id("gone"), "--yes"]);
     // Its removal saved no agent, so --focus has none to restore.
     let refused = fixture.run(&["restore", &fixture.id("gone"), "--focus"]);
-    assert!(!refused.status.success(), "{refused:?}");
+    assert!(!refused.status.success(), "{}", printed(&refused));
     let listed = fixture.ok(&["restore"]);
     assert_eq!(listed["removed"][0]["name"], "gone", "{listed}");
 }
@@ -224,7 +224,7 @@ fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoi
     fixture.ok(&["rm", "--wait", &fixture.id("kept"), "--yes"]);
 
     let (output, rows) = fixture.pick(&["restore"], picked["id"].as_str().unwrap(), "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let rows = rows.lines().collect::<Vec<_>>();
     assert_eq!(rows.len(), 2, "{rows:?}");
     assert!(
@@ -244,7 +244,7 @@ fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoi
     fixture.ok(&["checkpoint", &fixture.id("picked"), "--name", "draft"]);
     fs::write(path.join("notes"), "rewritten\n").unwrap();
     let (output, rows) = fixture.pick(&["restore", &fixture.id("picked"), "--checkpoint"], "2", "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let rows = rows.lines().collect::<Vec<_>>();
     assert_eq!(rows.len(), 2, "{rows:?}");
     assert!(rows[1].starts_with("2\t"), "{rows:?}");
@@ -379,7 +379,7 @@ fn restoring_a_removed_workspace_without_agents_keeps_them_for_a_later_restore()
     let restored = removed
         .fixture
         .run(&["restore", &removed.fixture.id("removed"), "--focus"]);
-    assert!(restored.status.success(), "{restored:?}");
+    assert!(restored.status.success(), "{}", printed(&restored));
     assert!(removed.path.join("resumed").exists());
     assert!(removed.saved(&reopened).is_empty());
 }
@@ -678,7 +678,7 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
     fixture.add("parent");
     fixture.add("other");
     let split = scoped_command(&fixture, "parent", &["split", "child"]);
-    assert!(split.status.success(), "{split:?}");
+    assert!(split.status.success(), "{}", printed(&split));
     // The split was interrupted before the child's setup started.
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
@@ -692,12 +692,12 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
             "parent",
             &["rm", "--wait", &fixture.id(name), "--yes"],
         );
-        assert!(!output.status.success(), "{name}: {output:?}");
+        assert!(!output.status.success(), "{name}: {}", printed(&output));
     }
     // A held child asks for the user_holds permission: a batch naming it
     // removes none.
     let held = scoped_command(&fixture, "parent", &["split", "held"]);
-    assert!(held.status.success(), "{held:?}");
+    assert!(held.status.success(), "{}", printed(&held));
     fixture.ok(&[
         "acquire",
         "hold",
@@ -717,7 +717,7 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
             "--yes",
         ],
     );
-    assert!(!refused.status.success(), "{refused:?}");
+    assert!(!refused.status.success(), "{}", printed(&refused));
     assert_eq!(
         fixture.ok(&["status", &fixture.id("child")])["workspace"]["state"],
         "preparing"
@@ -727,9 +727,9 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
         "parent",
         &["rm", "--wait", &fixture.id("child"), "--yes"],
     );
-    assert!(removed.status.success(), "{removed:?}");
+    assert!(removed.status.success(), "{}", printed(&removed));
     let again = scoped_command(&fixture, "parent", &["split", "child"]);
-    assert!(again.status.success(), "{again:?}");
+    assert!(again.status.success(), "{}", printed(&again));
     assert_eq!(
         fixture.ok(&["status", &fixture.id("child")])["workspace"]["parent"]["name"],
         "parent"
@@ -1047,7 +1047,7 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
     ] {
         fs::write(fixture.root.path().join("git-failure"), failure).unwrap();
         let output = fixture.run(&args);
-        assert!(!output.status.success(), "{args:?}: {output:?}");
+        assert!(!output.status.success(), "{args:?}: {}", printed(&output));
         let error = String::from_utf8_lossy(&output.stderr);
         assert!(
             error.contains("injected Git predicate failure"),
@@ -1090,7 +1090,7 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         expected
     );
     let empty = fixture.run(&["release", "--workspace", &fixture.id("held")]);
-    assert!(!empty.status.success(), "{empty:?}");
+    assert!(!empty.status.success(), "{}", printed(&empty));
     assert_eq!(
         fixture.ok(&["leases", "hold", "--workspace", &fixture.id("held")]),
         expected
@@ -1115,7 +1115,7 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         fixture.run(&command)
     };
     let listed = scoped(&["leases", "hold"]);
-    assert!(listed.status.success(), "{listed:?}");
+    assert!(listed.status.success(), "{}", printed(&listed));
     assert_eq!(
         serde_json::from_slice::<Value>(&listed.stdout).unwrap(),
         expected
@@ -1130,10 +1130,11 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         "--reason",
         "Keep my notes",
     ]);
-    assert_eq!(requested.status.code(), Some(2), "{requested:?}");
+    assert_eq!(requested.status.code(), Some(2), "{}", printed(&requested));
     assert!(
-        format!("{requested:?}").contains("approval_pending"),
-        "{requested:?}"
+        format!("{}", printed(&requested)).contains("approval_pending"),
+        "{}",
+        printed(&requested)
     );
     let release = scoped(&["release", "hold", "--name", "app-thread"]);
     assert!(!release.status.success());

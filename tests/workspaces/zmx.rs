@@ -60,7 +60,11 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
         "--agent",
         "claude",
     ]));
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let calls = zmx_calls(&fixture);
     assert_eq!(calls[0], ["list"]);
     let labels = format!("shoal.workspace={id}");
@@ -102,7 +106,11 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
         "--agent",
         "claude",
     ]));
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let attaches = |calls: Vec<Vec<String>>| calls.into_iter().filter(|call| call[0] == "attach");
     assert_eq!(
         attaches(zmx_calls(&fixture)).next_back().unwrap()[3],
@@ -119,7 +127,11 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
         "--agent",
         "claude",
     ]));
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let output = fixture.run(&[
         "start",
         "--in",
@@ -128,7 +140,7 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
         "--agent",
         "claude",
     ]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     // Watching sessions lists them on its own schedule, so only the other
     // calls are counted. The execution tells its session apart from a later
     // one under the name, and neither run opens a session.
@@ -173,7 +185,11 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     wait_until("the detached agent's result", || {
         runs() == "background tracked go\n"
     });
@@ -227,7 +243,11 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let calls = zmx_calls(&fixture);
     let attach = calls.iter().rfind(|call| call[0] == "attach").unwrap();
     assert_eq!(attach[..2], ["attach", "--labels"]);
@@ -244,7 +264,11 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let workspace = fixture.ok(&["status", &fixture.id("shell-here")]);
     assert_eq!(
         fs::read_to_string(&directive).unwrap().trim(),
@@ -268,7 +292,11 @@ fn background_add_without_an_agent_opens_the_workspace_shell_in_its_session() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     wait_until("the detached workspace shell", || {
         fs::read_to_string(home.join("shell-cwd")).is_ok_and(|cwd| !cwd.is_empty())
     });
@@ -327,7 +355,11 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let calls = zmx_calls(&fixture);
     for (name, id, execution) in &expected {
         assert!(
@@ -376,7 +408,11 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let calls = zmx_calls(&fixture);
     assert!(calls.iter().all(|call| call[0] != "attach"), "{calls:?}");
     let send = calls
@@ -438,7 +474,11 @@ fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     // The watcher has the daemon close the session Shoal recorded creating.
     let watched = || fs::read_to_string(home.join("zmx-calls")).unwrap_or_default();
     let ended = try_wait_for(|| {
@@ -474,7 +514,11 @@ fn a_detached_session_stays_open_without_close_when_done() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let calls = zmx_calls(&fixture);
     let sent = calls
         .iter()
@@ -510,7 +554,11 @@ fn a_detached_session_ends_with_its_agent_whatever_its_exit() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     wait_until("the detached agent environment", || {
         fs::read_to_string(home.join("agent-env")).is_ok_and(|env| env == "unset\n")
     });
@@ -553,7 +601,11 @@ fn an_idle_codex_with_updates_is_prompted_in_its_zmx_session() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let sent: Vec<_> = zmx_calls(&fixture)
         .into_iter()
         .filter(|call| call[0] == "send")
@@ -590,7 +642,11 @@ fn zmx_agent_exit_resets_input_modes_for_the_calling_shell() {
             "claude",
         ]);
     let (output, transcript) = fixture.terminal_command(&mut command, "", true);
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let enabled = transcript.rfind("\x1b[?1000h").unwrap();
     let disabled = transcript.rfind("\x1b[?1000l").unwrap();
     assert!(disabled > enabled, "zmx leaked mouse reporting mode");
@@ -707,12 +763,16 @@ fn attach_selects_a_session_of_the_workspace() {
     let persist = agent_in_session(&fixture, "persist", "persist");
     let other = agent_in_session(&fixture, "other", "other");
     let (output, transcript) = fixture.interactive(&["attach", &fixture.id("persist")], "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     assert_eq!(attached(), ["attach", "persist"]);
     // The picker leaves out a workspace without a session.
     let idle = fixture.add("idle");
     let (output, rows) = fixture.pick(&["attach"], workspace["id"].as_str().unwrap(), "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let rows = rows.lines().collect::<Vec<_>>();
     assert_eq!(rows.len(), 2, "{rows:?}");
     let idle = idle["id"].as_str().unwrap();
@@ -744,11 +804,19 @@ fn attach_previous_returns_to_the_session_last_detached_from() {
             .unwrap()
     };
     let (output, transcript) = fixture.interactive(&["attach", &fixture.id("other")], "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     // A session that ends while attached is not one to return to.
     fs::write(home.join("zmx-attach-ends-session"), "").unwrap();
     let (output, transcript) = fixture.interactive(&["attach", &fixture.id("persist")], "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     fs::remove_file(home.join("zmx-attach-ends-session")).unwrap();
     fs::write(
         home.join("zmx-sessions"),
@@ -756,7 +824,11 @@ fn attach_previous_returns_to_the_session_last_detached_from() {
     )
     .unwrap();
     let (output, transcript) = fixture.interactive(&["attach", "-"], "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     assert_eq!(attached(), ["attach", "other"]);
     drop((persist, other));
 }
@@ -777,7 +849,11 @@ fn attach_previous_returns_to_a_running_chat() {
     });
     let previous = || {
         let (output, transcript) = fixture.interactive(&["attach", "-"], "");
-        assert!(output.status.success(), "{output:?}\n{transcript}");
+        assert!(
+            output.status.success(),
+            "{}\n{transcript}",
+            printed(&output)
+        );
         zmx_calls(&fixture)
             .into_iter()
             .rfind(|call| call[0] == "attach")
@@ -785,7 +861,11 @@ fn attach_previous_returns_to_a_running_chat() {
     };
     for target in ["persist", "talk"] {
         let (output, transcript) = fixture.interactive(&["attach", &fixture.id(target)], "");
-        assert!(output.status.success(), "{output:?}\n{transcript}");
+        assert!(
+            output.status.success(),
+            "{}\n{transcript}",
+            printed(&output)
+        );
     }
     assert_eq!(previous(), ["attach", "chat"]);
     // A chat whose agent exited is passed over, as a removed workspace is.
@@ -806,7 +886,11 @@ fn attach_previous_returns_to_a_session_an_agent_launch_left_running() {
     fs::write(home.join("zmx-sessions"), &listed).unwrap();
     let other = agent_in_session(&fixture, "other", "other");
     let (output, transcript) = fixture.interactive(&["attach", &fixture.id("other")], "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     // An agent launched here runs in a new session this terminal attaches
     // to, which outlives the detach.
     install_test_script(home.join("bin/claude"), "#!/bin/sh\nexit 0\n");
@@ -821,13 +905,21 @@ fn attach_previous_returns_to_a_session_an_agent_launch_left_running() {
         "claude",
     ]);
     let (output, transcript) = fixture.terminal_command(&mut launch, "", true);
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     fs::remove_file(home.join("zmx-attach-detaches")).unwrap();
     fs::write(home.join("zmx-sessions"), &listed).unwrap();
     // Its workspace's agent, started once the launch's ended, runs there.
     let launched = agent_in_session(&fixture, "launched", "launched");
     let (output, transcript) = fixture.interactive(&["attach", "-"], "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     let attached = zmx_calls(&fixture)
         .into_iter()
         .rfind(|call| call[0] == "attach")
@@ -865,11 +957,15 @@ fn attach_reaches_a_session_shoal_opened_for_a_workspace_without_an_agent() {
             .unwrap()
     };
     let (output, transcript) = fixture.interactive(&["attach", &fixture.id("failed")], "");
-    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     assert_eq!(attached(), ["attach", "failed"]);
     // The picker offers the workspace whose session is open, and only it.
     let (output, rows) = fixture.pick(&["attach"], workspace["id"].as_str().unwrap(), "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let rows = rows.lines().collect::<Vec<_>>();
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert_eq!(attached(), ["attach", "failed"]);
@@ -1003,7 +1099,7 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
             .unwrap()
     };
     let output = start(&[]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert!(
         !fixture
             .run(&["status", &fixture.id("no-zmx")])
@@ -1011,5 +1107,5 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
             .success()
     );
     let output = start(&["--here"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 }

@@ -23,7 +23,7 @@ fn removal_and_cleanup_leave_a_session_the_user_opened() -> anyhow::Result<()> {
             "claude",
         ])
         .output()?;
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let sessions = fs::read_to_string(home.join("zmx-sessions"))?;
     assert!(sessions.contains("shoal.workspace="), "{sessions}");
     assert!(!sessions.contains("shoal.created="), "{sessions}");
@@ -177,7 +177,8 @@ fn assert_failed_labelling_refuses_launches(
         let (output, transcript) = fixture.interactive_command(&mut command, "");
         assert!(
             !output.status.success(),
-            "{args:?}: {output:?} {transcript}"
+            "{args:?}: {} {transcript}",
+            printed(&output)
         );
         assert!(!fixture.root.path().join("new-agent-started").exists());
         assert_eq!(fs::read_to_string(&recovery)?, saved);
@@ -333,7 +334,7 @@ fn zmx_reassignment_waits_for_another_states_verified_close() -> anyhow::Result<
             "claude",
         ])
         .output()?;
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let other = Fixture::new();
     other.add("new-owner");
     install_test_script(other.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
@@ -500,7 +501,7 @@ fn removals_refuse_to_end_the_zmx_session_they_run_in() -> anyhow::Result<()> {
             "--yes",
         ],
     )?;
-    assert!(removal.status.success(), "{removal:?}");
+    assert!(removal.status.success(), "{}", printed(&removal));
     Ok(())
 }
 
@@ -517,7 +518,7 @@ fn removals_from_a_pane_split_off_a_recorded_pane_go_on() -> anyhow::Result<()> 
     assert!(caller.status.success());
     // The worker records the pane Shoal opened, which removal closes alone.
     let (worker, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
-    assert!(worker.status.success(), "{worker:?} {transcript}");
+    assert!(worker.status.success(), "{} {transcript}", printed(&worker));
     let export = |pane: &str| {
         fixture
             .command()
@@ -529,10 +530,10 @@ fn removals_from_a_pane_split_off_a_recorded_pane_go_on() -> anyhow::Result<()> 
     };
     let refused = export("w1:p9")?;
     assert!(!refused.status.success());
-    assert!(refused.stdout.is_empty(), "{refused:?}");
+    assert!(refused.stdout.is_empty(), "{}", printed(&refused));
     // A pane the user split off the tab stays open, and keeps its stream.
     let exported = export("w1:p9.2")?;
-    assert!(exported.status.success(), "{exported:?}");
+    assert!(exported.status.success(), "{}", printed(&exported));
     assert!(exported.stdout.starts_with(b"shoal workspace 1\n"));
     Ok(())
 }

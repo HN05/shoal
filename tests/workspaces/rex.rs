@@ -74,7 +74,11 @@ impl RexServer {
 
     fn json(&self, args: &[&str]) -> Value {
         let output = self.rex(args);
-        assert!(output.status.success(), "rex {args:?}: {output:?}");
+        assert!(
+            output.status.success(),
+            "rex {args:?}: {}",
+            printed(&output)
+        );
         serde_json::from_slice(&output.stdout).unwrap()
     }
 
@@ -154,7 +158,7 @@ impl RexServer {
             fixture.root.path().join("state").display()
         );
         let output = self.rex(&["send", "-b", block, &line]);
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
     }
 }
 
@@ -203,7 +207,7 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
         ),
         "",
     );
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     // The window's shell runs the add worker, which runs the agent in place.
     // The wrapper records its place once its execution registers, so wait
     // for the session itself.
@@ -272,7 +276,7 @@ fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
             ),
             "",
         );
-        assert!(output.status.success(), "{output:?} {transcript}");
+        assert!(output.status.success(), "{} {transcript}", printed(&output));
     };
     launch(&["start", repo, "--branch", "placed", "--agent", "pi"]);
     wait_until("setup to finish with the agent running", || {
@@ -392,7 +396,7 @@ fn demos_fall_back_to_the_configured_session_and_take_input() {
             )
             .output()
             .unwrap();
-        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
     // The block that starts it is in a session that is gone, so the demo
@@ -498,11 +502,19 @@ fn a_workspace_whose_block_is_gone_has_no_session_to_attach() {
         )
     };
     let (attached, transcript) = attach();
-    assert!(attached.status.success(), "{attached:?} {transcript}");
+    assert!(
+        attached.status.success(),
+        "{} {transcript}",
+        printed(&attached)
+    );
     assert!(rex.block_open(&block));
     assert!(rex.rex(&["block", "close", &block]).status.success());
     let (refused, transcript) = attach();
-    assert!(!refused.status.success(), "{refused:?} {transcript}");
+    assert!(
+        !refused.status.success(),
+        "{} {transcript}",
+        printed(&refused)
+    );
 }
 
 #[test]
@@ -543,7 +555,7 @@ fn a_zmx_session_started_from_a_rex_block_with_rex_off_leaves_the_block_alone() 
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     let zmx_calls = fs::read_to_string(fixture.root.path().join("zmx-calls")).unwrap_or_default();
     assert!(zmx_calls.contains("attach"), "{zmx_calls} {transcript}");
     fixture.ok(&["rm", "--wait", &fixture.id("plain"), "--yes"]);

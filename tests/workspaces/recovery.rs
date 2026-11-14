@@ -41,7 +41,7 @@ fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
         execution,
         "--focus",
     ]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(
         fs::read_to_string(path.join("restored")).unwrap(),
         "restored"
@@ -199,10 +199,10 @@ fn daemon_stop_and_signals_stop_tracked_agents() {
     // down until `shoal restore`.
     let agent = start(&fixture);
     let output = fixture.run(&["daemon", "stop"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(fixture.daemon.child.wait().unwrap().success());
     let output = agent.wait_with_output().unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let stopped = saved();
     assert!(
         !stopped.is_empty()
@@ -220,7 +220,7 @@ fn daemon_stop_and_signals_stop_tracked_agents() {
     );
     assert!(fixture.daemon.child.wait().unwrap().success());
     let output = agent.wait_with_output().unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let saved = saved();
     assert!(
         saved
@@ -589,7 +589,7 @@ fn adopting_a_workspace_path_again_reclaims_its_unverifiable_worktree() {
         .args(["adopt", path_arg])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(fs::read_to_string(&directive).unwrap().trim(), path_arg);
     let reclaimed = fixture.ok(&["status", &fixture.id("reclaimed")])["workspace"].clone();
     assert_eq!(reclaimed["id"], workspace["id"]);

@@ -100,7 +100,7 @@ fn add_issue_takes_the_repository_of_the_current_checkout_or_workspace() {
             .env("PATH", &path)
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         serde_json::from_str::<Value>(
             String::from_utf8_lossy(&output.stdout)
                 .lines()
@@ -135,7 +135,7 @@ fn an_agent_splits_copies_of_its_own_workspace_only() {
         ),
     ] {
         let split = scoped_command(&fixture, "parent", args);
-        assert!(split.status.success(), "{args:?}: {split:?}");
+        assert!(split.status.success(), "{args:?}: {}", printed(&split));
         let child: Value = serde_json::from_slice(&split.stdout).unwrap();
         assert_eq!(child["branch"].as_str(), branch, "{child}");
         assert_eq!(
@@ -151,7 +151,7 @@ fn an_agent_splits_copies_of_its_own_workspace_only() {
         "parent",
         &["split", "--copy", &fixture.id("other")],
     );
-    assert!(!refused.status.success(), "{refused:?}");
+    assert!(!refused.status.success(), "{}", printed(&refused));
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 4);
 }
 
@@ -207,7 +207,7 @@ fn setup_commands_cannot_recursively_run_setup() {
     .unwrap();
 
     let output = fixture.run(&["setup", &fixture.id("worker")]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
 }
 
 #[test]
@@ -233,10 +233,11 @@ fn setup_continues_after_the_cli_that_started_it_exits() {
     // The CLI shows what setup writes, as it did when it ran setup itself.
     fs::write(&release, "").unwrap();
     let output = fixture.run(&["--json", "start", repo, "--branch", "quick"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("preparing"),
-        "{output:?}"
+        "{}",
+        printed(&output)
     );
     fs::remove_file(&release).unwrap();
     let mut add = fixture
@@ -308,7 +309,7 @@ fn an_operation_keeps_its_scope_after_the_execution_that_started_it_ends() {
         "-c",
         &command,
     ]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     fs::write(&release, "").unwrap();
     wait_until("the post-setup hook to run", || {
         path.join("post-setup-ran").exists()
@@ -485,7 +486,7 @@ fn add_base_accepts_branches_tags_commits_and_revision_expressions() {
         assert_eq!(workspace["base_ref"], serde_json::json!(reference));
         fs::write(path.join("tracked"), "workspace change\n").unwrap();
         let output = fixture.run(&["diff", &fixture.id(&name)]);
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         let diff = String::from_utf8(output.stdout).unwrap();
         assert!(diff.contains("workspace change"));
         assert!(!diff.contains("source-only"));
@@ -573,7 +574,7 @@ printf '%s' "$SHOAL_WORKSPACE" > setup-workspace
         .env("SHOAL_TEST_BIN", support::shoal_binary())
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(workspace["state"], "ready");
     assert!(String::from_utf8_lossy(&output.stderr).contains("setup output"));
@@ -832,7 +833,7 @@ pub(super) fn fail_setup(fixture: &Fixture, branch: &str) -> PathBuf {
     // Without a terminal its preparation queues the agent, so no follower
     // leaves it waiting.
     let output = fixture.run(&["start", repo, "--branch", branch, "--agent", "waiter"]);
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     let failed = &fixture.ok(&["status", &fixture.id(branch)])["workspace"];
     assert_eq!(failed["state"], "failed", "{failed}");
     let path = PathBuf::from(failed["path"].as_str().unwrap());
@@ -900,7 +901,7 @@ fn resume_with_focus_runs_the_agent_waiting_for_a_failed_setup_here() {
         "--permission",
         "push=deny",
     ]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(path.join("agent-started").exists());
     let status = fixture.ok(&["status", &fixture.id("failing")]);
     assert_eq!(status["workspace"]["narrowing"]["push"], "deny", "{status}");
@@ -930,7 +931,7 @@ fn resume_checks_every_target_before_it_retries_a_failed_setup() {
     // A workspace with nothing to resume refuses the selection.
     fixture.ok(&["start", repo, "--branch", "plain", "--skip-setup"]);
     let mixed = fixture.run(&["restore", &fixture.id("failing"), &fixture.id("plain")]);
-    assert!(!mixed.status.success(), "{mixed:?}");
+    assert!(!mixed.status.success(), "{}", printed(&mixed));
     let kept = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
     assert_eq!(kept["state"], "failed", "{kept}");
 }
@@ -1174,8 +1175,8 @@ Path('setup-result').write_text('complete')
         // output, as the message says: stop, then skip the failed setup.
         let stopped = fixture.run(&["stop", &fixture.id("survivor"), "--yes"]);
         let skipped = fixture.run(&["setup", &fixture.id("survivor"), "--skip"]);
-        assert!(stopped.status.success(), "{stopped:?}");
-        assert!(skipped.status.success(), "{skipped:?}");
+        assert!(stopped.status.success(), "{}", printed(&stopped));
+        assert!(skipped.status.success(), "{}", printed(&skipped));
         assert_eq!(
             fixture.ok(&["status", &fixture.id("survivor")])["workspace"]["state"],
             "ready"
@@ -1391,7 +1392,7 @@ fn add_from_issue_reads_the_forge_and_passes_context_to_agents() {
         .env("PATH", fixture.restricted_path(&bin))
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let custom = serde_json::from_slice::<Value>(&output.stdout).unwrap();
     assert_eq!(custom["branch"], "custom-issue-name");
     assert_eq!(custom["name"], title);
@@ -1547,7 +1548,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
             .env("AGENT_ARGS", &agent_args)
             .output()
             .unwrap();
-        assert!(output.status.success(), "{output:?}");
+        assert!(output.status.success(), "{}", printed(&output));
         let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
         assert_eq!(workspace["name"], "Create workspace");
         assert_eq!(workspace["branch"], format!("{number}-create-workspace"));
@@ -1573,7 +1574,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         .env("AGENT_ARGS", &agent_args)
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(!agent_args.exists());
 }
 
@@ -1587,7 +1588,11 @@ fn issue_number_picks_a_repository_before_lookup_interactively() {
     install_test_script(bin.join("fzf"), "#!/bin/sh\nhead -n 1\n");
     // The scripted forge has no such issue, so the lookup fails after the pick.
     let (output, transcript) = fixture.interactive(&["start", "103", "--base", "HEAD"], "");
-    assert!(!output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        !output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
     assert!(
         transcript.contains("GET repos/team/project/issues/103"),
         "{transcript}"
@@ -1657,7 +1662,8 @@ fn issue_lookup_errors_never_create_a_workspace() {
         assert!(!output.status.success());
         assert!(
             String::from_utf8_lossy(&output.stderr).contains(diagnostic),
-            "{output:?}"
+            "{}",
+            printed(&output)
         );
         assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
     }
@@ -1750,7 +1756,8 @@ esac
         assert!(!output.status.success(), "{args:?}");
         assert!(
             String::from_utf8_lossy(&output.stderr).contains(diagnostic),
-            "{output:?}"
+            "{}",
+            printed(&output)
         );
         assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
     }
@@ -1925,7 +1932,7 @@ fn interactive_add_picks_an_open_issue_or_pull_request() {
         )
     };
     let (output, transcript) = add("Use an issue", "34");
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     let issue = fixture.ok(&["status", &fixture.id("Fix API timeout")]);
     assert_eq!(
         issue["issues"][0]["url"],
@@ -1933,7 +1940,7 @@ fn interactive_add_picks_an_open_issue_or_pull_request() {
     );
     // The PR's head branch belongs to a workspace, which reopens.
     let (output, transcript) = add("Use a pull request", "7");
-    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
     assert_eq!(
         fs::read_to_string(&directive).unwrap().trim(),
         fixture.ok(&["status", &fixture.id("topic")])["workspace"]["path"]
@@ -2024,7 +2031,11 @@ fn a_new_workspace_is_named_by_name_else_its_issue_else_its_branch() {
         let output = fixture.run(&[
             "start", repo, "--branch", "refused", "--base", "HEAD", "--name", refused,
         ]);
-        assert!(!output.status.success(), "{refused:?}");
+        assert!(
+            !output.status.success(),
+            "{refused:?}: {}",
+            printed(&output)
+        );
     }
 }
 
@@ -2359,7 +2370,7 @@ fn split_without_a_branch_creates_a_workspace_at_a_commit() {
         .args(["--json", "split", "--no-branch"])
         .output()
         .unwrap();
-    assert!(top.status.success(), "{top:?}");
+    assert!(top.status.success(), "{}", printed(&top));
     let top: Value = serde_json::from_slice(&top.stdout).unwrap();
     assert_eq!(top["name"], format!("main at {short}"));
     assert_eq!(top["branch"], Value::Null);
@@ -2478,6 +2489,6 @@ fn branch_only_commands_refuse_a_workspace_at_a_commit() {
     }
     // What needs no branch works there.
     let output = run(&["run", "--", "git", "rev-parse", "HEAD"]);
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert!(fixture.run(&["diff", &fixture.id(&name)]).status.success());
 }

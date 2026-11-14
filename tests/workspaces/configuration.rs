@@ -203,7 +203,7 @@ fn inline_repository_config_resolves_relative_paths_in_the_callers_directory() {
         ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let result: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(
         result["config"],
@@ -728,14 +728,14 @@ fn agents_git_over_https_uses_the_hosts_agent_token() {
         fill,
     ]);
 
-    assert!(agent.status.success(), "{agent:?}");
+    assert!(agent.status.success(), "{}", printed(&agent));
     let stdout = String::from_utf8(agent.stdout).unwrap();
     assert!(stdout.contains("password=agenttoken\n"), "{stdout}");
     assert_eq!(
         fs::read_to_string(&saved).unwrap(),
         "https://me:usertoken@git.example.com\n"
     );
-    assert!(other.status.success(), "{other:?}");
+    assert!(other.status.success(), "{}", printed(&other));
     let stdout = String::from_utf8(other.stdout).unwrap();
     assert!(stdout.contains("password=usertoken\n"), "{stdout}");
 }

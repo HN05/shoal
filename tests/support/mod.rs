@@ -16,6 +16,10 @@ pub mod run;
 pub mod wait;
 pub mod zmx;
 
+// Each test binary uses its own subset of support, this included.
+#[allow(unused_imports)]
+pub use shoal_core::test_support::printed;
+
 use std::{
     ffi::OsStr,
     fs,

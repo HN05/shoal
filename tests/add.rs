@@ -1,6 +1,6 @@
 mod support;
 
-use support::prompt;
+use support::{printed, prompt};
 
 use serde_json::{Value, json};
 use std::{
@@ -27,7 +27,11 @@ fn an_issue_numbered_zero_is_refused_before_any_request() {
             .stdin(Stdio::null())
             .output()
             .unwrap();
-        assert!(daemon.methods().is_empty(), "{args:?}: {output:?}");
+        assert!(
+            daemon.methods().is_empty(),
+            "{args:?}: {}",
+            printed(&output)
+        );
         assert!(!output.status.success(), "{args:?}");
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains("must be positive"), "{args:?}: {stderr}");
@@ -121,9 +125,9 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             .stdin(Stdio::null())
             .output()
             .unwrap();
-        assert_eq!(daemon.methods(), expected, "{args:?}: {output:?}");
+        assert_eq!(daemon.methods(), expected, "{args:?}: {}", printed(&output));
         assert!(!output.status.success(), "{args:?}");
-        assert!(output.stdout.is_empty(), "{args:?}: {output:?}");
+        assert!(output.stdout.is_empty(), "{args:?}: {}", printed(&output));
         let error: Value = serde_json::from_slice(&output.stderr).unwrap();
         assert_eq!(error["error"]["code"], "command_failed");
         assert!(
@@ -131,7 +135,8 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
                 .as_str()
                 .unwrap()
                 .contains(diagnostic),
-            "{args:?}: {output:?}"
+            "{args:?}: {}",
+            printed(&output)
         );
     }
 }
@@ -151,7 +156,7 @@ fn a_scoped_start_here_takes_its_own_slot_without_skipping_the_limits() {
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    assert!(!output.status.success(), "{output:?}");
+    assert!(!output.status.success(), "{}", printed(&output));
     assert_eq!(
         daemon.methods(),
         [
@@ -161,7 +166,8 @@ fn a_scoped_start_here_takes_its_own_slot_without_skipping_the_limits() {
             "queue_add now=false starts_in_caller=true",
             "start_workspace",
         ],
-        "{output:?}"
+        "{}",
+        printed(&output)
     );
 }
 

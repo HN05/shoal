@@ -172,7 +172,7 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
         ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let listed: Vec<Value> = serde_json::from_slice(&output.stdout).unwrap();
     assert!(listed.iter().any(|entry| entry["name"] == "other"));
     assert!(!listed.iter().any(|entry| entry["name"] == "worktree"));
@@ -197,12 +197,12 @@ fn repository_commands_pick_a_workspace_that_defines_them() {
     .unwrap();
     let id = defining["id"].as_str().unwrap();
     let (output, rows) = fixture.pick(&["run", "local-check"], id, "");
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(output.stdout, b"repository command");
     assert!(rows.starts_with(&format!("{id}\t")), "{rows:?}");
     assert_eq!(rows.lines().count(), 1, "{rows:?}");
     let previous = fixture.run(&["run", "local-check", "-w", "-"]);
-    assert!(previous.status.success(), "{previous:?}");
+    assert!(previous.status.success(), "{}", printed(&previous));
     assert_eq!(previous.stdout, b"repository command");
     let (output, rows) = fixture.pick(&["run", "lsit"], id, "");
     assert!(!output.status.success());
@@ -243,7 +243,7 @@ fn undefined_commands_fail_as_unknown_in_every_form() {
                     .output()
                     .unwrap();
                 assert!(!output.status.success(), "{directory:?} {args:?}");
-                assert!(output.stdout.is_empty(), "{args:?}: {output:?}");
+                assert!(output.stdout.is_empty(), "{args:?}: {}", printed(&output));
                 let error = failure_message(&output, json);
                 assert!(error.contains("unknown command \"bogus\""), "{error}");
                 assert!(!error.contains("workspace"), "{args:?}: {error}");
@@ -258,7 +258,12 @@ fn undefined_commands_fail_as_unknown_in_every_form() {
         "--",
         "extra",
     ]);
-    assert_eq!(output.stdout, b"repository commandextra", "{output:?}");
+    assert_eq!(
+        output.stdout,
+        b"repository commandextra",
+        "{}",
+        printed(&output)
+    );
 }
 
 #[test]
@@ -282,8 +287,13 @@ check = ['printf', '%s', 'ran']
             .args(&args)
             .output()
             .unwrap();
-        assert_eq!(output.status.code(), Some(2), "{args:?}: {output:?}");
-        assert!(output.stdout.is_empty(), "{args:?}: {output:?}");
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "{args:?}: {}",
+            printed(&output)
+        );
+        assert!(output.stdout.is_empty(), "{args:?}: {}", printed(&output));
         let error = String::from_utf8_lossy(&output.stderr);
         assert!(error.contains(&format!("'{}'", args[0])), "{error}");
         assert!(error.contains("`shoal run <name>`"), "{error}");
