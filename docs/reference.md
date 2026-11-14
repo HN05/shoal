@@ -3168,7 +3168,8 @@ and a coordinator not one where a child's agent runs; the refusal names what
 runs and `shoal stop`. A refresh takes the workspace's `updating` state, so it
 does not overlap removal, restore or setup. A chat has no worktree to refresh,
 and `shoal refresh` run from a chat, even one in a workspace's worktree, is
-refused. Workspace processes refresh their own workspace and those below it.
+refused. Workspace processes refresh their own workspace and those below it,
+and a copy only from a source their scope reaches, as they copy.
 `--json` prints the workspace with `target`, `from` and `to` (HEAD before and
 after), `up_to_date`, and `setup`, whether setup ran again.
 

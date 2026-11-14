@@ -1,5 +1,5 @@
 //! What a workspace was made from, and the commit that has now.
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use shoal_refs::CommitId;
 
 use super::super::{Manager, copies::Source};
@@ -71,7 +71,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Target> {
         if let Some(copied) = &workspace.copied_from {
-            return self.copy_target(workspace, copied).await;
+            return self.copy_target(workspace, copied, caller).await;
         }
         let repo = self.repository(&workspace.repository_id).await?;
         match (&workspace.branch, &workspace.at) {
@@ -89,15 +89,31 @@ impl Manager {
     }
 
     /// What the copy `workspace` refreshes to: the live workspace it
-    /// `copied`, while a copy of a checkpoint never moves.
-    async fn copy_target(&self, workspace: &Workspace, copied: &CopiedFrom) -> Result<Target> {
+    /// `copied`, which `caller`'s scope must reach as it must to copy it,
+    /// while a copy of a checkpoint never moves.
+    async fn copy_target(
+        &self,
+        workspace: &Workspace,
+        copied: &CopiedFrom,
+        caller: Option<&Caller>,
+    ) -> Result<Target> {
         match (copied.checkpoint, &copied.workspace) {
             (Some(number), Some(source)) => Ok(Target::Fixed(format!(
                 "checkpoint {number} of {}",
                 source.name
             ))),
             (Some(number), None) => Ok(Target::Fixed(format!("checkpoint {number}"))),
-            (None, Some(source)) => Ok(Target::Copy(source.id.clone())),
+            (None, Some(source)) => {
+                if let Some(caller) = caller {
+                    ensure!(
+                        self.reaches(caller, &source.id).await?,
+                        "workspace processes copy only their own workspace and those below it, and {} is outside this one's scope; ask the user to refresh {}",
+                        source.name,
+                        workspace.name
+                    );
+                }
+                Ok(Target::Copy(source.id.clone()))
+            }
             (None, None) => match self.removed_source_name(&workspace.id).await? {
                 Some(name) => bail!("source {name} was removed; nothing to refresh from"),
                 None => bail!(

@@ -159,3 +159,17 @@ async fn a_copy_of_a_checkpoint_is_up_to_date() {
         format!("checkpoint {} of topic", checkpoint.number)
     );
 }
+
+#[tokio::test]
+async fn a_workspace_process_refreshes_a_copy_only_from_a_source_it_reaches() {
+    let (f, source) = Fixture::copied().await;
+    let copy = f.copy(&source, "copy", None, false).await;
+    add_commit(&source.path, "later");
+    let own = super::caller(&copy.id, "agent");
+
+    let refused = (f.refresh_as(&copy, Some(&own)).await)
+        .unwrap_err()
+        .to_string();
+    assert!(refused.contains("outside this one's scope"), "{refused}");
+    assert!(!f.refresh(&copy).await.unwrap().up_to_date);
+}
