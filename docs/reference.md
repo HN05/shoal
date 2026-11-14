@@ -3141,7 +3141,8 @@ from while it holds nothing of its own:
 | At a tag or a bare commit, or a copy of a checkpoint | nothing: it is up to date |
 | A copy of a live workspace | the source's current files, copied again |
 
-A branch moves only by fast-forward, never by rebase or merge. A workspace at a
+A branch workspace's branch moves only by fast-forward, never by rebase or
+merge; a copy's branch follows its source's HEAD, wherever that went. A workspace at a
 commit is checked out at its new commit, which becomes its starting commit and
 what `shoal diff` compares with. A workspace that already has its target's
 commits, or a copy whose source still has the HEAD, index and unsaved files it

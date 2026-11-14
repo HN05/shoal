@@ -1,6 +1,7 @@
 //! Refresh: bring a workspace up to date with what it was made from while it
-//! holds nothing of its own. A branch moves only by fast-forward, and work
-//! of its own is refused, never carried over.
+//! holds nothing of its own. A branch workspace's branch moves only by
+//! fast-forward, a copy's follows its source's HEAD, and work of its own is
+//! refused, never carried over.
 use anyhow::{Context, Result, bail, ensure};
 
 use super::{Manager, copies::Source};
