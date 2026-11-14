@@ -229,6 +229,31 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
 }
 
 #[tokio::test]
+async fn an_imported_child_opens_at_the_top_without_its_exporters_parent() {
+    let (_source, exporting, source_repo, origin) = exporter().await;
+    let (_target, importing, target_repo) = importer(&origin).await;
+    let parent = exporting
+        .create_workspace(&source_repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = exporting
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+
+    let file = export_removed(&exporting, &child.id).await;
+    let restored = import(&importing, &target_repo, &file).await;
+
+    assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
+    assert_eq!(restored.opened.workspace.parent, None);
+}
+
+#[tokio::test]
 async fn import_writes_nothing_while_the_repository_moves() {
     let (_source, exporting, source_repo, origin) = exporter().await;
     let (_target, importing, target_repo) = importer(&origin).await;

@@ -98,9 +98,16 @@ impl Manager {
             .restore
             .retention();
         let expires_at = UnixTime::now() + retention;
+        // The space it was below where it was exported stays its parent only
+        // where that space is here too.
+        let parent = match removed.parent {
+            Some(parent) if self.find_space(&parent.id).await?.is_some() => Some(parent),
+            _ => None,
+        };
         let mut removed = RemovedSpace {
             repository_id: Some(repo.id.clone()),
             expires_at,
+            parent,
             ..removed
         };
         let checkpoint = &mut removed.kept_workspace_mut()?.checkpoint;
