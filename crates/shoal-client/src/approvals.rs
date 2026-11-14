@@ -336,6 +336,48 @@ pub struct ApprovalRequest {
     /// request once the push is done; approving again waits until it ends.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operation: Option<String>,
+    /// The gate's part in a request a permission of `gate` governs, which
+    /// it decides before anyone else; none for any other request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<GateStep>,
+}
+
+states!(
+    /// What the gate made of a request.
+    GateVerdict {
+        Allow => "allow",
+        Deny => "deny",
+        Escalate => "escalate",
+        /// No agent returned a verdict, which denied it.
+        Failed => "failed",
+    }
+);
+
+/// Where the gate is with a request: deciding it, or done with it after
+/// allowing it, which the approval path then carries out, after an allow
+/// that could not be carried out or a request it could not judge, which
+/// then take the normal route, or after passing it on for a case the user
+/// wrote down.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case", deny_unknown_fields)]
+pub enum GateStep {
+    Deciding,
+    Allowed,
+    Unapplied {
+        /// Why carrying out the allow failed.
+        error: String,
+    },
+    /// The gate could not judge it, as an issue proposal whose space is
+    /// gone, so it takes the normal route.
+    Unjudged {
+        reason: String,
+    },
+    Escalated {
+        /// Why the gate passed it on.
+        reason: String,
+        /// The `escalate` case it quoted.
+        rule: String,
+    },
 }
 
 impl ApprovalRequest {

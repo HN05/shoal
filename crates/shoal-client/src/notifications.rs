@@ -52,6 +52,9 @@ states!(NotificationKind {
     StopFailed => "stop_failed",
     /// A best-effort event hook failed.
     HookFailed => "hook_failed",
+    /// The gate could not be set up to decide a request, as when no agent
+    /// it can run is configured, which denied the request.
+    GateUnavailable => "gate_unavailable",
     /// A workspace process asked for the user's attention.
     AgentMessage => "agent_message",
     /// The daemon started an agent from the queue.

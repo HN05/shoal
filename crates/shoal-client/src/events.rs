@@ -140,6 +140,9 @@ states!(EventKind {
     ApprovalRequested => "approval_requested",
     /// An approval the space asked for was approved or denied.
     ApprovalDecided => "approval_decided",
+    /// The gate allowed, denied or passed on an approval the space asked
+    /// for, or failed to decide it, which denied it.
+    GateDecided => "gate_decided",
     /// The space's agent sent an alert.
     AlertSent => "alert_sent",
     /// The space's agent changed its status line or plan steps.
@@ -307,6 +310,9 @@ pub struct EventDetails {
     /// The approval requested or decided.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval: Option<Box<ApprovalEvent>>,
+    /// The gate's verdict on an approval.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<Box<GateEvent>>,
     /// The alert sent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alert: Option<AlertEvent>,
@@ -419,6 +425,25 @@ pub struct ApprovalEvent {
     /// What approving it allows, as `shoal approvals` describes it.
     pub subject: String,
     pub status: crate::approvals::DecisionStatus,
+}
+
+/// What the gate made of an approval request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GateEvent {
+    #[serde(flatten)]
+    pub number: crate::item_numbers::ItemNumber,
+    /// What approving it allows, as `shoal approvals` describes it.
+    pub subject: String,
+    pub verdict: crate::approvals::GateVerdict,
+    pub reason: String,
+    /// The `escalate` case an escalation quoted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rule: Option<String>,
+    /// The agent that decided, and the session it decided in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

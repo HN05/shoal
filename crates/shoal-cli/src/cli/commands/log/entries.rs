@@ -103,6 +103,7 @@ fn event_line(event: &EventDetails) -> (String, String) {
         EventKind::QuestionAnswered => fixed("Question answered", question(event, true)),
         EventKind::ApprovalRequested => fixed("Approval requested", approval(event, false)),
         EventKind::ApprovalDecided => fixed("Approval decided", approval(event, true)),
+        EventKind::GateDecided => fixed("Gate decided", gate(event)),
         EventKind::AlertSent => fixed(
             "Alert sent",
             (event.alert.as_ref()).map_or_else(String::new, |alert| alert.message.clone()),
@@ -351,6 +352,17 @@ fn approval(event: &EventDetails, decided: bool) -> String {
         ),
         false => format!("{} {}", approval.number, approval.subject),
     }
+}
+
+fn gate(event: &EventDetails) -> String {
+    let Some(gate) = &event.gate else {
+        return String::new();
+    };
+    let rule = (gate.rule.as_ref()).map_or_else(String::new, |rule| format!(" ({rule})"));
+    format!(
+        "{} {}: {}: {}{rule}",
+        gate.number, gate.verdict, gate.subject, gate.reason
+    )
 }
 
 fn child(event: &EventDetails) -> String {

@@ -17,7 +17,7 @@ use crate::{
         ui::{self, Cell},
     },
     client::approvals::{
-        self, ApprovalRequest, DecisionStatus, Duplicate, ProposalDecision, Specification,
+        self, ApprovalRequest, DecisionStatus, Duplicate, GateStep, ProposalDecision, Specification,
     },
     client::item_numbers::ItemNumber,
 };
@@ -146,6 +146,19 @@ fn print_details(ctx: &Context, request: &ApprovalRequest) {
     }
 }
 
+/// What the gate did with the request: deciding it, allowing it, or the
+/// reason and case it passed it on for.
+fn gate_step(request: &ApprovalRequest) -> String {
+    match &request.gate {
+        None => String::new(),
+        Some(GateStep::Deciding) => "deciding".into(),
+        Some(GateStep::Allowed) => "allowed".into(),
+        Some(GateStep::Unapplied { error }) => format!("allowed, then failed: {error}"),
+        Some(GateStep::Unjudged { reason }) => format!("not judged: {reason}"),
+        Some(GateStep::Escalated { reason, rule }) => format!("passed on: {reason} (case: {rule})"),
+    }
+}
+
 /// Status once decided, space, reason, and the settings an approval
 /// grants or the labels a proposal adds.
 fn detail_rows(request: &ApprovalRequest) -> Vec<[Cell; 2]> {
@@ -160,6 +173,7 @@ fn detail_rows(request: &ApprovalRequest) -> Vec<[Cell; 2]> {
     }
     row("Space", space_label(request));
     row("Reason", request.reason.clone());
+    row("Gate", gate_step(request));
     match proposed_labels(request) {
         Some(labels) => row("Labels", labels.join(", ")),
         None => row("Settings", settings(&request.specification)),

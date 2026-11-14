@@ -64,6 +64,7 @@ impl ApprovalRequestExt for ApprovalRequest {
             url: None,
             warnings: Vec::new(),
             operation: None,
+            gate: None,
         }
     }
 

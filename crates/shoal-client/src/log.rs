@@ -87,7 +87,7 @@ impl LogEntry {
 }
 
 /// The workspace and chat events the log shows, apart from forge activity.
-const ENTRY_KINDS: [EventKind; 28] = [
+const ENTRY_KINDS: [EventKind; 29] = [
     EventKind::Created,
     EventKind::Renamed,
     EventKind::RemovalStarted,
@@ -108,6 +108,7 @@ const ENTRY_KINDS: [EventKind; 28] = [
     EventKind::QuestionAnswered,
     EventKind::ApprovalRequested,
     EventKind::ApprovalDecided,
+    EventKind::GateDecided,
     EventKind::AlertSent,
     EventKind::ChildCreated,
     EventKind::ChildRemoved,

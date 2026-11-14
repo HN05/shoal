@@ -21,7 +21,7 @@ use crate::{
         ui::{self, Cell, WidthLimit},
     },
     client::{
-        approvals::{ApprovalRequest, DecisionStatus},
+        approvals::{ApprovalRequest, DecisionStatus, GateStep},
         questions::{self, Question},
     },
     model::{Chat, ReviewMark, SpaceLinks, Workspace},
@@ -217,6 +217,7 @@ fn decision_items(
         .filter(|request| {
             request.status == DecisionStatus::Pending
                 && request.decider.is_none()
+                && request.gate != Some(GateStep::Deciding)
                 && (kept(&request.space_id) || detached(request))
         })
         .map(|request| Item::Approval { request });
