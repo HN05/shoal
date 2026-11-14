@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn untracked_leaves_out_the_checkout_tracked_worktrees_and_the_verified_seed() {
+fn untracked_leaves_out_the_checkout_tracked_worktrees_and_shoals_own() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("repo");
     let tree = |path: PathBuf| git::Worktree {
@@ -15,11 +15,13 @@ fn untracked_leaves_out_the_checkout_tracked_worktrees_and_the_verified_seed() {
         tracked: HashSet::from([root.join("tracked")]),
         seed,
         verified_seed: false,
+        review_runs: Some(root.join(".reviews")),
     };
     let trees = [
         tree(root.join(".checkout")),
         tree(root.join("tracked")),
         tree(root.join("stray")),
+        tree(root.join(".reviews/7/checkout")),
         tree(dir.path().join("elsewhere")),
     ];
     let checkout = root.join(".checkout");

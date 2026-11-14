@@ -11,6 +11,7 @@ use crate::{
     daemon::{log, workspace::Manager},
     git,
     model::UntrackedWorktree,
+    shoal_dirs::{Contents, ShoalDir},
 };
 
 /// What Shoal owns under a repository's workspace directory.
@@ -18,11 +19,14 @@ pub(super) struct OwnedWorktrees {
     pub(super) tracked: HashSet<PathBuf>,
     pub(super) seed: crate::seed::Layout,
     pub(super) verified_seed: bool,
+    /// The directory of the repository's review runs, whose checkouts are
+    /// worktrees, when it is the one Shoal created.
+    pub(super) review_runs: Option<PathBuf>,
 }
 
 impl OwnedWorktrees {
-    /// Each Git worktree under `root`, other than the checkout and Shoal's
-    /// seed, that no workspace owns.
+    /// Each Git worktree under `root`, other than the checkout, Shoal's
+    /// seed and its review checkouts, that no workspace owns.
     fn untracked<'a>(
         &self,
         checkout: &Path,
@@ -35,6 +39,7 @@ impl OwnedWorktrees {
                 tree.path.starts_with(root)
                     && tree.path != checkout
                     && !(self.verified_seed && self.seed.is_worktree(&tree.path))
+                    && !(self.review_runs.as_ref()).is_some_and(|runs| tree.path.starts_with(runs))
                     && !self.tracked.contains(&tree.path)
             })
             .map(|tree| tree.path.as_path())
@@ -91,10 +96,12 @@ impl Manager {
         let verified_seed = crate::daemon::seed::is_seed_worktree(repo, &seed)
             .await
             .unwrap_or(false);
+        let review_runs = ShoalDir::new(root, &repo.id, Contents::ReviewRuns);
         Ok(OwnedWorktrees {
             tracked,
             seed,
             verified_seed,
+            review_runs: review_runs.is_own().then(|| review_runs.root().to_owned()),
         })
     }
 }
