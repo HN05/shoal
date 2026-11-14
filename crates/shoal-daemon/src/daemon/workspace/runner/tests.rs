@@ -51,15 +51,19 @@ pub(super) async fn launch(
 /// run 1 pushed `main` at its head and runs 2 and 8 wait for PR 12 at that
 /// head, which `pull_head` names when the PR moved on since, and the forge
 /// refuses to cancel run 8; run 3 runs, and run 6 was cancelled.
-struct Fixture {
+pub(super) struct Fixture {
     _root: tempfile::TempDir,
-    manager: Arc<Manager>,
-    repository: RepositoryId,
-    head: String,
-    server: Server,
+    pub manager: Arc<Manager>,
+    pub repository: RepositoryId,
+    pub head: String,
+    pub server: Server,
 }
 
-async fn fixture(jobs: Vec<Value>, pull_head: Option<&'static str>, settings: &str) -> Fixture {
+pub(super) async fn fixture(
+    jobs: Vec<Value>,
+    pull_head: Option<&'static str>,
+    settings: &str,
+) -> Fixture {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -178,7 +182,7 @@ fn run(id: u64, event: &str, commit: &str, payload: Value) -> Value {
     })
 }
 
-fn job(handle: &str, id: u64, run: u64) -> Value {
+pub(super) fn job(handle: &str, id: u64, run: u64) -> Value {
     json!({"handle": handle, "id": id, "run_id": run, "name": "rust", "runs_on": ["shoal"], "status": "waiting"})
 }
 
@@ -371,7 +375,7 @@ pub(super) async fn admit_and_claim(manager: &Manager) -> Vec<QueueEntry> {
     admitted
 }
 
-async fn job_entries(manager: &Manager) -> Vec<QueueEntry> {
+pub(super) async fn job_entries(manager: &Manager) -> Vec<QueueEntry> {
     manager
         .queue_entries()
         .await
@@ -501,60 +505,6 @@ async fn waiting_jobs_are_read_every_minute_while_none_could_start() {
     manager.runners.age_waiting_read(INTERVAL);
     manager.poll_waiting_jobs().await.unwrap();
     assert_eq!(reads(), read + 1);
-}
-
-#[tokio::test]
-async fn a_job_whose_pr_moved_on_has_its_run_cancelled_without_a_workspace() {
-    let fixture = fixture(vec![job("old", 4, 2)], Some("new"), "").await;
-    let manager = &fixture.manager;
-
-    admit_and_claim(manager).await;
-    assert!(
-        fixture
-            .server
-            .received()
-            .iter()
-            .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/2/cancel")
-    );
-    assert!(job_entries(manager).await.is_empty());
-    assert!(manager.claimed_jobs().await.unwrap().is_empty());
-    assert!(
-        manager
-            .list_workspaces()
-            .await
-            .unwrap()
-            .iter()
-            .all(|workspace| !workspace.name.starts_with("ci-"))
-    );
-    // The forge still lists it, but the runner leaves it to others.
-    manager.refresh_waiting_jobs().await.unwrap();
-    assert!(job_entries(manager).await.is_empty());
-    let notifications = manager.notifications(false, 50).await.unwrap();
-    assert!(
-        notifications
-            .iter()
-            .all(|notification| notification.kind != NotificationKind::RunnerFailed),
-        "{notifications:?}"
-    );
-}
-
-#[tokio::test]
-async fn a_superseded_run_the_forge_does_not_cancel_is_passed_over_with_a_notification() {
-    let fixture = fixture(vec![job("old", 4, 8)], Some("new"), "").await;
-    let manager = &fixture.manager;
-
-    admit_and_claim(manager).await;
-    assert!(job_entries(manager).await.is_empty());
-    assert!(manager.claimed_jobs().await.unwrap().is_empty());
-    let notifications = manager.notifications(false, 50).await.unwrap();
-    let run = format!("http://{}/team/repo/actions/runs/8", fixture.server.host);
-    assert!(
-        notifications.iter().any(|notification| {
-            notification.kind == NotificationKind::RunnerFailed
-                && notification.message.contains(&run)
-        }),
-        "{notifications:?}"
-    );
 }
 
 #[tokio::test]

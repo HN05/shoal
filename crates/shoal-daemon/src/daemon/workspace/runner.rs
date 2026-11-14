@@ -10,6 +10,7 @@ mod listing;
 mod overrun;
 mod registration;
 mod single_use;
+mod superseded;
 mod taken;
 mod waiting;
 

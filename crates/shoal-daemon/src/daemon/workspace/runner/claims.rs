@@ -2,10 +2,10 @@
 //! which claims the job by its handle, as a tracked execution in a workspace
 //! at the job's commit that starts from the seed and holds a permit from the
 //! repository's `runner.permit` pool when it names one, at low CPU priority
-//! so that it takes only the cores agents and the user leave idle. A PR's
-//! job whose PR moved to a newer head has its run cancelled and is passed
-//! over, as is one that cannot start, which stays with the forge for other
-//! runners, as do the jobs of a repository whose runner was turned off. A job admitted as the
+//! so that it takes only the cores agents and the user leave idle. A
+//! superseded PR job is passed over, as is one that cannot start, which
+//! stays with the forge for other runners, as do the jobs of a repository
+//! whose runner was turned off. A job admitted as the
 //! system shuts down waits in the queue again.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
@@ -29,7 +29,6 @@ use crate::{
     forge::{
         ForgeRepo,
         ci::runner::{Installation, JobCommand, JobLaunch},
-        items::reference::ItemRef,
     },
     model::{QueueEntry, QueuedJob, Workspace},
     removal::InspectionPolicy,
@@ -131,8 +130,10 @@ impl Manager {
             .await?
             .context("the repository's runner is no longer registered")?;
         let forge = ForgeRepo::resolve(&registration.forge_repository, &self.forge_hosts()).await?;
-        if forge.run_superseded(&self.user_account(), &job.run).await? {
-            self.cancel_superseded(entry, &forge, &job.run.url).await;
+        if self
+            .cancel_if_superseded(&entry.name, &forge, &job.run)
+            .await?
+        {
             return Ok(Claim::Superseded);
         }
         let workspace = self.create_claimed_workspace(entry, &forge, job).await?;
@@ -150,25 +151,6 @@ impl Manager {
             crate::daemon::log!("runner: {error:#}");
         }
         started
-    }
-
-    /// Cancel the superseded `run` of `entry`'s job unless it finished:
-    /// Shoal's runners leave its jobs waiting on the forge, where they would
-    /// hold the PR's checks. A cancel that fails tells the user.
-    async fn cancel_superseded(&self, entry: &QueueEntry, forge: &ForgeRepo, run: &ItemRef) {
-        let Err(error) = forge.cancel_unfinished(&self.user_account(), run).await else {
-            return;
-        };
-        self.notify(
-            Some(&entry.name),
-            NotificationKind::RunnerFailed,
-            format!(
-                "CI run {run} is for a PR that moved to a newer head, and cancelling it \
-                 failed: {error:#}. It may hold the PR's checks; cancel it with \
-                 shoal ci cancel {run}"
-            ),
-        )
-        .await;
     }
 
     /// Create the workspace `entry`'s job runs in and record the claim of
