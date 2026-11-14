@@ -579,6 +579,9 @@ fn historical_database(version: i64) -> Result<Connection> {
         db.execute_batch(include_str!("spaces_table.sql"))?;
         db.execute_batch("PRAGMA foreign_keys=ON;")?;
     }
+    if version >= 183 {
+        db.execute_batch(include_str!("review_sessions.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"

@@ -122,6 +122,7 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 first,
                 &"claude".into(),
                 &output(2, Vec::new()),
+                None,
                 UnixTime::from_seconds(3)
             )?);
             let finding = FindingId {
@@ -182,6 +183,7 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 second,
                 &"claude".into(),
                 &output(0, checked),
+                None,
                 UnixTime::from_seconds(8)
             )?);
 
@@ -309,6 +311,7 @@ async fn removing_the_workspace_deletes_its_reviews() {
                 id,
                 &"claude".into(),
                 &output(1, Vec::new()),
+                None,
                 UnixTime::from_seconds(3),
             )?;
             reply(
@@ -328,6 +331,73 @@ async fn removing_the_workspace_deletes_its_reviews() {
                 |row| row.get(0),
             )?;
             assert_eq!(left, 0);
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_review_resumes_the_latest_session_of_its_workspace_or_pr() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = store(&directory).await;
+    let pr = |number| ReviewTarget::Pr {
+        url: format!("https://forge.example/team/repo/pulls/{number}")
+            .parse()
+            .unwrap(),
+        head: "topic".into(),
+        base: "main".into(),
+        post: false,
+    };
+    store
+        .write(move |tx| {
+            // Each review finishes before the next is queued, as one runs at
+            // a time, by `reviewer` with the session it reported.
+            let review = |target: &ReviewTarget, reviewer: &str, session: Option<&str>| {
+                let id = queue(
+                    tx,
+                    &SpaceId::from("work"),
+                    target,
+                    &"claude".into(),
+                    &Default::default(),
+                    UnixTime::from_seconds(1),
+                )?
+                .id();
+                start(
+                    tx,
+                    id,
+                    &"head".into(),
+                    &"base".into(),
+                    UnixTime::from_seconds(2),
+                )?;
+                let session = session.map(|session| AgentSessionId::from(session.to_owned()));
+                let output = output(0, Vec::new());
+                let now = UnixTime::from_seconds(3);
+                finish(tx, id, &reviewer.into(), &output, session.as_ref(), now)?;
+                Ok::<_, anyhow::Error>(id)
+            };
+            let saved = |id| -> Result<Option<(String, String)>> {
+                Ok(session(tx, id)?
+                    .map(|(agent, session)| (agent.to_string(), session.as_str().to_owned())))
+            };
+            let pair = |agent: &str, session: &str| Some((agent.to_owned(), session.to_owned()));
+            let first = review(&ReviewTarget::Workspace, "claude", Some("s1"))?;
+            assert_eq!(saved(first)?, None);
+            review(&pr(8), "claude", Some("p8"))?;
+            // A run that reported none keeps the session before it.
+            review(&ReviewTarget::Workspace, "claude", None)?;
+            let next = review(&ReviewTarget::Workspace, "claude", Some("s2"))?;
+            assert_eq!(saved(next)?, pair("claude", "s1"));
+            // A fallback's session is the latest.
+            let after = review(&ReviewTarget::Workspace, "codex", Some("c1"))?;
+            assert_eq!(saved(after)?, pair("claude", "s2"));
+            let last = review(&ReviewTarget::Workspace, "claude", None)?;
+            assert_eq!(saved(last)?, pair("codex", "c1"));
+            // Each PR keeps its own.
+            let again = review(&pr(8), "claude", None)?;
+            assert_eq!(saved(again)?, pair("claude", "p8"));
+            let other = review(&pr(9), "claude", None)?;
+            assert_eq!(saved(other)?, None);
             Ok(())
         })
         .await

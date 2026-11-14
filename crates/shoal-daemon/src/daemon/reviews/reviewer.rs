@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use tokio::sync::watch;
 
 use crate::{
+    agent::AgentSessionId,
     daemon::oneshot::{self, AgentCommand},
     reviews::{
         FailureReason, ReviewId,
@@ -80,7 +81,11 @@ pub(super) struct Reviewer<'a> {
 /// How a run ended.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Ended {
-    Returned(ReviewerOutput),
+    Returned {
+        output: ReviewerOutput,
+        /// The session the reviewer reported.
+        session: Option<AgentSessionId>,
+    },
     Failed(FailureReason),
     Cancelled,
     /// What the reviewer started could not be proven stopped, so its run
@@ -108,7 +113,7 @@ pub(super) async fn run(reviewer: &Reviewer<'_>, cancel: &mut watch::Receiver<bo
 fn ended(reviewer: &Reviewer<'_>, exited: Result<oneshot::Ended>) -> Ended {
     match exited {
         Ok(oneshot::Ended::Exited { success }) => match read(reviewer, success) {
-            Ok(Ok(output)) => Ended::Returned(output),
+            Ok(Ok((output, session))) => Ended::Returned { output, session },
             Ok(Err(reason)) => Ended::Failed(reason),
             Err(error) => {
                 crate::daemon::log!("reading a reviewer's output: {error:#}");
@@ -128,30 +133,39 @@ fn ended(reviewer: &Reviewer<'_>, exited: Result<oneshot::Ended>) -> Ended {
     }
 }
 
-fn read(reviewer: &Reviewer, success: bool) -> Result<Result<ReviewerOutput, FailureReason>> {
+/// The review the run that exited with `success` returned, with the session
+/// it reported, or why it returned none.
+fn read(reviewer: &Reviewer, success: bool) -> Result<Result<Returned, FailureReason>> {
     let files = &reviewer.files.directory;
     // A result too large to be a review is no review; it is never loaded.
     let result = match reviewer.writes_output {
         true => oneshot::read_bounded(&reviewer.files.output(), RESULT_LIMIT)?,
         false => oneshot::read_bounded(&oneshot::stdout(files), RESULT_LIMIT)?,
     };
-    let stderr = oneshot::read_tail(&oneshot::stderr(files), DIAGNOSTIC_LIMIT)?;
+    let stderr = oneshot::stderr(files);
+    let head = oneshot::read_head(&stderr, DIAGNOSTIC_LIMIT)?;
+    let tail = oneshot::read_tail(&stderr, DIAGNOSTIC_LIMIT)?;
     let stdout = oneshot::read_tail(&oneshot::stdout(files), DIAGNOSTIC_LIMIT)?;
-    Ok(output::read(
-        reviewer.format,
-        &output::Run {
-            success,
-            result: result.as_deref(),
-            diagnostics: [&stderr, &stdout],
-        },
-    ))
+    let run = output::Run {
+        success,
+        result: result.as_deref(),
+        diagnostics: [&tail, &stdout],
+    };
+    Ok(output::read(reviewer.format, &run).map(|output| {
+        let session = output::session(reviewer.format, result.as_deref(), &head);
+        (output, session)
+    }))
 }
+
+/// A review and the session its reviewer reported.
+type Returned = (ReviewerOutput, Option<AgentSessionId>);
 
 /// The most of a reviewer's result that is read.
 const RESULT_LIMIT: u64 = 8 * 1024 * 1024;
 
 /// The most of each diagnostic stream that is read, from its end, where
-/// a failure is reported.
+/// a failure is reported, and of standard error from its start, where a
+/// tool names its session.
 const DIAGNOSTIC_LIMIT: u64 = 64 * 1024;
 
 /// Write the ID of review `id`, whose run these files are.

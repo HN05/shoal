@@ -17,7 +17,7 @@ use super::{
 };
 use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use crate::{
-    agent::{Agent, ModelChoice},
+    agent::{Agent, AgentSessionId, ModelChoice},
     config::{Effective, templates},
     daemon::{
         log, oneshot,
@@ -291,7 +291,10 @@ impl Manager {
         };
         let agent = review.agent.clone();
         let model = settings.model(&agent, review.model.clone());
-        let ended = self.attempt(&run, &agent, &model, cancelled).await;
+        let session = self.review_session(review, settings).await;
+        let ended = self
+            .review_by_agent(&run, review.id, &agent, &model, session, cancelled)
+            .await;
         let fallback = settings
             .review
             .fallback_agent
@@ -304,7 +307,7 @@ impl Manager {
                     review.id
                 );
                 let model = settings.model(&fallback, Default::default());
-                let ended = self.attempt(&run, &fallback, &model, cancelled).await;
+                let ended = self.attempt(&run, &fallback, &model, None, cancelled).await;
                 (fallback, ended)
             }
             (ended, _) => (agent, ended),
@@ -329,15 +332,76 @@ impl Manager {
         crate::git::detached::add(&repository.path, &files.checkout(), head.as_str()).await
     }
 
-    /// One reviewer's attempt at `run`: agent `agent` with `model`.
+    /// The session `review`'s agent resumes: the one the latest earlier
+    /// review of its workspace or PR recorded, when that agent reported it
+    /// and can resume one. A change of agent, or a fallback that reviewed
+    /// last, starts a new session.
+    async fn review_session(
+        &self,
+        review: &Review,
+        settings: &Effective,
+    ) -> Option<AgentSessionId> {
+        let resumes = (settings.tools.get(review.agent.name()))
+            .is_some_and(|tool| tool.launch.arguments.review_resume.is_some());
+        if !resumes {
+            return None;
+        }
+        let id = review.id;
+        match self.store.run(move |db| store::session(db, id)).await {
+            Ok(saved) => {
+                saved.and_then(|(agent, session)| (agent == review.agent).then_some(session))
+            }
+            Err(error) => {
+                log!("review {id}: its reviewer's session: {error:#}");
+                None
+            }
+        }
+    }
+
+    /// The attempt of review `id`'s own `agent` at `run`, resuming `session`
+    /// when there is one, and in a new session when there is none or
+    /// resuming it failed for a reason other than running too long.
+    async fn review_by_agent(
+        &self,
+        run: &Run<'_>,
+        id: ReviewId,
+        agent: &Agent,
+        model: &ModelChoice,
+        session: Option<AgentSessionId>,
+        cancelled: &mut watch::Receiver<bool>,
+    ) -> Ended {
+        if let Some(session) = session {
+            match self
+                .attempt(run, agent, model, Some(&session), cancelled)
+                .await
+            {
+                Ended::Returned {
+                    output,
+                    session: reported,
+                } => {
+                    let session = reported.or(Some(session));
+                    return Ended::Returned { output, session };
+                }
+                Ended::Failed(reason) if reason != FailureReason::TimedOut => log!(
+                    "review {id}: resuming {agent}'s session failed ({reason}); it starts a new one"
+                ),
+                ended => return ended,
+            }
+        }
+        self.attempt(run, agent, model, None, cancelled).await
+    }
+
+    /// One reviewer's attempt at `run`: agent `agent` with `model`, resuming
+    /// `session` when given.
     async fn attempt(
         &self,
         run: &Run<'_>,
         agent: &Agent,
         model: &ModelChoice,
+        session: Option<&AgentSessionId>,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Ended {
-        let reviewer = match reviewer_for(run, agent, model, &self.paths.home) {
+        let reviewer = match reviewer_for(run, agent, model, session, &self.paths.home) {
             Ok(reviewer) => reviewer,
             Err(error) => {
                 log!("review by {agent}: {error:#}");
@@ -370,7 +434,9 @@ impl Manager {
         let recorded = self
             .store
             .write(move |tx| match ended {
-                Ended::Returned(output) => store::finish(tx, id, &reviewer, &output, now),
+                Ended::Returned { output, session } => {
+                    store::finish(tx, id, &reviewer, &output, session.as_ref(), now)
+                }
                 Ended::Failed(reason) => store::fail(tx, id, Some(&reviewer), reason, now),
                 Ended::LeftRunning => {
                     store::fail(tx, id, Some(&reviewer), FailureReason::ExecutionFailed, now)
@@ -709,12 +775,19 @@ async fn release_run(
     }
 }
 
+/// What a resumed session is told before the review's instructions.
+const RESUMED: &str = "Earlier in this session you reviewed an earlier commit of this work. \
+    Review the commit now checked out as the instructions below say; what you learned before \
+    is context, and the history after them says how each earlier finding was resolved.";
+
 /// The reviewer `agent` with `model`: its review template's arguments for
-/// this run, after its launcher and the arguments selecting the model.
+/// this run, or its resume template's when it resumes `session`, after its
+/// launcher and the arguments selecting the model.
 fn reviewer_for<'a>(
     run: &Run<'a>,
     agent: &Agent,
     model: &ModelChoice,
+    session: Option<&AgentSessionId>,
     home: &Path,
 ) -> Result<Reviewer<'a>> {
     let Run {
@@ -731,21 +804,50 @@ fn reviewer_for<'a>(
         .get(agent.name())
         .with_context(|| format!("no AI tool runs {agent}"))?;
     let arguments = &tool.launch.arguments;
-    let args = arguments
-        .review_args(&crate::ai::ReviewFields {
-            prompt: instructions,
-            schema: &files.schema(),
-            schema_json: crate::reviews::output::SCHEMA,
-            output: &files.output(),
-        })
+    let prompt = reviewer_prompt(instructions, session);
+    let fields = crate::ai::ReviewFields {
+        prompt: &prompt,
+        schema: &files.schema(),
+        schema_json: crate::reviews::output::SCHEMA,
+        output: &files.output(),
+    };
+    let (args, writes_output) = review_arguments(arguments, &fields, session)
         .with_context(|| format!("{agent} has no review template"))?;
     Ok(Reviewer {
         runs,
         command: oneshot::agent_command(settings, agent, model, args, configured, home)?,
         files,
         timeout: reviewer::TIMEOUT,
-        writes_output: arguments.review_writes_output(),
+        writes_output,
         format: tool.review_result,
+    })
+}
+
+/// What a reviewer is asked: `instructions`, after what a resumed session
+/// is told when it resumes `session`.
+fn reviewer_prompt(instructions: &str, session: Option<&AgentSessionId>) -> String {
+    match session {
+        Some(_) => format!("{RESUMED}\n\n{instructions}"),
+        None => instructions.to_owned(),
+    }
+}
+
+/// The arguments of a review with `fields`, resuming `session` when given,
+/// and whether its result goes to `{output}`; none without the template.
+fn review_arguments(
+    arguments: &crate::ai::Arguments,
+    fields: &crate::ai::ReviewFields,
+    session: Option<&AgentSessionId>,
+) -> Option<(Vec<std::ffi::OsString>, bool)> {
+    Some(match session {
+        Some(session) => (
+            arguments.review_resume_args(fields, session)?,
+            arguments.review_resume_writes_output(),
+        ),
+        None => (
+            arguments.review_args(fields)?,
+            arguments.review_writes_output(),
+        ),
     })
 }
 

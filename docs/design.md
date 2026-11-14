@@ -1894,9 +1894,15 @@ arguments; a standalone `{args}` places the caller's literal arguments.
 `edit` command, otherwise `$VISUAL` or `$EDITOR` with the workspace path, through the same
 wrapper, so the editor gets scope and port variables and counts as activity.
 `review run` chooses between the `review` command and a local review, which
-follows the review bot. The daemon runs the reviewer once, without a session,
-read-only in a detached checkout of the committed HEAD, so the review judges what
-the agent committed and never sees or changes its uncommitted work. The
+follows the review bot. The daemon runs the reviewer once, read-only in a
+detached checkout of the committed HEAD, so the review judges what the agent
+committed and never sees or changes its uncommitted work. The reviews of a
+workspace, or of a PR, continue one reviewer session, so a later review keeps
+what the reviewer understood and reuses its cached prompt; an AI tool finds a
+saved session by the directory it ran in, so the checkout has one path per
+workspace and PR. The session adds context and decides nothing: each review is
+given its instructions and history in full, and a change of agent starts a new
+session. The
 reviewer returns findings in a fixed schema, which the daemon stores, so the agent
 answers each with a typed outcome carrying its reason, issue or original finding,
 and the next review checks every `fixed` one instead of rereading free text. A finding
@@ -1910,12 +1916,12 @@ history a review receives is context, not instructions, and the verdict is shown
 but decides nothing. Failures are typed reasons classified like the bot's, so
 backend output never reaches a message. The 30-minute limit is fixed: a review that
 long has stopped making progress. The daemon starts the reviewer as a one-shot
-agent run, which any feature can use: an AI tool's command without a session or
-terminal, in its own process group, killed on timeout, cancel or a daemon stop and
+agent run, which any feature can use: an AI tool's command without a terminal,
+which may resume a session an earlier run reported, in its own process group, killed on timeout, cancel or a daemon stop and
 found again by its marker after a crash. A one-shot run takes an agent slot like
 any agent and waits in the agent queue at the rank of the workspace it serves,
 ahead of that workspace's agent, which waits on it. Protection stops a one-shot run before
-any agent, since it has no session to lose; it asks for a slot again and waits
+any agent, since it has no running session to lose; it asks for a slot again and waits
 for healthy readings, as a stopped agent's restore does. A chat has no worktree or branch, so it
 reviews no changes of its own: it names the workspace it reviews, or reviews
 its one linked PR as a PR target, and its reviews are those of its linked PRs. A PR target, named by URL or `--pr`, resolves a same-repository PR through the daemon's

@@ -1017,9 +1017,11 @@ Shoal tracks execution; the review tool owns sessions, exports, and forge access
 
 `shoal review run [space]` queues a review of the workspace's committed HEAD
 against [`shoal diff`](#diff)'s base. An agent reviews it once in the
-background, read-only, in a detached checkout of that commit in the repository
-directory's `.reviews`, outside the workspace, so uncommitted edits and later
-commits stay out; no session opens and no setup runs. The checkout's files are read-only whatever the reviewer's
+background, without a terminal, read-only, in a detached checkout of that commit
+in the repository directory's `.reviews`, outside the workspace, so uncommitted
+edits and later commits stay out; no setup runs. Each workspace, and each PR
+reviewed in it, has one place there, so every review of it checks its commit out
+at the same path. The checkout's files are read-only whatever the reviewer's
 settings allow, and Shoal adds no trust entry for it; it is removed when the
 review ends. A checkout that cannot be removed stays until `shoal daemon restart`,
 and the repository cannot be moved or removed until then; one whose reviewer's processes
@@ -1035,7 +1037,13 @@ chat has no changes of its own; see [chat reviews](#chat-reviews) below.
 The reviewer is `--agent`, else [`[review] agent`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#reviews), else `agent.default`, else one you
 pick, and needs a [`review` template](#agents). It runs with `--model` and `--effort`
 over its [configured model and effort](#agents), which the review keeps if it starts
-over; the fallback agent runs with its own configured ones. A reviewer still running after 30
+over; the fallback agent runs with its own configured ones. The reviews of a
+workspace, and those of each PR reviewed in it, continue one session: a review
+resumes the session the latest earlier one saved, through the tool's
+[`review_resume` template](config.md#agents), when the same agent saved it,
+so the reviewer keeps what it understood and its cached prompt. Another
+agent, such as the fallback, starts a new session, as does a session that
+cannot be resumed; the session goes with the workspace. A reviewer still running after 30
 minutes is stopped and the review fails as `timed-out`; after any other failure,
 `fallback_agent` reviews once more. A failed review records why as one of
 `usage-limit`, `quota-exhausted`, `rate-limit`, `authentication-failed`,

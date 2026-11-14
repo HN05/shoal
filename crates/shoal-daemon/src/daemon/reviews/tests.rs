@@ -27,6 +27,11 @@ struct Fixture {
 /// `{review}` names a file holding [`REVIEW`], with the review scheduler and
 /// the agent queue, under a fixed agent limit, running when there are any.
 async fn fixture(reviewers: &[(&str, &str)], review: &str) -> Fixture {
+    fixture_with(reviewers, review, "").await
+}
+
+/// [`fixture`] with `settings` in each reviewer's table.
+async fn fixture_with(reviewers: &[(&str, &str)], review: &str, settings: &str) -> Fixture {
     let (root, manager) = manager().await;
     let result = root.path().join("review.json");
     std::fs::write(&result, REVIEW).unwrap();
@@ -36,7 +41,7 @@ async fn fixture(reviewers: &[(&str, &str)], review: &str) -> Fixture {
         let script = script.replace("{review}", &result.to_string_lossy());
         install_test_script(&path, &format!("#!/bin/sh\n{script}\n"));
         config.push_str(&format!(
-            "[agents.{name}]\ncommand = ['{}']\nreview = ['{{prompt}}', '{{schema}}']\n",
+            "[agents.{name}]\ncommand = ['{}']\nreview = ['{{prompt}}', '{{schema}}']\n{settings}",
             path.display()
         ));
     }
@@ -84,13 +89,18 @@ impl Fixture {
     }
 
     async fn review_of(&self, workspace: &SpaceId) -> Review {
+        self.review_by(workspace, None).await
+    }
+
+    /// [`Self::review_of`] by `agent`, else the configured reviewer.
+    async fn review_by(&self, workspace: &SpaceId, agent: Option<&str>) -> Review {
         let mut ended = self.manager.reviews.ended.subscribe();
         let queued = self
             .manager
             .queue_review(
                 &SpaceSelector::id(workspace),
                 ReviewTarget::Workspace,
-                None,
+                agent.map(crate::agent::Agent::from),
                 Default::default(),
             )
             .await
@@ -1001,6 +1011,7 @@ async fn finished_reviews(
                     review,
                     &"absent".into(),
                     &output,
+                    None,
                     UnixTime::from_seconds(3),
                 )?;
                 ids.push(review);
@@ -1084,6 +1095,59 @@ async fn each_review_of_a_workspace_runs_in_one_checkout_in_its_repository_direc
     let checkout = std::path::Path::new(fixture.workspace.id.as_str()).join("checkout");
     assert!(cwd[0].ends_with(&checkout), "{cwd:?}");
     assert!(!fixture.manager.paths.state.join("reviews").exists());
+}
+
+/// A reviewer that records each run as `new` or `resume <session>` in `runs`
+/// and the latest resumed run's prompt in `resumed`, reports session
+/// `s<run>`, or the one it resumes, as Codex does, and cannot resume while
+/// `stale` exists.
+const RESUMER: &str = r#"dir="$(dirname '{review}')"
+if [ "$1" = resume ]; then echo "resume $2" >> "$dir/runs"; session=$2; printf '%s' "$3" > "$dir/resumed"
+else echo new >> "$dir/runs"; session="s$(wc -l < "$dir/runs" | tr -d ' ')"; fi
+echo "session id: $session" >&2
+[ "$1" = resume ] && [ -e "$dir/stale" ] && exit 1
+cat '{review}'"#;
+
+#[tokio::test]
+async fn later_reviews_resume_the_session_of_the_agent_that_reviewed_last() {
+    let settings =
+        "base = 'codex'\nreview_resume = ['resume', '{session}', '{prompt}', '{schema}']\n";
+    let reviewers = [("fake", RESUMER), ("other", RESUMER)];
+    let fixture = fixture_with(&reviewers, "agent = 'fake'", settings).await;
+    let fixture = &fixture;
+    let review = |agent| async move {
+        let review = fixture.review_by(&fixture.workspace.id, agent).await;
+        assert_eq!(review.state, ReviewState::Finished, "{review:?}");
+    };
+    let root = fixture._root.path();
+    review(None).await;
+    review(None).await;
+    // The resumed session is given the instructions with the history again.
+    let resumed = std::fs::read_to_string(root.join("resumed")).unwrap();
+    assert!(resumed.contains("# Earlier reviews"), "{resumed}");
+    // Another agent's review starts its own, after which the configured
+    // agent starts a new one too.
+    review(Some("other")).await;
+    review(None).await;
+    // A session that cannot be resumed gives way to a new one, which the
+    // next review resumes.
+    std::fs::write(root.join("stale"), "").unwrap();
+    review(None).await;
+    std::fs::remove_file(root.join("stale")).unwrap();
+    review(None).await;
+    let runs = std::fs::read_to_string(root.join("runs")).unwrap();
+    assert_eq!(
+        runs.lines().collect::<Vec<_>>(),
+        [
+            "new",
+            "resume s1",
+            "new",
+            "new",
+            "resume s4",
+            "new",
+            "resume s6"
+        ]
+    );
 }
 
 #[tokio::test]

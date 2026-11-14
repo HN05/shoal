@@ -57,7 +57,7 @@ async fn the_result_comes_from_the_output_file_when_the_reviewer_writes_one() {
     let script = format!("printf '%s' '{review}' > '{}'", files.output().display());
     let mut writer = reviewer(&files, &["sh", "-c", &script]);
     writer.writes_output = true;
-    let Ended::Returned(output) = run(&writer, &mut cancelled).await else {
+    let Ended::Returned { output, .. } = run(&writer, &mut cancelled).await else {
         panic!("no review returned");
     };
     assert!(output.findings.is_empty());

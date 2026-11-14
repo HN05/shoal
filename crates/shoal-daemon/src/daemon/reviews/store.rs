@@ -7,7 +7,7 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 use shoal_refs::CommitId;
 
 use crate::{
-    agent::{Agent, ModelChoice},
+    agent::{Agent, AgentSessionId, ModelChoice},
     reviews::{
         Check, FailureReason, Finding, FindingId, Outcome, OutcomeKind, Posted, Reply, Review,
         ReviewId, ReviewState, ReviewStatus, ReviewTarget,
@@ -190,17 +190,19 @@ pub(crate) fn start(
 }
 
 /// Record the reviewer's result on a running review, numbering its findings
-/// from 1, and the checks it made of earlier `fixed` findings of the same
-/// workspace. False when the review is no longer running.
+/// from 1, the checks it made of earlier `fixed` findings of the same
+/// workspace, and the session it reported. False when the review is no
+/// longer running.
 pub(crate) fn finish(
     tx: &rusqlite::Transaction<'_>,
     id: ReviewId,
     reviewer: &Agent,
     output: &ReviewerOutput,
+    session: Option<&AgentSessionId>,
     now: crate::time::UnixTime,
 ) -> Result<bool> {
     let finished = tx.execute(
-        "UPDATE reviews SET state=?6,reviewer=?2,summary=?3,verdict=?4,ended_at=?5
+        "UPDATE reviews SET state=?6,reviewer=?2,summary=?3,verdict=?4,ended_at=?5,session=?8
             WHERE id=?1 AND state=?7",
         params![
             id,
@@ -209,7 +211,8 @@ pub(crate) fn finish(
             output.verdict,
             now,
             ReviewState::Finished,
-            ReviewState::Running
+            ReviewState::Running,
+            session.map(AgentSessionId::as_str)
         ],
     )? == 1;
     if !finished {
@@ -234,6 +237,22 @@ pub(crate) fn finish(
         record_check(tx, id, checked)?;
     }
     Ok(true)
+}
+
+/// The session the latest earlier review of review `id`'s workspace and PR,
+/// or of the workspace alone, recorded, with the agent that reported it.
+pub(crate) fn session(db: &Connection, id: ReviewId) -> Result<Option<(Agent, AgentSessionId)>> {
+    Ok(db
+        .query_row(
+            "SELECT earlier.reviewer,earlier.session FROM reviews earlier JOIN reviews this
+                ON this.workspace_id=earlier.workspace_id
+                AND json_extract(this.target,'$.url') IS json_extract(earlier.target,'$.url')
+                WHERE this.id=?1 AND earlier.id<?1 AND earlier.session IS NOT NULL
+                ORDER BY earlier.id DESC LIMIT 1",
+            [id],
+            |row| Ok((row.get(0)?, AgentSessionId::from(row.get::<_, String>(1)?))),
+        )
+        .optional()?)
 }
 
 /// Record a check of an earlier finding of the same workspace that is
