@@ -271,7 +271,8 @@ pub struct QueuedLaunch<A = crate::agent::Agent> {
     /// without them it starts as one from no terminal does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub env: Option<BTreeMap<String, String>>,
-    /// Start at once regardless of the limits, which scoped callers cannot.
+    /// Start at once regardless of the limits, which a scoped caller does as
+    /// its `limits` permission allows.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub now: bool,
 }
