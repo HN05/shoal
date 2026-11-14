@@ -119,7 +119,7 @@ impl Manager {
     }
 
     /// The `candidates` not already `chosen` that may sleep for room at
-    /// `now`, lowest rank first: heavy agents the user does not attend,
+    /// `now`, lowest rank first: heavy agents, a workspace's or a chat's,
     /// which something will wake and for which sleeping costs nothing.
     async fn sleepers<'a>(
         &self,
@@ -127,11 +127,10 @@ impl Manager {
         chosen: &HashMap<ExecutionId, Chosen>,
         now: UnixTime,
     ) -> Result<Vec<Sleeper<'a>>> {
-        let light = self.light().await?;
         let mut eligible = Vec::new();
         for candidate in candidates {
             let (execution, id) = (&candidate.execution, &candidate.workspace_id);
-            if chosen.contains_key(execution) || candidate.attended || light.execution(execution) {
+            if chosen.contains_key(execution) || candidate.light {
                 continue;
             }
             if !self.awaits_wake(id).await? {

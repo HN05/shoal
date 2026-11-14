@@ -25,6 +25,8 @@ struct Setup {
     done: bool,
     held: bool,
     recover: bool,
+    /// The mode its agent runs in.
+    mode: &'static str,
 }
 
 const HELD_DONE_IDLE: Setup = Setup {
@@ -32,6 +34,7 @@ const HELD_DONE_IDLE: Setup = Setup {
     done: true,
     held: true,
     recover: true,
+    mode: "worker",
 };
 
 /// A workspace named `name` whose agent `setup` describes.
@@ -49,10 +52,14 @@ async fn agent(
         .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
+    let agent = crate::execution::TrackedAgent {
+        mode: setup.mode.into(),
+        ..crate::execution::TrackedAgent::named("claude")
+    };
     manager
         .track_agent(
             &execution.plan.id,
-            &crate::execution::TrackedAgent::named("claude"),
+            &agent,
             &workspace.id,
             &workspace.name,
             setup.recover,
@@ -363,7 +370,7 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
         state: AgentState::Working,
         done: false,
         held: false,
-        recover: true,
+        ..HELD_DONE_IDLE
     };
     let (workspace, execution) = agent(&manager, &repo.id, "blocked", working).await;
     let selector = SpaceSelector::id(&workspace.id);
@@ -474,11 +481,13 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
     );
 }
 
-/// An idle chat in a repository under `root` with `[sleep] idle` enabled,
-/// whose prompt cache has expired, and its agent's execution.
+/// An idle chat whose agent runs in `mode`, in a repository under `root`
+/// with `[sleep] idle` enabled and a heavy chat mode `pair`, whose prompt
+/// cache has expired, and its agent's execution.
 async fn idle_chat(
     manager: &std::sync::Arc<Manager>,
     root: &std::path::Path,
+    mode: &str,
 ) -> (
     crate::model::Chat,
     crate::daemon::workspace::StartedExecution,
@@ -489,7 +498,10 @@ async fn idle_chat(
         .await
         .unwrap();
     manager
-        .write_local_config(&repo.id, Some("[sleep]\nidle = true\n".into()))
+        .write_local_config(
+            &repo.id,
+            Some("[sleep]\nidle = true\n[modes.pair]\nkind = 'chat'\n".into()),
+        )
         .await
         .unwrap();
     let chat = manager
@@ -502,10 +514,14 @@ async fn idle_chat(
         .begin_agent_execution(chat.id.as_str())
         .await
         .unwrap();
+    let agent = crate::execution::TrackedAgent {
+        mode: mode.into(),
+        ..crate::execution::TrackedAgent::named("claude")
+    };
     manager
         .track_agent(
             &execution.plan.id,
-            &crate::execution::TrackedAgent::named("claude"),
+            &agent,
             &chat.id,
             &chat.name,
             true,
@@ -536,12 +552,23 @@ async fn idle_chat(
     (chat, execution)
 }
 
-/// A chat's idle agent keeps running with its prompt cache expired, since
-/// the user attends it, while `[sleep] idle` stops a workspace's.
+/// `[sleep] idle` stops a heavy chat's idle agent once its prompt cache
+/// expires, as it stops a workspace's.
 #[tokio::test]
-async fn a_chats_idle_agent_keeps_running_once_its_cache_expires() {
+async fn a_heavy_chats_idle_agent_stops_once_its_cache_expires() {
     let (root, manager) = manager().await;
-    let (_, execution) = idle_chat(&manager, root.path()).await;
+    let (_, execution) = idle_chat(&manager, root.path(), "pair").await;
+
+    manager.stop_idle_agents().await.unwrap();
+
+    assert!(*execution.stop.borrow());
+}
+
+/// A light chat's idle agent keeps running with its prompt cache expired.
+#[tokio::test]
+async fn a_light_chats_idle_agent_keeps_running_once_its_cache_expires() {
+    let (root, manager) = manager().await;
+    let (_, execution) = idle_chat(&manager, root.path(), "chat").await;
 
     manager.stop_idle_agents().await.unwrap();
 
@@ -554,7 +581,7 @@ async fn a_chats_idle_agent_keeps_running_once_its_cache_expires() {
 async fn a_blocked_chats_idle_agent_stops_until_its_space_clears() {
     use crate::client::progress::ProgressChange;
     let (root, manager) = manager().await;
-    let (chat, execution) = idle_chat(&manager, root.path()).await;
+    let (chat, execution) = idle_chat(&manager, root.path(), "chat").await;
     let blocker = crate::model::Blocker::Pr("https://github.com/team/app/pull/8".parse().unwrap());
     let change = ProgressChange::AddBlocker {
         blocker,
@@ -606,6 +633,34 @@ async fn a_sleeping_agent_sleeps_once_its_cache_expires() {
         stop_reason(&manager, &execution).await,
         Some(Protection::slept().reason)
     );
+}
+
+/// A light workspace agent that sleeps only stops its idle wakes: neither
+/// its sleep nor an expired cache under `[sleep] idle` stops it.
+#[tokio::test]
+async fn a_light_agent_that_sleeps_keeps_running() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let config = "[sleep]\nidle = true\n[modes.triage]\nweight = 'light'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
+    let light = Setup {
+        mode: "triage",
+        ..UNFINISHED
+    };
+    let (workspace, execution) = agent(&manager, &repo.id, "sleeps", light).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.sleep(&selector, Some(Sleep::Turn))).await.unwrap();
+    cache_expires_in(&manager, &workspace, 0).await;
+
+    manager.stop_idle_agents().await.unwrap();
+
+    assert!(!*execution.stop.borrow());
 }
 
 #[tokio::test]

@@ -643,14 +643,19 @@ async fn an_agent_records_its_mode_with_its_execution_workspace_and_last_session
     assert_eq!(earlier.mode, "worker");
 }
 
-/// Load never stops a chat's agent, which the user attends, while a lack of
-/// disk space stops it with the others, since any agent may be writing.
-#[tokio::test]
-async fn load_leaves_a_chats_agent_running_while_disk_space_stops_it() {
-    let (root, manager) = manager().await;
-    let repo = repository(root.path(), "repo");
+/// A running chat in a repository under `root` with a heavy chat mode
+/// `pair`, and the execution of its agent, which runs in `mode`.
+async fn chat_agent(
+    manager: &std::sync::Arc<Manager>,
+    root: &std::path::Path,
+    mode: &str,
+) -> crate::daemon::workspace::StartedExecution {
+    let repo = repository(root, "repo");
     let repo = manager
         .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    (manager.write_local_config(&repo.id, Some("[modes.pair]\nkind = 'chat'\n".into())))
         .await
         .unwrap();
     let chat = manager
@@ -663,16 +668,40 @@ async fn load_leaves_a_chats_agent_running_while_disk_space_stops_it() {
         .begin_agent_execution(chat.id.as_str())
         .await
         .unwrap();
-    manager
-        .track_agent(
-            &execution.plan.id,
-            &crate::execution::TrackedAgent::named("claude"),
-            &chat.id,
-            &chat.name,
-            true,
-            Duration::ZERO,
-        )
-        .await;
+    let agent = crate::execution::TrackedAgent {
+        mode: mode.into(),
+        ..crate::execution::TrackedAgent::named("claude")
+    };
+    (manager.track_agent(
+        &execution.plan.id,
+        &agent,
+        &chat.id,
+        &chat.name,
+        true,
+        Duration::ZERO,
+    ))
+    .await;
+    execution
+}
+
+/// Load stops a heavy chat's agent, as it stops a workspace's.
+#[tokio::test]
+async fn load_stops_a_heavy_chats_agent() {
+    let (root, manager) = manager().await;
+    let execution = chat_agent(&manager, root.path(), "pair").await;
+
+    let stopped = manager.stop_agent_for_overload("critical memory pressure");
+
+    assert!(stopped.await);
+    assert!(*execution.stop.borrow());
+}
+
+/// Load never stops a light chat's agent, while a lack of disk space stops
+/// it with the others, since any agent may be writing.
+#[tokio::test]
+async fn load_leaves_a_light_chats_agent_running_while_disk_space_stops_it() {
+    let (root, manager) = manager().await;
+    let execution = chat_agent(&manager, root.path(), "chat").await;
 
     assert!(
         !manager

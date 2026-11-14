@@ -211,9 +211,6 @@ pub(crate) struct Agent {
     narrowing: crate::config::permissions::PermissionsConfig,
     workspace: SpaceName,
     workspace_id: SpaceId,
-    /// Whether the user attends its space, so that Shoal never stops it to
-    /// free capacity.
-    attended: bool,
     started: Instant,
     recover: bool,
     stop: watch::Sender<bool>,
@@ -508,7 +505,6 @@ impl Manager {
         running: Duration,
     ) {
         self.record_execution_agent(id, tracked).await;
-        let attended = self.attended(workspace_id).await;
         let connections = self.executions.connections().await;
         let Some(stop) = connections.stop_channel(id) else {
             return;
@@ -520,7 +516,6 @@ impl Manager {
             narrowing: tracked.narrowing,
             workspace: workspace.clone(),
             workspace_id: workspace_id.clone(),
-            attended,
             started: Instant::now()
                 .checked_sub(running)
                 .unwrap_or_else(Instant::now),
@@ -1078,13 +1073,11 @@ impl Manager {
                             space: &agent.workspace_id,
                             started: agent.started,
                             attached: agent.attached == Some(true),
-                            attended: agent.attended,
                         });
                 let selected: Vec<ExecutionId> = match select {
-                    // Load stops the heavy agents the user does not attend.
+                    // Load stops heavy agents, a workspace's or a chat's.
                     Select::One => {
-                        let heavy =
-                            running.filter(|agent| !agent.attended && !light.execution(agent.id));
+                        let heavy = running.filter(|agent| !light.execution(agent.id));
                         first_to_stop(heavy, turns, &ranks)
                             .into_iter()
                             .cloned()
@@ -1298,8 +1291,6 @@ struct Running<'a> {
     started: Instant,
     /// Whether a terminal shows it, so the user may be working with it.
     attached: bool,
-    /// Whether the user attends its space.
-    attended: bool,
 }
 
 /// Of the `running` agents, the one whose stop costs the least, by the
