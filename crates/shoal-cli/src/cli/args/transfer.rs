@@ -15,6 +15,7 @@ pub enum MoveCommand {
     /// A workspace is removed: the file holds its checkpoint, as a Git bundle without the
     /// commits of the default branch, its base, links and stopped agents. A chat's agent is
     /// stopped once it has reported its session: the file holds the chat's name and agent.
+    /// The chats in a workspace's worktree and those below a space end with it, in its file.
     /// Both carry the files of the agents' sessions, such as their transcripts. A removed
     /// workspace is exported without another removal. Without -o, or with `-`, it writes to
     /// standard output, which must not be a terminal. When -o names a directory, several spaces,
@@ -27,8 +28,10 @@ pub enum MoveCommand {
     /// lacks continues only on the machine that exported it. --keep-sessions and --new-sessions
     /// override that. A workspace opens again, fetching the default branch when the file builds
     /// on commits the repository lacks, and shoal restore restores its agents. A chat starts in
-    /// the repository's checkout, resuming its session: beside this terminal, or in the
-    /// background with --restore or without a terminal. Without a file, or with `-`, it reads
+    /// the worktree it ran in when that workspace is here, else in the repository's checkout, or
+    /// in root_dir without a repository, resuming its session: beside this terminal, or in the
+    /// background with --restore or without a terminal. The chats a file carries open again
+    /// stopped, as shoal restore opens removed chats. Without a file, or with `-`, it reads
     /// from standard input, which must not be a terminal. A directory imports each .shoal file
     /// in it.
     Import(ImportArgs),
@@ -40,7 +43,8 @@ pub enum MoveCommand {
     /// restore opens it again; a chat's file stays here for shoal move import. --keep copies the
     /// spaces instead and leaves them running here.
     Ssh(SshArgs),
-    /// Move every repository directory, with its workspaces and clone, into root_dir.
+    /// Move every repository directory, with its workspaces and clone, and the files of the chats
+    /// without a repository into root_dir.
     Root(RootArgs),
 }
 
