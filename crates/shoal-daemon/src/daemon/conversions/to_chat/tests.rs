@@ -346,3 +346,39 @@ async fn nothing_builds_on_a_workspace_that_becomes_a_chat() {
     );
     assert!(created.base_workspace.is_none());
 }
+
+#[tokio::test]
+async fn a_failed_conversion_leaves_the_workspace_its_record_and_checkpoints() {
+    let (root, manager) = manager().await;
+    let repo = registered(root.path(), &manager).await;
+    let workspace = manager
+        .create_workspace(&repo.id, "fix-login".into(), None, None, None)
+        .await
+        .unwrap();
+    std::fs::write(workspace.path.join("notes.txt"), "unsaved").unwrap();
+    let chat = ConvertedChat {
+        agent: "claude".into(),
+        execution: ExecutionId::generate(),
+        session: None,
+        origin: None,
+        mode: crate::model::chat_mode(),
+        narrowing: Default::default(),
+    };
+    // Git refuses to remove a locked worktree, which fails the conversion
+    // after its record is saved.
+    let path = workspace.path.to_str().unwrap();
+    git(&repo.path, &["worktree", "lock", path]);
+    let converted = (manager.convert_worktree_to_chat(&workspace.id, &chat)).await;
+    git(&repo.path, &["worktree", "unlock", path]);
+    assert!(converted.is_err());
+
+    // Nothing to restore while the workspace exists, which keeps its
+    // checkpoints.
+    assert!(manager.removed_spaces().await.unwrap().is_empty());
+    let checkpoints = manager
+        .checkpoints(&SpaceSelector::id(&workspace.id), None)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!checkpoints.is_empty());
+}

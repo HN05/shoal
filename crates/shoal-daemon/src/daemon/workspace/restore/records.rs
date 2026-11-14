@@ -27,24 +27,18 @@ impl Manager {
     /// Take the removal's checkpoint and record what `shoal restore` reopens
     /// before any file is deleted, so an interrupted or failed removal stays
     /// restorable, leaving out the agent `carried_on` ran as, which carries on
-    /// in the chat the workspace becomes. That chat keeps the workspace's
-    /// ID, so the record of a conversion, with the checkpoints, takes one of
-    /// its own, which its restore opens it under beside the chat. Records of
-    /// spaces that still exist are not listed.
+    /// in the chat the workspace becomes, which takes the record an ID of its
+    /// own once it commits. Records of spaces that still exist are not
+    /// listed.
     pub(in crate::daemon::workspace) async fn save_removal_record(
         &self,
         workspace: &Workspace,
         cause: EventCause,
         carried_on: Option<&ExecutionId>,
     ) -> Result<RemovedSpace> {
-        let mut checkpoint = self
+        let checkpoint = self
             .checkpoint(workspace, CheckpointCause::Removal, None)
             .await?;
-        let id = match carried_on {
-            Some(_) => SpaceId::generate(),
-            None => workspace.id.clone(),
-        };
-        checkpoint.workspace_id = id.clone();
         // Removal refuses link changes, so links read now are final, unlike
         // those of the snapshot taken before it started; the spaces below go
         // first, so its parent is still there.
@@ -56,7 +50,7 @@ impl Manager {
             None => self.unplaced_sessions(workspace).await,
         };
         let removed = RemovedSpace {
-            space_id: id,
+            space_id: workspace.id.clone(),
             repository_id: Some(workspace.repository_id.clone()),
             name: workspace.name.clone(),
             expires_at: checkpoint.expires_at,
@@ -75,15 +69,8 @@ impl Manager {
                 session_files,
             })),
         };
-        let (record, from) = (removed.clone(), workspace.id.clone());
-        self.store
-            .write(move |tx| {
-                if record.space_id != from {
-                    super::super::checkpoints::reassign(tx, &from, &record.space_id)?;
-                }
-                self::record(tx, &record)
-            })
-            .await?;
+        let record = removed.clone();
+        self.store.run(move |db| self::record(db, &record)).await?;
         Ok(removed)
     }
 
@@ -216,6 +203,34 @@ impl Manager {
             .await?
             .with_context(|| format!("no restorable space {selector}; shoal restore lists them"))
     }
+}
+
+/// Give the removal record of the workspace `id`, which a conversion makes a
+/// chat keeping that ID, and its checkpoints an ID of their own, which its
+/// restore opens it under beside the chat; a disposable workspace has none.
+/// It runs in the transaction that commits the conversion, so a conversion
+/// that fails leaves the record and checkpoints the workspace's.
+pub(in crate::daemon::workspace) fn rekey_converted(
+    tx: &rusqlite::Transaction<'_>,
+    id: &SpaceId,
+) -> Result<()> {
+    let recorded = crate::daemon::store::exists(
+        tx,
+        "SELECT 1 FROM removed_spaces WHERE space_id=?1 AND NOT chat",
+        [id],
+    )?;
+    if !recorded {
+        return Ok(());
+    }
+    let own = SpaceId::generate();
+    super::super::checkpoints::reassign(tx, id, &own)?;
+    tx.execute(
+        "UPDATE removed_spaces SET space_id=?2, record=json_set(record,
+            '$.workspace_id', ?2, '$.checkpoint.workspace_id', ?2)
+         WHERE space_id=?1 AND NOT chat",
+        params![id, own],
+    )?;
+    Ok(())
 }
 
 /// Persist a removal record, replacing one an earlier attempt left.

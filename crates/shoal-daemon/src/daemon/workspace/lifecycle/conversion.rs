@@ -23,7 +23,9 @@ impl Manager {
     }
 
     /// Replace the workspace `id`, whose worktree is gone, with the stopped
-    /// `chat`, returning the requests it decided, given back to the user.
+    /// `chat`, giving the workspace's removal record an ID of its own, since
+    /// the chat keeps this one, and returning the requests it decided, given
+    /// back to the user.
     pub(super) async fn commit_conversion(
         &self,
         id: &SpaceId,
@@ -31,7 +33,10 @@ impl Manager {
     ) -> Result<Vec<ApprovalRequest>> {
         let (id, chat) = (id.to_owned(), chat.clone());
         self.store
-            .write(move |tx| crate::daemon::conversions::record::replace_workspace(tx, &id, &chat))
+            .write(move |tx| {
+                super::super::restore::rekey_converted(tx, &id)?;
+                crate::daemon::conversions::record::replace_workspace(tx, &id, &chat)
+            })
             .await
     }
 }
