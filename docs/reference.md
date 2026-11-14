@@ -3859,7 +3859,8 @@ branch; a checkpoint that branch already has travels without one. Ignored files,
 leases, permits, approvals, grants and holds stay behind; setup rebuilds what the
 workspace needs. A chat's file holds its name, agent and session, and the chats below it, or
 below one of them: the export refuses a chat whose agent reported no session,
-the one it runs in and one with a workspace below it, and asks before stopping the agents unless given `--yes`; the chat is then
+the one it runs in and one with a workspace below it that is not exported with
+it, and asks before stopping the agents unless given `--yes`; the chat is then
 removed with the chats below it. A workspace or chat
 already removed, as by cleanup, is exported from its removal record, which
 stays, under the refusals that still apply, without another removal. The file's manifest names its `kind`, `workspace` or `chat`.
