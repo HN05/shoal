@@ -56,6 +56,9 @@ impl Backend for Forgejo {
             // Forgejo approves runs only through a web UI route.
             Capability::ApproveRuns => Support::Unsupported(Some("approve them in the web UI")),
             Capability::RunJobs => Support::Unsupported(Some(RUNNER_RELEASE)),
+            Capability::AutoMergeAtHead => Support::Unsupported(Some(
+                "Forgejo checks the head only when it sets an automatic merge, which then merges the head the PR has once checks pass",
+            )),
             Capability::CancelJobs
             | Capability::StartRuns
             | Capability::ReadRuns

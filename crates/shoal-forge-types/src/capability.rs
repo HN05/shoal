@@ -34,6 +34,7 @@ states!(Capability: Variants {
     SquashMerge => "squash_merge",
     AutoMerge => "auto_merge",
     MergeAtHead => "merge_at_head",
+    AutoMergeAtHead => "auto_merge_at_head",
     UpdateByMerge => "update_by_merge",
     UpdateByRebase => "update_by_rebase",
     ForkPrs => "fork_prs",
@@ -71,6 +72,9 @@ impl Capability {
             Self::SquashMerge => "squash and merge PRs",
             Self::AutoMerge => "merge PRs once their checks pass",
             Self::MergeAtHead => "bind a merge to the head commit it read",
+            Self::AutoMergeAtHead => {
+                "keep an automatic merge bound to the head commit it read until it merges"
+            }
             Self::UpdateByMerge => "update PR branches by merging their base",
             Self::UpdateByRebase => "update PR branches by rebasing onto their base",
             Self::ForkPrs => "open PRs from a fork",

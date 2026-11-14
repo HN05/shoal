@@ -4251,8 +4251,10 @@ succeed. GitHub deletes the branch of an automatic merge only as the
 repository's settings say, so it refuses `--delete-branch` with `--auto`, and
 Bitbucket cannot merge later. `--cancel-auto` withdraws the automatic merge.
 A merge and an automatic merge name the head commit Shoal read for them, and
-the forge refuses to merge a head that moved since, except on Bitbucket, which
-takes none.
+the forge refuses one whose head moved by then, except on Bitbucket, which
+takes none. Of the automatic merges, only GitLab's stays bound to that head
+until it merges, dropping the merge when the branch moves; the others merge
+the head the PR has once checks pass, as `shoal forge capabilities` says.
 When the last check of a workspace that links the PR found files
 [changed on both sides](#conflicts) at the PR's head with its base branch,
 `merge` and `merge --auto` name them and ask before merging, such as

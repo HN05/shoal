@@ -74,7 +74,7 @@ impl Backend for Bitbucket {
             Capability::AutoMerge => {
                 Support::Unsupported(Some("Bitbucket's API cannot merge a pull request later"))
             }
-            Capability::MergeAtHead => Support::Unsupported(Some(
+            Capability::MergeAtHead | Capability::AutoMergeAtHead => Support::Unsupported(Some(
                 "Bitbucket merges a pull request at whatever head it has when it merges",
             )),
             Capability::UpdateByMerge | Capability::UpdateByRebase => Support::Unsupported(Some(

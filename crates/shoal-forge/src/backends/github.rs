@@ -43,6 +43,9 @@ impl Backend for GitHub {
 
     fn support(&self, capability: Capability) -> Support {
         match capability {
+            Capability::AutoMergeAtHead => Support::Unsupported(Some(
+                "GitHub keeps an automatic merge set after a push from an account with write access, and documents no check of the expected head after it sets one",
+            )),
             Capability::RunJobs
             | Capability::ResolveThreads
             | Capability::RerunJobs
