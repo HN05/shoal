@@ -92,6 +92,8 @@ pub struct RepoConfig {
     #[option(section)]
     pub review: ReviewConfig,
     #[option(section)]
+    pub gate: crate::config::gate::GateConfig,
+    #[option(section)]
     pub messages: MessagesConfig,
     #[option(section)]
     pub merge: MergeConfig,
@@ -442,6 +444,7 @@ impl RepoConfig {
         }
         self.cleanup.validate()?;
         self.messages.validate()?;
+        self.gate.validate()?;
         self.conflicts.validate()?;
         self.runner.validate()?;
         crate::config::validate_port_range(self.ports.start, self.ports.end)?;

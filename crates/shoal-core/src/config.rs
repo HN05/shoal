@@ -3,6 +3,7 @@
 pub mod agents;
 pub mod edit;
 pub mod forges;
+pub mod gate;
 pub mod git_profiles;
 pub mod hooks;
 pub mod machine;

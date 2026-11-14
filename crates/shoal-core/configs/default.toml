@@ -362,6 +362,20 @@ confirm = true
 # Push the default branch to its upstream after shoal merge; --push and --no-push override it.
 push = false
 
+# The gate decides an agent's requests under a permission of "gate" at once:
+# it allows one, denies it with a reason, or passes it to you for a case listed
+# in escalate. It reads this table from the repository's checkout.
+[gate]
+# Agent that decides (no default); unset, agent.default does.
+# agent = "claude"
+# Agent that decides once more when the first one fails (no default).
+# fallback_agent = "codex"
+# What the gate is told besides its built-in instructions (no default).
+# instructions = "Follow CONTRIBUTING.md."
+# The cases that go to you, each of which the gate quotes when it passes one.
+escalate = []
+# A table per key, such as [gate.merge], adds instructions and cases of its own.
+
 # Files that hold a number each change picks for itself, such as a schema or
 # protocol version: paths and globs relative to the repository root. Shoal
 # reports a branch that changed one its base also changed, and asks before

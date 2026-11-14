@@ -430,11 +430,11 @@ issue, and `{relabel}`, the sentence that swaps the `[issue]` `plan_label` for
 
 ```toml
 [permissions]
-issue_open = "direct"                 # "propose" or "direct"
-pr_open = "direct"                    # "propose" or "direct"
-issue_other_repositories = "propose"  # "deny", "propose" or "direct"
-merge = "propose"                     # "propose" or "direct"
-push = "direct"                       # "deny", "propose" or "direct"
+issue_open = "direct"                 # "propose", "gate" or "direct"
+pr_open = "direct"                    # "propose", "gate" or "direct"
+issue_other_repositories = "propose"  # "deny", "propose", "gate" or "direct"
+merge = "propose"                     # "propose", "gate" or "direct"
+push = "direct"                       # "deny", "propose", "gate" or "direct"
 api_writes = "deny"                   # "deny", "propose" or "direct"
 daemon = "deny"                       # "deny", "propose" or "direct"
 admin = "propose"                     # "deny", "propose" or "direct"
@@ -445,8 +445,9 @@ decide = "deny"                       # "deny" or "direct"
 ci_approve = "propose"                # "deny", "propose" or "direct"
 ```
 
-Permissions say what agents may do: `"direct"` at once, `"propose"` after an
-approval, and `"deny"` never, in that order from widest to narrowest.
+Permissions say what agents may do: `"direct"` at once, `"gate"` after the
+[gate](#gate) allows it, `"propose"` after an approval, and `"deny"` never, in
+that order from widest to narrowest; no built-in mode sets `"gate"`.
 `issue_open` and `pr_open` cover issues and PRs in the space's repository,
 `issue_other_repositories` issues in other repositories, `merge` `shoal merge`
 and `unmerge`, and merging a PR, its automatic merge and deleting its branch, `push` pushes to the repository's remotes by `shoal pr open` or
@@ -474,6 +475,31 @@ default above; `chat`, `plan` and `orchestrate` default
 `"direct"` and `api_writes` and `daemon` to `"propose"`. A space's own permissions
 are then narrowed to its parent's and set by `--permission`; see
 [mode permissions](reference.md#mode-permissions).
+
+### Gate
+
+```toml
+[gate]
+agent = "claude"          # Default: agent.default
+fallback_agent = "codex"  # Optional
+instructions = "Follow CONTRIBUTING.md."
+escalate = ["merging into a release branch"]
+
+[gate.push]
+instructions = "Tags are pushed only by the release workflow."
+escalate = ["a push to a tag"]
+```
+
+The gate is the agent that decides a request under a permission of `"gate"`;
+see [the gate](reference.md#the-gate). Shoal reads this table from the
+repository's checkout and the layers beside it, never from the requesting
+workspace's worktree. `fallback_agent` decides once more when the first agent
+fails for a reason other than running too long. `instructions` follow the
+gate's built-in instructions, and `escalate` lists the cases it passes to the
+user, each quoted word for word in the verdict; with none, it decides every
+request itself. `[gate.issue_open]`, `[gate.pr_open]`,
+`[gate.issue_other_repositories]`, `[gate.merge]` and `[gate.push]` add their
+`instructions` and `escalate` for the requests that key governs.
 
 ### Secrets
 
