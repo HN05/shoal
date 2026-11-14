@@ -2458,7 +2458,8 @@ cleanup, and repairing, adopting, restoring and moving workspaces, in the
 caller's own repository where the action names one. A scoped process changes
 Shoal's config only key by key, setting a permission only to a value its
 space holds and removing none, since that could hand it more; it never
-replaces the config or runs `config setup` or `repo setup`.
+replaces the config or runs `config setup` or `repo setup`. A removed
+workspace it restores opens below its own space.
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the
 [review template](../crates/shoal-core/src/config/templates/review.md), its task,

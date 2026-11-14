@@ -903,3 +903,45 @@ async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
     assert!(removed_id.ends_with(workspace.id.as_str()));
     assert!(!removed_id.exists());
 }
+
+#[tokio::test]
+async fn a_scoped_restore_reopens_the_workspace_below_the_caller() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.remove_workspace(&selector, UnsavedWork::All, InspectionPolicy::GitOnly))
+        .await
+        .unwrap();
+    let master = crate::daemon::test_support::chat(
+        &std::sync::Arc::clone(&manager),
+        "master",
+        "orchestrate",
+        None,
+        None,
+    )
+    .await;
+    let caller = Caller {
+        space_id: master.id.clone(),
+        execution: None,
+        granted: None,
+    };
+    let restored = manager
+        .restore_workspace_below(&selector, &caller)
+        .await
+        .unwrap();
+    let id = restored.opened.workspace.id.clone();
+    let parent = manager
+        .store
+        .read(move |tx| crate::daemon::workspace::tree::parent_id(tx, &id))
+        .await
+        .unwrap();
+    assert_eq!(parent, Some(master.id));
+}

@@ -13,6 +13,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::Manager;
 use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
+use crate::daemon::scope::Caller;
 use crate::refusal::{Reason, Refusal};
 use crate::{
     daemon::events::EventCause,
@@ -125,6 +126,44 @@ impl Manager {
     /// and stopped agents; the caller sets it up and links its PRs. The
     /// record goes once the files are back.
     pub async fn restore_workspace(&self, selector: &SpaceSelector) -> Result<RestoredWorkspace> {
+        self.restore_workspace_as(selector, None).await
+    }
+
+    /// [`Self::restore_workspace`] for a scoped `caller`, which reopens it
+    /// below its own space, which must take a child of the workspace's
+    /// repository, as a scoped start opens one, so it stays in its tree.
+    pub(crate) async fn restore_workspace_below(
+        &self,
+        selector: &SpaceSelector,
+        caller: &Caller,
+    ) -> Result<RestoredWorkspace> {
+        let removed = (self.removed_workspaces().await?.into_iter())
+            .find(|removed| selector.given_id() == Some(&removed.workspace_id))
+            .with_context(|| {
+                format!("no restorable workspace {selector}; shoal restore lists them")
+            })?;
+        let (repository, parent) = (removed.repository_id, caller.space_id.clone());
+        self.store
+            .read(move |tx| super::tree::ready_parent(tx, Some(&repository), &parent).map(drop))
+            .await?;
+        let restored = self.restore_workspace_as(selector, Some(caller)).await?;
+        let (space, parent) = (
+            restored.opened.workspace.id.clone(),
+            caller.space_id.clone(),
+        );
+        self.store
+            .write(move |tx| super::tree::set_parent(tx, &space, Some(&parent)))
+            .await?;
+        Ok(restored)
+    }
+
+    /// [`Self::restore_workspace`] for `caller`, which relinks only what it
+    /// may link.
+    async fn restore_workspace_as(
+        &self,
+        selector: &SpaceSelector,
+        caller: Option<&Caller>,
+    ) -> Result<RestoredWorkspace> {
         let removed = self.claim_removed_workspace(selector).await?;
         let checkpoint = &removed.checkpoint;
         let files = (checkpoint.commit != checkpoint.head).then(|| RestoredFiles {
@@ -138,8 +177,7 @@ impl Manager {
             },
             None => self.restore_branch_workspace(&removed, files).await?,
         };
-        // Only the user restores a removed workspace.
-        let mut warnings = (self.relink_space(&opened.workspace.id, &removed.links, None)).await;
+        let mut warnings = (self.relink_space(&opened.workspace.id, &removed.links, caller)).await;
         let session_files = self
             .hand_over_imported_sessions(&removed, &opened.workspace.id)
             .await

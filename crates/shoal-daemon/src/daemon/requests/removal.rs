@@ -118,7 +118,10 @@ pub(super) async fn handle(
             Body::Cleanup(cleanup::on_request(manager, dry_run, &selection).await?)
         }
         RemovalMethod::RestoreWorkspace { workspace } => {
-            Body::RestoredWorkspace(Box::new(manager.restore_workspace(&workspace).await?))
+            Body::RestoredWorkspace(Box::new(match caller {
+                Some(caller) => manager.restore_workspace_below(&workspace, caller).await?,
+                None => manager.restore_workspace(&workspace).await?,
+            }))
         }
         RemovalMethod::DropRestoredSessions { workspace } => {
             manager.drop_restored_sessions(&workspace).await?;

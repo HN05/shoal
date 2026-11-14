@@ -356,7 +356,7 @@ With `push = "deny"`, `pr open` and `git push` fail with the reason.
 Other keys govern administering Shoal and the actions that reach beyond a
 space, each `deny`, `propose` or `direct`: `admin` administering Shoal, such as `config set`, `repo add`,
 `cleanup`, `setup --skip`, `contribute`, `move`, and restoring removed
-workspaces (a permission you set in config
+workspaces, which reopen below your space (a permission you set in config
 only to a value your space holds, and `config reset`, `install`, `setup` and
 `repo setup` stay the user's), `limits` starting agents regardless of the limits, with
 `--now`, `--focus` or `queue start`, `ci_approve` approving CI runs that wait
