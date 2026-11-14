@@ -1332,11 +1332,12 @@ fn a_scoped_start_runs_a_chat_here_as_its_own() {
     fs::write(fixture.repo.join("chat-agent.sh"), agent).unwrap();
     fixture.add("parent");
     let parent = fixture.id("parent");
-    let start = ["start", "--mode", "chat", "--here", "--agent", "claude"];
+    let caller = "echo \"$SHOAL_SCOPE_TOKEN\" > \"$HOME/caller-token\"; \
+                  exec \"$SHOAL\" start --mode chat --here --agent claude --name here";
     let (output, transcript) = fixture.interactive_command(
         (fixture.command().current_dir(&fixture.repo))
-            .args(["run", "--workspace", &parent, "--", support::shoal_binary()])
-            .args(start.iter().chain(&["--name", "here"])),
+            .args(["run", "--workspace", &parent, "--", "sh", "-c", caller])
+            .env("SHOAL", support::shoal_binary()),
         "",
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -1350,7 +1351,11 @@ fn a_scoped_start_runs_a_chat_here_as_its_own() {
         panic!("{recorded:?}");
     };
     assert_eq!(id, chat["id"], "{chat}");
-    assert!(!token.is_empty());
+    let caller_token = fs::read_to_string(fixture.root.path().join("caller-token")).unwrap();
+    assert!(
+        !token.is_empty() && token != caller_token.trim(),
+        "{recorded:?}"
+    );
 }
 
 #[test]
