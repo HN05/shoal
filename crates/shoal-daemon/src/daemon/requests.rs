@@ -38,7 +38,10 @@ pub(super) async fn operation(
     caller: Option<&Caller>,
     scope: Option<&ScopeToken>,
 ) -> Answer {
-    handle(server, operation, caller, scope)
+    // Boxed, so the wrappers that serve it each hold a pointer instead of
+    // the largest request's state, which overflows a debug build's worker
+    // stack within a request as deep as a removal of nested spaces.
+    Box::pin(handle(server, operation, caller, scope))
         .await
         .unwrap_or_else(|error| Answer::failed(&error))
 }
