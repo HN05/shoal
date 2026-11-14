@@ -1,6 +1,5 @@
 //! What a snapshot observed: the kind of thing it read and the state it
 //! saw that thing in.
-use serde::{Deserialize, Deserializer, de::IntoDeserializer};
 use shoal_states::states;
 
 use crate::{
@@ -72,15 +71,5 @@ impl From<JobState> for SnapshotState {
             JobState::Finished => Self::Finished,
             JobState::Cancelled => Self::Cancelled,
         }
-    }
-}
-
-/// A saved snapshot's state, which snapshots that saw none save as empty.
-pub(super) fn saved<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Option<SnapshotState>, D::Error> {
-    match String::deserialize(deserializer)?.as_str() {
-        "" => Ok(None),
-        state => SnapshotState::deserialize(state.into_deserializer()).map(Some),
     }
 }

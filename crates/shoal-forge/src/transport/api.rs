@@ -8,6 +8,7 @@ use serde_json::Value;
 use shoal_time::UnixTime;
 use tokio::process::Command;
 
+use crate::raw::HttpMethod;
 use crate::{
     ForgeRepo,
     account::Account,
@@ -25,17 +26,6 @@ pub(crate) const FILE_TIMEOUT: Duration = Duration::from_secs(600);
 /// Bounds a response and the head the transport prints with it, unless
 /// the request sets a lower one.
 pub(crate) const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
-
-shoal_states::states!(
-    /// The HTTP methods forge requests use.
-    HttpMethod: ValueEnum {
-        Get => "GET",
-        Post => "POST",
-        Patch => "PATCH",
-        Put => "PUT",
-        Delete => "DELETE",
-    }
-);
 
 /// One REST request; `endpoint` is relative to the forge's API root.
 #[derive(Debug, Clone, PartialEq)]

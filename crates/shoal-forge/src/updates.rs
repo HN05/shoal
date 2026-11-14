@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de::IntoDeserializer};
 use shoal_refs::CommitId;
 use shoal_time::UnixTime;
 
@@ -122,7 +122,7 @@ pub struct Snapshot {
     /// observation.
     #[serde(
         default,
-        deserialize_with = "state::saved",
+        deserialize_with = "saved_state",
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) state: Option<SnapshotState>,
@@ -151,6 +151,16 @@ pub struct Snapshot {
     /// again.
     #[serde(skip)]
     pub(crate) failures_shown_elsewhere: bool,
+}
+
+/// A saved snapshot's state, which snapshots that saw none save as empty.
+fn saved_state<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<SnapshotState>, D::Error> {
+    match String::deserialize(deserializer)?.as_str() {
+        "" => Ok(None),
+        state => SnapshotState::deserialize(state.into_deserializer()).map(Some),
+    }
 }
 
 /// A failed job of a run, with the step that failed where its log names one.

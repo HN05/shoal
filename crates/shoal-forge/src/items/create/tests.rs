@@ -2,8 +2,9 @@ use super::*;
 use crate::{
     backends::{ForgeKind, Items},
     capability::CapabilityRequests,
+    raw::HttpMethod,
     test_support::{Server, agent_on, repo_on},
-    transport::{api::HttpMethod, memory::Memory},
+    transport::memory::Memory,
 };
 use serde_json::json;
 

@@ -11,13 +11,14 @@ use crate::{
     backends::Reviews,
     items::item::{Current, text},
     numbers::{CommentId, PullNumber},
+    raw::HttpMethod,
     review::{
         diff::{Diff, FileDiff},
         reviewers::Reviewer,
         submit::{PlacedReview, ReviewVerdict, Side, Submission},
         thread::{Target, Thread},
     },
-    transport::api::{HttpMethod, Request, TransportRequests},
+    transport::api::{Request, TransportRequests},
     updates::{activity_key, id_text},
 };
 

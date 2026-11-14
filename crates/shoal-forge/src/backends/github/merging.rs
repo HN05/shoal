@@ -15,7 +15,8 @@ use crate::{
         revert::NewRevert,
     },
     numbers::PullNumber,
-    transport::api::{HttpMethod, Request, TransportRequests, encode},
+    raw::HttpMethod,
+    transport::api::{Request, TransportRequests, encode},
 };
 
 impl Merging for GitHub {

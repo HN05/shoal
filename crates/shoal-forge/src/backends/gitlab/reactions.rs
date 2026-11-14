@@ -13,7 +13,8 @@ use crate::{
         link::ItemKind,
         reaction::{Listed, Subject, allowed::AllowedReactions},
     },
-    transport::api::{HttpMethod, Request, TransportRequests},
+    raw::HttpMethod,
+    transport::api::{Request, TransportRequests},
 };
 
 impl Reactions for GitLab {

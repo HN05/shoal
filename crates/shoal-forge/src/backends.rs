@@ -61,7 +61,11 @@ impl ForgeKind {
                 }
             })
     }
+}
 
+/// How a forge's tokens sign in.
+#[shoal_forge_derive::extension(pub SignIn)]
+impl ForgeKind {
     /// Whether a token for the forge signs in together with the email of
     /// the account it belongs to.
     pub fn uses_account_email(self) -> bool {

@@ -10,7 +10,8 @@ use crate::{
         link::ItemKind,
         reaction::{Listed, Subject},
     },
-    transport::api::{HttpMethod, Request},
+    raw::HttpMethod,
+    transport::api::Request,
 };
 
 impl Reactions for GitHub {

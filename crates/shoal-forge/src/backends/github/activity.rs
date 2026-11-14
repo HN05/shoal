@@ -6,6 +6,7 @@ use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 
 use super::GitHub;
+use crate::review::status::StatusRecords;
 use crate::{
     ForgeRepo,
     account::Account,

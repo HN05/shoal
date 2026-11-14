@@ -18,11 +18,12 @@ use crate::{
         reaction::{Listed, Subject},
     },
     numbers::{CommentId, PullNumber},
+    raw::HttpMethod,
     review::{
         reviewers::team_name,
         view::{Comment, Details, PrDetails, labels, login, required, text_field},
     },
-    transport::api::{HttpMethod, Request, TransportRequests, encode},
+    transport::api::{Request, TransportRequests, encode},
 };
 
 /// What a forge serving GitHub's REST shapes serves its own way. The

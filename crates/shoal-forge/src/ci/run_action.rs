@@ -13,7 +13,8 @@ use crate::{
     ci::{CiAction, JobState, id, run_view::RunViewSteps},
     items::{link::LinkKind, reference::ItemRef},
     numbers::{JobId, PullNumber, RunId, RunNumber},
-    transport::api::{HttpMethod, Request, TransportRequests},
+    raw::HttpMethod,
+    transport::api::{Request, TransportRequests},
 };
 
 /// A workflow run in the repository, as its forge reports it.

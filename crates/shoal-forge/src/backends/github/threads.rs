@@ -7,8 +7,9 @@ use crate::{
     ForgeRepo,
     account::Account,
     numbers::{CommentId, PullNumber},
+    raw::HttpMethod,
     review::thread::{Target, Thread},
-    transport::api::{HttpMethod, Request, TransportRequests},
+    transport::api::{Request, TransportRequests},
 };
 
 /// A GitHub review thread, which only GraphQL reports.

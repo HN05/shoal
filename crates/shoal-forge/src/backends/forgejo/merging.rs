@@ -13,7 +13,8 @@ use crate::{
         link::ItemKind,
     },
     numbers::PullNumber,
-    transport::api::{HttpMethod, Request, TransportRequests, encode},
+    raw::HttpMethod,
+    transport::api::{Request, TransportRequests, encode},
 };
 
 impl Merging for Forgejo {

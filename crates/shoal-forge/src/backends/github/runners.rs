@@ -20,7 +20,8 @@ use crate::{
     },
     items::item::text,
     numbers::{JobId, PullNumber, RunId, RunnerId},
-    transport::api::{HttpMethod, Request, TransportRequests},
+    raw::HttpMethod,
+    transport::api::{Request, TransportRequests},
 };
 
 impl Runners for GitHub {

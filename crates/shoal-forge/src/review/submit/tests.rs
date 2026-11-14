@@ -1,4 +1,5 @@
 use super::*;
+use crate::raw::HttpMethod;
 
 fn review(verdict: ReviewVerdict, body: &str, comments: &[(&str, u64, &str)]) -> NewReview {
     NewReview {
@@ -56,13 +57,7 @@ fn line_comments_read_from_json_default_to_the_new_side_and_refuse_unknowns() {
 
 /// A submission of `drafts` and `requests`, each a POST to its endpoint.
 fn submission(drafts: &[&str], requests: &[&str]) -> Submission {
-    let post = |endpoint: &&str| {
-        Request::new(
-            crate::transport::api::HttpMethod::Post,
-            (*endpoint).into(),
-            None,
-        )
-    };
+    let post = |endpoint: &&str| Request::new(HttpMethod::Post, (*endpoint).into(), None);
     Submission {
         drafts: drafts.iter().map(post).collect(),
         requests: requests.iter().map(post).collect(),
@@ -86,11 +81,7 @@ impl Exchange for Scripted {
 
     fn discard(&self, draft: &Value) -> Result<Request> {
         let endpoint = format!("drafts/{}", draft["id"]);
-        Ok(Request::new(
-            crate::transport::api::HttpMethod::Delete,
-            endpoint,
-            None,
-        ))
+        Ok(Request::new(HttpMethod::Delete, endpoint, None))
     }
 }
 

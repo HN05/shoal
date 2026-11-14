@@ -19,7 +19,8 @@ use crate::{
     },
     items::item::text,
     numbers::{JobId, RunId, RunNumber},
-    transport::api::{HttpMethod, Request, TransportRequests, encode},
+    raw::HttpMethod,
+    transport::api::{Request, TransportRequests, encode},
 };
 
 impl Runs for GitLab {

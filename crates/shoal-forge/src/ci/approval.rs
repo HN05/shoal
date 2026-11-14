@@ -15,7 +15,8 @@ use crate::{
         run_action::{Run, RunActionSteps},
     },
     numbers::PullNumber,
-    transport::api::{HttpMethod, Request, TransportRequests},
+    raw::HttpMethod,
+    transport::api::{Request, TransportRequests},
 };
 
 /// The runs one page of a commit's runs holds.

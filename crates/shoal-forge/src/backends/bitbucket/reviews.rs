@@ -14,13 +14,14 @@ use crate::{
         link::ItemKind,
     },
     numbers::{CommentId, PullNumber},
+    raw::HttpMethod,
     review::{
         diff::Diff,
         reviewers::Reviewer,
         submit::{PlacedReview, ReviewVerdict, Side, Submission},
         thread::{Target, Thread},
     },
-    transport::api::{HttpMethod, Request, TransportRequests},
+    transport::api::{Request, TransportRequests},
 };
 
 impl Reviews for Bitbucket {

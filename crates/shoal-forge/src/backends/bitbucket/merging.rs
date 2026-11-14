@@ -12,7 +12,8 @@ use crate::{
         item::{Current, ItemRequests},
         link::ItemKind,
     },
-    transport::api::{HttpMethod, Request, TransportRequests, encode},
+    raw::HttpMethod,
+    transport::api::{Request, TransportRequests, encode},
 };
 
 impl Merging for Bitbucket {

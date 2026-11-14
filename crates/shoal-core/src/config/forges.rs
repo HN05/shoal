@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use super::value::Value;
 use crate::forge::{
     account::{Login, Logins, Missing, Token},
-    backends::ForgeKind,
+    backends::{ForgeKind, SignIn},
 };
 
 /// Bounds a token command, which may wait on a password manager.

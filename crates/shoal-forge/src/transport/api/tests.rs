@@ -1,4 +1,5 @@
 use super::*;
+use crate::raw::HttpMethod;
 use crate::{
     backends::ForgeKind,
     test_support::{Server, agent_on, repo_on},

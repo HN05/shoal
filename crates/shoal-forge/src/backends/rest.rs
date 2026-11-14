@@ -7,6 +7,7 @@ use futures_util::{StreamExt, TryStreamExt};
 use serde_json::Value;
 use shoal_refs::CommitId;
 
+use crate::review::status::StatusRecords;
 use crate::{
     ForgeRepo,
     account::Account,

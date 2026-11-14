@@ -19,7 +19,8 @@ use crate::{
         reaction::Subject,
     },
     numbers::{IssueNumber, PullNumber},
-    transport::api::{HttpMethod, Request, TransportRequests, encode},
+    raw::HttpMethod,
+    transport::api::{Request, TransportRequests, encode},
     updates::DISCUSSION,
 };
 

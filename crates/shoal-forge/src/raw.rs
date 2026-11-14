@@ -5,13 +5,23 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub use crate::transport::api::HttpMethod;
 use crate::{
     ForgeRepo,
     account::Account,
     backends::Backend,
     transport::api::{Request, TransportRequests, encode},
 };
+
+shoal_states::states!(
+    /// The HTTP methods forge requests use.
+    HttpMethod: ValueEnum {
+        Get => "GET",
+        Post => "POST",
+        Patch => "PATCH",
+        Put => "PUT",
+        Delete => "DELETE",
+    }
+);
 
 /// A request to a path under the forge's API root, such as
 /// `repos/{owner}/{repo}/branches`.

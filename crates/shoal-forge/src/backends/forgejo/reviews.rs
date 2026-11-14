@@ -12,13 +12,14 @@ use crate::{
     capability::{self, Capability},
     items::item::Current,
     numbers::{CommentId, PullNumber},
+    raw::HttpMethod,
     review::{
         diff::Diff,
         reviewers::Reviewer,
         submit::{PlacedReview, ReviewVerdict, Side, Submission},
         thread::{Target, Thread},
     },
-    transport::api::{HttpMethod, Request, TransportRequests},
+    transport::api::{Request, TransportRequests},
     updates::activity_key,
 };
 

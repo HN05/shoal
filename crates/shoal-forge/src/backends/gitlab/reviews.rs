@@ -14,13 +14,14 @@ use crate::{
         link::ItemKind,
     },
     numbers::{CommentId, PullNumber},
+    raw::HttpMethod,
     review::{
         diff::{Bases, Diff, FileDiff, Placed},
         reviewers::Reviewer,
         submit::{PlacedReview, ReviewVerdict, Submission},
         thread::{Target, Thread},
     },
-    transport::api::{HttpMethod, Request, TransportRequests},
+    transport::api::{Request, TransportRequests},
     updates::discussion_key,
 };
 

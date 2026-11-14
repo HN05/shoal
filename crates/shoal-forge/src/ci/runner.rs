@@ -20,7 +20,8 @@ use crate::{
     capability::{Capability, CapabilityRequests},
     ci::checks::CheckRequests,
     numbers::{JobId, PullNumber, RunId, RunnerId},
-    transport::api::{HttpMethod, Request, TransportRequests},
+    raw::HttpMethod,
+    transport::api::{Request, TransportRequests},
 };
 
 /// A job waiting in the forge's queue for a runner with its labels.

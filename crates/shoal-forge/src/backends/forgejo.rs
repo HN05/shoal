@@ -63,7 +63,7 @@ impl Routes for Forgejo {
     }
 
     fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
-        actions::run_number(repo, target)
+        run_number(repo, target)
     }
 }
 
@@ -253,3 +253,26 @@ fn first_page(endpoint: String) -> String {
 
 #[cfg(test)]
 mod tests;
+
+/// The run number of a run's or job's web URL in the repository, which may
+/// be relative to the host.
+pub(crate) fn run_number(repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
+    let parts = runs_path(repo, target)?;
+    parts
+        .first()?
+        .parse()
+        .ok()
+        .filter(|number| *number > 0)
+        .map(RunNumber::new)
+}
+
+/// The path components of `target` after the repository's runs. A host may
+/// link relative to itself, or over HTTPS while its remote uses HTTP.
+pub(crate) fn runs_path<'a>(repo: &ForgeRepo, target: &'a str) -> Option<Vec<&'a str>> {
+    let relative = ["https", "http"]
+        .iter()
+        .find_map(|scheme| target.strip_prefix(&format!("{scheme}://{}", repo.host)))
+        .unwrap_or(target);
+    let rest = relative.strip_prefix(&format!("/{}/actions/runs/", repo.path))?;
+    Some(rest.split('/').collect())
+}

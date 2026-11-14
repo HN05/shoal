@@ -23,7 +23,8 @@ use crate::{
     capability::{Capability, CapabilityRequests},
     items::{action::ActionRequests, item::ItemState, link::ItemKind},
     numbers::{JobId, PullNumber, RunId, RunNumber},
-    transport::api::{HttpMethod, Request, TransportRequests},
+    raw::HttpMethod,
+    transport::api::{Request, TransportRequests},
 };
 
 states!(CiAction: ValueEnum {

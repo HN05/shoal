@@ -6,6 +6,7 @@ use crate::{
     client::agents::GitCredential,
     config::forges::Whose,
     daemon::{scope::Caller, workspace::Manager},
+    forge::backends::SignIn,
 };
 
 impl Manager {

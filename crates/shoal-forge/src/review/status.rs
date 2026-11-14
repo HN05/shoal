@@ -88,7 +88,11 @@ impl PrStatus {
             ..Self::new(url, None)
         }
     }
+}
 
+/// Recording what a PR's status lookups found.
+#[shoal_forge_derive::extension(pub(crate) StatusRecords)]
+impl PrStatus {
     /// An open PR's mergeability and checks as `snapshot` observed them,
     /// with the lookups that failed.
     pub(crate) fn record_snapshot(&mut self, snapshot: Snapshot) {
