@@ -281,9 +281,10 @@ impl Scoped for ItemMethod {
                     | Action::DeleteBranch),
                 ..
             } => {
-                change_context_space(manager, caller, context).await?;
+                let repository = reached_change_context(manager, caller, context).await?;
                 let subject = manager.merge_subject(context, item.clone(), action);
-                let merge = permissions::Action::new(PermissionKey::Merge, subject.await?);
+                let merge = permissions::Action::new(PermissionKey::Merge, subject.await?)
+                    .in_repository(repository);
                 manager.authorize_action(Some(caller), merge).await?;
                 Some(context_workspace(context)?)
             }
@@ -384,6 +385,21 @@ pub(super) async fn change_context_space<'a>(
         };
     }
     context_workspace(context)
+}
+
+/// The repository a change from `context` is made in, once
+/// [`change_context_space`] names the space that makes it, which the
+/// caller's scope must reach before the change asks approval: a chat
+/// without a repository resolves its permissions in it.
+pub(super) async fn reached_change_context(
+    manager: &Manager,
+    caller: &Caller,
+    context: &mut ItemContext,
+) -> Result<RepositoryId> {
+    let space = change_context_space(manager, caller, context).await?;
+    manager.ensure_selected_reached(caller, Some(space)).await?;
+    let space = manager.context_space(context).await?;
+    Ok(space.repository_id().clone())
 }
 
 /// The space a read from `context` runs in, which [`context_workspace`]

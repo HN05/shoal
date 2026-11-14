@@ -94,9 +94,12 @@ impl Scoped for CiMethod {
                     (None, Some(pr)) => format!("the CI runs of PR {pr}"),
                     (None, None) => "the CI runs of the space's PR".to_owned(),
                 };
-                let action = Action::new(PermissionKey::CiApprove, format!("approve {runs}"));
+                let reached = super::items::reached_change_context(manager, caller, context);
+                let repository = reached.await?;
+                let action = Action::new(PermissionKey::CiApprove, format!("approve {runs}"))
+                    .in_repository(repository);
                 manager.authorize_action(Some(caller), action).await?;
-                Some(super::items::change_context_space(manager, caller, context).await?)
+                Some(super::items::context_workspace(context)?)
             }
             // A chat without a repository acts in a registered checkout as
             // its own space, with its agent account.

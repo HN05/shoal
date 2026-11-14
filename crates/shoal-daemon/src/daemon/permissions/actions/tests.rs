@@ -314,9 +314,17 @@ async fn approving_ci_runs_follows_the_ci_approve_permission() {
         protocol::{CiMethod, ItemContext},
     };
 
-    let (_temp, manager) = manager().await;
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    crate::daemon::test_support::git(
+        &checkout,
+        &["remote", "add", "origin", "https://github.com/team/repo"],
+    );
+    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap();
     let master = chat(&manager, "master", "orchestrate", None, None).await;
-    let worker = chat(&manager, "worker", "chat", None, Some(&master.id)).await;
+    let worker = chat(&manager, "worker", "chat", Some(&repo), Some(&master.id)).await;
     let mut approve = CiMethod::ApproveCiRuns {
         context: ItemContext::Chat(SpaceSelector::id(&worker.id)),
         run: Some("7".parse().unwrap()),

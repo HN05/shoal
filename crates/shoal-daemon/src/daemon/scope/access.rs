@@ -406,28 +406,33 @@ impl Manager {
         caller: &Caller,
         request: &'a mut QueueRequest,
     ) -> Result<Option<&'a mut SpaceSelector>> {
-        if request.now {
-            let start = format!("start the agent of {} now", request.name);
-            self.authorize_beyond_limits(caller, start).await?;
-        }
+        let start = format!("start the agent of {} now", request.name);
         if request.workspace.is_none() {
             self.confine_new_launch(caller, request).await?;
+            if request.now {
+                self.authorize_beyond_limits(caller, start).await?;
+            }
             return Ok(None);
         }
         let QueueRequest {
             workspace,
             mode,
             narrowing,
+            now,
             ..
         } = request;
         let target = workspace.as_mut().context(WORKER_REFUSAL)?;
         let target = self.worker_target(caller, target, mode.as_ref(), narrowing);
-        Ok(Some(target.await?))
+        let target = target.await?;
+        if *now {
+            self.authorize_beyond_limits(caller, start).await?;
+        }
+        Ok(Some(target))
     }
 
-    /// The workspace below `caller`'s own space whose worker it queues in
-    /// `mode`, the default mode without one, refused with `given`
-    /// permissions the caller does not hold.
+    /// The workspace below `caller`'s own space, which its scope reaches,
+    /// whose worker it queues in `mode`, the default mode without one,
+    /// refused with `given` permissions the caller does not hold.
     pub(in crate::daemon) async fn worker_target<'a>(
         &self,
         caller: &Caller,
@@ -440,6 +445,8 @@ impl Manager {
             .unwrap_or(crate::config::modes::ModeName::DEFAULT);
         let target = self
             .workspace_below(caller, workspace, WORKER_REFUSAL)
+            .await?;
+        self.ensure_reaches(caller, &self.space(target).await?)
             .await?;
         let giver = Some(&caller.space_id);
         (self.ensure_agent_held(giver, target, &mode, given)).await?;
