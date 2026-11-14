@@ -3155,8 +3155,9 @@ differ from those it started with, as cleanup compares them, with `shoal start
 
 A copy is copied again in place, as `--copy` copies: the source must pass the
 same checks, and a removed source is refused. A [checkpoint](#checkpoints-and-restore)
-first keeps the copy's state, then its tracked, untracked and ignored files and
-its index become the source's, and HEAD moves to the source's, its branch with
+first keeps the copy's HEAD and unsaved files, then its tracked, untracked and
+ignored files and its index become the source's: ignored files the copy had are
+gone, as removal deletes them, since they count as nobody's work, and HEAD moves to the source's, its branch with
 it. A new starting checkpoint records what it now holds, and the old one expires
 as any checkpoint does. Setup and the post-setup hook run again, as `shoal
 setup` runs them, unless the copy was created with `--skip-setup`; the other

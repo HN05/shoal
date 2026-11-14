@@ -827,7 +827,9 @@ tip for a workspace at a commit, or a copy's live source, whose files it copies
 in again in place after a checkpoint keeps the copy's. It moves a branch only by
 fast-forward and refuses work of the workspace's own, naming it and the command
 that deals with it, rather than rebasing, merging or carrying it over: resolving
-those is the agent's or the user's work, and a refresh must never lose any. It
+those is the agent's or the user's work, and a refresh must never lose any.
+Ignored files are nobody's work, as cleanup counts them, so a copy's are
+replaced by its source's, whose setup outputs they mostly are. It
 runs only when asked, since a checkout moving under a working agent would
 surprise it, and like restore it refuses while another command or agent runs
 there.
