@@ -289,6 +289,7 @@ fn a_chats_agent_runs_with_its_chats_identity_and_scope() {
         environment: BTreeMap::from([(env::TMPDIR.to_owned(), "/tmp/chat".into())]),
         merge: None,
         unmerge: None,
+        reports_signals: false,
     };
     let mut command = Command::new("agent");
     configure_environment(&mut command, &paths, &plan);

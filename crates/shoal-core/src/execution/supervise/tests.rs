@@ -591,6 +591,7 @@ fn plan(root: &Path) -> ExecutionPlan {
         environment: Default::default(),
         merge: None,
         unmerge: None,
+        reports_signals: false,
     }
 }
 

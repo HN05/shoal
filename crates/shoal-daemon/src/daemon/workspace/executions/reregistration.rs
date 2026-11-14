@@ -51,6 +51,7 @@ impl Manager {
             environment,
             merge: None,
             unmerge: None,
+            reports_signals: false,
         })
     }
 }

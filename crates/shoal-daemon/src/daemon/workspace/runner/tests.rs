@@ -1006,6 +1006,43 @@ async fn a_signal_to_the_daemon_leaves_a_jobs_runner_running_for_the_next_daemon
     assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);
 }
 
+#[tokio::test]
+async fn a_signal_to_a_jobs_wrapper_cancels_its_run_before_the_runner_stops() {
+    use crate::{
+        daemon::scope::{Caller, ScopedExecution},
+        protocol::SessionSignal,
+    };
+
+    let fixture = fixture(vec![job("h3", 7, 3)], "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    let (_, started) = (LAUNCHED.lock().unwrap())
+        .remove(&claimed[0].workspace_id)
+        .unwrap();
+    // The job's wrapper tells the daemon of a signal before it stops.
+    assert!(started.plan.reports_signals);
+    let wrapper = Caller {
+        space_id: claimed[0].workspace_id.clone(),
+        execution: Some(ScopedExecution {
+            id: started.plan.id.clone(),
+            kind: ExecutionKind::Command,
+            agent_execution: None,
+        }),
+        granted: None,
+        read_only: false,
+    };
+    manager
+        .cancel_job_for_signal(Some(&wrapper), SessionSignal::Terminate)
+        .await
+        .unwrap();
+    assert!(cancelled(&fixture, 3));
+    assert_eq!(
+        logged_stops(manager),
+        [JobStop::Signal(SessionSignal::Terminate)]
+    );
+}
+
 /// What stopped each job whose stop Shoal's log recorded.
 fn logged_stops(manager: &Manager) -> Vec<JobStop> {
     let stops = manager.runners.stops.lock().unwrap();

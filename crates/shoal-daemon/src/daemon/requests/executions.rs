@@ -83,6 +83,10 @@ pub(super) async fn handle(
                     .await?
             }
         }),
+        ExecutionMethod::SessionSignalled { signal } => {
+            manager.cancel_job_for_signal(caller, signal).await?;
+            Body::Ok
+        }
     }))
 }
 
@@ -116,6 +120,8 @@ impl Scoped for ExecutionMethod {
                 )?;
                 None
             }
+            // The caller reports its own execution's session.
+            ExecutionMethod::SessionSignalled { .. } => None,
             ExecutionMethod::Execute {
                 space,
                 kind: ExecutionKind::Command | ExecutionKind::Merge | ExecutionKind::Unmerge,

@@ -58,6 +58,11 @@ pub struct ExecutionPlan {
     pub merge: Option<Box<MergePlan>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unmerge: Option<Box<UnmergePlan>>,
+    /// The wrapper tells the daemon before a hangup or terminate signal
+    /// stops the command, so the daemon first ends what the command runs
+    /// elsewhere, such as a CI job's run on its forge.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reports_signals: bool,
 }
 
 /// The space an execution runs in, a workspace or a chat, as its wrapper

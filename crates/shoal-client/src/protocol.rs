@@ -43,7 +43,7 @@ pub use ci::CiMethod;
 pub use config::{ConfigTarget, RepositoryLayers};
 pub use daemon::{DaemonMethod, Exit, ExitRequest, ExitWhen, Exited, Work, WorkPlace};
 pub use demos::DemoMethod;
-pub use executions::ExecutionMethod;
+pub use executions::{ExecutionMethod, SessionSignal};
 pub use files::FileMethod;
 pub use frames::{
     FrameTooLarge, MAX_FRAME, Responses, frame_pages, read, read_buffered, read_response,

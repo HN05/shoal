@@ -72,6 +72,28 @@ pub enum ExecutionMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         change: Option<crate::config::permissions::PermissionChange>,
     },
+    /// `signal` ends the session of the caller's execution, whose wrapper
+    /// stops its command once the daemon answers, after the daemon ended
+    /// what the command runs elsewhere, such as a CI job's run on its forge.
+    SessionSignalled { signal: SessionSignal },
+}
+
+/// A signal that ends an execution's session, as closing its terminal,
+/// logging out or shutting down sends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionSignal {
+    Hangup,
+    Terminate,
+}
+
+impl std::fmt::Display for SessionSignal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Hangup => "SIGHUP",
+            Self::Terminate => "SIGTERM",
+        })
+    }
 }
 
 impl ExecutionMethod {
@@ -80,7 +102,10 @@ impl ExecutionMethod {
             Self::Execute { .. } => Lifetime::Open,
             // A restart waits for requests of the wrapper it restores.
             Self::RestartAgent { .. } => Lifetime::Open,
-            Self::CheckMerge | Self::CheckUnmerge | Self::ListAgents => Lifetime::Reply,
+            Self::CheckMerge
+            | Self::CheckUnmerge
+            | Self::ListAgents
+            | Self::SessionSignalled { .. } => Lifetime::Reply,
         }
     }
 }

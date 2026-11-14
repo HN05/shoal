@@ -3,9 +3,11 @@
 //! deleted and the job's workspace is removed whatever it holds,
 //! with its permit, and the runner's directory of a job no longer claimed,
 //! however its workspace went, is deleted. A job ends only on the forge's
-//! word: stopping it, or removing its workspace while it runs, cancels its
-//! run there, and the forge's runner then stops it, or Shoal does once the
-//! runner outlives the run. Shoal's log names what stopped each runner.
+//! word: stopping it, removing its workspace while it runs, or a signal
+//! ending its wrapper's session cancels its run there, and the forge's
+//! runner then stops it, or Shoal or the wrapper does once the runner
+//! outlives the run or the signal. Shoal's log names what stopped each
+//! runner.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
@@ -13,18 +15,20 @@ use crate::forge::items::reference::ItemRef;
 use crate::forge::numbers::RunnerId;
 use std::collections::HashSet;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use rusqlite::params;
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         notifications::NotificationKind,
+        scope::Caller,
         workspace::{Manager, capacity::Activity},
     },
     forge::ci::CiAction,
     model::QueuedJob,
     process::{execution::Processes, identity},
+    protocol::SessionSignal,
     state::{ExecutionState, QueueKind, QueueState},
 };
 use shoal_forge::ci::run_action::RunActionRequests;
@@ -60,18 +64,22 @@ pub(crate) enum JobStop {
     Removal,
     /// Its runner outliving its finished run.
     Overrun,
+    /// A signal ending its wrapper's session, as a logout or a shutdown
+    /// sends.
+    Signal(SessionSignal),
 }
 
 impl std::fmt::Display for JobStop {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Stop => "shoal stop",
-            Self::DaemonStop => "shoal daemon stop",
-            Self::DaemonSignal => "a signal to the daemon",
-            Self::SystemShutdown => "the system shutting down",
-            Self::Removal => "its workspace's removal",
-            Self::Overrun => "its runner outliving its finished run",
-        })
+        match self {
+            Self::Stop => f.write_str("shoal stop"),
+            Self::DaemonStop => f.write_str("shoal daemon stop"),
+            Self::DaemonSignal => f.write_str("a signal to the daemon"),
+            Self::SystemShutdown => f.write_str("the system shutting down"),
+            Self::Removal => f.write_str("its workspace's removal"),
+            Self::Overrun => f.write_str("its runner outliving its finished run"),
+            Self::Signal(signal) => write!(f, "{signal} to its wrapper"),
+        }
     }
 }
 
@@ -264,17 +272,51 @@ impl Manager {
             return true;
         }
         if let Err(error) = self.cancel_for_stop(&job, cause).await {
-            self.notify(
-                None,
-                NotificationKind::RunnerFailed,
-                format!(
-                    "Stopping CI job {} could not cancel {} on the forge, where it times out: {error:#}",
-                    job.job.job.name, job.job.run.url
-                ),
-            )
-            .await;
+            self.notify_cancel_failed(&job, &error).await;
         }
         true
+    }
+
+    /// Cancel on the forge the run of the job the execution of `caller`
+    /// runs, if it runs one, before `signal`, which ends its session, has
+    /// its wrapper stop the runner.
+    pub(crate) async fn cancel_job_for_signal(
+        &self,
+        caller: Option<&Caller>,
+        signal: SessionSignal,
+    ) -> Result<()> {
+        let caller = caller
+            .filter(|caller| caller.execution_id().is_some())
+            .context("only an execution's wrapper reports the signal that ends its session")?;
+        let Some(job) = self.workspace_claim(&caller.space_id).await? else {
+            return Ok(());
+        };
+        if let Err(error) = self.cancel_for_stop(&job, JobStop::Signal(signal)).await {
+            self.notify_cancel_failed(&job, &error).await;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// Whether the space `space_id` runs a claimed job, whose wrapper reports
+    /// the signal that ends its session.
+    pub(crate) async fn runs_job(&self, space_id: &SpaceId) -> bool {
+        self.workspace_claim(space_id)
+            .await
+            .is_ok_and(|job| job.is_some())
+    }
+
+    /// Tell the user that stopping `job` could not cancel its run.
+    async fn notify_cancel_failed(&self, job: &ClaimedJob, error: &anyhow::Error) {
+        self.notify(
+            None,
+            NotificationKind::RunnerFailed,
+            format!(
+                "Stopping CI job {} could not cancel {} on the forge, where it times out: {error:#}",
+                job.job.job.name, job.job.run.url
+            ),
+        )
+        .await;
     }
 
     /// The workspaces of the claimed jobs, none when they cannot be read.
