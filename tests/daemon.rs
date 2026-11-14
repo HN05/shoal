@@ -1156,3 +1156,16 @@ fn commands_wait_for_an_older_managed_daemon_to_restart_with_the_update() {
     assert_eq!(methods.len(), 4);
     assert!(methods.iter().all(|method| method == &methods[0]));
 }
+
+#[test]
+fn a_scoped_process_starts_no_daemon_while_none_answers_for_its_permission() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let output = support::cli(root.path())
+        .env("SHOAL_SCOPE_TOKEN", "scope")
+        .args(["daemon", "start"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("daemon permission"), "{stderr}");
+}

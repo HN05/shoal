@@ -360,7 +360,8 @@ workspaces, `limits` starting agents regardless of the limits, with
 `--now`, `--focus` or `queue start`, `ci_approve` approving CI runs that wait
 for approval, `user_holds` releasing the user's holds
 and removing what the user holds, and `daemon` the daemon's service
-commands and `shoal update`. `notifications`, `deny` or `direct`, lets a
+commands and `shoal update` while a daemon of this Shoal answers to decide
+it. `notifications`, `deny` or `direct`, lets a
 space read the user's notifications, Shoal's own log and the inbox's
 daemon-wide problems, and `decide`, `deny` or `direct`, decide the requests
 of the spaces below as the user does.

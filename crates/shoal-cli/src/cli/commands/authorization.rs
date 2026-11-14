@@ -40,6 +40,15 @@ async fn authorize_in(ctx: &Context, key: PermissionKey, repository: Option<&str
         env::is_scoped(),
         "this process runs below a scoped one without its scope; run it where the agent runs"
     );
+    // The daemon decides the permission, so none can when no daemon of this
+    // Shoal answers, as before a start or an install after an upgrade.
+    if key == PermissionKey::Daemon {
+        let answers = matches!(crate::cli::client::status(&ctx.paths).await, Ok(Some(_)));
+        ensure!(
+            answers,
+            "no daemon of this Shoal answers to decide this process's daemon permission; ask the user to run this command"
+        );
+    }
     let repository = (repository.map(str::to_owned))
         .map(crate::cli::ui::repository_selector)
         .transpose()?;

@@ -452,7 +452,7 @@ approval, and `"deny"` never, in that order from widest to narrowest.
 and `unmerge`, and merging a PR, its automatic merge and deleting its branch, `push` pushes to the repository's remotes by `shoal pr open` or
 `git push`, `api_writes` `shoal forge api` requests other than reads,
 `daemon` installing, starting, stopping and restarting the daemon and
-`shoal update`, `limits` starting agents regardless of `max_agents` and
+`shoal update` while a daemon of the same Shoal answers to decide it, `limits` starting agents regardless of `max_agents` and
 memory, `user_holds` releasing the user's holds and removing the spaces the
 user holds, `notifications` reading your notifications, Shoal's own log and
 the inbox's daemon-wide problems, `decide` deciding the approval requests of

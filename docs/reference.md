@@ -2448,7 +2448,9 @@ notifications, Shoal's own log, and the untracked worktrees, cleanup errors
 and failing syncs the inbox lists; `user_holds` governs
 releasing the user's holds and removing a space the user holds, or holds
 one below; `daemon` governs installing,
-starting, stopping and restarting the daemon, and `shoal update`; `limits`
+starting, stopping and restarting the daemon, and `shoal update`, which a
+scoped process takes only while a daemon of the same Shoal answers to decide
+it; `limits`
 starting agents regardless of `max_agents` and memory, with `--now`,
 `--focus`, `queue start` or the queue picker's start; `admin`
 governs the rest of administering Shoal, its config, repositories and
