@@ -1032,6 +1032,32 @@ async fn a_signal_to_a_jobs_wrapper_cancels_its_run_before_the_runner_stops() {
         granted: None,
         read_only: false,
     };
+    // A step's command, which inherits the job's scope, neither reports
+    // signals nor cancels the run with one.
+    let step = manager
+        .begin_execution(
+            claimed[0].workspace_id.as_str(),
+            None,
+            ExecutionKind::Command,
+            Some(&wrapper),
+        )
+        .await
+        .unwrap();
+    assert!(!step.plan.reports_signals);
+    let step = Caller {
+        execution: Some(ScopedExecution {
+            id: step.plan.id.clone(),
+            kind: ExecutionKind::Command,
+            agent_execution: None,
+        }),
+        ..wrapper.clone()
+    };
+    manager
+        .cancel_job_for_signal(Some(&step), SessionSignal::Terminate)
+        .await
+        .unwrap();
+    assert!(!cancelled(&fixture, 3));
+
     manager
         .cancel_job_for_signal(Some(&wrapper), SessionSignal::Terminate)
         .await

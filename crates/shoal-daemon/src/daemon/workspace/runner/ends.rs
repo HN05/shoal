@@ -279,7 +279,8 @@ impl Manager {
 
     /// Cancel on the forge the run of the job the execution of `caller`
     /// runs, if it runs one, before `signal`, which ends its session, has
-    /// its wrapper stop the runner.
+    /// its wrapper stop the runner. Another execution in the job's
+    /// workspace, such as a step's command, cancels nothing.
     pub(crate) async fn cancel_job_for_signal(
         &self,
         caller: Option<&Caller>,
@@ -291,6 +292,11 @@ impl Manager {
         let Some(job) = self.workspace_claim(&caller.space_id).await? else {
             return Ok(());
         };
+        // The runner may run before its claim records its execution.
+        let runner = (job.execution_id.as_ref()).is_none_or(|id| caller.execution_id() == Some(id));
+        if !runner {
+            return Ok(());
+        }
         if let Err(error) = self.cancel_for_stop(&job, JobStop::Signal(signal)).await {
             self.notify_cancel_failed(&job, &error).await;
             return Err(error);
@@ -298,8 +304,8 @@ impl Manager {
         Ok(())
     }
 
-    /// Whether the space `space_id` runs a claimed job, whose wrapper reports
-    /// the signal that ends its session.
+    /// Whether the space `space_id` runs a claimed job, whose runner's
+    /// wrapper reports the signal that ends its session.
     pub(crate) async fn runs_job(&self, space_id: &SpaceId) -> bool {
         self.workspace_claim(space_id)
             .await

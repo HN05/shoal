@@ -355,7 +355,8 @@ impl Manager {
                 environment: registered.environment,
                 merge,
                 unmerge,
-                reports_signals: self.runs_job(&space_id).await,
+                // Only the runner the daemon launched, not a step's command.
+                reports_signals: caller.is_none() && self.runs_job(&space_id).await,
             },
             space: registered.space,
             stop: registered.stop,
