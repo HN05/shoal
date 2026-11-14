@@ -5,3 +5,6 @@ sensitive = ["crates/shoal-client/src/protocol/version.rs", "crates/shoal-daemon
 
 [setup]
 presets = ["cargo"]
+
+[issue]
+area_prefix = "area/"
