@@ -1247,7 +1247,7 @@ fn agent_state_reports_from_an_input_that_never_closes() {
 }
 
 #[test]
-fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
+fn agents_mark_their_workspace_ready_whatever_it_commits() {
     let fixture = Fixture::new();
     let added = fixture.add("reviewed");
     fixture.add("other");
@@ -1255,7 +1255,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
     let output = scoped_command(&fixture, "reviewed", &["ready"]);
     assert!(output.status.success(), "{}", printed(&output));
     let marks: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert!(marks[0]["url"].is_null() && marks[0]["stale"] == false);
+    assert!(marks[0]["url"].is_null() && marks[0].get("head").is_none());
     for args in [
         &["ready", "--space", &fixture.id("other")][..],
         &["ready", "pr"],
@@ -1275,12 +1275,8 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
     fs::write(path.join("later"), "later\n").unwrap();
     git(path, &["add", "later"]);
     git_with_identity(path, &["commit", "-m", "later"]);
-    // An outdated mark no longer needs the user.
-    assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
-    assert_eq!(
-        fixture.ok(&["status", &fixture.id("reviewed")])["workspace"]["review"][0]["stale"],
-        true
-    );
+    // A new commit leaves the mark waiting for the user.
+    assert_eq!(fixture.ok(&["inbox"]), listed);
 
     let output = scoped_command(&fixture, "reviewed", &["ready", "--undo"]);
     assert!(output.status.success(), "{}", printed(&output));

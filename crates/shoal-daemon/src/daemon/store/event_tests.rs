@@ -200,6 +200,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    db.execute_batch(include_str!("marks_without_heads_undo.sql"))?;
     db.execute_batch(include_str!("consumed_upgrades_undo.sql"))?;
     db.execute_batch(include_str!("removed_spaces_undo.sql"))?;
     db.execute_batch(include_str!("gate_undo.sql"))?;
@@ -451,7 +452,7 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
         "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
          INSERT INTO chats(id,repository_id,name,agent,started_at)
              VALUES ('c','repo','planner','claude',1);
-         INSERT INTO space_review(space_id,url,kind,head) VALUES ('c','',NULL,'abc');",
+         INSERT INTO space_review(space_id,url,kind) VALUES ('c','',NULL);",
     )?;
     crate::daemon::events::record_link(
         &db,

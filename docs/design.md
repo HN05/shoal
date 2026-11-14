@@ -1858,7 +1858,7 @@ redirected or JSON output.
 
 Bare `shoal` is the one place to see what needs the user and the work going
 on: a plain fzf picker whose inbox view lists open questions, pending approvals,
-agents that need input, failed workspaces and current ready marks, and whose
+agents that need input, failed workspaces and ready marks, and whose
 spaces view lists workspaces, followed by a view of recent notifications. It opens
 on the inbox when that has rows, searching for the current workspace's items
 when it has some; Tab reloads the next view in place, and each view binds only the keys that act on
@@ -2468,8 +2468,10 @@ its issue. The shared `work` rule says so, so every built-in mode marks the
 same way. They are a status signal for integrations, separate from messages
 and completion: they never notify, complete, or change cleanup. A
 mark covers a linked issue or PR, or the workspace when nothing is linked, and
-binds to HEAD; new commits make it outdated rather than removing it, so marking
-again is an explicit statement about the new revision. Only an open PR whose
+carries no commit: what it waits for is the user, not a revision, and a chat's
+checkout rarely moves, so it lasts until `shoal ready --undo`, unlinking its
+item or removing the space, new commits leave it as it was, and marking again
+refreshes it. Only an open PR whose
 head on the forge is HEAD takes a mark, since a branch that opens several PRs in
 turn leaves merged ones linked, and a PR cannot be reviewed at a commit it lacks;
 marking skips the others with their reasons rather than failing the rest. Marking linked items
@@ -2484,8 +2486,8 @@ an agent usually withdraws to push more work that still needs CI and review.
 A failed forge change fails the command with the marks kept, so the agent can
 retry it.
 A chat marks the same way, except that its checkout is not on a PR's branch:
-it marks each linked open PR at the head the forge reports, and its issue or itself
-at its checkout's HEAD. Its marks are journal events as a workspace's are,
+it marks each linked open PR whatever its head on the forge, and its issue or
+itself. Its marks are journal events as a workspace's are,
 and they show it `ready` in lists and the inbox.
 A working agent never waits for the user, so its own `working` state outranks
 its space's `ready`, as `needs input` does, and the inbox leaves out the marks
@@ -2499,7 +2501,7 @@ and after each. Lists name them by what the user does: `working`, `needs input`,
 and `waiting`, since an idle agent waits for the user or for activity that wakes
 it; a ready workspace whose agent or command reports no state, or a running
 chat whose agent reports none yet, is `process running`,
-one where nothing runs `inactive`, a current ready mark `ready`, and a recorded
+one where nothing runs `inactive`, a ready mark `ready`, and a recorded
 completion `finished`, which only an agent needing input outranks. A done
 space with stopped work is `finished` too: its stopped agent has nothing left
 to do, and `stopped` would ask the user to resume it. A row's marker groups statuses by what they ask of the user, in a

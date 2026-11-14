@@ -151,9 +151,7 @@ fn marks_wait_in_the_inbox_only_while_their_agent_is_not_working() {
     let mark = crate::model::ReviewMark {
         kind: None,
         url: None,
-        head: "abc".into(),
         created_at: UnixTime::EPOCH,
-        stale: Some(false),
         warnings: Vec::new(),
     };
     let agent = |state: &str| serde_json::json!({"state": state, "since": 0});

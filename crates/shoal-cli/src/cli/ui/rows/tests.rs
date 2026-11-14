@@ -226,9 +226,7 @@ fn mark_labels_name_the_marked_item() {
     let mark = |kind, url: Option<&str>| ReviewMark {
         kind,
         url: url.map(|url| url.parse().unwrap()),
-        head: "abc".into(),
         created_at: UnixTime::from_seconds(0),
-        stale: None,
         warnings: Vec::new(),
     };
     let pr = mark(Some(ItemKind::Pr), Some("https://example.com/o/r/pulls/12"));
@@ -254,17 +252,14 @@ fn workspace_rows_align_status_and_titles() {
     ];
     workspaces[3].running = true;
     workspaces[3].links.issues = vec![issue("Refine the list view")];
-    let mark = |stale| crate::model::ReviewMark {
+    let mark = || crate::model::ReviewMark {
         kind: None,
         url: None,
-        head: "head".into(),
         created_at: UnixTime::from_seconds(0),
-        stale: Some(stale),
         warnings: Vec::new(),
     };
     workspaces[4].running = true;
-    workspaces[4].review = vec![mark(false)];
-    workspaces[5].review = vec![mark(true)];
+    workspaces[4].review = vec![mark()];
     let agent = |state| {
         Some(crate::model::AgentStatus {
             state,
@@ -281,14 +276,14 @@ fn workspace_rows_align_status_and_titles() {
         workspace("a", "done", "done", WorkspaceState::Ready),
         workspace("a", "follow-up", "follow-up", WorkspaceState::Ready),
     ]);
-    workspaces[6].review = vec![mark(false)];
+    workspaces[6].review = vec![mark()];
     workspaces[6].agent_state = agent(AgentState::Waiting);
-    workspaces[7].review = vec![mark(false)];
+    workspaces[7].review = vec![mark()];
     workspaces[7].agent_state = agent(AgentState::Working);
     workspaces[8].running = true;
     workspaces[8].agent_state = agent(AgentState::Idle);
     workspaces[9].done = true;
-    workspaces[9].review = vec![mark(false)];
+    workspaces[9].review = vec![mark()];
     workspaces[9].agent_state = agent(AgentState::Idle);
     workspaces[10].done = true;
     workspaces[10].agent_state = agent(AgentState::Waiting);
@@ -310,9 +305,9 @@ fn workspace_rows_align_status_and_titles() {
             "● 1   fix-login  stopped",
             "✗ 2   x          failed",
             "◌ 3   new        preparing",
-            "◐ 4   busy       process running   Refine the list view",
+            "◐ 4   busy       process running  Refine the list view",
             "● 5   review     ready",
-            "○ 6   quiet      ready (outdated)",
+            "○ 6   quiet      inactive",
             "● 7   asking     needs input",
             "◐ 8   marked     working",
             "○ 9   agent      waiting",

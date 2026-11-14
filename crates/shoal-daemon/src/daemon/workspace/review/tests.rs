@@ -1,5 +1,3 @@
-use shoal_refs::CommitId;
-
 use super::*;
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -29,7 +27,7 @@ fn select(kind: Option<LinkKind>, input: Option<&str>) -> Selection {
     }
 }
 
-async fn review_events(manager: &Manager) -> Vec<(String, Option<String>, CommitId)> {
+async fn review_events(manager: &Manager) -> Vec<(String, Option<String>)> {
     manager
         .workspace_events(None, 100)
         .await
@@ -39,7 +37,7 @@ async fn review_events(manager: &Manager) -> Vec<(String, Option<String>, Commit
             EventItem::Event(event) => event
                 .details
                 .review
-                .map(|review| (event.details.kind.to_string(), review.url, review.head)),
+                .map(|review| (event.details.kind.to_string(), review.url)),
             EventItem::Chat(_)
             | EventItem::File(_)
             | EventItem::Shoal(_)
@@ -73,7 +71,7 @@ async fn link(manager: &Manager, id: &str, pr: &str, issue: Option<&str>) {
 }
 
 #[tokio::test]
-async fn marks_bind_to_head_follow_links_and_record_events() {
+async fn marks_follow_links_outlast_commits_and_record_events() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -186,21 +184,15 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         "an unlinked PR cannot be marked"
     );
 
-    // A new commit makes existing marks stale until the agent marks again.
+    // A new commit leaves the marks as they were.
+    let before = manager.workspace_by_id(&workspace.id).await.unwrap().review;
     std::fs::write(workspace.path.join("later"), "later\n").unwrap();
     commit(&workspace.path, "later");
     let inspection = manager
         .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
-    assert_eq!(inspection.workspace.review.len(), 2);
-    assert!(
-        inspection
-            .workspace
-            .review
-            .iter()
-            .all(|mark| mark.stale == Some(true))
-    );
+    assert_eq!(inspection.workspace.review, before);
     let later = current_head(&workspace).await.unwrap();
     let pr_only = || select(Some(LinkKind::Pr), Some("12"));
     // The PR is marked only once its head on the forge is HEAD.
@@ -215,20 +207,6 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         .mark_ready(&SpaceSelector::id(&workspace.id), pr_only(), None)
         .await
         .unwrap();
-    let inspection = manager
-        .inspect_workspace(&SpaceSelector::id(&workspace.id))
-        .await
-        .unwrap();
-    let pr_mark = inspection
-        .workspace
-        .review
-        .iter()
-        .find(|mark| mark.url.as_ref() == Some(&pr.parse().unwrap()))
-        .unwrap();
-    assert_eq!(
-        (pr_mark.head.as_str(), pr_mark.stale),
-        (later.as_str(), Some(false))
-    );
 
     // Unlinking withdraws a mark; explicit clearing needs an existing mark.
     manager
@@ -276,22 +254,19 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     // Initial marks of the two linked items share one transaction; order them.
     events[2..4].sort();
     let mut linked = vec![
-        (ready.clone(), Some(issue.clone()), head.clone()),
-        (ready.clone(), Some(pr.clone()), head.clone()),
+        (ready.clone(), Some(issue.clone())),
+        (ready.clone(), Some(pr.clone())),
     ];
     linked.sort();
     assert_eq!(
         events,
         [
-            vec![
-                (ready.clone(), None, head.clone()),
-                (cleared.clone(), None, head.clone()),
-            ],
+            vec![(ready.clone(), None), (cleared.clone(), None)],
             linked,
             vec![
-                (ready.clone(), Some(pr.clone()), later.clone()),
-                (cleared.clone(), Some(issue), head.clone()),
-                (cleared.clone(), Some(pr), later),
+                (ready.clone(), Some(pr.clone())),
+                (cleared.clone(), Some(issue)),
+                (cleared.clone(), Some(pr)),
             ],
         ]
         .concat()
@@ -828,43 +803,4 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .unwrap();
     assert!(draft());
     assert_eq!(marks().await, 0);
-}
-
-#[tokio::test]
-async fn listings_leave_staleness_unknown_where_file_access_stalls() {
-    let (temp, manager) = manager().await;
-    let checkout = repository(temp.path(), "repo");
-    let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "ready".into(), None, None, None)
-        .await
-        .unwrap();
-    manager
-        .mark_ready(
-            &SpaceSelector::id(&workspace.id),
-            Selection::default(),
-            None,
-        )
-        .await
-        .unwrap();
-    let listed = manager.visible_workspaces(None).await.unwrap();
-    assert_eq!(listed[0].review[0].stale, Some(false));
-
-    tokio::time::pause();
-    let stalled = manager
-        .check_access(&workspace.path, std::future::pending::<Result<()>>())
-        .await;
-    tokio::time::resume();
-    assert!(stalled.is_err());
-
-    let listed = manager.visible_workspaces(None).await.unwrap();
-    assert_eq!(listed[0].review[0].stale, None);
-    let inspection = manager
-        .inspect_workspace(&SpaceSelector::id(&workspace.id))
-        .await
-        .unwrap();
-    assert_eq!(inspection.workspace.review[0].stale, None);
 }

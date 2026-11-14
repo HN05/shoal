@@ -473,9 +473,7 @@ async fn ready_outcomes_too_large_for_a_frame_arrive_in_pages() {
                         .parse()
                         .unwrap(),
                 ),
-                head: format!("{n:040}").into(),
                 created_at: crate::time::UnixTime::from_seconds(1),
-                stale: Some(false),
                 warnings: Vec::new(),
             })
             .collect(),

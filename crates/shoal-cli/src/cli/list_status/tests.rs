@@ -32,25 +32,21 @@ fn coordinated(coordinator: AgentState) -> Workspace {
     workspace
 }
 
-fn mark(stale: bool) -> ReviewMark {
+fn mark() -> ReviewMark {
     ReviewMark {
         kind: None,
         url: None,
-        head: "abc".into(),
         created_at: crate::time::UnixTime::EPOCH,
-        stale: Some(stale),
         warnings: Vec::new(),
     }
 }
 
 #[test]
-fn a_working_coordinator_replaces_only_inactive_and_outdated_marks() {
+fn a_working_coordinator_replaces_only_inactive() {
     let status = |workspace: &Workspace| ListStatus::of_workspace(workspace, false);
     let mut workspace = coordinated(AgentState::Working);
     assert_eq!(status(&workspace), ListStatus::ParentWorking);
-    workspace.review = vec![mark(true)];
-    assert_eq!(status(&workspace), ListStatus::ParentWorking);
-    workspace.review = vec![mark(false)];
+    workspace.review = vec![mark()];
     assert_eq!(status(&workspace), ListStatus::Ready);
     workspace.review.clear();
     workspace.running = true;
@@ -210,12 +206,12 @@ fn a_working_agent_outranks_its_ready_mark_in_every_space() {
         prompt_cache_expires_at: None,
     };
     let mut workspace = coordinated(AgentState::Idle);
-    workspace.review = vec![mark(false)];
+    workspace.review = vec![mark()];
     let mut chat: Chat = serde_json::from_value(serde_json::json!({
         "id": "c", "name": "talk", "agent": "claude", "running": true, "started_at": 0,
     }))
     .expect("a chat record");
-    chat.review = vec![mark(false)];
+    chat.review = vec![mark()];
     for (state, shown) in [
         (AgentState::Working, ListStatus::Working),
         (AgentState::Idle, ListStatus::Ready),

@@ -874,21 +874,20 @@ fn a_chat_opens_issues_and_acts_on_its_linked_items() {
 }
 
 #[test]
-fn a_chat_marks_its_pr_ready_at_its_head_or_itself_at_its_checkout() {
+fn a_chat_marks_its_pr_ready_whatever_its_head_or_itself() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     let (mut agent, _) = fixture.run_chat("planning", &[]);
-    // Nothing linked marks the chat itself, at its checkout's HEAD.
-    let head = git(&fixture.repo, &["rev-parse", "HEAD"]);
+    // Nothing linked marks the chat itself.
     let marks = fixture.ok(&["ready", "--space", &fixture.id("planning")]);
     assert_eq!(marks[0]["url"], Value::Null, "{marks}");
-    assert_eq!(marks[0]["head"], head.trim(), "{marks}");
     let inbox = fixture.ok(&["inbox"]);
     assert_eq!(inbox[0]["kind"], "chat_ready", "{inbox}");
     assert_eq!(inbox[0]["chat"]["name"], "planning", "{inbox}");
     let ready = fixture.ok(&["list", "--chats", "--status", "ready"]);
     assert_eq!(ready.to_string().matches("planning").count(), 1, "{ready}");
 
-    // A linked PR is marked at its head on the forge, replacing that mark.
+    // A linked PR is marked whatever its head on the forge, replacing that
+    // mark.
     let mut pr = pull(9, "open", "Fix", &[]);
     pr["head"]["sha"] = json!("prhead");
     fixture.respond(json!({"GET repos/team/project/pulls/9": {"body": pr}}));
@@ -902,18 +901,12 @@ fn a_chat_marks_its_pr_ready_at_its_head_or_itself_at_its_checkout() {
     ]);
     let marks = fixture.ok(&["ready", "--space", &fixture.id("planning")]);
     let url = format!("{}/pulls/9", fixture.web);
-    assert_eq!(
-        (&marks[0]["url"], &marks[0]["head"]),
-        (&json!(url), &json!("prhead")),
-        "{marks}"
-    );
+    assert_eq!(marks.as_array().map(Vec::len), Some(1), "{marks}");
+    assert_eq!(marks[0]["url"], json!(url), "{marks}");
     let chats = fixture.request(json!("list_chats"));
-    let recorded = &chats["data"][0]["review"][0];
-    assert_eq!(
-        (&recorded["url"], &recorded["head"]),
-        (&json!(url), &json!("prhead")),
-        "{chats}"
-    );
+    let recorded = chats["data"][0]["review"].as_array();
+    assert_eq!(recorded.map(Vec::len), Some(1), "{chats}");
+    assert_eq!(recorded.unwrap()[0]["url"], json!(url), "{chats}");
     fixture.ok(&[
         "ready",
         "--undo",

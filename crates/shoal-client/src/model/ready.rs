@@ -1,19 +1,15 @@
 //! Ready-for-review marks.
 use serde::{Deserialize, Serialize};
-use shoal_refs::CommitId;
 
-/// An agent's statement that linked work is ready for review at a commit.
+/// An agent's statement that it needs the user before it can go on: linked
+/// work is ready for review, or it has a decision or answer to ask for.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewMark {
     /// The linked issue or PR; both are absent when the mark covers the
     /// workspace itself.
     pub kind: Option<crate::forge::items::link::ItemKind>,
     pub url: Option<crate::forge::items::reference::ItemRef>,
-    pub head: CommitId,
     pub created_at: crate::time::UnixTime,
-    /// Whether HEAD has moved since the mark; absent when HEAD was not read.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stale: Option<bool>,
     /// What the marked item leaves out of the repository's conventions, as
     /// `shoal ready` reports it; never stored.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

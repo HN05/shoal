@@ -798,7 +798,7 @@ work is stopped, `working`, `ready`, the other [agent states](#agent-state),
 `process running` while an agent without a reported state or a command runs,
 `parent working` while no agent of its own has ever started there and the
 agent of the nearest space above with one works, as when that agent's
-subagents work in a child it split, `ready (outdated)`, or `inactive`.
+subagents work in a child it split, or `inactive`.
 `shoal list` and its picker order spaces by status, then number: working
 agents and processes first, then what needs you, failures, changes under
 way, queued agents, and quiet spaces last.
@@ -829,7 +829,7 @@ lists only the chats. `list --repo <repository>`, with or without
 `--chats` or `--status`, lists only that registered repository's workspaces,
 chats and queued agents. `list --status <status>`,
 repeated or comma-separated, lists only rows with one of those statuses, spelled
-in kebab case (`needs-input`, `ready-outdated`, `queued`).
+in kebab case (`needs-input`, `process-running`, `queued`).
 A chat's status is `asleep` while its agent is [asleep](#sleep), else
 `stopped` until it is restored, or `finished` after
 `shoal done` or `blocked` while blocked, then, in order of precedence,
@@ -842,7 +842,7 @@ and pending approval requests that no coordinating agent decides, each with its
 running chats whose agent needs input, blocked workspaces and chats with the
 first of what blocks them, failed
 workspaces, workspaces and chats whose agent is [asleep](#sleep) with why,
-what wakes it and the commands that wake it now, [ready marks](#ready-for-review) at the current HEAD of
+what wakes it and the commands that wake it now, [ready marks](#ready-for-review) of
 spaces whose agent is not working, one row per marked item, running [demos](#demos), Git worktrees under a repository's
 Shoal directory that no workspace owns, automatic cleanup failing other than in
 a workspace, and repositories whose default branch has failed to
@@ -5003,34 +5003,30 @@ shoal ready --undo --draft    # Also return the PRs whose marks are withdrawn to
 
 A mark says the agent needs the user before it can go on: the work for a
 linked issue or PR, or for the workspace itself when nothing is linked, is
-ready for review at the current HEAD, or the agent has a decision or answer to
-ask them for. It means the same in a workspace and a chat.
+ready for review, or the agent has a decision or answer to ask them for. It means the same in a workspace and a chat.
 Items are selected like `link`, and a selected item must be linked; a kind with
 no linked items is an error. A linked PR is marked only while it is open and
 its head on the forge is HEAD; `shoal ready` skips any other, prints each
 with its reason on stderr, and fails when that PR was selected or nothing
-else is left to mark. Marking again moves the mark to the current HEAD, and
-marking linked items replaces a mark made while nothing was linked.
+else is left to mark. Marking again refreshes the mark, and marking linked
+items replaces a mark made while nothing was linked. A mark carries no commit,
+so new commits leave it as it was.
 A working agent does not wait for the user, so while a marked space's agent
 reports `working`, lists show it `working` and the inbox leaves its marks out;
 they show again once its turn ends. Marks never notify, record completion, or
 affect cleanup; use `shoal alerts send` to
-ask for attention. New commits make a mark outdated: `list` shows
-`ready (outdated)`, and `status`, `inspect` and `list --json` list
-`review` marks with `kind`, `url`, `head`, `created_at` and `stale`, which
-is absent when HEAD cannot be read within three seconds or its file access
-stalled.
-`shoal inbox` lists every current mark across repositories. `unready` fails when
+ask for attention. `status`, `inspect` and `list --json` list `review` marks
+with `kind`, `url` and `created_at`.
+`shoal inbox` lists them across repositories. `unready` fails when
 it selects no mark. Unlinking an item withdraws its mark, and removal deletes
 all marks. Each mark and withdrawal
 is a [workspace event](#workspace-events). Scoped callers mark only their own
 workspace; `--space` selects another workspace or a chat for unscoped callers.
 
-A [chat](#chats) marks each linked open PR at the PR's head on the forge, since its
-checkout is not on the PR's branch, and its linked issue, or the chat itself
-when nothing is linked, at its checkout's HEAD. `list --chats` shows a marked
-chat as `ready`, `inbox` lists its marks, and `list --json` lists them as the
-chat's `review` without `stale`. A chat's marks are not workspace events, and
+A [chat](#chats) marks each linked open PR whatever its head on the forge, since
+its checkout is not on the PR's branch, and its linked issue, or the chat
+itself when nothing is linked. `list --chats` shows a marked chat as `ready`,
+`inbox` lists its marks, and `list --json` lists them as the chat's `review`. A chat's marks are not workspace events, and
 the [review gate](#local-reviews) does not apply to them; `hooks.post_ready` runs in
 the chat's checkout, with the repository's `[env]`, whose `{path}` is the
 checkout and `{repo}` the repository; a chat has no `{workspace}`, `{branch}`
@@ -5386,8 +5382,9 @@ the UUID of the workspace or chat it records (`workspace_id` or `chat_id`, the
 other null), `repository_id` (null for a chat without a repository), `name`,
 `path` and `branch` (null for a chat), `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
-`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `question_asked`, `question_answered`, `approval_requested`, `approval_decided`, `gate_decided`, `alert_sent`, `progress_changed`, `child_created`, `child_removed` and `job_ended`; history from earlier versions may also contain `continued` and `chat_changed`. Review events add a `review` object with the mark's `kind`,
-`url` (both null for a workspace mark) and `head`. Link events add a `link`
+`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `question_asked`, `question_answered`, `approval_requested`, `approval_decided`, `gate_decided`, `alert_sent`, `progress_changed`, `child_created`, `child_removed` and `job_ended`; history from earlier versions may also contain `continued` and `chat_changed`. Review events add a `review` object with the mark's `kind` and
+`url`, both null for a workspace mark; those from earlier versions also carry
+the commit as `head`. Link events add a `link`
 object with the linked issue or PR's `kind` and canonical `url`. Agent state
 events add `agent_state` with the reported `state`, null when its execution ended.
 `item_changed` events add an `item` object with the `kind`, `url` and `action`

@@ -911,7 +911,7 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
         .require_review(workspace, Gate::Ready, &head)
         .await
         .unwrap();
-    // A workspace process's mark checks the HEAD it records.
+    // A workspace process's mark passes once the review covers HEAD.
     let caller = crate::daemon::scope::Caller {
         space_id: workspace.id.clone(),
         execution: None,
@@ -927,7 +927,7 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
         .await
         .unwrap()
         .marks;
-    assert_eq!(marks[0].head, head);
+    assert_eq!(marks.len(), 1);
 }
 
 /// The frames the daemon answers `method` with, and the JSON their review

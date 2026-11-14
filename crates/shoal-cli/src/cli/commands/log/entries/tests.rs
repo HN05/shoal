@@ -47,9 +47,9 @@ fn details_name_what_each_entry_is_about() {
     assert_eq!(
         details(
             serde_json::json!({"kind": "review_ready", "review": {"kind": "pr",
-            "url": "https://forge.example/team/repo/pulls/2131", "head": "4e1c9a2f00"}})
+            "url": "https://forge.example/team/repo/pulls/2131"}})
         ),
-        "#2131 at 4e1c9a2"
+        "#2131"
     );
     assert_eq!(
         details(serde_json::json!({"kind": "linked", "link": {"kind": "ci",

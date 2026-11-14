@@ -225,8 +225,8 @@ fn decision_items(
 }
 
 /// Workspaces whose agent needs input, then blocked ones, then failed ones,
-/// then those whose agent is asleep, then each mark made at the current
-/// commit of those whose agent is not working.
+/// then those whose agent is asleep, then each mark of those whose agent is
+/// not working.
 fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<SpaceId>) -> Vec<Item> {
     let status = |w: &Workspace| ListStatus::of_workspace(w, stopped.contains(&w.id));
     let waiting = workspaces
@@ -255,13 +255,10 @@ fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<SpaceId>) -> Vec<
     let waiting_marks = (workspaces.iter())
         .filter(|w| list_status::marks_wait(w.agent_state.map(|status| status.state)));
     let review = waiting_marks.flat_map(|w| {
-        w.review
-            .iter()
-            .filter(|mark| mark.stale != Some(true))
-            .map(|mark| Item::Ready {
-                workspace: w.clone(),
-                mark: mark.clone(),
-            })
+        w.review.iter().map(|mark| Item::Ready {
+            workspace: w.clone(),
+            mark: mark.clone(),
+        })
     });
     (waiting.chain(blocked).chain(failed))
         .chain(asleep)

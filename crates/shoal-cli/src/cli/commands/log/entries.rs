@@ -238,20 +238,13 @@ fn exit(event: &EventDetails) -> String {
     }
 }
 
-/// The marked item, or the commit a mark of the space itself is at.
+/// The marked item, or nothing for a mark of the space itself.
 fn review(event: &EventDetails) -> String {
-    let Some(review) = &event.review else {
-        return String::new();
-    };
-    let head = short_commit(review.head.as_str());
-    match &review.url {
-        Some(url) => format!("{} at {head}", reference(url)),
-        None => format!("at {head}"),
-    }
-}
-
-fn short_commit(commit: &str) -> String {
-    commit.chars().take(7).collect()
+    let url = event
+        .review
+        .as_ref()
+        .and_then(|review| review.url.as_deref());
+    url.map(reference).unwrap_or_default()
 }
 
 fn link(event: &EventDetails) -> (String, String) {

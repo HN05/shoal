@@ -217,7 +217,7 @@ instead of the PR delivery guidance below.
   those below it. Ready-for-review
   marks say the agent needs the user before it can go on, in every space,
   show `ready` and reach the inbox only while the space's agent is not
-  working, bind to HEAD, cover only linked items or the unlinked workspace, record
+  working, carry no commit, cover only linked items or the unlinked workspace, record
   journal events, and never notify, complete, or change cleanup; `hooks.post_ready`
   failure keeps them. Only explicit
   done completes an assignment. PR cleanup

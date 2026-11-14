@@ -269,21 +269,13 @@ async fn space_kind(ctx: &Context, space: &SpaceSelector) -> Result<&'static str
 }
 
 /// One indented line per mark: its item, or the space itself, called
-/// `itself`, and whether new commits arrived since.
+/// `itself`.
 pub(super) fn review_lines(marks: &[ReviewMark], itself: &str) -> String {
     marks
         .iter()
-        .map(|mark| {
-            let item = match (mark.kind, &mark.url) {
-                (Some(kind), Some(url)) => format!("{kind} {url}"),
-                _ => itself.to_owned(),
-            };
-            let outdated = if mark.stale == Some(true) {
-                " (outdated)"
-            } else {
-                ""
-            };
-            format!("  {item}{outdated}")
+        .map(|mark| match (mark.kind, &mark.url) {
+            (Some(kind), Some(url)) => format!("  {kind} {url}"),
+            _ => format!("  {itself}"),
         })
         .collect::<Vec<_>>()
         .join("\n")

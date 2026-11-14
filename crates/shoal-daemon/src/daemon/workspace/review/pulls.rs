@@ -1,7 +1,6 @@
-//! Which linked PRs a ready mark may cover: open ones, at the head the forge
-//! reports for them, which a workspace's PR must share with its HEAD.
+//! Which linked PRs a ready mark may cover: open ones, whose head on the
+//! forge a workspace's PR must share with its HEAD.
 use crate::forge::items::reference::ItemRef;
-use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use shoal_refs::CommitId;
@@ -14,11 +13,9 @@ use crate::{
 };
 use shoal_forge::items::action::ActionRequests;
 
-/// The linked PRs a mark covers, sorted by whether they can be marked.
+/// The linked PRs a mark covers that cannot be marked.
 #[derive(Default)]
 pub(super) struct Pulls {
-    /// The forge's head of each PR that can be marked.
-    pub(super) heads: HashMap<ItemRef, CommitId>,
     pub(super) skipped: Vec<SkippedPr>,
 }
 
@@ -53,12 +50,9 @@ impl Manager {
             let pull = (forge.read(&account, ItemKind::Pr, url.pull()?.get()).await)
                 .with_context(|| format!("could not read {url}"))?;
             let state = pull.item.state;
-            match unmarkable_reason(state, pull.head_sha.as_ref().map(CommitId::as_str), head) {
-                Some(reason) => pulls.skipped.push(SkippedPr { url, reason }),
-                None => {
-                    let head = pull.head_sha.context("PR has no head commit")?;
-                    pulls.heads.insert(url, head);
-                }
+            let pull_head = pull.head_sha.as_ref().map(CommitId::as_str);
+            if let Some(reason) = unmarkable_reason(state, pull_head, head) {
+                pulls.skipped.push(SkippedPr { url, reason });
             }
         }
         Ok(pulls)

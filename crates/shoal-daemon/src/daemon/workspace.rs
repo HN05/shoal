@@ -100,15 +100,9 @@ use crate::{
     paths::Paths,
 };
 use anyhow::Result;
-use futures_util::StreamExt as _;
 use rusqlite::OptionalExtension;
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::OwnedMutexGuard;
-
-/// Review checks a listing runs at once, each reading HEAD with one Git
-/// process: enough to overlap their waits without one listing taking a
-/// process per workspace.
-const REVIEW_CHECK_CONCURRENCY: usize = 8;
 
 pub struct Manager {
     pub store: Store,
@@ -307,8 +301,8 @@ impl Manager {
         self.usage.with_workspaces(|usages| usages.get(id, now))
     }
 
-    /// The workspaces a caller lists, with review marks checked against
-    /// HEAD and their coordinators' turn states. A workspace process sees its
+    /// The workspaces a caller lists, with their coordinators' turn
+    /// states. A workspace process sees its
     /// own subtree with its own workspace first, since scoped commands
     /// without a target act on the first one; a chat in a workspace's
     /// worktree also sees that workspace, last.
@@ -320,12 +314,6 @@ impl Manager {
             }
             workspaces.sort_by_key(|w| w.id != *owner);
         }
-        let deadline = review::check_deadline();
-        futures_util::stream::iter(&mut workspaces)
-            .for_each_concurrent(REVIEW_CHECK_CONCURRENCY, |workspace| {
-                self.annotate_review(workspace, deadline)
-            })
-            .await;
         for workspace in &mut workspaces {
             workspace.usage = self.workspace_usage(&workspace.id);
         }
@@ -412,9 +400,7 @@ impl Manager {
     }
 
     pub async fn inspect_workspace(&self, selector: &SpaceSelector) -> Result<Inspection> {
-        let mut workspace = self.workspace(selector).await?;
-        self.annotate_review(&mut workspace, review::check_deadline())
-            .await;
+        let workspace = self.workspace(selector).await?;
         let simulators = self.list_simulators(Some(&workspace.id)).await?;
         let issues = self.issue_registrations(&workspace.id).await?;
         let pr_cleanup = self.pr_registration(&workspace.id).await?;

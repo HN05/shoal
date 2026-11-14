@@ -571,6 +571,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 180 {
         db.execute_batch(include_str!("consumed_upgrades.sql"))?;
     }
+    if version >= 181 {
+        db.execute_batch(include_str!("marks_without_heads.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -1717,6 +1720,43 @@ fn a_hold_shoal_continue_made_stays_as_an_ordinary_hold() -> Result<()> {
     migrate(&mut db)?;
     let held: String = db.query_row("SELECT name FROM workspace_holds", [], |r| r.get(0))?;
     assert_eq!(held, "continue");
+    Ok(())
+}
+
+#[test]
+fn ready_marks_keep_their_items_and_lose_their_commit() -> Result<()> {
+    let mut db = historical_database(180)?;
+    db.execute(
+        "INSERT INTO space_review(space_id,url,kind,head,created_at)
+            VALUES ('workspace','https://forge.example/o/r/pulls/12','pr','abc',5)",
+        [],
+    )?;
+    migrate(&mut db)?;
+    let columns: Vec<String> = db
+        .prepare("SELECT name FROM pragma_table_info('space_review') ORDER BY cid")?
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(columns, ["space_id", "url", "kind", "created_at"]);
+    let mark: (String, String, i64) = db.query_row(
+        "SELECT url,kind,created_at FROM space_review WHERE space_id='workspace'",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
+    assert_eq!(
+        mark,
+        ("https://forge.example/o/r/pulls/12".into(), "pr".into(), 5)
+    );
+    // Its withdrawal reaches the journal without a commit.
+    db.execute("DELETE FROM space_review", [])?;
+    let review: String = db.query_row(
+        "SELECT json_extract(record,'$.review') FROM workspace_events ORDER BY id DESC LIMIT 1",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&review)?,
+        serde_json::json!({"kind": "pr", "url": "https://forge.example/o/r/pulls/12"})
+    );
     Ok(())
 }
 

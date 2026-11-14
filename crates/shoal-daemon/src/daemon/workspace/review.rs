@@ -1,11 +1,10 @@
-//! Ready-for-review marks: an agent's statement that linked work is ready at a
-//! commit. Integrations read them from the event journal; they neither notify
-//! the user nor affect completion or cleanup.
+//! Ready-for-review marks: an agent's statement that it needs the user before
+//! it can go on. Integrations read them from the event journal; they neither
+//! notify the user nor affect completion or cleanup.
 use crate::client::space_ids::SpaceId;
 use crate::config::hooks::HookCommand;
 use crate::forge::items::reference::ItemRef;
-use shoal_refs::CommitId;
-use std::{collections::BTreeMap, ffi::OsString, path::Path, time::Duration};
+use std::{collections::BTreeMap, ffi::OsString, path::Path};
 
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, params};
@@ -26,26 +25,16 @@ use crate::{
     },
     forge::items::link::{ItemKind, LinkKind, Selection},
     hooks::{self, Hook, HookKind, HookSpace},
-    model::{Chat, ReadyMarks, Repository, ReviewMark, SkippedPr, Workspace},
+    model::{Chat, ReadyMarks, Repository, ReviewMark, SkippedPr},
 };
 use pulls::Pulls;
 
 mod pulls;
 
-/// How long a listing waits for its review checks before it leaves their
-/// staleness unknown, so stalled file access cannot hold up the
-/// reply.
-const CHECK_LIMIT: Duration = Duration::from_secs(3);
-
-/// When the review checks of a listing that starts now give up.
-pub(super) fn check_deadline() -> tokio::time::Instant {
-    tokio::time::Instant::now() + CHECK_LIMIT
-}
-
 pub(crate) fn list(db: &Connection, id: &SpaceId) -> Result<Vec<ReviewMark>> {
     Ok(db
         .prepare(
-            "SELECT url,kind,head,created_at FROM space_review
+            "SELECT url,kind,created_at FROM space_review
              WHERE space_id=?1 ORDER BY created_at,url",
         )?
         .query_map([id], |row| {
@@ -67,9 +56,7 @@ pub(crate) fn list(db: &Connection, id: &SpaceId) -> Result<Vec<ReviewMark>> {
             Ok(ReviewMark {
                 kind,
                 url,
-                head: row.get(2)?,
-                created_at: row.get(3)?,
-                stale: None,
+                created_at: row.get(2)?,
                 warnings: Vec::new(),
             })
         })?
@@ -87,16 +74,15 @@ pub(crate) fn forget(db: &Connection, id: &SpaceId, urls: &[String]) -> Result<(
 }
 
 impl Manager {
-    /// Mark the selected linked items ready at HEAD, or the workspace itself
-    /// when nothing is linked and nothing was selected. A linked PR is marked
+    /// Mark the selected linked items ready, or the workspace itself when
+    /// nothing is linked and nothing was selected. A linked PR is marked
     /// only while it is open with HEAD as its head on the forge; the others are
-    /// skipped, and an explicitly selected one fails. Marking again moves
-    /// the mark to the current HEAD and reruns `hooks.post_ready`. With
+    /// skipped, and an explicitly selected one fails. Marking again refreshes
+    /// the mark and reruns `hooks.post_ready`. With
     /// `[pr] undraft_on_ready`, marked draft PRs leave draft before the hook runs,
     /// which removes their progress section with the next publication; a
     /// failure there keeps the marks and runs the hook. For a scoped
-    /// `caller`, `[review] require_for_ready` applies to the HEAD the marks
-    /// record.
+    /// `caller`, `[review] require_for_ready` applies to HEAD.
     pub async fn mark_ready(
         &self,
         selector: &SpaceSelector,
@@ -132,7 +118,7 @@ impl Manager {
         let space = LinkSpace::from(workspace.clone());
         let pulls =
             (self.markable_pulls(&space, kind, explicit.as_ref(), Some(head.as_str()))).await?;
-        let mut ready = (self.record_marks(&workspace.id, kind, explicit, head, pulls)).await?;
+        let mut ready = (self.record_marks(&workspace.id, kind, explicit, pulls)).await?;
         let undrafted = match settings.pr.undraft_on_ready {
             true => self.set_draft(&space, &pr_urls(&ready.marks), false).await,
             false => Ok(()),
@@ -163,10 +149,9 @@ impl Manager {
         Ok(ready)
     }
 
-    /// [`Self::mark_ready`] for a chat, which works on no branch of its own:
-    /// each linked open PR is marked at its head on the forge, and an issue or
-    /// the chat itself at its checkout's HEAD. A chat is unscoped, so no review
-    /// gate applies, and no coordinator hears of it.
+    /// [`Self::mark_ready`] for a chat, which works on no branch of its own,
+    /// so each linked open PR is marked whatever its head. A chat is unscoped,
+    /// so no review gate applies, and no coordinator hears of it.
     async fn mark_chat_ready(&self, space: &LinkSpace, selection: Selection) -> Result<ReadyMarks> {
         let LinkSpace::Chat { chat, checkout } = space else {
             bail!("only a chat is marked this way");
@@ -176,10 +161,7 @@ impl Manager {
         let kind = marked_kind(&selection)?;
         let explicit = marked_item(self.explicit_item(&checkout.path, &selection).await?);
         let pulls = (self.markable_pulls(space, kind, explicit.as_ref(), None)).await?;
-        let (head, _) = crate::git::head_and_branch(&checkout.path)
-            .await
-            .context("cannot read the checkout's HEAD")?;
-        let mut ready = (self.record_marks(space.id(), kind, explicit, head, pulls)).await?;
+        let mut ready = (self.record_marks(space.id(), kind, explicit, pulls)).await?;
         let undrafted = match settings.pr.undraft_on_ready {
             true => self.set_draft(space, &pr_urls(&ready.marks), false).await,
             false => Ok(()),
@@ -235,14 +217,13 @@ impl Manager {
         .await;
     }
 
-    /// Record marks of `kind`, or of the `explicit` item, at `head`, or for
-    /// a PR at its own head among the `pulls`, which leave out those they skip.
+    /// Record marks of `kind`, or of the `explicit` item, leaving out the
+    /// `pulls` skipped.
     async fn record_marks(
         &self,
         id: &SpaceId,
         kind: Option<ItemKind>,
         explicit: Option<ItemRef>,
-        head: CommitId,
         pulls: Pulls,
     ) -> Result<ReadyMarks> {
         let id = id.to_owned();
@@ -262,29 +243,17 @@ impl Manager {
                 let mut marks = Vec::new();
                 for url in items {
                     let kind = url.as_ref().and_then(|url| url.kind().item());
-                    let head = (url.as_ref())
-                        .and_then(|url| pulls.heads.get(url))
-                        .unwrap_or(&head)
-                        .clone();
                     tx.execute(
-                        "INSERT INTO space_review(space_id,url,kind,head,created_at)
-                         VALUES (?1,?2,?3,?4,?5)
+                        "INSERT INTO space_review(space_id,url,kind,created_at)
+                         VALUES (?1,?2,?3,?4)
                          ON CONFLICT(space_id,url) DO UPDATE
-                         SET head=excluded.head,created_at=excluded.created_at",
-                        params![
-                            id,
-                            url.as_ref().map_or("", ItemRef::url),
-                            kind,
-                            head,
-                            created_at
-                        ],
+                         SET created_at=excluded.created_at",
+                        params![id, url.as_ref().map_or("", ItemRef::url), kind, created_at],
                     )?;
                     marks.push(ReviewMark {
                         kind,
                         url,
-                        head,
                         created_at,
-                        stale: Some(false),
                         warnings: Vec::new(),
                     });
                 }
@@ -379,34 +348,6 @@ impl Manager {
                 Ok(())
             })
             .await
-    }
-
-    /// Say whether each mark still describes HEAD. HEAD that cannot be read
-    /// by `deadline`, or is in a directory whose file access stalls, leaves staleness
-    /// unknown rather than failing or holding up a listing.
-    pub async fn annotate_review(&self, workspace: &mut Workspace, deadline: tokio::time::Instant) {
-        if workspace.review.is_empty() {
-            return;
-        }
-        let head = self.listed_head(workspace, deadline).await;
-        for mark in &mut workspace.review {
-            mark.stale = head.as_ref().map(|head| head != &mark.head);
-        }
-    }
-
-    async fn listed_head(
-        &self,
-        workspace: &Workspace,
-        deadline: tokio::time::Instant,
-    ) -> Option<String> {
-        if self.file_access.stalled(&workspace.path).is_some() {
-            return None;
-        }
-        (tokio::time::timeout_at(deadline, current_head(workspace))
-            .await
-            .ok()?
-            .ok())
-        .map(String::from)
     }
 }
 

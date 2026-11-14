@@ -37,7 +37,7 @@ async fn a_launch_in_a_child_ranks_with_its_ready_parent_ahead_of_earlier_launch
             )?;
             // A ready mark makes the parent's work finishing.
             db.execute(
-                "INSERT INTO space_review(space_id,url,kind,head) VALUES (?1,'',NULL,'abc')",
+                "INSERT INTO space_review(space_id,url,kind) VALUES (?1,'',NULL)",
                 [parent],
             )?;
             Ok(())
