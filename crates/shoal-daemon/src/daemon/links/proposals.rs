@@ -701,7 +701,7 @@ impl Manager {
     ) -> Result<Option<String>> {
         let posted = match space {
             Some(space) => self
-                .apply_own(space.id(), forge, account, target.clone(), &comment)
+                .apply_own(space.id(), forge, account, target.clone(), &comment, None)
                 .await
                 .map(|_| ()),
             None => forge

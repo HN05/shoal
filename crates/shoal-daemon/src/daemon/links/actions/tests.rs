@@ -229,3 +229,22 @@ async fn several_assigned_issues_need_the_number_of_the_one_acted_on() {
     assert!(format!("{error:#}").contains("several"), "{error:#}");
     assert_eq!(linked(Some("8")).await.unwrap(), 8);
 }
+
+#[test]
+fn a_scoped_verdict_is_the_space_s_own_post_and_the_user_s_is_not() {
+    use crate::forge::review::submit::{NewReview, ReviewVerdict};
+    let approval = Action::Review(NewReview {
+        verdict: ReviewVerdict::Approve,
+        body: "Looks right".into(),
+        comments: Vec::new(),
+        commit: None,
+    });
+    let posted = || vec!["review-1".to_owned()];
+    let scoped = Caller {
+        space_id: "space".into(),
+        execution: None,
+        granted: None,
+    };
+    assert_eq!(own_posts(&approval, Some(&scoped), posted()), posted());
+    assert!(own_posts(&approval, None, posted()).is_empty());
+}
