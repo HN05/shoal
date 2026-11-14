@@ -231,3 +231,26 @@ fn a_chat_that_was_a_workspace_is_told_so_in_the_place_it_opens() {
     let issue = converted.subject.and_then(|subject| subject.issue);
     assert_eq!(issue.map(|issue| issue.number), Some(7));
 }
+
+#[test]
+fn a_chat_restored_beside_a_session_another_space_holds_is_told_it_was_restored() {
+    let repo = repository();
+    let topic = || Topic::repository(&repo, &"chat".into());
+    let held = crate::execution::recovery::Copied {
+        earlier_files: false,
+        held_elsewhere: true,
+    };
+    let told = |topic: Topic| {
+        topic
+            .subject
+            .map(|subject| subject.text)
+            .unwrap_or_default()
+    };
+
+    let restored = told(topic().changed(false, Some(held), &repo.path));
+    assert!(restored.contains("restored"), "{restored}");
+    assert!(!restored.contains("converted"), "{restored}");
+    // A workspace that became the chat is told so, whatever else it is.
+    let converted = told(topic().changed(true, Some(held), &repo.path));
+    assert!(converted.contains("converted"), "{converted}");
+}

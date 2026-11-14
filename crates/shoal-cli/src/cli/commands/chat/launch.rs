@@ -361,11 +361,12 @@ async fn run_agent(
     }
 }
 
-/// Start the agent of `chat`, which a workspace became, in this terminal
-/// as its `session` there saved it: from a fork of that session, told what
-/// its space is now, with the rules of its mode and the fields of the issue
-/// the chat links; it consumes `records` once it runs.
-pub(in crate::cli::commands) async fn start_converted(
+/// Start the agent of `chat`, which a workspace became, or whose session
+/// another space holds since its restore, in this terminal as its `session`
+/// saved it: from a fork of that session, told what its space is now or
+/// that it was restored, with the rules of its mode and the fields of the
+/// issue the chat links; it consumes `records` once it runs.
+pub(in crate::cli::commands) async fn start_changed(
     ctx: &Context,
     chat: &Chat,
     session: &crate::execution::recovery::LastSession,
@@ -382,7 +383,7 @@ pub(in crate::cli::commands) async fn start_converted(
         linked_issue: crate::config::templates::IssueFields::linked(&chat.links),
         ..topic
     }
-    .converted(&home);
+    .changed(session.converted, session.copied, &home);
     let agent: Agent = session.agent.name().parse()?;
     let options = Options {
         now: false,

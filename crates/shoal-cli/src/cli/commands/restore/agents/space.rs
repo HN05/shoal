@@ -144,10 +144,11 @@ async fn restore(
             records.extend(commands.into_iter().map(|command| command.path));
             return start_changed(ctx, workspace, session, handoff.as_deref(), records).await;
         }
-        // A chat changes only by a workspace becoming it.
+        // A chat changes by a workspace becoming it, or by its restore while
+        // another space holds its session.
         (PresentSpace::Chat(chat), true) => {
             records.extend(commands.into_iter().map(|command| command.path));
-            let start = crate::cli::commands::chat::start_converted(ctx, chat, &session, records);
+            let start = crate::cli::commands::chat::start_changed(ctx, chat, &session, records);
             return start.await;
         }
         (_, false) => {}
