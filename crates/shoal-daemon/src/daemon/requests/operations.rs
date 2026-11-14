@@ -274,11 +274,13 @@ impl Follower {
         let mut next = after;
         loop {
             changed.borrow_and_update();
+            // Read the events before the scope, so an event pushed after the
+            // scope ended is read only by a lookup that sees it ended.
+            let (events, ended) = entry.events_from(next);
             let scoped = match &self.scope {
                 Some(token) => manager.caller(token).await?.is_some(),
                 None => true,
             };
-            let (events, ended) = entry.events_from(next);
             let Some(operation) = manager.gates.try_operation() else {
                 return Ok(());
             };
