@@ -173,3 +173,19 @@ async fn a_workspace_process_refreshes_a_copy_only_from_a_source_it_reaches() {
     assert!(refused.contains("outside this one's scope"), "{refused}");
     assert!(!f.refresh(&copy).await.unwrap().up_to_date);
 }
+
+#[tokio::test]
+async fn a_copy_keeps_its_own_worktree_config() {
+    let (f, source) = Fixture::copied().await;
+    git(
+        &f.repo.path,
+        &["config", "extensions.worktreeConfig", "true"],
+    );
+    let copy = f.copy(&source, "copy", None, false).await;
+    git(&copy.path, &["config", "--worktree", "user.name", "Copy"]);
+    add_commit(&source.path, "later");
+
+    assert!(!f.refresh(&copy).await.unwrap().up_to_date);
+    let name = git(&copy.path, &["config", "--worktree", "user.name"]);
+    assert_eq!(name.trim(), "Copy");
+}

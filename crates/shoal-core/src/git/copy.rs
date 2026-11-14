@@ -32,9 +32,14 @@ pub async fn add_worktree(
 /// the index, worktree config and files of the worktree at `source`, which
 /// must still be at `head` once its index is read; its `.git` file stays.
 pub async fn fill(source: &Path, copy: &Path, head: &CommitId) -> Result<()> {
-    for file in ["index", "config.worktree"] {
-        copy_admin_file(source, copy, file).await?;
-    }
+    copy_admin_file(source, copy, "config.worktree").await?;
+    fill_index_and_files(source, copy, head).await
+}
+
+/// Give the worktree at `copy` the index and files of the worktree at
+/// `source`, which must still be at `head` once its index is read.
+async fn fill_index_and_files(source: &Path, copy: &Path, head: &CommitId) -> Result<()> {
+    copy_admin_file(source, copy, "index").await?;
     let current = super::resolve_commit(source, "HEAD", super::run_isolated).await?;
     ensure!(
         current == *head,
@@ -44,14 +49,14 @@ pub async fn fill(source: &Path, copy: &Path, head: &CommitId) -> Result<()> {
 }
 
 /// Give the existing worktree at `copy` the HEAD `head` of the worktree at
-/// `source`, moving its branch there when it is on one, then its index,
-/// worktree config and files in place of its own, as [`fill`] gives a new
-/// one; its `.git` file stays. Its own files are gone, so the caller keeps
-/// what it needs of them first.
+/// `source`, moving its branch there when it is on one, then its index and
+/// files in place of its own; its `.git` file and worktree config, such as
+/// a Git profile, stay. Its own files are gone, so the caller keeps what it
+/// needs of them first.
 pub async fn refill(source: &Path, copy: &Path, head: &CommitId) -> Result<()> {
     super::run_isolated(copy, &["reset", "--quiet", "--soft", head.as_str(), "--"]).await?;
     crate::fsutil::copy::clear_worktree(copy).await?;
-    fill(source, copy, head).await
+    fill_index_and_files(source, copy, head).await
 }
 
 /// The paths in the worktree whose Git metadata lives elsewhere, which a
