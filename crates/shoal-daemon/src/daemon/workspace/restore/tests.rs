@@ -972,7 +972,8 @@ async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
         panic!("{files:?}");
     };
     assert_eq!((&file.path, file.expires_at), (&added.path, None));
-    // The restored workspace has no parent, so the old one reaches them no more.
+    // The restored workspace goes below its parent again, which reaches
+    // them as before.
     let parents: Vec<Option<String>> = manager
         .store
         .run(|db| {
@@ -983,7 +984,7 @@ async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
         })
         .await
         .unwrap();
-    assert_eq!(parents, [None]);
+    assert_eq!(parents, [Some(parent.id.to_string())]);
     let [listed] = listed.as_slice() else {
         panic!("{listed:?}");
     };
@@ -1051,4 +1052,59 @@ async fn a_scoped_restore_reopens_the_workspace_below_the_caller() {
         .await
         .unwrap();
     assert_eq!(parent, Some(master.id));
+}
+
+#[tokio::test]
+async fn a_restored_workspace_goes_below_its_parent_while_that_exists() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    let child_selector = SpaceSelector::id(&child.id);
+    let remove = |selector: SpaceSelector| {
+        let manager = std::sync::Arc::clone(&manager);
+        async move {
+            (manager.remove_workspace(&selector, UnsavedWork::All, InspectionPolicy::GitOnly))
+                .await
+                .unwrap();
+        }
+    };
+    let parent_of = |id: SpaceId| {
+        let manager = std::sync::Arc::clone(&manager);
+        async move {
+            (manager.store)
+                .read(move |tx| crate::daemon::workspace::tree::parent_id(tx, &id))
+                .await
+                .unwrap()
+        }
+    };
+    remove(child_selector.clone()).await;
+    let restored = manager.restore_workspace(&child_selector).await.unwrap();
+    assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
+    assert_eq!(parent_of(child.id.clone()).await, Some(parent.id.clone()));
+
+    // Removed with its parent, it restores alone, at the top level.
+    remove(SpaceSelector::id(&parent.id)).await;
+    let restored = manager.restore_workspace(&child_selector).await.unwrap();
+    assert_eq!(restored.warnings.len(), 1, "{:?}", restored.warnings);
+    assert!(restored.warnings[0].contains(parent.id.as_str()));
+    assert_eq!(parent_of(child.id.clone()).await, None);
+    let removed = manager.removed_workspaces().await.unwrap();
+    assert_eq!(removed.len(), 1);
+    assert_eq!(removed[0].space_id, parent.id);
 }

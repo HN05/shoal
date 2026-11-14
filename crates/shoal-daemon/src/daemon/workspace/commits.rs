@@ -49,9 +49,9 @@ impl RecordedJobWorkspace {
 /// The ID a new workspace's record takes, a new one unless a restore keeps
 /// its own, and the space it goes below, or none at the top.
 #[derive(Default)]
-struct NewRecord {
-    id: Option<SpaceId>,
-    parent: Option<SpaceId>,
+pub(super) struct NewRecord {
+    pub id: Option<SpaceId>,
+    pub parent: Option<SpaceId>,
 }
 
 impl Manager {
@@ -385,7 +385,7 @@ impl Manager {
     pub(super) async fn restore_commit_workspace(
         &self,
         removed: &RemovedSpace,
-        id: Option<SpaceId>,
+        new: NewRecord,
         at: StartingCommit,
         files: Option<RestoredFiles>,
     ) -> Result<Workspace> {
@@ -404,7 +404,7 @@ impl Manager {
                 ),
                 at,
                 diff_ref,
-                NewRecord { id, parent: None },
+                new,
                 CreationOptions {
                     skip_setup: removed.kept_workspace()?.setup_skipped,
                     ..Default::default()

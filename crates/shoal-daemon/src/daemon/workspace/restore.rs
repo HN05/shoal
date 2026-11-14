@@ -12,6 +12,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
+use super::commits::NewRecord;
 use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::scope::Caller;
@@ -43,8 +44,9 @@ impl Manager {
             .checkpoint(workspace, CheckpointCause::Removal, None)
             .await?;
         // Removal refuses link changes, so links read now are final, unlike
-        // those of the snapshot taken before it started.
-        let links = self.workspace_by_id(&workspace.id).await?.links;
+        // those of the snapshot taken before it started; the spaces below go
+        // first, so its parent is still there.
+        let Workspace { links, parent, .. } = self.workspace_by_id(&workspace.id).await?;
         // Removal has stopped every agent, and deletes the state their
         // records are in.
         let mut agents = crate::execution::recovery::stopped_agents(&self.paths, &workspace.id)?;
@@ -59,6 +61,7 @@ impl Manager {
             repository_id: Some(workspace.repository_id.clone()),
             name: workspace.name.clone(),
             expires_at: checkpoint.expires_at,
+            parent,
             links,
             agents,
             last_sessions,
@@ -194,7 +197,11 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<RestoredWorkspace> {
         let removed = self.claim_removed_workspace(selector).await?;
-        let id = self.restored_id(&removed).await?;
+        let mut warnings = Vec::new();
+        let new = NewRecord {
+            id: self.restored_id(&removed).await?,
+            parent: self.restored_parent(&removed, &mut warnings).await?,
+        };
         let kept = removed.kept_workspace()?;
         let checkpoint = &kept.checkpoint;
         let files = (checkpoint.commit != checkpoint.head).then(|| RestoredFiles {
@@ -203,13 +210,13 @@ impl Manager {
         });
         let opened = match kept.at.clone() {
             Some(at) => OpenedWorkspace {
-                workspace: (self.restore_commit_workspace(&removed, id, at, files)).await?,
+                workspace: (self.restore_commit_workspace(&removed, new, at, files)).await?,
                 reused: false,
             },
-            None => self.restore_branch_workspace(&removed, id, files).await?,
+            None => self.restore_branch_workspace(&removed, new, files).await?,
         };
         let id = &opened.workspace.id;
-        let mut warnings = self.relink_space(id, &removed.links, caller).await;
+        warnings.extend(self.relink_space(id, &removed.links, caller).await);
         let session_files = self.restore_agents(&removed, id, &mut warnings).await;
         self.adopt_removal(&removed, id).await?;
         Ok(RestoredWorkspace {
@@ -254,6 +261,41 @@ impl Manager {
         session_files
     }
 
+    /// The space the restore of `removed` opens it below: its recorded
+    /// parent while that exists and takes it, as a start places a child;
+    /// otherwise none, with a warning in `warnings` naming the parent.
+    async fn restored_parent(
+        &self,
+        removed: &RemovedSpace,
+        warnings: &mut Vec<String>,
+    ) -> Result<Option<SpaceId>> {
+        let Some(parent) = removed.parent.clone() else {
+            return Ok(None);
+        };
+        let (repository, space) = (removed.repository_id.clone(), removed.space_id.clone());
+        let id = parent.id.clone();
+        let taken = (self.store)
+            .read(move |tx| {
+                Ok(super::tree::ensure_parent(
+                    tx,
+                    repository.as_ref(),
+                    &space,
+                    &id,
+                ))
+            })
+            .await?;
+        match taken {
+            Ok(()) => Ok(Some(parent.id)),
+            Err(error) => {
+                warnings.push(format!(
+                    "{} opens at the top level, since its parent {} ({}) cannot take it: {error:#}",
+                    removed.name, parent.name, parent.id
+                ));
+                Ok(None)
+            }
+        }
+    }
+
     /// The ID the restore of `removed` opens it under: its own, unless the
     /// chat a conversion made of it has it, beside which it opens as a new
     /// space.
@@ -262,12 +304,12 @@ impl Manager {
         Ok((!taken).then(|| removed.space_id.clone()))
     }
 
-    /// Open the removed workspace `removed` again under `id` on its branch
-    /// at the removed HEAD, with `files` from its checkpoint.
+    /// Open the removed workspace `removed` again as `new` places it, on its
+    /// branch at the removed HEAD, with `files` from its checkpoint.
     async fn restore_branch_workspace(
         &self,
         removed: &RemovedSpace,
-        id: Option<SpaceId>,
+        new: NewRecord,
         files: Option<RestoredFiles>,
     ) -> Result<OpenedWorkspace> {
         let branch = self.restore_branch(removed).await?;
@@ -280,7 +322,8 @@ impl Manager {
                 skip_setup: removed.kept_workspace()?.setup_skipped,
                 ..Default::default()
             },
-            id,
+            id: new.id,
+            parent: new.parent,
             ..Default::default()
         };
         let opened = self

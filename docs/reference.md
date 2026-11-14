@@ -3760,8 +3760,11 @@ workspace exists, recreating the branch at the removed HEAD when it was deleted,
 puts its unsaved files back as uncommitted changes, links its issue and its
 opened and related items, saves the agents stopped by the removal or before it
 and the last sessions, runs setup, links its PRs, and keeps its checkpoints, log and attached
-files; a link or save that fails is a warning. A workspace converted into a chat
-opens beside that chat, under a new ID, with its checkpoints. Once its post-setup hook succeeds, it restores those agents and last
+files; a link or save that fails is a warning. It goes below the space it was
+below while that exists and takes it as a child; otherwise it opens at the top
+level with a warning naming that space. It restores alone: the spaces removed
+with it keep their records. A workspace converted into a chat opens beside that
+chat, under a new ID, with its checkpoints. Once its post-setup hook succeeds, it restores those agents and last
 sessions as it restores a stopped space's, queued unless `--now` or `--focus`, under
 `--permission`; one it cannot restore is reported and stays saved, and the workspace
 stays open. `--no-agents` keeps them saved for a later `shoal restore`, keeping the
@@ -3771,7 +3774,7 @@ or when it moved past HEAD while unsaved files would have to be applied to it;
 the error names the commit to recover by hand. Scoped processes reopen removed workspaces as their space's
 [`admin` permission](#permitted-actions) allows.
 
-Removal records the branch, base, links, stopped agents and last sessions with its checkpoint, and
+Removal records the branch, base, parent, links, stopped agents and last sessions with its checkpoint, and
 keeps them until the checkpoint expires. Links cannot change once removal
 starts, so the record holds the final ones. Removal stops agents as `shoal stop`
 does, keeping their recovery records in the removal record; interrupted commands

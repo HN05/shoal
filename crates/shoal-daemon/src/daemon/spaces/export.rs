@@ -359,6 +359,7 @@ fn packaged_record(
         repository_id: Some(workspace.repository_id.clone()),
         name: workspace.name.clone(),
         expires_at: checkpoint.expires_at,
+        parent: workspace.parent.clone(),
         links: workspace.links.clone(),
         agents,
         // An unreadable last session is not worth refusing the export for.

@@ -1,6 +1,6 @@
 //! Removed spaces and what removal leaves: kept branches and worktrees
 //! no workspace owns.
-use super::{Checkpoint, OpenedWorkspace, SpaceLinks, StartingCommit};
+use super::{Checkpoint, OpenedWorkspace, SpaceLinks, SpaceRef, StartingCommit};
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
 use crate::space_names::SpaceName;
@@ -50,6 +50,10 @@ pub struct RemovedSpace {
     /// None for a chat without a repository.
     pub repository_id: Option<RepositoryId>,
     pub name: SpaceName,
+    /// The space it was below, which a restore puts it below again while
+    /// that takes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<SpaceRef>,
     pub links: SpaceLinks,
     /// Agents stopped by the removal or before it, which `shoal restore`
     /// continues once the space is restored.
