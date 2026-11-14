@@ -50,14 +50,13 @@ on:
 
 concurrency:
   # Drafts and edits get groups of their own; edits queue instead of cancelling,
-  # so a later edit never cancels the run that leaving draft started. A release
-  # version commit's push gets one too, so it never cancels the run of the main
-  # commit below it, which release.py waits for.
+  # so a later edit never cancels the run that leaving draft started. Each push
+  # to main gets one too, so a later merge never cancels the run of the commit
+  # before it, which a release waits for.
   group: >-
     ci-${{ (github.event.pull_request.draft && 'draft-') ||
     (github.event.action == 'edited' && 'edited-') ||
-    (startsWith(github.event.head_commit.message, 'chore: prepare release v') && 'release-') ||
-    '' }}${{ github.ref }}
+    '' }}${{ (github.event_name == 'push' && github.sha) || github.ref }}
   cancel-in-progress: ${{ github.event.action != 'edited' }}
 
 env:
