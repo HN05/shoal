@@ -70,11 +70,15 @@ pub(in crate::cli::commands) async fn launch(
     if let Some(code) = agents::start_chat(ctx, &launch.agent, &launch.chat).await? {
         return Ok(Started::Exited(code));
     }
-    match launch.options.place {
+    let started = match launch.options.place {
         ChatPlace::Detached => launch.start_detached(ctx).await,
         ChatPlace::Background => launch.start_in_background(ctx).await,
         ChatPlace::Beside | ChatPlace::Here => launch.start_in_terminal(ctx).await,
+    };
+    if let Err(error) = &started {
+        admission::fail_launch(ctx, error).await;
     }
+    started
 }
 
 /// A chat ready to start: its agent, what it passes on to the agent, its

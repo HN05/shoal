@@ -166,4 +166,8 @@ pub struct ChatStart {
     /// them, the default host opens it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub env: Option<std::collections::BTreeMap<String, String>>,
+    /// Start its agent at once regardless of the agent slots, which it
+    /// still takes. Scoped callers cannot.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub now: bool,
 }

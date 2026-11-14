@@ -42,7 +42,22 @@ impl Manager {
         if let Some(token) = &token {
             self.operations.revoke(token);
         }
+        if let (Err(error), Some(entry)) = (&started, &entry) {
+            self.free_failed_start(entry, error).await;
+        }
         started
+    }
+
+    /// Free the slot of the admitted launch `entry`, whose chat failed to
+    /// start with `error`, rather than hold it until its grace ends.
+    async fn free_failed_start(
+        &self,
+        entry: &crate::client::queue::QueueEntryId,
+        error: &anyhow::Error,
+    ) {
+        if let Err(kept) = self.fail_queue_entry(entry, &format!("{error:#}")).await {
+            crate::daemon::log!("chat launch {entry} keeps its slot: {kept:#}");
+        }
     }
 
     /// `start` with its repository named by ID and the agent, mode and name
@@ -227,7 +242,7 @@ fn launch_request(start: &ChatStart) -> Result<ChatQueueRequest> {
         plan: serde_json::to_string(&plan)?,
         env: (start.env.clone())
             .unwrap_or_else(|| crate::terminal::detached_start_environment(None)),
-        now: false,
+        now: start.now,
         priority: start.priority,
         records_when_waiting: true,
     })
