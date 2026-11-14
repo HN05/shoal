@@ -94,18 +94,22 @@ def await_passed_ci(commit):
     """Wait while a required check on *commit* is pending; fail unless each passed in time."""
     deadline = time.monotonic() + CI_WAIT_SECONDS
     while True:
-        states = ci_states(commit)
-        failed = [f"{check} is {states.get(check, 'missing')}" for check in REQUIRED_CHECKS
-                  if states.get(check) not in ("success", "pending")]
+        # Every push to main runs CI, but ci.yml posts these checks only once
+        # its gate has finished, so a missing one is still to come.
+        states = {check: state for check, state in ci_states(commit).items()
+                  if check in REQUIRED_CHECKS}
+        failed = [f"{check} is {state}" for check, state in states.items()
+                  if state not in ("success", "pending")]
         if failed:
             raise ValueError(f"main commit {commit} has not passed CI: {'; '.join(failed)}")
-        pending = [check for check in REQUIRED_CHECKS if states[check] == "pending"]
-        if not pending:
+        waiting = [f"{check} is {states.get(check, 'missing')}" for check in REQUIRED_CHECKS
+                   if states.get(check) != "success"]
+        if not waiting:
             return
         if time.monotonic() >= deadline:
             raise ValueError(f"main commit {commit} has not passed CI in "
-                             f"{CI_WAIT_SECONDS // 60} minutes: {', '.join(pending)} pending")
-        print(f"Waiting for {', '.join(pending)} on {commit}", flush=True)
+                             f"{CI_WAIT_SECONDS // 60} minutes: {'; '.join(waiting)}")
+        print(f"Waiting for CI on {commit}: {'; '.join(waiting)}", flush=True)
         time.sleep(CI_POLL_SECONDS)
 
 

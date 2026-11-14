@@ -207,41 +207,36 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual([c.args[1:3] for c in run.call_args_list],
                          [("fmt", "--all"), ("CARGO_BUILD_WARNINGS=deny", "cargo")])
 
-    def test_ci_status_waits_while_a_check_is_pending(self):
+    def test_ci_status_waits_while_a_check_is_pending_or_not_posted(self):
         with patch.object(release, "forge", side_effect=[
-                    self.statuses(rust="pending", musl="success"),
+                    self.statuses(),
+                    self.statuses(rust="pending", gate="success"),
                     self.statuses(rust="success", musl="success", gate="success")]) as forge, \
                 patch.object(release.time, "sleep") as sleep:
             release.await_passed_ci("m" * 40)
-        self.assertEqual(forge.call_count, 2)
-        sleep.assert_called_once_with(release.CI_POLL_SECONDS)
+        self.assertEqual(forge.call_count, 3)
+        self.assertEqual(sleep.call_count, 2)
 
     def test_ci_status_stops_waiting_at_the_deadline(self):
         clock = iter([0, release.CI_WAIT_SECONDS - 1, release.CI_WAIT_SECONDS])
         with patch.object(release, "forge",
-                          return_value=self.statuses(rust="success", musl="pending")) as forge, \
+                          return_value=self.statuses(rust="success")) as forge, \
                 patch.object(release.time, "monotonic", side_effect=lambda: next(clock)), \
                 patch.object(release.time, "sleep"), \
                 self.assertRaises(ValueError) as refused:
             release.await_passed_ci("m" * 40)
         self.assertEqual(forge.call_count, 2)
-        self.assertIn(release.REQUIRED_CHECKS[1], str(refused.exception))
+        self.assertIn(f"{release.REQUIRED_CHECKS[1]} is missing", str(refused.exception))
 
-    def test_ci_status_refuses_a_failed_or_missing_check(self):
-        cases = {
-            "failure": (self.statuses(rust="success", musl="failure"), release.REQUIRED_CHECKS[1]),
-            "missing": (self.statuses(musl="pending"), release.REQUIRED_CHECKS[0]),
-            "none": (self.statuses(), release.REQUIRED_CHECKS[0]),
-        }
-        for case, (statuses, check) in cases.items():
-            with self.subTest(case=case), \
-                    patch.object(release, "forge", return_value=statuses), \
-                    patch.object(release.time, "sleep") as sleep, \
-                    self.assertRaises(ValueError) as refused:
-                release.await_passed_ci("m" * 40)
-            self.assertIn("m" * 40, str(refused.exception))
-            self.assertIn(check, str(refused.exception))
-            sleep.assert_not_called()
+    def test_ci_status_refuses_a_failed_check_without_waiting(self):
+        with patch.object(release, "forge",
+                          return_value=self.statuses(rust="pending", musl="failure")), \
+                patch.object(release.time, "sleep") as sleep, \
+                self.assertRaises(ValueError) as refused:
+            release.await_passed_ci("m" * 40)
+        self.assertIn("m" * 40, str(refused.exception))
+        self.assertIn(f"{release.REQUIRED_CHECKS[1]} is failure", str(refused.exception))
+        sleep.assert_not_called()
 
     def test_forge_reads_through_shoal_without_the_workflow_token(self):
         with patch.dict(release.os.environ, {"RELEASE_AUTOMATION_TOKEN": ""}), \
