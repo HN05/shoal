@@ -53,14 +53,15 @@ root_dir = "~/shoal"
 
 # A forge host: the API it serves, set instead of letting the daemon ask the
 # host once, "github", "gitlab", "forgejo" (also Gitea) or "bitbucket"; and
-# the tokens Forgejo, Gitea and Bitbucket requests sign in with, yours and
-# the agent account's, each written out, from a variable or printed by a
-# command. Without a token only public repositories are readable.
-# See docs/config.md#forges.
+# the tokens Forgejo, Gitea and Bitbucket requests sign in with, yours, the
+# agent account's and the one agents approve and request changes on PRs
+# with, each written out, from a variable or printed by a command. Without a
+# token only public repositories are readable. See docs/config.md#forges.
 # [machine.forges."git.example.com"]
 # type = "forgejo"
 # user_token = { cmd = ["security", "find-generic-password", "-s", "forgejo", "-w"] }
 # agent_token = { cmd = ["op", "read", "op://dev/agent/token"] }
+# review_token = { cmd = ["op", "read", "op://dev/reviewer/token"] }
 
 # Bitbucket Cloud also takes the email of an Atlassian API token's account.
 # [machine.forges."bitbucket.org"]
