@@ -42,7 +42,6 @@ impl Manager {
         }
     }
 
-    /// Refuse `caller` the `space` its scope does not reach.
     /// Refuse `caller` the space `selector` names unless its scope reaches
     /// it, before it asks approval for an action there; none names no space.
     pub(in crate::daemon) async fn ensure_selected_reached(
@@ -59,6 +58,7 @@ impl Manager {
         }
     }
 
+    /// Refuse `caller` the `space` its scope does not reach.
     pub(in crate::daemon) async fn ensure_reaches(
         &self,
         caller: &Caller,

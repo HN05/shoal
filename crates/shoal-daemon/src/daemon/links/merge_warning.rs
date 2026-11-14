@@ -104,8 +104,6 @@ impl Manager {
         Ok(warning(branch.into(), vec![recorded], &merged))
     }
 
-    /// The forge and the PR `input` names in the repository of `context`, or
-    /// the space's linked PR.
     /// What `action` on the PR `input` names, or on `context`'s linked PR,
     /// does, as an approval of it binds it: a merge at the commit the PR's
     /// head has now, so a later commit needs another decision.
@@ -126,6 +124,8 @@ impl Manager {
         Ok(format!("{} {url}{at}", action.name()))
     }
 
+    /// The forge and the PR `input` names in the repository of `context`, or
+    /// the space's linked PR.
     async fn pull_to_merge(
         &self,
         context: &ItemContext,
