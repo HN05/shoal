@@ -12,6 +12,7 @@ mod detached;
 mod launch;
 mod link;
 mod mode;
+mod own_group;
 mod pause;
 pub mod recovery;
 pub(crate) mod spawn;

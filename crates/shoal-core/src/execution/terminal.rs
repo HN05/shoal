@@ -76,10 +76,10 @@ impl Terminal {
     }
 }
 
-/// In a new child before exec: make its process group the foreground of the
-/// terminal on its standard input. With SIGTTOU blocked, a background group
-/// may do so without being stopped.
-fn take_foreground() {
+/// Make this process's group the foreground of the terminal on its standard
+/// input, as a new child does before exec. With SIGTTOU blocked, a background
+/// group may do so without being stopped.
+pub(super) fn take_foreground() {
     // SAFETY: sigset and mask calls touch only this thread's local set and
     // mask; tcsetpgrp names this process's own group.
     unsafe {

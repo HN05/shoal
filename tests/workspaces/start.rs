@@ -237,30 +237,60 @@ fn a_scoped_start_reports_an_agent_refused_after_the_childs_setup() {
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
 }
 
-/// A scoped caller's `--here` runs the agent of the child it opens in its
-/// own terminal, as the child's own agent with the child's identity.
+/// A scoped caller's `start --here` runs the new child's agent in its own
+/// process, as the child's own agent with the child's scope, which a stop of
+/// the caller leaves running though the start shares the caller's process
+/// group.
 #[test]
 fn a_scoped_start_runs_its_agent_here_as_the_childs() {
-    let agent = r#"echo "$SHOAL_WORKSPACE_ID" "$SHOAL_SCOPE_TOKEN" > agent-env"#;
-    let config = format!("[agents.waiter]\ncommand = ['sh', '-c', '{agent}']\n");
-    let fixture = Fixture::with_config(Some(&config));
+    let config = "[agents.waiter]\ncommand = ['sh', '-c', '. \"$HOME/agent.sh\"']\n";
+    let fixture = Fixture::with_config(Some(config));
+    let agent = "echo \"$SHOAL_WORKSPACE_ID\" \"$SHOAL_SCOPE_TOKEN\" > \"$HOME/agent-env\"\n\
+                 trap 'exit 0' TERM\n\
+                 echo $$ > \"$HOME/agent-pid\"\n\
+                 while :; do sleep 1; done\n";
+    fs::write(fixture.root.path().join("agent.sh"), agent).unwrap();
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
-    let repo = fixture.repo.to_str().unwrap();
-    let start = [
-        "start", repo, "--branch", "child", "--here", "--agent", "waiter",
-    ];
-    let output = scoped_command(&fixture, "parent", &start);
-    assert!(output.status.success(), "{output:?}");
+    // The caller's shell leads its process group, which the start shares.
+    let caller = "echo \"$SHOAL_SCOPE_TOKEN\" > \"$HOME/caller-token\"; \
+                  \"$SHOAL\" --json start \"$REPO\" --branch child --here --agent waiter; :";
+    let mut run = fixture.command();
+    run.args([
+        "run",
+        "--workspace",
+        &fixture.id("parent"),
+        "--",
+        "sh",
+        "-c",
+        caller,
+    ])
+    .env("SHOAL", support::shoal_binary())
+    .env("REPO", &fixture.repo)
+    .stdin(Stdio::null())
+    .stdout(Stdio::null())
+    .stderr(Stdio::null());
+    let mut run = run.spawn().unwrap();
+    let read = |name: &str| fs::read_to_string(fixture.root.path().join(name)).ok();
+    let pid: u32 = wait_for("the child's agent", || {
+        read("agent-pid")?.trim().parse().ok()
+    });
     let child = &fixture.ok(&["status", &fixture.id("child")])["workspace"];
     assert_eq!(child["parent"]["id"], fixture.id("parent"), "{child}");
-    let path = std::path::Path::new(child["path"].as_str().unwrap());
-    let recorded = std::fs::read_to_string(path.join("agent-env")).unwrap();
+    let recorded = read("agent-env").unwrap();
     let [workspace, token] = recorded.split_whitespace().collect::<Vec<_>>()[..] else {
         panic!("{recorded:?}");
     };
     assert_eq!(workspace, fixture.id("child"));
-    assert!(!token.is_empty());
+    let caller_token = read("caller-token").unwrap();
+    assert!(
+        !token.is_empty() && token != caller_token.trim(),
+        "{recorded:?}"
+    );
+    fixture.ok(&["stop", &fixture.id("parent"), "--skip-children"]);
+    run.wait().unwrap();
+    assert!(process_running(pid));
+    fixture.ok(&["stop", &fixture.id("child")]);
 }
 
 /// A scoped caller's blocked agent queues whole: the workspace opens below

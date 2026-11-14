@@ -54,6 +54,11 @@ pub(super) async fn run_tracked(
     mode: Mode,
     agent: Option<super::TrackedAgent>,
 ) -> Result<i32> {
+    // A scoped process that runs an agent here runs its own space's agent,
+    // which its starter's stops leave running.
+    let _group = (agent.is_some() && env::is_scoped())
+        .then(super::own_group::OwnGroup::lead)
+        .transpose()?;
     let launch = prepare_tracked_launch(paths, workspace, command, &mode, agent).await?;
     launch.run_to_end(paths, &mode).await
 }

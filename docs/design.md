@@ -1570,7 +1570,9 @@ rather than holding the terminal, since only the user's terminal starts agents
 beyond the limits. Its
 agent's execution is its own space's, with that space's scope: an agent's wrapper,
 and what it started, never count among the processes of another execution that
-started it, so the caller's stops leave the agent running. zmx reports no exit status, so a session launch
+started it, and the wrapper leaves its starter's process group, which the
+starter's wrapper signals as it stops, taking the terminal along when that group
+held it, so the caller's stops leave the agent running. zmx reports no exit status, so a session launch
 exits 0; the daemon still records the agent's exit.
 
 Demos let the user try a change where the agent's windows are out of sight,
