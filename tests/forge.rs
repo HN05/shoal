@@ -145,7 +145,7 @@ fn pull(number: u64, state: &str, title: &str, labels: &[&str]) -> Value {
     json!({"number": number, "title": title, "state": state, "draft": false,
         "merged": state == "merged", "node_id": "PR_node",
         "labels": labels.iter().map(|name| json!({"name": name})).collect::<Vec<_>>(),
-        "head": {"ref": "topic", "repo": {"full_name": "team/project"}},
+        "head": {"sha": "head", "ref": "topic", "repo": {"full_name": "team/project"}},
         "base": {"ref": "main"}})
 }
 
@@ -3211,7 +3211,8 @@ fn auto_merges_are_scheduled_and_cancelled_with_the_merge_command() {
         sent,
         [
             json!([format!("POST {endpoint}/merge"), {"Do": "squash",
-                "delete_branch_after_merge": false, "merge_when_checks_succeed": true}]),
+                "delete_branch_after_merge": false, "head_commit_id": "head",
+                "merge_when_checks_succeed": true}]),
             json!([format!("DELETE {endpoint}/merge"), null]),
         ]
     );

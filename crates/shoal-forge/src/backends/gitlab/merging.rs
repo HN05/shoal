@@ -53,6 +53,7 @@ impl Merging for GitLab {
         let endpoint = repo.item_endpoint(ItemKind::Pr, current.item.number);
         Ok(vec![merge_request(
             format!("{endpoint}/merge"),
+            current,
             method,
             delete_branch,
             false,
@@ -70,6 +71,7 @@ impl Merging for GitLab {
         let endpoint = repo.item_endpoint(ItemKind::Pr, current.item.number);
         Ok(vec![merge_request(
             format!("{endpoint}/merge"),
+            current,
             method,
             delete_branch,
             true,
@@ -110,10 +112,12 @@ impl Merging for GitLab {
     }
 }
 
-/// GitLab merges with the project's merge method, optionally squashing, now
-/// or once the pipeline succeeds when `when_pipeline_succeeds`.
+/// GitLab merges with the project's merge method, optionally squashing, at
+/// the head `current` had when read, now or once the pipeline succeeds when
+/// `when_pipeline_succeeds`.
 fn merge_request(
     endpoint: String,
+    current: &Current,
     method: MergeMethod,
     delete_branch: bool,
     when_pipeline_succeeds: bool,
@@ -124,6 +128,7 @@ fn merge_request(
     let mut body = json!({
         "squash": method == MergeMethod::Squash,
         "should_remove_source_branch": delete_branch,
+        "sha": current.read_head()?,
     });
     if when_pipeline_succeeds {
         body["merge_when_pipeline_succeeds"] = json!(true);

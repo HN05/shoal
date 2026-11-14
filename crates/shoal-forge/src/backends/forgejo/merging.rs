@@ -49,7 +49,7 @@ impl Merging for Forgejo {
             method,
             delete_branch,
             false,
-        )])
+        )?])
     }
 
     /// Forgejo merges now when the checks already succeed.
@@ -66,7 +66,7 @@ impl Merging for Forgejo {
             method,
             delete_branch,
             true,
-        )])
+        )?])
     }
 
     fn cancel_auto_merge(&self, repo: &ForgeRepo, current: &Current) -> Result<Vec<Request>> {
@@ -104,20 +104,26 @@ fn merge_endpoint(repo: &ForgeRepo, current: &Current) -> String {
     )
 }
 
-/// Merge the PR now, or once its checks succeed when `when_checks_succeed`.
+/// Merge the PR at the head it had when read, now or once its checks
+/// succeed when `when_checks_succeed`.
 fn merge_request(
     repo: &ForgeRepo,
     current: &Current,
     method: MergeMethod,
     delete_branch: bool,
     when_checks_succeed: bool,
-) -> Request {
+) -> Result<Request> {
     let mut body = json!({
         "Do": method.as_str(),
         "delete_branch_after_merge": delete_branch,
+        "head_commit_id": current.read_head()?,
     });
     if when_checks_succeed {
         body["merge_when_checks_succeed"] = json!(true);
     }
-    Request::new(HttpMethod::Post, merge_endpoint(repo, current), Some(body))
+    Ok(Request::new(
+        HttpMethod::Post,
+        merge_endpoint(repo, current),
+        Some(body),
+    ))
 }

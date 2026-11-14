@@ -71,6 +71,7 @@ impl Backend for GitLab {
             | Capability::MergeCommit
             | Capability::SquashMerge
             | Capability::AutoMerge
+            | Capability::MergeAtHead
             | Capability::UpdateByRebase
             | Capability::LineComments
             | Capability::ApprovePrs

@@ -1,7 +1,7 @@
 //! An issue or PR as one read reports it, in the same shape for every
 //! forge.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use shoal_refs::{BranchName, CommitId};
 
@@ -98,6 +98,15 @@ impl Current {
         self.head_repository
             .as_deref()
             .is_some_and(|path| path.eq_ignore_ascii_case(&repo.path))
+    }
+
+    /// The commit the PR's head had when read, which a merge names so the
+    /// forge refuses a head that moved since.
+    pub fn read_head(&self) -> Result<&str> {
+        self.head_sha
+            .as_ref()
+            .map(CommitId::as_str)
+            .context("the forge did not report the PR's head commit")
     }
 }
 

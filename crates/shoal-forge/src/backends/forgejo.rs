@@ -73,6 +73,7 @@ impl Backend for Forgejo {
             | Capability::RebaseMerge
             | Capability::SquashMerge
             | Capability::AutoMerge
+            | Capability::MergeAtHead
             | Capability::UpdateByMerge
             | Capability::UpdateByRebase
             | Capability::ForkPrs

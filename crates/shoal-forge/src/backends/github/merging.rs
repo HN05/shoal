@@ -47,15 +47,10 @@ impl Merging for GitHub {
         let item = &current.item;
         let pr = item.pr.as_ref().context("only PRs merge")?;
         let merge = format!("{}/merge", repo.item_endpoint(ItemKind::Pr, item.number));
+        let body = json!({ "merge_method": method.as_str(), "sha": current.read_head()? });
         // GitHub can answer success without merging.
-        let mut requests = vec![
-            Request::new(
-                HttpMethod::Put,
-                merge,
-                Some(json!({ "merge_method": method.as_str() })),
-            )
-            .confirming("merged"),
-        ];
+        let mut requests =
+            vec![Request::new(HttpMethod::Put, merge, Some(body)).confirming("merged")];
         // A fork's branch is not this repository's to delete.
         if delete_branch && current.head_in(repo) {
             requests.push(self.branch_delete(repo, pr.head.as_str()));
@@ -99,11 +94,7 @@ impl Merging for GitHub {
             .node_id
             .as_deref()
             .context("GitHub did not report the PR's node ID")?;
-        let head = current
-            .head_sha
-            .as_ref()
-            .map(shoal_refs::CommitId::as_str)
-            .context("GitHub did not report the PR's head commit")?;
+        let head = current.read_head()?;
         let method = match method {
             UpdateMethod::Merge => "MERGE",
             UpdateMethod::Rebase => "REBASE",
@@ -138,7 +129,7 @@ impl Merging for GitHub {
 }
 
 /// The GraphQL request that has GitHub merge the PR `current` with `method`
-/// once it can, or withdraws that without one.
+/// once it can, at the head it had when read, or withdraws that without one.
 fn auto_merge_request(current: &Current, method: Option<MergeMethod>) -> Result<Request> {
     let id = current
         .node_id
@@ -146,8 +137,12 @@ fn auto_merge_request(current: &Current, method: Option<MergeMethod>) -> Result<
         .context("GitHub did not report the PR's node ID")?;
     let (query, variables) = match method {
         Some(method) => (
-            "mutation($id: ID!, $method: PullRequestMergeMethod!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: $method}) { clientMutationId } }",
-            json!({ "id": id, "method": method.as_str().to_ascii_uppercase() }),
+            "mutation($id: ID!, $method: PullRequestMergeMethod!, $head: GitObjectID!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: $method, expectedHeadOid: $head}) { clientMutationId } }",
+            json!({
+                "id": id,
+                "method": method.as_str().to_ascii_uppercase(),
+                "head": current.read_head()?,
+            }),
         ),
         None => (
             "mutation($id: ID!) { disablePullRequestAutoMerge(input: {pullRequestId: $id}) { clientMutationId } }",

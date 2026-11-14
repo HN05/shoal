@@ -33,7 +33,7 @@ fn pr(forge: &ForgeRepo, draft: bool, labels: &[&str]) -> Current {
         head_repository: Some("team/repo".into()),
         body: String::new(),
         author: None,
-        head_sha: None,
+        head_sha: Some("c0ffee".into()),
         base_sha: None,
         merge_commit: None,
         conflict: None,
@@ -238,7 +238,7 @@ fn comments_state_changes_and_merges_use_each_forges_endpoints() {
             (
                 "PUT".into(),
                 "repos/team/repo/pulls/7/merge".into(),
-                json!({"merge_method": "squash"})
+                json!({"merge_method": "squash", "sha": "c0ffee"})
             ),
             (
                 "DELETE".into(),
@@ -254,12 +254,17 @@ fn comments_state_changes_and_merges_use_each_forges_endpoints() {
     let mut fork = pr(&github, false, &[]);
     fork.head_repository = Some("someone/repo".into());
     assert_eq!(requests(&github, &fork, merge.clone()).len(), 1);
+    // A merge names the head it read, so one the forge did not report refuses it.
+    let mut unread = pr(&github, false, &[]);
+    unread.head_sha = None;
+    assert!(github.plan(&unread, &merge).is_err());
     assert_eq!(
         requests(&forgejo, &pr(&forgejo, false, &[]), merge),
         [(
             "POST".into(),
             "repos/team/repo/pulls/7/merge".into(),
-            json!({"Do": "squash", "delete_branch_after_merge": true})
+            json!({"Do": "squash", "delete_branch_after_merge": true,
+                    "head_commit_id": "c0ffee"})
         )]
     );
 }
@@ -432,7 +437,7 @@ fn gitlab_changes_merge_requests_in_one_update_by_user_id() {
         [(
             "PUT".into(),
             "projects/group%2Fsub%2Frepo/merge_requests/7/merge".into(),
-            json!({"squash": true, "should_remove_source_branch": true})
+            json!({"squash": true, "should_remove_source_branch": true, "sha": "c0ffee"})
         )]
     );
     assert!(gitlab.plan(&open, &merge(MergeMethod::Rebase)).is_err());
@@ -453,7 +458,7 @@ fn automatic_merges_use_each_forges_requests() {
             "POST".into(),
             "repos/team/repo/pulls/7/merge".into(),
             json!({"Do": "squash", "delete_branch_after_merge": true,
-                    "merge_when_checks_succeed": true})
+                    "head_commit_id": "c0ffee", "merge_when_checks_succeed": true})
         )]
     );
     assert_eq!(
@@ -472,7 +477,7 @@ fn automatic_merges_use_each_forges_requests() {
             "PUT".into(),
             "projects/group%2Frepo/merge_requests/7/merge".into(),
             json!({"squash": true, "should_remove_source_branch": true,
-                    "merge_when_pipeline_succeeds": true})
+                    "sha": "c0ffee", "merge_when_pipeline_succeeds": true})
         )]
     );
     assert_eq!(
@@ -489,7 +494,7 @@ fn automatic_merges_use_each_forges_requests() {
     assert_eq!((enable.len(), enable[0].1.as_str()), (1, "graphql"));
     assert_eq!(
         enable[0].2["variables"],
-        json!({"id": "PR_1", "method": "SQUASH"})
+        json!({"id": "PR_1", "method": "SQUASH", "head": "c0ffee"})
     );
     assert!(
         enable[0].2["query"]
@@ -512,7 +517,7 @@ fn automatic_merges_use_each_forges_requests() {
         [(
             "PUT".into(),
             "repos/team/repo/pulls/7/merge".into(),
-            json!({"merge_method": "squash"})
+            json!({"merge_method": "squash", "sha": "c0ffee"})
         )]
     );
     open.item.state = ItemState::Closed;

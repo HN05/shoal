@@ -64,6 +64,7 @@ impl Backend for GitHub {
             | Capability::RebaseMerge
             | Capability::SquashMerge
             | Capability::AutoMerge
+            | Capability::MergeAtHead
             | Capability::UpdateByMerge
             | Capability::UpdateByRebase
             | Capability::ForkPrs

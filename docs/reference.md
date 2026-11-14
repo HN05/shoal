@@ -4250,6 +4250,9 @@ GitLab's merge when the pipeline succeeds, or Forgejo's merge when checks
 succeed. GitHub deletes the branch of an automatic merge only as the
 repository's settings say, so it refuses `--delete-branch` with `--auto`, and
 Bitbucket cannot merge later. `--cancel-auto` withdraws the automatic merge.
+A merge and an automatic merge name the head commit Shoal read for them, and
+the forge refuses to merge a head that moved since, except on Bitbucket, which
+takes none.
 When the last check of a workspace that links the PR found files
 [changed on both sides](#conflicts) at the PR's head with its base branch,
 `merge` and `merge --auto` name them and ask before merging, such as
