@@ -1620,8 +1620,9 @@ start chats are light, so they stay so in a workspace. A chat without a
 repository resolves its mode, and so its weight, in the global config, and
 its slot counts toward `machine.max_agents` alone. A heavy chat's start with
 no free slot follows a new workspace's: from a terminal nothing is recorded
-until its entry starts, since its place opens then, and without one the chat
-is recorded at once so the caller can address it, its launch attached to it. A one-shot run's
+until its entry starts, since its place opens then, while without one, or for
+a scoped caller, the chat is recorded at once so the caller can address it
+and it goes below the caller, its launch attached to it. A one-shot run's
 admission is its in-memory request, which ends with the run, or with the daemon
 for a run whose processes could not be proven stopped, so none outlives a
 restart. `machine.max_agents`

@@ -1778,8 +1778,9 @@ a slot of the [agent queue](#agent-queue) and whether load, idle stops and
 update, which `shoal attach` and `shoal queue start` skip. Only its agent
 exiting cleanly differs: it sends no notification. A heavy chat's start
 waits in the queue when no slot is free, as a new workspace's does: from a
-terminal it records nothing until its entry starts, and without one the
-chat is recorded at once and the start reports it with its entry. The
+terminal it records nothing until its entry starts, while one without a
+terminal or a scoped caller's records the chat at once, below where it goes,
+and reports it with its entry. The
 daemon records each chat under its name, with the session the agent's
 session-start hook last reported, which
 [`shoal move`](#move-a-space-to-another-machine) continues on another machine.
