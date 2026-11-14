@@ -19,7 +19,8 @@ impl Manager {
     /// queue it, as a new workspace's launch is: one that no limit applies
     /// to starts untracked, and one admitted here starts in the caller,
     /// which records the chat and attaches the launch to it. One that waits
-    /// starts from the queue, which runs its plan.
+    /// starts from the queue, which runs its plan, and when its caller
+    /// records the chat at once, only once the chat is attached.
     pub(in crate::daemon) async fn queue_chat_add(
         &self,
         mut request: ChatQueueRequest,
@@ -41,7 +42,7 @@ impl Manager {
             });
         }
         let id = QueueEntryId::generate();
-        let now = request.now;
+        let (now, records) = (request.now, request.records_when_waiting);
         let launch = Launch {
             id: id.clone(),
             repository,
@@ -58,12 +59,29 @@ impl Manager {
             .write(move |tx| insert_launch(tx, &launch, &removing))
             .await?;
         let admitted = now || self.admit_waiting(Some(&id)).await?;
+        // Kept before the gate opens, so no pass admits it unattached.
+        if records && !admitted {
+            self.agent_queue.keep_for_attach(&id);
+        }
         self.admission_of(&id, admitted).await
     }
 
     /// Record `chat` as the one the launch `id` starts its agent in, whether
-    /// it starts or waits, unless a launch already holds the chat's agent.
-    pub(super) async fn attach_chat(&self, id: &QueueEntryId, chat: &SpaceId) -> Result<()> {
+    /// it starts or waits, unless a launch already holds the chat's agent,
+    /// and let admission take a launch kept for this.
+    pub(in crate::daemon) async fn attach_chat(
+        &self,
+        id: &QueueEntryId,
+        chat: &SpaceId,
+    ) -> Result<()> {
+        let attached = self.attach_chat_row(id, chat).await;
+        self.agent_queue.end_attach_keep(id);
+        self.agent_queue.wake();
+        attached
+    }
+
+    /// Record `chat` on the launch `id`'s row as [`Self::attach_chat`] does.
+    async fn attach_chat_row(&self, id: &QueueEntryId, chat: &SpaceId) -> Result<()> {
         let _gate = self.agent_queue.lock_admission().await;
         let (id, chat) = (id.to_owned(), chat.to_owned());
         let attached = self

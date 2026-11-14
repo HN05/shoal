@@ -101,9 +101,9 @@ impl Manager {
 
     /// Record the chat the resolved `start` describes, whose agent's launch
     /// `admission` queued, below where it goes for `caller`, and attach the
-    /// launch to it, keeping the launch out of admission meanwhile so that
-    /// it starts in this chat. A chat that cannot be recorded takes its
-    /// launch out of the queue.
+    /// launch to it, which the queue keeps out of admission until then, so
+    /// that it starts in this chat. A chat that cannot be recorded and
+    /// attached takes its launch out of the queue.
     async fn record_queued_chat(
         &self,
         start: ChatStart,
@@ -111,19 +111,16 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<StartedChat> {
         let entry = (admission.entry).context("the daemon queued the chat without an entry")?;
-        self.agent_queue.hold(&entry.id);
-        let recorded = self.record_chat_for_queue(&start, &entry.id, caller).await;
-        self.agent_queue.release(&entry.id);
-        let chat = match recorded {
+        let chat = match self.record_chat_for_queue(&start, &entry.id, caller).await {
             Ok(chat) => chat,
             Err(error) => {
+                self.agent_queue.end_attach_keep(&entry.id);
                 if let Err(removal) = self.queue_remove(entry.id.as_str(), None).await {
                     crate::daemon::log!("queued chat launch kept: {removal:#}");
                 }
                 return Err(error);
             }
         };
-        self.agent_queue.wake();
         Ok(StartedChat::Queued(Box::new(QueuedChat {
             chat,
             entry,
@@ -132,7 +129,8 @@ impl Manager {
     }
 
     /// Record the chat the resolved `start` describes below where it goes
-    /// for `caller`, and attach the launch `entry` to it.
+    /// for `caller`, and attach the launch `entry` to it, removing the chat
+    /// again when the launch cannot take it.
     async fn record_chat_for_queue(
         &self,
         start: &ChatStart,
@@ -150,11 +148,13 @@ impl Manager {
         };
         let workspace = start.workspace.as_ref();
         let chat = (self.start_new_chat(start.repository.clone(), workspace, new)).await?;
-        self.queue_attach(
-            entry,
-            &crate::client::space_names::SpaceSelector::id(&chat.id),
-        )
-        .await?;
+        if let Err(error) = self.attach_chat(entry, &chat.id).await {
+            let selector = crate::client::space_names::SpaceSelector::id(&chat.id);
+            if let Err(removal) = self.remove_chat(&selector, Some(Vec::new())).await {
+                crate::daemon::log!("chat {} kept without its launch: {removal:#}", chat.id);
+            }
+            return Err(error);
+        }
         Ok(chat)
     }
 
@@ -229,6 +229,7 @@ fn launch_request(start: &ChatStart) -> Result<ChatQueueRequest> {
             .unwrap_or_else(|| crate::terminal::detached_start_environment(None)),
         now: false,
         priority: start.priority,
+        records_when_waiting: true,
     })
 }
 
