@@ -83,7 +83,7 @@ pub(in crate::cli) use questions::summary as question_summary;
 
 use anyhow::Result;
 use clap::CommandFactory;
-use futures_util::{StreamExt, stream};
+use futures_util::{StreamExt, future::LocalBoxFuture, stream};
 
 use crate::client::output::{self, workspaces::Directory};
 use crate::client::output::{Output, overviews::WorkspaceOverviewResult};
@@ -315,27 +315,37 @@ pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
 }
 
 /// Run `command` through its group's dispatcher.
-async fn dispatch(ctx: Context, command: Command, daemon: Daemon) -> Result<i32> {
+///
+/// The group's future is built here and boxed, outside any poll: a debug
+/// build keeps every arm's future in the frame that builds it, which would
+/// otherwise sit on the main thread's stack beneath the whole command.
+fn dispatch(
+    ctx: Context,
+    command: Command,
+    daemon: Daemon,
+) -> LocalBoxFuture<'static, Result<i32>> {
     match command {
         Command::Run {
             name,
             workspace,
             args,
-        } => dispatch::run::run(ctx, name, workspace, args).await,
-        Command::Internal { command } => dispatch::internal::run(ctx, command).await,
-        Command::Approvals { command, args } => dispatch::approvals::run(ctx, command, args).await,
-        Command::Integration(command) => dispatch::integration::run(ctx, command).await,
-        Command::Repository(command) => dispatch::repository::run(ctx, command).await,
-        Command::Create(command) => dispatch::create::run(ctx, command).await,
-        Command::Items(command) => dispatch::items::run(ctx, command).await,
-        Command::Sessions(command) => dispatch::sessions::run(ctx, command).await,
-        Command::Coordination(command) => dispatch::coordination::run(ctx, command).await,
-        Command::Workspace(command) => dispatch::workspace::run(ctx, command).await,
-        Command::Changes(command) => dispatch::changes::run(ctx, command).await,
-        Command::Resources(command) => dispatch::resources::run(ctx, command).await,
-        Command::Diagnostics(command) => dispatch::diagnostics::run(ctx, command).await,
-        Command::Lifecycle(command) => dispatch::lifecycle::run(ctx, command).await,
-        Command::Service(command) => dispatch::service::run(ctx, command, daemon).await,
+        } => Box::pin(dispatch::run::run(ctx, name, workspace, args)),
+        Command::Internal { command } => Box::pin(dispatch::internal::run(ctx, command)),
+        Command::Approvals { command, args } => {
+            Box::pin(dispatch::approvals::run(ctx, command, args))
+        }
+        Command::Integration(command) => Box::pin(dispatch::integration::run(ctx, command)),
+        Command::Repository(command) => Box::pin(dispatch::repository::run(ctx, command)),
+        Command::Create(command) => Box::pin(dispatch::create::run(ctx, command)),
+        Command::Items(command) => Box::pin(dispatch::items::run(ctx, command)),
+        Command::Sessions(command) => Box::pin(dispatch::sessions::run(ctx, command)),
+        Command::Coordination(command) => Box::pin(dispatch::coordination::run(ctx, command)),
+        Command::Workspace(command) => Box::pin(dispatch::workspace::run(ctx, command)),
+        Command::Changes(command) => Box::pin(dispatch::changes::run(ctx, command)),
+        Command::Resources(command) => Box::pin(dispatch::resources::run(ctx, command)),
+        Command::Diagnostics(command) => Box::pin(dispatch::diagnostics::run(ctx, command)),
+        Command::Lifecycle(command) => Box::pin(dispatch::lifecycle::run(ctx, command)),
+        Command::Service(command) => Box::pin(dispatch::service::run(ctx, command, daemon)),
     }
 }
 
