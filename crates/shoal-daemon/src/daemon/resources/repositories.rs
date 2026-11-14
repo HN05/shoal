@@ -133,8 +133,8 @@ pub(crate) fn borrowed(db: &Connection, repository_id: &RepositoryId) -> Result<
         db,
         "SELECT 1 FROM repository_resource_leases r
          JOIN resource_leases l ON l.id=r.lease_id
-         JOIN workspaces w ON w.id=l.workspace_id
-         WHERE r.repository_id=?1 AND w.repository_id<>?1",
+         JOIN spaces s ON s.id=l.workspace_id
+         WHERE r.repository_id=?1 AND s.repository_id<>?1",
         [repository_id],
     )
 }

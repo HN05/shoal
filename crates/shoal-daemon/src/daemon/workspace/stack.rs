@@ -94,11 +94,12 @@ fn change_base(
 pub(crate) fn record_base_changed(db: &Connection, id: &SpaceId, cause: EventCause) -> Result<()> {
     db.execute(
         "INSERT INTO workspace_events(record) SELECT json_object(
-            'kind',?2,'workspace_id',stacked.id,'repository_id',stacked.repository_id,
-            'name',stacked.name,'path',stacked.path,'branch',stacked.branch,'cause',?3,'error',NULL,
+            'kind',?2,'workspace_id',journal.id,'repository_id',journal.repository_id,
+            'name',journal.name,'path',journal.path,'branch',journal.branch,'cause',?3,'error',NULL,
             'base_workspace',json((SELECT json_object('id',id,'name',name,'branch',branch)
-                FROM workspaces WHERE id=stacked.base_workspace_id))
-        ) FROM workspaces stacked WHERE stacked.id=?1",
+                FROM journal_spaces WHERE id=stacked.base_workspace_id))
+        ) FROM workspaces stacked JOIN journal_spaces journal ON journal.id=stacked.id
+        WHERE stacked.id=?1",
         params![id, EventKind::BaseChanged, cause],
     )?;
     Ok(())
@@ -133,7 +134,7 @@ fn ensure_base(
 ) -> Result<()> {
     let repository = db
         .query_row(
-            "SELECT repository_id FROM workspaces WHERE id=?1",
+            "SELECT repository_id FROM spaces WHERE id=?1 AND kind='workspace'",
             [id],
             |row| row.get::<_, RepositoryId>(0),
         )
@@ -162,14 +163,18 @@ fn ensure_base(
 pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
     workspace.base_workspace = db
         .query_row(
-            "SELECT base.id,base.name,base.branch FROM workspaces stacked
-             JOIN workspaces base ON base.id=stacked.base_workspace_id WHERE stacked.id=?1",
+            "SELECT base.id,space.name,base.branch FROM workspaces stacked
+             JOIN workspaces base ON base.id=stacked.base_workspace_id
+             JOIN spaces space ON space.id=base.id WHERE stacked.id=?1",
             [&workspace.id],
             row,
         )
         .optional()?;
     workspace.stacked_workspaces = db
-        .prepare("SELECT id,name,branch FROM workspaces WHERE base_workspace_id=?1 ORDER BY name")?
+        .prepare(
+            "SELECT id,name,branch FROM spaces JOIN workspaces USING(id)
+             WHERE base_workspace_id=?1 ORDER BY name",
+        )?
         .query_map([&workspace.id], row)?
         .collect::<rusqlite::Result<_>>()?;
     Ok(())
@@ -204,7 +209,7 @@ pub(super) fn owner(
 ) -> Result<Option<SpaceId>> {
     Ok(db
         .query_row(
-            "SELECT id FROM workspaces WHERE repository_id=?1 AND branch=?2
+            "SELECT id FROM spaces JOIN workspaces USING(id) WHERE repository_id=?1 AND branch=?2
                 AND id NOT IN (SELECT space_id FROM space_conversions
                     WHERE json_extract(record,'$.to')='chat')",
             params![repository_id, branch],

@@ -424,7 +424,7 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
     ]);
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
-        "UPDATE workspaces SET state='removing' WHERE name='interrupted'",
+        "UPDATE workspaces SET state='removing' WHERE id IN (SELECT id FROM spaces WHERE name='interrupted')",
         [],
     )
     .unwrap();
@@ -442,7 +442,7 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
         "failed"
     );
     db.execute(
-        "UPDATE workspaces SET error=NULL WHERE name='interrupted'",
+        "UPDATE workspaces SET error=NULL WHERE id IN (SELECT id FROM spaces WHERE name='interrupted')",
         [],
     )
     .unwrap();
@@ -555,7 +555,7 @@ fn adopting_a_workspace_path_again_reclaims_its_unverifiable_worktree() {
     unmark_owner(&workspace);
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
-        "UPDATE workspaces SET git_dir_id='0:0' WHERE name='reclaimed'",
+        "UPDATE workspaces SET git_dir_id='0:0' WHERE id IN (SELECT id FROM spaces WHERE name='reclaimed')",
         [],
     )
     .unwrap();
@@ -634,7 +634,7 @@ fn reconcile_reclaims_unverifiable_worktrees_only_on_explicit_request() {
     unmark_owner(&workspace);
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
-        "UPDATE workspaces SET git_dir_id='0:0' WHERE name='reclaimed'",
+        "UPDATE workspaces SET git_dir_id='0:0' WHERE id IN (SELECT id FROM spaces WHERE name='reclaimed')",
         [],
     )
     .unwrap();
@@ -699,7 +699,7 @@ fn deleted_worktrees_are_forgotten_even_when_their_metadata_is_unverifiable() {
         let workspace = fixture.add(name);
         unmark_owner(&workspace);
         db.execute(
-            "UPDATE workspaces SET git_dir_id='0:0' WHERE name=?1",
+            "UPDATE workspaces SET git_dir_id='0:0' WHERE id IN (SELECT id FROM spaces WHERE name=?1)",
             [name],
         )
         .unwrap();

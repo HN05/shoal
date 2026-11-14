@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, consumed_upgrades, place_owners, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 181;
+pub(super) const SCHEMA_VERSION: i64 = 182;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -459,12 +459,13 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
         Some(consumed_upgrades::refuse_unconsumed),
     ),
     (181, include_str!("marks_without_heads.sql"), None),
+    (182, include_str!("spaces_table.sql"), None),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
 /// own with foreign keys off, so dropping the old table deletes nothing that
 /// references it.
-const REBUILDS: &[i64] = &[150];
+const REBUILDS: &[i64] = &[150, 182];
 
 /// Names are labels that may repeat, so the tables of workspaces and chats
 /// lose the unique constraint on them, which only a rebuild removes.

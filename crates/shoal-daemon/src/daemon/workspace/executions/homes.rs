@@ -174,7 +174,11 @@ impl Home {
                     "a chat runs only its agent; run commands in a workspace"
                 );
                 ensure!(
-                    store::exists(tx, "SELECT 1 FROM chats WHERE id=?1", [&chat.id])?,
+                    store::exists(
+                        tx,
+                        "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat'",
+                        [&chat.id]
+                    )?,
                     "the chat was removed"
                 );
                 ensure!(!removing.reserved(&chat.id), "the chat is being removed");

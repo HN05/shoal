@@ -78,8 +78,8 @@ impl Manager {
             .run(move |db| {
                 Ok(db
                     .prepare(&format!(
-                        "{} SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM taken
-                            JOIN spaces USING(id)
+                        "{} SELECT spaces.id,spaces.name,spaces.kind,workspaces.branch FROM taken
+                            JOIN spaces USING(id) LEFT JOIN workspaces ON workspaces.id=spaces.id
                             WHERE depth > 0 ORDER BY depth, spaces.id",
                         taken()
                     ))?
@@ -97,9 +97,10 @@ impl Manager {
             .run(move |db| {
                 Ok(db
                     .prepare(&format!(
-                        "SELECT spaces.id,spaces.name,spaces.kind,spaces.branch
+                        "SELECT spaces.id,spaces.name,spaces.kind,workspaces.branch
                             FROM {TAKEN_FIRST} AS first
                             JOIN spaces ON spaces.id=first.space_id
+                            LEFT JOIN workspaces ON workspaces.id=spaces.id
                             WHERE first.parent_id=?1 ORDER BY spaces.kind, spaces.name"
                     ))?
                     .query_map([id], space_ref)?
@@ -115,8 +116,9 @@ impl Manager {
             .run(move |db| {
                 Ok(db
                     .prepare(&format!(
-                        "{} SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM up
-                            JOIN spaces USING(id) WHERE depth > 0 ORDER BY depth",
+                        "{} SELECT spaces.id,spaces.name,spaces.kind,workspaces.branch FROM up
+                            JOIN spaces USING(id) LEFT JOIN workspaces ON workspaces.id=spaces.id
+                            WHERE depth > 0 ORDER BY depth",
                         up("true")
                     ))?
                     .query_map([id], space_ref)?
@@ -399,7 +401,7 @@ pub(crate) fn parent_id(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>
 /// workspace when the parameter is NULL, by name.
 pub(super) fn subtree_query(columns: &str) -> String {
     format!(
-        "{} SELECT {columns} FROM workspaces
+        "{} SELECT {columns} FROM spaces JOIN workspaces USING(id)
             WHERE ?1 IS NULL OR id IN (SELECT id FROM down) ORDER BY name",
         down("true")
     )
@@ -419,8 +421,9 @@ fn subtree(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>> {
 pub(crate) fn children(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceRef>> {
     Ok(db
         .prepare(
-            "SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM space_parents
+            "SELECT spaces.id,spaces.name,spaces.kind,workspaces.branch FROM space_parents
                 JOIN spaces ON spaces.id=space_parents.space_id
+                LEFT JOIN workspaces ON workspaces.id=spaces.id
                 WHERE space_parents.parent_id=?1 ORDER BY spaces.name",
         )?
         .query_map([id], space_ref)?
@@ -431,8 +434,9 @@ pub(crate) fn children(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceRef>> {
 pub(crate) fn parent(db: &Connection, id: &SpaceId) -> Result<Option<SpaceRef>> {
     Ok(db
         .query_row(
-            "SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM space_parents
+            "SELECT spaces.id,spaces.name,spaces.kind,workspaces.branch FROM space_parents
                 JOIN spaces ON spaces.id=space_parents.parent_id
+                LEFT JOIN workspaces ON workspaces.id=spaces.id
                 WHERE space_parents.space_id=?1",
             [id],
             space_ref,
@@ -448,8 +452,9 @@ pub(crate) fn delegated(
 ) -> Result<Vec<SpaceRef>> {
     Ok(db
         .prepare(&format!(
-            "{} SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM down
-                JOIN spaces USING(id) WHERE depth > 0 ORDER BY depth, name",
+            "{} SELECT spaces.id,spaces.name,spaces.kind,workspaces.branch FROM down
+                JOIN spaces USING(id) LEFT JOIN workspaces ON workspaces.id=spaces.id
+                WHERE depth > 0 ORDER BY depth, name",
             down(&format!("NOT {}", has_agent("space_parents.space_id")))
         ))?
         .query_map(params![id, agents.parameter()], space_ref)?

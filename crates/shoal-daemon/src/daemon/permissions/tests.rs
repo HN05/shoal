@@ -150,18 +150,18 @@ async fn a_launch_takes_the_mode_it_starts_in_before_the_mode_is_recorded() {
 }
 
 /// Record `assignments` as the `--permission` given to the agent of the
-/// space `id`, in `table`.
-async fn give(manager: &Manager, table: &str, id: &SpaceId, assignments: &[&str]) {
+/// space `id`.
+async fn give(manager: &Manager, id: &SpaceId, assignments: &[&str]) {
     let assignments: Vec<String> = assignments.iter().map(|a| (*a).to_owned()).collect();
     let narrowing = crate::config::permissions::PermissionsConfig::assigned(&assignments).unwrap();
     let json = serde_json::to_string(&narrowing).unwrap();
-    let (sql, id) = (
-        format!("UPDATE {table} SET narrowing=?2 WHERE id=?1"),
-        id.clone(),
-    );
+    let id = id.clone();
     manager
         .store
-        .run(move |db| Ok(db.execute(&sql, rusqlite::params![id, json])?))
+        .run(move |db| {
+            let sql = "UPDATE spaces SET narrowing=?2 WHERE id=?1";
+            Ok(db.execute(sql, rusqlite::params![id, json])?)
+        })
         .await
         .unwrap();
 }
@@ -173,10 +173,10 @@ async fn a_given_permission_applies_to_its_space_and_caps_the_spaces_below() {
     let top = chat(&manager, "top", "chat", Some(&repo), None).await;
     let worker = workspace(&manager, &repo, "worker", &top.id, Some("worker".into())).await;
     let split = workspace(&manager, &repo, "split", &worker.id, None).await;
-    give(&manager, "chats", &top.id, &["merge=propose"]).await;
+    give(&manager, &top.id, &["merge=propose"]).await;
     // Wider than the worker mode's merge and the chat's above it.
     let assignments = ["push=propose", "merge=direct"];
-    give(&manager, "workspaces", &worker.id, &assignments).await;
+    give(&manager, &worker.id, &assignments).await;
     let of = |id: SpaceId| {
         let manager = manager.clone();
         let repository = repo.id.clone();
@@ -207,8 +207,8 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
     let child = workspace(&manager, &repo, "child", &worker.id, Some("worker".into())).await;
     let talk = chat(&manager, "talk", "chat", Some(&repo), Some(&worker.id)).await;
     // The user gave both a merge the worker does not hold.
-    give(&manager, "workspaces", &child.id, &["merge=direct"]).await;
-    give(&manager, "chats", &talk.id, &["merge=direct"]).await;
+    give(&manager, &child.id, &["merge=direct"]).await;
+    give(&manager, &talk.id, &["merge=direct"]).await;
     let talk = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
     let assigned = |assignments: &[&str]| {
         let assignments: Vec<String> = assignments.iter().map(|a| (*a).to_owned()).collect();
@@ -261,9 +261,9 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
     let parent = workspace(&manager, &repo, "parent", &top.id, Some("worker".into())).await;
     let child = workspace(&manager, &repo, "child", &parent.id, Some("worker".into())).await;
     // The user gave the chat less push than the spaces below it.
-    give(&manager, "chats", &top.id, &["push=propose"]).await;
-    give(&manager, "workspaces", &parent.id, &["push=direct"]).await;
-    give(&manager, "workspaces", &child.id, &["push=propose"]).await;
+    give(&manager, &top.id, &["push=propose"]).await;
+    give(&manager, &parent.id, &["push=direct"]).await;
+    give(&manager, &child.id, &["push=propose"]).await;
     let child = manager.workspace_by_id(&child.id).await.unwrap();
     let space = crate::model::PresentSpace::Workspace(child);
     let dropped = |assignment: &str| {
@@ -290,7 +290,7 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
     // A queued or registered agent or a restore that leaves a recorded key
     // out drops it.
     let talk = chat(&manager, "talk", "chat", Some(&repo), Some(&parent.id)).await;
-    give(&manager, "chats", &talk.id, &["push=propose"]).await;
+    give(&manager, &talk.id, &["push=propose"]).await;
     let talk = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
     let none = crate::config::permissions::PermissionsConfig::default();
     let (giver, child) = (Some(&top.id), SpaceSelector::id(space.id()));
@@ -316,7 +316,7 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
         .await
         .unwrap();
     let quiet = workspace(&manager, &repo, "quiet", &parent.id, Some("review".into())).await;
-    give(&manager, "workspaces", &quiet.id, &["push=deny"]).await;
+    give(&manager, &quiet.id, &["push=deny"]).await;
     let quiet = SpaceSelector::id(&quiet.id);
     let review = "review".into();
     let registered = manager.ensure_agent_held(giver, &quiet, &review, &none);

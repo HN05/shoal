@@ -131,13 +131,12 @@ impl AskFromChat for Ask {
 const SPACE: &str = "COALESCE(q.workspace_id,q.chat_id)";
 
 const SELECT: &str = concat!(
-    "SELECT q.space_number,q.number,COALESCE(q.workspace_id,q.chat_id),COALESCE(w.name,c.name),q.created_at,
+    "SELECT q.space_number,q.number,COALESCE(q.workspace_id,q.chat_id),s.name,q.created_at,
     q.question,q.recommendation,q.reason,q.choices,q.answer,q.answered_at,
     (SELECT m.id FROM space_messages m WHERE m.id=q.message_id),
     q.closed_at,q.withdrawn,q.in_chat,",
     sent_files!("q.files"),
-    " FROM questions q LEFT JOIN workspaces w ON w.id=q.workspace_id
-        LEFT JOIN chats c ON c.id=q.chat_id"
+    " FROM questions q LEFT JOIN spaces s ON s.id=COALESCE(q.workspace_id,q.chat_id)"
 );
 
 fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Question, String)> {

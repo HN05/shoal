@@ -138,11 +138,11 @@ fn space_of(
     id: &SpaceId,
     repository: &RepositoryId,
 ) -> Result<bool> {
-    let query = match kind {
-        SpaceKind::Workspace => "SELECT 1 FROM workspaces WHERE id=?1 AND repository_id=?2",
-        SpaceKind::Chat => "SELECT 1 FROM chats WHERE id=?1 AND repository_id=?2",
-    };
-    crate::daemon::store::exists(db, query, params![id, repository])
+    crate::daemon::store::exists(
+        db,
+        "SELECT 1 FROM spaces WHERE id=?1 AND repository_id=?2 AND kind=?3",
+        params![id, repository, kind],
+    )
 }
 
 /// Hold back `entry` until a preparation of `workspace`, the one it opens,
@@ -424,7 +424,7 @@ fn issue_workspaces(
 ) -> Result<Vec<Workspace>> {
     Ok(db
         .prepare(&format!(
-            "SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE repository_id=?1
+            "SELECT {WORKSPACE_COLUMNS} FROM spaces JOIN workspaces USING(id) WHERE repository_id=?1
              AND id IN (SELECT space_id FROM space_issue WHERE url=?2) ORDER BY name"
         ))?
         .query_map(params![repository, url], store::workspace)?
@@ -438,7 +438,9 @@ fn recorded_workspace<P: rusqlite::Params>(
 ) -> Result<Option<Workspace>> {
     Ok(db
         .query_row(
-            &format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE {condition}"),
+            &format!(
+                "SELECT {WORKSPACE_COLUMNS} FROM spaces JOIN workspaces USING(id) WHERE {condition}"
+            ),
             params,
             store::workspace,
         )

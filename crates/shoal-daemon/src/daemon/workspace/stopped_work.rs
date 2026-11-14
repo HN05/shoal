@@ -66,7 +66,7 @@ impl Manager {
             .store
             .run(|db| {
                 Ok(db
-                    .prepare("SELECT id FROM chats")?
+                    .prepare("SELECT id FROM spaces WHERE kind='chat'")?
                     .query_map([], |row| row.get(0))?
                     .collect::<rusqlite::Result<_>>()?)
             })

@@ -7,8 +7,10 @@ fn database() -> Result<Connection> {
     db.execute_batch(
         "INSERT INTO repositories(id,path,source,last_used) VALUES
             ('repo','/repo','/repo',0), ('other','/other','/other',0);
-         INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES
-            ('owner','repo','worker','/worker','topic','ready');",
+         INSERT INTO spaces(id,kind,repository_id,name)
+             VALUES ('owner','workspace','repo','worker');
+         INSERT INTO workspaces(id,path,branch,state)
+             VALUES ('owner','/worker','topic','ready');",
     )?;
     Ok(db)
 }

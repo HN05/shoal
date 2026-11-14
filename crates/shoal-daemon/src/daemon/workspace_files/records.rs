@@ -13,13 +13,12 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use super::{AttachedFile, Attacher, FileSource, HomeKey, SentFile, Space, layout::Copy};
 
 const COLUMNS: &str = "id,space,source,name,title,path,bytes,created_at,attached_by,
-    (SELECT expires_at FROM removed_space_files r WHERE r.space_id=workspace_files.space_id),
-    space_id IN (SELECT id FROM chats)
+    (SELECT expires_at FROM removed_space_files r WHERE r.space_id=space_files.space_id),
+    space_id IN (SELECT id FROM spaces WHERE kind='chat')
         OR space_id IN (SELECT space_id FROM removed_space_files WHERE chat)";
 
 /// The owners of attached files that are gone.
-const GONE: &str = "space_id NOT IN (SELECT id FROM workspaces)
-    AND space_id NOT IN (SELECT id FROM chats)";
+const GONE: &str = "space_id NOT IN (SELECT id FROM spaces)";
 
 /// SQL for a `files` column with the files whose record IDs the JSON array
 /// in `$column` lists, in its order, as a JSON array of [`SentFile`]s; a file
@@ -31,7 +30,7 @@ macro_rules! sent_files {
                 SELECT json_object('id',f.id,'name',f.name,'title',f.title,'path',f.path) AS file
                 FROM json_each(",
             $column,
-            ") j JOIN workspace_files f ON f.id=j.value ORDER BY j.key)) AS files"
+            ") j JOIN space_files f ON f.id=j.value ORDER BY j.key)) AS files"
         )
     };
 }
@@ -46,7 +45,7 @@ pub(crate) fn sent_ids(files: &[SentFile]) -> Result<String> {
 /// The record IDs of Shoal's copies at `paths`, in their order, as a column
 /// [`sent_files`] reads stores them; a path no record has is left out.
 pub(crate) fn ids_at(db: &Connection, paths: &[PathBuf]) -> Result<String> {
-    let mut statement = db.prepare("SELECT id FROM workspace_files WHERE path=?1")?;
+    let mut statement = db.prepare("SELECT id FROM space_files WHERE path=?1")?;
     let mut ids = Vec::new();
     for path in paths {
         if let Some(id) = statement
@@ -121,7 +120,7 @@ pub(crate) fn record(
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
         tx.execute(
-            "INSERT INTO workspace_files
+            "INSERT INTO space_files
                 (space_id,space,parent_id,repository_id,root_dir,source,name,title,path,bytes,
                     created_at,attached_by)
                 SELECT spaces.id,spaces.name,
@@ -153,9 +152,8 @@ pub(super) fn record_all(
 ) -> Result<Vec<AttachedFile>> {
     record(tx, space_id, source, Some(attacher), copies)?;
     let records = {
-        let mut statement = tx.prepare(&format!(
-            "SELECT {COLUMNS} FROM workspace_files WHERE path=?1"
-        ))?;
+        let mut statement =
+            tx.prepare(&format!("SELECT {COLUMNS} FROM space_files WHERE path=?1"))?;
         copies
             .iter()
             .map(|copy| Ok(statement.query_row([copy.path.to_string_lossy()], row)?))
@@ -168,7 +166,7 @@ pub(super) fn record_all(
 pub(super) fn list(db: &Connection, space_id: &SpaceId) -> Result<Vec<AttachedFile>> {
     Ok(db
         .prepare(&format!(
-            "SELECT {COLUMNS} FROM workspace_files WHERE space_id=?1 ORDER BY id"
+            "SELECT {COLUMNS} FROM space_files WHERE space_id=?1 ORDER BY id"
         ))?
         .query_map([space_id], row)?
         .collect::<rusqlite::Result<_>>()?)
@@ -177,7 +175,7 @@ pub(super) fn list(db: &Connection, space_id: &SpaceId) -> Result<Vec<AttachedFi
 /// How many files the space `space_id` has.
 pub(crate) fn count(db: &Connection, space_id: &SpaceId) -> Result<usize> {
     let count: i64 = db.query_row(
-        "SELECT COUNT(*) FROM workspace_files WHERE space_id=?1",
+        "SELECT COUNT(*) FROM space_files WHERE space_id=?1",
         [space_id],
         |row| row.get(0),
     )?;
@@ -189,9 +187,9 @@ pub(crate) fn count(db: &Connection, space_id: &SpaceId) -> Result<usize> {
 pub(super) fn idle(db: &Connection, home: &HomeKey) -> Result<Vec<AttachedFile>> {
     Ok(db
         .prepare(&format!(
-            "SELECT {COLUMNS} FROM workspace_files WHERE {IN_HOME}
+            "SELECT {COLUMNS} FROM space_files WHERE {IN_HOME}
                 AND space_id NOT IN (SELECT space_id FROM executions)
-                AND space_id NOT IN (SELECT id FROM chats)
+                AND space_id NOT IN (SELECT id FROM spaces WHERE kind='chat')
                 ORDER BY id"
         ))?
         .query_map(params![home.repository_id(), home.root_dir()], row)?
@@ -206,7 +204,7 @@ const IN_HOME: &str = "repository_id IS ?1 AND (?1 IS NOT NULL OR root_dir IS ?2
 pub(crate) fn roots(db: &Connection) -> Result<Vec<String>> {
     Ok(db
         .prepare(
-            "SELECT DISTINCT root_dir FROM workspace_files
+            "SELECT DISTINCT root_dir FROM space_files
                 WHERE repository_id IS NULL AND root_dir IS NOT NULL ORDER BY root_dir",
         )?
         .query_map([], |row| row.get(0))?
@@ -218,7 +216,7 @@ pub(super) fn gone_space(db: &Connection, id: &SpaceId) -> Result<Option<Space>>
     Ok(db
         .query_row(
             &format!(
-                "SELECT space_id,space,repository_id,parent_id,root_dir FROM workspace_files
+                "SELECT space_id,space,repository_id,parent_id,root_dir FROM space_files
                     WHERE space_id=?1 AND {GONE}
                     ORDER BY id DESC LIMIT 1"
             ),
@@ -233,7 +231,7 @@ pub(super) fn gone_space(db: &Connection, id: &SpaceId) -> Result<Option<Space>>
 pub(super) fn kept(db: &Connection) -> Result<Vec<Space>> {
     Ok(db
         .prepare(&format!(
-            "SELECT space_id,space,repository_id,parent_id,root_dir FROM workspace_files
+            "SELECT space_id,space,repository_id,parent_id,root_dir FROM space_files
                 WHERE {GONE} GROUP BY space_id ORDER BY MIN(id)"
         ))?
         .query_map([], space)?
@@ -246,7 +244,7 @@ pub(super) fn kept(db: &Connection) -> Result<Vec<Space>> {
 pub(super) fn expired(db: &Connection, home: &HomeKey) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare(&format!(
-            "SELECT DISTINCT space_id FROM workspace_files WHERE {IN_HOME} AND {GONE}
+            "SELECT DISTINCT space_id FROM space_files WHERE {IN_HOME} AND {GONE}
                 AND space_id NOT IN (SELECT space_id FROM removed_space_files
                     WHERE expires_at > unixepoch())"
         ))?
@@ -262,7 +260,7 @@ pub(super) fn any_in(db: &Connection, directories: &[PathBuf]) -> Result<bool> {
         let prefix = format!("{}/", directory.to_string_lossy());
         if crate::daemon::store::exists(
             db,
-            "SELECT 1 FROM workspace_files WHERE substr(path,1,length(?1))=?1",
+            "SELECT 1 FROM space_files WHERE substr(path,1,length(?1))=?1",
             [&prefix],
         )? {
             return Ok(true);
@@ -274,14 +272,14 @@ pub(super) fn any_in(db: &Connection, directories: &[PathBuf]) -> Result<bool> {
 /// Forget the records `ids`.
 pub(super) fn forget(tx: &Transaction<'_>, ids: &[i64]) -> Result<()> {
     for id in ids {
-        tx.execute("DELETE FROM workspace_files WHERE id=?1", [id])?;
+        tx.execute("DELETE FROM space_files WHERE id=?1", [id])?;
     }
     Ok(())
 }
 
 /// Forget every record of the removed workspace or removed chat `space_id`.
 pub(super) fn forget_space(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<()> {
-    tx.execute("DELETE FROM workspace_files WHERE space_id=?1", [space_id])?;
+    tx.execute("DELETE FROM space_files WHERE space_id=?1", [space_id])?;
     tx.execute(
         "DELETE FROM removed_space_files WHERE space_id=?1",
         [space_id],
@@ -299,7 +297,7 @@ pub(crate) fn keep_removed(
     expires_at: crate::time::UnixTime,
 ) -> Result<()> {
     tx.execute(
-        "UPDATE workspace_files SET space=(SELECT name FROM spaces WHERE id=?1)
+        "UPDATE space_files SET space=(SELECT name FROM spaces WHERE id=?1)
             WHERE space_id=?1",
         [space_id],
     )?;
@@ -307,7 +305,7 @@ pub(crate) fn keep_removed(
     tx.execute(
         "INSERT OR REPLACE INTO removed_space_files(space_id,chat,expires_at)
             SELECT id,kind='chat',?2 FROM spaces WHERE id=?1
-                AND EXISTS(SELECT 1 FROM workspace_files WHERE space_id=?1)",
+                AND EXISTS(SELECT 1 FROM space_files WHERE space_id=?1)",
         params![space_id, expires_at],
     )?;
     Ok(())
@@ -318,7 +316,7 @@ pub(crate) fn keep_removed(
 pub(super) fn forget_expired(db: &mut Connection) -> Result<()> {
     db.execute(
         "DELETE FROM removed_space_files WHERE expires_at <= unixepoch()
-            AND space_id NOT IN (SELECT space_id FROM workspace_files)",
+            AND space_id NOT IN (SELECT space_id FROM space_files)",
         [],
     )?;
     Ok(())
@@ -328,7 +326,7 @@ pub(super) fn forget_expired(db: &mut Connection) -> Result<()> {
 /// parent now, in the transaction that records the restore.
 pub(crate) fn restore(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     tx.execute(
-        "UPDATE workspace_files SET space=(SELECT name FROM spaces WHERE id=?1),
+        "UPDATE space_files SET space=(SELECT name FROM spaces WHERE id=?1),
             parent_id=(SELECT parent_id FROM space_parents WHERE space_id=?1)
             WHERE space_id=?1",
         [id],
@@ -355,7 +353,7 @@ pub(crate) fn claim(
 /// goes, to its own parent.
 fn reparent(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     tx.execute(
-        "UPDATE workspace_files
+        "UPDATE space_files
             SET parent_id=(SELECT parent_id FROM space_parents WHERE space_id=?1)
             WHERE parent_id=?1",
         [id],
@@ -366,7 +364,7 @@ fn reparent(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
 /// Forget every record of repository `repository_id`.
 pub(super) fn forget_repository(db: &Connection, repository_id: &RepositoryId) -> Result<()> {
     db.execute(
-        "DELETE FROM workspace_files WHERE repository_id=?1",
+        "DELETE FROM space_files WHERE repository_id=?1",
         [repository_id],
     )?;
     Ok(())
@@ -381,13 +379,13 @@ pub(crate) fn rebase(
     destination: &Path,
 ) -> Result<()> {
     let recorded: Vec<(i64, String)> = tx
-        .prepare("SELECT id,path FROM workspace_files WHERE repository_id=?1")?
+        .prepare("SELECT id,path FROM space_files WHERE repository_id=?1")?
         .query_map([repository_id], |row| Ok((row.get(0)?, row.get(1)?)))?
         .collect::<rusqlite::Result<_>>()?;
     for (id, path) in recorded {
         if let Ok(inside) = Path::new(&path).strip_prefix(source) {
             tx.execute(
-                "UPDATE workspace_files SET path=?2 WHERE id=?1",
+                "UPDATE space_files SET path=?2 WHERE id=?1",
                 params![id, destination.join(inside).to_string_lossy()],
             )?;
         }
@@ -399,7 +397,7 @@ pub(crate) fn rebase(
 pub(crate) fn outside_repositories(db: &Connection) -> Result<Vec<String>> {
     Ok(db
         .prepare(
-            "SELECT DISTINCT space FROM workspace_files WHERE repository_id IS NULL ORDER BY space",
+            "SELECT DISTINCT space FROM space_files WHERE repository_id IS NULL ORDER BY space",
         )?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)

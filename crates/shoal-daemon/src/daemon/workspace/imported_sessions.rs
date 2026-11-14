@@ -283,8 +283,10 @@ impl Layout {
 /// The IDs of the workspaces and removal records that keep their session
 /// files.
 fn session_owners(db: &Connection) -> Result<HashSet<String>> {
-    db.prepare("SELECT id FROM workspaces UNION SELECT space_id FROM removed_spaces")?
-        .query_map([], |row| row.get(0))?
-        .map(|id| Ok(id?))
-        .collect()
+    db.prepare(
+        "SELECT id FROM spaces WHERE kind='workspace' UNION SELECT space_id FROM removed_spaces",
+    )?
+    .query_map([], |row| row.get(0))?
+    .map(|id| Ok(id?))
+    .collect()
 }

@@ -92,7 +92,7 @@ pub async fn workspace_below(
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE workspaces SET mode=?2 WHERE id=?1",
+                "UPDATE spaces SET mode=?2 WHERE id=?1",
                 rusqlite::params![id, mode],
             )?;
             Ok(())

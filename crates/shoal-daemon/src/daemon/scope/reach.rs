@@ -26,7 +26,7 @@ impl Manager {
             .run(move |db| {
                 store::exists(
                     db,
-                    "SELECT 1 FROM chats WHERE id=?1 AND repository_id IS NULL",
+                    "SELECT 1 FROM spaces WHERE id=?1 AND repository_id IS NULL",
                     [id],
                 )
             })

@@ -11,8 +11,10 @@ async fn database() -> Result<(tempfile::TempDir, Store)> {
             db.execute_batch(
                 "INSERT INTO repositories(id,path,source,last_used)
                  VALUES ('repo','/unused/repo','local',0);
-                 INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-                 VALUES ('workspace','repo','work','/unused/work','work','ready');
+                 INSERT INTO spaces(id,kind,repository_id,name)
+                     VALUES ('workspace','workspace','repo','work');
+                 INSERT INTO workspaces(id,path,branch,state)
+                     VALUES ('workspace','/unused/work','work','ready');
                  INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,
                      execution_id,state,created_at,seen_at,space_id) VALUES
                  ('launch','launch','repo','launch','codex','{}','{}',NULL,'starting',0,99,NULL),

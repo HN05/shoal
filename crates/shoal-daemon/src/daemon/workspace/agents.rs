@@ -552,15 +552,11 @@ impl Manager {
                         narrowing
                     ],
                 )?;
-                for table in ["workspaces", "chats"] {
-                    db.execute(
-                        &format!(
-                            "UPDATE {table} SET mode=?2,narrowing=?3
-                             WHERE id=(SELECT space_id FROM executions WHERE id=?1)"
-                        ),
-                        rusqlite::params![execution, agent.mode, narrowing],
-                    )?;
-                }
+                db.execute(
+                    "UPDATE spaces SET mode=?2,narrowing=?3
+                     WHERE id=(SELECT space_id FROM executions WHERE id=?1)",
+                    rusqlite::params![execution, agent.mode, narrowing],
+                )?;
                 Ok(())
             })
             .await;

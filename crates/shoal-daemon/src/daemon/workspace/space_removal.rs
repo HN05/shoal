@@ -337,7 +337,7 @@ fn delete_record(
     let released = release_decided_by(tx, id)?;
     let assignees = links::issue::removed_assignees(tx, id)?;
     ensure!(
-        tx.execute("DELETE FROM space_records WHERE id=?1", [id])? == 1,
+        spaces::records::remove(tx, id)?,
         "the space was removed meanwhile"
     );
     Ok(Deleted {

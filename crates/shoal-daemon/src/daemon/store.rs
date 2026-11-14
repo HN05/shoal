@@ -237,8 +237,8 @@ pub fn ensure_branch_available(
     };
     let owner: Option<(crate::client::space_ids::SpaceNumber, SpaceName)> = db
         .query_row(
-            "SELECT number,name FROM workspaces WHERE repository_id=?1 AND branch=?2
-                AND (?3 IS NULL OR id!=?3)",
+            "SELECT number,name FROM spaces JOIN workspaces USING(id)
+                WHERE repository_id=?1 AND branch=?2 AND (?3 IS NULL OR id!=?3)",
             rusqlite::params![repository_id, branch, except_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
@@ -273,8 +273,8 @@ pub fn ensure_no_pending_move(db: &Connection, workspace_id: &SpaceId) -> Result
     ensure!(
         !exists(
             db,
-            "SELECT 1 FROM repository_moves JOIN workspaces USING (repository_id)
-                WHERE workspaces.id=?1",
+            "SELECT 1 FROM repository_moves JOIN spaces USING (repository_id)
+                WHERE spaces.id=?1 AND spaces.kind='workspace'",
             [workspace_id]
         )?,
         "repository move is incomplete; run shoal move root again"
@@ -295,7 +295,8 @@ pub fn ensure_repository_not_moving(db: &Connection, repository_id: &RepositoryI
     Ok(())
 }
 
-const REPOSITORY_WORKSPACES_QUERY: &str = "SELECT 1 FROM workspaces WHERE repository_id=?1";
+const REPOSITORY_WORKSPACES_QUERY: &str =
+    "SELECT 1 FROM spaces WHERE repository_id=?1 AND kind='workspace'";
 
 pub fn repository_has_workspaces(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
     exists(db, REPOSITORY_WORKSPACES_QUERY, [repository_id])
@@ -318,7 +319,8 @@ pub fn require_ready(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
 /// Whether any workspace of the repository has a tracked execution.
 pub fn repository_has_executions(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
     Ok(db.query_row(
-        "SELECT EXISTS(SELECT 1 FROM executions e JOIN workspaces w ON w.id=e.space_id WHERE w.repository_id=?1)",
+        "SELECT EXISTS(SELECT 1 FROM executions e JOIN spaces s ON s.id=e.space_id
+            WHERE s.repository_id=?1 AND s.kind='workspace')",
         [repository_id],
         |row| row.get(0),
     )?)
@@ -670,7 +672,8 @@ pub fn repository_executions(
     Ok(db
         .prepare(&format!(
             "SELECT {EXECUTION_COLUMNS} FROM executions
-                WHERE space_id IN (SELECT id FROM workspaces WHERE repository_id=?1)"
+                WHERE space_id IN (SELECT id FROM spaces
+                    WHERE repository_id=?1 AND kind='workspace')"
         ))?
         .query_map([repository_id], execution)?
         .collect::<rusqlite::Result<Vec<_>>>()?)

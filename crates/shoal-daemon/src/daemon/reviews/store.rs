@@ -85,7 +85,7 @@ pub(crate) fn active(
 pub(crate) fn active_in(db: &Connection, repository_id: &RepositoryId) -> Result<Vec<ReviewId>> {
     Ok(db
         .prepare(
-            "SELECT reviews.id FROM reviews JOIN workspaces ON workspaces.id=workspace_id
+            "SELECT reviews.id FROM reviews JOIN spaces ON spaces.id=workspace_id
                 WHERE repository_id=?1 AND reviews.state IN (?2,?3)",
         )?
         .query_map(
@@ -376,7 +376,7 @@ fn require_finding(db: &Connection, id: FindingId) -> Result<()> {
     Ok(())
 }
 
-const COLUMNS: &str = "reviews.id,workspace_id,workspaces.name,target,agent,reviewer,reviews.state,
+const COLUMNS: &str = "reviews.id,workspace_id,spaces.name,target,agent,reviewer,reviews.state,
     failure,head,base,created_at,started_at,ended_at,summary,verdict,posted,reviews.model";
 
 /// Review `id` with its findings.
@@ -391,7 +391,7 @@ fn load_record(db: &Connection, id: ReviewId) -> Result<Option<Review>> {
     Ok(db
         .query_row(
             &format!(
-                "SELECT {COLUMNS} FROM reviews JOIN workspaces ON workspaces.id=workspace_id
+                "SELECT {COLUMNS} FROM reviews JOIN spaces ON spaces.id=workspace_id
                     WHERE reviews.id=?1"
             ),
             [id],
@@ -404,7 +404,7 @@ fn load_record(db: &Connection, id: ReviewId) -> Result<Option<Review>> {
 pub(crate) fn list(db: &Connection, ids: &[SpaceId]) -> Result<Vec<Review>> {
     let reviews = db
         .prepare(&format!(
-            "SELECT {COLUMNS} FROM reviews JOIN workspaces ON workspaces.id=workspace_id
+            "SELECT {COLUMNS} FROM reviews JOIN spaces ON spaces.id=workspace_id
                 WHERE workspace_id IN (SELECT value FROM json_each(?1)) ORDER BY reviews.id DESC"
         ))?
         .query_map([serde_json::to_string(ids)?], review)?
@@ -421,7 +421,9 @@ pub(crate) fn workspaces(
     repository: Option<&RepositoryId>,
 ) -> Result<Vec<SpaceId>> {
     Ok(db
-        .prepare("SELECT id FROM workspaces WHERE ?1 IS NULL OR repository_id=?1")?
+        .prepare(
+            "SELECT id FROM spaces WHERE kind='workspace' AND (?1 IS NULL OR repository_id=?1)",
+        )?
         .query_map([repository], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }

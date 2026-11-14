@@ -60,8 +60,9 @@ fn working_in(work: &Work) -> Option<&SpaceId> {
 
 /// Every workspace with its state, by number.
 fn workspaces(tx: &rusqlite::Transaction<'_>) -> Result<Vec<(WorkPlace, WorkspaceState)>> {
-    let mut statement =
-        tx.prepare("SELECT id, number, name, state FROM workspaces ORDER BY number")?;
+    let mut statement = tx.prepare(
+        "SELECT id, number, name, state FROM spaces JOIN workspaces USING(id) ORDER BY number",
+    )?;
     let rows = statement.query_map([], |row| {
         let workspace = WorkPlace {
             id: row.get("id")?,

@@ -288,7 +288,7 @@ impl Manager {
         self.store
             .run(|db| {
                 Ok(db
-                    .prepare("SELECT id FROM workspaces")?
+                    .prepare("SELECT id FROM spaces WHERE kind='workspace'")?
                     .query_map([], |row| row.get(0))?
                     .collect::<rusqlite::Result<_>>()?)
             })
@@ -359,7 +359,7 @@ impl Manager {
                 let mut workspace = db
                     .query_row(
                         &format!(
-                            "SELECT {} FROM workspaces WHERE id=?1",
+                            "SELECT {} FROM spaces JOIN workspaces USING(id) WHERE id=?1",
                             store::WORKSPACE_COLUMNS
                         ),
                         [&id],
@@ -380,7 +380,13 @@ impl Manager {
         let owned = id.to_owned();
         let exists = self
             .store
-            .run(move |db| store::exists(db, "SELECT 1 FROM workspaces WHERE id=?1", [owned]))
+            .run(move |db| {
+                store::exists(
+                    db,
+                    "SELECT 1 FROM spaces WHERE id=?1 AND kind='workspace'",
+                    [owned],
+                )
+            })
             .await?;
         Ok(match exists {
             true => Some(self.workspace_by_id(id).await?),

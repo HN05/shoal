@@ -548,7 +548,7 @@ mod streams {
         let id = own.id.clone();
         (daemon.manager.store)
             .run(move |db| {
-                db.execute("UPDATE workspaces SET name='renamed' WHERE id=?1", [&id])?;
+                db.execute("UPDATE spaces SET name='renamed' WHERE id=?1", [&id])?;
                 Ok(())
             })
             .await

@@ -136,7 +136,8 @@ fn release_attended_decisions(
     let space: Option<SpaceId> = tx
         .query_row(
             "SELECT space_id FROM executions WHERE id=?1
-                AND EXISTS (SELECT 1 FROM chats WHERE chats.id=executions.space_id)",
+                AND EXISTS (SELECT 1 FROM spaces
+                    WHERE spaces.id=executions.space_id AND spaces.kind='chat')",
             [id],
             |row| row.get(0),
         )

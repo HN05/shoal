@@ -109,7 +109,7 @@ fn stop_levels_take_leftovers_then_every_untracked_process() {
     fixture.add("busy");
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
-        "UPDATE workspaces SET state='stopping' WHERE name='busy'",
+        "UPDATE workspaces SET state='stopping' WHERE id IN (SELECT id FROM spaces WHERE name='busy')",
         [],
     )
     .unwrap();
@@ -120,8 +120,11 @@ fn stop_levels_take_leftovers_then_every_untracked_process() {
         &fixture.id("busy"),
     ]);
     assert!(!refused.status.success(), "{}", printed(&refused));
-    db.execute("UPDATE workspaces SET state='ready' WHERE name='busy'", [])
-        .unwrap();
+    db.execute(
+        "UPDATE workspaces SET state='ready' WHERE id IN (SELECT id FROM spaces WHERE name='busy')",
+        [],
+    )
+    .unwrap();
     assert!(process_running(leftover));
     let output = fixture.root.path().join("stopped.json");
     let run = fixture.run(&[
@@ -269,7 +272,7 @@ fn stop_stops_named_or_all_running_workspaces_and_marks_them_stopped() {
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     let set_state = |state: &str| {
         db.execute(
-            "UPDATE workspaces SET state=?1 WHERE name='second'",
+            "UPDATE workspaces SET state=?1 WHERE id IN (SELECT id FROM spaces WHERE name='second')",
             [state],
         )
         .unwrap();

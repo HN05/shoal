@@ -82,7 +82,7 @@ pub(crate) fn fail_interrupted_removals(tx: &Connection) -> Result<()> {
 fn fail_stopped_removal(tx: &Connection, id: &SpaceId, why: &str) -> Result<()> {
     let number: Option<Option<SpaceNumber>> = tx
         .query_row(
-            "SELECT number FROM workspaces WHERE id=?1 AND state=?2",
+            "SELECT number FROM spaces JOIN workspaces USING(id) WHERE id=?1 AND state=?2",
             params![id, WorkspaceState::Removing],
             |row| row.get(0),
         )

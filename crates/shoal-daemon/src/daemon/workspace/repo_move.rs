@@ -433,7 +433,7 @@ impl Manager {
                     ],
                 )?;
                 tx.execute(
-                    "UPDATE workspaces SET state=?2 WHERE repository_id=?1",
+                    "UPDATE workspaces SET state=?2 WHERE id IN (SELECT id FROM spaces WHERE repository_id=?1)",
                     params![id, WorkspaceState::Reconciling],
                 )?;
                 Ok(())
@@ -478,7 +478,8 @@ impl Manager {
                 )?;
                 tx.execute(
                     &format!(
-                        "UPDATE workspaces SET path={}, git_dir={} WHERE repository_id=?1",
+                        "UPDATE workspaces SET path={}, git_dir={}
+                            WHERE id IN (SELECT id FROM spaces WHERE repository_id=?1)",
                         rebased("path"),
                         rebased("git_dir")
                     ),
@@ -705,7 +706,11 @@ fn movable_records(
         "a command or agent is running in a workspace of the repository; stop it first"
     );
     ensure!(
-        !store::exists(db, "SELECT 1 FROM chats WHERE repository_id=?1", [id])?,
+        !store::exists(
+            db,
+            "SELECT 1 FROM spaces WHERE repository_id=?1 AND kind='chat'",
+            [id]
+        )?,
         "a chat is running in the repository; wait for it to finish"
     );
     // A job waiting for the runner holds nothing in the directory, and
@@ -719,7 +724,7 @@ fn movable_records(
         "agent launches are queued for the repository; wait for it to finish"
     );
     let states = db
-        .prepare("SELECT id,state FROM workspaces WHERE repository_id=?1")?
+        .prepare("SELECT id,state FROM spaces JOIN workspaces USING(id) WHERE repository_id=?1")?
         .query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))?
         .collect::<rusqlite::Result<BTreeMap<SpaceId, WorkspaceState>>>()?;
     for (workspace, state) in &states {

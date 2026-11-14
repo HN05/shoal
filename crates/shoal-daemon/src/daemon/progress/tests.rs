@@ -316,7 +316,7 @@ async fn a_chats_progress_is_its_own_and_goes_with_it() {
     manager
         .store
         .run(move |db| {
-            db.execute("DELETE FROM chats WHERE id=?1", [&id])?;
+            db.execute("DELETE FROM spaces WHERE id=?1", [&id])?;
             Ok(
                 db.query_row("SELECT COUNT(*) FROM space_progress", [], |row| {
                     row.get::<_, i64>(0)

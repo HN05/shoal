@@ -682,7 +682,7 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
     // The split was interrupted before the child's setup started.
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
-        "UPDATE workspaces SET state='preparing' WHERE name='child'",
+        "UPDATE workspaces SET state='preparing' WHERE id IN (SELECT id FROM spaces WHERE name='child')",
         [],
     )
     .unwrap();
@@ -811,7 +811,7 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     let set_state = |state: &str| {
         db.execute(
-            "UPDATE workspaces SET state=?1 WHERE name='second'",
+            "UPDATE workspaces SET state=?1 WHERE id IN (SELECT id FROM spaces WHERE name='second')",
             [state],
         )
         .unwrap();
@@ -885,7 +885,7 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
     let second = fixture.add("fourth");
     // One still preparing, whose setup never started, goes with the others.
     db.execute(
-        "UPDATE workspaces SET state='preparing' WHERE name='fourth'",
+        "UPDATE workspaces SET state='preparing' WHERE id IN (SELECT id FROM spaces WHERE name='fourth')",
         [],
     )
     .unwrap();

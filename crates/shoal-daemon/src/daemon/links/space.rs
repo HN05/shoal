@@ -312,7 +312,7 @@ fn ensure_one(named: &str, found: &[Repository]) -> Result<()> {
 
 /// Whether `id` names a recorded chat, whose links change whenever it runs.
 pub(crate) fn is_chat(db: &Connection, id: &SpaceId) -> Result<bool> {
-    store::exists(db, "SELECT 1 FROM chats WHERE id=?1", [id])
+    store::exists(db, "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat'", [id])
 }
 
 /// Refuse a change to the links, cursor or marks of a workspace that is not

@@ -574,16 +574,31 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 181 {
         db.execute_batch(include_str!("marks_without_heads.sql"))?;
     }
+    if version >= 182 {
+        db.execute_batch("PRAGMA foreign_keys=OFF;")?;
+        db.execute_batch(include_str!("spaces_table.sql"))?;
+        db.execute_batch("PRAGMA foreign_keys=ON;")?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
     } else {
         "workspace_id"
     };
+    let workspace = if version >= 182 {
+        "BEGIN;
+        INSERT INTO workspaces(id,path,branch,state)
+            VALUES ('workspace','/work','worker','ready');
+        INSERT INTO spaces(id,kind,repository_id,name)
+            VALUES ('workspace','workspace','repo','worker');
+        COMMIT;"
+    } else {
+        "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+            VALUES ('workspace','repo','worker','/work','worker','ready');"
+    };
     db.execute_batch(&format!(
         "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-            INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-                VALUES ('workspace','repo','worker','/work','worker','ready');
+            {workspace}
             INSERT INTO executions(id,{space},state) VALUES ('execution','workspace','running');"
     ))?;
     Ok(db)
@@ -775,7 +790,7 @@ fn migration_names_recorded_chats_and_keeps_what_they_own() -> Result<()> {
     migrate_through_v0_17_0(&mut db)?;
 
     let names = db
-        .prepare("SELECT id,name FROM chats ORDER BY id")?
+        .prepare("SELECT id,name FROM spaces WHERE kind='chat' ORDER BY id")?
         .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     assert_eq!(
@@ -834,12 +849,12 @@ fn migration_starts_earlier_agents_in_the_mode_they_ran_as() -> Result<()> {
         None
     );
     assert_eq!(
-        mode("SELECT mode FROM workspaces WHERE id='workspace'")?.as_deref(),
+        mode("SELECT mode FROM spaces WHERE id='workspace'")?.as_deref(),
         Some("worker")
     );
-    assert_eq!(mode("SELECT mode FROM workspaces WHERE id='shell'")?, None);
+    assert_eq!(mode("SELECT mode FROM spaces WHERE id='shell'")?, None);
     assert_eq!(
-        mode("SELECT mode FROM chats WHERE id='chat'")?.as_deref(),
+        mode("SELECT mode FROM spaces WHERE id='chat'")?.as_deref(),
         Some("chat")
     );
     Ok(())
@@ -881,7 +896,7 @@ fn migration_keeps_one_parent_for_each_space() -> Result<()> {
         events
     );
     // A removed parent's children leave the tree with it.
-    db.execute("DELETE FROM chats WHERE id='chat'", [])?;
+    db.execute("DELETE FROM spaces WHERE id='chat'", [])?;
     assert_eq!(
         db.query_row("SELECT COUNT(*) FROM space_parents", [], |r| r
             .get::<_, i64>(0))?,
@@ -917,15 +932,17 @@ fn migration_numbers_recorded_spaces_workspaces_first() -> Result<()> {
 fn new_spaces_take_the_smallest_number_no_space_holds() -> Result<()> {
     let db = historical_database(SCHEMA_VERSION)?;
     db.execute_batch(
-        "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-             VALUES ('second','repo','second','/second','second','ready');
-         INSERT INTO chats(id,repository_id,name,agent,started_at)
-             VALUES ('chat','repo','chat','claude',1);
-         DELETE FROM workspaces WHERE id='second';
-         INSERT INTO chats(id,repository_id,name,agent,started_at)
-             VALUES ('reused','repo','reused','claude',2),
-                ('next','repo','next','claude',3);
-         UPDATE workspaces SET name='renamed' WHERE id='workspace';",
+        "INSERT INTO spaces(id,kind,repository_id,name)
+             VALUES ('second','workspace','repo','second');
+         INSERT INTO workspaces(id,path,branch,state) VALUES ('second','/second','second','ready');
+         INSERT INTO spaces(id,kind,repository_id,name,mode)
+             VALUES ('chat','chat','repo','chat','chat');
+         INSERT INTO chats(id,agent,started_at) VALUES ('chat','claude',1);
+         DELETE FROM spaces WHERE id='second';
+         INSERT INTO spaces(id,kind,repository_id,name,mode)
+             VALUES ('reused','chat','repo','reused','chat'),('next','chat','repo','next','chat');
+         INSERT INTO chats(id,agent,started_at) VALUES ('reused','claude',2),('next','claude',3);
+         UPDATE spaces SET name='renamed' WHERE id='workspace';",
     )?;
     assert_eq!(
         space_numbers(&db)?,
@@ -1101,8 +1118,9 @@ fn migration_numbers_items_within_their_space() -> Result<()> {
     );
     // A new space skips the numbers the pending proposals reserve.
     db.execute_batch(
-        "INSERT INTO chats(id,repository_id,name,agent,started_at)
-             VALUES ('new','repo','new','claude',2);",
+        "INSERT INTO spaces(id,kind,repository_id,name,mode)
+             VALUES ('new','chat','repo','new','chat');
+         INSERT INTO chats(id,agent,started_at) VALUES ('new','claude',2);",
     )?;
     assert!(space_numbers(&db)?.contains(&("new".into(), 5)));
     Ok(())
@@ -1111,10 +1129,7 @@ fn migration_numbers_items_within_their_space() -> Result<()> {
 /// Every space's name and number, by name.
 fn space_numbers(db: &Connection) -> Result<Vec<(String, i64)>> {
     Ok(db
-        .prepare(
-            "SELECT name,number FROM workspaces UNION ALL SELECT name,number FROM chats
-                ORDER BY name",
-        )?
+        .prepare("SELECT name,number FROM spaces ORDER BY name")?
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
         .collect::<rusqlite::Result<_>>()?)
 }
@@ -1481,7 +1496,7 @@ fn migration_moves_pending_updates_out_of_activity_records() -> Result<()> {
         .query_map([], |r| r.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     assert_eq!(records, [r#"{"state":"open"}"#, r#"{"state":"open"}"#]);
-    db.execute_batch("DELETE FROM executions; DELETE FROM workspaces;")?;
+    db.execute_batch("DELETE FROM executions; DELETE FROM spaces WHERE kind='workspace';")?;
     let left: i64 = db.query_row("SELECT COUNT(*) FROM pending_updates", [], |r| r.get(0))?;
     assert_eq!(left, 0);
     Ok(())
@@ -1536,21 +1551,22 @@ fn executions_and_queue_restores_keep_their_workspace_as_their_space() -> Result
     // A chat's execution and restore go with the chat, as a workspace's go
     // with the workspace.
     db.execute_batch(
-        "INSERT INTO chats(id,repository_id,name,agent,started_at)
-            VALUES ('chat','repo','chat','claude',1);
+        "INSERT INTO spaces(id,kind,repository_id,name,mode)
+            VALUES ('chat','chat','repo','chat','chat');
+         INSERT INTO chats(id,agent,started_at) VALUES ('chat','claude',1);
          INSERT INTO executions(id,space_id,state) VALUES ('chat-execution','chat','running');
          INSERT INTO agent_queue(id,kind,repository_id,name,agent,execution_id,state,created_at,space_id)
             VALUES ('chat-restore','restore','repo','chat','claude','chat-execution','queued',1,'chat');
-         DELETE FROM chats WHERE id='chat';",
+         DELETE FROM spaces WHERE id='chat';",
     )?;
     assert_eq!(spaces(&db)?, kept);
-    db.execute("DELETE FROM workspaces WHERE id='workspace'", [])?;
+    db.execute("DELETE FROM spaces WHERE id='workspace'", [])?;
     assert!(spaces(&db)?.is_empty());
     Ok(())
 }
 
 #[test]
-fn migration_records_every_space_once_across_conversions() -> Result<()> {
+fn migration_records_every_space_once_and_a_conversion_keeps_it() -> Result<()> {
     let mut db = historical_database(163)?;
     db.execute_batch(
         "INSERT INTO chats(id,repository_id,name,agent,started_at)
@@ -1559,32 +1575,41 @@ fn migration_records_every_space_once_across_conversions() -> Result<()> {
             VALUES ('chat','{}',1),('workspace','{}',1);",
     )?;
     migrate(&mut db)?;
-    let recorded = |db: &Connection| -> Result<Vec<String>> {
+    let recorded = |db: &Connection| -> Result<Vec<(String, String)>> {
         Ok(db
-            .prepare("SELECT id FROM space_records ORDER BY id")?
-            .query_map([], |r| r.get(0))?
+            .prepare("SELECT id,kind FROM spaces ORDER BY id")?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
             .collect::<rusqlite::Result<_>>()?)
     };
+    let space = |id: &str, kind: &str| (id.to_owned(), kind.to_owned());
     let progress = |db: &Connection| -> Result<Vec<String>> {
         Ok(db
             .prepare("SELECT space_id FROM space_progress ORDER BY space_id")?
             .query_map([], |r| r.get(0))?
             .collect::<rusqlite::Result<_>>()?)
     };
-    assert_eq!(recorded(&db)?, ["chat", "workspace"]);
+    assert_eq!(
+        recorded(&db)?,
+        [space("chat", "chat"), space("workspace", "workspace")]
+    );
 
-    // A conversion replaces the chat's row and keeps the space.
+    // A conversion changes the space's kind and swaps its kind's row.
     db.execute_batch(
-        "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-            VALUES ('chat','repo','chat','/chat','chat','ready');
-         DELETE FROM chats WHERE id='chat';",
+        "BEGIN;
+         INSERT INTO workspaces(id,path,branch,state) VALUES ('chat','/chat','chat','ready');
+         UPDATE spaces SET kind='workspace' WHERE id='chat';
+         DELETE FROM chats WHERE id='chat';
+         COMMIT;",
     )?;
-    assert_eq!(recorded(&db)?, ["chat", "workspace"]);
+    assert_eq!(
+        recorded(&db)?,
+        [space("chat", "workspace"), space("workspace", "workspace")]
+    );
     assert_eq!(progress(&db)?, ["chat", "workspace"]);
 
-    // Deleting the record removes the space with its row.
-    db.execute("DELETE FROM space_records WHERE id='chat'", [])?;
-    let rows: i64 = db.query_row("SELECT COUNT(*) FROM spaces", [], |r| r.get(0))?;
+    // Deleting the space removes it with its kind's row.
+    db.execute("DELETE FROM spaces WHERE id='chat'", [])?;
+    let rows: i64 = db.query_row("SELECT COUNT(*) FROM workspaces", [], |r| r.get(0))?;
     assert_eq!((rows, progress(&db)?), (1, vec!["workspace".to_owned()]));
     Ok(())
 }
@@ -1635,7 +1660,8 @@ fn migration_keeps_each_space_completion_in_one_table() -> Result<()> {
     );
     // A removed space's completion goes with it, without an `undone` event.
     db.execute_batch(
-        "DELETE FROM chats WHERE id='done'; DELETE FROM executions; DELETE FROM workspaces;",
+        "DELETE FROM spaces WHERE id='done'; DELETE FROM executions;
+         DELETE FROM spaces WHERE kind='workspace';",
     )?;
     assert_eq!(
         db.query_row("SELECT COUNT(*) FROM space_completion", [], |r| r
@@ -1781,9 +1807,11 @@ fn mappers_use_named_columns() -> Result<()> {
     db.execute_batch(
         r#"INSERT INTO repositories(id,path,source,last_used,name,workspaces_dir)
                 VALUES ('repo','/checkout','origin',42,'project','/workspaces');
-            INSERT INTO workspaces(id,repository_id,name,path,branch,state,error,
+            INSERT INTO spaces(id,kind,repository_id,name)
+                VALUES ('workspace','workspace','repo','worker');
+            INSERT INTO workspaces(id,path,branch,state,error,
                 base_commit,base_ref,git_dir,git_dir_id,setup_finished)
-                VALUES ('workspace','repo','worker','/work','feature','failed','setup error',
+                VALUES ('workspace','/work','feature','failed','setup error',
                     'abc','refs/heads/main','/git/worktrees/worker','1:2',1);
             INSERT INTO ports(workspace_id,name,port,env_var,reason)
                 VALUES ('workspace','web',12345,'WEB_PORT',NULL);
@@ -1803,7 +1831,7 @@ fn mappers_use_named_columns() -> Result<()> {
     )?;
     check_columns(
         &db,
-        "workspaces",
+        "spaces JOIN workspaces USING(id)",
         WORKSPACE_COLUMNS,
         workspace,
         serde_json::json!({
@@ -1866,7 +1894,15 @@ fn seed_interrupted_operations(db: &mut Connection) -> Result<()> {
         "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);",
     )?;
     for state in WorkspaceState::ALL {
-        db.execute("INSERT INTO workspaces(id,repository_id,name,path,branch,state,error) VALUES (?1,'repo',?1,?1,?1,?1,'original error')", [state])?;
+        db.execute(
+            "INSERT INTO spaces(id,kind,repository_id,name) VALUES (?1,'workspace','repo',?1)",
+            [state],
+        )?;
+        db.execute(
+            "INSERT INTO workspaces(id,path,branch,state,error)
+                VALUES (?1,?1,?1,?1,'original error')",
+            [state],
+        )?;
     }
     db.execute_batch("INSERT INTO executions(id,space_id,state) VALUES ('execution','preparing','running');
             INSERT INTO simulator_clean_requests(request_id,workspace_id,record)
@@ -1956,7 +1992,7 @@ async fn failed_quarantine_rolls_back_without_undoing_migration() {
             db.execute_batch(
                 "DROP TABLE access_requests;
                 PRAGMA user_version=16;
-                CREATE TRIGGER fail_quarantine BEFORE UPDATE OF state ON workspaces
+                CREATE TRIGGER fail_quarantine BEFORE UPDATE OF state ON executions
                     BEGIN SELECT RAISE(ABORT, 'quarantine blocked'); END;",
             )?;
             start_v0_17_0(db)
@@ -2051,7 +2087,7 @@ async fn migrates_original_database_without_losing_ownership_records() {
             assert_eq!(repo.id, "repo");
             assert!(repo.name.is_none() && repo.workspaces_dir.is_none());
             let workspace = db.query_row(
-                &format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces"),
+                &format!("SELECT {WORKSPACE_COLUMNS} FROM spaces JOIN workspaces USING(id)"),
                 [],
                 workspace,
             )?;
@@ -2233,13 +2269,14 @@ fn reviews_keep_their_findings_replies_and_ids_when_they_can_fail_for_false_posi
 fn workspaces_may_have_no_branch_once_migrated_and_keep_what_references_them() -> Result<()> {
     let mut db = historical_database(116)?;
     migrate(&mut db)?;
-    db.execute(
-        "INSERT INTO workspaces(id,repository_id,name,path,state,start_commit)
-            VALUES ('detached','repo','main-3f2a9c1','/detached','ready','3f2a9c1')",
-        [],
+    db.execute_batch(
+        "INSERT INTO spaces(id,kind,repository_id,name)
+            VALUES ('detached','workspace','repo','main-3f2a9c1');
+         INSERT INTO workspaces(id,path,state,start_commit)
+            VALUES ('detached','/detached','ready','3f2a9c1');",
     )?;
     let branches: Vec<Option<String>> = db
-        .prepare("SELECT branch FROM workspaces ORDER BY name")?
+        .prepare("SELECT branch FROM spaces JOIN workspaces USING(id) ORDER BY name")?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     assert_eq!(branches, [None, Some("worker".to_owned())]);
@@ -2257,13 +2294,12 @@ fn chats_may_have_no_repository_once_migrated_and_keep_what_references_them() ->
             VALUES ('chat',1,'worker','Hello');",
     )?;
     migrate_through_v0_17_0(&mut db)?;
-    db.execute(
-        "INSERT INTO chats(id,name,agent,started_at)
-            VALUES ('master','master','codex',2)",
-        [],
+    db.execute_batch(
+        "INSERT INTO spaces(id,kind,name,mode) VALUES ('master','chat','master','chat');
+         INSERT INTO chats(id,agent,started_at) VALUES ('master','codex',2);",
     )?;
     let repositories: Vec<Option<String>> = db
-        .prepare("SELECT repository_id FROM chats ORDER BY name")?
+        .prepare("SELECT repository_id FROM spaces WHERE kind='chat' ORDER BY name")?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     assert_eq!(repositories, [None, Some("repo".to_owned())]);
@@ -2278,12 +2314,12 @@ fn files_may_have_no_repository_once_migrated() -> Result<()> {
     let mut db = historical_database(136)?;
     migrate(&mut db)?;
     db.execute(
-        "INSERT INTO workspace_files(space_id,space,source,name,path,bytes,created_at)
+        "INSERT INTO space_files(space_id,space,source,name,path,bytes,created_at)
             VALUES ('master','master','added','report.md','/shoal/report.md',4,1)",
         [],
     )?;
     let repository: Option<String> =
-        db.query_row("SELECT repository_id FROM workspace_files", [], |row| {
+        db.query_row("SELECT repository_id FROM space_files", [], |row| {
             row.get(0)
         })?;
     assert_eq!(repository, None);
@@ -2548,7 +2584,7 @@ fn every_space_keeps_its_unread_messages_in_one_table() -> Result<()> {
     )?;
     assert_eq!(db.last_insert_rowid(), 14);
     // A space's messages go with its row.
-    db.execute("DELETE FROM chats WHERE id='chat'", [])?;
+    db.execute("DELETE FROM spaces WHERE id='chat'", [])?;
     assert_eq!(
         db.query_row(
             "SELECT COUNT(*) FROM space_messages WHERE space_id='chat'",
@@ -2594,7 +2630,7 @@ fn removed_spaces_keep_their_files_until_their_chat_or_removal_record_expires() 
         ]
     );
     // A removed chat's file events still name it as a chat.
-    db.execute("DELETE FROM workspace_files WHERE space_id='chat'", [])?;
+    db.execute("DELETE FROM space_files WHERE space_id='chat'", [])?;
     let chat: Option<String> = db.query_row(
         "SELECT json_extract(record,'$.chat_id') FROM workspace_events
             WHERE json_extract(record,'$.kind')='file_removed'",
@@ -2641,5 +2677,114 @@ fn a_converted_workspaces_record_takes_an_id_beside_its_chat() -> Result<()> {
         .query_map([], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     assert_eq!(owners, [own.clone(), own.clone()]);
+    Ok(())
+}
+
+#[test]
+fn migration_keeps_every_space_with_its_kind_number_and_files() -> Result<()> {
+    let mut db = historical_database(181)?;
+    db.execute_batch(
+        r#"UPDATE workspaces SET number=4,mode='worker',narrowing='{"push":"propose"}'
+             WHERE id='workspace';
+         INSERT INTO chats(id,repository_id,name,agent,started_at,number,mode)
+             VALUES ('chat','repo','talk','claude',1,2,'chat'),
+                 ('master',NULL,'master','claude',3,5,'orchestrate');
+         INSERT INTO chats(id,repository_id,name,agent,started_at,number,mode,converted)
+             VALUES ('converted','repo','was a workspace','codex',2,3,'worker',1);
+         INSERT INTO workspace_files(space_id,space,repository_id,source,name,path,bytes,created_at)
+             VALUES ('chat','talk','repo','added','a.md','/repo/a.md',1,1),
+                 ('workspace','worker','repo','added','b.md','/repo/b.md',1,1);"#,
+    )?;
+    migrate(&mut db)?;
+    type Space = (
+        String,
+        String,
+        Option<String>,
+        String,
+        i64,
+        String,
+        Option<String>,
+    );
+    let spaces: Vec<Space> = db
+        .prepare(
+            "SELECT id,kind,repository_id,name,number,mode,narrowing FROM spaces ORDER BY number",
+        )?
+        .query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+                r.get(6)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let space = |id: &str, kind: &str, repository: Option<&str>, name: &str, number, mode: &str| {
+        let repository = repository.map(str::to_owned);
+        (
+            id.into(),
+            kind.into(),
+            repository,
+            name.into(),
+            number,
+            mode.into(),
+            None,
+        )
+    };
+    let mut workspace = space(
+        "workspace",
+        "workspace",
+        Some("repo"),
+        "worker",
+        4,
+        "worker",
+    );
+    workspace.6 = Some(r#"{"push":"propose"}"#.into());
+    assert_eq!(
+        spaces,
+        [
+            space("chat", "chat", Some("repo"), "talk", 2, "chat"),
+            space(
+                "converted",
+                "chat",
+                Some("repo"),
+                "was a workspace",
+                3,
+                "worker"
+            ),
+            workspace,
+            space("master", "chat", None, "master", 5, "orchestrate"),
+        ]
+    );
+    let converted: bool = db.query_row(
+        "SELECT converted FROM chats WHERE id='converted'",
+        [],
+        |r| r.get(0),
+    )?;
+    assert!(converted);
+    let files: Vec<(String, String)> = db
+        .prepare(
+            "SELECT space_id,kind FROM space_files JOIN spaces ON spaces.id=space_id ORDER BY 1",
+        )?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(
+        files,
+        [
+            ("chat".to_owned(), "chat".to_owned()),
+            ("workspace".to_owned(), "workspace".to_owned())
+        ]
+    );
+    // Removing a space removes its kind's row with it.
+    db.execute("DELETE FROM spaces WHERE id IN ('chat','workspace')", [])?;
+    let kind_rows: i64 = db.query_row(
+        "SELECT (SELECT COUNT(*) FROM chats WHERE id='chat')
+            + (SELECT COUNT(*) FROM workspaces)",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(kind_rows, 0);
     Ok(())
 }

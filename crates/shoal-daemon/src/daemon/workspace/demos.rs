@@ -201,7 +201,7 @@ pub(super) fn record(
 fn list(db: &Connection, workspace: Option<&SpaceId>) -> Result<Vec<Running>> {
     let mut statement = db.prepare(
         "SELECT d.workspace_id,w.name,d.execution_id,d.started_at,d.record,d.has_run
-         FROM demos d JOIN workspaces w ON w.id=d.workspace_id
+         FROM demos d JOIN spaces w ON w.id=d.workspace_id
          WHERE ?1 IS NULL OR d.workspace_id=?1 ORDER BY w.name,d.name",
     )?;
     let rows = statement.query_map([workspace], |row| {

@@ -113,7 +113,14 @@ fn fixture(path: &std::path::Path, rows: usize) -> Result<()> {
     )?;
     for row in 0..rows {
         let id = row.to_string();
-        tx.execute("INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES (?1,'repo',?1,?1,?1,'ready')", [&id])?;
+        tx.execute(
+            "INSERT INTO workspaces(id,path,branch,state) VALUES (?1,?1,?1,'ready')",
+            [&id],
+        )?;
+        tx.execute(
+            "INSERT INTO spaces(id,kind,repository_id,name) VALUES (?1,'workspace','repo',?1)",
+            [&id],
+        )?;
         tx.execute(
             "INSERT INTO executions(id,space_id,state) VALUES (?1,?1,'running')",
             [&id],
@@ -128,7 +135,9 @@ async fn inspection(backend: &Backend, metrics: &Arc<Metrics>, id: SpaceId) -> R
     backend
         .run(metrics.clone(), move |db| {
             let workspace = db.query_row(
-                &format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE id=?1"),
+                &format!(
+                    "SELECT {WORKSPACE_COLUMNS} FROM spaces JOIN workspaces USING(id) WHERE id=?1"
+                ),
                 [&selector],
                 workspace,
             )?;

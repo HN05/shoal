@@ -53,8 +53,8 @@ const DECIDED_BY: &str =
 /// The `workspace_id` and `chat_id` of a request the space `?2` owns, one
 /// of them the space, the other none; both none without a space, for a
 /// proposed issue its repository owns.
-pub(super) const OWNING_SPACE: &str =
-    "(SELECT id FROM workspaces WHERE id=?2),(SELECT id FROM chats WHERE id=?2)";
+pub(super) const OWNING_SPACE: &str = "(SELECT id FROM spaces WHERE id=?2 AND kind='workspace'),
+        (SELECT id FROM spaces WHERE id=?2 AND kind='chat')";
 
 /// A stored request's key, record, active flag, number and whether its
 /// space is gone.

@@ -352,8 +352,10 @@ fn failed_startup_recovery_never_serves() {
             .unwrap()
             .execute_batch(&format!(
                 "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-                INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-                    VALUES ('workspace','repo','worker','/missing/worker','worker','{state}');
+                INSERT INTO spaces(id,kind,repository_id,name)
+                    VALUES ('workspace','workspace','repo','worker');
+                INSERT INTO workspaces(id,path,branch,state)
+                    VALUES ('workspace','/missing/worker','worker','{state}');
                 CREATE TRIGGER block_recovery BEFORE UPDATE OF state ON workspaces
                     BEGIN SELECT RAISE(ABORT, 'recovery blocked'); END;"
             ))

@@ -635,7 +635,7 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     let set_state = |state: &str| {
         db.execute(
-            "UPDATE workspaces SET state=?1 WHERE name='second'",
+            "UPDATE workspaces SET state=?1 WHERE id IN (SELECT id FROM spaces WHERE name='second')",
             [state],
         )
         .unwrap();

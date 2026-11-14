@@ -15,8 +15,10 @@ async fn store(directory: &tempfile::TempDir) -> Store {
         .run(|db| {
             db.execute_batch(
                 "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-                INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-                    VALUES ('work','repo','fix-login','/work','fix-login','ready');",
+                INSERT INTO spaces(id,kind,repository_id,name)
+                    VALUES ('work','workspace','repo','fix-login');
+                INSERT INTO workspaces(id,path,branch,state)
+                    VALUES ('work','/work','fix-login','ready');",
             )?;
             Ok(())
         })
@@ -318,7 +320,7 @@ async fn removing_the_workspace_deletes_its_reviews() {
                 "Why?",
                 UnixTime::from_seconds(4),
             )?;
-            tx.execute("DELETE FROM workspaces WHERE id='work'", [])?;
+            tx.execute("DELETE FROM spaces WHERE id='work'", [])?;
             let left: i64 = tx.query_row(
                 "SELECT (SELECT COUNT(*) FROM reviews)+(SELECT COUNT(*) FROM review_findings)
                     +(SELECT COUNT(*) FROM review_replies)",

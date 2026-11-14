@@ -180,7 +180,7 @@ fn recorded_use(db: &Connection, id: &RepositoryId) -> Result<bool> {
             WHERE repository_id=?1 AND expires_at > unixepoch()
         UNION ALL SELECT 1 FROM removed_spaces
             WHERE repository_id=?1 AND expires_at > unixepoch()
-        UNION ALL SELECT 1 FROM removed_space_files JOIN workspace_files USING(space_id)
+        UNION ALL SELECT 1 FROM removed_space_files JOIN space_files USING(space_id)
             WHERE repository_id=?1 AND expires_at > unixepoch()",
         [id],
     )

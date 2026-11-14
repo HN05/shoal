@@ -26,8 +26,10 @@ async fn restart_waits_for_background_work_and_executions_that_cannot_reattach()
     manager.store.run(|db| {
             db.execute_batch(
                 "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/test','/test',0);
-                 INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-                    VALUES ('workspace','repo','work','/test/work','work','ready');
+                 INSERT INTO spaces(id,kind,repository_id,name)
+                     VALUES ('workspace','workspace','repo','work');
+                 INSERT INTO workspaces(id,path,branch,state)
+                     VALUES ('workspace','/test/work','work','ready');
                  INSERT INTO executions(id,space_id,state) VALUES ('legacy','workspace','running');
                  INSERT INTO executions(id,space_id,state) VALUES ('unknown','workspace','unknown');"
             )?;

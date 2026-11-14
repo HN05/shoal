@@ -6,9 +6,12 @@ use crate::daemon::test_support::manager;
 /// exited, then removed, recorded in `plan`'s log too.
 const JOURNAL: &str = "
     INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-    INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-        VALUES ('plan','repo','plan','/plan','plan','ready'),
-            ('other','repo','other','/other','other','ready');
+    BEGIN;
+    INSERT INTO workspaces(id,path,branch,state)
+        VALUES ('plan','/plan','plan','ready'),('other','/other','other','ready');
+    INSERT INTO spaces(id,kind,repository_id,name)
+        VALUES ('plan','workspace','repo','plan'),('other','workspace','repo','other');
+    COMMIT;
     INSERT INTO workspace_events(record) VALUES
         (json_object('kind','created','workspace_id','fix-id','name','fix')),
         (json_object('kind','agent_started','workspace_id','fix-id','name','fix',

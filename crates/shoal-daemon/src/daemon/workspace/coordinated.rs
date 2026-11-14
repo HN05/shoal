@@ -69,9 +69,9 @@ fn working_coordinator(
 ) -> Result<Option<SpaceId>> {
     let agentless = store::exists(
         db,
-        "SELECT 1 FROM workspaces WHERE id=?1 AND mode IS NULL
-         UNION ALL SELECT 1 FROM chats WHERE id=?1
-             AND NOT EXISTS (SELECT 1 FROM executions WHERE space_id=?1)",
+        "SELECT 1 FROM spaces WHERE id=?1 AND CASE kind
+            WHEN 'workspace' THEN mode IS NULL
+            ELSE NOT EXISTS (SELECT 1 FROM executions WHERE space_id=?1) END",
         [id],
     )?;
     if !agentless {

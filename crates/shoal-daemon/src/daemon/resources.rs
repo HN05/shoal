@@ -78,7 +78,7 @@ fn holders(db: &Connection, active: &[ResourceLease]) -> Result<String> {
     let mut names = Vec::with_capacity(ids.len());
     for id in ids {
         let name: Option<String> = db
-            .query_row("SELECT name FROM workspaces WHERE id=?1", [id], |row| {
+            .query_row("SELECT name FROM spaces WHERE id=?1", [id], |row| {
                 row.get(0)
             })
             .optional()?;

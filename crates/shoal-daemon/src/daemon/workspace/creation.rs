@@ -8,10 +8,10 @@ use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
 use crate::{
     config::Config,
-    daemon::store,
+    daemon::{spaces, store},
     fsutil::off_runtime,
     git::{self, default_branch::DefaultBranchLookup},
-    model::{Repository, Workspace},
+    model::{Repository, SpaceKind, Workspace},
     protocol::CreationOptions,
     state::WorkspaceState,
 };
@@ -345,7 +345,7 @@ impl Manager {
                     store::ensure_directory_free(tx, &record.path)?;
                 }
                 store::ensure_path_outside_moves(tx, &record.path)?;
-                let workspaces = tx.prepare(&format!("SELECT {} FROM workspaces", store::WORKSPACE_COLUMNS))?
+                let workspaces = tx.prepare(&format!("SELECT {} FROM spaces JOIN workspaces USING(id)", store::WORKSPACE_COLUMNS))?
                     .query_map([], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 for workspace in workspaces {
@@ -375,11 +375,9 @@ impl Manager {
                     tree::set_parent(tx, &record.id, Some(parent))?;
                 }
                 tx.execute(
-                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,start_commit,made_for,setup_skipped,disposable,number,mode,narrowing) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12,?13,?14,?15,?16,NULLIF(?17,0),?18,?19)",
+                    "INSERT INTO workspaces (id,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,start_commit,made_for,setup_skipped,disposable) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?3,?10,?11,?12,?13,?14)",
                     params![
                         record.id,
-                        record.repository_id,
-                        record.name,
                         record.path.to_str(),
                         record.branch,
                         record.state,
@@ -393,22 +391,26 @@ impl Manager {
                         record.at.as_ref().and_then(|at| at.made_for.as_ref()).map(serde_json::to_string).transpose()?,
                         record.setup_skipped,
                         record.disposable,
-                        record.number,
-                        record.mode,
-                        store::narrowing_column(&record.narrowing)?,
                     ],
                 )?;
-                if let Placement::Replacing(converting) = &placement {
-                    converting.replace_chat(tx)?;
-                }
+                let number = match &placement {
+                    Placement::Replacing(converting) => {
+                        converting.replace_chat(tx)?;
+                        record.number
+                    }
+                    Placement::Below(_) => spaces::records::record(tx, &spaces::records::NewSpace {
+                        id: &record.id,
+                        kind: SpaceKind::Workspace,
+                        repository_id: Some(&record.repository_id),
+                        name: &record.name,
+                        number: record.number,
+                        mode: record.mode.as_ref(),
+                        narrowing: &record.narrowing,
+                    })?,
+                };
                 tx.execute(
                     "UPDATE repositories SET last_used=(SELECT COALESCE(MAX(last_used),0)+1 FROM repositories) WHERE id=?1",
                     [&record.repository_id],
-                )?;
-                let number = tx.query_row(
-                    "SELECT number FROM workspaces WHERE id=?1",
-                    [&record.id],
-                    |row| row.get(0),
                 )?;
                 Ok(Workspace { number, ..record })
             })

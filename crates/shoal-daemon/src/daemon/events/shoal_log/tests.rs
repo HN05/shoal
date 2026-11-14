@@ -5,8 +5,10 @@ use crate::daemon::test_support::manager;
 /// and restored, between Shoal's own events.
 const JOURNAL: &str = "
     INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-    INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-        VALUES ('plan','repo','plan','/plan','plan','ready');
+    BEGIN;
+    INSERT INTO workspaces(id,path,branch,state) VALUES ('plan','/plan','plan','ready');
+    INSERT INTO spaces(id,kind,repository_id,name) VALUES ('plan','workspace','repo','plan');
+    COMMIT;
     INSERT INTO workspace_events(record) VALUES
         (json_object('kind','daemon_started','version','1.0.0')),
         (json_object('kind','created','workspace_id','fix-id','name','fix')),

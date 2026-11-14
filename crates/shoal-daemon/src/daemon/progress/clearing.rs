@@ -100,8 +100,8 @@ impl Manager {
 fn blocked_plans(db: &Transaction<'_>) -> Result<Vec<Blocked>> {
     let rows = db
         .prepare(
-            "SELECT p.space_id,COALESCE(w.repository_id,c.repository_id) FROM space_progress p
-             LEFT JOIN workspaces w ON w.id=p.space_id LEFT JOIN chats c ON c.id=p.space_id
+            "SELECT p.space_id,s.repository_id FROM space_progress p
+             LEFT JOIN spaces s ON s.id=p.space_id
              WHERE json_array_length(p.record,'$.blockers') > 0",
         )?
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?

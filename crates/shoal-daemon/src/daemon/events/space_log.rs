@@ -164,8 +164,7 @@ fn removed(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
         .query_row(
             "SELECT space_id FROM workspace_events
              WHERE json_extract(record,'$.kind') IN (?2,'chat_ended') AND space_id=?1
-                 AND space_id NOT IN (SELECT id FROM workspaces)
-                 AND space_id NOT IN (SELECT id FROM chats)
+                 AND space_id NOT IN (SELECT id FROM spaces)
              ORDER BY id DESC LIMIT 1",
             params![id, EventKind::Removed],
             |row| row.get(0),

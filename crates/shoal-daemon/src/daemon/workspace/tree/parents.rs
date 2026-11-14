@@ -178,7 +178,7 @@ fn assign(
     if parent != current.as_ref() {
         if let Some(parent) = parent {
             let repository: RepositoryId = tx.query_row(
-                "SELECT repository_id FROM workspaces WHERE id=?1",
+                "SELECT repository_id FROM spaces WHERE id=?1",
                 [workspace],
                 |row| row.get(0),
             )?;

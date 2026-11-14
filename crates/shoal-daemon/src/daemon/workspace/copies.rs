@@ -503,13 +503,14 @@ fn live_source(workspace: Workspace, head: CommitId, files: SourceFiles) -> Sour
 pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
     workspace.copied_from = db
         .query_row(
-            "SELECT source.id, source.name, source.branch, copy.copied_from_checkpoint,
+            "SELECT source.id, source_space.name, source.branch, copy.copied_from_checkpoint,
                 copy.starting_checkpoint, json_extract(start.record, '$.head'),
                 json_extract(start.record, '$.commit'), copy.starting_index
              FROM workspaces copy
              JOIN checkpoints start
                 ON start.workspace_id=copy.id AND start.number=copy.starting_checkpoint
              LEFT JOIN workspaces source ON source.id=copy.copied_from
+             LEFT JOIN spaces source_space ON source_space.id=source.id
              WHERE copy.id=?1",
             [&workspace.id],
             |row| {

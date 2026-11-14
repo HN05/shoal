@@ -61,6 +61,7 @@ pub(crate) fn space_kind(db: &rusqlite::Connection, id: &SpaceId) -> Result<Opti
 mod export;
 mod find;
 pub(crate) mod priority;
+pub(crate) mod records;
 pub(crate) mod removal_notices;
 mod removing;
 pub(crate) use removing::{Removing, Reservation};

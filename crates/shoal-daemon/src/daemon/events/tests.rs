@@ -391,8 +391,10 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
         .run(move |db| {
             db.execute_batch(
                 "INSERT INTO repositories(id,path,source,last_used) VALUES ('r','/r','/r',1);
-                 INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-                     VALUES ('w','r','worker','/work','worker','ready');",
+                 INSERT INTO spaces(id,kind,repository_id,name)
+                     VALUES ('w','workspace','r','worker');
+                 INSERT INTO workspaces(id,path,branch,state)
+                     VALUES ('w','/work','worker','ready');",
             )?;
             for (kind, agent) in &recorded {
                 record_agent(db, &SpaceId::from("w"), *kind, agent)?;

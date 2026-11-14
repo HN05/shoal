@@ -979,7 +979,7 @@ async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
         .store
         .run(|db| {
             Ok(db
-                .prepare("SELECT parent_id FROM workspace_files")?
+                .prepare("SELECT parent_id FROM space_files")?
                 .query_map([], |row| row.get(0))?
                 .collect::<rusqlite::Result<_>>()?)
         })

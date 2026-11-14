@@ -34,9 +34,12 @@ fn resource(mode: LockMode) -> Specification {
 fn owners(db: &Connection) -> Result<()> {
     db.execute_batch(
         "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-            INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES
-                ('owner','repo','worker','/work','worker','ready'),
-                ('other','repo','other','/other','other','ready');",
+            INSERT INTO spaces(id,kind,repository_id,name)
+                VALUES ('owner','workspace','repo','worker'),
+                ('other','workspace','repo','other');
+            INSERT INTO workspaces(id,path,branch,state)
+                VALUES ('owner','/work','worker','ready'),
+                ('other','/other','other','ready');",
     )?;
     Ok(())
 }
@@ -845,7 +848,10 @@ async fn decisions_bind_settings_and_release_obeys_configured_lifetime() {
         .unwrap();
     store.run(|db| {
             db.execute_batch("INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-                INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES ('owner','repo','worker','/work','worker','ready');")?;
+                INSERT INTO spaces(id,kind,repository_id,name)
+                    VALUES ('owner','workspace','repo','worker');
+                INSERT INTO workspaces(id,path,branch,state)
+                    VALUES ('owner','/work','worker','ready');")?;
             for lifetime in [Lifetime::Lease, Lifetime::Workspace] {
                 let tx = db.transaction()?;
                 let target = Target::Resource { scope: Scope::Global, pool: "lock".into() };
@@ -986,7 +992,7 @@ async fn a_chat_owns_its_requests_until_it_goes() -> Result<()> {
                 pending.key
             );
             assert_eq!(list(tx, Some(&id))?.len(), 1);
-            tx.execute("DELETE FROM chats WHERE id=?1", [&id])?;
+            tx.execute("DELETE FROM spaces WHERE id=?1", [&id])?;
             assert!(current(tx, &id, &target, "default")?.is_none());
             Ok(())
         })

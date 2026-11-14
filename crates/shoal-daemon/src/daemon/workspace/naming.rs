@@ -30,10 +30,7 @@ impl Manager {
 
 /// Record `name` as the name of workspace `id`.
 fn store_name(db: &mut Connection, id: &SpaceId, name: &SpaceName) -> Result<()> {
-    db.execute(
-        "UPDATE workspaces SET name=?2 WHERE id=?1",
-        params![id, name],
-    )?;
+    db.execute("UPDATE spaces SET name=?2 WHERE id=?1", params![id, name])?;
     Ok(())
 }
 

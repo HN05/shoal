@@ -17,7 +17,7 @@ use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
-        events, store,
+        events, spaces, store,
         workspace::{self, Manager},
     },
     fsutil::off_runtime,
@@ -379,7 +379,10 @@ impl Manager {
         self.store
             .run(move |db| {
                 Ok(db
-                    .prepare("SELECT id,name FROM chats WHERE workspace_id=?1 ORDER BY name")?
+                    .prepare(
+                        "SELECT id,name FROM spaces JOIN chats USING(id)
+                         WHERE workspace_id=?1 ORDER BY name",
+                    )?
                     .query_map([id], |row| {
                         Ok(SpaceRef {
                             id: row.get(0)?,
@@ -532,14 +535,19 @@ fn insert(
 ) -> Result<Chat> {
     let workspace = chat.workspace.as_ref().map(|workspace| &workspace.id);
     ensure_place_free(tx, chat.repository_id.as_ref(), workspace)?;
+    // Checked with the record, so a removal that began while the start
+    // waited finds the chat below the parent or refuses it; recorded first,
+    // so the chat's start names it.
+    if let Some((parent, removing)) = &parent {
+        ensure!(!removing.reserved(parent), "{parent} is being removed");
+        workspace::ensure_parent(tx, chat.repository_id.as_ref(), &chat.id, parent)?;
+        workspace::set_parent(tx, &chat.id, Some(parent))?;
+    }
     tx.execute(
-        "INSERT INTO chats(id,repository_id,name,agent,started_at,origin,scope_token,
-            workspace_id,mode,root_dir,narrowing,session)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+        "INSERT INTO chats(id,agent,started_at,origin,scope_token,workspace_id,root_dir,session)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
         params![
             chat.id,
-            chat.repository_id,
-            chat.name,
             chat.agent,
             chat.started_at,
             chat.origin
@@ -548,21 +556,23 @@ fn insert(
                 .transpose()?,
             crate::daemon::scope::new_token(),
             workspace,
-            chat.mode,
             (chat.root_dir.as_deref()).map(|root| root.to_string_lossy().into_owned()),
-            store::narrowing_column(&chat.narrowing)?,
             chat.session,
         ],
     )?;
-    chat.number = tx.query_row("SELECT number FROM chats WHERE id=?1", [&chat.id], |row| {
-        row.get(0)
-    })?;
-    // Checked with the record, so a removal that began while the start
-    // waited finds the chat below the parent or refuses it.
-    if let Some((parent, removing)) = &parent {
-        ensure!(!removing.reserved(parent), "{parent} is being removed");
-        workspace::ensure_parent(tx, chat.repository_id.as_ref(), &chat.id, parent)?;
-        workspace::set_parent(tx, &chat.id, Some(parent))?;
+    chat.number = spaces::records::record(
+        tx,
+        &spaces::records::NewSpace {
+            id: &chat.id,
+            kind: SpaceKind::Chat,
+            repository_id: chat.repository_id.as_ref(),
+            name: &chat.name,
+            number: SpaceNumber::default(),
+            mode: Some(&chat.mode),
+            narrowing: &chat.narrowing,
+        },
+    )?;
+    if parent.is_some() {
         chat.parent = workspace::parent(tx, &chat.id)?;
     }
     Ok(chat)
@@ -627,7 +637,7 @@ fn rename(
         .with_context(|| format!("no chat {chat}"))?;
     if old.name != *name {
         tx.execute(
-            "UPDATE chats SET name=?2 WHERE id=?1",
+            "UPDATE spaces SET name=?2 WHERE id=?1",
             params![old.id, name],
         )?;
     }
@@ -643,14 +653,16 @@ fn rename(
 /// marked as `owner`'s, the daemon's state directory.
 fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
     db.prepare(
-        "SELECT chats.id,chats.repository_id,chats.name,chats.agent,
+        "SELECT chats.id,space.repository_id,space.name,chats.agent,
                     EXISTS (SELECT 1 FROM executions e WHERE e.space_id=chats.id) AS running,
                     chats.started_at,chats.origin,repositories.workspaces_dir,chats.session,
                     space_completion.record AS completion,
-                    workspaces.id,workspaces.name,workspaces.branch,chats.number,chats.mode,
-                    chats.root_dir,chats.narrowing,chats.converted
-             FROM chats LEFT JOIN repositories ON repositories.id=chats.repository_id
+                    workspaces.id,home.name,workspaces.branch,space.number,space.mode,
+                    chats.root_dir,space.narrowing,chats.converted
+             FROM chats JOIN spaces space ON space.id=chats.id
+                LEFT JOIN repositories ON repositories.id=space.repository_id
                 LEFT JOIN workspaces ON workspaces.id=chats.workspace_id
+                LEFT JOIN spaces home ON home.id=workspaces.id
                 LEFT JOIN space_completion ON space_completion.space_id=chats.id
              ORDER BY chats.started_at, chats.rowid",
     )?
@@ -727,14 +739,14 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
 fn forget_unstarted(tx: &rusqlite::Transaction<'_>, id: &SpaceId, error: &str) -> Result<()> {
     let unstarted = store::exists(
         tx,
-        "SELECT 1 FROM chats WHERE id=?1 AND NOT EXISTS
+        "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat' AND NOT EXISTS
             (SELECT 1 FROM executions WHERE space_id=?1)",
         [id],
     )?;
     if unstarted {
         let cause = events::EventCause::StartFailed;
         events::record(tx, id, events::EventKind::Removed, cause, Some(error))?;
-        tx.execute("DELETE FROM space_records WHERE id=?1", [id])?;
+        spaces::records::remove(tx, id)?;
     }
     Ok(())
 }

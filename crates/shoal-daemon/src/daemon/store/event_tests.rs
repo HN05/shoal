@@ -11,7 +11,11 @@ fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
         [],
     )?;
     let tx = db.transaction()?;
-    tx.execute("INSERT INTO workspaces(id,repository_id,name,path,branch,state,observed_branch) VALUES ('w','repo','worker','/work','worker','preparing','worker')", [])?;
+    tx.execute_batch(
+        "INSERT INTO workspaces(id,path,branch,state,observed_branch)
+            VALUES ('w','/work','worker','preparing','worker');
+         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');",
+    )?;
     tx.execute("UPDATE workspaces SET state='ready' WHERE id='w'", [])?;
     tx.rollback()?;
     assert_eq!(
@@ -20,7 +24,13 @@ fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
         0
     );
 
-    db.execute("INSERT INTO workspaces(id,repository_id,name,path,branch,state,observed_branch) VALUES ('w','repo','worker','/work','worker','preparing','worker')", [])?;
+    db.execute_batch(
+        "BEGIN;
+         INSERT INTO workspaces(id,path,branch,state,observed_branch)
+            VALUES ('w','/work','worker','preparing','worker');
+         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
+         COMMIT;",
+    )?;
     db.execute(
         "UPDATE workspaces SET state='failed',error='setup error' WHERE id='w'",
         [],
@@ -39,7 +49,7 @@ fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
         "UPDATE workspaces SET observed_branch=NULL WHERE id='w'",
         [],
     )?;
-    db.execute("DELETE FROM workspaces WHERE id='w'", [])?;
+    db.execute("DELETE FROM spaces WHERE id='w'", [])?;
     let records = db
         .prepare("SELECT record FROM workspace_events ORDER BY id")?
         .query_map([], |r| r.get::<_, String>(0))?
@@ -79,10 +89,12 @@ fn link_events_include_item_kind_and_url() -> Result<()> {
         "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
         [],
     )?;
-    db.execute(
-        "INSERT INTO workspaces(id,repository_id,name,path,branch,state,observed_branch)
-         VALUES ('w','repo','worker','/work','worker','ready','worker')",
-        [],
+    db.execute_batch(
+        "BEGIN;
+         INSERT INTO workspaces(id,path,branch,state,observed_branch)
+            VALUES ('w','/work','worker','ready','worker');
+         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
+         COMMIT;",
     )?;
     crate::daemon::events::record_link(
         &db,
@@ -114,10 +126,12 @@ fn item_activity_events_include_item_and_update_details() -> Result<()> {
         "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
         [],
     )?;
-    db.execute(
-        "INSERT INTO workspaces(id,repository_id,name,path,branch,state,observed_branch)
-         VALUES ('w','repo','worker','/work','worker','ready','worker')",
-        [],
+    db.execute_batch(
+        "BEGIN;
+         INSERT INTO workspaces(id,path,branch,state,observed_branch)
+            VALUES ('w','/work','worker','ready','worker');
+         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
+         COMMIT;",
     )?;
     let update = crate::forge::updates::Update {
         url: "https://forge.example/team/repo/pulls/7".into(),
@@ -197,9 +211,19 @@ fn each_space_keeps_its_newest_bulk_events_and_every_other() -> Result<()> {
 
 /// Remove the current event schema when tests emulate an older database.
 pub(super) fn remove_schema(db: &Connection) -> Result<()> {
+    // Rebuilt tables go without deleting what references them, as in a
+    // rebuilding migration.
+    db.pragma_update(None, "foreign_keys", false)?;
+    let removed = remove_schema_objects(db);
+    db.pragma_update(None, "foreign_keys", true)?;
+    removed
+}
+
+fn remove_schema_objects(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    db.execute_batch(include_str!("spaces_table_undo.sql"))?;
     db.execute_batch(include_str!("marks_without_heads_undo.sql"))?;
     db.execute_batch(include_str!("consumed_upgrades_undo.sql"))?;
     db.execute_batch(include_str!("removed_spaces_undo.sql"))?;
@@ -392,10 +416,12 @@ fn run_link_activity_and_approval_events_read_back() -> Result<()> {
         "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
         [],
     )?;
-    db.execute(
-        "INSERT INTO workspaces(id,repository_id,name,path,branch,state,observed_branch)
-         VALUES ('w','repo','worker','/work','worker','ready','worker')",
-        [],
+    db.execute_batch(
+        "BEGIN;
+         INSERT INTO workspaces(id,path,branch,state,observed_branch)
+            VALUES ('w','/work','worker','ready','worker');
+         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
+         COMMIT;",
     )?;
     let url = "https://forge.example/team/repo/actions/runs/2765";
     crate::daemon::events::record_link(
@@ -449,10 +475,14 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
     let mut db = Connection::open_in_memory()?;
     migrate(&mut db)?;
     db.execute_batch(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-         INSERT INTO chats(id,repository_id,name,agent,started_at)
-             VALUES ('c','repo','planner','claude',1);
-         INSERT INTO space_review(space_id,url,kind) VALUES ('c','',NULL);",
+        "BEGIN;
+         INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+         INSERT INTO chats(id,agent,started_at)
+             VALUES ('c','claude',1);
+         INSERT INTO spaces(id,kind,repository_id,name,mode)
+             VALUES ('c','chat','repo','planner','chat');
+         INSERT INTO space_review(space_id,url,kind) VALUES ('c','',NULL);
+         COMMIT;",
     )?;
     crate::daemon::events::record_link(
         &db,
@@ -521,23 +551,30 @@ fn renames_questions_and_children_reach_their_spaces_logs() -> Result<()> {
     let mut db = Connection::open_in_memory()?;
     migrate(&mut db)?;
     db.execute_batch(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-         INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-             VALUES ('parent','repo','plan','/plan','plan','ready');
+        "BEGIN;
+         INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+         INSERT INTO workspaces(id,path,branch,state)
+             VALUES ('parent','/plan','plan','ready');
+         INSERT INTO spaces(id,kind,repository_id,name)
+             VALUES ('parent','workspace','repo','plan');
          INSERT INTO space_parents(space_id,parent_id) VALUES ('child','parent');
-         INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-             VALUES ('child','repo','fix','/fix','fix','ready');
-         INSERT INTO chats(id,repository_id,name,agent,started_at)
-             VALUES ('chat','repo','helper','claude',1);
+         INSERT INTO workspaces(id,path,branch,state)
+             VALUES ('child','/fix','fix','ready');
+         INSERT INTO spaces(id,kind,repository_id,name)
+             VALUES ('child','workspace','repo','fix');
          INSERT INTO space_parents(space_id,parent_id) VALUES ('chat','parent');
-         UPDATE workspaces SET name='Fix login' WHERE id='child';
+         INSERT INTO chats(id,agent,started_at) VALUES ('chat','claude',1);
+         INSERT INTO spaces(id,kind,repository_id,name,mode)
+             VALUES ('chat','chat','repo','helper','chat');
+         UPDATE spaces SET name='Fix login' WHERE id='child';
          UPDATE workspaces SET branch='fix/login' WHERE id='child';
          INSERT INTO questions(space_number,number,workspace_id,created_at,question,
                  recommendation,choices)
              VALUES (2,1,'child',1,'Which database?','SQLite','[]');
          UPDATE questions SET answer='SQLite',answered_at=2 WHERE number=1;
-         DELETE FROM chats WHERE id='chat';
-         DELETE FROM workspaces WHERE id='child';",
+         DELETE FROM spaces WHERE id='chat';
+         DELETE FROM spaces WHERE id='child';
+         COMMIT;",
     )?;
     let events: Vec<_> = journal(&db)?
         .into_iter()
@@ -591,11 +628,15 @@ fn a_workspace_s_creation_takes_the_base_recorded_after_it() -> Result<()> {
     let mut db = Connection::open_in_memory()?;
     migrate(&mut db)?;
     db.execute_batch(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-         INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-             VALUES ('w','repo','fix','/fix','fix','preparing');
+        "BEGIN;
+         INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+         INSERT INTO workspaces(id,path,branch,state)
+             VALUES ('w','/fix','fix','preparing');
+         INSERT INTO spaces(id,kind,repository_id,name)
+             VALUES ('w','workspace','repo','fix');
          UPDATE workspaces SET base_commit='abc',base_ref='refs/heads/main' WHERE id='w';
-         UPDATE workspaces SET base_ref='refs/heads/other' WHERE id='w';",
+         UPDATE workspaces SET base_ref='refs/heads/other' WHERE id='w';
+         COMMIT;",
     )?;
     let created: Vec<_> = journal(&db)?
         .into_iter()

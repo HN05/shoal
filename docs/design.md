@@ -845,10 +845,10 @@ there.
 
 A space changes kind with `shoal convert`, since only its agent learns what the
 work is, and a merged workspace's conversation can still be worth keeping. The
-space stays the same: its row moves between `chats` and `workspaces` under the
-same ID and number in one transaction, the new row first, so what belongs to
-the space by ID, its links, tree, questions, files and progress, stays, and the
-removal triggers leave it while the space exists as the other kind. A chat
+space stays the same: one transaction changes the kind its `spaces` row
+records, with its ID, number and name, and swaps the row of its kind's table,
+so what belongs to the space by ID, its links, tree, questions, files and
+progress, stays. A chat
 becomes a workspace through the creation path every workspace on a branch
 takes, with the chat's record turned into the workspace's at insertion and
 given back if the worktree cannot be made; the worktree directory comes from
@@ -893,10 +893,10 @@ that opened them, so what runs there is the new chat's. Spaces form one tree thr
 opened alike: every space has at most one parent, a ready workspace or a chat
 of its own repository, or a chat without a repository, never one below it, and
 any other child in another repository is refused: spaces across repositories
-share a parent only in a chat without one. Every space has one record in
-`space_records`, which its workspace or chat row extends and a conversion
-keeps; deleting it removes the space with what each table of spaces holds for
-it. A removal reserves the space first, in memory whatever its kind, and a
+share a parent only in a chat without one. Every space has one row in
+`spaces`, with its kind and what every space has, which its workspace or chat
+row extends with what only its kind has; a conversion keeps it, and deleting it
+removes the space with what each table of spaces holds for it. A removal reserves the space first, in memory whatever its kind, and a
 workspace's worktree also through its `removing` state, which startup
 recovery reads. Every
 reader takes one walk up or one walk down that link, with no branch on kind,

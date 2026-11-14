@@ -63,7 +63,8 @@ impl Manager {
                     params![id, intent.branch],
                 )?;
                 tx.execute(
-                    "UPDATE workspaces SET base_ref=?3 WHERE repository_id=?1 AND base_ref=?2",
+                    "UPDATE workspaces SET base_ref=?3
+                     WHERE id IN (SELECT id FROM spaces WHERE repository_id=?1) AND base_ref=?2",
                     params![repository_id, old_base, git::local_ref(&intent.branch)],
                 )?;
                 release(tx, &id)?;

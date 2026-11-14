@@ -1,7 +1,6 @@
-//! The store side of a conversion: moving a space's row between `chats` and
-//! `workspaces` under the same ID and number, with what belongs to only one
-//! kind's row, and the record of a conversion whose agent has yet to start
-//! in the new place.
+//! The store side of a conversion: changing a space's kind and swapping its
+//! kind's row, with what belongs to only one kind, and the record of a
+//! conversion whose agent has yet to start in the new place.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
@@ -12,7 +11,11 @@ use crate::{
     agent::Agent,
     client::{agent::AgentSessionId, scope_tokens::ScopeToken},
     config::{modes::ModeName, permissions::PermissionsConfig},
-    daemon::approvals::{ApprovalRequest, release_decided_by},
+    daemon::{
+        approvals::{ApprovalRequest, release_decided_by},
+        spaces::records as spaces,
+    },
+    model::SpaceKind,
     sessions::Origin,
 };
 
@@ -58,8 +61,6 @@ pub(crate) enum Pending {
 /// The columns of a chat's row, which a conversion keeps as they are.
 const CHAT_COLUMNS: &[&str] = &[
     "id",
-    "repository_id",
-    "name",
     "agent",
     "started_at",
     "origin",
@@ -67,12 +68,13 @@ const CHAT_COLUMNS: &[&str] = &[
     "asks_in_chat",
     "scope_token",
     "workspace_id",
-    "number",
-    "mode",
     "root_dir",
-    "narrowing",
     "converted",
 ];
+
+/// The columns of the chat's space's row it keeps with them, which name
+/// what the chat's agent ran in.
+const SPACE_COLUMNS: &[&str] = &["repository_id", "name", "number", "mode", "narrowing"];
 
 /// A chat's row: its scope token, kept as one, and its other columns as a
 /// JSON object, with what restarting its agent reads from it, and the
@@ -115,6 +117,14 @@ impl ChatRow {
             serde_json::from_value(serde_json::Value::Object(self.columns.clone()))?;
         agent.scope_token = self.scope_token.clone();
         Ok(agent)
+    }
+
+    /// The mode the row's agent ran in.
+    fn mode(&self) -> Result<ModeName> {
+        let mode = self.columns.get("mode").cloned();
+        Ok(serde_json::from_value(
+            mode.context("a chat's row names its mode")?,
+        )?)
     }
 }
 
@@ -266,12 +276,18 @@ pub(crate) fn record_chat_conversion(
 }
 
 /// Replace the chat `id`, whose workspace row was just inserted under its
-/// ID, with that workspace, unless a stop saved the chat meanwhile: its
+/// ID, with that workspace, whose agent runs in `mode` with the permissions
+/// `narrowing` gives it, unless a stop saved the chat meanwhile: its
 /// questions, approval requests and unread messages become the workspace's,
 /// and its agent's scope token reaches the workspace until the agent
 /// restarts there.
 /// Returns the row the chat had.
-pub(crate) fn replace_chat(tx: &Transaction<'_>, id: &SpaceId) -> Result<ChatRow> {
+pub(crate) fn replace_chat(
+    tx: &Transaction<'_>,
+    id: &SpaceId,
+    mode: &ModeName,
+    narrowing: &PermissionsConfig,
+) -> Result<ChatRow> {
     anyhow::ensure!(
         crate::daemon::store::exists(
             tx,
@@ -296,6 +312,7 @@ pub(crate) fn replace_chat(tx: &Transaction<'_>, id: &SpaceId) -> Result<ChatRow
         [id],
     )?;
     forget_completion(tx, id)?;
+    spaces::convert(tx, id, SpaceKind::Workspace, mode, narrowing)?;
     tx.execute("DELETE FROM chats WHERE id=?1", [id])?;
     Ok(row)
 }
@@ -318,7 +335,7 @@ pub(crate) fn relocated_chat(
 /// that workspace's row: its completion, questions, approval requests and
 /// unread messages return to the chat.
 pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) -> Result<()> {
-    insert_chat_row(tx, row)?;
+    give_back_chat_row(tx, id, row)?;
     tx.execute(
         "UPDATE questions SET chat_id=workspace_id,workspace_id=NULL WHERE workspace_id=?1",
         [id],
@@ -367,10 +384,8 @@ pub(crate) fn replace_workspace(
     chat: &ConvertedChat,
 ) -> Result<Vec<ApprovalRequest>> {
     tx.execute(
-        "INSERT INTO chats(id,repository_id,name,agent,started_at,origin,session,scope_token,
-            number,mode,narrowing,converted)
-         SELECT id,repository_id,name,?2,unixepoch(),?3,?4,?5,number,?6,?7,1
-         FROM workspaces WHERE id=?1",
+        "INSERT INTO chats(id,agent,started_at,origin,session,scope_token,converted)
+         VALUES (?1,?2,unixepoch(),?3,?4,?5,1)",
         params![
             id,
             chat.agent,
@@ -379,10 +394,9 @@ pub(crate) fn replace_workspace(
                 .transpose()?,
             chat.session,
             crate::daemon::scope::new_token(),
-            chat.mode,
-            crate::daemon::store::narrowing_column(&chat.narrowing)?,
         ],
     )?;
+    spaces::convert(tx, id, SpaceKind::Chat, &chat.mode, &chat.narrowing)?;
     tx.execute(
         "UPDATE questions SET chat_id=workspace_id,workspace_id=NULL WHERE workspace_id=?1",
         [id],
@@ -417,15 +431,15 @@ fn forget_executions(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     Ok(())
 }
 
-/// The row of the chat `id`.
+/// The row of the chat `id`, with its space's.
 fn chat_row(db: &Connection, id: &SpaceId) -> Result<ChatRow> {
-    let pairs: Vec<String> = (CHAT_COLUMNS.iter())
+    let pairs: Vec<String> = (CHAT_COLUMNS.iter().chain(SPACE_COLUMNS))
         .map(|column| format!("'{column}',{column}"))
         .collect();
     let row: String = db
         .query_row(
             &format!(
-                "SELECT json_object({}) FROM chats WHERE id=?1",
+                "SELECT json_object({}) FROM spaces JOIN chats USING(id) WHERE id=?1",
                 pairs.join(",")
             ),
             [id],
@@ -449,8 +463,8 @@ fn chat_row(db: &Connection, id: &SpaceId) -> Result<ChatRow> {
     Ok(row)
 }
 
-/// Insert the chat `row` as it was.
-fn insert_chat_row(tx: &Transaction<'_>, row: &ChatRow) -> Result<()> {
+/// Make the space `id` the chat `row` again, as it was.
+fn give_back_chat_row(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) -> Result<()> {
     let values: Vec<String> = (CHAT_COLUMNS.iter())
         .map(|column| format!("json_extract(?1,'$.{column}')"))
         .collect();
@@ -462,7 +476,8 @@ fn insert_chat_row(tx: &Transaction<'_>, row: &ChatRow) -> Result<()> {
         ),
         [serde_json::to_string(row)?],
     )?;
-    Ok(())
+    let narrowing = row.agent()?.narrowing()?;
+    spaces::convert(tx, id, SpaceKind::Chat, &row.mode()?, &narrowing)
 }
 
 #[cfg(test)]

@@ -285,7 +285,7 @@ async fn marks_follow_links_outlast_commits_and_record_events() {
     manager
         .store
         .run(move |db| {
-            db.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
+            db.execute("DELETE FROM spaces WHERE id=?1", [id])?;
             Ok(())
         })
         .await

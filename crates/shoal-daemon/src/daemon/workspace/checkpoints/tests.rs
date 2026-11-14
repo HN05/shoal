@@ -434,7 +434,7 @@ async fn expiry_deletes_expired_and_unowned_checkpoints_and_adopts_removal_refs(
     manager
         .store
         .run(move |db| {
-            db.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
+            db.execute("DELETE FROM spaces WHERE id=?1", [id])?;
             Ok(())
         })
         .await

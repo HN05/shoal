@@ -170,10 +170,9 @@ fn keep_wrapper_restore(db: &Connection, restore: &Restore) -> Result<bool> {
 fn open_spaces(db: &Connection) -> Result<Vec<Target>> {
     Ok(db
         .prepare(
-            "SELECT id,repository_id,name FROM workspaces w WHERE state='ready' AND NOT EXISTS
-                (SELECT 1 FROM space_completion c WHERE c.space_id=w.id)
-             UNION ALL SELECT id,repository_id,name FROM chats h WHERE NOT EXISTS
-                (SELECT 1 FROM space_completion c WHERE c.space_id=h.id)",
+            "SELECT id,repository_id,name FROM spaces s LEFT JOIN workspaces w USING(id)
+             WHERE (s.kind='chat' OR w.state='ready') AND NOT EXISTS
+                (SELECT 1 FROM space_completion c WHERE c.space_id=s.id)",
         )?
         .query_map([], |row| {
             Ok(Target {
@@ -196,7 +195,7 @@ fn recorded_executions(db: &Connection) -> Result<HashSet<ExecutionId>> {
 /// Every space's ID.
 fn all_spaces(db: &Connection) -> Result<Vec<SpaceId>> {
     Ok(db
-        .prepare("SELECT id FROM workspaces UNION ALL SELECT id FROM chats")?
+        .prepare("SELECT id FROM spaces")?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }

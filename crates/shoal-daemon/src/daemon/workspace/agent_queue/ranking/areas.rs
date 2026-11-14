@@ -42,7 +42,10 @@ pub(super) fn labels(db: &Connection) -> Result<Labels> {
 /// Every workspace with the labels of its assigned issues and PRs.
 fn workspaces(db: &Connection) -> Result<Vec<Labelled<SpaceId>>> {
     let rows = db
-        .prepare("SELECT id,repository_id FROM workspaces ORDER BY number IS NULL,number,id")?
+        .prepare(
+            "SELECT id,repository_id FROM spaces WHERE kind='workspace'
+             ORDER BY number IS NULL,number,id",
+        )?
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
         .collect::<rusqlite::Result<Vec<(SpaceId, RepositoryId)>>>()?;
     (rows.into_iter())

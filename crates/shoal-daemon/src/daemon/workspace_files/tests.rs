@@ -302,11 +302,9 @@ async fn files_sent_with_messages_are_listed_until_they_expire() {
     let left = manager
         .store
         .run(|db| {
-            Ok(
-                db.query_row("SELECT COUNT(*) FROM workspace_files", [], |row| {
-                    row.get::<_, i64>(0)
-                })?,
-            )
+            Ok(db.query_row("SELECT COUNT(*) FROM space_files", [], |row| {
+                row.get::<_, i64>(0)
+            })?)
         })
         .await
         .unwrap();

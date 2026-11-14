@@ -128,7 +128,7 @@ async fn the_sweep_keeps_only_files_pending_proposals_attach() {
     // its files.
     manager
         .store
-        .run(|db| Ok(db.execute("DELETE FROM workspaces", [])?))
+        .run(|db| Ok(db.execute("DELETE FROM spaces WHERE kind='workspace'", [])?))
         .await
         .unwrap();
     manager.sweep_proposal_files().await.unwrap();

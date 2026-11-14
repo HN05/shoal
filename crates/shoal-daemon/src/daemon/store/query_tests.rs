@@ -24,6 +24,12 @@ fn execution_space(db: &Connection) -> &'static str {
     }
 }
 
+/// Whether a space's shared fields have their own table, as they do after
+/// the upgrade.
+fn has_spaces(db: &Connection) -> bool {
+    db.prepare("SELECT kind FROM spaces").is_ok()
+}
+
 fn add_owners(db: &Connection, start: i64, end: i64) -> Result<()> {
     for n in start..end {
         let owner = format!("owner-{n}");
@@ -31,11 +37,22 @@ fn add_owners(db: &Connection, start: i64, end: i64) -> Result<()> {
             "INSERT INTO repositories(id,path,source,last_used) VALUES (?1,?1,?1,0)",
             [&owner],
         )?;
-        db.execute(
-            "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-            VALUES (?1,?1,?1,?1,'main','ready')",
-            [&owner],
-        )?;
+        if has_spaces(db) {
+            db.execute(
+                "INSERT INTO spaces(id,kind,repository_id,name) VALUES (?1,'workspace',?1,?1)",
+                [&owner],
+            )?;
+            db.execute(
+                "INSERT INTO workspaces(id,path,branch,state) VALUES (?1,?1,'main','ready')",
+                [&owner],
+            )?;
+        } else {
+            db.execute(
+                "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+                VALUES (?1,?1,?1,?1,'main','ready')",
+                [&owner],
+            )?;
+        }
         // Insert in reverse name order to exercise the explicit list ordering.
         for name in ["z", "a"] {
             let id = format!("{owner}-{name}");
@@ -211,7 +228,7 @@ fn repository_workspace_reads_search_migrated_index() -> Result<()> {
     check_query_growth(
         &db,
         &format!("SELECT EXISTS({REPOSITORY_WORKSPACES_QUERY})"),
-        "workspaces",
+        "spaces",
         "repository_id",
         "missing",
     )?;
@@ -241,7 +258,12 @@ fn ownership_snapshot(db: &mut Connection) -> Result<Vec<Vec<Vec<rusqlite::types
             "executions" => &execution_columns,
             _ => "*",
         };
-        let mut statement = db.prepare(&format!("SELECT {columns} FROM {table} ORDER BY rowid"))?;
+        // A workspace's shared fields are its space's after the upgrade.
+        let source = match table {
+            "workspaces" if has_spaces(db) => "spaces JOIN workspaces USING(id) ORDER BY id",
+            _ => &format!("{table} ORDER BY rowid"),
+        };
+        let mut statement = db.prepare(&format!("SELECT {columns} FROM {source}"))?;
         let columns = statement.column_count();
         Ok(statement
             .query_map([], |row| (0..columns).map(|i| row.get(i)).collect())?
@@ -276,7 +298,7 @@ async fn v17_upgrade_and_reopen_preserve_ownership_leases_and_executions() -> Re
                 );
                 for (index, column) in [
                     ("executions_space", "space_id"),
-                    ("workspaces_repository", "repository_id"),
+                    ("spaces_repository", "repository_id"),
                 ] {
                     let columns = db
                         .prepare(&format!("PRAGMA index_info({index})"))?

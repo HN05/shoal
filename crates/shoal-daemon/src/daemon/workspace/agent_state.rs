@@ -702,9 +702,8 @@ fn stopped(db: &Connection, report: &Report) -> Result<bool> {
 /// checked against the chat before either would otherwise outlive it.
 fn takes_report(db: &Connection, id: &SpaceId) -> Result<bool> {
     Ok(db.query_row(
-        "SELECT EXISTS (SELECT 1 FROM workspaces WHERE id=?1)
-            OR EXISTS (SELECT 1 FROM chats WHERE id=?1
-                AND EXISTS (SELECT 1 FROM executions WHERE space_id=?1))",
+        "SELECT EXISTS (SELECT 1 FROM spaces WHERE id=?1 AND (kind='workspace'
+            OR EXISTS (SELECT 1 FROM executions WHERE space_id=?1)))",
         [id],
         |row| row.get(0),
     )?)

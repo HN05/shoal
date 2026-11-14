@@ -122,7 +122,7 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
     manager
         .store
         .run(move |db| {
-            db.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
+            db.execute("DELETE FROM spaces WHERE id=?1", [id])?;
             Ok(())
         })
         .await
@@ -539,7 +539,7 @@ async fn a_chat_stopped_or_removed_before_the_write_takes_no_report() {
     // removal, commit before it is written.
     for ended in [
         "DELETE FROM executions WHERE space_id=?1",
-        "DELETE FROM chats WHERE id=?1",
+        "DELETE FROM spaces WHERE id=?1",
     ] {
         let id = chat.id.clone();
         let saved = manager

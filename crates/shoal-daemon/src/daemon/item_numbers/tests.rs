@@ -4,10 +4,14 @@ use crate::client::space_ids::SpaceId;
 fn spaces(db: &Connection) -> Result<()> {
     db.execute_batch(
         "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-        INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES
-            ('first','repo','first','/first','first','ready');
-        INSERT INTO chats(id,repository_id,name,agent,started_at)
-            VALUES ('chat','repo','planning','claude',1);",
+        INSERT INTO spaces(id,kind,repository_id,name)
+            VALUES ('first','workspace','repo','first');
+        INSERT INTO workspaces(id,path,branch,state)
+            VALUES ('first','/first','first','ready');
+        INSERT INTO spaces(id,kind,repository_id,name,mode)
+            VALUES ('chat','chat','repo','planning','chat');
+        INSERT INTO chats(id,agent,started_at)
+            VALUES ('chat','claude',1);",
     )?;
     Ok(())
 }

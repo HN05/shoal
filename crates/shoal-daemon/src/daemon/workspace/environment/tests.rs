@@ -77,7 +77,7 @@ async fn exported_scopes_are_persistent_independent_and_untracked() {
     restored
         .store
         .run(move |db| {
-            db.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
+            db.execute("DELETE FROM spaces WHERE id=?1", [id])?;
             Ok(())
         })
         .await

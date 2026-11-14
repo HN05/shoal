@@ -1202,19 +1202,20 @@ async fn a_launch_a_space_queued_keeps_it_and_goes_with_it() {
     };
     let reached = manager.reachable_queue(Some(&sibling)).await.unwrap();
     assert!(reached.iter().all(|reached| reached.id != entry.id));
-    // Converting the space to a chat, which moves its row to the other
-    // table, keeps the launch; removing the space removes it.
+    // Converting the space to a chat, which swaps its kind's row, keeps
+    // the launch; removing the space removes it.
     let parent_id = parent.id.clone();
     manager
         .store
         .run(move |db| {
-            db.execute(
-                "INSERT INTO chats(id,repository_id,name,agent,started_at,number)
-                 SELECT id,repository_id,name,'claude',0,number
-                 FROM workspaces WHERE id=?1",
+            let tx = db.transaction()?;
+            tx.execute(
+                "INSERT INTO chats(id,agent,started_at) VALUES (?1,'claude',0)",
                 [&parent_id],
             )?;
-            db.execute("DELETE FROM workspaces WHERE id=?1", [&parent_id])?;
+            tx.execute("UPDATE spaces SET kind='chat' WHERE id=?1", [&parent_id])?;
+            tx.execute("DELETE FROM workspaces WHERE id=?1", [&parent_id])?;
+            tx.commit()?;
             Ok(())
         })
         .await
@@ -1224,7 +1225,7 @@ async fn a_launch_a_space_queued_keeps_it_and_goes_with_it() {
     manager
         .store
         .run(move |db| {
-            db.execute("DELETE FROM chats WHERE id=?1", [&parent_id])?;
+            db.execute("DELETE FROM spaces WHERE id=?1", [&parent_id])?;
             Ok(())
         })
         .await

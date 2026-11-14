@@ -52,7 +52,7 @@ async fn idle_workers<const N: usize>(
             .store
             .run(move |db| {
                 db.execute(
-                    "UPDATE workspaces SET mode=?2 WHERE id=?1",
+                    "UPDATE spaces SET mode=?2 WHERE id=?1",
                     rusqlite::params![id, ModeName::DEFAULT],
                 )?;
                 Ok(())
