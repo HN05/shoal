@@ -268,6 +268,7 @@ impl Launch {
             narrowing: launch.narrowing,
             parent: launch.parent.as_ref(),
             priority: launch.priority,
+            queue_entry: crate::env::queue_entry(),
         };
         crate::client::chats::start(&ctx.paths, launch.home(), new, place).await
     }
