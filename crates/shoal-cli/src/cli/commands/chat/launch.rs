@@ -235,7 +235,12 @@ impl Launch {
         let (repository, home) = (launch.repository.registered(), launch.home());
         agents::trust_chat(ctx, &launch.settings, &self.agent, repository, home).await;
         let chat = match admission::queued_chat(ctx).await? {
-            Some(chat) => chat,
+            Some(chat) => {
+                if let Some(origin) = current_origin().await {
+                    crate::client::chats::place(&ctx.paths, &chat, origin).await?;
+                }
+                chat
+            }
             None => {
                 let chat = self.record_new(ctx, current_origin().await).await?;
                 admission::attach_launch(ctx, &chat).await?;

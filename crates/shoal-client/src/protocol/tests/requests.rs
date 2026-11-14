@@ -130,6 +130,7 @@ const REQUESTS: &[&str] = &[
     r#"{"rename_chat":{"chat":"app-chat","name":"topic"}}"#,
     r#"{"check_chat_parent":{"repository":"app","workspace":"fix","parent":"7"}}"#,
     r#"{"chat_scope":{"chat":"chat-id"}}"#,
+    r#"{"place_chat":{"chat":"chat-id","origin":{"host":"tmux","place":"%3"}}}"#,
     r#""chat_root""#,
     // The agent queue.
     r#"{"queue_add":{"request":{"repository":"app","name":"fix","agent":"claude","issue_title":null,"plan":"{}","env":{},"now":false,"workspace":"fix","starts_in_caller":true,"blockers":[]}}}"#,

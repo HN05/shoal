@@ -204,3 +204,50 @@ async fn a_place_closes_with_the_workspace_its_record_names() -> Result<()> {
     );
     Ok(())
 }
+
+/// A chat recorded before its queued agent started takes the place Shoal
+/// opened for it once it runs there, so its removal closes that place, and
+/// keeps the first place it got.
+#[tokio::test]
+async fn a_queued_chat_takes_the_place_it_starts_in() -> Result<()> {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_string_lossy().into_owned().into(), None, None)
+        .await?;
+    let new = crate::daemon::chats::NewChat {
+        name: "talk".into(),
+        agent: "claude".into(),
+        mode: "chat".into(),
+        narrowing: Default::default(),
+        origin: None,
+        parent: None,
+        priority: None,
+    };
+    let chat = manager
+        .start_new_chat(Some((&repo.id).into()), None, new)
+        .await?;
+    let selector = SpaceSelector::id(&chat.id);
+    let opened = |place: &str| Origin {
+        owned: true,
+        ..Origin::created(HostName::Herdr, place.into())
+    };
+
+    manager.place_chat(&selector, opened("w1:p9")).await?;
+    manager.place_chat(&selector, opened("w1:p10")).await?;
+
+    let owners: Vec<(String, SpaceId)> = (manager.store)
+        .run(|db| {
+            let mut statement = db.prepare("SELECT place,space_id FROM owned_places")?;
+            let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+            Ok(rows.collect::<rusqlite::Result<_>>()?)
+        })
+        .await?;
+    assert_eq!(owners, [("w1:p9".to_owned(), chat.id.clone())]);
+    let origin = manager.chat(&selector).await?.origin;
+    assert_eq!(
+        origin.and_then(|origin| origin.place).as_deref(),
+        Some("w1:p9")
+    );
+    Ok(())
+}

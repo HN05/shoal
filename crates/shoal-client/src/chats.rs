@@ -98,6 +98,13 @@ pub async fn scope(daemon: &impl Daemon, chat: &Chat) -> Result<ScopeToken> {
     Ok(scope.token)
 }
 
+/// Record `origin` as the place `chat`, recorded before its queued agent
+/// started, runs in.
+pub async fn place(daemon: &impl Daemon, chat: &Chat, origin: Origin) -> Result<()> {
+    let chat = SpaceSelector::id(&chat.id);
+    request(daemon, ChatMethod::PlaceChat { chat, origin }).await
+}
+
 /// Rename `chat` to `name`.
 pub async fn rename(
     daemon: &impl Daemon,
