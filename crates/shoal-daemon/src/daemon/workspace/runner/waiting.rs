@@ -1,7 +1,8 @@
 //! The forge's waiting jobs as entries of the agent queue. Each poll adds
 //! the jobs a repository's runner may take, with the run each belongs to and
-//! the spaces that run links, and drops the entries of jobs the forge no
-//! longer lists as waiting, which another runner took or a cancel ended.
+//! the spaces that run links, drops the entries of jobs the forge no longer
+//! lists as waiting, which another runner took or a cancel ended, and passes
+//! over the jobs of PRs that moved on.
 use crate::client::queue::QueueEntryId;
 use crate::client::repository_ids::RepositoryId;
 use std::collections::HashSet;
@@ -62,8 +63,9 @@ impl Manager {
     }
 
     /// Queue the jobs `repository`'s forge lists as waiting for `labels`
-    /// that the runner has not queued, claimed or passed over, and drop the
-    /// entries of those it no longer lists.
+    /// that the runner has not queued, claimed or passed over, drop the
+    /// entries of those it no longer lists, and pass over the superseded
+    /// ones.
     async fn refresh_repository_jobs(
         &self,
         repository: &Repository,
@@ -93,7 +95,7 @@ impl Manager {
             let id = repository.id.clone();
             self.store.write(move |tx| queue_job(tx, &id, &job)).await?;
         }
-        Ok(())
+        self.pass_over_superseded_jobs(&repository.id, &forge).await
     }
 }
 

@@ -3431,7 +3431,8 @@ against an agent's as an agent's counts against a job's. With
 while it runs. Until a job is admitted, any other runner may take it. `queue
 start` admits a job regardless of the limits, and `queue cancel` passes it
 over, leaving it to other runners. A PR's job whose PR
-has a newer head when it is admitted is passed over too, and its run is
+has a newer head is passed over too, at the next poll of the forge's waiting
+jobs while it waits, whatever holds it back, or when it is admitted; its run is
 cancelled on the forge as the user unless it finished, so it no longer holds
 the PR's checks; a cancel that fails sends a `runner_failed` notification.
 

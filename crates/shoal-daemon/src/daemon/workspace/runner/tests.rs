@@ -548,7 +548,7 @@ async fn a_job_whose_checkout_fails_is_passed_over_and_its_workspace_removed() {
 }
 
 /// A workspace holding the one permit of the fixture's `builds` pool.
-async fn hold_the_builds_permit(fixture: &Fixture) -> crate::model::Workspace {
+pub(super) async fn hold_the_builds_permit(fixture: &Fixture) -> crate::model::Workspace {
     let manager = &fixture.manager;
     let other = manager
         .create_workspace(&fixture.repository, "other".into(), None, None, None)
