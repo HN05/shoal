@@ -4615,7 +4615,8 @@ must be waiting, or with `--pr`, or neither for the linked PR, every waiting run
 on the PR's head, failing when none waits. It uses your login, or the agent
 account for a scoped process, which approves as its space's
 [`ci_approve` permission](#permitted-actions) allows, and records an
-`item_changed` event. Only
+`item_changed` event. A proposed approval names the runs it approves, so a
+run that starts waiting later, as for a later push, asks again. Only
 GitHub approves through its API: Forgejo and Gitea approve in the web UI, so
 there the command fails before any request. `--json` returns the `approved`
 runs' URLs.

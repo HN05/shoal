@@ -308,11 +308,7 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
 
 #[tokio::test]
 async fn approving_ci_runs_follows_the_ci_approve_permission() {
-    use crate::{
-        client::space_names::SpaceSelector,
-        daemon::scope::Scoped,
-        protocol::{CiMethod, ItemContext},
-    };
+    use crate::{client::space_names::SpaceSelector, protocol::ItemContext};
 
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
@@ -325,13 +321,14 @@ async fn approving_ci_runs_follows_the_ci_approve_permission() {
         .unwrap();
     let master = chat(&manager, "master", "orchestrate", None, None).await;
     let worker = chat(&manager, "worker", "chat", Some(&repo), Some(&master.id)).await;
-    let mut approve = CiMethod::ApproveCiRuns {
-        context: ItemContext::Chat(SpaceSelector::id(&worker.id)),
-        run: Some("7".parse().unwrap()),
-        pr: None,
-    };
-    let request = undecided(approve.scope(&manager, &caller(&worker.id)).await.map(drop));
+    // It asks before it sends the forge anything, naming the run.
+    let context = ItemContext::Chat(SpaceSelector::id(&worker.id));
+    let asking = caller(&worker.id);
+    let run = Some("7".parse().unwrap());
+    let approving = manager.approve_ci_runs(&context, run, None, Some(&asking));
+    let request = undecided(approving.await.map(drop));
     assert_eq!(request.target, Target::Action(PermissionKey::CiApprove));
+    assert!(request.name.contains("/actions/runs/7"), "{}", request.name);
 }
 
 #[tokio::test]

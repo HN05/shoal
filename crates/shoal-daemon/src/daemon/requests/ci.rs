@@ -5,15 +5,11 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
-    permissions::Action,
     scope::{Caller, Scoped},
     workspace::Manager,
 };
 use crate::client::space_names::SpaceSelector;
-use crate::{
-    config::permissions::PermissionKey,
-    protocol::{Body, CiMethod, ItemContext},
-};
+use crate::protocol::{Body, CiMethod, ItemContext};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -87,18 +83,10 @@ impl Scoped for CiMethod {
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
-            // Approving runs is the `ci_approve` permission's.
-            CiMethod::ApproveCiRuns { context, run, pr } => {
-                let runs = match (run.as_ref(), pr.as_ref()) {
-                    (Some(run), _) => format!("CI run {run}"),
-                    (None, Some(pr)) => format!("the CI runs of PR {pr}"),
-                    (None, None) => "the CI runs of the space's PR".to_owned(),
-                };
-                let reached = super::items::reached_change_context(manager, caller, context);
-                let repository = reached.await?;
-                let action = Action::new(PermissionKey::CiApprove, format!("approve {runs}"))
-                    .in_repository(repository);
-                manager.authorize_action(Some(caller), action).await?;
+            // Approving runs asks for the `ci_approve` permission once it
+            // knows the runs it approves.
+            CiMethod::ApproveCiRuns { context, .. } => {
+                super::items::reached_change_context(manager, caller, context).await?;
                 Some(super::items::context_workspace(context)?)
             }
             // A chat without a repository acts in a registered checkout as

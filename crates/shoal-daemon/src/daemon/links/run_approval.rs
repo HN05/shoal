@@ -6,7 +6,8 @@ use anyhow::{Context, Result};
 
 use super::actions::Place;
 use crate::{
-    daemon::{events, scope::Caller, workspace::Manager},
+    config::permissions::PermissionKey,
+    daemon::{events, permissions::Action, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
         account::Account,
@@ -22,7 +23,9 @@ use crate::{
 
 impl Manager {
     /// Approve the run `run` names in the repository of `context`, otherwise
-    /// every waiting run on the head of the PR `pr` names or the linked PR.
+    /// every waiting run on the head of the PR `pr` names or the linked PR,
+    /// as the `ci_approve` permission of a scoped `caller` allows for the
+    /// runs it names.
     pub async fn approve_ci_runs(
         &self,
         context: &ItemContext,
@@ -41,6 +44,8 @@ impl Manager {
         let approved = match run {
             Some(input) => {
                 let run = ItemRef::in_repository(&forge, LinkKind::Ci, &input)?;
+                let approval = format!("approve CI run {run}");
+                self.authorize_approval(caller, &place, approval).await?;
                 let url = forge
                     .approve_run(&account, &run)
                     .await
@@ -48,19 +53,34 @@ impl Manager {
                 self.record_approval(workspace, LinkKind::Ci, &url).await?;
                 vec![url]
             }
-            None => self.approve_pr_runs(&place, &forge, &account, pr).await?,
+            None => (self.approve_pr_runs(&place, &forge, &account, pr, caller)).await?,
         };
         Ok(RunsApproved { approved })
     }
 
+    /// Let a scoped `caller` take `approval` of runs in `place`'s repository
+    /// as its `ci_approve` permission allows.
+    async fn authorize_approval(
+        &self,
+        caller: Option<&Caller>,
+        place: &Place,
+        approval: String,
+    ) -> Result<()> {
+        let action = Action::new(PermissionKey::CiApprove, approval)
+            .in_repository(place.repository_id().clone());
+        self.authorize_action(caller, action).await
+    }
+
     /// Approve each waiting run on the PR's head, stopping at the first that
-    /// fails.
+    /// fails. A scoped `caller`'s approval names those runs, so a run that
+    /// starts waiting after it, such as for a later push, asks again.
     async fn approve_pr_runs(
         &self,
         place: &Place,
         forge: &ForgeRepo,
         account: &Account,
         pr: Option<ItemInput>,
+        caller: Option<&Caller>,
     ) -> Result<Vec<String>> {
         let pull = (self.named_or_linked(pr, place.space_id(), forge, ItemKind::Pr)).await?;
         let (number, url) = (pull.pull()?, pull.to_string());
@@ -68,6 +88,9 @@ impl Manager {
             .pr_waiting_runs(account, number)
             .await
             .with_context(|| format!("could not approve the CI runs of {url}"))?;
+        let runs: Vec<String> = waiting.iter().map(|run| run.url.to_string()).collect();
+        let approval = format!("approve the CI runs of {url} waiting: {}", runs.join(", "));
+        self.authorize_approval(caller, place, approval).await?;
         let (approved, result) = forge.approve_runs(account, &waiting).await;
         if !approved.is_empty() {
             self.record_approval(place.workspace(), LinkKind::Pr, &url)

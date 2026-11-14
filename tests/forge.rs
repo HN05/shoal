@@ -4828,7 +4828,7 @@ fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
     assert_eq!(status["prs"][0]["waiting_runs"], waiting, "{status}");
     fixture.requests();
 
-    // Approving lets a contributor's code run, so it is the user's decision.
+    // Approving lets a contributor's code run, so a worker proposes it.
     let shoal = support::shoal_binary();
     let approve = ["ci", "approve", "--pr", "8"];
     let scoped = fixture.run(
@@ -4838,8 +4838,16 @@ fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
         ]
         .concat(),
     );
-    assert!(!scoped.status.success(), "{scoped:?}");
-    assert!(fixture.requests().is_empty());
+    // It reads which runs wait, which its approval request names, and
+    // approves none until a decision approves them.
+    assert_eq!(scoped.status.code(), Some(2), "{scoped:?}");
+    let requests = fixture.requests();
+    assert!(
+        (requests.iter()).all(|request| request[0]
+            .as_str()
+            .is_some_and(|line| line.starts_with("GET "))),
+        "{requests:?}"
+    );
 
     let approved = fixture.ok(&["ci", "approve", "--space", &fixture.id("topic")]);
     assert_eq!(approved, json!({"approved": [url(21)]}));
