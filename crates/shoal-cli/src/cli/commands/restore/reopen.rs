@@ -63,7 +63,10 @@ async fn reopen(ctx: &Context, removed: &RemovedSpace) -> Result<Reopened> {
 }
 
 /// Print the warnings of the chat `restored` and link its PRs again.
-async fn reopened_chat(ctx: &Context, restored: RestoredChat) -> Result<Reopened> {
+pub(in crate::cli::commands) async fn reopened_chat(
+    ctx: &Context,
+    restored: RestoredChat,
+) -> Result<Reopened> {
     let RestoredChat {
         chat,
         removed,
