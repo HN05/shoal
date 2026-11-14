@@ -17,6 +17,8 @@ shoal_states::states!(
         /// What a copy of another workspace started with, which keeps every
         /// unsaved file whatever the archive limit.
         Start => "start",
+        /// The state a refresh replaced with its source's files again.
+        Refresh => "refresh",
     }
 );
 

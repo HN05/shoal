@@ -155,6 +155,7 @@ fn cause_label(cause: CheckpointCause) -> &'static str {
         CheckpointCause::Restore => "before restore",
         CheckpointCause::Removal => "removal",
         CheckpointCause::Start => "start of copy",
+        CheckpointCause::Refresh => "before refresh",
     }
 }
 

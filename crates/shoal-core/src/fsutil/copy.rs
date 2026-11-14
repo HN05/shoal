@@ -174,6 +174,23 @@ fn clone_file(source: &Path, destination: &Path) -> io::Result<()> {
     }
 }
 
+/// Remove every child of the worktree directory `path` but its `.git`
+/// file.
+pub(crate) async fn clear_worktree(path: &Path) -> anyhow::Result<()> {
+    let path = path.to_owned();
+    off_runtime::run(move || {
+        for entry in fs::read_dir(&path)? {
+            let entry = entry?;
+            if entry.file_name() != ".git" {
+                let child = entry.path();
+                remove_existing(&child).with_context(|| format!("remove {}", child.display()))?;
+            }
+        }
+        Ok(())
+    })
+    .await
+}
+
 /// Give the existing directory `destination` each of `source`'s children
 /// except its `.git` file, cloned as [`clone_tree`] clones them, or copied
 /// where the filesystem cannot clone.

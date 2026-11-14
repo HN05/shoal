@@ -1,6 +1,6 @@
 //! Work of a workspace's own, which a refresh would lose, and the refusal
 //! that names it and what deals with it.
-use anyhow::{Result, ensure};
+use anyhow::{Result, bail};
 
 use crate::{git, model::Workspace};
 
@@ -15,6 +15,9 @@ pub(super) struct OwnWork<'a> {
     commits: String,
     /// The command that moves its commits, such as `git rebase main`.
     remedy: Option<String>,
+    /// For a copy, the command that makes a fresh one; the files it started
+    /// with are not its own work.
+    fresh_copy: Option<&'a str>,
 }
 
 impl<'a> OwnWork<'a> {
@@ -25,6 +28,7 @@ impl<'a> OwnWork<'a> {
             since: target,
             commits: format!("that {label} lacks"),
             remedy: Some(format!("git rebase {label}")),
+            fresh_copy: None,
         }
     }
 
@@ -35,6 +39,19 @@ impl<'a> OwnWork<'a> {
             since: start,
             commits: "after its starting commit".to_owned(),
             remedy: None,
+            fresh_copy: None,
+        }
+    }
+
+    /// A copy's: its commits after `head`, the HEAD it was copied at, and
+    /// files that differ from those it was copied with; `fresh` makes a
+    /// fresh copy.
+    pub(super) fn copy(head: &'a str, fresh: &'a str) -> Self {
+        Self {
+            since: head,
+            commits: "since it was copied".to_owned(),
+            remedy: None,
+            fresh_copy: Some(fresh),
         }
     }
 
@@ -45,16 +62,28 @@ impl<'a> OwnWork<'a> {
         if let Some(commits) = self.held_commits(workspace).await? {
             held.push(commits);
         }
-        if let Some(changes) = held_changes(workspace).await? {
+        if !self.only_starting_files(workspace).await?
+            && let Some(changes) = held_changes(workspace).await?
+        {
             held.push(changes);
         }
-        ensure!(
-            held.is_empty(),
-            "workspace {} holds work of its own, which refresh never carries over: {}",
+        if held.is_empty() {
+            return Ok(());
+        }
+        let fresh = (self.fresh_copy)
+            .map(|command| format!("; or make a fresh copy with {command}"))
+            .unwrap_or_default();
+        bail!(
+            "workspace {} holds work of its own, which refresh never carries over: {}{fresh}",
             workspace.name,
             held.join("; and ")
-        );
-        Ok(())
+        )
+    }
+
+    /// Whether `workspace` is a copy that holds only the files it was
+    /// copied with, as cleanup compares them.
+    async fn only_starting_files(&self, workspace: &Workspace) -> Result<bool> {
+        Ok(self.fresh_copy.is_some() && crate::removal::holds_starting_files(workspace).await?)
     }
 
     /// The commits of `workspace` after [`Self::since`], with what deals

@@ -1,14 +1,15 @@
 //! What a workspace was made from, and the commit that has now.
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use shoal_refs::CommitId;
 
-use super::super::Manager;
+use super::super::{Manager, copies::Source};
+use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::scope::Caller,
     forge::{PullRequest, items::reference::ItemInput, numbers::PullNumber},
     git::{self, default_branch::DefaultBranchLookup},
-    model::{MadeFor, Repository, Workspace},
+    model::{CopiedFrom, MadeFor, Repository, Workspace},
     protocol::{ItemContext, PullHead},
 };
 
@@ -27,6 +28,8 @@ pub(super) enum Target {
     /// The head of the PR a workspace at a commit was made for, as the
     /// forge reported it.
     PrHead(PullHead),
+    /// The live workspace a copy copied, whose files it takes again.
+    Copy(SpaceId),
     /// Something that never moves, such as a tag, by how a reader knows it.
     Fixed(String),
 }
@@ -36,6 +39,12 @@ pub(super) enum Found {
     /// What never moves, by how a reader knows it.
     Fixed(String),
     Moving(Move),
+    /// The live workspace a copy copied, as a copy starts from it, and the
+    /// command that makes a fresh copy of it.
+    Copy {
+        source: Box<Source>,
+        fresh: String,
+    },
 }
 
 /// The commit a refresh moves a workspace to, how Git or Shoal names what
@@ -61,6 +70,9 @@ impl Manager {
         workspace: &Workspace,
         caller: Option<&Caller>,
     ) -> Result<Target> {
+        if let Some(copied) = &workspace.copied_from {
+            return self.copy_target(workspace, copied).await;
+        }
         let repo = self.repository(&workspace.repository_id).await?;
         match (&workspace.branch, &workspace.at) {
             (Some(branch), _) => branch_target(&repo, workspace, branch).await,
@@ -72,7 +84,27 @@ impl Manager {
                     at.commit.abbreviated(7)
                 ))),
             },
-            (None, None) => anyhow::bail!("workspace {} records no start", workspace.name),
+            (None, None) => bail!("workspace {} records no start", workspace.name),
+        }
+    }
+
+    /// What the copy `workspace` refreshes to: the live workspace it
+    /// `copied`, while a copy of a checkpoint never moves.
+    async fn copy_target(&self, workspace: &Workspace, copied: &CopiedFrom) -> Result<Target> {
+        match (copied.checkpoint, &copied.workspace) {
+            (Some(number), Some(source)) => Ok(Target::Fixed(format!(
+                "checkpoint {number} of {}",
+                source.name
+            ))),
+            (Some(number), None) => Ok(Target::Fixed(format!("checkpoint {number}"))),
+            (None, Some(source)) => Ok(Target::Copy(source.id.clone())),
+            (None, None) => match self.removed_source_name(&workspace.id).await? {
+                Some(name) => bail!("source {name} was removed; nothing to refresh from"),
+                None => bail!(
+                    "the source of {} was removed; nothing to refresh from",
+                    workspace.name
+                ),
+            },
         }
     }
 
@@ -95,6 +127,14 @@ impl Manager {
     pub(super) async fn find_target(&self, repo: &Repository, target: Target) -> Result<Found> {
         let (commit, label, how) = match target {
             Target::Fixed(what) => return Ok(Found::Fixed(what)),
+            Target::Copy(id) => {
+                let fresh = format!(
+                    "shoal start --copy {}",
+                    self.workspace_by_id(&id).await?.number
+                );
+                let source = Box::new(self.live_copy_source(&id).await?);
+                return Ok(Found::Copy { source, fresh });
+            }
             Target::Upstream { remote, reference } => {
                 let commit = git::fetch::reference(&repo.path, &remote, &reference).await?;
                 let branch = git::strip_local(&reference).unwrap_or(&reference);
@@ -167,7 +207,7 @@ fn pull_head(pull: PullRequest) -> Result<PullHead> {
     let reference = match pull.head_ref {
         Some(reference) => reference,
         None if !pull.fork => git::local_ref(&pull.head),
-        None => anyhow::bail!(
+        None => bail!(
             "PR #{} comes from a fork, and its forge serves no ref for a fork's head",
             pull.number
         ),

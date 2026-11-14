@@ -3,7 +3,7 @@
 //! of its own is refused, never carried over.
 use anyhow::{Context, Result, bail, ensure};
 
-use super::Manager;
+use super::{Manager, copies::Source};
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -72,11 +72,17 @@ impl Manager {
         self.ensure_refreshable(workspace, state, own).await?;
         let path = &workspace.path;
         let from = git::resolve_commit(path, "HEAD", git::run_isolated).await?;
-        let (target, up_to_date) = match self.find_target(repo, target).await? {
-            Found::Fixed(what) => (what, true),
+        let (target, up_to_date, setup) = match self.find_target(repo, target).await? {
+            Found::Fixed(what) => (what, true, false),
             Found::Moving(moving) => {
                 let moved = self.move_to_target(workspace, &moving).await?;
-                (moving.label, !moved)
+                (moving.label, !moved, false)
+            }
+            Found::Copy { source, fresh } => {
+                let copied = self.copy_source_again(workspace, &source, &fresh).await?;
+                // The source's ignored files replaced what its setup wrote.
+                let setup = copied && !workspace.setup_skipped;
+                (format!("workspace {}", source.name()), !copied, setup)
             }
         };
         Ok(Refreshed {
@@ -85,7 +91,7 @@ impl Manager {
             to: git::resolve_commit(path, "HEAD", git::run_isolated).await?,
             from,
             up_to_date,
-            setup: false,
+            setup,
         })
     }
 
@@ -111,6 +117,26 @@ impl Manager {
             workspace.name
         );
         Ok(())
+    }
+
+    /// Copy `source`'s files into the copy `workspace` again unless it has
+    /// what the copy started with, returning whether it did; work of the
+    /// copy's own refuses it, naming `fresh`, which makes a fresh copy.
+    async fn copy_source_again(
+        &self,
+        workspace: &Workspace,
+        source: &Source,
+        fresh: &str,
+    ) -> Result<bool> {
+        let copied = (workspace.copied_from.as_ref()).context("workspace is no copy")?;
+        if self.source_unchanged(source, copied).await? {
+            return Ok(false);
+        }
+        OwnWork::copy(copied.head.as_str(), fresh)
+            .refuse(workspace)
+            .await?;
+        self.copy_again(workspace, source).await?;
+        Ok(true)
     }
 
     /// Move `workspace` as `moving` says unless it already has its commit,

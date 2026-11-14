@@ -43,6 +43,17 @@ pub async fn fill(source: &Path, copy: &Path, head: &CommitId) -> Result<()> {
     crate::fsutil::copy::clone_worktree(source, copy).await
 }
 
+/// Give the existing worktree at `copy` the HEAD `head` of the worktree at
+/// `source`, moving its branch there when it is on one, then its index,
+/// worktree config and files in place of its own, as [`fill`] gives a new
+/// one; its `.git` file stays. Its own files are gone, so the caller keeps
+/// what it needs of them first.
+pub async fn refill(source: &Path, copy: &Path, head: &CommitId) -> Result<()> {
+    super::run_isolated(copy, &["reset", "--quiet", "--soft", head.as_str(), "--"]).await?;
+    crate::fsutil::copy::clear_worktree(copy).await?;
+    fill(source, copy, head).await
+}
+
 /// The paths in the worktree whose Git metadata lives elsewhere, which a
 /// copy would share, so Git in the copy would change them: checked-out
 /// submodules, and worktrees or submodules inside ignored directories.

@@ -35,7 +35,7 @@ pub(crate) enum CopyPlace {
 
 /// What a copy starts from, resolved from its request: a live or removed
 /// workspace's HEAD, diff base and files.
-struct Source {
+pub(super) struct Source {
     workspace_id: SpaceId,
     repository_id: RepositoryId,
     name: String,
@@ -60,6 +60,11 @@ enum SourceFiles {
 }
 
 impl Source {
+    /// The name of the workspace copied.
+    pub(super) fn name(&self) -> &str {
+        &self.name
+    }
+
     /// The branch a copy takes when none is given: the copied branch's, or
     /// for a workspace at a commit its short HEAD, with `-copy` added;
     /// nothing is built from the copied workspace's name.
@@ -81,6 +86,64 @@ impl Source {
 }
 
 impl Manager {
+    /// The current files of the live workspace `id`, as a copy starts from
+    /// them.
+    pub(super) async fn live_copy_source(&self, id: &SpaceId) -> Result<Source> {
+        self.files_source(self.workspace_by_id(id).await?).await
+    }
+
+    /// Whether `source` still has the HEAD, index and unsaved files the copy
+    /// `copied` started with.
+    pub(super) async fn source_unchanged(
+        &self,
+        source: &Source,
+        copied: &CopiedFrom,
+    ) -> Result<bool> {
+        let SourceFiles::Worktree(path) = &source.files else {
+            return Ok(false);
+        };
+        if source.head != copied.head || git::checkpoint::index_tree(path).await? != copied.index {
+            return Ok(false);
+        }
+        let message = format!("Shoal comparison of {} with its copy", source.name);
+        let now = git::checkpoint::snapshot(path, &message, true).await?;
+        git::checkpoint::same_files(path, copied.commit.as_str(), now.commit.as_str()).await
+    }
+
+    /// Copy the live `source`'s files into the reserved copy `workspace`
+    /// again, in place, at the source's HEAD, after a checkpoint keeps what
+    /// it holds, and record what it now started with. Its branch, if it has
+    /// one, moves to that HEAD.
+    pub(super) async fn copy_again(&self, workspace: &Workspace, source: &Source) -> Result<()> {
+        let SourceFiles::Worktree(path) = &source.files else {
+            anyhow::bail!("only a live workspace's files are copied again");
+        };
+        self.checkpoint(workspace, CheckpointCause::Refresh, None)
+            .await?;
+        git::copy::refill(path, &workspace.path, &source.head).await?;
+        self.record_copy_start(workspace, source, Ok(false)).await?;
+        Ok(())
+    }
+
+    /// The name of the removed workspace the copy `id` was made from, while
+    /// its removal record lasts.
+    pub(super) async fn removed_source_name(&self, id: &SpaceId) -> Result<Option<String>> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                Ok(db
+                    .query_row(
+                        "SELECT removed.name FROM workspaces copy
+                         JOIN removed_workspaces removed ON removed.workspace_id=copy.copied_from
+                         WHERE copy.id=?1",
+                        [id],
+                        |row| row.get(0),
+                    )
+                    .optional()?)
+            })
+            .await
+    }
+
     /// Create a copy of `source` in `repository` where `place` says, below
     /// the space `new` names, and take its starting checkpoint. It runs
     /// setup like any workspace unless the caller skips it.
@@ -381,7 +444,8 @@ impl Manager {
     }
 
     /// Record what the copy `id` was made from, its starting checkpoint and
-    /// the tree of the index it started with.
+    /// the tree of the index it started with, and for a copy at a commit the
+    /// source's HEAD as its starting commit.
     async fn record_copied_from(
         &self,
         id: &SpaceId,
@@ -390,13 +454,14 @@ impl Manager {
         index: String,
     ) -> Result<()> {
         let (id, source_id) = (id.to_owned(), source.workspace_id.clone());
-        let checkpoint = source.checkpoint();
+        let (checkpoint, head) = (source.checkpoint(), source.head.clone());
         self.store
             .run(move |db| {
                 db.execute(
                     "UPDATE workspaces SET copied_from=?2,copied_from_checkpoint=?3,
-                        starting_checkpoint=?4,starting_index=?5 WHERE id=?1",
-                    params![id, source_id, checkpoint, starting, index],
+                        starting_checkpoint=?4,starting_index=?5,
+                        start_commit=iif(start_commit IS NULL, NULL, ?6) WHERE id=?1",
+                    params![id, source_id, checkpoint, starting, index, head],
                 )?;
                 Ok(())
             })
