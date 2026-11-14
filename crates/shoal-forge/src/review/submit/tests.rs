@@ -148,3 +148,37 @@ async fn submissions_to_one_pr_take_turns_and_leave_no_lock_behind() {
     assert!(!submitting.contains_key(url));
     assert!(!submitting.contains_key(&format!("{url}0")));
 }
+
+#[tokio::test]
+async fn a_verdict_is_refused_to_the_account_that_opened_the_pr() {
+    use crate::{backends::ForgeKind, test_support::Server};
+
+    let server = Server::start(|request| {
+        let body = match request.line.split_whitespace().nth(1) {
+            Some("/api/v1/user") => serde_json::json!({"login": "Agent"}),
+            Some("/api/v1/repos/team/repo/pulls/7") => serde_json::json!({
+                "number": 7, "title": "Fix", "state": "open", "user": {"login": "agent"},
+                "head": {"ref": "topic", "sha": "a".repeat(40)}, "base": {"ref": "main"},
+            }),
+            _ => serde_json::json!({
+                "number": 8, "title": "Fix", "state": "open", "user": {"login": "someone"},
+                "head": {"ref": "topic", "sha": "b".repeat(40)}, "base": {"ref": "main"},
+            }),
+        };
+        (200, Vec::new(), body.to_string().into())
+    });
+    let repo = crate::test_support::repo_on(&server, ForgeKind::Forgejo, "team/repo");
+    let account = crate::test_support::agent_on(&server, "agent");
+    let own = repo.verdict_head(&account, PullNumber::new(7));
+    let error = own.await.unwrap_err();
+    assert_eq!(error.downcast_ref::<OwnPull>().unwrap().login, "Agent");
+    let other = repo.verdict_head(&account, PullNumber::new(8));
+    assert_eq!(other.await.unwrap().unwrap().as_str(), "b".repeat(40));
+
+    // An account without a login for the host is refused before any request.
+    let received = server.received().len();
+    let anonymous = Account::default();
+    let missing = repo.verdict_head(&anonymous, PullNumber::new(8));
+    assert!(missing.await.is_err());
+    assert_eq!(server.received().len(), received);
+}
