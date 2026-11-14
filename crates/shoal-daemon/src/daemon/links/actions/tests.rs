@@ -244,6 +244,7 @@ fn a_scoped_verdict_is_the_space_s_own_post_and_the_user_s_is_not() {
         space_id: "space".into(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     assert_eq!(own_posts(&approval, Some(&scoped), posted()), posted());
     assert!(own_posts(&approval, None, posted()).is_empty());

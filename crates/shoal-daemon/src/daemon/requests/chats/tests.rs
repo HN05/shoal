@@ -30,6 +30,7 @@ async fn a_chat_recorded_for_a_scoped_launch_goes_below_its_queuer() {
         space_id: queuer.id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     let launch = ChatQueueRequest {
         repository: Some((&repo.id).into()),
@@ -75,6 +76,7 @@ async fn a_scoped_chat_start_now_asks_the_limits_permission() {
         space_id: starter.id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
     let limits = |result: Result<()>| match result.unwrap_err().downcast::<Undecided>() {
         Ok(Undecided(request)) => request.target,
@@ -126,6 +128,7 @@ async fn a_scoped_chat_start_now_elsewhere_is_refused_without_asking() {
         space_id: starter.id.clone(),
         execution: None,
         granted: None,
+        read_only: false,
     };
 
     let mut launch = ChatMethod::LaunchChat {
