@@ -73,8 +73,20 @@ def validate(commit):
     """Accept a release tree on *commit*; return the main commit whose CI vouches for it."""
     tested = tested_commit(commit)
     await_passed_ci(tested)
+    check_only_versions_changed(tested)
     check_versions_build()
     return tested
+
+
+def check_only_versions_changed(tested):
+    """Refuse a checkout that differs from *tested* in more than a version bump."""
+    manifest, lock = (ROOT / "Cargo.toml").read_text(), (ROOT / "Cargo.lock").read_text()
+    changed = set(git("diff", "--name-only", tested).splitlines())
+    bumped = bump(run("git", "show", f"{tested}:Cargo.toml", capture=True),
+                  run("git", "show", f"{tested}:Cargo.lock", capture=True),
+                  versions(manifest, lock), set())[1:]
+    if not changed <= {"Cargo.toml", "Cargo.lock"} or bumped != (manifest, lock):
+        raise ValueError(f"the release changes more than the versions of main commit {tested}")
 
 
 def check_versions_build():

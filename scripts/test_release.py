@@ -189,6 +189,29 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(release.tested_commit("r" * 40), "m" * 40)
             self.assertEqual(release.tested_commit("m" * 40), "m" * 40)
 
+    def test_validation_accepts_only_a_version_bump_of_the_tested_commit(self):
+        _, manifest, lock = release.bump(self.manifest, self.lock, "0.2.0", set())
+        cases = {
+            "bump": (manifest, lock, "Cargo.toml\nCargo.lock", True),
+            "other file": (manifest, lock, "Cargo.toml\nCargo.lock\nsrc/main.rs", False),
+            "other manifest change": (manifest + "\n[profile.dev]\ndebug = 0\n", lock,
+                                      "Cargo.toml\nCargo.lock", False),
+        }
+        for case, (manifest_now, lock_now, changed, accepted) in cases.items():
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as root, \
+                    patch.object(release, "ROOT", Path(root)), \
+                    patch.object(release, "git", return_value=changed), \
+                    patch.object(release, "run", side_effect=lambda *args, **_: {
+                        "m" * 40 + ":Cargo.toml": self.manifest,
+                        "m" * 40 + ":Cargo.lock": self.lock}[args[2]]):
+                (Path(root) / "Cargo.toml").write_text(manifest_now)
+                (Path(root) / "Cargo.lock").write_text(lock_now)
+                if accepted:
+                    release.check_only_versions_changed("m" * 40)
+                else:
+                    with self.assertRaisesRegex(ValueError, "m" * 40):
+                        release.check_only_versions_changed("m" * 40)
+
     @staticmethod
     def statuses(**states):
         contexts = {"rust": release.REQUIRED_CHECKS[0], "musl": release.REQUIRED_CHECKS[1],
@@ -201,9 +224,11 @@ class ReleaseTests(unittest.TestCase):
                 patch.object(release, "tested_commit", return_value="m" * 40), \
                 patch.object(release, "forge",
                              return_value=self.statuses(rust="success", musl="success")) as forge, \
+                patch.object(release, "check_only_versions_changed") as versions_only, \
                 patch.object(release, "run") as run:
             self.assertEqual(release.validate("r" * 40), "m" * 40)
         forge.assert_called_once_with(f"/repos/HN05/shoal/commits/{'m' * 40}/status")
+        versions_only.assert_called_once_with("m" * 40)
         self.assertEqual([c.args[1:3] for c in run.call_args_list],
                          [("fmt", "--all"), ("CARGO_BUILD_WARNINGS=deny", "cargo")])
 
