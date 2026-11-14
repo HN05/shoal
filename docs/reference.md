@@ -1192,8 +1192,9 @@ agent running. An agent Happy runs leaves the call at once anyway, so a
 caller outside Shoal launches it as before; the new workspace's own settings
 decide, once it is set up. `start --here` and `contribute --here` run the agent in
 place, returning its exit code, and for callers outside Shoal so does `restore --focus`.
-A scoped caller's `--here` waits for a slot rather than skipping the limits, and
-its agent is its own space's, with that space's scope: the caller's stops leave it running. A launch that would start a zmx session refuses the agent when zmx is missing,
+A scoped caller's `--here` runs the agent here only when a slot is free: with
+none, it queues the agent and returns, as a detached start does, rather than
+skipping the limits. Its agent is its own space's, with that space's scope: the caller's stops leave it running. A launch that would start a zmx session refuses the agent when zmx is missing,
 as a missing agent executable does, or older than 1.0.1. A zmx reaches only
 sessions a zmx of its own version started: before upgrading from 0.8 or
 earlier, stop the agents in zmx sessions with `shoal stop`, and resume them

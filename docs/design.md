@@ -1564,8 +1564,10 @@ its settings, and queues it itself rather than in the start request.
 `start --here` keeps the in-place launch, for a script that waits on the agent's
 exit code and for a scoped caller, such as a master session's terminal, that runs
 an agent there; `restore --focus` keeps it for callers outside Shoal. A scoped
-caller's `--here` waits for a slot, since only the user's terminal starts agents
-beyond the limits, and holds its own launch's entry as the user's does. Its
+caller's `--here` takes a free slot and holds its own launch's entry as the
+user's does; with none free it queues and returns, as a detached start does,
+rather than holding the terminal, since only the user's terminal starts agents
+beyond the limits. Its
 agent's execution is its own space's, with that space's scope: an agent's wrapper,
 and what it started, never count among the processes of another execution that
 started it, so the caller's stops leave the agent running. zmx reports no exit status, so a session launch
