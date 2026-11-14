@@ -7,7 +7,7 @@ use crate::{
         scope::ScopedExecution,
         test_support::{commit, git, manager, repository},
     },
-    protocol::WorkspaceMethod,
+    protocol::{CommitStart, WorkspaceMethod},
 };
 
 struct Fixture {
@@ -228,6 +228,123 @@ async fn a_chat_has_nothing_to_refresh() {
         .await
         .unwrap_err();
     assert!(refused.to_string().contains("a chat"), "{refused}");
+}
+
+#[tokio::test]
+async fn a_workspace_made_for_a_branch_moves_to_its_tip_and_one_at_a_tag_stays() {
+    let f = Fixture::new().await;
+    git(&f.repo.path, &["tag", "v1"]);
+    git(&f.repo.path, &["branch", "topic"]);
+    let at = async |revision: &str| {
+        let start = CommitStart::Revision(Some(revision.into()));
+        (f.manager)
+            .create_commit_workspace((&f.repo.id).into(), None, start, Default::default())
+            .await
+            .unwrap()
+    };
+    let tagged = at("v1").await;
+    let topic = at("topic").await;
+    let advance_topic = |name: &str| {
+        git(&f.repo.path, &["switch", "-q", "topic"]);
+        let tip = add_commit(&f.repo.path, name);
+        git(&f.repo.path, &["switch", "-q", "main"]);
+        tip
+    };
+    let tip = advance_topic("tip");
+
+    let refreshed = f.refresh(&topic).await.unwrap();
+    assert_eq!(
+        (refreshed.target.as_str(), refreshed.to.as_str()),
+        ("topic", tip.as_str())
+    );
+    assert_eq!(refreshed.workspace.at.unwrap().commit, tip);
+    assert_eq!(head(&topic.path), tip);
+    let tag = f.refresh(&tagged).await.unwrap();
+    assert_eq!((tag.target.as_str(), tag.up_to_date), ("tag v1", true));
+
+    let own = add_commit(&topic.path, "own");
+    advance_topic("later");
+    let refused = f.refresh(&topic).await.unwrap_err().to_string();
+    assert!(refused.contains("after its starting commit"), "{refused}");
+    assert_eq!(head(&topic.path), own);
+}
+
+#[tokio::test]
+async fn a_prs_workspace_at_a_commit_moves_to_the_head_its_forge_reports() {
+    let (f, origin) = Fixture::cloned().await;
+    let served = Arc::new(std::sync::Mutex::new(String::new()));
+    let server = forge_of(&origin, served.clone());
+    let host = &server.host;
+    crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::Forgejo);
+    crate::daemon::test_support::configure(
+        &f.manager,
+        &format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n"),
+    )
+    .await;
+    let url = format!("http://{host}/team/repo");
+    git(&f.repo.path, &["remote", "set-url", "origin", &url]);
+    let push_head = |name: &str| {
+        let head = add_commit(&origin, name);
+        git(&origin, &["update-ref", "refs/pull/9/head", &head]);
+        git(&origin, &["update-server-info"]);
+        *served.lock().unwrap() = head.clone();
+        head
+    };
+    let first = push_head("first");
+    let opened = (f.manager)
+        .open_pull_head(
+            (&f.repo.id).into(),
+            format!("{url}/pulls/9").parse().unwrap(),
+            crate::protocol::PullHead {
+                number: crate::forge::numbers::PullNumber::new(9),
+                reference: "refs/pull/9/head".into(),
+                commit: first.into(),
+                base: None,
+            },
+            None,
+            Default::default(),
+            None,
+        )
+        .await
+        .unwrap();
+    let second = push_head("second");
+
+    let refreshed = f.refresh(&opened.workspace).await.unwrap();
+    assert_eq!(
+        (refreshed.target.as_str(), refreshed.to.as_str()),
+        ("PR #9's head", second.as_str())
+    );
+    assert_eq!(refreshed.workspace.at.unwrap().commit, second);
+    assert_eq!(head(&opened.workspace.path), second);
+}
+
+/// A Forgejo forge whose PR 9 has its head at the commit `head` holds, and
+/// which serves the repository `origin` as `team/repo` over Git's dumb HTTP
+/// protocol, from what `git update-server-info` last listed.
+fn forge_of(
+    origin: &Path,
+    head: Arc<std::sync::Mutex<String>>,
+) -> crate::forge::test_support::Server {
+    let git_dir = origin.join(".git");
+    crate::forge::test_support::Server::start(move |request| {
+        let path = request.line.split(' ').nth(1).unwrap_or_default();
+        let path = path.split('?').next().unwrap_or_default();
+        if path == "/api/v1/repos/team/repo/pulls/9" {
+            let pull = serde_json::json!({
+                "number": 9, "title": "Fix", "state": "open", "merged": false,
+                "draft": false, "head": {"ref": "topic", "sha": *head.lock().unwrap()},
+                "base": {"ref": "main"}, "labels": [],
+            });
+            return (200, Vec::new(), pull.to_string().into());
+        }
+        let file = path
+            .strip_prefix("/team/repo/")
+            .map(|file| git_dir.join(file));
+        match file.and_then(|file| fs::read(file).ok()) {
+            Some(bytes) => (200, Vec::new(), bytes),
+            None => (404, Vec::new(), Vec::new()),
+        }
+    })
 }
 
 /// The scoped execution `execution` of the space `space`.

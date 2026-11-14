@@ -24,8 +24,8 @@ use tokio::sync::OwnedMutexGuard;
 
 /// The commit a workspace at a commit starts at, what it was made for, and
 /// the directory and name it derives from them.
-struct Start {
-    at: StartingCommit,
+pub(super) struct Start {
+    pub(super) at: StartingCommit,
     directory: String,
     name: SpaceName,
     /// The ref its diff compares with; none compares with `at`.
@@ -451,7 +451,11 @@ impl Manager {
     /// Resolve a revision as a branch workspace's `--base` resolves, fetching
     /// a remote branch it names; a tag or commit that does not resolve makes
     /// `origin` fetch with its tags once before trying again.
-    async fn resolve_revision(&self, repo: &Repository, base: Option<&str>) -> Result<Start> {
+    pub(super) async fn resolve_revision(
+        &self,
+        repo: &Repository,
+        base: Option<&str>,
+    ) -> Result<Start> {
         let revision = self.new_branch_base(repo, base).await?;
         let commit = match git::resolve_commit(&repo.path, &revision, git::run_isolated).await {
             Ok(commit) => commit,
@@ -516,7 +520,7 @@ async fn fetch_job_commit(
 
 /// A PR's `head`, fetched from `origin` and checked to be the commit the
 /// forge reported.
-async fn pull_head(repo: &Repository, head: &PullHead) -> Result<Start> {
+pub(super) async fn pull_head(repo: &Repository, head: &PullHead) -> Result<Start> {
     let fetched = git::fetch::reference(&repo.path, "origin", &head.reference).await?;
     anyhow::ensure!(
         fetched == head.commit,
