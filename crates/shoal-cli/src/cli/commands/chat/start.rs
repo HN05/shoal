@@ -118,6 +118,7 @@ async fn start_resolved(ctx: &Context, resolved: ChatStart) -> Result<i32> {
     } = resolved;
     let mode = mode.context("the daemon names the chat's mode")?;
     let options = Options {
+        now: false,
         agent,
         place: ChatPlace::Here,
         name,

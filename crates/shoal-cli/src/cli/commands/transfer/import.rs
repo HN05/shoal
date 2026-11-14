@@ -258,6 +258,7 @@ impl Package {
             .iter()
             .find_map(|last| last.session.clone());
         Ok(chat::Options {
+            now: false,
             priority: None,
             narrowing: chat::Narrowing::Recorded(packaged.narrowing),
             agent: Some(packaged.agent.name().parse()?),

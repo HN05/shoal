@@ -22,6 +22,7 @@ fn repository() -> Repository {
 /// Options of a new chat that runs detached, with the task `args`.
 fn options() -> Options {
     Options {
+        now: false,
         agent: Some("claude".into()),
         place: ChatPlace::Detached,
         name: None,
