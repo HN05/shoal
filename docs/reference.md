@@ -4032,9 +4032,6 @@ while the worktree exists, as open questions, pending PR proposals and push requ
 conditions. Idle cleanup restarts its
 timer after release. Removal releases holds, a parent's removal those below it too;
 a hold never keeps the workspace's parent.
-Upgrading turns a `shoal continue` from earlier versions into a hold named
-`continue` with the reason “Converted from an earlier Shoal version”, which the
-next explicit `done` releases.
 
 Reacquiring a name returns the original hold, including its reason. Acquisition
 requires a ready, verified worktree and is excluded while a resource hook runs.

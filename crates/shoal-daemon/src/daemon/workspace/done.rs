@@ -165,17 +165,11 @@ impl Manager {
                 let progressed =
                     progress::record_status(tx, &id, completion.summary.as_deref(), now)?
                         | progress::remove_blockers(tx, &id, now)?;
-                // Like the continuation it replaced, a hold made from one by
-                // migration 31 ends at the next explicit done.
-                let released = tx.execute(
-                    "DELETE FROM workspace_holds WHERE workspace_id=?1 AND from_continuation",
-                    [&id],
-                )?;
                 let closed = questions::close_open(tx, &id)?;
                 // A finished assignment leaves its failed turn alone.
                 super::turn_retry::cancel(tx, &id)?;
                 Ok(Persisted {
-                    changed: replaced || released > 0 || !closed.is_empty() || progressed,
+                    changed: replaced || !closed.is_empty() || progressed,
                     closed,
                     progressed,
                 })

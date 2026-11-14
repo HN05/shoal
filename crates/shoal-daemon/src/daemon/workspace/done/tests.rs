@@ -577,40 +577,6 @@ async fn undone_withdraws_completion_without_blocking_cleanup() {
 }
 
 #[tokio::test]
-async fn explicit_done_releases_only_the_hold_migrated_from_continuation() {
-    let (_root, manager, workspace) = fixture().await;
-    let id = workspace.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            // A user hold with the same name and reason is not the migrated one.
-            db.execute(
-                "INSERT INTO workspace_holds(workspace_id,name,reason,created_at,from_continuation)
-                 VALUES (?1,'continue','Converted from an earlier Shoal version',1,1),
-                        (?1,'thread','Converted from an earlier Shoal version',1,0)",
-                [id],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    let names = || async {
-        let holds = manager.workspace_by_id(&workspace.id).await.unwrap().holds;
-        holds.into_iter().map(|hold| hold.name).collect::<Vec<_>>()
-    };
-    assert_eq!(names().await, ["continue", "thread"]);
-    manager
-        .mark_done(
-            &SpaceSelector::id(&workspace.id),
-            Done::default(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    assert_eq!(names().await, ["thread"]);
-}
-
-#[tokio::test]
 async fn undone_keeps_an_unreadable_completion() {
     let (_root, manager, workspace) = fixture().await;
     let id = workspace.id.clone();
