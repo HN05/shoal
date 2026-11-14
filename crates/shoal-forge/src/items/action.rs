@@ -213,6 +213,8 @@ impl Action {
         Self::Edit(Box::new(edit))
     }
 
+    /// The action's name, which errors and the log show; a review's is its
+    /// verdict's, so the log tells an approval from a comment.
     pub fn name(&self) -> &'static str {
         match self {
             Self::Edit(_) => "edit",
@@ -230,7 +232,11 @@ impl Action {
                 Some(false) => "unresolve",
                 None => "reply",
             },
-            Self::Review(_) => "review",
+            Self::Review(review) => match review.verdict {
+                ReviewVerdict::Comment => "review",
+                ReviewVerdict::Approve => "approve",
+                ReviewVerdict::RequestChanges => "request_changes",
+            },
             Self::React(change) if change.remove => "unreact",
             Self::React(_) => "react",
         }

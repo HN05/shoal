@@ -281,6 +281,7 @@ fn item_changed(event: &EventDetails) -> (String, String) {
         "comment" => "comment",
         "review" => "reviewed",
         "approve" => "approved",
+        "request_changes" => "changes requested",
         "rerun" => "rerun",
         "cancel" => "canceled",
         action => {
