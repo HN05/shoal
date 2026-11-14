@@ -65,19 +65,52 @@ impl Launch {
             env: crate::terminal::start_environment(),
             now: self.options.now,
             priority: chat.priority,
-            records_when_waiting: self.options.place == ChatPlace::Detached,
+            records_when_waiting: self.records_when_waiting(),
         })
     }
 
+    /// Whether this start records its chat at once when its agent waits: a
+    /// start without a terminal, whose caller addresses the chat, and a
+    /// scoped one, whose chat goes below the caller's space, where the
+    /// queue's later start, which acts as the user, would not put it.
+    fn records_when_waiting(&self) -> bool {
+        self.options.place == ChatPlace::Detached || crate::env::is_scoped()
+    }
+
     /// End the start of this chat, whose agent waits as `entry` behind
-    /// `waiting` entries: from a terminal, the queue's start records the
-    /// chat in a place of its own; a start without one records it now, and
-    /// the queue keeps the launch until it takes the chat.
+    /// `waiting` entries: from the user's terminal, the queue's start
+    /// records the chat in a place of its own; a start that records it at
+    /// once does so now, and the queue keeps the launch until it takes the
+    /// chat. A chat that cannot be recorded and attached takes its launch
+    /// out of the queue.
     async fn wait(&self, ctx: &Context, entry: QueueEntry, waiting: usize) -> Result<Started> {
-        if self.options.place != ChatPlace::Detached {
+        if !self.records_when_waiting() {
             let code = crate::cli::commands::queued_agents::report_queued(ctx, &entry, waiting)?;
             return Ok(Started::Exited(code));
         }
+        let chat = match self.record_for_queue(ctx, &entry).await {
+            Ok(chat) => chat,
+            Err(error) => {
+                if let Err(removal) = queue::remove(&ctx.paths, entry.id.to_string()).await {
+                    eprintln!("shoal: the chat's agent stays queued: {removal:#}");
+                }
+                return Err(error);
+            }
+        };
+        crate::cli::agents::link_chat(ctx, &chat, &self.chat.links).await;
+        let queued = crate::client::output::chat::QueuedChat {
+            chat,
+            entry,
+            waiting,
+        };
+        super::detached::report_queued(ctx, &queued)?;
+        Ok(Started::Exited(0))
+    }
+
+    /// Record the chat, in no place yet, and attach the waiting launch
+    /// `entry` to it, removing the chat again when the launch cannot take
+    /// it.
+    async fn record_for_queue(&self, ctx: &Context, entry: &QueueEntry) -> Result<Chat> {
         let chat = self.record_new(ctx, None).await?;
         let attached = queue::attach(&ctx.paths, entry.id.clone(), SpaceSelector::id(&chat.id));
         if let Err(error) = attached.await {
@@ -90,14 +123,7 @@ impl Launch {
             }
             return Err(error);
         }
-        crate::cli::agents::link_chat(ctx, &chat, &self.chat.links).await;
-        let queued = crate::client::output::chat::QueuedChat {
-            chat,
-            entry,
-            waiting,
-        };
-        super::detached::report_queued(ctx, &queued)?;
-        Ok(Started::Exited(0))
+        Ok(chat)
     }
 }
 
