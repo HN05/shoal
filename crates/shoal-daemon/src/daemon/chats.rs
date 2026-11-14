@@ -431,7 +431,16 @@ impl Manager {
     /// The settings of `chat`: its repository's, or the global config's
     /// alone for a chat without a repository.
     pub(crate) async fn chat_settings(&self, chat: &Chat) -> Result<crate::config::Effective> {
-        match &chat.repository_id {
+        self.space_settings_in(chat.repository_id.as_ref()).await
+    }
+
+    /// The settings of a space of the repository `id`, or the global
+    /// config's alone for a space without one.
+    pub(crate) async fn space_settings_in(
+        &self,
+        id: Option<&RepositoryId>,
+    ) -> Result<crate::config::Effective> {
+        match id {
             Some(id) => self.repository_settings(id).await,
             None => self.config().resolve(&Default::default()),
         }

@@ -31,13 +31,13 @@ mod copy;
 mod moving;
 
 /// A space prepared for its package, ended here or copied: its repository,
-/// the package without its session files, the removal that ended a
+/// none for a chat without one, the package without its session files, the removal that ended a
 /// workspace, the settings describing its agents when they are not the
 /// repository's, the session files an import kept for it, and how the user
 /// continues the space here when writing the package fails, unless a
 /// removal record or the space itself keeps it.
 struct Prepared {
-    repo: Repository,
+    repo: Option<Repository>,
     manifest: Manifest,
     removal: Option<RemovalResult>,
     settings: Option<Result<Effective>>,
@@ -103,13 +103,14 @@ impl Manager {
         prepared: Prepared,
         file: std::path::PathBuf,
     ) -> Result<ExportedSpace> {
+        let repo = prepared.repo.as_ref();
         let settings = match prepared.settings {
             Some(settings) => settings,
-            None => self.repository_settings(&prepared.repo.id).await,
+            None => self.space_settings_in(repo.map(|repo| &repo.id)).await,
         };
         let written = self
             .write_package(
-                &prepared.repo,
+                repo,
                 prepared.manifest,
                 settings,
                 prepared.kept_sessions,
@@ -128,13 +129,13 @@ impl Manager {
         })
     }
 
-    /// Write `manifest`'s package, a space of `repo` whose agents `settings`
-    /// describes, with their session files to the new file `file`, those
+    /// Write `manifest`'s package, a space of `repo` or of none, whose
+    /// agents `settings` describes, with their session files to the new file `file`, those
     /// of a session in `kept` from there, and the warnings for what it left
     /// out.
     async fn write_package(
         &self,
-        repo: &Repository,
+        repo: Option<&Repository>,
         manifest: Manifest,
         settings: Result<Effective>,
         kept: Vec<SessionSource>,
@@ -204,8 +205,8 @@ impl Manager {
         let repo = self.repository(removed.repository()?).await?;
         Ok(Prepared {
             kept_sessions: kept_session_sources(&repo, &removed),
-            manifest: Manifest::of(&repo, Source::Workspace(removed)).await?,
-            repo,
+            manifest: Manifest::of(Some(&repo), Source::Workspace(removed)).await?,
+            repo: Some(repo),
             removal,
             settings,
             continues: None,
@@ -217,7 +218,7 @@ impl Manager {
     async fn prepare_removed_chat(&self, removed: RemovedSpace) -> Result<Prepared> {
         let repo = self.movable_removed_chat(&removed).await?;
         Ok(Prepared {
-            manifest: Manifest::of(&repo, Source::RemovedChat(removed)).await?,
+            manifest: Manifest::of(repo.as_ref(), Source::RemovedChat(removed)).await?,
             repo,
             removal: None,
             settings: None,
@@ -227,10 +228,11 @@ impl Manager {
     }
 
     /// The repository of the chat `removed` records, which moves to another
-    /// machine, refusing what [`Self::movable_chat`] refuses of a live chat
-    /// that its removal left: a chat that ran in a workspace, one without a
-    /// repository and one whose agent reported no session to continue.
-    async fn movable_removed_chat(&self, removed: &RemovedSpace) -> Result<Repository> {
+    /// machine, none for a chat without one, refusing what
+    /// [`Self::movable_chat`] refuses of a live chat that its removal left: a
+    /// chat that ran in a workspace and one whose agent reported no session
+    /// to continue.
+    async fn movable_removed_chat(&self, removed: &RemovedSpace) -> Result<Option<Repository>> {
         let kept = removed
             .chat()
             .context("the removal record is not a chat's")?;
@@ -241,19 +243,16 @@ impl Manager {
                 workspace.name
             );
         }
-        let Some(repository) = &removed.repository_id else {
-            anyhow::bail!(
-                "chat {} had no repository, and shoal move moves only a chat in one",
-                removed.name
-            );
-        };
         ensure!(
             kept.session.is_some(),
             "the agent of chat {} reported no session to continue elsewhere; shoal restore {} opens it here again",
             removed.name,
             removed.space_id
         );
-        self.repository(repository).await
+        match &removed.repository_id {
+            Some(repository) => self.repository(repository).await.map(Some),
+            None => Ok(None),
+        }
     }
 
     /// Remove `workspace` for its export through the removal path, taking
@@ -304,7 +303,7 @@ impl Manager {
     async fn end_chat_for_export(&self, chat: Chat) -> Result<Prepared> {
         let (repo, continues) = self.movable_chat(&chat).await?;
         let id = chat.id.clone();
-        let manifest = Manifest::of(&repo, Source::Chat(chat)).await?;
+        let manifest = Manifest::of(repo.as_ref(), Source::Chat(chat)).await?;
         self.remove_chat(&SpaceSelector::id(&id), Some(Vec::new()))
             .await?;
         Ok(Prepared {
@@ -317,11 +316,11 @@ impl Manager {
         })
     }
 
-    /// The repository of `chat`, which moves to another machine, and how
-    /// the user continues it here, refusing a chat in a workspace, one
-    /// without a repository, one whose agent reported no session to continue
-    /// and one with spaces below it.
-    async fn movable_chat(&self, chat: &Chat) -> Result<(Repository, String)> {
+    /// The repository of `chat`, which moves to another machine, none for a
+    /// chat without one, and how the user continues it here, refusing a chat
+    /// in a workspace, one whose agent reported no session to continue and
+    /// one with spaces below it.
+    async fn movable_chat(&self, chat: &Chat) -> Result<(Option<Repository>, String)> {
         if let Some(workspace) = &chat.workspace {
             anyhow::bail!(
                 "chat {} runs in workspace {}, and shoal move does not move a chat in a workspace",
@@ -329,13 +328,9 @@ impl Manager {
                 workspace.name
             );
         }
-        let Some(repo) = self.chat_repository(chat).await? else {
-            anyhow::bail!(
-                "chat {} has no repository, and shoal move moves only a chat in one",
-                chat.name
-            );
-        };
-        let Some(continues) = crate::transfer::continue_chat(chat, crate::repository::name(&repo))
+        let repo = self.chat_repository(chat).await?;
+        let Some(continues) =
+            crate::transfer::continue_chat(chat, repo.as_ref().map(crate::repository::name))
         else {
             anyhow::bail!(
                 "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",
@@ -350,13 +345,14 @@ impl Manager {
         Ok((repo, continues))
     }
 
-    /// The files of the sessions the agents of the package `manifest`
-    /// reported, as `settings` describes the agents, wherever they ran, with
+    /// The files of the sessions the agents of the package `manifest`, of
+    /// `repo` or of none, reported, as `settings` describes the agents,
+    /// wherever they ran, with
     /// a warning for each session left out, which then starts over on the
     /// importing machine.
     async fn session_sources(
         &self,
-        repo: &Repository,
+        repo: Option<&Repository>,
         settings: Result<Effective>,
         manifest: &Manifest,
     ) -> (Vec<SessionSource>, Vec<String>) {
@@ -372,15 +368,17 @@ impl Manager {
             }
         };
         let mut warnings = Vec::new();
-        let environments = self
-            .agent_environments(&repo.id)
-            .await
-            .unwrap_or_else(|error| {
-                warnings.push(format!(
-                    "agents' session files are looked up in the default places only: {error:#}"
-                ));
-                Vec::new()
-            });
+        let environments = match repo {
+            Some(repo) => self.agent_environments(&repo.id).await,
+            // Only a repository records the environments its agents ran in.
+            None => Ok(Vec::new()),
+        };
+        let environments = environments.unwrap_or_else(|error| {
+            warnings.push(format!(
+                "agents' session files are looked up in the default places only: {error:#}"
+            ));
+            Vec::new()
+        });
         let environments = Environments::new(&self.paths.home, &environments);
         let sessions = manifest.sessions.clone().unwrap_or_default();
         let found = tokio::task::spawn_blocking(move || {

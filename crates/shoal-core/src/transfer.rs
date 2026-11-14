@@ -34,15 +34,17 @@ use crate::{
 /// can: 1 holds a workspace, 2 a workspace with session files, which
 /// version 1 importers would read as part of the bundle, 3 any space,
 /// naming its kind, 4 a workspace at a commit, which earlier importers
-/// would open on a branch, and 5 a copy, which earlier importers would
-/// open as the space it copies.
+/// would open on a branch, 5 a copy, which earlier importers would open as
+/// the space it copies, and 6 a chat without a repository, which earlier
+/// importers would open in one.
 pub const FORMAT: &str = "shoal workspace";
-const VERSION: u32 = 5;
+const VERSION: u32 = 6;
 
 /// The version of the format that reads the package `manifest` describes.
 fn version(manifest: &Manifest) -> u32 {
     match (&manifest.space, manifest.session_files.is_empty()) {
-        _ if manifest.copy.is_some() => VERSION,
+        (Space::Chat(packaged), _) if packaged.outside_repositories => 6,
+        _ if manifest.copy.is_some() => 5,
         (Space::Workspace(packaged), _)
             if (packaged.workspace.workspace()).is_some_and(|kept| kept.at.is_some()) =>
         {
@@ -119,13 +121,13 @@ pub fn session_sources(
     (sources, warnings)
 }
 
-/// Write the package `manifest` describes, a space of `repo`, with its
-/// agents' session files `sessions`, to the new file `path` for `shoal move
-/// import`, with a warning for each session left out because a file of it
-/// cannot be read; a failure leaves no partial file and an existing one is
-/// never replaced.
+/// Write the package `manifest` describes, a space of `repo` or of none,
+/// with its agents' session files `sessions`, to the new file `path` for
+/// `shoal move import`, with a warning for each session left out because a
+/// file of it cannot be read; a failure leaves no partial file and an
+/// existing one is never replaced.
 pub async fn export(
-    repo: &Repository,
+    repo: Option<&Repository>,
     mut manifest: Manifest,
     sessions: Vec<SessionSource>,
     path: PathBuf,
@@ -136,6 +138,7 @@ pub async fn export(
     manifest.session_files = sessions.iter().map(|(file, _)| file.clone()).collect();
     let bundle = match &manifest.space {
         Space::Workspace(packaged) if packaged.bundle => {
+            let repo = repo.context("a workspace belongs to a repository")?;
             Some(Bundle::create(&repo.path, packaged).await?)
         }
         _ => None,
@@ -197,9 +200,9 @@ fn open_session_file(source: &SessionSource) -> Result<(std::fs::File, u64)> {
 // Only Shoal's own crates implement and await it.
 #[allow(async_fn_in_trait)]
 pub trait ManifestExt: Sized {
-    /// The package of `source`, a space of `repo`, without its session
-    /// files.
-    async fn of(repo: &Repository, source: Source) -> Result<Self>;
+    /// The package of `source`, a space of `repo`, or of none, without its
+    /// session files.
+    async fn of(repo: Option<&Repository>, source: Source) -> Result<Self>;
 
     /// The space's name.
     fn name(&self) -> &SpaceName;
@@ -217,11 +220,15 @@ pub trait ManifestExt: Sized {
 }
 
 impl ManifestExt for Manifest {
-    async fn of(repo: &Repository, source: Source) -> Result<Self> {
-        let remote_url = crate::repository::remote_url_from_source(&repo.source).await?;
+    async fn of(repo: Option<&Repository>, source: Source) -> Result<Self> {
+        let remote_url = match repo {
+            Some(repo) => crate::repository::remote_url_from_source(&repo.source).await?,
+            None => None,
+        };
         let machine = crate::process::machine::id();
         let (space, sessions) = match source {
             Source::Workspace(removed) => {
+                let repo = repo.context("a workspace belongs to a repository")?;
                 let sessions = Sessions {
                     machine,
                     agents: removed.agents.clone(),
@@ -237,6 +244,7 @@ impl ManifestExt for Manifest {
                     links: chat.links,
                     mode: chat.mode,
                     narrowing: chat.narrowing,
+                    outside_repositories: chat.repository_id.is_none(),
                 };
                 chat_package(machine, &chat.id, packaged, chat.session)
             }
@@ -250,6 +258,7 @@ impl ManifestExt for Manifest {
                     links: removed.links,
                     mode: kept.mode,
                     narrowing: kept.narrowing,
+                    outside_repositories: removed.repository_id.is_none(),
                 };
                 chat_package(machine, &removed.space_id, packaged, kept.session)
             }
@@ -373,26 +382,18 @@ impl PackagedWorkspaceExt for PackagedWorkspace {
 }
 
 /// How the user continues `chat`, about the repository called
-/// `repository`, here once it ended: the `shoal start` command that resumes
-/// its agent's session in its mode; `None` for a chat whose agent reported
-/// none.
-pub fn continue_chat(chat: &Chat, repository: &str) -> Option<String> {
+/// `repository`, or without one, here once it ended: the `shoal start`
+/// command that resumes its agent's session in its mode; `None` for a chat
+/// whose agent reported none.
+pub fn continue_chat(chat: &Chat, repository: Option<&str>) -> Option<String> {
     let session = chat.session.as_ref().map(AgentSessionId::as_str)?;
     let (mode, agent) = (chat.mode.to_string(), chat.agent.to_string());
+    let mut words = vec!["shoal", "start", "--mode", &mode];
+    words.extend(repository);
+    words.extend(["--name", chat.name.as_str(), "--agent", &agent]);
+    words.extend(["--session", session]);
     // A name is free text, so the command quotes what a shell would split.
-    let command = crate::shell::quote(&[
-        "shoal",
-        "start",
-        "--mode",
-        &mode,
-        repository,
-        "--name",
-        chat.name.as_str(),
-        "--agent",
-        &agent,
-        "--session",
-        session,
-    ]);
+    let command = crate::shell::quote(&words);
     Some(format!(
         "chat {} ended here; {command} continues it",
         chat.name

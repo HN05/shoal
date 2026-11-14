@@ -3414,8 +3414,9 @@ setup and guidance, told the workspace moved. Moving a chat removes it here,
 stopping its agent, since a session that kept growing here would fork from the one that
 continues there, and the user attends a chat, so export asks first; a chat whose
 agent reported no session refuses before stopping it, since nothing could continue
-it, and so does one with spaces below it, which its removal would take. Import starts the chat through the chat launch, in its mode, with the agent's resume
-arguments, under a free name since its own may be taken there, in the background
+it, and so does one with spaces below it, which its removal would take. Import starts the chat through the chat launch, in its mode, in the
+repository's checkout or, for a chat without one, the importing machine's
+`root_dir`, with the agent's resume arguments, under a free name since its own may be taken there, in the background
 when no terminal attends the import, as queued agents start. Export and import
 move work through any byte stream, where the user runs both halves and chooses
 their order. `move ssh` runs both over SSH after checking Shoal answers there,

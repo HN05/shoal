@@ -20,7 +20,7 @@ use crate::client::output::{
 };
 use crate::{
     cli::{
-        agents::{self, SessionHome},
+        agents::{self, ChatRepository, SessionHome},
         context::Context,
         output::{Palette, Style},
         ui,
@@ -113,7 +113,8 @@ struct Package {
     space: Space,
     /// Set for a copy, which opens as a new space.
     copy: Option<Copied>,
-    repository: crate::repository::Selector,
+    /// None for a chat without a repository.
+    repository: Option<crate::repository::Selector>,
     sessions: Sessions,
     carried: Vec<ImportedSessionFile>,
     bundle: Option<tempfile::NamedTempFile>,
@@ -121,7 +122,8 @@ struct Package {
 
 impl Package {
     /// Read the package in `file` for the repository with its origin, or
-    /// the one `options` names, keeping the sessions `options` says.
+    /// the one `options` names, unless it holds a chat without a
+    /// repository, keeping the sessions `options` says.
     fn read(file: &Path, options: &ImportOptions) -> Result<Self> {
         let Import {
             manifest,
@@ -141,11 +143,10 @@ impl Package {
                 );
             }
         }
-        let repository = options
-            .repository
-            .clone()
-            .or_else(|| manifest.remote_url.clone())
-            .context("the exported repository has no origin; select the repository to import into with --repo")?;
+        let repository = match &manifest.space {
+            Space::Chat(chat) if chat.outside_repositories => None,
+            _ => Some(destination(&manifest, options)?),
+        };
         let sessions = sessions_here(&manifest, options.sessions);
         let kept: BTreeSet<&AgentSessionId> =
             sessions.reported().map(|(_, session)| session).collect();
@@ -156,7 +157,7 @@ impl Package {
         Ok(Self {
             space: manifest.space,
             copy: manifest.copy,
-            repository: ui::repository_selector(repository)?,
+            repository,
             sessions,
             carried,
             bundle,
@@ -182,9 +183,11 @@ impl Package {
         ctx: &Context,
         packaged: &PackagedWorkspace,
     ) -> Result<Box<RestoredWorkspace>> {
+        let repository =
+            (self.repository.clone()).context("a workspace belongs to a repository")?;
         crate::client::transfer::import(
             &ctx.paths,
-            self.repository.clone(),
+            repository,
             self.bundle.as_ref().map(|bundle| bundle.path().to_owned()),
             packaged.prerequisite.clone(),
             packaged.workspace_with(self.sessions.clone()),
@@ -203,8 +206,8 @@ impl Package {
     }
 
     /// Put the packaged chat's session files in place, then start the chat
-    /// in its repository's checkout at `place`, under its name, resuming
-    /// the session its agent keeps here.
+    /// in its repository's checkout, or in `root_dir` without one, at
+    /// `place`, under its name, resuming the session its agent keeps here.
     async fn start_chat(self, ctx: &Context, place: ChatPlace) -> Result<Started> {
         // Nothing is recorded yet, so a program that moves the chat knows it
         // is not here.
@@ -212,9 +215,13 @@ impl Package {
             .chat_start(ctx, place)
             .await
             .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
+        let home = match &self.repository {
+            Some(selector) => SessionHome::Repository(selector.clone()),
+            None => SessionHome::Root,
+        };
         agents::install_session_files(
             ctx,
-            SessionHome::Repository(self.repository.clone()),
+            home,
             &self.carried(),
             agents::Existing::of_copy(self.copy.is_some()),
         )
@@ -229,21 +236,29 @@ impl Package {
     }
 
     /// How the packaged chat starts at `place`, in the repository the
-    /// package goes to, which this machine registers.
+    /// package goes to, which this machine registers, or in `root_dir`.
     async fn chat_start(&self, ctx: &Context, place: ChatPlace) -> Result<ChatStart> {
         let Space::Chat(packaged) = &self.space else {
             anyhow::bail!("the package holds a workspace, not a chat");
         };
-        let repositories = crate::client::repositories::list(&ctx.paths).await?;
-        let repo = crate::repository::select(&repositories, self.repository.clone())
-            .await?
-            .clone();
+        let repo = self.chat_repository(ctx).await?;
         Ok(ChatStart {
-            settings: chat::settings(ctx, &repo).await?,
+            settings: crate::config::settings(&ctx.paths, repo.config()).await?,
             topic: chat::Topic::imported(&repo, &packaged.mode, &packaged.links),
             options: self.chat_options(packaged, place)?,
-            repo: crate::cli::agents::ChatRepository::Registered(repo),
+            repo,
         })
+    }
+
+    /// Where the packaged chat starts: the checkout of the registered
+    /// repository the package goes to, or `root_dir`.
+    async fn chat_repository(&self, ctx: &Context) -> Result<ChatRepository> {
+        let Some(selector) = &self.repository else {
+            return Ok(ChatRepository::Outside(chat::root_dir(ctx).await?));
+        };
+        let repositories = crate::client::repositories::list(&ctx.paths).await?;
+        let repo = crate::repository::select(&repositories, selector.clone()).await?;
+        Ok(ChatRepository::Registered(repo.clone()))
     }
 
     /// How the packaged chat starts at `place`.
@@ -277,7 +292,7 @@ impl Package {
 
 /// What an imported chat starts with.
 struct ChatStart {
-    repo: crate::cli::agents::ChatRepository,
+    repo: ChatRepository,
     settings: crate::config::Effective,
     topic: chat::Topic,
     options: chat::Options,
@@ -439,6 +454,20 @@ impl ImportReport {
         )?;
         Ok(code)
     }
+}
+
+/// The repository a package of a space in one goes to: the one `options`
+/// names, else the one with the exported repository's origin.
+fn destination(
+    manifest: &Manifest,
+    options: &ImportOptions,
+) -> Result<crate::repository::Selector> {
+    let repository = options
+        .repository
+        .clone()
+        .or_else(|| manifest.remote_url.clone())
+        .context("the exported repository has no origin; select the repository to import into with --repo")?;
+    ui::repository_selector(repository)
 }
 
 /// The package's agents to import here, which keep their sessions as

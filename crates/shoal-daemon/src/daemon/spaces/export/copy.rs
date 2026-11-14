@@ -63,14 +63,14 @@ impl Manager {
         let agents = self.copied_agents(&workspace).await?;
         let copied = super::packaged_record(&self.paths, &workspace, checkpoint, agents);
         let repo = self.repository(&workspace.repository_id).await?;
-        let mut manifest = Manifest::of(&repo, Source::Workspace(copied)).await?;
+        let mut manifest = Manifest::of(Some(&repo), Source::Workspace(copied)).await?;
         manifest.copy = Some(Copied {
             earlier_files: number.is_some(),
             held_elsewhere: false,
         });
         Ok(Prepared {
             settings: Some(self.workspace_settings(&workspace).await),
-            repo,
+            repo: Some(repo),
             manifest,
             removal: None,
             kept_sessions: Vec::new(),
@@ -114,13 +114,8 @@ impl Manager {
             "the agent of chat {} reported no session to fork",
             chat.name
         );
-        let Some(repo) = self.chat_repository(&chat).await? else {
-            anyhow::bail!(
-                "chat {} has no repository, and shoal move copies only a chat in one",
-                chat.name
-            );
-        };
-        let mut manifest = Manifest::of(&repo, Source::Chat(chat)).await?;
+        let repo = self.chat_repository(&chat).await?;
+        let mut manifest = Manifest::of(repo.as_ref(), Source::Chat(chat)).await?;
         manifest.copy = Some(Copied::default());
         Ok(Prepared {
             repo,

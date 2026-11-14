@@ -466,3 +466,40 @@ async fn a_removed_chat_without_a_session_is_not_exported() {
     assert!(!file.exists());
     assert_eq!(manager.removed_spaces().await.unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn a_chat_without_a_repository_moves_and_copies_for_root_dir() {
+    let (root, manager) = manager().await;
+    let chat = crate::daemon::test_support::chat(&manager, "lead", "orchestrate", None, None).await;
+    manager
+        .record_chat_session(&chat.id, "s1".into())
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&chat.id);
+    let copy = root.path().join("copy.shoal");
+    let moved = root.path().join("lead.shoal");
+
+    manager
+        .copy_space(&selector, None, copy.clone())
+        .await
+        .unwrap();
+    let exported = manager
+        .export_space(
+            &selector,
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+            moved.clone(),
+        )
+        .await
+        .unwrap();
+    assert!(exported.removal.is_none());
+    assert!(manager.chats().await.unwrap().is_empty());
+    for file in [&copy, &moved] {
+        let import = Import::read(&mut &fs::read(file).unwrap()[..]).unwrap();
+        let Space::Chat(packaged) = &import.manifest.space else {
+            panic!("not a chat: {:?}", import.manifest);
+        };
+        assert!(packaged.outside_repositories);
+        assert_eq!(import.manifest.remote_url, None);
+    }
+}

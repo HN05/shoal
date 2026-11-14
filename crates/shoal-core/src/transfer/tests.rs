@@ -10,7 +10,7 @@ use crate::execution::recovery::{LastSession, Record};
 #[test]
 fn import_refuses_other_files_and_newer_formats() {
     assert!(Import::read(&mut &b"not an export\n"[..]).is_err());
-    assert!(Import::read(&mut &b"shoal workspace 6\n{}\n"[..]).is_err());
+    assert!(Import::read(&mut &b"shoal workspace 7\n{}\n"[..]).is_err());
 }
 
 /// The header of format version `version`.
@@ -119,6 +119,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         links: chat.links.clone(),
         mode: chat.mode.clone(),
         narrowing: chat.narrowing,
+        outside_repositories: false,
     };
     let (space, sessions) =
         chat_package(Some("m1".into()), &chat.id, packaged, chat.session.clone());
@@ -130,6 +131,13 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         copy: None,
     };
     assert_eq!(version(&manifest), 3);
+    // A chat without a repository needs an importer that starts it in
+    // root_dir; one before it would start it in a repository.
+    let mut outside = manifest.clone();
+    if let Space::Chat(packaged) = &mut outside.space {
+        packaged.outside_repositories = true;
+    }
+    assert_eq!(version(&outside), 6);
     let bytes = export_bytes(&header(3), &manifest, &["abc"]);
     let import = Import::read(&mut &bytes[..]).unwrap();
     assert!(import.bundle.is_none());
@@ -467,11 +475,29 @@ fn a_chat_continues_by_a_command_that_quotes_its_name() {
     }))
     .unwrap();
 
-    let line = continue_chat(&chat, "my repo").unwrap();
+    let line = continue_chat(&chat, Some("my repo")).unwrap();
 
     assert!(
         line.contains(
             "shoal start --mode chat 'my repo' --name 'shoal chat'\\''s $HOME' --agent claude --session session"
+        ),
+        "{line}"
+    );
+}
+
+#[test]
+fn a_chat_without_a_repository_continues_without_naming_one() {
+    let chat: Chat = serde_json::from_value(serde_json::json!({
+        "id": "chat", "name": "lead", "agent": "claude", "mode": "orchestrate",
+        "started_at": 0, "session": "session",
+    }))
+    .unwrap();
+
+    let line = continue_chat(&chat, None).unwrap();
+
+    assert!(
+        line.contains(
+            "shoal start --mode orchestrate --name lead --agent claude --session session"
         ),
         "{line}"
     );

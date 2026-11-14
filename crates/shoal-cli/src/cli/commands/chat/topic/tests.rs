@@ -146,7 +146,7 @@ fn a_chat_in_a_workspace_reopens_there() {
 
 #[test]
 fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
-    let repo = repository();
+    let repo = ChatRepository::Registered(repository());
     let url = "https://forge.example/team/repo/issues/7";
     let links: SpaceLinks = serde_json::from_value(serde_json::json!({
         "issues": [{"kind": "issue", "url": url, "title": "Decide"}], "prs": [],
@@ -180,6 +180,16 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
         panic!("expected a start");
     };
     assert_eq!(unlinked.linked_issue, None);
+    // One without a repository reopens in root_dir, naming none.
+    let outside = ChatRepository::Outside("/shoal".into());
+    let Relaunch::Start(outside) = Topic::imported(&outside, &"plan".into(), &links).relaunch
+    else {
+        panic!("expected a start");
+    };
+    assert_eq!(
+        (outside.repository, outside.linked_issue.as_ref()),
+        (None, Some(&url.parse().unwrap()))
+    );
 }
 
 #[test]

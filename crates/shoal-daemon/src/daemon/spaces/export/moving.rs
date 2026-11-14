@@ -94,10 +94,10 @@ impl Manager {
         let repo = self.repository(&workspace.repository_id).await?;
         Ok(Prepared {
             kept_sessions: kept_session_sources(&repo, &record),
-            manifest: Manifest::of(&repo, Source::Workspace(record)).await?,
+            manifest: Manifest::of(Some(&repo), Source::Workspace(record)).await?,
             // Its own config may describe its agents, and goes with it.
             settings: Some(self.workspace_settings(&workspace).await),
-            repo,
+            repo: Some(repo),
             removal: None,
             continues: None,
         })
@@ -111,7 +111,7 @@ impl Manager {
         self.stop_space(&selector, StopRequest::moving()).await?;
         let chat = self.chat(&selector).await?;
         Ok(Prepared {
-            manifest: Manifest::of(&repo, Source::Chat(chat)).await?,
+            manifest: Manifest::of(repo.as_ref(), Source::Chat(chat)).await?,
             repo,
             removal: None,
             settings: None,

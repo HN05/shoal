@@ -65,8 +65,9 @@ pub struct PackagedWorkspace {
     pub workspace: RemovedSpace,
 }
 
-/// A chat, which the import starts again in the repository's checkout,
-/// continuing its agent's session, linked to what it was linked to.
+/// A chat, which the import starts again in the repository's checkout, or
+/// in `root_dir` without one, continuing its agent's session, linked to
+/// what it was linked to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackagedChat {
     pub name: SpaceName,
@@ -85,6 +86,10 @@ pub struct PackagedChat {
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
     )]
     pub narrowing: crate::config::permissions::PermissionsConfig,
+    /// Set for a chat without a repository, which the import starts in
+    /// `root_dir`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub outside_repositories: bool,
 }
 
 /// A file of an agent's session, copied unread.

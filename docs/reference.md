@@ -3894,7 +3894,8 @@ and tells the agents so. Import refuses `--keep-sessions` for a copy.
 
 `shoal move import <file>` reads an export, or standard input without a file or for
 `-`, refusing a terminal, and continues it in the registered repository with the
-exported repository's origin, or the one `--repo` names. Given several files, or a
+exported repository's origin, or the one `--repo` names, or a chat without a
+repository in `root_dir`. Given several files, or a
 directory, whose `.shoal` files it reads in name order, it imports each one, going
 on after a failure, lists every space it continued and exits 1 naming each file it
 could not import or whose `hooks.post_setup` failed. The export carries the files of each
@@ -3920,8 +3921,8 @@ restore` does, under the importing machine's agent limits. Every reopen, by impo
 `shoal restore`, trusts the workspace's path for the agents that resume there. An agent
 without a kept session `shoal restore` starts as `shoal start --in` starts a new
 one, telling it the workspace moved, instead of running
-its `resume_command`. An imported chat starts in the repository's checkout as
-a chat starts, in the mode it ran in, under its name, with its agent's `resume` arguments for its session, or as a new
+its `resume_command`. An imported chat starts in the repository's checkout, or in `root_dir`
+without one, as a chat starts, in the mode it ran in, under its name, with its agent's `resume` arguments for its session, or as a new
 session for an agent without them or a session not kept. A single chat imported
 on a terminal opens beside it; with `--restore`, without a terminal, or among
 several files, it starts in a background place of the host that starts queued
