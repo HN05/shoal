@@ -59,14 +59,55 @@ def bump(manifest, lock, requested, occupied):
     return requested, manifest, lock
 
 
-def validate():
+# The commit statuses of main's required checks, named as ci.yml's jobs post them.
+REQUIRED_CHECKS = ("ci / rust (fmt, clippy, test, scripts) (push)",
+                   "ci / musl (check, identity test) (push)")
+# Release version commits start with this subject, and ci.yml runs no checks on them.
+VERSION_COMMIT = "chore: prepare release v"
+CI_POLL_SECONDS = 30
+
+
+def validate(commit):
+    """Accept a release tree on *commit*; return the main commit whose CI vouches for it."""
+    tested = tested_commit(commit)
+    await_passed_ci(tested)
+    check_versions_build()
+    return tested
+
+
+def check_versions_build():
+    """Check the checkout, which differs from the tested tree only in its versions."""
     run("cargo", "fmt", "--all", "--check")
     run("env", "CARGO_BUILD_WARNINGS=deny", "cargo", "clippy", "--locked", "--all-targets")
-    # As CI does: nextest runs each test in a process of its own, and the doc
-    # tests, which it does not run, follow.
-    run("cargo", "nextest", "run", "--locked", "--profile", "ci")
-    run("cargo", "test", "--locked", "--doc")
-    run("python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "test_*.py")
+
+
+def tested_commit(commit):
+    """The first-parent ancestor of *commit*, or *commit* itself, that is no version commit."""
+    while git("log", "-1", "--format=%s", commit).startswith(VERSION_COMMIT):
+        commit = git("rev-parse", f"{commit}^")
+    return commit
+
+
+def await_passed_ci(commit):
+    """Wait while a required check on *commit* is pending; fail unless each passed."""
+    while True:
+        states = ci_states(commit)
+        failed = [f"{check} is {states.get(check, 'missing')}" for check in REQUIRED_CHECKS
+                  if states.get(check) not in ("success", "pending")]
+        if failed:
+            raise ValueError(f"main commit {commit} has not passed CI: {'; '.join(failed)}")
+        pending = [check for check in REQUIRED_CHECKS if states[check] == "pending"]
+        if not pending:
+            return
+        print(f"Waiting for {', '.join(pending)} on {commit}", flush=True)
+        time.sleep(CI_POLL_SECONDS)
+
+
+def ci_states(commit):
+    """Map each check context on *commit* to its latest state."""
+    repository = os.environ.get("RELEASE_REPOSITORY", "HN05/shoal")
+    statuses = forge(f"/repos/{repository}/commits/{commit}/status")["statuses"] or []
+    return {status["context"]: status["status"] for status in statuses}
 
 
 def api(path, data=None, authenticated=True):
@@ -82,10 +123,17 @@ def api(path, data=None, authenticated=True):
         return json.loads(body) if body else None
 
 
-def shoal_api(path, data):
-    """Send *data* to the forge API *path* with the user's login through Shoal."""
+def shoal_api(path, data=None):
+    """Call the forge API *path*, sending *data* if given, with the user's login through Shoal."""
+    if data is None:
+        return json.loads(run("shoal", "forge", "api", path.lstrip("/"), "--json", capture=True))
     return json.loads(run("shoal", "forge", "api", path.lstrip("/"), "--input", "-", "--json",
                           input=json.dumps(data), capture=True))
+
+
+def forge(path, data=None):
+    """Call the forge API *path* as the workflow's token in CI, else as the user through Shoal."""
+    return (api if os.environ.get("RELEASE_AUTOMATION_TOKEN") else shoal_api)(path, data)
 
 
 def prepare(requested, dry_run, automated=False):
@@ -107,22 +155,24 @@ def prepare(requested, dry_run, automated=False):
     run("git", "switch", "-c", branch)
     (ROOT / "Cargo.toml").write_text(manifest)
     (ROOT / "Cargo.lock").write_text(lock)
-    validate()
+    tested = validate(git("rev-parse", "HEAD"))
     run("git", "add", "Cargo.toml", "Cargo.lock")
-    run("git", "commit", "-m", f"chore: prepare release v{version}")
+    run("git", "commit", "-m", f"{VERSION_COMMIT}{version}")
     run("git", "push", "-u", "origin", branch)
     if automated:
         repository = os.environ["RELEASE_REPOSITORY"]
         return api(f"/repos/{repository}/pulls", {
             "title": f"Release v{version}", "base": "main", "head": branch,
-            "body": f"Prepare Shoal {version}. Validated formatting, Clippy and tests. "
+            "body": f"Prepare Shoal {version}. CI passed on main at {tested}; "
+                    "formatting and Clippy pass with the new versions. "
                     "The Release workflow will merge this version change and publish it automatically.",
         })
     repository = os.environ.get("RELEASE_REPOSITORY", "HN05/shoal")
     shoal_api(f"/repos/{repository}/pulls", {
         "title": f"Release v{version}", "base": "main", "head": branch,
         "body": f"Prepare Shoal {version}. Both Cargo versions are updated.\n\n"
-                "Validated formatting, Clippy and tests.\n\n"
+                f"CI passed on main at {tested}; formatting and Clippy pass with the new "
+                "versions.\n\n"
                 f"After merging, run `python3 scripts/release.py publish {version}`. "
                 "Alternatively use Actions → release for the fully automated process.\n",
     })
@@ -154,7 +204,7 @@ def publish(version, dry_run, merged_commit=None, validated_tree=None):
         print(f"Would publish {tag} at {sha}")
         return
     if git("rev-parse", f"{sha}^{{tree}}") != validated_tree:
-        validate()
+        validate(sha)
     if not existing:
         run("git", "tag", "-a", tag, sha, "-m", f"Shoal {version}")
     run("git", "push", "origin", f"refs/tags/{tag}")
@@ -181,8 +231,7 @@ def create_release(version):
         tag, git,
         lambda path: api(f"/repos/{repository}{path}", authenticated=False), url, repository)
     # CI calls repository endpoints directly; no user-profile/login API is needed.
-    send = api if os.environ.get("RELEASE_AUTOMATION_TOKEN") else shoal_api
-    send(f"/repos/{repository}/releases", {
+    forge(f"/repos/{repository}/releases", {
         "name": f"Shoal {version}", "tag_name": f"v{version}",
         "body": body, "draft": False, "prerelease": False,
     })
@@ -250,8 +299,9 @@ def release_all(requested):
         return
     repository = os.environ["RELEASE_REPOSITORY"]
     number = prepare(requested, False, automated=True)["number"]
-    # Prepare validated this tree; publishing validates again only when the
-    # merge changed it, as when main moved on meanwhile.
+    # Prepare validated this tree; publishing validates again, against the main
+    # commit the merge built on, only when the merge changed it, as when main
+    # moved on meanwhile.
     validated_tree = git("rev-parse", "HEAD^{tree}")
     merged = merge_release_pr(repository, number)
     publish_merged(merged, repository, number, validated_tree)

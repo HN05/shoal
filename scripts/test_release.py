@@ -175,6 +175,70 @@ class ReleaseTests(unittest.TestCase):
                 release.publish("0.2.0", False, merged_commit=sha, validated_tree=validated_tree)
             self.assertEqual(validate.call_count, validations)
 
+    def test_validation_skips_version_commits_to_the_commit_ci_tested(self):
+        subjects = {"r" * 40: "chore: prepare release v0.2.0",
+                    "q" * 40: "chore: prepare release v0.1.9", "m" * 40: "Fix the daemon"}
+        parents = {"r" * 40: "q" * 40, "q" * 40: "m" * 40}
+
+        def git(*args):
+            if args[:3] == ("log", "-1", "--format=%s"):
+                return subjects[args[3]]
+            return parents[args[1].removesuffix("^")]
+
+        with patch.object(release, "git", side_effect=git):
+            self.assertEqual(release.tested_commit("r" * 40), "m" * 40)
+            self.assertEqual(release.tested_commit("m" * 40), "m" * 40)
+
+    @staticmethod
+    def statuses(**states):
+        contexts = {"rust": release.REQUIRED_CHECKS[0], "musl": release.REQUIRED_CHECKS[1],
+                    "gate": "ci / gate (docs-only PRs skip the checks) (push)"}
+        return {"statuses": [{"context": contexts[name], "status": state}
+                             for name, state in states.items()] or None}
+
+    def test_validation_reads_main_ci_from_the_forge_and_checks_the_build(self):
+        with patch.dict(release.os.environ, {"RELEASE_REPOSITORY": "HN05/shoal"}), \
+                patch.object(release, "tested_commit", return_value="m" * 40), \
+                patch.object(release, "forge",
+                             return_value=self.statuses(rust="success", musl="success")) as forge, \
+                patch.object(release, "run") as run:
+            self.assertEqual(release.validate("r" * 40), "m" * 40)
+        forge.assert_called_once_with(f"/repos/HN05/shoal/commits/{'m' * 40}/status")
+        self.assertEqual([c.args[1:3] for c in run.call_args_list],
+                         [("fmt", "--all"), ("CARGO_BUILD_WARNINGS=deny", "cargo")])
+
+    def test_ci_status_waits_while_a_check_is_pending(self):
+        with patch.object(release, "forge", side_effect=[
+                    self.statuses(rust="pending", musl="success"),
+                    self.statuses(rust="success", musl="success", gate="success")]) as forge, \
+                patch.object(release.time, "sleep") as sleep:
+            release.await_passed_ci("m" * 40)
+        self.assertEqual(forge.call_count, 2)
+        sleep.assert_called_once_with(release.CI_POLL_SECONDS)
+
+    def test_ci_status_refuses_a_failed_or_missing_check(self):
+        cases = {
+            "failure": (self.statuses(rust="success", musl="failure"), release.REQUIRED_CHECKS[1]),
+            "missing": (self.statuses(musl="pending"), release.REQUIRED_CHECKS[0]),
+            "none": (self.statuses(), release.REQUIRED_CHECKS[0]),
+        }
+        for case, (statuses, check) in cases.items():
+            with self.subTest(case=case), \
+                    patch.object(release, "forge", return_value=statuses), \
+                    patch.object(release.time, "sleep") as sleep, \
+                    self.assertRaises(ValueError) as refused:
+                release.await_passed_ci("m" * 40)
+            self.assertIn("m" * 40, str(refused.exception))
+            self.assertIn(check, str(refused.exception))
+            sleep.assert_not_called()
+
+    def test_forge_reads_through_shoal_without_the_workflow_token(self):
+        with patch.dict(release.os.environ, {"RELEASE_AUTOMATION_TOKEN": ""}), \
+                patch.object(release, "run", return_value='{"statuses": []}') as run:
+            self.assertEqual(release.forge("/repos/HN05/shoal/commits/m/status"), {"statuses": []})
+        run.assert_called_once_with("shoal", "forge", "api", "repos/HN05/shoal/commits/m/status",
+                                    "--json", capture=True)
+
     def test_resume_refuses_a_dirty_checkout_before_fetching(self):
         with patch.object(release, "git", return_value="dirty"), \
                 patch.object(release, "run") as run, self.assertRaisesRegex(

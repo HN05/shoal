@@ -13,9 +13,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Without these release.py's test build links
-  # each test binary with full debuginfo and incremental state, which outgrows
-  # the runner LXC's memory and gets rustc killed.
+  # The musl job's build settings: it shares /ci-target's slots, so matching
+  # them keeps either from rebuilding the other's dependencies.
   CARGO_INCREMENTAL: "0"
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_TEST_DEBUG: "0"
@@ -75,7 +74,7 @@ jobs:
           export GIT_CONFIG_VALUE_0="Authorization: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')"
           unset TOKEN
           cd source
-          # release.py builds and tests in /ci-target; hold a slot for the whole step.
+          # release.py runs Clippy in /ci-target; hold a slot for the whole step.
           . .forgejo/scripts/lock-target-dir.sh
           cargo clean --workspace
           if [ -n "$REQUESTED_VERSION" ]; then

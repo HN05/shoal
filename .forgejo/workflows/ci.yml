@@ -7,7 +7,9 @@
 # which still reports a status for the required check.
 # Pushes to main and dispatches always run everything, except that a release
 # PR (`release/v*`) and its version commit on main run no checks: release.py
-# validates that tree itself.
+# accepts that tree only once the rust and musl statuses below passed on the
+# main commit it builds on, and names those statuses; keep them in step with
+# the job names.
 #
 # A draft PR (Forgejo's draft state is a `WIP:` or `[WIP]` title prefix) runs
 # no checks, and pushing to it starts none. Taking it out of draft is a title
@@ -221,8 +223,9 @@ jobs:
       # Runner-mounted volume; a plain directory when unmounted.
       CARGO_TARGET_DIR: /ci-target
       RUSTFLAGS: '-D warnings'
-      # As in release.yml: linking the test binary with full debuginfo and
-      # incremental state outgrows the runner LXC's memory and gets rustc killed.
+      # Linking the test binary with full debuginfo and incremental state
+      # outgrows the runner LXC's memory and gets rustc killed. release.yml
+      # matches these, sharing the slots.
       CARGO_INCREMENTAL: "0"
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"

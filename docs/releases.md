@@ -5,8 +5,10 @@ In Forgejo, open **Actions → release → Run workflow**, select `main`, and en
 Entering the already-tagged version on `main` resumes an interrupted publication
 from that immutable tag without creating another version commit.
 
-The workflow updates both Cargo versions, runs the checks CI runs,
-creates and merges a version PR, validates the merged commit, and publishes its
+The workflow waits for the required CI checks on the `main` commit it releases,
+and stops unless both passed. It then updates both Cargo versions, checks their
+formatting and Clippy, creates and merges a version PR, checks the merged commit
+the same way when `main` moved meanwhile, and publishes its
 immutable tag and Forgejo release. Notes list merged PRs excluding release preparation
 since the nearest earlier published ancestor release, link referenced issues, and
 are copied to GitHub, with runtime dependency links to each host's tagged README.

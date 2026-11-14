@@ -401,7 +401,8 @@ instead of the PR delivery guidance below.
   Idle cleanup accepts commits on remote-tracking branches and commits merged into
   the local default branch or its remote-tracking branch, including squash and
   rebase merges.
-- Releases are pinned to the merged version commit; changelogs use published
+- Releases are pinned to the merged version commit and accepted only on a
+  `main` commit whose required checks passed; changelogs use published
   ancestor releases and merged PRs excluding release preparation; deleted branch
   labels require matching repository and exact PR identity. GitHub
   keeps change descriptions with a GitHub comparison link, omitting unmirrored
