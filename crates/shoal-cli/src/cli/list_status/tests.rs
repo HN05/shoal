@@ -201,3 +201,28 @@ fn a_queued_agent_gives_its_status_to_a_workspace_where_nothing_runs() {
     workspace.state = WorkspaceState::Removing;
     assert_eq!(status(&workspace, true), ListStatus::Removing);
 }
+
+#[test]
+fn a_working_agent_outranks_its_ready_mark_in_every_space() {
+    let status = |state| crate::model::AgentStatus {
+        state,
+        since: crate::time::UnixTime::EPOCH,
+        prompt_cache_expires_at: None,
+    };
+    let mut workspace = coordinated(AgentState::Idle);
+    workspace.review = vec![mark(false)];
+    let mut chat: Chat = serde_json::from_value(serde_json::json!({
+        "id": "c", "name": "talk", "agent": "claude", "running": true, "started_at": 0,
+    }))
+    .expect("a chat record");
+    chat.review = vec![mark(false)];
+    for (state, shown) in [
+        (AgentState::Working, ListStatus::Working),
+        (AgentState::Idle, ListStatus::Ready),
+    ] {
+        workspace.agent_state = Some(status(state));
+        chat.agent_state = Some(status(state));
+        assert_eq!(ListStatus::of_workspace(&workspace, false), shown);
+        assert_eq!(ListStatus::of_chat(&chat), shown);
+    }
+}

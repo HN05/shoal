@@ -145,3 +145,48 @@ fn a_chat_shoal_brings_back_is_listed_asleep_with_what_wakes_it() {
     }
     assert!(items[0].note().contains("shoal attach 4"));
 }
+
+#[test]
+fn marks_wait_in_the_inbox_only_while_their_agent_is_not_working() {
+    let mark = crate::model::ReviewMark {
+        kind: None,
+        url: None,
+        head: "abc".into(),
+        created_at: UnixTime::EPOCH,
+        stale: Some(false),
+        warnings: Vec::new(),
+    };
+    let agent = |state: &str| serde_json::json!({"state": state, "since": 0});
+    let workspace = |id: &str, state: &str| -> crate::model::Workspace {
+        let mut workspace: crate::model::Workspace = serde_json::from_value(serde_json::json!({
+            "id": id, "repository_id": "r1", "name": id, "path": "/w", "branch": id,
+            "state": "ready", "agent_state": agent(state),
+        }))
+        .unwrap();
+        workspace.review = vec![mark.clone()];
+        workspace
+    };
+    let chat = |id: &str, state: &str| -> crate::model::Chat {
+        let mut chat: crate::model::Chat = serde_json::from_value(serde_json::json!({
+            "id": id, "repository_id": "r1", "name": id, "agent": "claude",
+            "running": true, "started_at": 0, "agent_state": agent(state),
+        }))
+        .unwrap();
+        chat.review = vec![mark.clone()];
+        chat
+    };
+    let workspaces = [workspace("working", "working"), workspace("idle", "idle")];
+    let chats = [chat("working", "working"), chat("idle", "idle")];
+    let marked = |items: Vec<Item>| -> Vec<String> {
+        (items.into_iter())
+            .filter_map(|item| match item {
+                Item::Ready { workspace, .. } => Some(workspace.id.into()),
+                Item::ChatReady { chat, .. } => Some(chat.id.into()),
+                _ => None,
+            })
+            .collect()
+    };
+    let none = Default::default();
+    assert_eq!(marked(super::workspace_items(&workspaces, &none)), ["idle"]);
+    assert_eq!(marked(super::chat_items(&chats)), ["idle"]);
+}

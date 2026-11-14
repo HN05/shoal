@@ -16,7 +16,7 @@ use crate::{
     cli::{
         client,
         context::Context,
-        list_status::ListStatus,
+        list_status::{self, ListStatus},
         output::{self, Palette, Style},
         ui::{self, Cell, WidthLimit},
     },
@@ -226,7 +226,7 @@ fn decision_items(
 
 /// Workspaces whose agent needs input, then blocked ones, then failed ones,
 /// then those whose agent is asleep, then each mark made at the current
-/// commit.
+/// commit of those whose agent is not working.
 fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<SpaceId>) -> Vec<Item> {
     let status = |w: &Workspace| ListStatus::of_workspace(w, stopped.contains(&w.id));
     let waiting = workspaces
@@ -252,7 +252,9 @@ fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<SpaceId>) -> Vec<
         .map(|w| Item::Asleep {
             workspace: w.clone(),
         });
-    let review = workspaces.iter().flat_map(|w| {
+    let waiting_marks = (workspaces.iter())
+        .filter(|w| list_status::marks_wait(w.agent_state.map(|status| status.state)));
+    let review = waiting_marks.flat_map(|w| {
         w.review
             .iter()
             .filter(|mark| mark.stale != Some(true))
@@ -269,7 +271,7 @@ fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<SpaceId>) -> Vec<
 
 /// Running chats whose agent needs input, then blocked chats, then chats
 /// whose agent is asleep, then each running chat that recorded its work as
-/// finished, and each mark of the others.
+/// finished, and each mark of the others whose agent is not working.
 fn chat_items(chats: &[Chat]) -> Vec<Item> {
     let running = || chats.iter().filter(|chat| chat.running);
     let waiting = running()
@@ -283,12 +285,15 @@ fn chat_items(chats: &[Chat]) -> Vec<Item> {
         .map(|chat| Item::ChatAsleep { chat: chat.clone() });
     let finished = running().flat_map(|chat| match chat.completion {
         Some(_) => vec![Item::ChatDone { chat: chat.clone() }],
-        None => (chat.review.iter())
-            .map(|mark| Item::ChatReady {
-                chat: chat.clone(),
-                mark: mark.clone(),
-            })
-            .collect(),
+        None if list_status::marks_wait(chat.agent_state.map(|status| status.state)) => {
+            (chat.review.iter())
+                .map(|mark| Item::ChatReady {
+                    chat: chat.clone(),
+                    mark: mark.clone(),
+                })
+                .collect()
+        }
+        None => Vec::new(),
     });
     (waiting.chain(blocked).chain(asleep))
         .chain(finished)

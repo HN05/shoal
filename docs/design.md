@@ -2487,6 +2487,11 @@ A chat marks the same way, except that its checkout is not on a PR's branch:
 it marks each linked open PR at the head the forge reports, and its issue or itself
 at its checkout's HEAD. Its marks are journal events as a workspace's are,
 and they show it `ready` in lists and the inbox.
+A working agent never waits for the user, so its own `working` state outranks
+its space's `ready`, as `needs input` does, and the inbox leaves out the marks
+of a space whose agent works: the mark stays recorded and shows again when the
+turn ends, so a space keeps no `ready` status while its agent works on the
+user's reply, and the agent need not mark itself again.
 
 Agent state is the turn state a space's agent reports from its hooks:
 `working`, `waiting` for the user mid-turn, or `idle` before its first turn

@@ -47,8 +47,8 @@ impl ListStatus {
     /// whose saved work comes back on its own, a recorded completion when its
     /// work is stopped, stopped work unless blocked, an agent that needs
     /// input, what blocks it, a recorded
-    /// completion, a current ready mark, the agent's other turn states as
-    /// its sleep says, an agent or command running without one, the
+    /// completion, a current ready mark while its agent is not working,
+    /// the agent's other turn states as its sleep says, an agent or command running without one, the
     /// coordinator that does its work working, an outdated mark, or
     /// inactive.
     pub fn of_workspace(workspace: &Workspace, stopped: bool) -> Self {
@@ -69,7 +69,11 @@ impl ListStatus {
             WorkspaceState::Ready if agent == Some(AgentState::Waiting) => Self::NeedsInput,
             WorkspaceState::Ready if blocked => Self::Blocked,
             WorkspaceState::Ready if workspace.done => Self::Finished,
-            WorkspaceState::Ready if !workspace.review.is_empty() && !outdated => Self::Ready,
+            WorkspaceState::Ready
+                if !workspace.review.is_empty() && !outdated && marks_wait(agent) =>
+            {
+                Self::Ready
+            }
             WorkspaceState::Ready => match agent {
                 Some(state) => Self::sleeping(state, workspace.sleep),
                 None if workspace.running => Self::ProcessRunning,
@@ -101,8 +105,8 @@ impl ListStatus {
     /// it is stopped until it is restored, finished when it recorded
     /// completion or blocked while its progress records what blocks it; a
     /// running one needs input while its agent does, is blocked, finished
-    /// once it records completion, ready once it marks its work ready, or
-    /// else shows its agent's other turn states as its sleep says, or that
+    /// once it records completion, ready once it is marked ready while its
+    /// agent is not working, or else shows its agent's other turn states as its sleep says, or that
     /// it runs without one.
     pub fn of_chat(chat: &Chat) -> Self {
         let agent = chat.agent_state.map(|status| status.state);
@@ -117,7 +121,7 @@ impl ListStatus {
             true if agent == Some(AgentState::Waiting) => Self::NeedsInput,
             true if blocked => Self::Blocked,
             true if chat.completion.is_some() => Self::Finished,
-            true if !chat.review.is_empty() => Self::Ready,
+            true if !chat.review.is_empty() && marks_wait(agent) => Self::Ready,
             true => agent.map_or(Self::ProcessRunning, |state| {
                 Self::sleeping(state, chat.sleep)
             }),
@@ -236,6 +240,13 @@ impl ListStatus {
         };
         palette.paint(style, group.marker())
     }
+}
+
+/// Whether the ready marks of a space whose agent reports `agent` wait for
+/// the user: a working agent never does, so its marks show again once its
+/// turn ends.
+pub fn marks_wait(agent: Option<AgentState>) -> bool {
+    agent != Some(AgentState::Working)
 }
 
 /// Statuses that ask the same of the user share a row marker.

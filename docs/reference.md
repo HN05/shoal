@@ -794,7 +794,7 @@ workspace is neither done nor [blocked](#progress), `asleep` while its agent
 is [asleep](#sleep), `needs input`, `blocked`
 while its progress records what blocks it, `finished` after `shoal done` until
 `shoal done --undo` or `shoal restore` withdraws the completion, also while its
-work is stopped, `ready`, the other [agent states](#agent-state),
+work is stopped, `working`, `ready`, the other [agent states](#agent-state),
 `process running` while an agent without a reported state or a command runs,
 `parent working` while no agent of its own has ever started there and the
 agent of the nearest space above with one works, as when that agent's
@@ -833,7 +833,7 @@ in kebab case (`needs-input`, `ready-outdated`, `queued`).
 A chat's status is `asleep` while its agent is [asleep](#sleep), else
 `stopped` until it is restored, or `finished` after
 `shoal done` or `blocked` while blocked, then, in order of precedence,
-`needs input`, `blocked`, `finished`, `ready`, its agent's other
+`needs input`, `blocked`, `finished`, `working`, `ready`, its agent's other
 [states](#agent-state), or `process running` before its agent reports one.
 <a id="inbox"></a>The inbox lists what needs you, each with its workspace: open questions
 and pending approval requests that no coordinating agent decides, each with its
@@ -842,8 +842,8 @@ and pending approval requests that no coordinating agent decides, each with its
 running chats whose agent needs input, blocked workspaces and chats with the
 first of what blocks them, failed
 workspaces, workspaces and chats whose agent is [asleep](#sleep) with why,
-what wakes it and the commands that wake it now, [ready marks](#ready-for-review) at the current HEAD, one row per
-marked item, running [demos](#demos), Git worktrees under a repository's
+what wakes it and the commands that wake it now, [ready marks](#ready-for-review) at the current HEAD of
+spaces whose agent is not working, one row per marked item, running [demos](#demos), Git worktrees under a repository's
 Shoal directory that no workspace owns, automatic cleanup failing other than in
 a workspace, and repositories whose default branch has failed to
 [sync](#repositories) for 30 minutes. There Enter answers a question, approves or denies a request after
@@ -5011,7 +5011,10 @@ its head on the forge is HEAD; `shoal ready` skips any other, prints each
 with its reason on stderr, and fails when that PR was selected or nothing
 else is left to mark. Marking again moves the mark to the current HEAD, and
 marking linked items replaces a mark made while nothing was linked.
-Marks never notify, record completion, or affect cleanup; use `shoal alerts send` to
+A working agent does not wait for the user, so while a marked space's agent
+reports `working`, lists show it `working` and the inbox leaves its marks out;
+they show again once its turn ends. Marks never notify, record completion, or
+affect cleanup; use `shoal alerts send` to
 ask for attention. New commits make a mark outdated: `list` shows
 `ready (outdated)`, and `status`, `inspect` and `list --json` list
 `review` marks with `kind`, `url`, `head`, `created_at` and `stale`, which

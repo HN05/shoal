@@ -272,8 +272,8 @@ fn workspace_rows_align_status_and_titles() {
             prompt_cache_expires_at: None,
         })
     };
-    // Needing input outranks completion, which outranks a current mark
-    // and other turn states.
+    // Needing input outranks completion, which outranks a working agent,
+    // which outranks a current mark, which outranks other turn states.
     workspaces.extend([
         workspace("a", "asking", "asking", WorkspaceState::Ready),
         workspace("a", "marked", "marked", WorkspaceState::Ready),
@@ -314,7 +314,7 @@ fn workspace_rows_align_status_and_titles() {
             "● 5   review     ready",
             "○ 6   quiet      ready (outdated)",
             "● 7   asking     needs input",
-            "● 8   marked     ready",
+            "◐ 8   marked     working",
             "○ 9   agent      waiting",
             "○ 10  done       finished",
             "● 11  follow-up  needs input",
