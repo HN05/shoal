@@ -107,6 +107,12 @@ impl ItemDetails {
         Some(summary)
     }
 
+    /// Whether `next` shows the PR in draft where `self` showed it out of
+    /// draft, or the other way round.
+    pub(crate) fn draft_changed(&self, next: &Self) -> bool {
+        matches!((self.draft, next.draft), (Some(was), Some(is)) if was != is)
+    }
+
     /// Take each part `edited` changed as it is after the action, and only
     /// the names it added to or removed from a list, so a name someone else
     /// changed since the cursor last saw the item is still reported.
@@ -138,6 +144,11 @@ impl Edited {
     /// Whether the action changed none of the item's details.
     pub fn is_empty(&self) -> bool {
         self.before == self.after
+    }
+
+    /// Whether the action moved a PR into or out of draft.
+    pub fn changed_draft(&self) -> bool {
+        self.before.draft_changed(&self.after)
     }
 }
 

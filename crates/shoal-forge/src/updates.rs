@@ -399,6 +399,12 @@ impl Snapshot {
         (self.details.as_ref()).map(|details| details.title.as_str())
     }
 
+    /// Whether `next` shows the PR in or out of draft where `self` showed
+    /// the other; false while either has not read its details.
+    pub fn draft_changed(&self, next: &Self) -> bool {
+        matches!((&self.details, &next.details), (Some(seen), Some(details)) if seen.draft_changed(details))
+    }
+
     /// The PR's head commit, `None` for an issue.
     pub fn head(&self) -> Option<&CommitId> {
         self.head.as_ref()

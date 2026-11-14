@@ -3114,9 +3114,9 @@ async fn a_merge_a_background_poll_sees_asks_for_a_sync() {
         manager
             .record_background_activity(&workspace.id, vec![(PR.as_str().into(), in_state(state))])
     };
-    assert!(!record("open").await.unwrap());
-    assert!(!record("open").await.unwrap());
-    assert!(record("merged").await.unwrap());
+    assert!(!record("open").await.unwrap().merged);
+    assert!(!record("open").await.unwrap().merged);
+    assert!(record("merged").await.unwrap().merged);
 }
 
 #[tokio::test]

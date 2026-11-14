@@ -83,7 +83,8 @@ impl Manager {
         // A failed item lookup must not hold back the branch's changes.
         let looked_up = match activity {
             Ok(activity) => {
-                self.record_merges(space, activity.clone()).await?;
+                self.act_on_background_activity(space, activity.clone())
+                    .await?;
                 observations.splice(0..0, activity);
                 Ok(())
             }
@@ -108,19 +109,21 @@ impl Manager {
             .await
     }
 
-    /// Record the background `activity` of `space`'s items, and sync the
+    /// Record the background `activity` of `space`'s items; sync the
     /// default branch once one of them merged, since other workspaces'
-    /// conflict checks read it.
-    async fn record_merges(
+    /// conflict checks read it, and publish the space's progress again once
+    /// a PR moved into or out of draft, which its progress section follows.
+    async fn act_on_background_activity(
         &self,
         space: &LinkSpace,
         activity: Vec<(String, Snapshot)>,
     ) -> Result<()> {
-        if self
-            .record_background_activity(space.id(), activity)
-            .await?
-        {
+        let seen = (self.record_background_activity(space.id(), activity)).await?;
+        if seen.merged {
             self.syncs.request(space.repository_id());
+        }
+        if seen.changed_draft {
+            self.publications.request(space.id());
         }
         Ok(())
     }
@@ -145,18 +148,18 @@ impl Manager {
         Ok(())
     }
 
-    /// Record what changed since the last poll; returns whether an item merged.
+    /// Record what changed since the last poll.
     pub(super) async fn record_background_activity(
         &self,
         id: &SpaceId,
         observations: Vec<(String, Snapshot)>,
-    ) -> Result<bool> {
+    ) -> Result<Seen> {
         let id = id.to_owned();
         self.store
             .write(move |tx| {
                 require_ready_space(tx, &id)?;
                 let linked = polled_items(tx, &id)?;
-                let mut merged = false;
+                let mut seen = Seen::default();
                 for (url, kind, mut snapshot) in
                     observations.into_iter().filter_map(|(url, snapshot)| {
                         linked
@@ -184,8 +187,9 @@ impl Manager {
                         UnixTime::now(),
                     );
                     if let Some(previous) = previous {
+                        seen.changed_draft |= previous.draft_changed(&snapshot);
                         for update in previous.changes(&snapshot, &url) {
-                            merged |= update.kind == UpdateKind::Merged;
+                            seen.merged |= update.kind == UpdateKind::Merged;
                             crate::daemon::events::record_item_activity(
                                 tx, &id, kind, &url, &update,
                             )?;
@@ -193,10 +197,19 @@ impl Manager {
                     }
                     save_observation(tx, &id, &url, &snapshot)?;
                 }
-                Ok(merged)
+                Ok(seen)
             })
             .await
     }
+}
+
+/// What a background poll saw change that Shoal acts on.
+#[derive(Default)]
+pub(super) struct Seen {
+    /// An item merged.
+    pub merged: bool,
+    /// A PR moved into or out of draft.
+    pub changed_draft: bool,
 }
 
 /// Store `snapshot` as the background poll's observation of the item at

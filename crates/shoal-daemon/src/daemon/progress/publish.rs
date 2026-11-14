@@ -1,8 +1,8 @@
-//! Showing each space's progress in the progress section of its open PRs,
-//! those it opened or was assigned and has not marked ready: at most one
-//! edit per space each [`INTERVAL`], the latest progress written in the
-//! end. A failed edit is logged and retried with the next change, without
-//! a notification.
+//! Showing each space's progress in the progress section of its open draft
+//! PRs, those it opened or was assigned, and removing it from those out of
+//! draft: at most one edit per space each [`INTERVAL`], the latest progress
+//! written in the end. A failed edit is logged and retried with the next
+//! change, without a notification.
 use crate::client::space_ids::SpaceId;
 use crate::forge::items::reference::ItemRef;
 use std::{
@@ -121,22 +121,21 @@ pub async fn run(manager: Arc<Manager>) {
     }
 }
 
-/// The open PRs the space `id` opened or was assigned and has not marked
-/// ready, which show its progress.
+/// The PRs the space `id` opened or was assigned, which show its progress
+/// while they are open drafts.
 fn publishing_pulls(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let assigned = linked_items(db, id, Some(ItemKind::Pr))?.into_iter();
     let opened = (store::recorded_items(db, id, Relation::Opened)?.into_iter())
         .filter(|item| item.kind() == ItemKind::Pr.into())
         .map(|item| item.url);
-    let marked = crate::daemon::workspace::review::list(db, id)?;
-    let ready = |url: &ItemRef| marked.iter().any(|mark| mark.url.as_ref() == Some(url));
-    Ok(assigned.chain(opened).filter(|url| !ready(url)).collect())
+    Ok(assigned.chain(opened).collect())
 }
 
 impl Manager {
     /// Write the progress of the space `id` into the progress section of
-    /// each PR that shows it, unless `[pr] progress` is off, and record it
-    /// as published once every one does.
+    /// each of its draft PRs, and remove it from the others, unless
+    /// `[pr] progress` is off, and record it as published once every one
+    /// shows it.
     pub(crate) async fn publish_progress(&self, id: &SpaceId) -> Result<()> {
         let space = self.link_space(&SpaceSelector::id(id)).await?;
         if !self.space_settings(&space).await?.pr.progress {
@@ -160,10 +159,11 @@ impl Manager {
             .await
     }
 
-    /// Show `section` in the space's PRs at `urls`, or remove it for
-    /// `None`, logging each PR that fails without stopping at it; whether
-    /// every one succeeded. The caller holds the gates
-    /// [`Manager::lock_change_gates`] takes for the space.
+    /// Show `section` in the space's draft PRs at `urls`, removing it from
+    /// the others, or remove it from every one for `None`, logging each PR
+    /// that fails without stopping at it; whether every one succeeded. The
+    /// caller holds the gates [`Manager::lock_change_gates`] takes for the
+    /// space.
     async fn write_sections(
         &self,
         space: &LinkSpace,
@@ -178,14 +178,6 @@ impl Manager {
             }
         }
         written
-    }
-
-    /// Remove the progress section of the space's PRs at `urls`, which it
-    /// marked ready, so they stop showing it; a failure is logged. The
-    /// caller holds the gates [`Manager::lock_change_gates`] takes for the
-    /// space.
-    pub(crate) async fn remove_progress_sections(&self, space: &LinkSpace, urls: &[ItemRef]) {
-        self.write_sections(space, urls, None).await;
     }
 
     /// The spaces whose progress changed after its sections last showed it.

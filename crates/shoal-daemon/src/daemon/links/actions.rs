@@ -201,9 +201,10 @@ impl Manager {
         Ok(())
     }
 
-    /// Show `section` as the progress section of the space's PR at `url`, or
-    /// remove its section for `None`, as the agent account, unless the PR is
-    /// no longer open or already shows it. The caller holds the gates
+    /// Show `section` as the progress section of the space's PR at `url`
+    /// while it is a draft, or remove its section for `None` or a PR out of
+    /// draft, as the agent account, unless the PR is no longer open or
+    /// already shows it. The caller holds the gates
     /// [`Manager::lock_change_gates`] takes for the space.
     pub(crate) async fn write_progress_section(
         &self,
@@ -219,6 +220,8 @@ impl Manager {
         if current.item.state != ItemState::Open {
             return Ok(());
         }
+        let draft = current.item.pr.as_ref().is_some_and(|pr| pr.draft);
+        let section = section.filter(|_| draft);
         let body = crate::daemon::progress::section::with_section(&current.body, section);
         if body == current.body {
             return Ok(());
@@ -263,7 +266,8 @@ impl Manager {
 
     /// Apply `action` and record it as the workspace's own change, as well as
     /// a comment it posted before failing; `caller` takes it, `None` for the
-    /// user and for Shoal's own changes. The caller holds the gates
+    /// user and for Shoal's own changes. A PR it moves into or out of draft
+    /// has its progress section published again. The caller holds the gates
     /// [`Manager::lock_change_gates`] takes for the workspace.
     pub(super) async fn apply_own(
         &self,
@@ -285,6 +289,7 @@ impl Manager {
                 return Err(failed.await);
             }
         };
+        let changed_draft = acted.edited.changed_draft();
         let own = Own {
             state: own_state(action).then_some(acted.item.state),
             authored: own_posts(action, caller, acted.authored),
@@ -293,6 +298,9 @@ impl Manager {
         self.record_own_action(id, target, action.name(), own)
             .await
             .map_err(|error| shoal_forge::items::action::after_send(error, true))?;
+        if changed_draft {
+            self.publications.request(id);
+        }
         Ok(acted.item)
     }
 

@@ -5037,7 +5037,7 @@ the marks; every `shoal ready` runs it again.
 
 Before the hook, `shoal ready` takes each marked open PR that is a draft out of
 draft, as `shoal pr edit --no-draft` would; [`[pr] undraft_on_ready = false`](config.md#prs) keeps marks
-local. It also removes the [progress](#progress) section of each marked PR. `shoal ready --undo --draft`, or `[pr] draft_on_unready = true`, returns the open PRs
+local. `shoal ready --undo --draft`, or `[pr] draft_on_unready = true`, returns the open PRs
 whose marks it withdraws to draft first; `--no-draft` overrides that setting.
 A failed change reports the forge's error and exits non-zero, keeping the marks
 in both commands so either can be retried. Marks never change issues, and
@@ -5194,9 +5194,9 @@ Each change is a `progress_changed` [event](#workspace-events), which
 change. Progress never notifies, and coordinating agents read their
 children's progress on demand.
 
-While a space has an open PR it opened or was assigned and has not marked
-[ready](#ready-for-review), Shoal writes the status line and the steps into a
-section at the end of the PR's body, as the agent account:
+While a space has an open draft PR it opened or was assigned, Shoal writes
+the status line and the steps into a section at the end of the PR's body, as
+the agent account:
 
 ```markdown
 <!-- shoal:progress -->
@@ -5212,9 +5212,10 @@ leaves the rest of the body as it is. A PR is edited at most once a minute,
 and the latest progress is always written in the end, including what changed
 while the daemon was down; a PR opened later shows it with the next change. A
 failed edit is logged and retried with the next change, without a
-notification. `shoal ready` removes the section from the PRs it marks, and
-Shoal stops updating them; after `shoal ready --undo`, the next change writes
-it again. Merged and closed PRs are never edited, and completing with
+notification. A PR that leaves draft, through
+[`shoal ready`](#ready-for-review), `shoal pr edit --no-draft` or the forge,
+loses the section with the next publication, and one that returns to draft
+shows it again. Merged and closed PRs are never edited, and completing with
 `shoal done` keeps the section. [`[pr] progress = false`](config.md#prs) leaves PR
 bodies alone.
 

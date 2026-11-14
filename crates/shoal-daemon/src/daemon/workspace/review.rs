@@ -92,9 +92,9 @@ impl Manager {
     /// only while it is open with HEAD as its head on the forge; the others are
     /// skipped, and an explicitly selected one fails. Marking again moves
     /// the mark to the current HEAD and reruns `hooks.post_ready`. With
-    /// `[pr] undraft_on_ready`, marked draft PRs leave draft before the hook runs;
-    /// marked PRs lose their progress section, which Shoal stops updating;
-    /// a failure there keeps the marks and runs the hook. For a scoped
+    /// `[pr] undraft_on_ready`, marked draft PRs leave draft before the hook runs,
+    /// which removes their progress section with the next publication; a
+    /// failure there keeps the marks and runs the hook. For a scoped
     /// `caller`, `[review] require_for_ready` applies to the HEAD the marks
     /// record.
     pub async fn mark_ready(
@@ -137,7 +137,6 @@ impl Manager {
             true => self.set_draft(&space, &pr_urls(&ready.marks), false).await,
             false => Ok(()),
         };
-        (self.remove_progress_sections(&space, &pr_urls(&ready.marks))).await;
         if let Some(command) = command {
             match self.configured_workspace_environment(&workspace).await {
                 Ok(configured) => {
@@ -185,7 +184,6 @@ impl Manager {
             true => self.set_draft(space, &pr_urls(&ready.marks), false).await,
             false => Ok(()),
         };
-        (self.remove_progress_sections(space, &pr_urls(&ready.marks))).await;
         if let Some(command) = HookKind::PostReady.command(&settings) {
             let hook = HookSpace::Chat {
                 chat,
