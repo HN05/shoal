@@ -5,6 +5,7 @@ mod actions;
 mod agents;
 pub(crate) mod asleep;
 mod blockers;
+mod chats;
 mod dispatch;
 mod entries;
 mod expiry;

@@ -309,6 +309,39 @@ pub struct QueueRequest {
     pub issue_labels: Vec<String>,
 }
 
+/// The launch of a new chat's agent to admit under the agent slots, which
+/// its start records once the queue starts it, or records at once and
+/// attaches to the launch when it waits.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatQueueRequest {
+    /// The chat's repository, that of the workspace whose worktree it runs
+    /// in; none for a chat without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<crate::repository::Selector>,
+    pub name: SpaceName,
+    pub agent: crate::agent::Agent,
+    pub mode: crate::config::modes::ModeName,
+    /// The permissions `--permission` gave the agent.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
+    )]
+    pub narrowing: crate::config::permissions::PermissionsConfig,
+    /// What the queue's start of the chat runs, which the daemon keeps
+    /// without reading.
+    pub plan: String,
+    /// Terminal multiplexer variables the start needs to reach the same
+    /// window.
+    pub env: std::collections::BTreeMap<String, String>,
+    /// Start at once regardless of the limits; the agent still takes a slot.
+    /// Scoped callers cannot.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub now: bool,
+    /// The priority of the chat, which ranks the launch until it exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<crate::priority::Priority>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueAdmission {
     /// Whether the caller starts the agent now.

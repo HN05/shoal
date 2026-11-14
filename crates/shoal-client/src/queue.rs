@@ -9,7 +9,7 @@ use tokio::{io::AsyncReadExt as _, sync::oneshot};
 use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, open, request, stream_closed},
-    model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan},
+    model::{ChatQueueRequest, QueueAdmission, QueueEntry, QueueRequest, QueuedPlan},
     protocol::QueueMethod,
 };
 
@@ -25,6 +25,13 @@ const HOLD_RETRY: Duration = Duration::from_secs(1);
 pub async fn add(daemon: &impl Daemon, request: QueueRequest) -> Result<QueueAdmission> {
     let request = Box::new(request);
     self::request(daemon, QueueMethod::QueueAdd { request }).await
+}
+
+/// Admit the launch of a new chat's agent that `request` describes now or
+/// queue it.
+pub async fn add_chat(daemon: &impl Daemon, request: ChatQueueRequest) -> Result<QueueAdmission> {
+    let request = Box::new(request);
+    self::request(daemon, QueueMethod::QueueChat { request }).await
 }
 
 /// The worker of an existing workspace for the daemon to queue and start
@@ -93,14 +100,11 @@ pub async fn remove(daemon: &impl Daemon, entry: String) -> Result<QueueEntry> {
     request(daemon, QueueMethod::QueueRemove { entry }).await
 }
 
-/// Record `workspace` as the one the starting `entry` opened, or the
-/// existing one the waiting launch `entry` opens.
-pub async fn attach(
-    daemon: &impl Daemon,
-    entry: QueueEntryId,
-    workspace: SpaceSelector,
-) -> Result<()> {
-    request(daemon, QueueMethod::QueueAttach { entry, workspace }).await
+/// Record `space` as the workspace the starting `entry` opened, or the
+/// existing one the waiting launch `entry` opens, or the chat the launch
+/// `entry` starts its agent in.
+pub async fn attach(daemon: &impl Daemon, entry: QueueEntryId, space: SpaceSelector) -> Result<()> {
+    request(daemon, QueueMethod::QueueAttach { entry, space }).await
 }
 
 /// Free the slot of the starting `entry`, whose launch failed with `error`;

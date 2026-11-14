@@ -12,6 +12,10 @@ pub enum QueueMethod {
     QueueAdd {
         request: Box<crate::model::QueueRequest>,
     },
+    /// Admit the launch of a new chat's agent now or queue it.
+    QueueChat {
+        request: Box<crate::model::ChatQueueRequest>,
+    },
     /// Queue the worker of the ready `workspace`, the launch the daemon
     /// resolves `launch` into under the workspace's settings, on the
     /// workspace's issue unless the launch gives it a task, once `blockers`
@@ -55,10 +59,10 @@ pub enum QueueMethod {
         entry: QueueEntryId,
     },
     /// Record the workspace a starting entry opened, or the existing one a
-    /// waiting launch opens.
+    /// waiting launch opens, or the chat a launch starts its agent in.
     QueueAttach {
         entry: QueueEntryId,
-        workspace: SpaceSelector,
+        space: SpaceSelector,
     },
     /// End a starting entry that could not start its agent.
     QueueFail {
