@@ -86,8 +86,9 @@ impl Manager {
         }
         let scan =
             process::scan(idle.iter().map(|execution| execution.id.clone()).collect()).await?;
+        let agents = self.agent_trees().await?;
         for execution in idle {
-            if Processes::runs_outside_group(&execution, &scan)
+            if Processes::runs_outside_group(&execution, &scan, &agents)
                 && let Some(turn) = turns.get_mut(&execution.id)
             {
                 turn.state = AgentState::Working;

@@ -201,6 +201,7 @@ async fn only_marked_processes_outside_the_group_run_outside_it() {
         agent: None,
         stopped: None,
     };
+    let none = process::AgentTrees::default();
     let marked = |execution: &str| process::Scan {
         processes: vec![process::OwnedProcess {
             owner: execution.into(),
@@ -208,15 +209,31 @@ async fn only_marked_processes_outside_the_group_run_outside_it() {
         }],
         ..Default::default()
     };
-    assert!(Processes::runs_outside_group(&execution, &marked("agent")));
-    assert!(!Processes::runs_outside_group(&execution, &marked("other")));
+    assert!(Processes::runs_outside_group(
+        &execution,
+        &marked("agent"),
+        &none
+    ));
+    assert!(!Processes::runs_outside_group(
+        &execution,
+        &marked("other"),
+        &none
+    ));
     execution.group_id = Some(identity.pid);
-    assert!(!Processes::runs_outside_group(&execution, &marked("agent")));
+    assert!(!Processes::runs_outside_group(
+        &execution,
+        &marked("agent"),
+        &none
+    ));
 
     execution.group_id = Some(std::process::id());
     background.kill().await.unwrap();
     background.wait().await.unwrap();
-    assert!(!Processes::runs_outside_group(&execution, &marked("agent")));
+    assert!(!Processes::runs_outside_group(
+        &execution,
+        &marked("agent"),
+        &none
+    ));
 
     // An agent hook waiting for the next update does no work.
     let mut hook = crate::test_support::spawn_marked_child(
@@ -232,7 +249,7 @@ async fn only_marked_processes_outside_the_group_run_outside_it() {
         }],
         ..Default::default()
     };
-    assert!(!Processes::runs_outside_group(&execution, &waiting));
+    assert!(!Processes::runs_outside_group(&execution, &waiting, &none));
     hook.kill().await.unwrap();
     hook.wait().await.unwrap();
 }
@@ -291,7 +308,7 @@ fn marked_by(owner: &str, process: &process::Identity) -> process::Scan {
 /// A process that hides its environment under another execution's agent
 /// wrapper, as `sh` does on macOS under a scoped caller's `start --here`,
 /// takes the marker the wrapper inherited from its starter, whose work it is
-/// not.
+/// not, neither to stop nor to keep its turn working.
 #[tokio::test]
 async fn a_foreign_agent_wrappers_processes_are_not_the_starters() -> anyhow::Result<()> {
     use anyhow::Context;
@@ -305,10 +322,17 @@ async fn a_foreign_agent_wrappers_processes_are_not_the_starters() -> anyhow::Re
     let wrappers = std::slice::from_ref(&wrapper_identity);
     let alone = Processes::inspect(&execution, workspace.path(), &scan, &[]).await;
     let beside = Processes::inspect(&execution, workspace.path(), &scan, wrappers).await;
+    let none = process::AgentTrees::default();
+    let alone_runs = Processes::runs_outside_group(&execution, &scan, &none);
+    let agents = process::AgentTrees::of(wrappers).await;
+    let beside_runs =
+        agents.map(|agents| Processes::runs_outside_group(&execution, &scan, &agents));
     process::signal(&agent, libc::SIGKILL)?;
     wrapper.wait().await?;
     assert_eq!(alone?.owned, [agent]);
     assert!(beside?.owned.is_empty());
+    assert!(alone_runs);
+    assert!(!beside_runs?);
     Ok(())
 }
 
@@ -328,8 +352,11 @@ async fn an_agent_below_another_agents_wrapper_keeps_its_processes() -> anyhow::
     let scan = marked_by("child", &job);
     let workspace = tempfile::tempdir()?;
     let inspected = Processes::inspect(&execution, workspace.path(), &scan, &wrappers).await;
+    let agents = process::AgentTrees::of(&wrappers).await;
+    let runs = agents.map(|agents| Processes::runs_outside_group(&execution, &scan, &agents));
     process::signal(&job, libc::SIGKILL)?;
     outer.wait().await?;
     assert!(inspected?.owned.contains(&job));
+    assert!(runs?);
     Ok(())
 }
