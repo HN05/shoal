@@ -9,6 +9,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::{
     super::rank::{Space, Steps},
     Settings,
+    labels::{self, Labelled},
 };
 use crate::client::{
     events::EventKind, priority::Priority, repository_ids::RepositoryId, space_ids::SpaceId,
@@ -16,10 +17,7 @@ use crate::client::{
 };
 use crate::{
     daemon::{progress, store},
-    forge::{
-        items::link::LinkKind,
-        updates::{self, SnapshotState},
-    },
+    forge::{items::link::LinkKind, updates::SnapshotState},
     model::Tier,
 };
 
@@ -97,51 +95,29 @@ fn space(db: &Connection, row: &Row) -> Result<Space> {
     })
 }
 
-/// A space without a priority set whose issues have labels, which may give
-/// it one.
-pub(super) struct Labelled {
-    pub id: SpaceId,
-    pub repository: RepositoryId,
-    pub labels: Vec<String>,
-}
-
 /// The spaces without a priority set whose issues have labels, each with
-/// the labels of all its issues, as the background poll, or else a watch,
-/// last read them. A record that does not read leaves its issue without
-/// labels rather than failing the rank.
-pub(super) fn labelled(db: &Connection) -> Result<Vec<Labelled>> {
+/// the labels of all its issues.
+pub(super) fn labelled(db: &Connection) -> Result<Vec<Labelled<SpaceId>>> {
     let rows = db
         .prepare(
-            "SELECT s.id,s.repository_id,COALESCE(
-                (SELECT record FROM space_item_activity WHERE space_id=s.id AND url=i.url),
-                (SELECT record FROM pr_activity WHERE space_id=s.id AND url=i.url))
-             FROM spaces s JOIN space_issue i ON i.space_id=s.id
-             WHERE s.repository_id IS NOT NULL
-                AND s.id NOT IN (SELECT space_id FROM space_priority)",
+            "SELECT id,repository_id FROM spaces s
+             WHERE repository_id IS NOT NULL
+                AND id NOT IN (SELECT space_id FROM space_priority)
+                AND EXISTS(SELECT 1 FROM space_issue WHERE space_id=s.id)",
         )?
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, SpaceId>(0)?,
-                row.get::<_, RepositoryId>(1)?,
-                row.get::<_, Option<String>>(2)?,
-            ))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    let mut labelled: Vec<Labelled> = Vec::new();
-    for (id, repository, record) in rows {
-        let labels = (record.as_deref())
-            .and_then(|record| updates::saved_labels(record).ok())
-            .unwrap_or_default();
-        match labelled.iter_mut().find(|space| space.id == id) {
-            Some(space) => space.labels.extend(labels),
-            None => labelled.push(Labelled {
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<(SpaceId, RepositoryId)>>>()?;
+    let mut labelled = Vec::new();
+    for (id, repository) in rows {
+        let labels = labels::of_issues(db, &id)?;
+        if !labels.is_empty() {
+            labelled.push(Labelled {
                 id,
                 repository,
                 labels,
-            }),
+            });
         }
     }
-    labelled.retain(|space| !space.labels.is_empty());
     Ok(labelled)
 }
 
@@ -149,7 +125,7 @@ pub(super) fn labelled(db: &Connection) -> Result<Vec<Labelled>> {
 /// labels under its repository's `[priority.labels]` in `settings`, where
 /// one maps; a repository without settings maps none.
 pub(super) fn label_priorities(
-    labelled: Vec<Labelled>,
+    labelled: Vec<Labelled<SpaceId>>,
     settings: &Settings,
 ) -> Vec<(SpaceId, Priority)> {
     let mut priorities = Vec::new();

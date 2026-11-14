@@ -21,6 +21,7 @@ use crate::daemon::{approvals::Target, workspace::Manager};
 mod areas;
 mod edges;
 mod entries;
+mod labels;
 mod spaces;
 
 impl Manager {

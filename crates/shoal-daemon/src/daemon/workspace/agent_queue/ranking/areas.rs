@@ -8,20 +8,10 @@ use rusqlite::{Connection, params};
 use super::{
     super::rank::{Snapshot, Work},
     Settings,
+    labels::{self, Labelled},
 };
 use crate::client::{queue::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
-use crate::{
-    daemon::{links::pr::watched_prs, store},
-    forge::{items::reference::ItemRef, updates},
-    state::{QueueKind, QueueState},
-};
-
-/// Work with labels in a repository.
-pub(super) struct Labelled<Id> {
-    pub id: Id,
-    pub repository: RepositoryId,
-    pub labels: Vec<String>,
-}
+use crate::state::{QueueKind, QueueState};
 
 /// The labels areas come from.
 pub(super) struct Labels {
@@ -49,8 +39,7 @@ pub(super) fn labels(db: &Connection) -> Result<Labels> {
     })
 }
 
-/// Every workspace with the labels of its assigned issues and PRs, as the
-/// background poll, or else a watch, last read them.
+/// Every workspace with the labels of its assigned issues and PRs.
 fn workspaces(db: &Connection) -> Result<Vec<Labelled<SpaceId>>> {
     let rows = db
         .prepare("SELECT id,repository_id FROM workspaces ORDER BY number IS NULL,number,id")?
@@ -59,38 +48,12 @@ fn workspaces(db: &Connection) -> Result<Vec<Labelled<SpaceId>>> {
     (rows.into_iter())
         .map(|(id, repository)| {
             Ok(Labelled {
-                labels: assigned_labels(db, &id)?,
+                labels: labels::of_issues_and_prs(db, &id)?,
                 id,
                 repository,
             })
         })
         .collect()
-}
-
-/// The labels of the issues and PRs assigned to the workspace `id`.
-fn assigned_labels(db: &Connection, id: &SpaceId) -> Result<Vec<String>> {
-    let issues = store::assigned_issues(db, id)?.into_iter();
-    let items = issues.map(|issue| issue.url).chain(watched_prs(db, id)?);
-    let mut labels = Vec::new();
-    for url in items {
-        labels.extend(item_labels(db, id, &url)?);
-    }
-    Ok(labels)
-}
-
-/// The labels of the space `id`'s item `url`; none before they are read
-/// or when its record does not read, rather than failing the rank.
-fn item_labels(db: &Connection, id: &SpaceId, url: &ItemRef) -> Result<Vec<String>> {
-    let record: Option<String> = db.query_row(
-        "SELECT COALESCE(
-            (SELECT record FROM space_item_activity WHERE space_id=?1 AND url=?2),
-            (SELECT record FROM pr_activity WHERE space_id=?1 AND url=?2))",
-        params![id, url],
-        |row| row.get(0),
-    )?;
-    Ok((record.as_deref())
-        .and_then(|record| updates::saved_labels(record).ok())
-        .unwrap_or_default())
 }
 
 /// The waiting launches without a workspace, with the labels of their
