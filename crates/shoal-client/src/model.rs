@@ -37,7 +37,7 @@ pub use merges::{
 pub use ports::{PortCatalog, PortOverview, PortRequest, PortReservation, PortSuggestion};
 pub use queue::{
     Blocker, Dependency, HeldBy, InheritedRank, QueueAdmission, QueueEntry, QueueRank,
-    QueueRequest, QueuedJob, QueuedPlan, StoppedSpace, Tier,
+    QueueRequest, QueuedJob, QueuedPlan, SharedArea, StoppedSpace, Tier,
 };
 pub use ready::{ReadyMarks, ReadyOutcome, ReviewMark, SkippedPr};
 pub use removal::{

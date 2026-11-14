@@ -90,6 +90,7 @@ fn snapshot(
         edges: edges::waits(tx, leases)?,
         now: UnixTime::now(),
         schedule,
+        occupied: HashMap::new(),
     })
 }
 

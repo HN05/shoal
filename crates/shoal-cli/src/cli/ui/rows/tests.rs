@@ -70,6 +70,7 @@ fn queue_status_names_the_work_a_launch_waits_for() {
             from: "12".into(),
             dependency: Dependency::Blocked,
         }),
+        shared_areas: Vec::new(),
     });
     assert_eq!(
         queue_status_cell(&entry).0,

@@ -9,7 +9,10 @@ use super::super::{
     rank::{Entry, Work},
     state::WaitingOneShot,
 };
-use crate::client::{priority::Priority, queue::QueueEntryId, space_ids::SpaceId, time::UnixTime};
+use crate::client::{
+    priority::Priority, queue::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId,
+    time::UnixTime,
+};
 use crate::{
     forge::ci::runner::Trigger,
     model::{QueuedJob, Tier},
@@ -48,7 +51,7 @@ fn queued(
         .prepare(
             "SELECT seq,id,kind,name,created_at,COALESCE(space_id,opens_workspace_id),job,
                 priority,(SELECT prompt_cache_expires_at FROM space_agent_state s
-                    WHERE s.execution_id=q.execution_id)
+                    WHERE s.execution_id=q.execution_id),repository_id
              FROM agent_queue q WHERE state=?1 ORDER BY seq",
         )?
         .query_map([QueueState::Queued], |row| {
@@ -62,11 +65,14 @@ fn queued(
                 row.get::<_, Option<String>>(6)?,
                 row.get::<_, Option<Priority>>(7)?,
                 row.get::<_, Option<UnixTime>>(8)?,
+                row.get::<_, Option<RepositoryId>>(9)?,
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut entries = Vec::new();
-    for (seq, id, kind, name, queued_at, space, job, priority, prompt_cache_until) in rows {
+    for (seq, id, kind, name, queued_at, space, job, priority, prompt_cache_until, repository) in
+        rows
+    {
         let work = work(kind, space, job.as_deref(), jobs.get(&id))?;
         let entry = Entry {
             id,
@@ -76,6 +82,8 @@ fn queued(
             queued_at,
             arrival: 0,
             prompt_cache_until,
+            repository,
+            areas: Vec::new(),
         };
         entries.push(((seq, false), entry));
     }
@@ -97,6 +105,8 @@ fn oneshot(oneshot: &WaitingOneShot) -> (Arrived, Entry) {
         queued_at: oneshot.requested_at,
         arrival: 0,
         prompt_cache_until: None,
+        repository: None,
+        areas: Vec::new(),
     };
     ((after, true), entry)
 }

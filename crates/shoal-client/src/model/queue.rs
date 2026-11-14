@@ -85,6 +85,19 @@ pub struct QueueRank {
     pub tier: Tier,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tier_from: Option<InheritedRank>,
+    /// The areas a launch of a new workspace shares with the workspaces of
+    /// its repository, which put it after launches of its tier that share
+    /// fewer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shared_areas: Vec<SharedArea>,
+}
+
+/// An area a launch shares, with the spaces holding it: their numbers, or
+/// their names without one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SharedArea {
+    pub area: String,
+    pub spaces: Vec<String>,
 }
 
 /// How close an entry's work is to finished; later tiers start first.

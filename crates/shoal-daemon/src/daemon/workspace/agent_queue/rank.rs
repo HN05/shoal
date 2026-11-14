@@ -6,18 +6,23 @@
 //! anything waiting on it; a CI job or review ranks with the spaces it
 //! serves. Within a priority the schedule may put other work first: the
 //! work with the longest chain of work waiting on it, or restores whose
-//! prompt cache is still warm. Within a tier the larger share of a space's
-//! plan steps done goes first, then the space started earliest, then a CI
-//! job or review ahead of an agent, then arrival.
+//! prompt cache is still warm. Within a tier the launch of a new workspace
+//! that shares fewer areas with its repository's workspaces goes first,
+//! then the larger share of a space's plan steps done, then the space
+//! started earliest, then a CI job or review ahead of an agent, then
+//! arrival.
 use std::{
     cmp::Ordering,
-    collections::{HashMap, hash_map},
+    collections::{BTreeMap, HashMap, hash_map},
     time::Duration,
 };
 
-use crate::client::{priority::Priority, queue::QueueEntryId, space_ids::SpaceId, time::UnixTime};
+use crate::client::{
+    priority::Priority, queue::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId,
+    time::UnixTime,
+};
 use crate::config::machine::Schedule;
-use crate::model::{Dependency, InheritedRank, QueueRank, Tier};
+use crate::model::{Dependency, InheritedRank, QueueRank, SharedArea, Tier};
 
 /// How long an entry waits to rise one tier.
 const RISE_AFTER: Duration = Duration::from_secs(60 * 60);
@@ -32,7 +37,14 @@ pub(crate) struct Snapshot {
     pub now: UnixTime,
     /// What goes first within a priority.
     pub schedule: Schedule,
+    /// The areas the workspaces of each repository occupy, each with the
+    /// workspaces holding it.
+    pub occupied: HashMap<RepositoryId, Occupied>,
 }
+
+/// The areas a repository's workspaces occupy, each with the workspaces
+/// holding it.
+pub(crate) type Occupied = BTreeMap<String, Vec<SpaceId>>;
 
 /// A waiting entry.
 #[derive(Debug)]
@@ -50,6 +62,10 @@ pub(crate) struct Entry {
     /// When the prompt cache of a restore's agent expires, as its hooks last
     /// reported it.
     pub prompt_cache_until: Option<UnixTime>,
+    /// The repository it starts in, if any.
+    pub repository: Option<RepositoryId>,
+    /// The areas of the issue a launch of a new workspace starts on.
+    pub areas: Vec<String>,
 }
 
 /// What a waiting entry starts.
@@ -183,6 +199,7 @@ fn own(priority: Priority, tier: Tier) -> QueueRank {
         priority_from: None,
         tier,
         tier_from: None,
+        shared_areas: Vec::new(),
     }
 }
 
@@ -258,19 +275,16 @@ fn carried(edge: &Edge, standing: &Standing, snapshot: &Snapshot) -> Option<Queu
         Carries::Rank => {
             let waiting = standing.get(&edge.waiting)?;
             Some(QueueRank {
-                priority: waiting.priority,
                 priority_from: from(),
-                tier: waiting.tier,
                 tier_from: from(),
+                ..own(waiting.priority, waiting.tier)
             })
         }
         Carries::SetPriority => {
             let priority = passed_priority(&edge.waiting, standing, snapshot)?;
             Some(QueueRank {
-                priority,
                 priority_from: from(),
-                tier: Tier::New,
-                tier_from: None,
+                ..own(priority, Tier::New)
             })
         }
     }
@@ -370,6 +384,8 @@ struct Placed {
     lead: Lead,
     /// Whether it has waited as long as rises a tier.
     overdue: bool,
+    /// How many areas a launch of a new workspace shares with workspaces.
+    shared: usize,
     steps: Steps,
     started: UnixTime,
     /// A CI job or review, which goes ahead of an agent of its space.
@@ -382,6 +398,7 @@ impl Placed {
         (other.rank.priority.cmp(&self.rank.priority))
             .then_with(|| other.lead.cmp(&self.lead))
             .then_with(|| other.rank.tier.cmp(&self.rank.tier))
+            .then_with(|| self.shared.cmp(&other.shared))
             .then_with(|| other.steps.cmp_share(self.steps))
             .then_with(|| self.started.cmp(&other.started))
             .then_with(|| other.serves.cmp(&self.serves))
@@ -410,16 +427,41 @@ fn place(
     if let Some(held) = standing.get(&Node::Entry(entry.id.clone())) {
         raise(&mut rank, held.clone());
     }
+    rank.shared_areas = shared_areas(entry, snapshot);
     Placed {
         id: entry.id.clone(),
-        rank,
         lead: lead(entry, chains, snapshot),
         overdue: snapshot.now.duration_since(entry.queued_at) >= RISE_AFTER,
+        shared: rank.shared_areas.len(),
+        rank,
         steps: space.map(|space| space.steps).unwrap_or_default(),
         started: space.map_or(entry.queued_at, |space| space.created_at),
         serves: matches!(entry.work, Work::Job { .. } | Work::Review { .. }),
         arrival: entry.arrival,
     }
+}
+
+/// The areas `entry`, when it launches a new workspace, shares with the
+/// workspaces of its repository, each with what explanations call them.
+fn shared_areas(entry: &Entry, snapshot: &Snapshot) -> Vec<SharedArea> {
+    let Work::Launch { space: None } = entry.work else {
+        return Vec::new();
+    };
+    let occupied = (entry.repository.as_ref()).and_then(|id| snapshot.occupied.get(id));
+    let Some(occupied) = occupied else {
+        return Vec::new();
+    };
+    (entry.areas.iter())
+        .filter_map(|area| {
+            let holders = occupied.get(area)?;
+            Some(SharedArea {
+                area: area.clone(),
+                spaces: (holders.iter())
+                    .map(|id| label(&Node::Space(id.clone()), snapshot))
+                    .collect(),
+            })
+        })
+        .collect()
 }
 
 /// What a schedule puts first within a priority: under `speed` the length

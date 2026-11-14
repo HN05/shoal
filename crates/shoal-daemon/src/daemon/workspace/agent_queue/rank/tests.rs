@@ -29,6 +29,8 @@ fn entry(snapshot: &mut Snapshot, id: &str, work: Work) {
         queued_at: at(NOW),
         arrival,
         prompt_cache_until: None,
+        repository: None,
+        areas: Vec::new(),
     });
 }
 
@@ -82,6 +84,7 @@ fn tiered(tier: Tier, tier_from: Option<InheritedRank>) -> QueueRank {
         priority_from: None,
         tier,
         tier_from,
+        shared_areas: Vec::new(),
     }
 }
 
@@ -386,6 +389,7 @@ fn priority_and_tier_flow_to_waited_on_work_each_from_where_it_is_highest() {
             priority_from: inherited("#urgent", Dependency::Blocked),
             tier: Tier::Finishing,
             tier_from: inherited("#reviewed", Dependency::Stacked),
+            shared_areas: Vec::new(),
         }
     );
 }
@@ -620,4 +624,75 @@ fn spaces_order_as_their_agents_would_start_with_what_waits_on_them() {
             ("low".into(), Priority::LOW),
         ]
     );
+}
+
+/// Queue a launch of a new workspace `id` in `repo` whose issue has
+/// `areas`.
+fn launch_in_areas(snapshot: &mut Snapshot, id: &str, repo: &str, areas: &[&str]) {
+    entry(snapshot, id, launch(None));
+    let entry = snapshot.entries.last_mut().unwrap();
+    entry.repository = Some(repo.into());
+    entry.areas = areas.iter().map(|area| area.to_string()).collect();
+}
+
+/// Let the workspaces `holders` of `repo` occupy `area`.
+fn occupy(snapshot: &mut Snapshot, repo: &str, area: &str, holders: &[&str]) {
+    let occupied = snapshot.occupied.entry(repo.into()).or_default();
+    let spaces = holders.iter().map(|&id| SpaceId::from(id));
+    occupied.entry(area.into()).or_default().extend(spaces);
+}
+
+#[test]
+fn a_launch_sharing_fewer_areas_with_workspaces_goes_first_within_its_tier() {
+    let mut snapshot = snapshot();
+    for (id, created) in [("daemon", 1), ("cli", 2), ("both", 3)] {
+        space(&mut snapshot, id, Tier::Started, created);
+    }
+    occupy(&mut snapshot, "repo", "area/daemon", &["daemon", "both"]);
+    occupy(&mut snapshot, "repo", "area/cli", &["cli"]);
+    occupy(&mut snapshot, "other", "area/docs", &["daemon"]);
+    launch_in_areas(&mut snapshot, "two", "repo", &["area/cli", "area/daemon"]);
+    launch_in_areas(&mut snapshot, "one", "repo", &["area/daemon", "area/docs"]);
+    // Another repository's areas overlap nothing, and unlabelled work
+    // overlaps nothing.
+    launch_in_areas(&mut snapshot, "elsewhere", "other", &["area/cli"]);
+    launch_in_areas(&mut snapshot, "unlabelled", "repo", &[]);
+    assert_eq!(order(&snapshot), ["elsewhere", "unlabelled", "one", "two"]);
+    assert_eq!(
+        rank_of(&snapshot, "one").shared_areas,
+        [SharedArea {
+            area: "area/daemon".into(),
+            spaces: vec!["#daemon".into(), "#both".into()],
+        }]
+    );
+    assert!(rank_of(&snapshot, "elsewhere").shared_areas.is_empty());
+}
+
+#[test]
+fn priority_and_tier_go_before_shared_areas() {
+    let mut snapshot = snapshot();
+    space(&mut snapshot, "daemon", Tier::Started, 1);
+    occupy(&mut snapshot, "repo", "area/daemon", &["daemon"]);
+    launch_in_areas(&mut snapshot, "free", "repo", &["area/cli"]);
+    launch_in_areas(&mut snapshot, "urgent", "repo", &["area/daemon"]);
+    snapshot.entries[1].priority = Some(Priority::URGENT);
+    launch_in_areas(&mut snapshot, "waited", "repo", &["area/daemon"]);
+    snapshot.entries[2].queued_at = at(NOW - RISE_AFTER.as_secs() as i64);
+    assert_eq!(order(&snapshot), ["urgent", "waited", "free"]);
+}
+
+#[test]
+fn shared_areas_order_only_launches_of_new_workspaces() {
+    let mut snapshot = snapshot();
+    for (id, created) in [("daemon", 1), ("into", 2)] {
+        space(&mut snapshot, id, Tier::New, created);
+    }
+    occupy(&mut snapshot, "repo", "area/daemon", &["daemon", "into"]);
+    entry(&mut snapshot, "into", launch(Some("into")));
+    let into = snapshot.entries.last_mut().unwrap();
+    into.repository = Some("repo".into());
+    into.areas = vec!["area/daemon".into()];
+    launch_in_areas(&mut snapshot, "free", "repo", &[]);
+    assert_eq!(order(&snapshot), ["into", "free"]);
+    assert!(rank_of(&snapshot, "into").shared_areas.is_empty());
 }

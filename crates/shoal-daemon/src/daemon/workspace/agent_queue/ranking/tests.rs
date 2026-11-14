@@ -71,6 +71,7 @@ async fn a_launch_in_a_child_ranks_with_its_ready_parent_ahead_of_earlier_launch
                         from: parent.number.to_string(),
                         dependency: Dependency::Parent,
                     }),
+                    shared_areas: Vec::new(),
                 })
             ),
             (
@@ -81,6 +82,7 @@ async fn a_launch_in_a_child_ranks_with_its_ready_parent_ahead_of_earlier_launch
                     priority_from: None,
                     tier: Tier::New,
                     tier_from: None,
+                    shared_areas: Vec::new(),
                 })
             ),
         ]
