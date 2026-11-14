@@ -15,6 +15,7 @@ mod mode;
 mod own_group;
 mod pause;
 pub mod recovery;
+mod signal_report;
 pub(crate) mod spawn;
 mod supervise;
 mod takeover;

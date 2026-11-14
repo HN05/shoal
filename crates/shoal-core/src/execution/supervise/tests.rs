@@ -511,6 +511,114 @@ async fn ended_session_child() {
 }
 
 #[tokio::test]
+async fn a_signal_reaches_the_daemon_before_it_stops_a_command_whose_plan_reports_it() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let output = timeout(
+        Duration::from_secs(60),
+        crate::test_support::isolated_test(
+            root.path(),
+            "execution::supervise::tests::signal_report_child",
+        )
+        .output(),
+    )
+    .await
+    .expect("isolated signal report test stalled")
+    .unwrap();
+    assert!(output.status.success(), "{}", printed(&output));
+}
+
+#[tokio::test]
+#[ignore = "isolated wrapper launched by signal report regression"]
+async fn signal_report_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    let root = std::env::current_dir().unwrap();
+    let paths = Paths::for_test(&root);
+    std::fs::create_dir_all(&paths.state).unwrap();
+    let plan = ExecutionPlan {
+        reports_signals: true,
+        ..plan(&root)
+    };
+    let mode = Mode::Command { record: false };
+    let (ready, reported) = (root.join("ready"), root.join("reported"));
+    // The command exits 3 when the daemon heard of the signal before it.
+    let command: Vec<OsString> = vec![
+        "/bin/sh".into(),
+        "-c".into(),
+        format!(
+            "trap 'test -f {} && exit 3; exit 4' TERM; touch {}; while :; do sleep 0.05; done",
+            reported.display(),
+            ready.display()
+        )
+        .into(),
+    ];
+    let terminated = |outcome: &Outcome| match outcome {
+        Outcome::Paused {
+            code,
+            stop: Halt::Ended { .. },
+        } => Some(*code),
+        _ => None,
+    };
+
+    // With no daemon to tell, the signal stops the command all the same.
+    let (mut link, mut daemon) = connected(&paths, &plan);
+    let signal = async {
+        acknowledge_start(&mut daemon).await;
+        terminate_once_ready(&ready).await;
+    };
+    let wrapper = supervise(&mut link, &paths, &plan, &command, &mode, None, unsaved());
+    let ((), outcome) = tokio::join!(signal, wrapper);
+    assert_eq!(terminated(&outcome.unwrap()), Some(4));
+
+    // A daemon hears of it under the execution's scope before the command stops.
+    std::fs::remove_file(&ready).unwrap();
+    let listener = tokio::net::UnixListener::bind(&paths.socket).unwrap();
+    let (mut link, mut daemon) = connected(&paths, &plan);
+    let signal = async {
+        acknowledge_start(&mut daemon).await;
+        terminate_once_ready(&ready).await;
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut stream = BufReader::new(stream);
+        let request: protocol::Request = protocol::read_buffered(&mut stream).await.unwrap();
+        assert!(
+            matches!(
+                request.method,
+                protocol::Method::Operation(protocol::Operation::Execution(
+                    protocol::ExecutionMethod::SessionSignalled {
+                        signal: protocol::SessionSignal::Terminate
+                    }
+                ))
+            ),
+            "{:?}",
+            request.method
+        );
+        assert_eq!(request.scope.as_ref(), Some(&plan.scope_token));
+        std::fs::write(&reported, "").unwrap();
+        let response = protocol::Response {
+            protocol: protocol::VERSION,
+            id: request.id,
+            more: false,
+            body: protocol::Body::Ok,
+        };
+        protocol::write(stream.get_mut(), &response).await.unwrap();
+    };
+    let wrapper = supervise(&mut link, &paths, &plan, &command, &mode, None, unsaved());
+    let ((), outcome) = tokio::join!(signal, wrapper);
+    assert_eq!(terminated(&outcome.unwrap()), Some(3));
+}
+
+/// Send this wrapper a terminate signal once the command traps it, which it
+/// says by creating `ready`.
+async fn terminate_once_ready(ready: &Path) {
+    while !ready.exists() {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    // SAFETY: kill only sends a signal.
+    unsafe { libc::kill(std::process::id() as i32, libc::SIGTERM) };
+}
+
+#[tokio::test]
 async fn a_command_has_the_terminal_before_its_registration() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let output = crate::test_support::in_new_terminal(

@@ -2,7 +2,9 @@
 //! leaves it running, `shoal daemon stop` stops it as `shoal stop --all` does
 //! but leaves queued launches to the next daemon and stops CI jobs' runners
 //! after cancelling their runs, and a signal stops it saved first, since it
-//! may come from a shutdown, but leaves CI jobs running, as a restart does.
+//! may come from a shutdown, but leaves CI jobs running, as a restart does:
+//! a job's wrapper has the daemon cancel its run when a shutdown's signal
+//! reaches it.
 use super::{
     Manager,
     executions::{Save, StopRequest},

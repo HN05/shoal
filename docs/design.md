@@ -1282,8 +1282,9 @@ from a service stop, leave it running for the next daemon to take its wrapper
 back, and the wrapper runs apart from the daemon's service, in a systemd scope
 of its own, so the service manager's stop of the service leaves it running
 too. A job ends only on the forge's word, so stopping it, as `shoal daemon
-stop` and a system shutdown do, cancels its run there and protection leaves it
-running; once the forge has finished the run,
+stop` and a system shutdown do, cancels its run there, as does its wrapper
+through the daemon, which keeps the forge's login, when a logout's or a
+shutdown's signal reaches it, and protection leaves it running; once the forge has finished the run,
 a runner that outlives it by a grace period, held open by a process a step
 left, is Shoal's to end with every process of the job's workspace. The workspace that links a run's PR or owns its branch lists the job in its status, and a
 waiting one with what holds it back, as does every chat that links the PR, but

@@ -16,6 +16,7 @@ use super::{
     link::{Link, Received, Refused},
     pause::Halt,
     recovery,
+    signal_report::SignalReport,
     spawn::{AgentLaunch, spawn},
     terminal::Terminal,
 };
@@ -136,7 +137,8 @@ pub(super) async fn supervise(
     let signals = ExecutionSignals::new()?;
     let (mut child, group, _terminal, _scope) =
         register_child(link, paths, plan, command, mode, auth, saving.restored_from).await?;
-    let outcome = wait_for_child(link, &mut child, &group, signals, saving.ending).await?;
+    let report = SignalReport { paths, plan };
+    let outcome = wait_for_child(link, &mut child, &group, signals, saving.ending, report).await?;
     // A command owns its process group; descendants do not outlive its lease.
     drop(group);
     Ok(outcome)
@@ -242,13 +244,15 @@ fn consume_recovery_records(mode: &Mode, recovery_record: Option<&Path>) -> Resu
     Ok(())
 }
 
-/// Wait for the child, daemon controls, or a signal and classify the stop.
+/// Wait for the child, daemon controls, or a signal and classify the stop;
+/// `report` tells the daemon of a signal ending the session.
 async fn wait_for_child(
     link: &mut Link,
     child: &mut Child,
     group: &ProcessGroup,
     mut signals: ExecutionSignals,
     ending: impl Fn(&Halt),
+    report: SignalReport<'_>,
 ) -> Result<Outcome> {
     // While the daemon is away the link reattaches in the background and the
     // command keeps the terminal; nothing is written to it.
@@ -257,8 +261,8 @@ async fn wait_for_child(
             // A hangup reaches the command and this wrapper together, so the
             // wrapper's signal goes first when both are ready.
             biased;
-            _ = signals.hangup.recv() => return end_session(child, group, libc::SIGHUP, &ending).await,
-            _ = signals.terminate.recv() => return end_session(child, group, libc::SIGTERM, &ending).await,
+            _ = signals.hangup.recv() => return end_session(child, group, libc::SIGHUP, &ending, &report).await,
+            _ = signals.terminate.recv() => return end_session(child, group, libc::SIGTERM, &ending, &report).await,
             _ = signals.interrupt.recv() => return Ok(Outcome::ended(stop(child, group, libc::SIGINT).await?, None)),
             _ = signals.quit.recv() => return Ok(Outcome::ended(stop(child, group, libc::SIGQUIT).await?, None)),
             _ = signals.cancelled.wait_for(|cancelled| *cancelled) => {
@@ -288,18 +292,20 @@ async fn wait_for_child(
 }
 
 /// Stop the command whose session `signal` ended, after `ending` saved what
-/// restores it: the session's end, such as a shutdown, may kill this wrapper
-/// before the command exits.
+/// restores it, since the session's end, such as a shutdown, may kill this
+/// wrapper before the command exits, and `report` told the daemon.
 async fn end_session(
     child: &mut Child,
     group: &ProcessGroup,
     signal: i32,
     ending: impl Fn(&Halt),
+    report: &SignalReport<'_>,
 ) -> Result<Outcome> {
     let halt = Halt::ended_by(signal);
     if let Some(halt) = &halt {
         ending(halt);
     }
+    report.send(signal).await;
     let status = stop(child, group, signal).await?;
     Ok(Outcome::ended(status, halt))
 }
