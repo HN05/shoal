@@ -29,18 +29,29 @@ impl AgentTrees {
         if live.is_empty() {
             return Ok(Self::default());
         }
-        let parents = (same_user_processes().await?.into_iter())
-            .map(|(pid, _, parent)| (pid, parent))
-            .collect();
+        let rows = same_user_processes().await?;
         Ok(Self {
             wrappers: live,
-            parents,
-        })
+            parents: HashMap::new(),
+        }
+        .as_listed(&rows))
+    }
+
+    /// The same wrappers' trees as `rows`, a listing of this user's
+    /// processes as (PID, process group, parent PID), shows them, so a
+    /// process that listing shows is found below its wrapper.
+    pub(crate) fn as_listed(&self, rows: &[(u32, u32, u32)]) -> Self {
+        Self {
+            wrappers: self.wrappers.clone(),
+            parents: (rows.iter())
+                .map(|(pid, _, parent)| (*pid, *parent))
+                .collect(),
+        }
     }
 
     /// The agent wrappers other than `own`, the wrapper of the execution
     /// whose processes are sought.
-    pub fn others(&self, own: Option<&Identity>) -> Vec<Identity> {
+    pub(crate) fn others(&self, own: Option<&Identity>) -> Vec<Identity> {
         (self.wrappers.values())
             .filter(|wrapper| own != Some(*wrapper))
             .cloned()
@@ -49,7 +60,7 @@ impl AgentTrees {
 
     /// The processes that agents other than `own`, the wrapper of the
     /// execution whose processes are sought, run.
-    pub fn besides(&self, own: Option<&Identity>) -> Besides<'_> {
+    pub(crate) fn besides(&self, own: Option<&Identity>) -> Besides<'_> {
         Besides {
             trees: self,
             own: own
@@ -60,7 +71,7 @@ impl AgentTrees {
 }
 
 /// The processes that agents other than one execution's run.
-pub struct Besides<'a> {
+pub(crate) struct Besides<'a> {
     trees: &'a AgentTrees,
     /// The PID of the execution's live wrapper.
     own: Option<u32>,
@@ -71,7 +82,7 @@ impl Besides<'_> {
     /// than the execution's that is nearer to it than the execution's. An
     /// agent a scoped caller runs in its own terminal runs below the caller's
     /// wrapper too, and its processes stay its own.
-    pub fn run(&self, pid: u32) -> bool {
+    pub(crate) fn run(&self, pid: u32) -> bool {
         let mut current = pid;
         for _ in 0..=self.trees.parents.len() {
             if self.own == Some(current) {
