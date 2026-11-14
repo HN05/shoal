@@ -40,7 +40,8 @@ impl Manager {
     /// through the export's removal: a workspace once it still has what its
     /// checkpoint `exported` keeps, which the other machine now has, and no
     /// space below it stays here, taking only the spaces below it that
-    /// `unsaved` names, or a chat.
+    /// `unsaved` names, or a chat. Its issues' forge assignees stay for the
+    /// space on the other machine.
     pub async fn end_moved_space(
         &self,
         selector: &SpaceSelector,
@@ -50,6 +51,7 @@ impl Manager {
         let workspace = match self.space(selector).await? {
             PresentSpace::Workspace(workspace) => workspace,
             PresentSpace::Chat(chat) => {
+                self.hand_over_assignees(&chat.id).await?;
                 (self.remove_chat(&SpaceSelector::id(&chat.id), Some(Vec::new()))).await?;
                 return Ok(None);
             }
@@ -60,6 +62,7 @@ impl Manager {
             .ensure_unchanged_since_export(&workspace, exported)
             .await?;
         let moved = moved_work(&checkpoint, unsaved.children());
+        self.hand_over_assignees(&workspace.id).await?;
         let removal = self
             .remove_exported(&workspace, moved, InspectionPolicy::GitOnly)
             .await?;

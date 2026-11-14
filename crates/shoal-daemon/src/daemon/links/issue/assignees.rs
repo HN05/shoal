@@ -101,6 +101,14 @@ impl Manager {
         Ok(Some(assignment))
     }
 
+    /// Hand the assignees the space `id` stands for to the machine it moved
+    /// to: forget them for it, and Shoal's assignments no other space here
+    /// links, so ending it here takes none off the forge.
+    pub(crate) async fn hand_over_assignees(&self, id: &SpaceId) -> Result<()> {
+        let id = id.to_owned();
+        self.store.write(move |tx| hand_over(tx, &id)).await
+    }
+
     /// Take the logins `dropped` names off their issues where Shoal added
     /// them and no space links the issue for the same login any longer.
     /// Returns why each one that stays did.
@@ -193,6 +201,18 @@ pub(super) fn dropped(db: &Connection, id: &SpaceId, urls: &[ItemRef]) -> Result
         }));
     }
     Ok(dropped)
+}
+
+/// [`Manager::hand_over_assignees`] within the caller's transaction.
+fn hand_over(db: &Connection, id: &SpaceId) -> Result<()> {
+    for Dropped { url, login } in dropped(db, id, &super::assigned_urls(db, id)?)? {
+        db.execute(
+            "UPDATE space_issue SET assignee=NULL WHERE space_id=?1 AND url=?2",
+            rusqlite::params![id, url],
+        )?;
+        take_assignment(db, &url, &login)?;
+    }
+    Ok(())
 }
 
 /// Forget Shoal's assignment of `login` to the issue `url` once no space

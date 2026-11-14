@@ -205,6 +205,20 @@ async fn an_assignee_a_removal_cannot_take_back_notifies_the_user() {
 }
 
 #[tokio::test]
+async fn a_moved_space_leaves_its_assignee_to_the_other_machine() {
+    let fixture = Fixture::new(&["fix"], &[], "").await;
+    let workspace = &fixture.workspaces[0];
+    fixture.link(workspace).await;
+    let manager = &fixture.manager;
+    manager.hand_over_assignees(&workspace.id).await.unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.remove_workspace(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly))
+        .await
+        .unwrap();
+    assert_eq!(fixture.changes(), [json!(["shoal-user"])]);
+}
+
+#[tokio::test]
 async fn linking_an_issue_others_are_assigned_names_them() {
     let fixture = Fixture::new(&["fix"], &["ann", "bob"], "").await;
     let workspace = &fixture.workspaces[0];
