@@ -66,7 +66,9 @@ fn arrived(host: &str, imported: &Imported) -> String {
     let mut message = host.to_owned();
     let queued = match imported {
         Imported::Workspace(reopened) => {
-            message.push_str(&format!(" at {}", reopened.workspace.path.display()));
+            if let Some(workspace) = reopened.space.worktree() {
+                message.push_str(&format!(" at {}", workspace.path.display()));
+            }
             reopened
                 .queued
                 .as_ref()

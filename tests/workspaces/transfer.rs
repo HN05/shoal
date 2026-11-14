@@ -68,8 +68,8 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
 
     let repo = fixture.repo.to_str().unwrap();
     let imported = fixture.ok(&["move", "import", file, "--repo", repo]);
-    assert_eq!(imported["workspace"]["name"], "moving");
-    assert_eq!(imported["workspace"]["state"], "ready");
+    assert_eq!(imported["space"]["name"], "moving");
+    assert_eq!(imported["space"]["state"], "ready");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
     assert_eq!(
         fixture.ok(&["restore"])["removed"].clone(),
@@ -81,7 +81,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
         .root
         .path()
         .join("state/workspaces")
-        .join(imported["workspace"]["id"].as_str().unwrap())
+        .join(imported["space"]["id"].as_str().unwrap())
         .join(format!(
             "{}.recovery.json",
             agents[0]["execution"].as_str().unwrap()
@@ -147,7 +147,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
         String::from_utf8_lossy(&imported.stderr)
     );
     let imported: Value = serde_json::from_slice(&imported.stdout).unwrap();
-    assert_eq!(imported["workspace"]["name"], "moving");
+    assert_eq!(imported["space"]["name"], "moving");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
 }
 
@@ -370,10 +370,10 @@ fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
     assert!(agent.wait_with_output().unwrap().status.success());
     assert_eq!(moved["failed"], serde_json::json!([]), "{moved}");
     let imported = &moved["moved"][0];
-    assert_eq!(imported["workspace"]["name"], "handed", "{moved}");
+    assert_eq!(imported["space"]["name"], "handed", "{moved}");
     assert_eq!(imported["queued"]["queued"].as_array().unwrap().len(), 1);
     assert!(!path.exists());
-    let moved_path = Path::new(imported["workspace"]["path"].as_str().unwrap()).to_owned();
+    let moved_path = Path::new(imported["space"]["path"].as_str().unwrap()).to_owned();
     assert!(moved_path.starts_with(fs::canonicalize(there.root.path()).unwrap()));
     wait_until("agent restarted there", || {
         moved_path.join("agent-restarted").exists()
@@ -569,7 +569,7 @@ fn move_ssh_keep_copies_workspaces_there_and_leaves_them_here() {
             fs::read_to_string(path.join("notes")).unwrap(),
             format!("{name}\n")
         );
-        let copy_path = Path::new(copy["workspace"]["path"].as_str().unwrap());
+        let copy_path = Path::new(copy["space"]["path"].as_str().unwrap());
         assert!(copy_path.starts_with(&there_root), "{copied}");
         assert_eq!(
             fs::read_to_string(copy_path.join("notes")).unwrap(),
@@ -682,7 +682,7 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|import| import["workspace"]["name"].clone())
+        .map(|import| import["space"]["name"].clone())
         .collect();
     assert_eq!(names.len(), 2, "{imported}");
     assert!(names.contains(&"first".into()) && names.contains(&"second".into()));
@@ -907,7 +907,7 @@ fn export_finishes_when_its_terminal_ends_after_the_removal() {
     wait_until("export written", || file.exists());
     let repo = fixture.repo.to_str().unwrap();
     let imported = fixture.ok(&["move", "import", file.to_str().unwrap(), "--repo", repo]);
-    assert_eq!(imported["workspace"]["name"], "cut");
+    assert_eq!(imported["space"]["name"], "cut");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
 }
 

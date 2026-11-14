@@ -4,7 +4,7 @@ use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    model::{Chat, QueueEntry, RemovedSpace, Workspace},
+    model::{Chat, PresentSpace, QueueEntry, RemovedSpace, Workspace},
     output::{batch::Failure, outputs},
     saved::SavedSummary,
 };
@@ -45,7 +45,7 @@ pub struct StartedRestores {
     pub agents: Vec<RestoredAgent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub set_up: Vec<SetUp>,
-    /// The removed workspaces it opened again.
+    /// The removed spaces it opened again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reopened: Vec<Reopened>,
     pub failed: Vec<Failure>,
@@ -55,7 +55,7 @@ pub struct StartedRestores {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForgottenWork {
     pub forgotten: Vec<ExecutionId>,
-    /// The removed workspaces it opened again.
+    /// The removed spaces it opened again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reopened: Vec<Reopened>,
     pub failed: Vec<Failure>,
@@ -70,17 +70,17 @@ pub struct Queued {
     pub commands: Vec<StoppedCommands>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub set_up: Vec<SetUp>,
-    /// The removed workspaces it opened again.
+    /// The removed spaces it opened again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reopened: Vec<Reopened>,
     pub failed: Vec<Failure>,
 }
 
-/// A workspace opened again from a removal record, set up with its PRs
-/// linked.
+/// A space opened again from a removal record with its PRs linked, a
+/// workspace set up.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reopened {
-    pub workspace: Workspace,
+    pub space: PresentSpace,
     pub removed: RemovedSpace,
     pub warnings: Vec<String>,
     /// Its stopped agents stay saved for a later `shoal restore`.
@@ -100,7 +100,7 @@ pub struct StoppedWorkspace {
 
 /// What `shoal restore` without a space picks among: the workspaces with
 /// stopped work, unfinished work first, the stopped chats and the removed
-/// workspaces.
+/// spaces.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Restorable {
     pub stopped: Vec<StoppedWorkspace>,

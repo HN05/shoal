@@ -1810,7 +1810,7 @@ it passes over removed workspaces and chats that no longer run, while other
 commands' `-` selects only workspaces.
 `restore` uses the current workspace only when it has something to restore; its
 picker groups the workspaces with the agents and commands it would restore, the
-stopped chats and the removed workspaces, since one command brings back whatever
+stopped chats and the removed workspaces and chats, since one command brings back whatever
 of a space is stopped, interrupted or removed, and lists them without a terminal;
 completion also names the workspaces with nothing to restore. Its agent picker names agents by name, stop time and
 reason. Shell
@@ -2100,7 +2100,7 @@ increasing IDs. A chat's events go through the same recording path as a
 workspace's. Retention is per space, so one busy space cannot push out
 another's history: a space keeps its events while it exists and for
 `cleanup.restore.retention_days` after its removal, as its checkpoints and
-attached files, and a restored workspace takes the removed one's; only its
+attached files, and a restored space, which keeps its ID, keeps them; only its
 high-volume events, its agent's turn states, its progress changes and forge
 activity other than an item's closing, merging and reopening, keep a cap of the newest 500 per space.
 A space's log (`shoal log`, `client::log::log`) is a filtered view of
@@ -3293,20 +3293,31 @@ a checkpoint and stops when that one keeps HEAD only, then cleans untracked file
 the branch and applies the snapshot's files without staging them. Scoped
 callers may do this in their own workspace, since the replaced state stays a
 checkpoint.
-The removal record of a workspace that is not disposable (base, links and stopped
-agents' recovery records, with its checkpoint) persists before any file is deleted, so an interrupted or failed
-removal stays restorable; records of workspaces that still exist are not offered,
+Every removed space keeps one removal record, of either kind, in one table
+whose `chat` column tells the kinds apart once the space's own row is gone, and
+one restore path reopens both. The record of a workspace that is not disposable
+(base, parent, links and stopped agents' recovery records, with its checkpoint)
+persists before any file is deleted, so an interrupted or failed
+removal stays restorable; records of spaces that still exist are not offered,
 and a retried removal replaces the record with a new checkpoint while the earlier
 one stays. When the removal's checkpoint keeps HEAD only, merged cleanup retains
-the workspace. Records expire with their checkpoint. `shoal restore`
+the workspace. A workspace's record expires with its checkpoint; a chat's, taken
+before its state is deleted, with its attached files. A restored space keeps its
+ID and takes a new number, so its checkpoints, events, files and proposals are
+its own again without rewriting; a workspace converted into a chat, whose ID the
+chat keeps, opens beside it under a new one. It goes below its recorded parent
+while that takes it, else at the top level with a warning, and alone: the spaces
+removed with it keep their records. `shoal restore`
 reopens the branch through the existing-branch path, creating it at the removed
 HEAD when deleted and refusing one that no longer contains it, then applies the
 snapshot's files without staging them, links what the record names and saves its
-agents' recovery records under the new workspace ID, which the same `shoal restore`
+agents' recovery records, which the same `shoal restore`
 then restores as a stopped space's, since reopening is a step on the way back to
 the work; once the
-files are back, one transaction moves the checkpoints to that ID and deletes the
-record. A restore first claims the record, keeping it and its checkpoints from
+files are back, one transaction deletes the record and what keeps its files from
+expiring. A chat restores in the place it ran, refused while the workspace whose
+worktree it ran in is removed, naming the restore that opens both. A restore
+first claims the record, keeping it and its checkpoints and files from
 expiring for an hour while it runs. Reopening is
 allocation, so scoped callers cannot.
 Moving a space to another machine ends it there and continues it here, through

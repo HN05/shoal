@@ -451,7 +451,7 @@ async fn a_started_restore_keeps_expiry_from_its_record_checkpoints_and_files() 
         .unwrap();
     let floor = crate::time::UnixTime::now() + RESTORE_CLAIM;
     let claimed = manager
-        .claim_removed_workspace(&manager.named("topic").await)
+        .claim_removed_space(&manager.named("topic").await)
         .await
         .unwrap();
     assert!(claimed.expires_at >= floor);
@@ -1043,9 +1043,12 @@ async fn a_scoped_restore_reopens_the_workspace_below_the_caller() {
         read_only: false,
     };
     let restored = manager
-        .restore_workspace_below(&selector, &caller)
+        .restore_space_below(&selector, &caller)
         .await
         .unwrap();
+    let crate::model::RestoredSpace::Workspace(restored) = restored else {
+        panic!("{restored:?}");
+    };
     let id = restored.opened.workspace.id.clone();
     let parent = manager
         .store

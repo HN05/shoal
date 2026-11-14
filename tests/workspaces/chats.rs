@@ -203,16 +203,20 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
         &fixture.ok(&["restore", "--all", "--forget"]),
     );
     // The picker offers the stopped chats after the workspaces with stopped
-    // work.
+    // work, then the removed chats.
     let chat = save_chat(&mut fixture);
     stop_agent(&fixture, &worker);
     let both = format!("{chat} {}", worker["id"].as_str().unwrap());
     let (output, rows) = fixture.pick(&["restore", "--forget"], &both, "");
     assert!(output.status.success(), "{}", printed(&output));
     let rows = rows.lines().collect::<Vec<_>>();
-    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert_eq!(rows.len(), 4, "{rows:?}");
     assert!(rows[0].contains("worker"), "{rows:?}");
     assert!(rows[1].contains("talk"), "{rows:?}");
+    assert!(
+        rows[2..].iter().all(|row| row.contains("removed")),
+        "{rows:?}"
+    );
 }
 
 #[test]
@@ -2324,4 +2328,29 @@ fn chat_messages(fixture: &Fixture, id: &str) -> String {
         .unwrap();
     assert!(output.status.success(), "{}", printed(&output));
     String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+#[test]
+fn a_removed_chat_restores_under_its_id_from_the_removed_chats() {
+    let fixture = Fixture::new();
+    let (mut agent, chat) = start_test_chat(&fixture, "planning");
+    fixture.ok(&["rm", "--wait", &chat, "--yes"]);
+    agent.wait().unwrap();
+    assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
+
+    // Without a terminal, restore lists it among the removed spaces.
+    let listed = fixture.ok(&["restore"]);
+    let removed = listed["removed"].as_array().unwrap();
+    assert_eq!(removed.len(), 1, "{listed}");
+    assert_eq!(removed[0]["workspace_id"], chat.as_str(), "{listed}");
+    assert!(removed[0]["chat"].is_object(), "{listed}");
+
+    let restored = fixture.ok(&["restore", &chat, "--no-agents"]);
+    let reopened = &restored["reopened"][0];
+    assert_eq!(reopened["space"]["kind"], "chat", "{restored}");
+    assert_eq!(reopened["space"]["id"], chat.as_str(), "{restored}");
+    let chats = fixture.ok(&["list", "--chats"]);
+    assert_eq!(chats[0]["id"], chat.as_str(), "{chats}");
+    assert_eq!(chats[0]["name"], "planning", "{chats}");
+    assert_eq!(fixture.ok(&["restore"])["removed"], serde_json::json!([]));
 }

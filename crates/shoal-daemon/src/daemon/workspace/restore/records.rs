@@ -188,19 +188,17 @@ impl Manager {
     /// The removal record to reopen, kept with its checkpoints for at least
     /// [`RESTORE_CLAIM`] in the same transaction, so expiry cannot delete
     /// them while the restore runs.
-    pub(in crate::daemon::workspace) async fn claim_removed_workspace(
+    pub(in crate::daemon::workspace) async fn claim_removed_space(
         &self,
         selector: &SpaceSelector,
     ) -> Result<RemovedSpace> {
         let id = (selector.given_id().cloned()).with_context(|| {
-            format!("no restorable workspace {selector}; a removed workspace has no number, so select it by its ID")
+            format!("no restorable space {selector}; a removed space has no number, so select it by its ID")
         })?;
         self.store
             .write(move |tx| claim(tx, &id))
             .await?
-            .with_context(|| {
-                format!("no restorable workspace {selector}; shoal restore lists them")
-            })
+            .with_context(|| format!("no restorable space {selector}; shoal restore lists them"))
     }
 }
 

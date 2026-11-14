@@ -86,9 +86,9 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
     assert_eq!(removed[0]["cause"], "manual");
 
     let restored = fixture.ok(&["restore", &fixture.id("Scratch notes")])["reopened"][0].clone();
-    assert_eq!(restored["workspace"]["name"], "Scratch notes");
-    assert_eq!(restored["workspace"]["branch"], "scratch");
-    assert_eq!(restored["workspace"]["state"], "ready");
+    assert_eq!(restored["space"]["name"], "Scratch notes");
+    assert_eq!(restored["space"]["branch"], "scratch");
+    assert_eq!(restored["space"]["state"], "ready");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
     assert_eq!(
         fixture.ok(&["restore"])["removed"].clone(),
@@ -329,7 +329,7 @@ impl RemovedWithAgent {
             .ok(&[&["restore", id.as_str()][..], args].concat());
         let reopened = restored["reopened"][0].clone();
         assert_eq!(reopened["warnings"], serde_json::json!([]), "{restored}");
-        assert_eq!(reopened["workspace"]["path"], self.path.to_str().unwrap());
+        assert_eq!(reopened["space"]["path"], self.path.to_str().unwrap());
         (restored, reopened)
     }
 
@@ -340,7 +340,7 @@ impl RemovedWithAgent {
             .root
             .path()
             .join("state/workspaces")
-            .join(reopened["workspace"]["id"].as_str().unwrap());
+            .join(reopened["space"]["id"].as_str().unwrap());
         let Ok(entries) = fs::read_dir(&state) else {
             return Vec::new();
         };

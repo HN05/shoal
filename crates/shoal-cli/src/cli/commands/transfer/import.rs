@@ -358,7 +358,13 @@ async fn import_workspace(
         Ok(reopened) => reopened,
         Err(error) => return report.failed(ctx, file, &error),
     };
-    let workspace = reopened.workspace.clone();
+    let Some(workspace) = reopened.space.worktree().cloned() else {
+        return report.failed(
+            ctx,
+            file,
+            &anyhow::anyhow!("the import opened no workspace"),
+        );
+    };
     let post_setup = super::super::workspaces::run_post_setup(ctx, &workspace).await;
     if post_setup.is_ok() && options.restore {
         reopened.queue_agents(ctx).await;

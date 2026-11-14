@@ -9,7 +9,7 @@ use crate::space_names::SpaceSelector;
 use crate::{
     cleanup::{ManualCleanup, Selection},
     connection::{Daemon, pages, request},
-    model::{RemovedSpace, RestoredWorkspace, Workspace},
+    model::{RemovedSpace, RestoredSpace, Workspace},
     protocol::RemovalMethod,
 };
 
@@ -336,17 +336,14 @@ pub async fn clean_up(
     request(daemon, RemovalMethod::Cleanup { dry_run, selection }).await
 }
 
-/// The removed workspaces whose records allow restoring them.
+/// The removed spaces whose records allow restoring them.
 pub async fn removed(daemon: &impl Daemon) -> Result<Vec<RemovedSpace>> {
     pages(daemon, RemovalMethod::RemovedSpaces).await
 }
 
-/// Open the removed `workspace` again from its record.
-pub async fn restore(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-) -> Result<Box<RestoredWorkspace>> {
-    request(daemon, RemovalMethod::RestoreWorkspace { workspace }).await
+/// Open the removed `space` again from its record.
+pub async fn restore(daemon: &impl Daemon, space: SpaceSelector) -> Result<RestoredSpace> {
+    request(daemon, RemovalMethod::RestoreSpace { space }).await
 }
 
 /// Delete the session files the restore that opened `workspace` returned,

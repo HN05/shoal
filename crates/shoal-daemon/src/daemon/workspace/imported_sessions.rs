@@ -89,7 +89,10 @@ impl Manager {
         removed: &RemovedSpace,
         to: &SpaceId,
     ) -> Result<Vec<CarriedSessionFile>> {
-        let session_files = &removed.kept_workspace()?.session_files;
+        let Some(kept) = removed.workspace() else {
+            return Ok(Vec::new());
+        };
+        let session_files = &kept.session_files;
         if session_files.is_empty() {
             return Ok(Vec::new());
         }

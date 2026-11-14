@@ -258,6 +258,7 @@ response_bodies! {
     KeptBranches(Vec<crate::model::KeptBranch>),
     UntrackedWorktrees(Vec<crate::model::UntrackedWorktree>),
     RestoredWorkspace(Box<crate::model::RestoredWorkspace>),
+    RestoredSpace(crate::model::RestoredSpace),
     Checkpoint(crate::model::Checkpoint),
     Checkpoints(Option<Vec<crate::model::Checkpoint>>),
     RestoredCheckpoint(crate::model::RestoredCheckpoint),

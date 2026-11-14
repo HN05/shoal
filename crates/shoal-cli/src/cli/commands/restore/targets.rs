@@ -1,6 +1,6 @@
 //! What `shoal restore` acts on: workspaces with stopped work, the chats
 //! Shoal saved, the running spaces whose agents an interrupt left idle and
-//! removed workspaces, which one lookup finds by number or ID; without a
+//! removed spaces, which one lookup finds by number or ID; without a
 //! space, the current one or those picked, or else a list of them all.
 use anyhow::{Result, bail};
 
@@ -21,12 +21,12 @@ pub(super) enum Target {
     /// A space by ID, a workspace or a stopped chat, or a selector no space
     /// has, which the daemon refuses.
     Space(SpaceSelector),
-    /// A removed workspace, which a restore opens again.
+    /// A removed space, which a restore opens again.
     Removed(Box<RemovedSpace>),
 }
 
-/// The space `selector` names among `spaces` and the `removed` workspaces:
-/// a running chat, another space or a removed workspace.
+/// The space `selector` names among `spaces` and the `removed` ones: a
+/// running chat, another space or a removed space.
 pub(super) fn resolve(
     spaces: &Spaces,
     removed: &[RemovedSpace],
@@ -35,10 +35,8 @@ pub(super) fn resolve(
     match spaces.find(&selector) {
         Some(PresentSpace::Chat(chat)) if chat.running => Target::Running(Box::new(chat)),
         Some(space) => Target::Space(SpaceSelector::id(space.id())),
-        None => match (removed.iter())
-            .find(|workspace| selector.given_id() == Some(&workspace.space_id))
-        {
-            Some(workspace) => Target::Removed(Box::new(workspace.clone())),
+        None => match (removed.iter()).find(|space| selector.given_id() == Some(&space.space_id)) {
+            Some(space) => Target::Removed(Box::new(space.clone())),
             None => Target::Space(selector),
         },
     }
@@ -57,7 +55,7 @@ pub(super) struct Selected {
     /// it, once [`super::agents::setups::take_failed`] takes them from the
     /// others.
     pub setups: Vec<FailedSetup>,
-    /// The removed workspaces named, which open again.
+    /// The removed spaces named, which open again in that order.
     pub removed: Vec<RemovedSpace>,
 }
 
@@ -65,7 +63,7 @@ impl Selected {
     /// The spaces `targets` names, each once; every space with stopped work
     /// for `--all`; otherwise the current workspace when it has something
     /// to restore, else those picked among the workspaces with stopped
-    /// work, the stopped chats and the removed workspaces. `None` once it
+    /// work, the stopped chats and the removed spaces. `None` once it
     /// listed those, without a terminal or anything to pick.
     pub async fn load(ctx: &Context, targets: SpaceTargets) -> Result<Option<Self>> {
         if targets.all {
@@ -73,7 +71,7 @@ impl Selected {
         }
         let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
         let stopped = stopped_chats(&spaces);
-        let removed = removed_workspaces(ctx, &spaces, &targets.space).await?;
+        let removed = removed_spaces(ctx, &spaces, &targets.space).await?;
         let entries = match targets.space.is_empty() {
             true => removed_entries(&removed),
             false => ui::Entries::new(),
@@ -87,8 +85,8 @@ impl Selected {
         }
     }
 
-    /// The spaces `selectors` name among `spaces` and the `removed`
-    /// workspaces, each once.
+    /// The spaces `selectors` name among `spaces` and the `removed` ones,
+    /// each once.
     fn resolved(spaces: &Spaces, removed: &[RemovedSpace], selectors: Vec<SpaceSelector>) -> Self {
         let mut selected = Self {
             spaces: Some(Vec::new()),
@@ -119,10 +117,10 @@ impl Selected {
                     spaces.push(space);
                 }
             }
-            Target::Removed(workspace) => {
-                let id = &workspace.space_id;
+            Target::Removed(space) => {
+                let id = &space.space_id;
                 if !self.removed.iter().any(|named| named.space_id == *id) {
-                    self.removed.push(*workspace);
+                    self.removed.push(*space);
                 }
             }
         }
@@ -140,11 +138,12 @@ fn stopped_chats(spaces: &Spaces) -> Vec<Chat> {
         .collect()
 }
 
-/// The removed workspaces, which `names` may name, or which a picker or
-/// list offers when it names none; none when every name is a space's.
+/// The removed spaces, workspaces before chats, which `names` may name, or
+/// which a picker or list offers when it names none; none when every name
+/// is a space's.
 /// Restoring them is the `admin` permission's, which a scoped process asks
 /// for first, and only when it names one: it reopens none it did not name.
-async fn removed_workspaces(
+async fn removed_spaces(
     ctx: &Context,
     spaces: &Spaces,
     names: &[SpaceSelector],
@@ -158,22 +157,22 @@ async fn removed_workspaces(
     let admin = crate::config::permissions::PermissionKey::Admin;
     crate::cli::commands::authorization::authorize_key(ctx, admin).await?;
     let mut removed = crate::client::removal::removed(&ctx.paths).await?;
-    removed.retain(|removed| removed.workspace().is_some());
+    removed.sort_by_key(|removed| removed.workspace().is_none());
     Ok(removed)
 }
 
-/// The picker entries of the `removed` workspaces, by ID.
+/// The picker entries of the `removed` spaces, by ID.
 fn removed_entries(removed: &[RemovedSpace]) -> ui::Entries {
     removed
         .iter()
-        .map(|workspace| workspace.space_id.to_string())
+        .map(|space| space.space_id.to_string())
         .zip(super::reopen::removed_lines(removed))
         .collect()
 }
 
 /// List what a restore without a space picks among: the workspaces of
 /// `spaces` with stopped work, the `stopped` chats and the `removed`
-/// workspaces.
+/// spaces.
 async fn list(
     ctx: &Context,
     spaces: &Spaces,
@@ -198,7 +197,7 @@ async fn list(
 }
 
 /// Print `restorable` by group, each workspace and chat led by its number
-/// and each removed workspace by its ID, which select them.
+/// and each removed space by its ID, which select them.
 fn print_restorable(restorable: &Restorable) {
     let Restorable {
         stopped,
@@ -221,11 +220,19 @@ fn print_restorable(restorable: &Restorable) {
     for chat in chats {
         outln!("  {}  {}", chat.number, chat.name);
     }
-    if !removed.is_empty() {
-        outln!("Removed workspaces:");
-    }
-    for (workspace, line) in removed.iter().zip(super::reopen::removed_lines(removed)) {
-        outln!("  {}  {line}", workspace.space_id);
+    let lines = super::reopen::removed_lines(removed);
+    let (workspaces, chats): (Vec<_>, Vec<_>) =
+        (removed.iter().zip(lines)).partition(|(space, _)| space.workspace().is_some());
+    for (heading, group) in [
+        ("Removed workspaces:", workspaces),
+        ("Removed chats:", chats),
+    ] {
+        if !group.is_empty() {
+            outln!("{heading}");
+        }
+        for (space, line) in group {
+            outln!("  {}  {line}", space.space_id);
+        }
     }
 }
 

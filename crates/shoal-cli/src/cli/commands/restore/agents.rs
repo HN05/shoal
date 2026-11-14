@@ -183,7 +183,7 @@ async fn select_reopened(
     reopened: &mut [Reopened],
 ) -> Result<()> {
     for opened in reopened.iter_mut().filter(|opened| opened.agents_saved) {
-        let space = SpaceSelector::id(&opened.workspace.id);
+        let space = SpaceSelector::id(opened.space.id());
         if crate::client::saved::read(&ctx.paths, space.clone())
             .await?
             .is_empty()
@@ -342,7 +342,7 @@ async fn daemon_startable(
     let mut startable = Vec::new();
     for (space, saved) in stopped {
         let starts = queue::ensure_daemon_starts_in(ctx, &space, &saved).await;
-        let opened = (reopened.iter_mut()).find(|opened| opened.workspace.id == *space.id());
+        let opened = (reopened.iter_mut()).find(|opened| opened.space.id() == space.id());
         match (starts, opened) {
             (Err(error), Some(opened)) => {
                 opened.agents_saved = true;

@@ -200,10 +200,6 @@ impl Manager {
             priority,
         } = new;
         let home = self.reserve_chat_home(repository).await?;
-        ensure!(
-            !self.agent_queue.suspended(),
-            "Shoal is stopping work for a shutdown or a daemon stop; start the chat once it is over"
-        );
         let started_at = crate::time::UnixTime::now();
         let chat = Chat {
             id: SpaceId::generate(),
@@ -231,6 +227,46 @@ impl Manager {
             children: Vec::new(),
             converted: false,
         };
+        self.record_chat(chat, home, parent, priority).await
+    }
+
+    /// Record the removed chat `chat` again, as its restore reopens it: in
+    /// its repository, or else in the `root_dir` it ran in, below `parent`
+    /// when given, with its session.
+    pub(crate) async fn record_restored_chat(
+        &self,
+        chat: Chat,
+        parent: Option<SpaceId>,
+    ) -> Result<Chat> {
+        let home = match &chat.repository_id {
+            Some(id) => ChatHome {
+                repository: Some(self.reserve_repository_directory(id).await?),
+                root_dir: None,
+                _registry: None,
+            },
+            None => ChatHome {
+                repository: None,
+                root_dir: chat.root_dir.clone(),
+                _registry: Some(self.gates.lock_registry().await),
+            },
+        };
+        self.record_chat(chat, home, parent, None).await
+    }
+
+    /// Record `chat` at `home`, below `parent` when given, with `priority`,
+    /// give it its temporary directory and take its place in a terminal
+    /// host.
+    async fn record_chat(
+        &self,
+        chat: Chat,
+        home: ChatHome<'_>,
+        parent: Option<SpaceId>,
+        priority: Option<crate::client::priority::Priority>,
+    ) -> Result<Chat> {
+        ensure!(
+            !self.agent_queue.suspended(),
+            "Shoal is stopping work for a shutdown or a daemon stop; start the chat once it is over"
+        );
         let below = parent.map(|parent| (parent, self.space_removals.clone()));
         let chat = self
             .store
@@ -498,8 +534,8 @@ fn insert(
     ensure_place_free(tx, chat.repository_id.as_ref(), workspace)?;
     tx.execute(
         "INSERT INTO chats(id,repository_id,name,agent,started_at,origin,scope_token,
-            workspace_id,mode,root_dir,narrowing)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            workspace_id,mode,root_dir,narrowing,session)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
         params![
             chat.id,
             chat.repository_id,
@@ -514,7 +550,8 @@ fn insert(
             workspace,
             chat.mode,
             (chat.root_dir.as_deref()).map(|root| root.to_string_lossy().into_owned()),
-            store::narrowing_column(&chat.narrowing)?
+            store::narrowing_column(&chat.narrowing)?,
+            chat.session,
         ],
     )?;
     chat.number = tx.query_row("SELECT number FROM chats WHERE id=?1", [&chat.id], |row| {

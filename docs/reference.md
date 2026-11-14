@@ -420,13 +420,14 @@ unless `shoal stop` cancels it.
 `shoal restore [space...]` queues the restore of each agent a saved recovery
 record or last session keeps after its wrapper exits, or only the `--execution <id>` one, and
 reports how many it queued; the [agent queue](#agent-queue) starts them as
-the agent limits allow; a removed workspace's ID [opens it
+the agent limits allow; a removed space's ID [opens it
 again](#checkpoints-and-restore). Without a space, restore uses the current
 workspace when it has something to restore, otherwise a picker of the workspaces
 with stopped work, saying what each would restore, unfinished work first, then the
-stopped chats, then the removed workspaces; without a terminal, or with `--json`,
-it lists them in those groups instead, each removed workspace led by the ID that
-selects it, with the number of its removal's checkpoint.
+stopped chats, then the removed workspaces and the removed chats; without a
+terminal, or with `--json`, it lists them in those groups instead, each removed
+space led by the ID that selects it, a workspace with the number of its removal's
+checkpoint.
 A named workspace whose setup failed, or never started, retries its setup as
 `shoal setup` does, after which the agent waiting for it in the queue starts
 as a restored agent would: as the queue admits it, at once with `--now`, or in
@@ -807,7 +808,7 @@ shows it, and `--json` gives it as `number`. Every argument that takes a space
 selects it by that number or its ID, so `shoal attach 3` and `--space 3` name
 space 3, and `-` selects the space the command last acted on; other text is
 refused with "a space is selected by its number or ID". A name never selects
-a space, so names may repeat. A removed workspace has no number and is
+a space, so names may repeat. A removed space has no number and is
 selected by its ID. Without a space, a terminal opens a picker that shows the
 names. `--add-blocker` is the one argument where a bare number names an issue
 instead.
@@ -3722,7 +3723,7 @@ Scoped processes list and delete kept branches as their space's
 
 ```sh
 shoal checkpoint --name "before migration"  # keep the current workspace's state
-shoal restore <id>                # open the removed workspace with that ID again
+shoal restore <id>                # open the removed space with that ID again
 shoal restore 7 --checkpoint      # pick one of workspace 7's checkpoints
 shoal restore 7 --checkpoint 3    # return workspace 7 to checkpoint 3
 ```
@@ -3754,7 +3755,7 @@ restore their own workspace's checkpoints.
 `--checkpoint` without a number opens a picker of the workspace's checkpoints
 and restores the one picked; without a terminal, or with `--json`, it lists them
 instead. It takes one workspace, and none of the flags that restore agents.
-[`shoal restore`](#recovery) without a space also offers the removed workspaces.
+[`shoal restore`](#recovery) without a space also offers the removed spaces.
 `shoal restore <id>` of a removed workspace opens that removed workspace again under its ID, with a new number, on its branch and recorded base, which restores its stack link while the base
 workspace exists, recreating the branch at the removed HEAD when it was deleted,
 puts its unsaved files back as uncommitted changes, links its issue and its
@@ -3775,7 +3776,20 @@ the error names the commit to recover by hand. Scoped processes reopen removed w
 [`admin` permission](#permitted-actions) allows.
 
 Removal records the branch, base, parent, links, stopped agents and last sessions with its checkpoint, and
-keeps them until the checkpoint expires. Links cannot change once removal
+keeps them until the checkpoint expires.
+
+Every removal of a chat, by cleanup too, records its name, parent, links, mode,
+the permissions given to its agent, where it ran, its session, and its stopped
+agent and last session, until `retention_days` after the removal, as its
+attached files stay. `shoal restore <id>` of a removed chat records it again
+under its ID, with a new number, below its parent as a workspace's restore
+places one, in the place it ran: the checkout, the `root_dir` it ran in, which
+must still exist, or the worktree of its workspace, which must exist and be
+ready; while that workspace is removed, the restore refuses and names `shoal
+restore <workspace id> <chat id>`, which opens the workspace first. It links
+its items and PRs again, gives back its attached files, and restores its agent
+as a stopped chat's, under the same flags; a chat whose agent saved no session
+starts a new one, with a warning. Links cannot change once removal
 starts, so the record holds the final ones. Removal stops agents as `shoal stop`
 does, keeping their recovery records in the removal record; interrupted commands
 are not saved. When the removal's checkpoint keeps HEAD only, merged cleanup keeps the workspace instead.
@@ -5615,7 +5629,7 @@ A space's files outlive it: they stay for `cleanup.restore.retention_days`
 after its removal, like a workspace's
 [checkpoints](#checkpoints-and-restore), and `shoal files <id>` still lists
 them, with when they go, and deletes them with `rm`. `shoal restore` gives
-them back to the workspace it reopens, where they were. Disk space cleanup
+them back to the space it reopens, where they were. Disk space cleanup
 deletes them sooner when nothing else frees enough space. A space is named by
 the workspace's or chat's number or ID, a removed one's by ID; run from a chat's agent outside any workspace, `shoal files`, `add`
 and `rm` act on its chat.

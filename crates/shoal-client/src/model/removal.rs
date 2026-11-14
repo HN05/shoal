@@ -182,6 +182,25 @@ impl RemovedSpace {
     }
 }
 
+/// A space `shoal restore` opened again from its removal record.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RestoredSpace {
+    Workspace(Box<RestoredWorkspace>),
+    Chat(Box<RestoredChat>),
+}
+
+/// A chat `shoal restore` recorded again from its removal record, stopped,
+/// with its stopped agent and last session saved; the caller links its PRs
+/// and restores its agent.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RestoredChat {
+    pub chat: super::Chat,
+    pub removed: RemovedSpace,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+}
+
 /// A workspace `shoal restore` opened again from its removal record; the
 /// caller sets it up and links its PRs.
 #[derive(Debug, Serialize, Deserialize)]

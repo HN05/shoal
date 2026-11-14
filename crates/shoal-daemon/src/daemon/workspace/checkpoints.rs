@@ -382,7 +382,10 @@ impl Manager {
     /// owner. The files gate keeps the deletion of the removed space's files
     /// from coming between.
     pub(super) async fn adopt_removal(&self, removed: &RemovedSpace, id: &SpaceId) -> Result<()> {
-        let _files = self.gates.lock_message_files(removed.repository()?).await;
+        let _files = match &removed.repository_id {
+            Some(repository) => Some(self.gates.lock_message_files(repository).await),
+            None => None,
+        };
         let (from, to) = (removed.space_id.clone(), id.to_owned());
         self.store
             .write(move |tx| {

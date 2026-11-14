@@ -25,7 +25,7 @@ pub async fn link(paths: &CommandPaths, workspace: Workspace, pr: LinkedItem) ->
 /// Link PR `url`, a number or URL, as the one workspace `id` was opened on,
 /// with `title` when the caller knows it; whether it did, a refused link
 /// having warned.
-pub(crate) async fn link_or_warn(
+pub async fn link_or_warn(
     paths: &CommandPaths,
     id: &SpaceId,
     url: &ItemInput,

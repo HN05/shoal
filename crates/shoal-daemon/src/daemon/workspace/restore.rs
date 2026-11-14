@@ -1,4 +1,5 @@
-//! Restoring a removed workspace from its removal record.
+//! Restoring a removed space from its removal record: a workspace opens
+//! again here, a chat in the module below.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
@@ -14,7 +15,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::daemon::scope::Caller;
 use crate::{
     git,
-    model::{OpenedWorkspace, RemovedSpace, RestoredWorkspace},
+    model::{OpenedWorkspace, RemovedSpace, RestoredSpace, RestoredWorkspace},
     transfer::CarriedSessionFile,
 };
 
@@ -24,25 +25,45 @@ impl Manager {
     /// and stopped agents; the caller sets it up and links its PRs. The
     /// record goes once the files are back.
     pub async fn restore_workspace(&self, selector: &SpaceSelector) -> Result<RestoredWorkspace> {
-        self.restore_workspace_as(selector, None).await
+        let removed = self.claim_removed_space(selector).await?;
+        self.reopen_removed_workspace(removed, None).await
     }
 
-    /// [`Self::restore_workspace`] for a scoped `caller`, which reopens it
-    /// below its own space, which must take a child of the workspace's
-    /// repository, as a scoped start opens one, so it stays in its tree.
-    pub(crate) async fn restore_workspace_below(
+    /// Open the removed space `selector` names again, as its kind reopens,
+    /// for `caller`, which relinks only what it may link.
+    pub async fn restore_space(
+        &self,
+        selector: &SpaceSelector,
+        caller: Option<&Caller>,
+    ) -> Result<RestoredSpace> {
+        let removed = self.claim_removed_space(selector).await?;
+        Ok(match removed.workspace() {
+            Some(_) => RestoredSpace::Workspace(Box::new(
+                self.reopen_removed_workspace(removed, caller).await?,
+            )),
+            None => RestoredSpace::Chat(Box::new(self.reopen_removed_chat(removed, caller).await?)),
+        })
+    }
+
+    /// [`Self::restore_space`] for a scoped `caller`, which reopens it below
+    /// its own space, which must take a child of the space's repository, as
+    /// a scoped start opens one, so it stays in its tree.
+    pub(crate) async fn restore_space_below(
         &self,
         selector: &SpaceSelector,
         caller: &Caller,
-    ) -> Result<RestoredWorkspace> {
+    ) -> Result<RestoredSpace> {
         let repository = self.restorable_below(selector, caller).await?;
-        let restored = self.restore_workspace_as(selector, Some(caller)).await?;
-        let space = restored.opened.workspace.id.clone();
+        let restored = self.restore_space(selector, Some(caller)).await?;
+        let space = match &restored {
+            RestoredSpace::Workspace(restored) => restored.opened.workspace.id.clone(),
+            RestoredSpace::Chat(restored) => restored.chat.id.clone(),
+        };
         let parent = caller.space_id.clone();
         self.store
             .write(move |tx| {
-                super::tree::ready_parent(tx, Some(&repository), &parent).with_context(|| {
-                    format!("the restored workspace {space} stays at the top level")
+                super::tree::ready_parent(tx, repository.as_ref(), &parent).with_context(|| {
+                    format!("the restored space {space} stays at the top level")
                 })?;
                 super::tree::set_parent(tx, &space, Some(&parent))
             })
@@ -50,37 +71,34 @@ impl Manager {
         Ok(restored)
     }
 
-    /// The repository of the removed workspace `selector` names, once the
-    /// space of `caller` takes a child of it, as a scoped restore of it
-    /// places the workspace there.
+    /// The repository of the removed space `selector` names, once the space
+    /// of `caller` takes a child of it, as a scoped restore of it places the
+    /// space there.
     pub(crate) async fn restorable_below(
         &self,
         selector: &SpaceSelector,
         caller: &Caller,
-    ) -> Result<RepositoryId> {
+    ) -> Result<Option<RepositoryId>> {
         let removed = (self.removed_spaces().await?.into_iter())
             .find(|removed| selector.given_id() == Some(&removed.space_id))
-            .with_context(|| {
-                format!("no restorable workspace {selector}; shoal restore lists them")
-            })?;
-        let repository = removed.repository()?.clone();
+            .with_context(|| format!("no restorable space {selector}; shoal restore lists them"))?;
+        let repository = removed.repository_id;
         let parent = caller.space_id.clone();
         self.store
             .read(move |tx| {
-                super::tree::ready_parent(tx, Some(&repository), &parent)?;
+                super::tree::ready_parent(tx, repository.as_ref(), &parent)?;
                 Ok(repository)
             })
             .await
     }
 
-    /// [`Self::restore_workspace`] for `caller`, which relinks only what it
-    /// may link.
-    async fn restore_workspace_as(
+    /// Open the removed workspace `removed` again for `caller`, which
+    /// relinks only what it may link.
+    async fn reopen_removed_workspace(
         &self,
-        selector: &SpaceSelector,
+        removed: RemovedSpace,
         caller: Option<&Caller>,
     ) -> Result<RestoredWorkspace> {
-        let removed = self.claim_removed_workspace(selector).await?;
         let mut warnings = Vec::new();
         let new = NewRecord {
             id: self.restored_id(&removed).await?,
@@ -115,7 +133,7 @@ impl Manager {
     /// its record keeps of them: their stopped agents and last sessions, and
     /// the session files an import carried, which it returns for the caller
     /// to put in place. Each that fails adds a warning to `warnings`.
-    async fn restore_agents(
+    pub(super) async fn restore_agents(
         &self,
         removed: &RemovedSpace,
         id: &SpaceId,
@@ -148,7 +166,7 @@ impl Manager {
     /// The space the restore of `removed` opens it below: its recorded
     /// parent while that exists and takes it, as a start places a child;
     /// otherwise none, with a warning in `warnings` naming the parent.
-    async fn restored_parent(
+    pub(super) async fn restored_parent(
         &self,
         removed: &RemovedSpace,
         warnings: &mut Vec<String>,
@@ -306,6 +324,7 @@ pub(super) async fn write_files(worktree: &Path, files: &RestoredFiles) -> Resul
     git::checkpoint::apply(worktree, files.snapshot.as_str()).await
 }
 
+mod chats;
 mod imports;
 mod records;
 

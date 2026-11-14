@@ -248,7 +248,7 @@ impl Manager {
         selector: &SpaceSelector,
         number: CheckpointNumber,
     ) -> Result<Source> {
-        let removed = self.claim_removed_workspace(selector).await?;
+        let removed = self.claim_removed_space(selector).await?;
         let checkpoint = self
             .copied_checkpoint(&removed.space_id, &removed.name, number)
             .await?;

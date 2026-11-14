@@ -1,4 +1,4 @@
-//! Opening removed workspaces again from their removal records.
+//! Opening removed spaces again from their removal records.
 use crate::cli::commands::restore::agents::reports::QueuedExt;
 use crate::client::execution_ids::ExecutionId;
 use std::collections::BTreeSet;
@@ -15,46 +15,77 @@ use crate::{
         output::{Palette, Style},
         shell, terminal,
     },
-    model::{RemovedSpace, RestoredWorkspace},
+    model::{PresentSpace, RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace},
     state::WorkspaceState,
 };
 
-/// Open each of the `removed` workspaces again, set it up, link its PRs
-/// and run its post-setup hook, in which the agents restored for it start;
-/// an error once one fails names those opened before it. A workspace
-/// opened alone becomes the directory of a shell that follows the caller.
+/// Open each of the `removed` spaces again, in the order given, so a
+/// workspace opens before a chat in its worktree: link its PRs and set up a
+/// workspace and run its post-setup hook, in which the agents restored for
+/// it start; an error once one fails names those opened before it. A
+/// workspace opened alone becomes the directory of a shell that follows
+/// the caller.
 pub(super) async fn reopen_each(ctx: &Context, removed: &[RemovedSpace]) -> Result<Vec<Reopened>> {
     let mut reopened = Vec::new();
-    for workspace in removed {
-        let opened = reopen(ctx, workspace).await;
+    for space in removed {
+        let opened = reopen(ctx, space).await;
         reopened.push(opened.map_err(|error| Reopening::of(&reopened).explain(error))?);
     }
     if let [opened] = reopened.as_slice()
+        && let Some(workspace) = opened.space.worktree()
         && terminal::follows_caller(ctx)
     {
-        shell::navigate(ctx, &opened.workspace.path)?;
+        shell::navigate(ctx, &workspace.path)?;
     }
     Ok(reopened)
 }
 
-/// Open the removed `workspace` again, set it up, link its PRs and run its
-/// post-setup hook.
-async fn reopen(ctx: &Context, workspace: &RemovedSpace) -> Result<Reopened> {
-    let restore =
-        crate::client::removal::restore(&ctx.paths, SpaceSelector::id(&workspace.space_id));
-    let restored = ctx.progress("Restoring workspace", restore).await?;
+/// Open the `removed` space again: a workspace set up, with its PRs linked
+/// and its post-setup hook run, a chat with its PRs linked.
+async fn reopen(ctx: &Context, removed: &RemovedSpace) -> Result<Reopened> {
+    let restore = crate::client::removal::restore(&ctx.paths, SpaceSelector::id(&removed.space_id));
+    let restored = ctx.progress("Restoring", restore).await?;
+    let restored = match restored {
+        RestoredSpace::Workspace(restored) => restored,
+        RestoredSpace::Chat(restored) => return reopened_chat(ctx, *restored).await,
+    };
     let number = restored.opened.workspace.number;
     let opened = (prepare_reopened(ctx, *restored).await?).with_context(|| {
         format!(
             "the setup of {} did not finish; shoal restore {number} retries it",
-            workspace.name
+            removed.name
         )
     })?;
-    super::super::workspaces::run_post_setup(ctx, &opened.workspace).await?;
+    if let Some(workspace) = opened.space.worktree() {
+        super::super::workspaces::run_post_setup(ctx, workspace).await?;
+    }
     Ok(opened)
 }
 
-/// The workspaces a restore opened again, which an error that ends it
+/// Print the warnings of the chat `restored` and link its PRs again.
+async fn reopened_chat(ctx: &Context, restored: RestoredChat) -> Result<Reopened> {
+    let RestoredChat {
+        chat,
+        removed,
+        warnings,
+    } = restored;
+    for warning in &warnings {
+        eprintln!("warning: {warning}");
+    }
+    for pr in &removed.links.prs {
+        let url = pr.url.clone().into();
+        crate::opened_pull::link_or_warn(&ctx.paths, &chat.id, &url, pr.title.clone()).await;
+    }
+    Ok(Reopened {
+        agents_saved: !(removed.agents.is_empty() && removed.last_sessions.is_empty()),
+        space: PresentSpace::Chat(chat),
+        removed,
+        warnings,
+        queued: None,
+    })
+}
+
+/// The spaces a restore opened again, which an error that ends it
 /// afterwards names, since it reports them no other way.
 pub(super) struct Reopening(Option<String>);
 
@@ -62,12 +93,12 @@ impl Reopening {
     pub(super) fn of(reopened: &[Reopened]) -> Self {
         let names = reopened
             .iter()
-            .map(|opened| format!("{} as {}", opened.workspace.name, opened.workspace.number))
+            .map(|opened| format!("{} as {}", opened.space.name(), opened.space.number()))
             .collect::<Vec<_>>();
         Self((!names.is_empty()).then(|| names.join(", ")))
     }
 
-    /// `error`, saying which workspaces opened before it.
+    /// `error`, saying which spaces opened before it.
     pub(super) fn explain(&self, error: anyhow::Error) -> anyhow::Error {
         match &self.0 {
             Some(names) => error.context(format!("reopened {names}, then stopped")),
@@ -88,17 +119,18 @@ pub(in crate::cli::commands) async fn finish_reopen(
     let Some(mut reopened) = prepare_reopened(ctx, restored).await? else {
         return Ok(1);
     };
+    let workspace = (reopened.space.worktree().cloned()).context("a workspace reopened")?;
     // The agents start in a workspace whose post-setup hook succeeded.
     if restore {
-        super::super::workspaces::run_post_setup(ctx, &reopened.workspace).await?;
+        super::super::workspaces::run_post_setup(ctx, &workspace).await?;
         reopened.queue_agents(ctx).await;
     }
     ctx.emit(&reopened.message(ctx, action), &reopened)?;
     if terminal::follows_caller(ctx) {
-        shell::navigate(ctx, &reopened.workspace.path)?;
+        shell::navigate(ctx, &workspace.path)?;
     }
     if !restore {
-        super::super::workspaces::run_post_setup(ctx, &reopened.workspace).await?;
+        super::super::workspaces::run_post_setup(ctx, &workspace).await?;
     }
     Ok(0)
 }
@@ -115,9 +147,7 @@ pub(crate) trait ReopenedExt {
 
 impl ReopenedExt for Reopened {
     fn message(&self, ctx: &Context, action: &str) -> String {
-        let Self {
-            workspace, removed, ..
-        } = self;
+        let Self { space, removed, .. } = self;
         let checkpoint = removed.workspace().map(|kept| &kept.checkpoint);
         let files = if checkpoint.is_some_and(|checkpoint| checkpoint.commit != checkpoint.head) {
             "; unsaved files restored"
@@ -137,17 +167,20 @@ impl ReopenedExt for Reopened {
             0 => String::new(),
             1 => format!(
                 "; shoal restore {} restores its stopped agent",
-                workspace.number
+                space.number()
             ),
             _ => format!(
                 "; shoal restore {} restores its stopped agents",
-                workspace.number
+                space.number()
             ),
         };
+        let location = match space.worktree() {
+            Some(workspace) => super::super::workspaces::location_phrase(workspace),
+            None => format!("as chat {}", space.number()),
+        };
         format!(
-            "{action} {} {}{files}{agents}",
-            Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-            super::super::workspaces::location_phrase(workspace),
+            "{action} {} {location}{files}{agents}",
+            Palette::stdout(ctx.json).paint(Style::Heading, space.name()),
         )
     }
 
@@ -161,7 +194,7 @@ impl ReopenedExt for Reopened {
         if executions.is_empty() {
             return;
         }
-        let stopped = Stopped::from([(self.workspace.id.clone(), executions)]);
+        let stopped = Stopped::from([(self.space.id().clone(), executions)]);
         match super::agents::queue::queue_stopped(ctx, &stopped).await {
             Ok(queued) => {
                 self.queued = Some(queued);
@@ -169,7 +202,7 @@ impl ReopenedExt for Reopened {
             }
             Err(error) => eprintln!(
                 "warning: cannot queue the stopped agents; shoal restore {} restores them: {error:#}",
-                self.workspace.number
+                self.space.number()
             ),
         }
     }
@@ -213,7 +246,7 @@ pub(in crate::cli::commands) async fn prepare_reopened(
     }
     Ok(Some(Reopened {
         agents_saved: !(removed.agents.is_empty() && removed.last_sessions.is_empty()),
-        workspace,
+        space: PresentSpace::Workspace(workspace),
         removed,
         warnings,
         queued: None,

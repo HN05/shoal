@@ -79,7 +79,7 @@ enum Target {
     /// chats.
     Spaces(Need),
     /// Workspaces described by what `shoal restore` restores in them, then
-    /// the stopped chats, then the removed workspaces it opens again.
+    /// the stopped chats, then the removed spaces it opens again.
     RestoreSpaces,
     Pools,
     Members,
@@ -440,12 +440,9 @@ impl Typed {
                 crate::client::chats::recorded(&paths).await?,
             ));
             let removed = crate::client::removal::removed(&paths).await?;
-            let workspaces = removed
-                .into_iter()
-                .filter(|removed| removed.workspace().is_some());
-            candidates.extend(workspaces.map(|workspace| {
-                let help = format!("{} (removed)", workspace.name);
-                CompletionCandidate::new(workspace.space_id.to_string()).help(Some(help.into()))
+            candidates.extend(removed.into_iter().map(|space| {
+                let help = format!("{} (removed)", space.name);
+                CompletionCandidate::new(space.space_id.to_string()).help(Some(help.into()))
             }));
             return Ok(candidates);
         }
