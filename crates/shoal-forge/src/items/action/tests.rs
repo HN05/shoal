@@ -231,6 +231,7 @@ fn comments_state_changes_and_merges_use_each_forges_endpoints() {
     let merge = Action::Merge {
         method: MergeMethod::Squash,
         delete_branch: true,
+        head: None,
     };
     assert_eq!(
         requests(&github, &pr(&github, false, &[]), merge.clone()),
@@ -258,6 +259,16 @@ fn comments_state_changes_and_merges_use_each_forges_endpoints() {
     let mut unread = pr(&github, false, &[]);
     unread.head_sha = None;
     assert!(github.plan(&unread, &merge).is_err());
+    // A merge bound to a head refuses a PR whose head moved from it.
+    let bound = |head: &str| Action::AutoMerge {
+        method: MergeMethod::Squash,
+        delete_branch: false,
+        head: Some(head.into()),
+    };
+    let open = pr(&github, false, &[]);
+    assert!(github.plan(&open, &bound("c0ffee")).is_ok());
+    assert!(github.plan(&open, &bound("c0ffee0000")).is_ok());
+    assert!(github.plan(&open, &bound("decade")).is_err());
     assert_eq!(
         requests(&forgejo, &pr(&forgejo, false, &[]), merge),
         [(
@@ -431,6 +442,7 @@ fn gitlab_changes_merge_requests_in_one_update_by_user_id() {
     let merge = |method| Action::Merge {
         method,
         delete_branch: true,
+        head: None,
     };
     assert_eq!(
         requests(&gitlab, &open, merge(MergeMethod::Squash)),
@@ -450,6 +462,7 @@ fn automatic_merges_use_each_forges_requests() {
     let auto = |delete_branch| Action::AutoMerge {
         method: MergeMethod::Squash,
         delete_branch,
+        head: None,
     };
     let open = pr(&forgejo, false, &[]);
     assert_eq!(

@@ -270,7 +270,8 @@ impl Scoped for ItemMethod {
                 Some(workspace)
             }
             // Merging a PR and deleting its branch are the `merge`
-            // permission's.
+            // permission's, and the merge then names the head its request
+            // binds.
             ItemMethod::ItemAction {
                 context,
                 item,
@@ -282,7 +283,7 @@ impl Scoped for ItemMethod {
                 ..
             } => {
                 let repository = reached_change_context(manager, caller, context).await?;
-                let subject = manager.merge_subject(context, item.clone(), action);
+                let subject = manager.bind_merge(context, item.clone(), action);
                 let merge = permissions::Action::new(PermissionKey::Merge, subject.await?)
                     .in_repository(repository);
                 manager.authorize_action(Some(caller), merge).await?;

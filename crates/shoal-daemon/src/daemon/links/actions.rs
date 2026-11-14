@@ -158,8 +158,7 @@ impl Manager {
     /// Sync the repository a merge just changed, without waiting for it, so
     /// conflict checks of its other workspaces see the merge.
     fn sync_after_merge(&self, repository_id: &RepositoryId, action: &Action, item: &Item) {
-        let merging = matches!(action, Action::Merge { .. } | Action::AutoMerge { .. });
-        if merging && item.state == ItemState::Merged {
+        if action.merges() && item.state == ItemState::Merged {
             self.syncs.request(repository_id);
         }
     }

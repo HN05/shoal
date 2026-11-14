@@ -157,6 +157,7 @@ fn merge(args: &PrMergeArgs) -> (Action, &'static str) {
             Action::AutoMerge {
                 method,
                 delete_branch,
+                head: None,
             },
             "Auto-merge enabled",
         ),
@@ -164,6 +165,7 @@ fn merge(args: &PrMergeArgs) -> (Action, &'static str) {
             Action::Merge {
                 method,
                 delete_branch,
+                head: None,
             },
             "PR merged",
         ),

@@ -185,6 +185,7 @@ async fn a_merge_is_refused_once_its_warning_is_not_the_one_confirmed() {
     let merge = Action::Merge {
         method: crate::forge::items::action::MergeMethod::Merge,
         delete_branch: false,
+        head: None,
     };
     let refused = manager
         .confirmed_merge(
@@ -276,6 +277,7 @@ async fn a_confirmed_merge_keeps_the_pr_whose_warning_it_read() {
     let merge = Action::Merge {
         method: crate::forge::items::action::MergeMethod::Merge,
         delete_branch: false,
+        head: None,
     };
     let confirmed = ConfirmedWarning { warning };
     // Whatever the forge answers after the merge, it merged PR 1.
@@ -289,4 +291,53 @@ async fn a_confirmed_merge_keeps_the_pr_whose_warning_it_read() {
         merges.iter().all(|line| line.contains("/pulls/1/")),
         "{merges:?}"
     );
+}
+
+#[tokio::test]
+async fn a_merge_binds_the_head_the_pr_has_unless_it_names_one() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo_id = (manager.register_repository(repo.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap()
+        .id;
+    let workspace = (manager.create_workspace(&repo_id, "topic".into(), None, None, None))
+        .await
+        .unwrap();
+    let head = CommitId::from("a".repeat(40));
+    let sha = head.to_string();
+    let server = shoal_forge::test_support::Server::start(move |_| {
+        let pull = serde_json::json!({
+            "number": 1, "title": "Fix", "state": "open", "merged": false,
+            "draft": false, "head": {"ref": "topic", "sha": sha},
+            "base": {"ref": "main"}, "labels": [],
+        });
+        (200, Vec::new(), pull.to_string().into())
+    });
+    let host = &server.host;
+    crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::Forgejo);
+    crate::daemon::test_support::configure(
+        &manager,
+        &format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n"),
+    )
+    .await;
+    let origin = format!("http://{host}/team/repo");
+    crate::daemon::test_support::git(&repo, &["remote", "add", "origin", &origin]);
+    let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
+    let merge = |head| Action::AutoMerge {
+        method: crate::forge::items::action::MergeMethod::Merge,
+        delete_branch: false,
+        head,
+    };
+
+    let mut read = merge(None);
+    let subject = manager.bind_merge(&context, Some("1".parse().unwrap()), &mut read);
+    assert!(subject.await.unwrap().ends_with(&format!(" at {head}")));
+    assert_eq!(read.merge_head(), Some(&head));
+    // A merge that names its head, as an approval bound it, keeps it.
+    let named = CommitId::from("b".repeat(40));
+    let mut kept = merge(Some(named.clone()));
+    let subject = manager.bind_merge(&context, Some("1".parse().unwrap()), &mut kept);
+    assert!(subject.await.unwrap().ends_with(&format!(" at {named}")));
+    assert_eq!(kept.merge_head(), Some(&named));
 }

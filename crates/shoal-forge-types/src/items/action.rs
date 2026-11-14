@@ -3,7 +3,7 @@
 
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
-use shoal_refs::BranchName;
+use shoal_refs::{BranchName, CommitId};
 use shoal_states::states;
 
 use crate::items::attach::Attachment;
@@ -31,15 +31,22 @@ pub enum Action {
     EditComment(CommentEdit),
     Close,
     Reopen,
+    /// `head` is the commit the merge is for, such as one an approval bound,
+    /// and else the head the PR has when read before merging; the forge
+    /// refuses to merge a head that moved from it.
     Merge {
         method: MergeMethod,
         delete_branch: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        head: Option<CommitId>,
     },
     /// Have the forge merge the PR once its required checks and approvals
-    /// pass, or now when they already do.
+    /// pass, or now when they already do, at `head` as a merge takes it.
     AutoMerge {
         method: MergeMethod,
         delete_branch: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        head: Option<CommitId>,
     },
     CancelAutoMerge,
     /// Delete the head branch of a merged or closed PR from the repository.
@@ -199,6 +206,27 @@ impl Action {
             },
             Self::React(change) if change.remove => "unreact",
             Self::React(_) => "react",
+        }
+    }
+
+    /// Whether the action merges the PR, now or once it can.
+    pub fn merges(&self) -> bool {
+        matches!(self, Self::Merge { .. } | Self::AutoMerge { .. })
+    }
+
+    /// The head commit a merge names.
+    pub fn merge_head(&self) -> Option<&CommitId> {
+        match self {
+            Self::Merge { head, .. } | Self::AutoMerge { head, .. } => head.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// Bind a merge that names no head yet to `read`, the head the PR had
+    /// when read; other actions stay as they are.
+    pub fn bind_merge_head(&mut self, read: CommitId) {
+        if let Self::Merge { head, .. } | Self::AutoMerge { head, .. } = self {
+            head.get_or_insert(read);
         }
     }
 

@@ -66,10 +66,7 @@ impl Manager {
         confirmed: &ConfirmedWarning,
         caller: Option<&crate::daemon::scope::Caller>,
     ) -> Result<Item> {
-        ensure!(
-            matches!(action, Action::Merge { .. } | Action::AutoMerge { .. }),
-            "only a merge confirms a merge warning"
-        );
+        ensure!(action.merges(), "only a merge confirms a merge warning");
         let (_, url) = self.context_pull(context, input).await?;
         let current = self
             .merge_warning(context, Some(url.clone().into()))
@@ -105,23 +102,23 @@ impl Manager {
         Ok(warning(branch.into(), vec![recorded], &merged))
     }
 
-    /// What `action` on the PR `input` names, or on `context`'s linked PR,
-    /// does, as an approval of it binds it: a merge at the commit the PR's
-    /// head has now, so a later commit needs another decision.
-    pub(crate) async fn merge_subject(
+    /// Bind a merge in `action` of the PR `input` names, or of `context`'s
+    /// linked PR, to the commit the PR's head has now, unless it names one,
+    /// and return what it does as an approval of it binds it: a later
+    /// commit needs another decision, and the forge refuses to merge one.
+    pub(crate) async fn bind_merge(
         &self,
         context: &ItemContext,
         input: Option<ItemInput>,
-        action: &Action,
+        action: &mut Action,
     ) -> Result<String> {
         let (forge, url) = self.context_pull(context, input).await?;
-        let head = match action {
-            Action::Merge { .. } | Action::AutoMerge { .. } => {
-                (forge.pull_request(&self.agent_account(), &url).await?).head_commit
-            }
-            _ => None,
-        };
-        let at = head.map(|head| format!(" at {head}")).unwrap_or_default();
+        if action.merges() && action.merge_head().is_none() {
+            let pull = forge.pull_request(&self.agent_account(), &url).await?;
+            let head = pull.head_commit.context("the forge names no PR head")?;
+            action.bind_merge_head(head);
+        }
+        let at = (action.merge_head()).map_or_else(String::new, |head| format!(" at {head}"));
         Ok(format!("{} {url}{at}", action.name()))
     }
 

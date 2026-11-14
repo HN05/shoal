@@ -4263,8 +4263,9 @@ base branch, or a PR no workspace links merges without a question. A merge is
 refused when its warning changed while the question was open, including a
 warning that appeared where none was. A scoped process merges, sets or
 withdraws an automatic merge and deletes a PR's branch as the agent account,
-as its space's [`merge` permission](#mode-permissions) allows: with `"propose"` the request
-binds the PR at its head commit, so a later commit needs another approval.
+as its space's [`merge` permission](#mode-permissions) allows: the request binds the PR
+at its head commit, which the merge names to the forge, so with `"propose"` a
+later commit needs another approval.
 `delete-branch` deletes the branch of a merged or closed PR on the forge, such
 as one merged on the forge's website, never a local branch, with your own
 login or a scoped process's agent account. It refuses an open PR, a branch in a fork,

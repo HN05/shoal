@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 
 use anyhow::{Context, Result, ensure};
+use shoal_refs::CommitId;
 
 use crate::{
     account::Account,
@@ -410,15 +411,19 @@ impl ForgeRepo {
             Action::Merge {
                 method,
                 delete_branch,
+                head,
             } => {
                 ensure_open(item)?;
+                ensure_merge_head(current, head.as_ref())?;
                 self.kind().merge(self, current, *method, *delete_branch)?
             }
             Action::AutoMerge {
                 method,
                 delete_branch,
+                head,
             } => {
                 ensure_open(item)?;
+                ensure_merge_head(current, head.as_ref())?;
                 self.kind()
                     .auto_merge(self, current, *method, *delete_branch)?
             }
@@ -486,6 +491,23 @@ impl ForgeRepo {
         );
         Ok(())
     }
+}
+
+/// Refuse to merge the PR `current` once its head moved from `head`, the
+/// commit the merge is for; the forge then gets the head it read, which is
+/// that commit.
+fn ensure_merge_head(current: &Current, head: Option<&CommitId>) -> Result<()> {
+    let Some(head) = head else {
+        return Ok(());
+    };
+    let read = current.read_head()?;
+    // Bitbucket reports a PR's head as an abbreviated hash.
+    ensure!(
+        head.as_str().starts_with(read) || read.starts_with(head.as_str()),
+        "the head of #{} moved from {head} to {read} since the merge was asked for; run shoal pr merge again",
+        current.item.number
+    );
+    Ok(())
 }
 
 fn ensure_open(item: &Item) -> Result<()> {
