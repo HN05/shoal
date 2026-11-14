@@ -557,7 +557,8 @@ async fn a_scoped_start_reopens_only_a_workspace_below_its_own() {
     };
     let agent = daemon.scoped(&existing).await;
     let own = connection::request::<StartedWorkspace>(&agent, reopen(&existing)).await;
-    assert!(own.is_err());
+    let refusal = format!("{:#}", own.unwrap_err());
+    assert!(refusal.contains("split from theirs"), "{refusal}");
     let started: StartedWorkspace = connection::request(&agent, reopen(&child)).await.unwrap();
     assert!(started.reused);
     assert_eq!(started.workspace.id, child.id);
@@ -983,48 +984,52 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
         .publish_config(crate::daemon::test_support::global_config(
             "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false",
         ));
-    // The user's start holds a slot it has yet to open a workspace for.
+    let parent = daemon.workspace("parent").await;
+    let child = daemon
+        .manager
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    // The child's start holds a slot it has yet to open a workspace for,
+    // which the parent's scope reaches.
     let request = crate::model::QueueRequest {
         issue_labels: Vec::new(),
         priority: None,
         narrowing: Default::default(),
         mode: None,
         repository: daemon.repository.id.clone().into(),
-        name: "theirs".into(),
+        name: "api".into(),
         agent: "claude".into(),
         issue_title: None,
         plan: "{}".into(),
         env: Default::default(),
         now: false,
         workspace: None,
-        starts_in_caller: false,
+        starts_in_caller: true,
         blockers: Vec::new(),
     };
-    let theirs = daemon
-        .manager
-        .queue_add(request)
+    let caller = crate::daemon::scope::Caller {
+        space_id: child.id.clone(),
+        execution: None,
+    };
+    let theirs = (daemon.manager.queue_add_as(request, Some(&caller)))
         .await
         .unwrap()
         .entry
         .unwrap();
-    let chat = daemon
-        .manager
-        .start_chat(
-            daemon.repository.id.clone().into(),
-            "planner".into(),
-            "claude".into(),
-            None,
-        )
-        .await
-        .unwrap();
-    let token = daemon.manager.chat_scope(&chat.id).await.unwrap();
-    let agent = daemon.connector().scope(token);
+    let agent = daemon.scoped(&parent).await;
     let mut create = start_workspace(&daemon, WorkspaceStart::Name("api".into()));
     if let OperationMethod::StartWorkspace { queue_entry, .. } = &mut create {
         *queue_entry = Some(theirs.id.clone());
     }
     let refused = connection::request::<StartedWorkspace>(&agent, create).await;
-    assert!(refused.is_err());
+    let refusal = format!("{:#}", refused.unwrap_err());
+    assert!(refusal.contains("another launch's"), "{refusal}");
     let entries = daemon.manager.queue_entries().await.unwrap();
     let entry = entries.iter().find(|entry| entry.id == theirs.id).unwrap();
     assert_eq!(entry.space_id, None, "{entry:?}");
