@@ -142,7 +142,7 @@ impl Manager {
         let item = forge
             .apply(&self.user_account(), kind, number, &action)
             .await
-            .with_context(|| format!("could not {} {url}", action.name()))?
+            .with_context(|| format!("could not {} {url}", action.verb()))?
             .item;
         self.sync_after_merge(&checkout.id, &action, &item);
         Ok(item)
@@ -272,7 +272,7 @@ impl Manager {
         {
             Ok(acted) => acted,
             Err(error) => {
-                let error = error.context(format!("could not {} {}", action.name(), target.url));
+                let error = error.context(format!("could not {} {}", action.verb(), target.url));
                 return Err(self.record_failed_post(id, target, action, error).await);
             }
         };
