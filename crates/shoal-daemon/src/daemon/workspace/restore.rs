@@ -2,6 +2,7 @@
 //! and records what `shoal restore` needs to reopen the workspace, until the
 //! record expires.
 use crate::client::execution_ids::ExecutionId;
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
 use shoal_refs::{BranchName, CommitId};
@@ -137,6 +138,29 @@ impl Manager {
         selector: &SpaceSelector,
         caller: &Caller,
     ) -> Result<RestoredWorkspace> {
+        let repository = self.restorable_below(selector, caller).await?;
+        let restored = self.restore_workspace_as(selector, Some(caller)).await?;
+        let space = restored.opened.workspace.id.clone();
+        let parent = caller.space_id.clone();
+        self.store
+            .write(move |tx| {
+                super::tree::ready_parent(tx, Some(&repository), &parent).with_context(|| {
+                    format!("the restored workspace {space} stays at the top level")
+                })?;
+                super::tree::set_parent(tx, &space, Some(&parent))
+            })
+            .await?;
+        Ok(restored)
+    }
+
+    /// The repository of the removed workspace `selector` names, once the
+    /// space of `caller` takes a child of it, as a scoped restore of it
+    /// places the workspace there.
+    pub(crate) async fn restorable_below(
+        &self,
+        selector: &SpaceSelector,
+        caller: &Caller,
+    ) -> Result<RepositoryId> {
         let removed = (self.removed_workspaces().await?.into_iter())
             .find(|removed| selector.given_id() == Some(&removed.workspace_id))
             .with_context(|| {
@@ -144,17 +168,11 @@ impl Manager {
             })?;
         let (repository, parent) = (removed.repository_id, caller.space_id.clone());
         self.store
-            .read(move |tx| super::tree::ready_parent(tx, Some(&repository), &parent).map(drop))
-            .await?;
-        let restored = self.restore_workspace_as(selector, Some(caller)).await?;
-        let (space, parent) = (
-            restored.opened.workspace.id.clone(),
-            caller.space_id.clone(),
-        );
-        self.store
-            .write(move |tx| super::tree::set_parent(tx, &space, Some(&parent)))
-            .await?;
-        Ok(restored)
+            .read(move |tx| {
+                super::tree::ready_parent(tx, Some(&repository), &parent)?;
+                Ok(repository)
+            })
+            .await
     }
 
     /// [`Self::restore_workspace`] for `caller`, which relinks only what it

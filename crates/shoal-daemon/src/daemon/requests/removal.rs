@@ -260,6 +260,10 @@ async fn administer<'a>(
     method: &'a mut RemovalMethod,
 ) -> Result<Option<&'a mut SpaceSelector>> {
     let repository = match method {
+        // A restore opens the workspace below the caller, which must take it.
+        RemovalMethod::RestoreWorkspace { workspace } => {
+            Some(manager.restorable_below(workspace, caller).await?)
+        }
         RemovalMethod::ImportWorkspace { repository, .. } => {
             const REFUSAL: &str = "scoped processes import only into their own repository";
             *repository = manager.own_repository(caller, repository, REFUSAL).await?;
