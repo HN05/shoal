@@ -128,6 +128,17 @@ pub enum WorkspaceCommand {
         #[arg(long)]
         skip: bool,
     },
+    /// Bring a workspace up to date with what it was made from, while it
+    /// holds nothing of its own.
+    ///
+    /// A branch workspace fast-forwards to its upstream, else to the branch
+    /// it builds on: its base workspace's, else the default branch, synced
+    /// first. A workspace at a commit made for a PR or a branch moves to its
+    /// head or tip; one at a tag or bare commit is up to date. A copy of a
+    /// live workspace takes its source's files again and reruns setup.
+    /// Commits the target lacks and uncommitted changes refuse it. Without a
+    /// workspace, refreshes the one this runs in, else offers a picker.
+    Refresh { workspace: Option<SpaceSelector> },
     /// Keep a workspace's HEAD and unsaved files in a checkpoint that shoal restore returns to.
     Checkpoint {
         workspace: Option<SpaceSelector>,

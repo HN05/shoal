@@ -131,6 +131,7 @@ outputs!(
     crate::model::Repository,
     crate::model::RepositoryRemoval,
     crate::model::RestoredCheckpoint,
+    crate::model::Refreshed,
     crate::model::ReviewMark,
     crate::model::SyncedRepository,
     crate::model::Workspace,

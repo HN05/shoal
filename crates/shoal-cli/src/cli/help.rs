@@ -21,6 +21,7 @@ const GROUPS: &[(&str, &[&str])] = &[
             "rename",
             "adopt",
             "setup",
+            "refresh",
             "checkpoint",
             "restore",
             "messages",

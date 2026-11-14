@@ -71,6 +71,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: WorkspaceComman
             workspace,
             skip: true,
         } => workspaces::skip_setup(&ctx, workspace).await,
+        WorkspaceCommand::Refresh { workspace } => workspaces::refresh(&ctx, workspace).await,
         WorkspaceCommand::Checkpoint { workspace, name } => {
             restore::checkpoint(&ctx, workspace, name).await
         }

@@ -15,7 +15,8 @@ use crate::{
     connection::{Daemon, call, pages, request},
     model::{
         Blocker, ConflictCheck, DiffBase, Inspection, MergePreview, OwnedPlace, PresentSpace,
-        RenamedWorkspace, SpaceStatus, SpaceTarget, Spaces, UntrackedWorktree, Workspace,
+        Refreshed, RenamedWorkspace, SpaceStatus, SpaceTarget, Spaces, UntrackedWorktree,
+        Workspace,
     },
     protocol::{CommitStart, ConfigTarget, CreationOptions, RepositoryLayers, WorkspaceMethod},
     repository::Selector,
@@ -215,6 +216,11 @@ pub async fn fast_forward(
         },
     )
     .await
+}
+
+/// Bring `workspace` up to date with what it was made from.
+pub async fn refresh(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Refreshed> {
+    request(daemon, WorkspaceMethod::RefreshWorkspace { workspace }).await
 }
 
 /// The spaces `target` selects.
