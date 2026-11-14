@@ -31,6 +31,10 @@ for delivering a PR, under Committing near the end, decide when work is done.
   otherwise file an issue for it instead of only mentioning it.
 - Tests live in a sibling `tests.rs` (`#[cfg(test)] mod tests;`), not inline in
   the implementation file.
+- A file a package compiles, or its tests read, lives in that package's
+  directory (for the root package, `src/` or `tests/`) or in that of a package
+  it depends on: CI tests a PR's packages by the directories it changes, and
+  `scripts/check_package_sources.py` fails a build that reads any other.
 - Integrations such as agent tools, terminal hosts and apps implement callbacks
   for what they do differently; state, decisions and daemon calls stay in
   Shoal's generic code, which passes each callback only what it reads.

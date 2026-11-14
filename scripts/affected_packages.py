@@ -5,7 +5,8 @@ Prints `all` when every package is affected, or when Git finds no merge base
 with the base commit, else the name of each affected package on a line of its
 own, and nothing when the commits change no package. A file a package compiles or its
 tests read lives in its directory, or in that of a package it depends on, so
-a changed path names the package it affects."""
+a changed path names the package it affects; scripts/check_package_sources.py
+holds CI's builds to that."""
 import argparse
 import json
 import subprocess
@@ -28,6 +29,7 @@ WORKSPACE_INPUTS = (
     ".forgejo/scripts/check-toolchain.sh",
     ".forgejo/scripts/lock-target-dir.sh",
     "scripts/affected_packages.py",
+    "scripts/check_package_sources.py",
 )
 # The root package's directory is the workspace's, so it owns only these.
 ROOT_PACKAGE_DIRECTORIES = ("src/", "tests/")
@@ -89,11 +91,12 @@ class Workspace:
         return ALL if selected == set(self.directories) else sorted(selected)
 
 
-def load_workspace():
+def cargo_metadata():
+    """The workspace's `cargo metadata --no-deps`."""
     metadata = subprocess.run(
         ["cargo", "metadata", "--no-deps", "--format-version", "1"],
-        check=True, capture_output=True, text=True).stdout
-    return Workspace.from_metadata(json.loads(metadata))
+        check=True, stdout=subprocess.PIPE, text=True).stdout
+    return json.loads(metadata)
 
 
 def changed_paths(base, cwd=None, env=None):
@@ -119,7 +122,7 @@ def main():
         print(f"no merge base with {arguments.base}: every package is affected", file=sys.stderr)
         print(ALL)
         return
-    affected = load_workspace().affected(paths)
+    affected = Workspace.from_metadata(cargo_metadata()).affected(paths)
     for name in [ALL] if affected == ALL else affected:
         print(name)
 

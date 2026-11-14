@@ -754,6 +754,9 @@ configured command for another agent, plus proven child
   CI jobs start from a seed build, so flag a path compiled into code that tests
   run, such as `env!("CARGO_BIN_EXE_shoal")` or a build script's absolute
   path; it names the seed worktree until the code is rebuilt.
+  CI tests a PR's packages by the directories it changes, so flag a file a
+  package compiles or its tests read outside its directory (for the root
+  package, `src/` or `tests/`) and those of the packages it depends on.
 - Documentation: usage lives in README.md, behavior in docs/reference.md,
   configuration options in
   `crates/shoal-cli/src/cli/commands/configuration/reference.md`, decisions in
