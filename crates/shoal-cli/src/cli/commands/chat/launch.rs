@@ -374,11 +374,8 @@ pub(in crate::cli::commands) async fn start_changed(
 ) -> Result<i32> {
     let repo = repository_of(ctx, chat).await?;
     let settings = crate::config::settings(&ctx.paths, repo.config()).await?;
-    let home = repo.home(None).path().to_owned();
-    let topic = match &repo {
-        ChatRepository::Registered(registered) => Topic::repository(registered, &session.mode),
-        ChatRepository::Outside(_) => Topic::outside_repositories(&session.mode),
-    };
+    let topic = place_topic(ctx, chat, &repo, session).await?;
+    let home = topic.home(&repo).path().to_owned();
     let topic = Topic {
         linked_issue: crate::config::templates::IssueFields::linked(&chat.links),
         ..topic
@@ -402,6 +399,27 @@ pub(in crate::cli::commands) async fn start_changed(
     let launch = command::chat_launch(settings, &agent, repo, &topic, &options, chat.name.clone())?;
     let model_args = crate::agents::model_args(&launch.settings, &agent, &launch.model)?;
     run_agent(ctx, chat, agent, launch, model_args, records).await
+}
+
+/// The topic of the place the agent of `chat` starts in from `session`: the
+/// worktree of the workspace it runs in, unless it continues a workspace
+/// that became it, which leaves it the checkout, or else the checkout or
+/// the `root_dir` of `repo`.
+async fn place_topic(
+    ctx: &Context,
+    chat: &Chat,
+    repo: &ChatRepository,
+    session: &crate::execution::recovery::LastSession,
+) -> Result<Topic> {
+    if let Some(workspace) = chat.workspace.as_ref().filter(|_| !session.converted) {
+        let selector = SpaceSelector::id(&workspace.id);
+        let workspace = crate::client::workspaces::inspect(&ctx.paths, selector).await?;
+        return Ok(Topic::workspace(workspace.workspace, &session.mode));
+    }
+    Ok(match repo {
+        ChatRepository::Registered(registered) => Topic::repository(registered, &session.mode),
+        ChatRepository::Outside(_) => Topic::outside_repositories(&session.mode),
+    })
 }
 
 /// The repository `chat` runs in: its registered one, or the `root_dir` a
