@@ -1285,7 +1285,7 @@ fn a_restore_that_places_no_session_files_keeps_them_for_the_next() {
     let restored = fixture
         .command()
         .env_remove("SHOAL_DEV_USER_FILES")
-        .args(["--json", "restore", &fixture.id("unplaced")])
+        .args(["--json", "restore", &fixture.id("unplaced"), "--no-agents"])
         .output()
         .unwrap();
     assert!(restored.status.success(), "{restored:?}");
@@ -1331,12 +1331,12 @@ fn import_without_opening(fixture: &Fixture, file: &str, branch: &str) {
 }
 
 /// Restore the removed `workspace`, letting the development build put its
-/// agents' session files in place.
+/// agents' session files in place, and keep its agents saved.
 fn restore_with_user_files(fixture: &Fixture, workspace: &str) {
     let restored = fixture
         .command()
         .env("SHOAL_DEV_USER_FILES", "1")
-        .args(["--json", "restore", &fixture.id(workspace)])
+        .args(["--json", "restore", &fixture.id(workspace), "--no-agents"])
         .output()
         .unwrap();
     assert!(restored.status.success(), "{restored:?}");
