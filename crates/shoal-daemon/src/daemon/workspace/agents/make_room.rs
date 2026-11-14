@@ -3,7 +3,7 @@
 //! whose priority is no higher than the entry's goes to sleep, lowest rank
 //! first, once that costs nothing, and only one that holds a slot for an
 //! entry waiting for one. One that nothing would wake stays
-//! running, as do light agents and those the user attends. A woken agent
+//! running, as do light agents, a workspace's or a chat's. A woken agent
 //! reports no idle turn until it has worked one, so it finishes that turn
 //! before it can sleep for room again.
 use crate::client::{
