@@ -134,7 +134,8 @@ async fn children_of_an_orphaned_group_member_are_owned_with_a_live_leader() -> 
         Some(&identity),
         Some(identity.pid),
         Some(&ExecutionId::from("execution")),
-        &[],
+        &AgentTrees::default(),
+        None,
     )
     .await?;
     signal(&child, libc::SIGKILL)?;
@@ -174,7 +175,8 @@ async fn a_foreign_wrapper_and_its_agent_are_not_the_leaders() -> Result<()> {
         Some(&identity),
         Some(identity.pid),
         Some(&execution),
-        std::slice::from_ref(&wrapper),
+        &AgentTrees::of(std::slice::from_ref(&wrapper)).await?,
+        None,
     )
     .await?;
     signal(&agent, libc::SIGKILL)?;
@@ -234,7 +236,8 @@ async fn an_exited_commands_background_job_is_owned_through_its_lineage() -> Res
         Some(&identity),
         Some(identity.pid),
         Some(&ExecutionId::from("execution")),
-        &[],
+        &AgentTrees::default(),
+        None,
     )
     .await?;
     signal(&job, libc::SIGKILL)?;

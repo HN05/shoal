@@ -19,8 +19,9 @@ impl Processes {
     /// and ancestry each time. After signaling, callers must obtain a fresh scan.
     /// `workspace` is the directory of the execution's workspace. The other
     /// executions among those whose `agent_wrappers` these are run agents of
-    /// their own, wherever the process that started them runs, so neither
-    /// their wrappers nor what those started belong to `execution`.
+    /// their own, wherever the process that started them runs, so what runs
+    /// below their wrappers belongs to `execution` only below its own wrapper
+    /// there.
     pub async fn inspect(
         execution: &Execution,
         workspace: &Path,
@@ -31,26 +32,14 @@ impl Processes {
             Some(wrapper) if process::alive(wrapper)? => Some(wrapper.clone()),
             _ => None,
         };
-        let foreign: Vec<_> = (agent_wrappers.iter())
-            .filter(|other| execution.wrapper.as_ref() != Some(other))
-            .cloned()
-            .collect();
-        // A process that hides its environment, as a platform binary does
-        // on macOS, takes the marker of the nearest ancestor that tells,
-        // which for an agent's process can be its wrapper, started with the
-        // marker of the execution that started it.
-        let foreign_trees = process::trees_of(&foreign).await?;
-        let mut owned: Vec<_> = scan
-            .processes
-            .iter()
-            .filter(|p| p.owner == execution.id && !foreign_trees.contains(&p.identity.pid))
-            .map(|p| p.identity.clone())
-            .collect();
+        let agents = process::AgentTrees::of(agent_wrappers).await?;
+        let mut owned: Vec<_> = marked(execution, scan, &agents).cloned().collect();
         let (related, group_candidates) = process::related(
             execution.child.as_ref(),
             execution.group_id,
             Some(&execution.id),
-            &foreign,
+            &agents,
+            execution.wrapper.as_ref(),
         )
         .await?;
         owned.extend(related);
@@ -156,6 +145,19 @@ impl Processes {
         process::stop_verified(&targets).await?;
         Ok(!targets.is_empty())
     }
+}
+
+/// The processes of `scan` carrying the marker of `execution`, short of
+/// those that `agents` tell belong to another execution's agent.
+fn marked<'a>(
+    execution: &'a Execution,
+    scan: &'a process::Scan,
+    agents: &'a process::AgentTrees,
+) -> impl Iterator<Item = &'a process::Identity> {
+    (scan.processes.iter())
+        .filter(|p| p.owner == execution.id)
+        .map(|p| &p.identity)
+        .filter(|p| !agents.foreign(p.pid, execution.wrapper.as_ref()))
 }
 
 /// The PIDs of `processes`, separated by `separator`.
