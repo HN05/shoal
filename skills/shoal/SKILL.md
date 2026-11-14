@@ -353,8 +353,8 @@ With `push = "deny"`, `pr open` and `git push` fail with the reason.
 
 ### Permitted actions
 
-Other keys govern what was once the user's alone, each `deny`, `propose` or
-`direct`: `admin` administering Shoal, such as `config set`, `repo add`,
+Other keys govern administering Shoal and the actions that reach beyond a
+space, each `deny`, `propose` or `direct`: `admin` administering Shoal, such as `config set`, `repo add`,
 `cleanup`, `setup --skip`, `contribute`, `move`, and restoring removed
 workspaces, `limits` starting agents regardless of the limits, with
 `--now`, `--focus` or `queue start`, `ci_approve` approving CI runs that wait

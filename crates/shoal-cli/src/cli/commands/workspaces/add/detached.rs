@@ -121,9 +121,7 @@ async fn queue_in_existing(
 }
 
 /// Refuse, before any work is created, a detached start of the plan's
-/// agent that `options` ask to start differently: one a scoped caller
-/// starts regardless of the limits or any that `--focus` focuses, which
-/// nothing shows. The daemon starts the agent from the background, which
+/// agent that `--focus` asks to focus, which nothing shows. The daemon starts the agent from the background, which
 /// some host must take, unless the user's agent runs its own way.
 pub(super) async fn ensure_detachable(
     settings: &AddSettings<'_>,
