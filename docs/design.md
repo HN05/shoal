@@ -3318,8 +3318,10 @@ files are back, one transaction deletes the record and what keeps its files from
 expiring. A chat restores in the place it ran, refused while the workspace whose
 worktree it ran in is removed, naming the restore that opens both. A restore
 first claims the record, keeping it and its checkpoints and files from
-expiring for an hour while it runs. Reopening is
-allocation, so scoped callers cannot.
+expiring for an hour while it runs. A scoped caller restores a removed space
+only below its recorded parent, which must exist within its scope, as it
+creates children only there; the daemon decides, and lists a scoped caller
+only what it may restore.
 Moving a space to another machine ends it there and continues it here, through
 one package whose manifest names its kind and one path for both kinds: the
 package carries the agents' sessions and their files the same way, and only

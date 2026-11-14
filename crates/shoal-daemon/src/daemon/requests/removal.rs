@@ -36,6 +36,7 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::StopProcesses { .. }
         | RemovalMethod::CheckRemoval { .. }
         | RemovalMethod::RemovedSpaces
+        | RemovalMethod::RemovedSpace { .. }
         | RemovalMethod::DropRestoredSessions { .. } => false,
     }
 }
@@ -50,8 +51,11 @@ pub(super) async fn handle(
     }
     Ok(Answer::Body(match method {
         RemovalMethod::RemovedSpaces => {
-            let listed = manager.removed_spaces().await;
+            let listed = manager.restorable_spaces(caller).await;
             return Ok(Answer::pages(listed, Body::RemovedSpaces));
+        }
+        RemovalMethod::RemovedSpace { space } => {
+            Body::RemovedSpaces(vec![manager.removed_space(&space).await?])
         }
         RemovalMethod::StopTargets => {
             let targets = manager.stop_targets(QueuedLaunches::Cancel).await?;
@@ -117,10 +121,9 @@ pub(super) async fn handle(
         RemovalMethod::Cleanup { dry_run, selection } => {
             Body::Cleanup(cleanup::on_request(manager, dry_run, &selection).await?)
         }
-        RemovalMethod::RestoreSpace { space } => Body::RestoredSpace(match caller {
-            Some(caller) => manager.restore_space_below(&space, caller).await?,
-            None => manager.restore_space(&space, None).await?,
-        }),
+        RemovalMethod::RestoreSpace { space } => {
+            Body::RestoredSpace(manager.restore_space(&space, caller).await?)
+        }
         RemovalMethod::DropRestoredSessions { workspace } => {
             manager.drop_restored_sessions(&workspace).await?;
             Body::Ok
@@ -235,11 +238,15 @@ impl Scoped for RemovalMethod {
             // commands descend from its execution, which keeps them.
             RemovalMethod::StopProcesses { space, .. } => Ok(Some(space)),
             RemovalMethod::CheckStop { space } => Ok(Some(space)),
-            // Cleaning up, restoring removed workspaces and moving spaces is
-            // the `admin` permission's.
+            // Its answer lists only the spaces the caller may restore.
+            RemovalMethod::RemovedSpaces => Ok(None),
+            // Below its recorded parent, within the caller's scope.
+            RemovalMethod::RestoreSpace { space } | RemovalMethod::RemovedSpace { space } => {
+                manager.ensure_restorable_by(space, caller).await?;
+                Ok(None)
+            }
+            // Cleaning up and moving spaces is the `admin` permission's.
             RemovalMethod::Cleanup { .. }
-            | RemovalMethod::RemovedSpaces
-            | RemovalMethod::RestoreSpace { .. }
             | RemovalMethod::DropRestoredSessions { .. }
             | RemovalMethod::ExportSpace { .. }
             | RemovalMethod::ExportMovingSpace { .. }
@@ -258,8 +265,6 @@ async fn administer<'a>(
     method: &'a mut RemovalMethod,
 ) -> Result<Option<&'a mut SpaceSelector>> {
     let repository = match method {
-        // A restore opens the space below the caller, which must take it.
-        RemovalMethod::RestoreSpace { space } => manager.restorable_below(space, caller).await?,
         RemovalMethod::ImportWorkspace { repository, .. } => {
             const REFUSAL: &str = "scoped processes import only into their own repository";
             *repository = manager.own_repository(caller, repository, REFUSAL).await?;

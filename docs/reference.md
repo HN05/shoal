@@ -2465,7 +2465,7 @@ it; `limits`
 starting agents regardless of `max_agents` and memory, with `--now`,
 `--focus`, `queue start` or the queue picker's start; `admin`
 governs the rest of administering Shoal, its config, repositories and
-cleanup, and repairing, adopting, restoring and moving workspaces, in the
+cleanup, and repairing, adopting and moving workspaces, in the
 caller's own repository where the action names one. A scoped process changes
 Shoal's config only key by key, setting a permission only to a value its
 space holds and removing none, since that could hand it more; it never
@@ -3775,8 +3775,11 @@ from a fork of it, as a [copy](#copies)'s does, with a warning naming that
 space; this holds for a chat's restore too. It refuses when another
 workspace uses the branch, when the branch no longer contains the removed HEAD,
 or when it moved past HEAD while unsaved files would have to be applied to it;
-the error names the commit to recover by hand. Scoped processes reopen removed workspaces as their space's
-[`admin` permission](#permitted-actions) allows.
+the error names the commit to recover by hand. A scoped process restores a
+removed space, of either kind, whose recorded parent exists and its scope
+reaches, always below that parent; any other removed space is the user's to
+restore, and the refusal says why. Its restore list and picker offer only those
+it may restore.
 
 Removal records the branch, base, parent, links, stopped agents and last sessions with its checkpoint, and
 keeps them until the checkpoint expires.

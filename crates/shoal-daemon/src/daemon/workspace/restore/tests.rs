@@ -1013,49 +1013,67 @@ async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
 }
 
 #[tokio::test]
-async fn a_scoped_restore_reopens_the_workspace_below_the_caller() {
+async fn a_scoped_caller_restores_only_below_a_parent_in_its_scope() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "topic".into(), None, None, None)
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
         .await
         .unwrap();
-    let selector = SpaceSelector::id(&workspace.id);
-    (manager.remove_workspace(&selector, UnsavedWork::All, InspectionPolicy::GitOnly))
+    let child = manager
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
-    let master = crate::daemon::test_support::chat(
-        &std::sync::Arc::clone(&manager),
-        "master",
-        "orchestrate",
-        None,
-        None,
-    )
-    .await;
+    let top = manager
+        .create_workspace(&repo.id, "top".into(), None, None, None)
+        .await
+        .unwrap();
+    for id in [&child.id, &top.id] {
+        let selector = SpaceSelector::id(id);
+        (manager.remove_workspace(&selector, UnsavedWork::All, InspectionPolicy::GitOnly))
+            .await
+            .unwrap();
+    }
     let caller = Caller {
-        space_id: master.id.clone(),
+        space_id: parent.id.clone(),
         execution: None,
         granted: None,
         read_only: false,
     };
-    let restored = manager
-        .restore_space_below(&selector, &caller)
+
+    // It sees and restores only the child, whose parent its scope reaches.
+    let listed = manager.restorable_spaces(Some(&caller)).await.unwrap();
+    let listed: Vec<_> = listed.iter().map(|removed| &removed.space_id).collect();
+    assert_eq!(listed, [&child.id]);
+    let refused = (manager.ensure_restorable_by(&SpaceSelector::id(&top.id), &caller))
+        .await
+        .unwrap_err();
+    assert!(format!("{refused:#}").contains("the user's"), "{refused:#}");
+    let selector = SpaceSelector::id(&child.id);
+    manager
+        .ensure_restorable_by(&selector, &caller)
         .await
         .unwrap();
-    let crate::model::RestoredSpace::Workspace(restored) = restored else {
-        panic!("{restored:?}");
-    };
-    let id = restored.opened.workspace.id.clone();
-    let parent = manager
+    manager
+        .restore_space(&selector, Some(&caller))
+        .await
+        .unwrap();
+    let id = child.id.clone();
+    let below = manager
         .store
         .read(move |tx| crate::daemon::workspace::tree::parent_id(tx, &id))
         .await
         .unwrap();
-    assert_eq!(parent, Some(master.id));
+    assert_eq!(below, Some(parent.id));
 }
 
 #[tokio::test]

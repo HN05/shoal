@@ -1,7 +1,6 @@
 //! Restoring a removed space from its removal record: a workspace opens
 //! again here, a chat in the module below.
 use crate::client::agent::AgentSessionId;
-use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::{Copied, LastSession, StoppedAgent};
@@ -48,51 +47,72 @@ impl Manager {
         })
     }
 
-    /// [`Self::restore_space`] for a scoped `caller`, which reopens it below
-    /// its own space, which must take a child of the space's repository, as
-    /// a scoped start opens one, so it stays in its tree.
-    pub(crate) async fn restore_space_below(
+    /// The removed spaces `caller` may restore: every one for the user, for a
+    /// scoped caller those [`Self::scoped_restore_refusal`] lets it.
+    pub(crate) async fn restorable_spaces(
         &self,
-        selector: &SpaceSelector,
-        caller: &Caller,
-    ) -> Result<RestoredSpace> {
-        let repository = self.restorable_below(selector, caller).await?;
-        let restored = self.restore_space(selector, Some(caller)).await?;
-        let space = match &restored {
-            RestoredSpace::Workspace(restored) => restored.opened.workspace.id.clone(),
-            RestoredSpace::Chat(restored) => restored.chat.id.clone(),
+        caller: Option<&Caller>,
+    ) -> Result<Vec<RemovedSpace>> {
+        let removed = self.removed_spaces().await?;
+        let Some(caller) = caller else {
+            return Ok(removed);
         };
-        let parent = caller.space_id.clone();
-        self.store
-            .write(move |tx| {
-                super::tree::ready_parent(tx, repository.as_ref(), &parent).with_context(|| {
-                    format!("the restored space {space} stays at the top level")
-                })?;
-                super::tree::set_parent(tx, &space, Some(&parent))
-            })
-            .await?;
-        Ok(restored)
+        let mut restorable = Vec::new();
+        for space in removed {
+            if self.scoped_restore_refusal(&space, caller).await?.is_none() {
+                restorable.push(space);
+            }
+        }
+        Ok(restorable)
     }
 
-    /// The repository of the removed space `selector` names, once the space
-    /// of `caller` takes a child of it, as a scoped restore of it places the
-    /// space there.
-    pub(crate) async fn restorable_below(
+    /// The removed space `selector` names, by ID.
+    pub(crate) async fn removed_space(&self, selector: &SpaceSelector) -> Result<RemovedSpace> {
+        (self.removed_spaces().await?.into_iter())
+            .find(|removed| selector.given_id() == Some(&removed.space_id))
+            .with_context(|| format!("no restorable space {selector}; shoal restore lists them"))
+    }
+
+    /// Refuse the scoped `caller` the restore of the removed space
+    /// `selector` names unless [`Self::scoped_restore_refusal`] lets it.
+    pub(crate) async fn ensure_restorable_by(
         &self,
         selector: &SpaceSelector,
         caller: &Caller,
-    ) -> Result<Option<RepositoryId>> {
-        let removed = (self.removed_spaces().await?.into_iter())
-            .find(|removed| selector.given_id() == Some(&removed.space_id))
-            .with_context(|| format!("no restorable space {selector}; shoal restore lists them"))?;
-        let repository = removed.repository_id;
-        let parent = caller.space_id.clone();
-        self.store
-            .read(move |tx| {
-                super::tree::ready_parent(tx, repository.as_ref(), &parent)?;
-                Ok(repository)
-            })
-            .await
+    ) -> Result<()> {
+        let removed = self.removed_space(selector).await?;
+        match self.scoped_restore_refusal(&removed, caller).await? {
+            Some(refusal) => bail!("{refusal}"),
+            None => Ok(()),
+        }
+    }
+
+    /// Why the scoped `caller` may not restore `removed`, which its restore
+    /// puts below its recorded parent: that space is gone or outside the
+    /// caller's scope, or there is none, so the restore is the user's.
+    async fn scoped_restore_refusal(
+        &self,
+        removed: &RemovedSpace,
+        caller: &Caller,
+    ) -> Result<Option<String>> {
+        let name = &removed.name;
+        let Some(parent) = &removed.parent else {
+            return Ok(Some(format!(
+                "{name} was at the top level, so restoring it is the user's"
+            )));
+        };
+        let refusal = match self.find_space(&parent.id).await? {
+            None => format!(
+                "{name} was below {}, which is gone, so restoring it is the user's",
+                parent.name
+            ),
+            Some(_) if !self.reaches(caller, &parent.id).await? => format!(
+                "{name} was below {}, outside this space's scope, so restoring it is the user's",
+                parent.name
+            ),
+            Some(_) => return Ok(None),
+        };
+        Ok(Some(refusal))
     }
 
     /// Open the removed workspace `removed` again for `caller`, which
@@ -105,7 +125,7 @@ impl Manager {
         let mut warnings = Vec::new();
         let new = NewRecord {
             id: self.restored_id(&removed).await?,
-            parent: self.restored_parent(&removed, &mut warnings).await?,
+            parent: (self.restored_parent(&removed, caller, &mut warnings)).await?,
         };
         let kept = removed.kept_workspace()?;
         let checkpoint = &kept.checkpoint;
@@ -230,10 +250,12 @@ impl Manager {
 
     /// The space the restore of `removed` opens it below: its recorded
     /// parent while that exists and takes it, as a start places a child;
-    /// otherwise none, with a warning in `warnings` naming the parent.
+    /// otherwise none, with a warning in `warnings` naming the parent, or
+    /// for a scoped `caller`, which restores only below it, a refusal.
     pub(super) async fn restored_parent(
         &self,
         removed: &RemovedSpace,
+        caller: Option<&Caller>,
         warnings: &mut Vec<String>,
     ) -> Result<Option<SpaceId>> {
         let Some(parent) = removed.parent.clone() else {
@@ -253,6 +275,10 @@ impl Manager {
             .await?;
         match taken {
             Ok(()) => Ok(Some(parent.id)),
+            Err(error) if caller.is_some() => Err(error.context(format!(
+                "{} goes below {} only, which cannot take it",
+                removed.name, parent.name
+            ))),
             Err(error) => {
                 warnings.push(format!(
                     "{} opens at the top level, since its parent {} ({}) cannot take it: {error:#}",

@@ -160,8 +160,9 @@ instead of the PR delivery guidance below.
   that confines a caller another way (CLI refusals also follow ancestry
   for the same state directory); without a target a scoped command acts on the child
   whose directory it runs in, while agent hooks always report for the own workspace.
-  Workspace allocation other than a child of their own space and removal other than of a space below their own
-  stay denied; administering Shoal, the daemon, the user's holds and notifications, starting agents beyond the
+  Workspace allocation other than a child of their own space, removal other than of a space below their own
+  and restoring a removed space other than below its recorded parent within their scope stay denied, the
+  daemon deciding the restore; administering Shoal, the daemon, the user's holds and notifications, starting agents beyond the
   limits, approving CI runs, merging PRs and deciding any request below follow the permission key that
   governs each, as below. For the spaces their scope reaches but their own, scoped callers hold them, queue agents,
   which the daemon starts detached unless `start --here` runs one in the caller's terminal, and which hold their own space's scope, never the caller's, cancel and prioritize their queue

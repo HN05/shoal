@@ -21,7 +21,7 @@ impl Manager {
         let kept = (removed.chat()).context("the removal record is not a chat's")?;
         self.ensure_chat_place(&removed, kept).await?;
         let mut warnings = Vec::new();
-        let parent = self.restored_parent(&removed, &mut warnings).await?;
+        let parent = (self.restored_parent(&removed, caller, &mut warnings)).await?;
         let chat = self
             .record_restored_chat(restored_record(&removed, kept), parent)
             .await?;

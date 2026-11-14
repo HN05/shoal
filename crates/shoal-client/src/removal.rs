@@ -1,7 +1,7 @@
 //! What removing a workspace would discard, whether the caller lets it, and
 //! what the removal did.
 use crate::space_ids::SpaceId;
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 use shoal_refs::{BranchName, CommitId};
 
@@ -339,6 +339,13 @@ pub async fn clean_up(
 /// The removed spaces whose records allow restoring them.
 pub async fn removed(daemon: &impl Daemon) -> Result<Vec<RemovedSpace>> {
     pages(daemon, RemovalMethod::RemovedSpaces).await
+}
+
+/// The removed `space`, refused with the reason when the caller may not
+/// restore it.
+pub async fn removed_space(daemon: &impl Daemon, space: SpaceSelector) -> Result<RemovedSpace> {
+    let removed: Vec<RemovedSpace> = request(daemon, RemovalMethod::RemovedSpace { space }).await?;
+    removed.into_iter().next().context("no such removed space")
 }
 
 /// Open the removed `space` again from its record.

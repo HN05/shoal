@@ -138,25 +138,26 @@ fn stopped_chats(spaces: &Spaces) -> Vec<Chat> {
         .collect()
 }
 
-/// The removed spaces, workspaces before chats, which `names` may name, or
-/// which a picker or list offers when it names none; none when every name
-/// is a space's.
-/// Restoring them is the `admin` permission's, which a scoped process asks
-/// for first, and only when it names one: it reopens none it did not name.
+/// The removed spaces the caller may restore, as the daemon decides,
+/// workspaces before chats, which `names` may name, or which a picker or
+/// list offers when it names none; none when every name is a space's.
 async fn removed_spaces(
     ctx: &Context,
     spaces: &Spaces,
     names: &[SpaceSelector],
 ) -> Result<Vec<RemovedSpace>> {
-    let scoped = crate::env::inherits_scope(&ctx.paths.state);
-    if (scoped && names.is_empty())
-        || (!names.is_empty() && names.iter().all(|name| spaces.find(name).is_some()))
-    {
+    if !names.is_empty() && names.iter().all(|name| spaces.find(name).is_some()) {
         return Ok(Vec::new());
     }
-    let admin = crate::config::permissions::PermissionKey::Admin;
-    crate::cli::commands::authorization::authorize_key(ctx, admin).await?;
     let mut removed = crate::client::removal::removed(&ctx.paths).await?;
+    // A removed space the list leaves out, the daemon refuses with why.
+    for name in names.iter().filter(|name| spaces.find(name).is_none()) {
+        if name.given_id().is_some()
+            && !(removed.iter()).any(|removed| name.given_id() == Some(&removed.space_id))
+        {
+            removed.push(crate::client::removal::removed_space(&ctx.paths, name.clone()).await?);
+        }
+    }
     removed.sort_by_key(|removed| removed.workspace().is_none());
     Ok(removed)
 }

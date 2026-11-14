@@ -86,8 +86,10 @@ pub enum RemovalMethod {
         #[serde(flatten)]
         selection: crate::cleanup::Selection,
     },
-    /// Removed spaces that can still be restored.
+    /// Removed spaces that can still be restored, those the caller may.
     RemovedSpaces,
+    /// The removed space `space` names, once the caller may restore it.
+    RemovedSpace { space: SpaceSelector },
     /// Open a removed space again from its removal record.
     RestoreSpace { space: SpaceSelector },
     /// Delete the agents' session files the restore that opened `workspace`

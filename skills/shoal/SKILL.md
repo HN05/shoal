@@ -585,7 +585,7 @@ agents placed, and the user's as their `user_holds` permission allows.
 ```sh
 shoal rm <space>
 shoal checkpoint --name "<what comes next>"
-shoal restore <workspace>
+shoal restore <space>
 shoal restore [workspace] --checkpoint [<number>]
 shoal cleanup spaces
 shoal cleanup --dry-run
@@ -598,9 +598,10 @@ Removing a space removes the spaces below it first, held ones included, and
 asks what to do with unmerged work. `rm` returns once its checks pass and
 removes a workspace in the background; a later failure arrives as a message,
 and `--wait` waits for the removal. A checkpoint keeps HEAD and unsaved files;
-Shoal also takes one when an agent exits or is stopped. `restore` also reopens
-a removed workspace with its agents, as the space's `admin` permission
-allows, as do `cleanup` and `move`; `restore --checkpoint` lists a workspace's checkpoints,
+Shoal also takes one when an agent exits or is stopped. `restore <id>` also
+reopens a removed workspace or chat with its agents, below the space it was
+below; an agent restores one whose parent its scope reaches. `cleanup` and
+`move` are as the space's `admin` permission allows; `restore --checkpoint` lists a workspace's checkpoints,
 and with a number returns to one after keeping the current state in a new
 checkpoint, refusing while another command runs in the workspace. `cleanup spaces` removes every
 space automatic cleanup would remove without waiting for its idle delay;

@@ -219,7 +219,7 @@ shoal stop --leftovers        # Stop what this workspace's commands left running
 shoal stop --processes 3          # Stop its processes Shoal does not track; agents keep running
 shoal restart --all --agent claude  # Restart Claude agents in new terminals, such as after an update
 shoal restart --all --sequential    # Restart one at a time, idle agents first
-shoal restore                 # Pick stopped work, stopped chats and removed workspaces to restore
+shoal restore                 # Pick stopped work, stopped chats and removed spaces to restore
 shoal restore --all           # Queue the restore of stopped agents, restore stopped chats; report stopped commands
 shoal restore 3               # Continue its stopped agent, or the turn shoal stop --interrupt ended
 shoal restore 3 --now         # Restore its stopped agent at once in the background
@@ -235,7 +235,7 @@ shoal rm 3                    # Remove the workspace
 shoal rm 3 6                  # Remove several; the picker selects them with Tab or Ctrl-A
 shoal cleanup                 # Pick leftover workspaces, kept branches and caches to remove
 shoal checkpoint 3            # Keep HEAD and unsaved files to return to later
-shoal restore <id>            # Open a removed workspace again
+shoal restore <id>            # Open a removed workspace or chat again
 shoal restore 3 --checkpoint  # Pick one of the workspace's checkpoints
 shoal restore 3 --checkpoint 3 # Return the workspace to checkpoint 3
 shoal move ssh other 3 # Move the workspace or chat to another machine; its agents continue there
@@ -487,7 +487,8 @@ disposable workspace's, as `shoal checkpoint` does and Shoal does when an
 agent exits or is stopped. Until the checkpoint expires, after 30 days by default,
 `shoal restore` picks a removed workspace among what it restores, and
 `shoal restore <id>` opens one again with its links and the unsaved files the
-checkpoint kept, and restores the agents the removal stopped; `--no-agents` keeps them
+checkpoint kept, and restores the agents the removal stopped; a removed chat
+comes back the same way, with its agent's session; `--no-agents` keeps them
 saved for a later `shoal restore`, and `--forget` forgets them. A checkpoint keeps
 HEAD only when the unsaved files are too large or include a nested repository or
 changed submodule; see [Checkpoints and restore](docs/reference.md#checkpoints-and-restore).
