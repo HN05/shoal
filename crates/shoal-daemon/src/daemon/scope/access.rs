@@ -333,9 +333,9 @@ impl Manager {
     }
 
     /// Refuse the queue entry `id` that `caller`'s `start` names unless it
-    /// is the caller's own launch there: one it queued of a new space, or
-    /// one of the existing workspace `start` reopens, so a start never
-    /// takes another launch's slot.
+    /// is the launch of what `start` opens: one the caller queued of a new
+    /// space, or the one launch of the existing workspace `start` reopens,
+    /// whoever queued it, which the caller could cancel and queue again.
     pub(in crate::daemon) async fn ensure_own_launch(
         &self,
         caller: &Caller,
