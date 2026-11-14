@@ -76,6 +76,22 @@ fn queue_status_names_the_work_a_launch_waits_for() {
         queue_status_cell(&entry).0,
         "queued, position 2, priority urgent (from 7, its parent), finishing (from 12, blocked on this)"
     );
+    let rank = entry.rank.as_mut().unwrap();
+    rank.shared_areas = vec![
+        SharedArea {
+            area: "area/daemon".into(),
+            spaces: vec!["12".into(), "15".into()],
+        },
+        SharedArea {
+            area: "area/cli".into(),
+            spaces: vec!["3".into()],
+        },
+    ];
+    assert!(
+        queue_status_cell(&entry)
+            .0
+            .ends_with("(from 12, blocked on this), sharing area/daemon: 12, 15; area/cli: 3"),
+    );
     entry.rank = None;
     entry.held_by = Some(HeldBy::Memory {
         needed: 4 << 30,

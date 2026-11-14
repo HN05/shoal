@@ -2213,7 +2213,8 @@ highest of the spaces its run links, taking its priority even when lower, and
 a review with the workspace it reviews. `shoal queue` shows each waiting
 entry's priority and tier, and for each it took from waiting work, that work
 and why, as in `priority urgent (from 7, its parent), finishing (from 12,
-blocked on this)`.
+blocked on this)`, then each area a launch shares with the spaces holding it,
+as in `sharing area/daemon: 12, 15; area/cli: 3`.
 
 ### Agent accounts
 

@@ -24,7 +24,7 @@ use crate::{
     config::modes::ModeName,
     model::{
         Asleep, Chat, Dependency, HeldBy, InheritedRank, QueueEntry, QueueRank, Repository,
-        ReviewMark, Tier, Workspace, WorkspaceUsage,
+        ReviewMark, SharedArea, Tier, Workspace, WorkspaceUsage,
     },
     state::{AgentState, QueueKind, QueueState},
 };
@@ -334,7 +334,8 @@ fn waiting_reasons(entry: &QueueEntry) -> String {
 
 /// A waiting entry's rank: its priority and tier, each with the work it
 /// took that from and why, as in `priority urgent (from 7, its parent),
-/// finishing (from 12, blocked on this)`.
+/// finishing (from 12, blocked on this)`, then the areas it shares, as in
+/// `, sharing area/daemon: 12, 15; area/cli: 3`.
 fn rank_label(rank: &QueueRank) -> String {
     let tier = match rank.tier {
         Tier::New => "new",
@@ -342,11 +343,25 @@ fn rank_label(rank: &QueueRank) -> String {
         Tier::Finishing => "finishing",
     };
     format!(
-        "priority {}{}, {tier}{}",
+        "priority {}{}, {tier}{}{}",
         rank.priority,
         inherited_label(rank.priority_from.as_ref()),
-        inherited_label(rank.tier_from.as_ref())
+        inherited_label(rank.tier_from.as_ref()),
+        shared_areas_label(&rank.shared_areas)
     )
+}
+
+/// The areas a launch shares, each with the spaces holding it, as in
+/// `, sharing area/daemon: 12, 15; area/cli: 3`; nothing when it shares
+/// none.
+fn shared_areas_label(shared: &[SharedArea]) -> String {
+    if shared.is_empty() {
+        return String::new();
+    }
+    let areas: Vec<String> = (shared.iter())
+        .map(|shared| format!("{}: {}", shared.area, shared.spaces.join(", ")))
+        .collect();
+    format!(", sharing {}", areas.join("; "))
 }
 
 /// The work a rank was taken from and why, as in ` (from 12, blocked on

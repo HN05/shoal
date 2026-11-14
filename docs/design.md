@@ -1717,7 +1717,7 @@ area only orders, never holds a launch while a slot is free, every area counts
 the same, the hourly rise keeps a launch that shares areas from starving, and
 only new workspaces move, since other work's branch already exists. Then plan steps done, the space's age and arrival decide, and
 `shoal queue` explains a rank taken from other work, for its priority and its
-tier apart.
+tier apart, and the areas a launch shares, with the spaces holding each.
 For the same reason
 every caller sees the whole queue, while acting on an entry keeps the scope
 rules. Each waiting entry carries what held it back at the last admission
