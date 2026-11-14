@@ -7,7 +7,7 @@ use super::{Manager, copies::Source};
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::scope::Caller,
+    daemon::{log, scope::Caller},
     git,
     model::{PresentSpace, Refreshed, Repository, Workspace},
     state::WorkspaceState,
@@ -34,10 +34,7 @@ impl Manager {
         };
         let target = self.refresh_target(&workspace, caller).await?;
         if matches!(target, Target::DefaultBranch) {
-            // The sync takes the repository's Git gate itself.
-            self.sync_repository(&(&workspace.repository_id).into())
-                .await
-                .context("could not sync the default branch to refresh to")?;
+            self.sync_default_branch(&workspace).await;
         }
         let (repo, _git) = self.lock_repository(&workspace.repository_id).await?;
         let reserved = self
@@ -57,6 +54,20 @@ impl Manager {
             workspace: self.workspace_by_id(&workspace.id).await?,
             ..refreshed
         })
+    }
+
+    /// Sync the default branch `workspace` builds on before it refreshes to
+    /// it. The sync takes the repository's Git gate itself and records a
+    /// failure for status to show, after which the refresh goes on with the
+    /// local default branch as the checkout has it.
+    async fn sync_default_branch(&self, workspace: &Workspace) {
+        let repository = (&workspace.repository_id).into();
+        if let Err(error) = self.sync_repository(&repository).await {
+            log!(
+                "refresh of {} goes on with the local default branch: {error:#}",
+                workspace.name
+            );
+        }
     }
 
     /// Refresh the reserved `workspace`, which was in `state`, to `target`,

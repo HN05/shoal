@@ -3135,7 +3135,7 @@ from while it holds nothing of its own:
 | Workspace | Refresh moves it to |
 |---|---|
 | On a branch with an upstream | the upstream, fetched |
-| Any other branch workspace | the branch it builds on: its base workspace's, else the branch its recorded base names (a remote one fetched), else the local default branch, synced first as `shoal repo sync` does |
+| Any other branch workspace | the branch it builds on: its base workspace's, else the branch its recorded base names (a remote one fetched), else the local default branch, synced first as `shoal repo sync` does, or as the checkout has it when that sync fails |
 | At a commit made for a PR | the PR's head as the forge reports it now |
 | At a commit made for a branch | the branch's tip, resolved as `--base` resolves it |
 | At a tag or a bare commit, or a copy of a checkpoint | nothing: it is up to date |

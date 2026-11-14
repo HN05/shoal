@@ -112,6 +112,32 @@ async fn a_branch_workspace_fast_forwards_to_the_default_branch_once() {
 }
 
 #[tokio::test]
+async fn a_failed_sync_refreshes_to_the_local_default_branch() {
+    let f = Fixture::new().await;
+    let workspace = f.workspace("topic", None).await;
+    let missing = f.repo.path.with_file_name("missing");
+    git(
+        &f.repo.path,
+        &["remote", "add", "origin", missing.to_str().unwrap()],
+    );
+    // What a clone of the now missing origin left.
+    git(
+        &f.repo.path,
+        &["update-ref", "refs/remotes/origin/main", "main"],
+    );
+    let head = [
+        "symbolic-ref",
+        "refs/remotes/origin/HEAD",
+        "refs/remotes/origin/main",
+    ];
+    git(&f.repo.path, &head);
+    let main = add_commit(&f.repo.path, "later");
+
+    let refreshed = f.refresh(&workspace).await.unwrap();
+    assert_eq!(refreshed.to, main);
+}
+
+#[tokio::test]
 async fn a_stacked_workspace_fast_forwards_to_its_base_workspaces_branch() {
     let f = Fixture::new().await;
     let base = f.workspace("base", None).await;
