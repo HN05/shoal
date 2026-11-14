@@ -280,9 +280,7 @@ impl Manager {
             head.number
         );
         let fetched = pull_head(repo, head).await?;
-        git::detached::move_to(&workspace.path, fetched.at.commit.as_str()).await?;
-        self.record_starting_commit(&workspace.id, fetched.at.commit)
-            .await
+        self.move_to_start(workspace, fetched.at.commit).await
     }
 
     /// Move the workspace `id` of a job, before the job's first step, to
@@ -322,9 +320,19 @@ impl Manager {
             return Ok(());
         }
         fetch_job_commit(repo, commit, reference).await?;
+        self.move_to_start(workspace, commit.to_owned()).await
+    }
+
+    /// Check out `commit` in the reserved workspace at a commit, whose
+    /// repository's Git gate the caller holds, and record it as where the
+    /// workspace starts.
+    pub(super) async fn move_to_start(
+        &self,
+        workspace: &Workspace,
+        commit: CommitId,
+    ) -> Result<()> {
         git::detached::move_to(&workspace.path, commit.as_str()).await?;
-        self.record_starting_commit(&workspace.id, commit.to_owned())
-            .await
+        self.record_starting_commit(&workspace.id, commit).await
     }
 
     /// Record `commit` as where the workspace `id` started, which is also
