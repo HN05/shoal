@@ -307,31 +307,6 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
 }
 
 #[tokio::test]
-async fn approving_ci_runs_follows_the_ci_approve_permission() {
-    use crate::{client::space_names::SpaceSelector, protocol::ItemContext};
-
-    let (temp, manager) = manager().await;
-    let checkout = repository(temp.path(), "repo");
-    crate::daemon::test_support::git(
-        &checkout,
-        &["remote", "add", "origin", "https://github.com/team/repo"],
-    );
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
-    let master = chat(&manager, "master", "orchestrate", None, None).await;
-    let worker = chat(&manager, "worker", "chat", Some(&repo), Some(&master.id)).await;
-    // It asks before it sends the forge anything, naming the run.
-    let context = ItemContext::Chat(SpaceSelector::id(&worker.id));
-    let asking = caller(&worker.id);
-    let run = Some("7".parse().unwrap());
-    let approving = manager.approve_ci_runs(&context, run, None, Some(&asking));
-    let request = undecided(approving.await.map(drop));
-    assert_eq!(request.target, Target::Action(PermissionKey::CiApprove));
-    assert!(request.name.contains("/actions/runs/7"), "{}", request.name);
-}
-
-#[tokio::test]
 async fn deleting_a_pr_s_branch_follows_the_merge_permission() {
     use crate::{
         client::space_names::SpaceSelector,

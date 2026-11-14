@@ -4830,17 +4830,22 @@ fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
 
     // Approving lets a contributor's code run, so a worker proposes it.
     let shoal = support::shoal_binary();
-    let approve = ["ci", "approve", "--pr", "8"];
-    let scoped = fixture.run(
-        &[
-            &["run", "--workspace", &fixture.id("topic"), "--", shoal][..],
-            &approve,
-        ]
-        .concat(),
-    );
+    let scoped = |approve: &[&str]| {
+        fixture.run(
+            &[
+                &["run", "--workspace", &fixture.id("topic"), "--", shoal][..],
+                approve,
+            ]
+            .concat(),
+        )
+    };
     // It reads which runs wait, which its approval request names, and
     // approves none until a decision approves them.
-    assert_eq!(scoped.status.code(), Some(2), "{scoped:?}");
+    let proposed = scoped(&["ci", "approve", "--pr", "8"]);
+    assert_eq!(proposed.status.code(), Some(2), "{proposed:?}");
+    // A run that waits for nothing is refused before anything asks.
+    let refused = scoped(&["ci", "approve", &url(22)]);
+    assert_eq!(refused.status.code(), Some(1), "{refused:?}");
     let requests = fixture.requests();
     assert!(
         (requests.iter()).all(|request| request[0]

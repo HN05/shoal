@@ -64,6 +64,15 @@ impl ForgeRepo {
         Ok(waiting)
     }
 
+    /// The URL of the run `run`, once the forge approves runs and the run
+    /// waits for approval, as [`Self::approve_run`] requires.
+    pub async fn waiting_run(&self, account: &Account, run: &ItemRef) -> Result<String> {
+        self.require(Capability::ApproveRuns)?;
+        let run = self.read_run(account, run).await?;
+        ensure!(run.waiting, "{} does not wait for approval", run.url);
+        Ok(run.url)
+    }
+
     /// Approve the run `run`, which must wait for approval, and return its
     /// URL.
     pub async fn approve_run(&self, account: &Account, run: &ItemRef) -> Result<String> {

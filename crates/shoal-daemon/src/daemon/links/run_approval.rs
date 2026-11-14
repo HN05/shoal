@@ -44,7 +44,9 @@ impl Manager {
         let approved = match run {
             Some(input) => {
                 let run = ItemRef::in_repository(&forge, LinkKind::Ci, &input)?;
-                let approval = format!("approve CI run {run}");
+                // It asks once the forge would approve the run.
+                let waiting = forge.waiting_run(&account, &run).await?;
+                let approval = format!("approve CI run {waiting}");
                 self.authorize_approval(caller, &place, approval).await?;
                 let url = forge
                     .approve_run(&account, &run)
