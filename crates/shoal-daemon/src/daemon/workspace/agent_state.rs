@@ -14,7 +14,10 @@ use crate::{
     agents::hook_reports,
     execution::recovery,
     model::{AgentStatus, Execution, PresentSpace},
-    process::{execution::Processes, identity::Scan},
+    process::{
+        execution::Processes,
+        identity::{AgentTrees, Scan},
+    },
     protocol::TurnEnd,
     state::{AgentState, ExecutionState, TurnFailure},
     time::UnixTime,
@@ -153,14 +156,17 @@ struct StoppedTurn {
 
 impl StoppedTurn {
     /// The turn to keep: an idle one counts as working while `scan` finds
-    /// work of the execution outside its process group, as protection counts
-    /// it, since that work may start its next turn.
-    fn kept(&self, scan: Option<&Scan>) -> AgentState {
+    /// work of the execution outside its process group, short of what other
+    /// executions' `agents` run, as protection counts it, since that work
+    /// may start its next turn.
+    fn kept(&self, scan: Option<(&Scan, &AgentTrees)>) -> AgentState {
         let in_flight = || {
             self.execution
                 .as_ref()
                 .zip(scan)
-                .is_some_and(|(execution, scan)| Processes::runs_outside_group(execution, scan))
+                .is_some_and(|(execution, (scan, agents))| {
+                    Processes::runs_outside_group(execution, scan, agents)
+                })
         };
         if self.state == AgentState::Idle && in_flight() {
             AgentState::Working
@@ -213,6 +219,11 @@ impl Manager {
             let Some(turn) = reported else {
                 return Ok(());
             };
+            let agents = match scan {
+                Some(_) => Some(self.agent_trees().await?),
+                None => None,
+            };
+            let scan = scan.zip(agents.as_ref());
             recovery::save_turn(&self.paths, &turn.workspace, id, turn.kept(scan))
         }
         .await;

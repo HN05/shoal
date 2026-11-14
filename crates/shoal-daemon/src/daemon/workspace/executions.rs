@@ -918,6 +918,12 @@ impl Manager {
         self.store.read(|db| store::agent_wrappers(db)).await
     }
 
+    /// What the agents of executions run now, which is theirs wherever the
+    /// process that started them runs.
+    pub(crate) async fn agent_trees(&self) -> Result<process::AgentTrees> {
+        process::AgentTrees::of(&self.agent_wrappers().await?).await
+    }
+
     /// Delete an execution record whose processes the caller proved stopped.
     pub(crate) async fn forget_execution(&self, id: &ExecutionId) -> Result<()> {
         self.keep_stopped_turn(id, None).await;
