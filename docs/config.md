@@ -347,8 +347,9 @@ Each option merges on its own across layers, so a repository can replace
   `{schema}`, or its text, `{schema_json}`; `{output}` names a file the result
   goes to instead of standard output. A tool without one cannot review.
 - `gate` runs the [gate](reference.md#the-gate) once, with `review`'s
-  placeholders, read-only as a review but able to run `shoal`, whose commands
-  reach the daemon's socket; a tool without one cannot be the gate.
+  placeholders, read-only as a review but able to run `shoal`: the built-in
+  ones open Unix sockets in the tool's sandbox, the daemon's among them, and
+  no network host. A tool without one cannot be the gate.
   `gate_resume` runs it again in session `{session}`, which an earlier run
   reported, to keep a session per subject. A tool without one starts a new
   session each time, as does one whose runs report no session: Claude Code

@@ -94,8 +94,9 @@ pub const PROVIDERS: &[Provider] = &[
             "{prompt}",
         ]),
         // Its permissions read every file and write none, and its network
-        // reaches only the daemon's socket: the proxy it goes through allows
-        // no host.
+        // reaches Unix sockets, the daemon's among them, which Linux cannot
+        // allow one by one, but no host: the proxy it goes through allows
+        // none.
         gate: Some(&[
             "exec",
             "-c",
@@ -174,8 +175,9 @@ pub const PROVIDERS: &[Provider] = &[
             "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*)",
             "--settings={\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":false,\"allowUnsandboxedCommands\":false}}",
         ]),
-        // As `review`, with Shoal's commands, whose sandbox reaches the
-        // daemon's socket.
+        // As `review`, with Shoal's commands, whose sandbox reaches Unix
+        // sockets, the daemon's among them; the allowed tools reach them
+        // only through `shoal`.
         gate: Some(&[
             "-p",
             "{prompt}",
