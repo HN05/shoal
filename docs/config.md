@@ -732,7 +732,7 @@ takes a free port instead of suggesting one. See
 required_labels = ["type/"]  # Default: []
 plan_label = "needs-plan"    # Default: unset
 planned_label = "planned"    # Default: unset
-assign = true                # Assign linked issues on the forge
+assign = true                # Default: true
 ```
 
 `required_labels` names entries that every new issue's labels must each start
