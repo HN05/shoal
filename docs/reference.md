@@ -4607,10 +4607,11 @@ Linking an open issue as assigned, however the link is made, also adds the
 account the space acts as to its assignees on the forge: the agent account for a
 scoped caller, the user's own login for the user's terminal, unless
 [`[issue] assign`](config.md#issues) is off or that account has no token of its
-own for the forge. The link stands whether or not the forge assigns it. When a
-space drops the link, by unlinking it or being removed, Shoal takes off the
-assignee it added once no other space links the issue for the same login; an
-assignee it did not add, and that of a closed issue, stays.
+own for the forge. A warning on stderr and in the JSON `warnings` names the
+issue's other assignees, or why the forge did not assign it; the link stands
+either way. When a space drops the link, by unlinking it or being removed,
+Shoal takes off the assignee it added once no other space links the issue for
+the same login; an assignee it did not add, and that of a closed issue, stays.
 Assigned PRs accumulate without duplicates, and any PR of the repository can be
 assigned whatever its head branch, such as one pushed from the worktree on
 another branch. Assigned items suppress idle cleanup.

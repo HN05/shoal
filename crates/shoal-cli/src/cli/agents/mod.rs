@@ -158,8 +158,13 @@ pub(in crate::cli) async fn link_chat(
             item.url.clone().into(),
             item.title.clone(),
         );
-        if let Err(error) = linked.await {
-            eprintln!("shoal: {} was not linked to the chat: {error:#}", item.url);
+        match linked.await {
+            Ok(linked) => {
+                for warning in &linked.warnings {
+                    eprintln!("shoal: {warning}");
+                }
+            }
+            Err(error) => eprintln!("shoal: {} was not linked to the chat: {error:#}", item.url),
         }
     }
 }

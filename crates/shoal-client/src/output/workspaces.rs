@@ -77,12 +77,15 @@ pub struct Bases {
     pub stacked_workspaces: Vec<WorkspaceRef>,
 }
 
-/// Whether an item is linked, and how.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+/// Whether an item is linked, and how, with what assigning or unassigning
+/// an issue on the forge warned of.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Registered {
     pub registered: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relation: Option<crate::model::Relation>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 /// A question asked in the agent's chat.

@@ -45,12 +45,14 @@ async fn follow(ctx: &Context, id: String) -> Result<Outcome> {
     }
 }
 
-/// Follow a workspace's preparation to its end, as [`show`] shows it,
-/// returning the prepared workspace or how preparing it failed.
+/// Follow a workspace's preparation to its end, as [`show`] shows it, after
+/// what assigning its issue on the forge warned of, returning the prepared
+/// workspace or how preparing it failed.
 pub(super) async fn follow_preparation(
     ctx: &Context,
     mut preparing: Preparing<'_, CommandPaths>,
 ) -> Result<Result<Prepared, Unprepared>> {
+    super::links::print_warnings(preparing.warnings());
     let id = preparing.operation().to_owned();
     show(ctx, &id, async || preparing.next().await).await
 }

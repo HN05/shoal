@@ -290,7 +290,8 @@ commands act on the linked item, or on the number or URL given.
 
 `issue open` records the issue as opened by the space, or with `--link`
 assigns it instead. Linking an issue as assigned, by any command, adds the
-account the space acts as to its assignees on the forge; unlinking it, or
+account the space acts as to its assignees on the forge and warns of anyone
+else assigned; unlinking it, or
 removing the space, takes back an assignment Shoal made. `--repo OWNER/NAME`, or a repository URL on another forge, opens it
 in another repository, as the space's `issue_other_repositories` permission
 allows;

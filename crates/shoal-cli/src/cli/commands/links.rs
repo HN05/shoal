@@ -105,11 +105,13 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
     if let Some(error) = linked.title_error {
         eprintln!("Title unavailable: {error}");
     }
+    print_warnings(&linked.warnings);
     ctx.emit(
         &link_outcome(kind, relation),
         Registered {
             registered: true,
             relation: Some(relation),
+            warnings: linked.warnings,
         },
     )?;
     Ok(0)
@@ -163,7 +165,7 @@ async fn pick_open_item(
 pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {
     let (items, relation) = items.split()?;
     let (space, selected) = select(ctx, items).await?;
-    crate::client::items::unlink(
+    let unlinked = crate::client::items::unlink(
         &ctx.paths,
         space.clone(),
         relation,
@@ -171,12 +173,21 @@ pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {
         selected.input,
     )
     .await?;
+    print_warnings(&unlinked.warnings);
     let unlinked = Registered {
         registered: false,
         relation: None,
+        warnings: unlinked.warnings,
     };
     ctx.emit("Items unlinked", unlinked)?;
     Ok(0)
+}
+
+/// Print what changing an issue's assignees on the forge warned of.
+pub(super) fn print_warnings(warnings: &[String]) {
+    for warning in warnings {
+        eprintln!("warning: {warning}");
+    }
 }
 
 /// Wait for the activity of the items selected in a space, an item of the
