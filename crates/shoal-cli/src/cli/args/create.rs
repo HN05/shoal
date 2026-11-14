@@ -153,7 +153,7 @@ pub struct StartArgs {
     pub recorded_narrowing: Option<crate::config::permissions::PermissionsConfig>,
     /// Start in a chat whatever the mode's kind, as the place a chat opens in
     /// starts it, which shoal start passes.
-    #[arg(long, hide = true, conflicts_with_all = ["branch", "path", "base", "git_profile", "now", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
+    #[arg(long, hide = true, conflicts_with_all = ["branch", "path", "base", "git_profile", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
     pub as_chat: bool,
     /// Start in this ready workspace instead of a new space: its worker in a
     /// mode that starts in a workspace, else a chat in its worktree; without
@@ -241,7 +241,7 @@ pub struct StartArgs {
     pub model: ModelArgs,
     /// Agent session the chat continues, which shoal move import passes; it
     /// starts a chat whatever the mode's kind.
-    #[arg(long, hide = true, conflicts_with_all = ["branch", "path", "base", "git_profile", "now", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
+    #[arg(long, hide = true, conflicts_with_all = ["branch", "path", "base", "git_profile", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
     pub session: Option<crate::client::agent::AgentSessionId>,
     /// Start from a fork of --session instead of continuing it, which shoal
     /// move import passes for a copy.

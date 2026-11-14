@@ -51,6 +51,8 @@ pub(in crate::cli::commands) struct Options {
     pub narrowing: Narrowing,
     /// The priority set on the chat.
     pub priority: Option<Priority>,
+    /// Start its agent regardless of the agent slots.
+    pub now: bool,
 }
 
 /// Where a chat runs.
@@ -108,6 +110,7 @@ impl Options {
                 None => Narrowing::Requested(PermissionChange::combined(&args.permissions).set),
             },
             priority: args.priority.take(),
+            now: args.now || args.focus,
         }
     }
 
@@ -128,6 +131,7 @@ impl Options {
             parent,
             narrowing,
             priority,
+            now,
         } = self;
         let (permissions, recorded_narrowing) = narrowing.written();
         // A fork without a session, as a copy imported with new sessions
@@ -146,6 +150,7 @@ impl Options {
             permissions,
             recorded_narrowing,
             priority,
+            now,
             ..start
         }
     }
@@ -184,6 +189,7 @@ impl Options {
             parent: _,
             narrowing: _,
             priority: _,
+            now: _,
         } = self;
         ConfigSetupArgs {
             here: place == ChatPlace::Here,

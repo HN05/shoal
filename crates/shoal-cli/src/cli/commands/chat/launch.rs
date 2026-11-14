@@ -1,6 +1,7 @@
 //! Launching a chat's agent: through the daemon, in an app that runs it
 //! detached, in a background place, beside the caller, or here under the
-//! execution wrapper, as an execution of its chat.
+//! execution wrapper, as an execution of its chat, once the agent queue
+//! admits it.
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result, ensure};
@@ -22,6 +23,7 @@ use crate::{
     model::{Chat, ChatHome},
 };
 
+mod admission;
 mod command;
 mod detached;
 
@@ -70,10 +72,8 @@ pub(in crate::cli::commands) async fn launch(
     }
     match launch.options.place {
         ChatPlace::Detached => launch.start_detached(ctx).await,
-        ChatPlace::Background => (launch.hand_to_background(ctx).await).map(Started::Background),
-        ChatPlace::Beside | ChatPlace::Here => {
-            launch.run_in_terminal(ctx).await.map(Started::Exited)
-        }
+        ChatPlace::Background => launch.start_in_background(ctx).await,
+        ChatPlace::Beside | ChatPlace::Here => launch.start_in_terminal(ctx).await,
     }
 }
 
@@ -110,13 +110,32 @@ impl Launch {
     }
 
     /// Have the daemon start the chat in a background place, as it does
-    /// for an app; one the daemon cannot start opens its place here.
+    /// for an app, admitting its agent; one the daemon cannot start opens
+    /// its place here as [`Launch::start_in_background`] does.
     async fn start_detached(self, ctx: &Context) -> Result<Started> {
         let chosen = (&self.agent, &self.chat.name);
         match detached::request(&self.topic, &self.options, chosen) {
             Some(start) => detached::start(ctx, start).await,
-            None => (self.hand_to_background(ctx).await).map(Started::Background),
+            None => self.start_in_background(ctx).await,
         }
+    }
+
+    /// Hand the chat to a new background place once the agent queue admits
+    /// its agent.
+    async fn start_in_background(self, ctx: &Context) -> Result<Started> {
+        if let Some(waits) = self.admit(ctx).await? {
+            return Ok(waits);
+        }
+        (self.hand_to_background(ctx).await).map(Started::Background)
+    }
+
+    /// Run the chat beside this terminal or here once the agent queue admits
+    /// its agent.
+    async fn start_in_terminal(self, ctx: &Context) -> Result<Started> {
+        if let Some(waits) = self.admit(ctx).await? {
+            return Ok(waits);
+        }
+        self.run_in_terminal(ctx).await.map(Started::Exited)
     }
 
     /// Hand the chat to a new background place, which runs it here, and
@@ -208,12 +227,35 @@ impl Launch {
         self.topic.relaunch.command_line(options)
     }
 
-    /// Record the chat, in its home trusted for its agent, and link it to
-    /// what its topic names.
+    /// Record the chat, in its home trusted for its agent, unless its
+    /// queued agent's launch recorded it already, and link it to what its
+    /// topic names.
     async fn record(&self, ctx: &Context) -> Result<Chat> {
         let launch = &self.chat;
         let (repository, home) = (launch.repository.registered(), launch.home());
         agents::trust_chat(ctx, &launch.settings, &self.agent, repository, home).await;
+        let chat = match admission::queued_chat(ctx).await? {
+            Some(chat) => chat,
+            None => {
+                let chat = self.record_new(ctx, current_origin().await).await?;
+                admission::attach_launch(ctx, &chat).await?;
+                chat
+            }
+        };
+        if crate::env::shown_chat() {
+            recent::record_chat_attach(ctx, &SpaceSelector::id(&chat.id)).await;
+        }
+        agents::link_chat(ctx, &chat, &launch.links).await;
+        Ok(chat)
+    }
+
+    /// Record the chat as running in `place`, or in none.
+    async fn record_new(
+        &self,
+        ctx: &Context,
+        place: Option<crate::sessions::Origin>,
+    ) -> Result<Chat> {
+        let launch = &self.chat;
         let new = crate::client::chats::NewChat {
             name: &launch.name,
             agent: &self.agent,
@@ -222,18 +264,7 @@ impl Launch {
             parent: launch.parent.as_ref(),
             priority: launch.priority,
         };
-        let place = crate::terminal::current_place()
-            .await
-            .map(|place| crate::sessions::Origin {
-                owned: crate::env::opened_chat_place(),
-                ..place
-            });
-        let chat = crate::client::chats::start(&ctx.paths, home, new, place).await?;
-        if crate::env::shown_chat() {
-            recent::record_chat_attach(ctx, &SpaceSelector::id(&chat.id)).await;
-        }
-        agents::link_chat(ctx, &chat, &launch.links).await;
-        Ok(chat)
+        crate::client::chats::start(&ctx.paths, launch.home(), new, place).await
     }
 
     /// Run the recorded `chat`'s agent with `model_args` here under the
@@ -241,8 +272,18 @@ impl Launch {
     async fn run_here(self, ctx: &Context, chat: &Chat, model_args: Vec<OsString>) -> Result<i32> {
         act_in_chat_scope(ctx, chat).await?;
         crate::chat_handoff::report(&Ok(()));
+        let _hold = admission::hold_launch(ctx).await;
         run_agent(ctx, chat, self.agent, self.chat, model_args, Vec::new()).await
     }
+}
+
+/// The place this process runs in, as a chat it runs records it.
+async fn current_origin() -> Option<crate::sessions::Origin> {
+    let place = crate::terminal::current_place().await?;
+    Some(crate::sessions::Origin {
+        owned: crate::env::opened_chat_place(),
+        ..place
+    })
 }
 
 /// Make a scoped process, which starts `chat`, act in the chat's own scope
@@ -334,6 +375,7 @@ pub(in crate::cli::commands) async fn start_converted(
     .converted(&home);
     let agent: Agent = session.agent.name().parse()?;
     let options = Options {
+        now: false,
         agent: Some(agent.clone()),
         place: ChatPlace::Here,
         name: Some(chat.name.clone()),
