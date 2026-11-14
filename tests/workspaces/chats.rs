@@ -208,7 +208,7 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
 }
 
 #[test]
-fn a_chat_a_signal_saved_comes_back_on_its_own() {
+fn a_chat_a_signal_saved_between_turns_waits_then_comes_back_in_its_place() {
     let mut fixture = chat_session_fixture();
     let home = fixture.root.path().to_owned();
     // A signal, as a shutdown or a logout sends, saves the chat to come back.
@@ -225,6 +225,19 @@ fn a_chat_a_signal_saved_comes_back_on_its_own() {
     install_test_script(home.join("bin").join("zmx"), terminal_zmx());
     fixture.restart();
 
+    // Its agent stopped between turns, so its restore waits for an update,
+    // as a workspace agent's does; starting the entry wakes it at once.
+    let id = chat["id"].as_str().unwrap();
+    wait_until("restore waiting for an update", || {
+        fixture
+            .ok(&["queue"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["space_id"] == id && entry["waits_for_update"] == true)
+    });
+    fixture.ok(&["queue", "start", id]);
+
     // The resumed agent records its arguments, then its chat, then exits.
     wait_until("chat restored", || {
         fs::read_to_string(home.join("chat-args"))
@@ -234,8 +247,7 @@ fn a_chat_a_signal_saved_comes_back_on_its_own() {
     let calls = fs::read_to_string(home.join("zmx-calls")).unwrap();
     assert!(calls.contains("\"run\""), "{calls}");
     wait_until("chat-id rewritten", || {
-        fs::read_to_string(home.join("chat-id"))
-            .is_ok_and(|id| id.trim() == chat["id"].as_str().unwrap())
+        fs::read_to_string(home.join("chat-id")).is_ok_and(|written| written.trim() == id)
     });
     wait_until("restored chat stopped", || {
         fixture.ok(&["list", "--chats"])[0]["running"] == false
