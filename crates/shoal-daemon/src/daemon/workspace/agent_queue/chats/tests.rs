@@ -15,11 +15,14 @@ use crate::{
 };
 
 /// A machine of one agent slot with a heavy chat mode `pair` and a light
-/// one `chat`, and the workspace launch `busy` holding the slot.
+/// one `chat`, and the workspace launch `busy` holding the slot. Its
+/// `claude` is a program every runner has, since a chat's launch checks
+/// that its agent is installed.
 async fn full_machine(manager: &Manager, repo: &Repository) {
     manager.publish_config(global_config(
         "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n\
-         [modes.pair]\nkind = 'chat'\n[modes.solo]\nkind = 'chat'\nrepository = false\n",
+         [modes.pair]\nkind = 'chat'\n[modes.solo]\nkind = 'chat'\nrepository = false\n\
+         [agents.claude]\ncommand = ['sh']\n",
     ));
     assert!(add(manager, repo, "busy").await.start);
 }
