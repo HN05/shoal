@@ -4604,7 +4604,7 @@ forge keep current, and workspace lists show the first assigned issue's; when
 the forge cannot be read, the link is recorded without one and a warning names
 the error.
 Linking an open issue as assigned, however the link is made, also adds the
-account the space acts as to its assignees on the forge: the agent account for a
+account that links it to its assignees on the forge: the agent account for a
 scoped caller, the user's own login for the user's terminal, unless
 [`[issue] assign`](config.md#issues) is off or that account has no token of its
 own for the forge. A warning on stderr and in the JSON `warnings` names the

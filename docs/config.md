@@ -740,7 +740,7 @@ with, so `area/` takes any area label; see
 [repository conventions](reference.md#repository-conventions). `plan_label`
 marks issues that need a plan and `planned_label` those whose plan is settled;
 see [planning issues](reference.md#planning-issues). `assign` adds the account
-a space acts as to the assignees of each issue it links as assigned; see
+that links an issue as assigned to the issue's assignees on the forge; see
 [linked items](reference.md#linked-items-and-cleanup).
 
 ```toml
