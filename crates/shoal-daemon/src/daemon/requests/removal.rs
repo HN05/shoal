@@ -249,7 +249,8 @@ impl Scoped for RemovalMethod {
 }
 
 /// Let `caller` send `method`, which the `admin` permission governs, in its
-/// own repository where it imports into one, returning the space it moves.
+/// own repository where it imports into one, returning the space it moves,
+/// which its scope must reach before it asks approval.
 async fn administer<'a>(
     manager: &Manager,
     caller: &Caller,
@@ -263,11 +264,19 @@ async fn administer<'a>(
         }
         _ => None,
     };
+    manager
+        .ensure_selected_reached(caller, moved(method))
+        .await?;
     manager.administer(caller, &*method, repository).await?;
-    Ok(match method {
+    Ok(moved(method))
+}
+
+/// The space `method` moves, if it moves one.
+fn moved(method: &mut RemovalMethod) -> Option<&mut SpaceSelector> {
+    match method {
         RemovalMethod::ExportSpace { space, .. }
         | RemovalMethod::ExportMovingSpace { space, .. }
         | RemovalMethod::EndMovedSpace { space, .. } => Some(space),
         _ => None,
-    })
+    }
 }

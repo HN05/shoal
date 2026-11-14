@@ -65,7 +65,10 @@ impl Scoped for RecoveryMethod {
         manager: &Manager,
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
-        if let RecoveryMethod::Reconcile { .. } = self {
+        if let RecoveryMethod::Reconcile { workspace, .. } = self {
+            manager
+                .ensure_selected_reached(caller, workspace.as_mut())
+                .await?;
             manager.administer(caller, self, None).await?;
         }
         Ok(match self {

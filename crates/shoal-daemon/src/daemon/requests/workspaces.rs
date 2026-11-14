@@ -430,7 +430,7 @@ impl Scoped for WorkspaceMethod {
 
 /// Let `caller` send `method`, which the `admin` permission governs, in its
 /// own repository where it adopts a worktree there, returning the space it
-/// acts on.
+/// acts on, which its scope must reach before it asks approval.
 async fn administer<'a>(
     manager: &Manager,
     caller: &Caller,
@@ -444,13 +444,21 @@ async fn administer<'a>(
         }
         _ => None,
     };
+    manager
+        .ensure_selected_reached(caller, administered(method))
+        .await?;
     manager.administer(caller, &*method, repository).await?;
-    Ok(match method {
+    Ok(administered(method))
+}
+
+/// The space `method`, which the `admin` permission governs, acts on.
+fn administered(method: &mut WorkspaceMethod) -> Option<&mut SpaceSelector> {
+    match method {
         WorkspaceMethod::ReopenWorkspace { workspace }
         | WorkspaceMethod::WorkspaceEnv { workspace } => Some(workspace),
         WorkspaceMethod::CopySpace { space, .. } => Some(space),
         _ => None,
-    })
+    }
 }
 
 pub(in crate::daemon) async fn watch_workspace_events(
