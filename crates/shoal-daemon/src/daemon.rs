@@ -333,13 +333,6 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     {
         log!("{error:#}");
     }
-    let upgraded = manager.save_upgraded_chat_agents();
-    if let Err(error) = startup
-        .step("saving the agents of upgraded chats", upgraded)
-        .await
-    {
-        log!("{error:#}");
-    }
     let sessions = manager.cleanup_orphan_sessions();
     startup.step("cleaning up orphan sessions", sessions).await;
     Ok(manager)

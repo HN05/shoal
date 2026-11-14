@@ -742,7 +742,6 @@ fn forget_unstarted(tx: &rusqlite::Transaction<'_>, id: &SpaceId, error: &str) -
 mod done;
 mod files;
 pub(crate) mod launches;
-mod upgraded;
 
 #[cfg(test)]
 mod tests;
