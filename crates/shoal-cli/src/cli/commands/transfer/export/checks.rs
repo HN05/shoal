@@ -1,7 +1,7 @@
 //! What ending a space for its export would do, the refusals of an export
 //! that would lose work or cut its own output off, and the confirmation
 //! ending the spaces needs.
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, ensure};
 
 use super::Output;
 use crate::client::space_ids::SpaceId;
@@ -113,13 +113,6 @@ pub(super) async fn check_export(
 /// continue elsewhere, or the one this process runs in, which ending the
 /// chat would end before the export finished.
 fn check_chat_export(chat: Chat) -> Result<Chat> {
-    if let Some(workspace) = &chat.workspace {
-        bail!(
-            "chat {} runs in workspace {}, and shoal move does not move a chat in a workspace",
-            chat.name,
-            workspace.name
-        );
-    }
     ensure!(
         chat.session.is_some(),
         "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",

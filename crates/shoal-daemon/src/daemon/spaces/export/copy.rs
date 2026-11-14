@@ -102,13 +102,6 @@ impl Manager {
 
     /// A copy of `chat`, whose agent starts from a fork of its session.
     pub(super) async fn copy_chat(&self, chat: Chat) -> Result<Prepared> {
-        if let Some(workspace) = &chat.workspace {
-            anyhow::bail!(
-                "chat {} runs in workspace {}, and shoal move does not copy a chat in a workspace",
-                chat.name,
-                workspace.name
-            );
-        }
         ensure!(
             chat.session.is_some(),
             "the agent of chat {} reported no session to fork",

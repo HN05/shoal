@@ -60,6 +60,7 @@ fn a_carried_chat_keeps_its_session_only_where_its_agent_continues_it() {
             mode: "chat".into(),
             narrowing: Default::default(),
             outside_repositories: false,
+            workspace: None,
         }),
         sessions: None,
         session_files: Vec::new(),

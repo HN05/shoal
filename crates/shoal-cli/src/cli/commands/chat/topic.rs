@@ -94,26 +94,27 @@ impl Topic {
         }
     }
 
-    /// A chat in `mode` in the checkout of `repo`, or in `root_dir`
-    /// without one, with `links`, imported from another machine. One linked
-    /// to an issue reopens in a new tab with the issue's fields, for its
-    /// rules, without asking the forge, which may have closed it.
+    /// A chat in `mode` in the worktree of `workspace`, else in the
+    /// checkout of `repo`, or in `root_dir` without one, with `links`,
+    /// imported from another machine. One linked to an issue reopens in a
+    /// new tab with the issue's fields, for its rules, without asking the
+    /// forge, which may have closed it.
     pub(in crate::cli::commands) fn imported(
         repo: &ChatRepository,
+        workspace: Option<Workspace>,
         mode: &crate::config::modes::ModeName,
         links: &SpaceLinks,
     ) -> Self {
-        let (topic, place) = match repo {
-            ChatRepository::Registered(repo) => (Self::repository(repo, mode), in_checkout(repo)),
-            ChatRepository::Outside(_) => (Self::outside_repositories(mode), StartArgs::default()),
+        let mut topic = match (workspace, repo) {
+            (Some(workspace), _) => Self::workspace(workspace, mode),
+            (None, ChatRepository::Registered(repo)) => Self::repository(repo, mode),
+            (None, ChatRepository::Outside(_)) => Self::outside_repositories(mode),
         };
-        let linked = StartArgs {
-            linked_issue: links.issue().map(|issue| issue.url.clone()),
-            linked_issue_title: links.issue_title().map(str::to_owned),
-            ..place
-        };
+        if let Relaunch::Start(start) = &mut topic.relaunch {
+            start.linked_issue = links.issue().map(|issue| issue.url.clone());
+            start.linked_issue_title = links.issue_title().map(str::to_owned);
+        }
         Self {
-            relaunch: Relaunch::start(mode, linked),
             links: links.clone(),
             linked_issue: templates::IssueFields::linked(links),
             ..topic

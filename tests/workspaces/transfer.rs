@@ -1285,6 +1285,66 @@ fn a_workspace_moves_with_the_chat_in_its_worktree() {
 }
 
 #[test]
+fn a_chat_from_a_worktree_moves_back_into_it() {
+    let fixture = chat_moving_fixture();
+    let home = fixture.root.path();
+    let workspace = fixture.add("worker");
+    let path = PathBuf::from(workspace["path"].as_str().unwrap());
+    // Its agent says where it ran: the worktree's copy marks it.
+    let agent = fs::read_to_string(fixture.repo.join("chat-agent.sh")).unwrap();
+    let marked = format!("touch \"$HOME/in-worktree\"\n{agent}");
+    fs::write(path.join("chat-agent.sh"), marked).unwrap();
+    let worker = fixture.id("worker");
+    let file = home.join("reading.shoal");
+    let file = file.to_str().unwrap();
+    std::thread::scope(|scope| {
+        let chat = scope.spawn(|| {
+            let start = [
+                "start", "--in", &worker, "--mode", "chat", "--here", "--agent", "claude",
+                "--name", "reading",
+            ];
+            fixture.interactive_command(fixture.command().current_dir(&path).args(start), "")
+        });
+        wait_until("chat started", || home.join("chat-started").exists());
+        let exported = fixture.ok(&[
+            "move",
+            "export",
+            &fixture.id("reading"),
+            "-o",
+            file,
+            "--yes",
+        ]);
+        assert_eq!(
+            exported["manifest"]["workspace"]["id"], workspace["id"],
+            "{exported}"
+        );
+        let (output, transcript) = chat.join().unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{transcript}",
+            printed(&output)
+        );
+    });
+    fs::remove_file(home.join("in-worktree")).unwrap();
+
+    let repo = fixture.repo.to_str().unwrap();
+    let (output, transcript) = fixture.interactive_command(
+        fixture
+            .command()
+            .args(["move", "import", file, "--repo", repo]),
+        "",
+    );
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
+    assert!(home.join("in-worktree").exists());
+    let args = fs::read_to_string(home.join("chat-args")).unwrap();
+    assert!(args.contains("\n--resume\nchat-session\n"), "{args}");
+}
+
+#[test]
 fn the_sessions_of_a_profile_only_the_workspace_defines_move_with_it() {
     let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("profiled");

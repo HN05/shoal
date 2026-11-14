@@ -215,7 +215,7 @@ async fn a_disposable_workspace_is_refused_before_its_removal() {
 }
 
 #[tokio::test]
-async fn a_chat_in_a_workspace_is_not_moved() {
+async fn a_chat_in_a_workspace_moves_naming_the_workspace() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
@@ -235,10 +235,21 @@ async fn a_chat_in_a_workspace_is_not_moved() {
         )
         .await
         .unwrap();
+    manager
+        .record_chat_session(&chat.id, "s1".into())
+        .await
+        .unwrap();
     let file = root.path().join("worker-chat.shoal");
-    assert!(export(&manager, &chat.name, &file).await.is_err());
-    assert!(!file.exists());
-    assert!(manager.chat_by_id(&chat.id).await.unwrap().is_some());
+
+    export(&manager, &chat.name, &file).await.unwrap();
+    let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
+    let Space::Chat(packaged) = &import.manifest.space else {
+        panic!("not a chat: {:?}", import.manifest);
+    };
+    let ran_in = packaged.workspace.as_ref().map(|workspace| &workspace.id);
+    assert_eq!(ran_in, Some(&workspace.id));
+    assert!(manager.chat_by_id(&chat.id).await.unwrap().is_none());
+    assert!(workspace.path.exists());
 }
 
 #[tokio::test]

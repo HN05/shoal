@@ -3419,9 +3419,10 @@ its removal would take. The chats in a moving workspace's worktree and those
 below a moving space, through chats, move with it in its package as their
 removal records, which the import records and restores, so they keep their IDs,
 their parents and their worktrees wherever those are there; a chat below a
-workspace below it moves with that workspace. Import starts the chat through the chat launch, in its mode, in the
-repository's checkout or, for a chat without one, the importing machine's
-`root_dir`, with the agent's resume arguments, under a free name since its own may be taken there, in the background
+workspace below it moves with that workspace. Import starts the chat through the chat launch, in its mode, in the worktree
+of the workspace it ran in where that workspace is there and ready, since
+workspaces keep their IDs across moves, else in the repository's checkout or,
+for a chat without one, the importing machine's `root_dir`, with the agent's resume arguments, under a free name since its own may be taken there, in the background
 when no terminal attends the import, as queued agents start. Export and import
 move work through any byte stream, where the user runs both halves and chooses
 their order. `move ssh` runs both over SSH after checking Shoal answers there,

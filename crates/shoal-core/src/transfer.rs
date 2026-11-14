@@ -39,7 +39,8 @@ use crate::{
 /// naming its kind, 4 a workspace at a commit, which earlier importers
 /// would open on a branch, 5 a copy, which earlier importers would open as
 /// the space it copies, and 6 a chat without a repository, which earlier
-/// importers would open in one, or the chats that go with the space, which
+/// importers would open in one, one in a workspace's worktree, which they
+/// would open in the checkout, or the chats that go with the space, which
 /// they would leave out.
 pub const FORMAT: &str = "shoal workspace";
 const VERSION: u32 = 6;
@@ -48,6 +49,7 @@ const VERSION: u32 = 6;
 fn version(manifest: &Manifest) -> u32 {
     match (&manifest.space, manifest.session_files.is_empty()) {
         (Space::Chat(packaged), _) if packaged.outside_repositories => 6,
+        (Space::Chat(packaged), _) if packaged.workspace.is_some() => 6,
         _ if !manifest.chats.is_empty() => 6,
         _ if manifest.copy.is_some() => 5,
         (Space::Workspace(packaged), _)
@@ -263,6 +265,7 @@ impl ManifestExt for Manifest {
                     mode: chat.mode,
                     narrowing: chat.narrowing,
                     outside_repositories: chat.repository_id.is_none(),
+                    workspace: chat.workspace,
                 };
                 chat_package(machine, &chat.id, packaged, chat.session)
             }
@@ -277,6 +280,7 @@ impl ManifestExt for Manifest {
                     mode: kept.mode,
                     narrowing: kept.narrowing,
                     outside_repositories: removed.repository_id.is_none(),
+                    workspace: kept.workspace,
                 };
                 chat_package(machine, &removed.space_id, packaged, kept.session)
             }

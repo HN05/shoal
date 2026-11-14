@@ -3860,8 +3860,7 @@ branch; a checkpoint that branch already has travels without one. Ignored files,
 leases, permits, approvals, grants and holds stay behind; setup rebuilds what the
 workspace needs. A chat's file holds its name, agent and session, and the chats below it, or
 below one of them: the export refuses a chat whose agent reported no session,
-the one it runs in, one in a workspace's worktree and one with a workspace below
-it, and asks before stopping the agents unless given `--yes`; the chat is then
+the one it runs in and one with a workspace below it, and asks before stopping the agents unless given `--yes`; the chat is then
 removed with the chats below it. A workspace or chat
 already removed, as by cleanup, is exported from its removal record, which
 stays, under the refusals that still apply, without another removal. The file's manifest names its `kind`, `workspace` or `chat`.
@@ -3930,8 +3929,11 @@ its `resume_command`. The chats a file carries open again after its space as `sh
 removed chat, under their IDs, stopped, below their parents and in the worktrees
 they ran in where those are there, and `--restore` queues their agents'
 restores; an imported chat's own chat starts under a new ID, so the chats it
-carries open at the top level. An imported chat starts in the repository's checkout, or in `root_dir`
-without one, as a chat starts, in the mode it ran in, under its name, with its agent's `resume` arguments for its session, or as a new
+carries open at the top level. An imported chat starts as a chat starts: in the
+worktree of the workspace it ran in where the importing machine has that
+workspace ready, such as one that moved there before, otherwise in the
+repository's checkout, with a warning for one that ran in a worktree, or in
+`root_dir` without a repository, in the mode it ran in, under its name, with its agent's `resume` arguments for its session, or as a new
 session for an agent without them or a session not kept. A single chat imported
 on a terminal opens beside it; with `--restore`, without a terminal, or among
 several files, it starts in a background place of the host that starts queued

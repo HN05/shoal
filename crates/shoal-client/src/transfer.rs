@@ -111,6 +111,10 @@ pub struct PackagedChat {
     /// `root_dir`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub outside_repositories: bool,
+    /// The workspace in whose worktree it ran, where the import starts it
+    /// when the importing machine has that workspace ready.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<crate::model::WorkspaceRef>,
 }
 
 /// A file of an agent's session, copied unread.

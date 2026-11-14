@@ -264,9 +264,11 @@ impl Package {
             anyhow::bail!("the package holds a workspace, not a chat");
         };
         let repo = self.chat_repository(ctx).await?;
+        let workspace = hosting_workspace(ctx, packaged, &repo).await;
+        let (mode, links) = (&packaged.mode, &packaged.links);
         Ok(ChatStart {
             settings: crate::config::settings(&ctx.paths, repo.config()).await?,
-            topic: chat::Topic::imported(&repo, &packaged.mode, &packaged.links),
+            topic: chat::Topic::imported(&repo, workspace, mode, links),
             options: self.chat_options(packaged, place)?,
             repo,
         })
@@ -485,6 +487,30 @@ impl ImportReport {
         )?;
         Ok(code)
     }
+}
+
+/// The workspace of `repo` in whose worktree the `packaged` chat ran, when
+/// this machine has it ready, such as one that moved here before; without
+/// it, the chat starts in the checkout, with a warning.
+async fn hosting_workspace(
+    ctx: &Context,
+    packaged: &PackagedChat,
+    repo: &ChatRepository,
+) -> Option<crate::model::Workspace> {
+    let ran_in = packaged.workspace.as_ref()?;
+    let selector = crate::client::space_names::SpaceSelector::id(&ran_in.id);
+    let found = chat::hosting_workspace(ctx, &selector).await.ok();
+    let in_repository = |workspace: &crate::model::Workspace| {
+        (repo.registered()).is_some_and(|repo| repo.id == workspace.repository_id)
+    };
+    let workspace = found.filter(in_repository);
+    if workspace.is_none() {
+        eprintln!(
+            "warning: chat {} ran in workspace {}, which is not ready here, so it starts in the checkout",
+            packaged.name, ran_in.name
+        );
+    }
+    workspace
 }
 
 /// The repository a package of a space in one goes to: the one `options`

@@ -249,20 +249,12 @@ impl Manager {
 
     /// The repository of the chat `removed` records, which moves to another
     /// machine, none for a chat without one, refusing what
-    /// [`Self::movable_chat`] refuses of a live chat that its removal left: a
-    /// chat that ran in a workspace and one whose agent reported no session
-    /// to continue.
+    /// [`Self::movable_chat`] refuses of a live chat that its removal left:
+    /// one whose agent reported no session to continue.
     async fn movable_removed_chat(&self, removed: &RemovedSpace) -> Result<Option<Repository>> {
         let kept = removed
             .chat()
             .context("the removal record is not a chat's")?;
-        if let Some(workspace) = &kept.workspace {
-            anyhow::bail!(
-                "chat {} ran in workspace {}, and shoal move does not move a chat in a workspace",
-                removed.name,
-                workspace.name
-            );
-        }
         ensure!(
             kept.session.is_some(),
             "the agent of chat {} reported no session to continue elsewhere; shoal restore {} opens it here again",
@@ -332,16 +324,9 @@ impl Manager {
 
     /// The repository of `chat`, which moves to another machine, none for a
     /// chat without one, and how the user continues it here, refusing a chat
-    /// in a workspace, one whose agent reported no session to continue and
-    /// one with a space below it that does not go with it.
+    /// whose agent reported no session to continue and one with a space
+    /// below it that does not go with it.
     async fn movable_chat(&self, chat: &Chat) -> Result<(Option<Repository>, String)> {
-        if let Some(workspace) = &chat.workspace {
-            anyhow::bail!(
-                "chat {} runs in workspace {}, and shoal move does not move a chat in a workspace",
-                chat.name,
-                workspace.name
-            );
-        }
         let repo = self.chat_repository(chat).await?;
         let Some(continues) =
             crate::transfer::continue_chat(chat, repo.as_ref().map(crate::repository::name))

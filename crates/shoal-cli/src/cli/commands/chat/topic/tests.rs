@@ -153,7 +153,7 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     }))
     .unwrap();
     let agent: Agent = "claude".parse().unwrap();
-    let topic = Topic::imported(&repo, &"plan".into(), &links);
+    let topic = Topic::imported(&repo, None, &"plan".into(), &links);
     let options = Options {
         now: false,
         priority: None,
@@ -175,14 +175,14 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     let issue = templates::IssueFields::at(&start.linked_issue.unwrap(), start.linked_issue_title);
     assert_eq!((issue.number, issue.title.as_str()), (7, "Decide"));
     let Relaunch::Start(unlinked) =
-        Topic::imported(&repo, &"plan".into(), &SpaceLinks::default()).relaunch
+        Topic::imported(&repo, None, &"plan".into(), &SpaceLinks::default()).relaunch
     else {
         panic!("expected a start");
     };
     assert_eq!(unlinked.linked_issue, None);
     // One without a repository reopens in root_dir, naming none.
     let outside = ChatRepository::Outside("/shoal".into());
-    let Relaunch::Start(outside) = Topic::imported(&outside, &"plan".into(), &links).relaunch
+    let Relaunch::Start(outside) = Topic::imported(&outside, None, &"plan".into(), &links).relaunch
     else {
         panic!("expected a start");
     };

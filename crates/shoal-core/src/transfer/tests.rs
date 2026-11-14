@@ -120,6 +120,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         mode: chat.mode.clone(),
         narrowing: chat.narrowing,
         outside_repositories: false,
+        workspace: None,
     };
     let (space, sessions) =
         chat_package(Some("m1".into()), &chat.id, packaged, chat.session.clone());

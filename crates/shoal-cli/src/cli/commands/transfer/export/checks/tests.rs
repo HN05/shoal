@@ -14,12 +14,6 @@ fn chat(name: &str, workspace: Option<&str>) -> Chat {
     .unwrap()
 }
 
-#[test]
-fn a_chat_in_a_workspace_is_refused_before_anything_ends() {
-    check_chat_export(chat("talk", None)).unwrap();
-    assert!(check_chat_export(chat("reading", Some("worker"))).is_err());
-}
-
 /// The workspace `name`, with the spaces `children` below it.
 fn workspace(name: &str, children: Vec<SpaceRef>) -> crate::model::Workspace {
     let mut workspace = crate::model::Workspace::new_record(
