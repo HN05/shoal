@@ -269,6 +269,8 @@ fn comments_state_changes_and_merges_use_each_forges_endpoints() {
     assert!(github.plan(&open, &bound("c0ffee")).is_ok());
     assert!(github.plan(&open, &bound("c0ffee0000")).is_ok());
     assert!(github.plan(&open, &bound("decade")).is_err());
+    assert!(github.plan(&open, &bound("c0f")).is_err());
+    assert!(github.plan(&open, &bound("")).is_err());
     assert_eq!(
         requests(&forgejo, &pr(&forgejo, false, &[]), merge),
         [(

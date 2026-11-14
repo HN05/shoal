@@ -501,9 +501,10 @@ fn ensure_merge_head(current: &Current, head: Option<&CommitId>) -> Result<()> {
         return Ok(());
     };
     let read = current.read_head()?;
-    // Bitbucket reports a PR's head as an abbreviated hash.
+    // Bitbucket reports a PR's head as an abbreviated hash; a bound head
+    // shorter than the one read would name more than one commit.
     ensure!(
-        head.as_str().starts_with(read) || read.starts_with(head.as_str()),
+        head.as_str().starts_with(read),
         "the head of #{} moved from {head} to {read} since the merge was asked for; run shoal pr merge again",
         current.item.number
     );
