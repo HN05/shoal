@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_support::printed;
 
 #[test]
 fn the_tmux_variable_names_the_socket_and_the_session() {
@@ -176,7 +177,7 @@ impl Isolated {
             .args(["start-server", ";", "set-option", "-s", "exit-empty", "off"])
             .output()
             .unwrap();
-        assert!(started.status.success(), "{started:?}");
+        assert!(started.status.success(), "{}", printed(&started));
         let tmux = Tmux {
             socket: Some(socket),
         };

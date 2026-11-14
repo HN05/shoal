@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_support::printed;
 
 #[tokio::test]
 async fn a_command_takes_the_terminal_as_it_starts() {
@@ -8,7 +9,7 @@ async fn a_command_takes_the_terminal_as_it_starts() {
         "execution::terminal::tests::foreground_child",
     )
     .await;
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 }
 
 #[tokio::test]

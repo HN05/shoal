@@ -1,8 +1,8 @@
 //! Unit-test fixtures; keep their state and repositories under the returned root.
 use std::{
-    fs,
+    fmt, fs,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Output},
 };
 
 use crate::{
@@ -39,6 +39,32 @@ pub fn git(repo: &Path, args: &[&str]) -> String {
         String::from_utf8_lossy(&output.stderr)
     );
     String::from_utf8(output.stdout).unwrap()
+}
+
+/// `output` as a failing assertion shows it: its exit status, then what the
+/// command printed on stdout and stderr as text, where `Output`'s `Debug`
+/// lists their bytes.
+pub fn printed(output: &Output) -> Printed<'_> {
+    Printed(output)
+}
+
+/// A command's [`Output`] shown as text; see [`printed`].
+pub struct Printed<'a>(&'a Output);
+
+impl fmt::Display for Printed<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Output {
+            status,
+            stdout,
+            stderr,
+        } = self.0;
+        write!(
+            formatter,
+            "{status}\n--- stdout ---\n{}\n--- stderr ---\n{}",
+            String::from_utf8_lossy(stdout),
+            String::from_utf8_lossy(stderr),
+        )
+    }
 }
 
 pub fn commit(repo: &Path, file: &str) {

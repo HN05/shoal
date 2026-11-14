@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_support::printed;
 
 async fn git(repo: &Path, args: &[&str]) -> String {
     crate::git::run(repo, args).await.unwrap()
@@ -29,7 +30,7 @@ fn repository(root: &Path, format: &str) -> std::path::PathBuf {
             .env("GIT_CONFIG_NOSYSTEM", "1")
             .output()
             .unwrap();
-        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
     }
     repo
 }

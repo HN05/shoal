@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::install_test_script;
+use crate::test_support::{install_test_script, printed};
 use std::fs;
 
 #[tokio::test]
@@ -18,7 +18,7 @@ async fn synchronous_service_stops_allow_the_daemon_drain() -> Result<()> {
         .output(),
     )
     .await??;
-    anyhow::ensure!(output.status.success(), "{output:?}");
+    anyhow::ensure!(output.status.success(), "{}", printed(&output));
     Ok(())
 }
 

@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use super::*;
+use crate::test_support::printed;
 
 fn proxy(upstream: &str, key: Option<&str>) -> crate::proxy::Proxy {
     let key = key.map_or(String::new(), |env| format!("key = {{ env = '{env}' }}\n"));
@@ -175,7 +176,7 @@ async fn a_claude_agent_through_its_proxy_gets_the_hour_long_prompt_cache_unless
     .await
     .expect("prompt cache check stalled")
     .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 }
 
 #[tokio::test]
@@ -216,7 +217,7 @@ async fn a_proxy_without_an_upstream_reads_the_environment_as_the_agent_sees_it(
         .await
         .expect("base URL check stalled")
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 }
 
 #[tokio::test]

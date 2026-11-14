@@ -1,6 +1,6 @@
 use super::*;
-use crate::test_support::assert_pending;
 use crate::test_support::install_test_script;
+use crate::test_support::{assert_pending, printed};
 use std::{fs, time::Duration};
 
 fn owned_daemon(root: &std::path::Path) -> Result<(Paths, File)> {
@@ -23,7 +23,7 @@ async fn draining_waits_for_ownership_and_keeps_it_through_job_removal() -> Resu
         .output(),
     )
     .await??;
-    ensure!(output.status.success(), "{output:?}");
+    ensure!(output.status.success(), "{}", printed(&output));
     Ok(())
 }
 
@@ -83,7 +83,7 @@ async fn legacy_service_jobs_are_drained_before_their_stop_deadline_starts() -> 
         .output(),
     )
     .await??;
-    ensure!(output.status.success(), "{output:?}");
+    ensure!(output.status.success(), "{}", printed(&output));
     Ok(())
 }
 

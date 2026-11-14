@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::{git, isolated_test, repository};
+use crate::test_support::{git, isolated_test, printed, repository};
 use shoal_refs::CommitId;
 use std::fs;
 
@@ -15,7 +15,7 @@ async fn reverts_run_without_the_users_git_configuration() {
     .await
     .expect("the revert cases stalled")
     .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("1 passed"), "{stdout}");
 }

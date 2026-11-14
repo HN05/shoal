@@ -1,7 +1,7 @@
 use std::{fs, process::Command};
 
 use super::*;
-use crate::test_support::install_test_script;
+use crate::test_support::{install_test_script, printed};
 
 #[test]
 fn state_hooks_report_each_state_and_never_fail() {
@@ -18,7 +18,7 @@ fn state_hooks_report_each_state_and_never_fail() {
     assert_eq!(group["matcher"], "idle_prompt");
     let command = group["hooks"][0]["command"].as_str().unwrap();
     let output = Command::new("sh").args(["-c", command]).output().unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let calls = fs::read_to_string(&log).unwrap();
     assert_eq!(
         calls.lines().last().unwrap(),
@@ -57,7 +57,7 @@ fn plan_hooks_match_the_plan_tools_and_never_fail() {
     );
     let command = group["hooks"][0]["command"].as_str().unwrap();
     let output = Command::new("sh").args(["-c", command]).output().unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     let calls = fs::read_to_string(&log).unwrap();
     assert_eq!(calls.trim_end(), "internal plan --integration codex");
 }

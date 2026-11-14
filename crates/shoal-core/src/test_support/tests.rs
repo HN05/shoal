@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, fs, path::Path, time::Duration};
 
 use anyhow::{Context as _, Result};
 
-use super::{commit, git, install_test_script, isolated_test, repository};
+use super::{commit, git, install_test_script, isolated_test, printed, repository};
 
 #[tokio::test]
 async fn git_fixtures_ignore_inherited_git_variables() -> Result<()> {
@@ -33,7 +33,7 @@ async fn git_fixtures_ignore_inherited_git_variables() -> Result<()> {
     )
     .await
     .context("fixture repository creation stalled")??;
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(snapshot(&sentinel)?, before);
     Ok(())
 }

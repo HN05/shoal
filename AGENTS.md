@@ -397,6 +397,9 @@ what a derive, the language or a dependency guarantees, or repeat a path
 another test covers. Persisted and protocol representations are behavior and
 keep their tests.
 
+A failing assertion shows a command's output through `test_support::printed`,
+as text a reader of the log can follow, never with `{:?}`, which lists its bytes.
+
 A test must not depend on runner speed. Never assert that work finishes within
 a wall-clock duration or race it against a short real timeout. Assert the outcome
 and the applied limit, drive time with a paused Tokio clock, or wait on an explicit

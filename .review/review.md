@@ -737,6 +737,8 @@ configured command for another agent, plus proven child
   defines them: assertions on prose the code spells out as a literal beyond the
   fragment that tells outcomes apart, restated constants, defaults or tables,
   guarantees of a derive, the language or a dependency, and repeated paths.
+  Flag a command's `Output` printed with `{:?}`, which lists its bytes, instead
+  of through `test_support::printed`.
   CI jobs start from a seed build, so flag a path compiled into code that tests
   run, such as `env!("CARGO_BIN_EXE_shoal")` or a build script's absolute
   path; it names the seed worktree until the code is rebuilt.

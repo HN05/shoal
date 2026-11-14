@@ -11,6 +11,7 @@ use crate::{
     sessions::{HostName, Origin},
     state::WorkspaceState,
 };
+use shoal_core::test_support::printed;
 use std::fs;
 use tokio::net::UnixListener;
 
@@ -47,7 +48,7 @@ async fn attach_candidates_follow_recorded_places() -> Result<()> {
     )
     .await
     .context("attach candidate discovery stalled")??;
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     // One listing answers for every recorded place, and Herdr is asked only
     // where it is on.
     assert_eq!(fs::read_to_string(root.path().join("zmx-lists"))?, "list\n");

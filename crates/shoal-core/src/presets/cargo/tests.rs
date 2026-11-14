@@ -1,6 +1,7 @@
 use std::{fs, process::Command};
 
 use super::*;
+use crate::test_support::printed;
 
 /// Which `-Z` options the stand-in rustc takes.
 #[derive(Clone, Copy)]
@@ -74,7 +75,7 @@ printf '%s\n' "$@"
         command.env("RUSTC_BOOTSTRAP", value);
     }
     let output = command.output().unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     String::from_utf8(output.stdout)
         .unwrap()
         .replace(&root_path.display().to_string(), "{root}")

@@ -1,5 +1,6 @@
 use super::*;
 use serde_json::{Value, json};
+use shoal_core::test_support::printed;
 use std::{fs, path::Path, process::Command};
 
 // Exercise the real fixture output on every platform without invoking xcrun.
@@ -14,7 +15,7 @@ fn fixture(root: &Path, args: &[&str]) -> String {
         .env("HOME", root)
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
     String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }
 

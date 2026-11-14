@@ -2,6 +2,7 @@ use crate::client::execution_ids::ExecutionId;
 use std::time::Duration;
 
 use super::*;
+use crate::test_support::printed;
 use crate::{
     execution::completion::report_completion,
     model::Workspace,
@@ -27,7 +28,7 @@ async fn adjacent_controls_survive_start_and_recovery_transitions() {
     .await
     .expect("isolated execution control test stalled")
     .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 }
 
 #[tokio::test]
@@ -132,7 +133,7 @@ async fn wrappers_reattach_report_late_exits_and_stop_when_refused() {
     .await
     .expect("isolated reattachment test stalled")
     .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 }
 
 /// The daemon end of a wrapper's first connection, and the wrapper's link.
@@ -369,7 +370,7 @@ async fn an_ended_session_saves_the_command_as_stopped() {
     .await
     .expect("isolated ended session test stalled")
     .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 }
 
 #[tokio::test]
@@ -517,7 +518,7 @@ async fn a_command_has_the_terminal_before_its_registration() {
         "execution::supervise::tests::terminal_child",
     )
     .await;
-    assert!(output.status.success(), "{output:?}");
+    assert!(output.status.success(), "{}", printed(&output));
 }
 
 #[tokio::test]

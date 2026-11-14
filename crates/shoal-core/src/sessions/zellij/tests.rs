@@ -6,6 +6,7 @@ use std::{
 };
 
 use super::*;
+use crate::test_support::printed;
 
 #[test]
 fn places_name_their_session_and_pane() {
@@ -440,7 +441,7 @@ impl Isolated {
             .args(["attach", "--create-background", &session])
             .output()
             .unwrap();
-        assert!(started.status.success(), "{started:?}");
+        assert!(started.status.success(), "{}", printed(&started));
         let screen = Arc::default();
         let client = Self::client(dir.path(), &session, Arc::clone(&screen));
         let zellij = Zellij {
@@ -613,7 +614,10 @@ impl Isolated {
         Self::zellij_in(self.dir.path())
             .args(["list-sessions", "--no-formatting"])
             .output()
-            .map_or_else(|error| error.to_string(), |output| format!("{output:?}"))
+            .map_or_else(
+                |error| error.to_string(),
+                |output| printed(&output).to_string(),
+            )
     }
 
     /// The processes naming the session or its directory, with their
@@ -859,8 +863,11 @@ async fn what_zellij_lists(zellij: &Zellij, session: &str) -> String {
     let instance = zellij.instance(session).await;
     let mut list = zellij.action(session);
     list.args(["list-panes", "--all", "--json"]);
-    let output = Run::new(list).timeout(TIMEOUT).capture().await;
-    format!("the server is {instance:?} and Zellij lists {output:?}")
+    let listed = Run::new(list).timeout(TIMEOUT).capture().await.map_or_else(
+        |error| error.to_string(),
+        |output| printed(&output).to_string(),
+    );
+    format!("the server is {instance:?} and Zellij lists {listed}")
 }
 
 /// `text` without its terminal escape sequences.
