@@ -2703,7 +2703,8 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
         json!(["POST repos/team/project/issues/3/comments", {"body": "Seen twice\n"}, "Bearer usertoken"])
     );
 
-    // Merging is the user's: a workspace process is refused before any request.
+    // A workspace process proposes the merge, bound to the head it reads,
+    // and merges nothing.
     let shoal = support::shoal_binary();
     let merge = ["pr", "merge", "--method", "rebase"];
     let scoped = fixture.run(
@@ -2713,8 +2714,14 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
         ]
         .concat(),
     );
-    assert!(!scoped.status.success(), "{scoped:?}");
-    assert!(fixture.requests().is_empty());
+    assert_eq!(scoped.status.code(), Some(2), "{scoped:?}");
+    let requests = fixture.requests();
+    assert!(
+        (requests.iter()).all(|request| request[0]
+            .as_str()
+            .is_some_and(|line| line.starts_with("GET "))),
+        "{requests:?}"
+    );
 }
 
 #[test]

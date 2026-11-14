@@ -35,9 +35,13 @@ async fn a_space_never_has_more_than_the_space_above_it() {
         }
     };
 
-    // A top-level chat merges directly; the worker below it keeps its own.
+    // A top-level chat opens issues elsewhere directly; the worker below it
+    // keeps its own.
     let chat = of(top.id.clone()).await;
-    assert_eq!(chat.merge.value, Opening::Direct);
+    assert_eq!(
+        chat.issue_other_repositories.value,
+        OtherRepositories::Direct
+    );
     let below = of(worker.id.clone()).await;
     assert_eq!(below.merge.value, Opening::Propose);
     assert_eq!(below.merge.from, PermissionSource::Mode);
@@ -57,7 +61,7 @@ async fn a_space_never_has_more_than_the_space_above_it() {
         assert_eq!(push.from, PermissionSource::Parent);
     }
     // A wider mode below a narrower one is narrowed, a narrower one kept.
-    let config = "[modes.chat.permissions]\npush = 'propose'\n\
+    let config = "[modes.chat.permissions]\npush = 'propose'\nmerge = 'direct'\n\
                   [modes.worker.permissions]\npush = 'deny'\nmerge = 'direct'\n";
     (manager.write_local_config(&repo.id, Some(config.into())))
         .await
@@ -78,7 +82,8 @@ async fn a_chat_without_a_repository_resolves_in_the_repository_of_the_action() 
     let (temp, manager) = manager().await;
     let repo = register(&temp, &manager, "repo").await;
     let other = register(&temp, &manager, "other").await;
-    let config = "[modes.orchestrate.permissions]\nmerge = 'propose'\n";
+    let config = "[modes.orchestrate.permissions]\nmerge = 'propose'\n\
+                  [modes.chat.permissions]\nmerge = 'direct'\n";
     (manager.write_local_config(&repo.id, Some(config.into())))
         .await
         .unwrap();

@@ -39,12 +39,12 @@ fn a_mode_permission_in_any_layer_wins_over_permissions_in_any_layer() {
 #[test]
 fn permissions_win_over_a_built_in_mode_default() {
     let settings = settings("", "[permissions]\nmerge = 'propose'\n");
-    let chat = resolve(&settings, mode(&"chat".into())).unwrap();
-    assert_eq!(chat.merge.value, Opening::Propose);
+    let master = resolve(&settings, mode(&"orchestrate".into())).unwrap();
+    assert_eq!(master.merge.value, Opening::Propose);
     let settings = self::settings("", "");
-    let chat = resolve(&settings, mode(&"chat".into())).unwrap();
+    let master = resolve(&settings, mode(&"orchestrate".into())).unwrap();
     let worker = resolve(&settings, mode(&"worker".into())).unwrap();
-    assert!(chat.merge.value > worker.merge.value);
+    assert!(master.merge.value > worker.merge.value);
 }
 
 #[test]
@@ -86,25 +86,25 @@ fn a_mode_no_toml_layer_defines_has_permissions_and_the_key_defaults() {
 #[test]
 fn a_space_below_another_takes_the_narrower_permission_from_its_parent() {
     let settings = settings("", "");
-    let chat = resolve(&settings, mode(&"chat".into())).unwrap();
+    let master = resolve(&settings, mode(&"orchestrate".into())).unwrap();
     let worker = resolve(&settings, mode(&"worker".into())).unwrap();
-    let below = chat.below(&worker);
+    let below = master.below(&worker);
     assert_eq!(below.merge.value, worker.merge.value);
     assert_eq!(below.merge.from, PermissionSource::Parent);
     // Where the parent allows as much, the space's own mode decides.
-    assert_eq!(below.push, chat.push);
+    assert_eq!(below.push, master.push);
     assert_eq!(below.push.from, PermissionSource::Mode);
     // A parent that allows more widens nothing.
-    assert_eq!(worker.below(&chat), worker);
+    assert_eq!(worker.below(&master), worker);
 }
 
 #[test]
 fn only_direct_permissions_are_held_for_a_decision() {
     let settings = settings("", "");
-    let chat = resolve(&settings, mode(&"chat".into())).unwrap();
+    let master = resolve(&settings, mode(&"orchestrate".into())).unwrap();
     let worker = resolve(&settings, mode(&"worker".into())).unwrap();
     use PermissionKey::{ApiWrites, Merge, Push};
-    assert!(chat.withheld(&[Merge, Push]).is_none());
+    assert!(master.withheld(&[Merge, Push]).is_none());
     assert!(worker.withheld(&[Push]).is_none());
     assert!(worker.withheld(&[Merge, Push]).is_some());
     assert!(worker.withheld(&[ApiWrites]).is_some());
@@ -133,7 +133,7 @@ fn a_narrowing_takes_known_keys_and_values_and_round_trips() {
 fn a_given_permission_applies_as_given_and_only_from_one_who_holds_it() {
     let settings = settings("", "");
     let worker = resolve(&settings, mode(&"worker".into())).unwrap();
-    let chat = resolve(&settings, mode(&"chat".into())).unwrap();
+    let master = resolve(&settings, mode(&"orchestrate".into())).unwrap();
     let wider = PermissionsConfig::assigned(&["merge=direct".to_owned()]).unwrap();
     // A wider value than the mode's applies, even below a narrower parent.
     let given = worker.below(&worker).given(&wider);
@@ -141,24 +141,24 @@ fn a_given_permission_applies_as_given_and_only_from_one_who_holds_it() {
     assert_eq!(given.merge.from, PermissionSource::Given);
     assert_eq!(given.push, worker.push);
     let narrower = PermissionsConfig::assigned(&["push=propose".to_owned()]).unwrap();
-    assert_eq!(chat.given(&narrower).push.value, Pushes::Propose);
+    assert_eq!(master.given(&narrower).push.value, Pushes::Propose);
     // Only one that holds a value gives it.
     assert!(wider.ensure_held(&worker).is_err());
-    assert!(wider.ensure_held(&chat).is_ok());
+    assert!(wider.ensure_held(&master).is_ok());
     assert!(narrower.ensure_held(&worker).is_ok());
 }
 
 #[test]
 fn a_dropped_key_gives_the_value_it_falls_back_to() {
     let settings = settings("", "");
-    let chat = resolve(&settings, mode(&"chat".into())).unwrap();
+    let master = resolve(&settings, mode(&"orchestrate".into())).unwrap();
     let worker = resolve(&settings, mode(&"worker".into())).unwrap();
     let drop_merge = PermissionChange::assigned("merge=mode").unwrap();
-    // A chat's mode merges directly, which a worker does not hold.
-    let refused = drop_merge.ensure_held(&chat, &worker).unwrap_err();
+    // A master session merges directly, which a worker does not hold.
+    let refused = drop_merge.ensure_held(&master, &worker).unwrap_err();
     assert!(format!("{refused:#}").contains("merge=mode would give merge=direct"));
     assert!(drop_merge.ensure_held(&worker, &worker).is_ok());
-    assert!(drop_merge.ensure_held(&chat, &chat).is_ok());
+    assert!(drop_merge.ensure_held(&master, &master).is_ok());
     let set_merge = PermissionChange::assigned("merge=direct").unwrap();
     assert!(set_merge.ensure_held(&worker, &worker).is_err());
     // A registration or restore without a recorded key drops it.

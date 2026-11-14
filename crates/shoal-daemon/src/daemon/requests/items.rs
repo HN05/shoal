@@ -5,12 +5,14 @@ use anyhow::{Result, bail};
 
 use super::super::{
     answer::Answer,
+    permissions,
     scope::{Caller, Scoped},
     workspace::Manager,
 };
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
+    config::permissions::PermissionKey,
     forge::items::action::Action,
     protocol::{self, Body, ItemContext, ItemMethod, ViewPiece},
 };
@@ -159,9 +161,13 @@ pub(super) async fn handle(
             confirmed,
         } => Body::Item(match confirmed {
             Some(confirmed) => {
-                (manager.confirmed_merge(&context, item, action, &confirmed)).await?
+                (manager.confirmed_merge(&context, item, action, &confirmed, caller)).await?
             }
-            None => manager.item_action(&context, kind, item, action).await?,
+            None => {
+                manager
+                    .item_action(&context, kind, item, action, caller)
+                    .await?
+            }
         }),
         ItemMethod::MergeWarning { context, item } => {
             Body::MergeWarning(manager.merge_warning(&context, item).await?)
@@ -263,19 +269,27 @@ impl Scoped for ItemMethod {
                     .await?;
                 Some(workspace)
             }
+            // Merging a PR and deleting its branch are the `merge`
+            // permission's.
             ItemMethod::ItemAction {
-                action: Action::Merge { .. } | Action::AutoMerge { .. } | Action::CancelAutoMerge,
+                context,
+                item,
+                action:
+                    action @ (Action::Merge { .. }
+                    | Action::AutoMerge { .. }
+                    | Action::CancelAutoMerge
+                    | Action::DeleteBranch),
                 ..
+            } => {
+                change_context_space(manager, caller, context).await?;
+                let subject = manager.merge_subject(context, item.clone(), action);
+                let merge = permissions::Action::new(PermissionKey::Merge, subject.await?);
+                manager.authorize_action(Some(caller), merge).await?;
+                Some(context_workspace(context)?)
             }
-            | ItemMethod::MergeWarning { .. } => {
-                bail!("merging is the user's decision; ask them with shoal alerts send")
+            ItemMethod::MergeWarning { context, .. } => {
+                read_context_space(manager, caller, context).await?
             }
-            ItemMethod::ItemAction {
-                action: Action::DeleteBranch,
-                ..
-            } => bail!(
-                "deleting a PR's branch is the user's decision; ask them with shoal alerts send"
-            ),
             ItemMethod::ItemAction {
                 action: Action::Review(review),
                 ..

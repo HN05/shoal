@@ -304,10 +304,11 @@ allows;
 `issue ls` and `pr ls` take `--repo` too. `shoal pr revert [<number>]`
 opens a PR that undoes a merged one; where the forge cannot, it opens it from a
 child workspace already marked done, which goes once the revert merges.
-Workspace processes cannot merge a PR, delete its branch, or approve or
-request changes on one: `pr merge`, `pr delete-branch`, `pr review --approve`
-and `--request-changes` are refused. `ci approve` follows the space's
-`ci_approve` [permission](#permitted-actions).
+Workspace processes cannot approve or request changes on a PR:
+`pr review --approve` and `--request-changes` are refused. `pr merge`, its
+`--auto` and `--cancel-auto`, and `pr delete-branch` follow the space's
+`merge` permission, a merge bound to the PR's head commit, and `ci approve`
+its `ci_approve` [permission](#permitted-actions).
 
 `shoal forge capabilities` lists what the forge supports, such as resolving
 threads, rerunning jobs or reading job logs, and what to do instead.

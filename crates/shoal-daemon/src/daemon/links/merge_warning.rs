@@ -63,6 +63,7 @@ impl Manager {
         input: Option<ItemInput>,
         action: Action,
         confirmed: &ConfirmedWarning,
+        caller: Option<&crate::daemon::scope::Caller>,
     ) -> Result<Item> {
         ensure!(
             matches!(action, Action::Merge { .. } | Action::AutoMerge { .. }),
@@ -76,7 +77,7 @@ impl Manager {
             current == confirmed.warning,
             "the merge warning changed since you confirmed the merge; run shoal pr merge again"
         );
-        self.item_action(context, ItemKind::Pr, Some(url.into()), action)
+        self.item_action(context, ItemKind::Pr, Some(url.into()), action, caller)
             .await
     }
 
@@ -105,6 +106,26 @@ impl Manager {
 
     /// The forge and the PR `input` names in the repository of `context`, or
     /// the space's linked PR.
+    /// What `action` on the PR `input` names, or on `context`'s linked PR,
+    /// does, as an approval of it binds it: a merge at the commit the PR's
+    /// head has now, so a later commit needs another decision.
+    pub(crate) async fn merge_subject(
+        &self,
+        context: &ItemContext,
+        input: Option<ItemInput>,
+        action: &Action,
+    ) -> Result<String> {
+        let (forge, url) = self.pull_to_merge(context, input).await?;
+        let head = match action {
+            Action::Merge { .. } | Action::AutoMerge { .. } => {
+                (forge.pull_request(&self.agent_account(), &url).await?).head_commit
+            }
+            _ => None,
+        };
+        let at = head.map(|head| format!(" at {head}")).unwrap_or_default();
+        Ok(format!("{} {url}{at}", action.name()))
+    }
+
     async fn pull_to_merge(
         &self,
         context: &ItemContext,

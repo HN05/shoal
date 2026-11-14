@@ -176,7 +176,8 @@ permission_keys! {
     pr_open: PrOpen => "pr_open", Opening;
     /// Opening an issue in another repository than the space's.
     issue_other_repositories: IssueOtherRepositories => "issue_other_repositories", OtherRepositories;
-    /// Merging a branch with `shoal merge`.
+    /// Merging a branch with `shoal merge`, merging a PR and deleting its
+    /// branch.
     merge: Merge => "merge", Opening;
     /// Pushing to the workspace repository's remotes, with `shoal pr open`
     /// or plain `git push`.
@@ -236,17 +237,17 @@ impl PermissionsConfig {
         ci_approve: Some(Acting::Propose),
     };
 
-    /// The defaults of a mode that coordinates rather than edits: it decides
-    /// its children's merges and issues elsewhere.
+    /// The defaults of a mode that coordinates rather than edits: it opens
+    /// and decides its children's issues elsewhere.
     pub const COORDINATING: Self = Self {
         issue_other_repositories: Some(OtherRepositories::Direct),
-        merge: Some(Opening::Direct),
         ..Self::KEY_DEFAULTS
     };
 
     /// The defaults of a master session, which reaches every space and does
     /// what the user would, but proposes what stops every agent.
     pub const ORCHESTRATING: Self = Self {
+        merge: Some(Opening::Direct),
         daemon: Some(Acting::Propose),
         admin: Some(Acting::Direct),
         limits: Some(Acting::Direct),

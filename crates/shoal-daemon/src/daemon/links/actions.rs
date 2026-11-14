@@ -47,6 +47,7 @@ impl Manager {
         kind: ItemKind,
         input: Option<ItemInput>,
         action: Action,
+        caller: Option<&Caller>,
     ) -> Result<Item> {
         action.validate(kind)?;
         match context {
@@ -56,28 +57,30 @@ impl Manager {
             }
             _ => {
                 let space = self.context_space(context).await?;
-                self.space_item_action(space, kind, input, action).await
+                self.space_item_action(space, kind, input, action, caller)
+                    .await
             }
         }
     }
 
     /// Apply `action` for the workspace or chat and record it as its own
-    /// change.
+    /// change: the user's decisions with the user's login, unless a scoped
+    /// `caller` takes one as its permissions allow, as the agent account.
     async fn space_item_action(
         &self,
         space: LinkSpace,
         kind: ItemKind,
         input: Option<ItemInput>,
         action: Action,
+        caller: Option<&Caller>,
     ) -> Result<Item> {
         self.verify_space(&space).await?;
         let forge = self.space_forge(&space).await?;
         let item = (self.named_or_linked(input, Some(space.id()), &forge, kind)).await?;
         let (number, url) = (item.number().get(), item.to_string());
-        let account = if users_decision(&action) {
-            self.user_account()
-        } else {
-            self.agent_account()
+        let account = match caller {
+            None if users_decision(&action) => self.user_account(),
+            _ => self.agent_account(),
         };
         // Held from before the change, so a poll that observes it records
         // it after the cursors that take it as the space's own know it.

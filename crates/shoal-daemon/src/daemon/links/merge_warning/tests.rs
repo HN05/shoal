@@ -187,7 +187,13 @@ async fn a_merge_is_refused_once_its_warning_is_not_the_one_confirmed() {
         delete_branch: false,
     };
     let refused = manager
-        .confirmed_merge(&context, Some("7".parse().unwrap()), merge, &confirmed)
+        .confirmed_merge(
+            &context,
+            Some("7".parse().unwrap()),
+            merge,
+            &confirmed,
+            None,
+        )
         .await
         .unwrap_err();
     assert!(refused.to_string().contains("changed since you confirmed"));
@@ -197,6 +203,7 @@ async fn a_merge_is_refused_once_its_warning_is_not_the_one_confirmed() {
             Some("7".parse().unwrap()),
             Action::Close,
             &confirmed,
+            None,
         )
         .await
         .unwrap_err();
@@ -272,7 +279,7 @@ async fn a_confirmed_merge_keeps_the_pr_whose_warning_it_read() {
     };
     let confirmed = ConfirmedWarning { warning };
     // Whatever the forge answers after the merge, it merged PR 1.
-    let _ = (manager.confirmed_merge(&context, None, merge, &confirmed)).await;
+    let _ = (manager.confirmed_merge(&context, None, merge, &confirmed, None)).await;
     let merges: Vec<_> = (server.received().into_iter())
         .filter(|request| request.line.starts_with("POST"))
         .map(|request| request.line)

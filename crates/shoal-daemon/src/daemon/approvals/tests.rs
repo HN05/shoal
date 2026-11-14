@@ -911,6 +911,10 @@ async fn a_parent_approves_a_merge_with_its_own_merge_permission_at_its_commit()
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
+    let config = "[modes.chat.permissions]\nmerge = 'direct'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
     let top = chat(&manager, "top", "chat", Some(&repo), None).await;
     let worker = working_below(&manager, &repo, "worker", &top.id, "worker").await;
     let child = working_below(&manager, &repo, "child", &worker.id, "worker").await;

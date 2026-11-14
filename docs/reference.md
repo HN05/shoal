@@ -1759,8 +1759,9 @@ acts on its own, under the [scoped workspace commands](#scoped-workspace-command
 rules, without those that need a worktree. It opens workspaces and chats only
 below the chat and in its repository, renames only its own chat, decides the requests
 routed to it only with a grant, and opens issues only where its
-[permissions](#mode-permissions) let it open them directly. Merging, branch deletion, PR verdicts, CI
-approval, your notifications and administration stay with you. `--parent`
+[permissions](#mode-permissions) let it open them directly; its other
+permissions decide merging, CI approval, your notifications and
+administration, and PR verdicts stay with you. `--parent`
 names the space the chat goes below, by number or ID; a workspace's or a
 chat's agent that starts a chat starts it below its own space, or below one
 under it that `--parent` names, in the background, and returns once the chat
@@ -4215,10 +4216,13 @@ When the last check of a workspace that links the PR found files
 They read only that record, so a PR without one, a record of another head or
 base branch, or a PR no workspace links merges without a question. A merge is
 refused when its warning changed while the question was open, including a
-warning that appeared where none was.
+warning that appeared where none was. A scoped process merges, sets or
+withdraws an automatic merge and deletes a PR's branch as the agent account,
+as its space's [`merge` permission](#mode-permissions) allows: with `"propose"` the request
+binds the PR at its head commit, so a later commit needs another approval.
 `delete-branch` deletes the branch of a merged or closed PR on the forge, such
 as one merged on the forge's website, never a local branch, with your own
-login; workspace processes cannot. It refuses an open PR, a branch in a fork,
+login or a scoped process's agent account. It refuses an open PR, a branch in a fork,
 and a branch that no longer points to the PR's head commit.
 `revert` opens a PR that undoes a merged PR into its base branch and refuses
 one that has not merged. It takes `pr open`'s options except `--base`; its

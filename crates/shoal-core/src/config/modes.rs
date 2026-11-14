@@ -285,8 +285,8 @@ pub fn permission_layers(
 }
 
 /// The permissions Shoal's mode `name` has where config sets none: a
-/// worker's are the keys' defaults, the modes that coordinate decide their
-/// children's merges and issues elsewhere, and a master session does what
+/// worker's are the keys' defaults, the modes that coordinate open and
+/// decide their children's issues elsewhere, and a master session does what
 /// the user would; a mode Shoal does not ship has none.
 fn built_in_permissions(name: &ModeName) -> PermissionsConfig {
     match name {

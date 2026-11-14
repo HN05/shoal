@@ -82,15 +82,27 @@ impl Manager {
         let action = Action::Review(new_review(review, shows, moved.then_some(head)));
         let url = pull.to_string();
         match self
-            .item_action(&context, ItemKind::Pr, Some(pull.clone().into()), action)
+            .item_action(
+                &context,
+                ItemKind::Pr,
+                Some(pull.clone().into()),
+                action,
+                None,
+            )
             .await
         {
             Ok(_) => Ok(url),
             // Nothing was sent, and the lines no longer match.
             Err(error) if error.downcast_ref::<HeadMoved>().is_some() => {
                 let action = Action::Review(new_review(review, |_| false, Some(head)));
-                self.item_action(&context, ItemKind::Pr, Some(pull.clone().into()), action)
-                    .await?;
+                self.item_action(
+                    &context,
+                    ItemKind::Pr,
+                    Some(pull.clone().into()),
+                    action,
+                    None,
+                )
+                .await?;
                 Ok(url)
             }
             Err(error) => Err(error),

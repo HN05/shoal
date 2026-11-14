@@ -295,3 +295,33 @@ async fn approving_ci_runs_follows_the_ci_approve_permission() {
     let request = undecided(approve.scope(&manager, &caller(&worker.id)).await.map(drop));
     assert_eq!(request.target, Target::Action(PermissionKey::CiApprove));
 }
+
+#[tokio::test]
+async fn deleting_a_pr_s_branch_follows_the_merge_permission() {
+    use crate::{
+        client::space_names::SpaceSelector,
+        daemon::scope::Scoped,
+        forge::items::{action::Action as ItemAction, link::ItemKind},
+        protocol::{ItemContext, ItemMethod},
+    };
+
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    crate::daemon::test_support::git(
+        &checkout,
+        &["remote", "add", "origin", "https://github.com/team/repo"],
+    );
+    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap();
+    let chat = chat(&manager, "chat", "chat", Some(&repo), None).await;
+    let mut delete = ItemMethod::ItemAction {
+        context: ItemContext::Chat(SpaceSelector::id(&chat.id)),
+        kind: ItemKind::Pr,
+        item: Some("12".parse().unwrap()),
+        action: ItemAction::DeleteBranch,
+        confirmed: None,
+    };
+    let request = undecided(delete.scope(&manager, &caller(&chat.id)).await.map(drop));
+    assert_eq!(request.target, Target::Action(PermissionKey::Merge));
+}
