@@ -3850,16 +3850,19 @@ ending anything when the file exists, when the daemon cannot create a file in it
 directory within 30 seconds, or when `-` would stream from a place that closes
 with the space. A workspace is removed as `shoal rm` removes it, and its file
 holds its removal record and checkpoint. The export also refuses one whose file
-lies inside it, whose uncommitted files a checkpoint cannot keep, or with chats
-in its worktree or in one below it, and asks
-before releasing holds unless given `--yes`. The checkpoint
+lies inside it or whose uncommitted files a checkpoint cannot keep, and asks
+before ending the chats that go with it or releasing holds unless given
+`--yes`. The chats in its worktree and those below it, or below one of them, go
+with it in its file; a chat below a workspace below it goes with that
+workspace. The checkpoint
 travels as a Git bundle without the commits of the default remote's default
 branch; a checkpoint that branch already has travels without one. Ignored files,
 leases, permits, approvals, grants and holds stay behind; setup rebuilds what the
-workspace needs. A chat's file holds its name, agent and session: the export
-refuses a chat whose agent reported no session, or the one it runs in, and asks
-before stopping the agent unless given `--yes`, and one with workspaces below
-it or in a workspace's worktree; the chat is then removed. A workspace or chat
+workspace needs. A chat's file holds its name, agent and session, and the chats below it, or
+below one of them: the export refuses a chat whose agent reported no session,
+the one it runs in, one in a workspace's worktree and one with a workspace below
+it, and asks before stopping the agents unless given `--yes`; the chat is then
+removed with the chats below it. A workspace or chat
 already removed, as by cleanup, is exported from its removal record, which
 stays, under the refusals that still apply, without another removal. The file's manifest names its `kind`, `workspace` or `chat`.
 
@@ -3867,7 +3870,9 @@ stays, under the refusals that still apply, without another removal. The file's 
 picker selects when `-o` names an existing directory, and `shoal move export
 --repo <repository> --all -o <directory>`, for every workspace and running chat
 of the repository, export each to `<id>.shoal` in the directory, named after
-the space's ID since names repeat, creating it when missing. It checks every space as a single export does, that no workspace
+the space's ID since names repeat, creating it when missing. A chat that goes
+with another of the spaces goes in that space's file, and each space is
+exported after the spaces below it. It checks every space as a single export does, that no workspace
 is in the middle of another lifecycle operation, and that the terminal does not
 close with one of them, before ending any: when one cannot be exported, it lists
 each refusal and ends nothing. It asks once before ending the chats and releasing
@@ -3921,7 +3926,11 @@ restore` does, under the importing machine's agent limits. Every reopen, by impo
 `shoal restore`, trusts the workspace's path for the agents that resume there. An agent
 without a kept session `shoal restore` starts as `shoal start --in` starts a new
 one, telling it the workspace moved, instead of running
-its `resume_command`. An imported chat starts in the repository's checkout, or in `root_dir`
+its `resume_command`. The chats a file carries open again after its space as `shoal restore` reopens a
+removed chat, under their IDs, stopped, below their parents and in the worktrees
+they ran in where those are there, and `--restore` queues their agents'
+restores; an imported chat's own chat starts under a new ID, so the chats it
+carries open at the top level. An imported chat starts in the repository's checkout, or in `root_dir`
 without one, as a chat starts, in the mode it ran in, under its name, with its agent's `resume` arguments for its session, or as a new
 session for an agent without them or a session not kept. A single chat imported
 on a terminal opens beside it; with `--restore`, without a terminal, or among

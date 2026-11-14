@@ -48,7 +48,8 @@ struct Prepared {
 
 impl Manager {
     /// Write a space for another Shoal to the new file `file`, removing it
-    /// here first, a running chat once its agent stopped. A selector that
+    /// here first with the spaces below it that `unsaved` confirms, a
+    /// running chat once its agent stopped. A selector that
     /// names neither exports the removal record of the workspace or chat
     /// with that ID, which stays. The daemon writes the file, so closing
     /// the caller's terminal with the space cannot cut the export short; it
@@ -63,7 +64,7 @@ impl Manager {
     ) -> Result<ExportedSpace> {
         crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
         let ended = match self.space(selector).await {
-            Ok(PresentSpace::Chat(chat)) => self.end_chat_for_export(chat).await?,
+            Ok(PresentSpace::Chat(chat)) => self.end_chat_for_export(chat, &unsaved).await?,
             _ => {
                 self.remove_for_export(selector, unsaved, inspection)
                     .await?
@@ -303,17 +304,21 @@ impl Manager {
             .collect())
     }
 
-    /// Remove `chat` for its export, with the chats that go with it, once
-    /// its agent has reported the session the package continues and its
-    /// package is made, stopping the running agents, so their sessions'
-    /// files stop changing and only writing them is left.
-    async fn end_chat_for_export(&self, chat: Chat) -> Result<Prepared> {
+    /// Remove `chat` for its export, with the chats that go with it, of
+    /// those `unsaved` confirms, once its agent has reported the session the
+    /// package continues and its package is made, stopping the running
+    /// agents, so their sessions' files stop changing and only writing them
+    /// is left. A chat that joins it meanwhile keeps it here.
+    async fn end_chat_for_export(&self, chat: Chat, unsaved: &UnsavedWork) -> Result<Prepared> {
         let (repo, continues) = self.movable_chat(&chat).await?;
         let carried = self.chats_carried_by(&chat.id).await?;
+        let taking = match unsaved.children() {
+            Some(confirmed) => confirmed.to_vec(),
+            None => carried.clone(),
+        };
         let id = chat.id.clone();
         let mut manifest = Manifest::of(repo.as_ref(), Source::Chat(chat)).await?;
-        self.remove_chat(&SpaceSelector::id(&id), Some(carried.clone()))
-            .await?;
+        (self.remove_chat(&SpaceSelector::id(&id), Some(taking))).await?;
         manifest.chats = self.carried_records(&carried).await?;
         Ok(Prepared {
             repo,

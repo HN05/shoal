@@ -106,6 +106,16 @@ impl Default for UnsavedWork {
 }
 
 impl UnsavedWork {
+    /// Consent to delete nothing but the spaces `children` below it.
+    pub fn taking(children: Vec<SpaceId>) -> Self {
+        Self::Confirmed {
+            files: false,
+            detached_head: None,
+            files_restorable: false,
+            children: Some(children),
+        }
+    }
+
     /// Consent to delete the unsaved work `check` shows.
     pub fn confirming(check: &RemovalCheck) -> Self {
         Self::Confirmed {

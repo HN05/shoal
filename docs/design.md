@@ -3414,7 +3414,12 @@ setup and guidance, told the workspace moved. Moving a chat removes it here,
 stopping its agent, since a session that kept growing here would fork from the one that
 continues there, and the user attends a chat, so export asks first; a chat whose
 agent reported no session refuses before stopping it, since nothing could continue
-it, and so does one with spaces below it, which its removal would take. Import starts the chat through the chat launch, in its mode, in the
+it, and so does one with a workspace below it that does not move with it, which
+its removal would take. The chats in a moving workspace's worktree and those
+below a moving space, through chats, move with it in its package as their
+removal records, which the import records and restores, so they keep their IDs,
+their parents and their worktrees wherever those are there; a chat below a
+workspace below it moves with that workspace. Import starts the chat through the chat launch, in its mode, in the
 repository's checkout or, for a chat without one, the importing machine's
 `root_dir`, with the agent's resume arguments, under a free name since its own may be taken there, in the background
 when no terminal attends the import, as queued agents start. Export and import

@@ -8,68 +8,105 @@ use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, ui},
-    model::{Chat, PresentSpace},
-    removal::RemovalCheck,
+    model::{Chat, PresentSpace, SpaceKind, SpaceRef, Spaces},
+    removal::{RemovalCheck, UnsavedWork},
 };
 
-/// A space that passed its export check: a workspace with what its removal
-/// would delete, or a running chat whose agent reported a session.
+/// A space that passed its export check, with the spaces its removal takes
+/// first and the chats among them that go with it, which its export ends
+/// too.
+pub(in super::super) struct Checked {
+    pub(in super::super) space: Ending,
+    taken: Vec<SpaceRef>,
+    carried: Vec<Chat>,
+}
+
+/// What ending a space for its export does: removing a workspace, with
+/// what its removal would delete, or a chat whose agent reported a session.
 #[allow(
     clippy::large_enum_variant,
     reason = "one per exported space, moved into its planned export"
 )]
-pub(in super::super) enum Checked {
+pub(in super::super) enum Ending {
     Workspace(RemovalCheck),
     Chat(Chat),
 }
 
 impl Checked {
     pub(super) fn name(&self) -> &crate::client::space_names::SpaceName {
-        match self {
-            Self::Workspace(check) => &check.workspace.name,
-            Self::Chat(chat) => &chat.name,
+        match &self.space {
+            Ending::Workspace(check) => &check.workspace.name,
+            Ending::Chat(chat) => &chat.name,
         }
     }
 
     pub(super) fn id(&self) -> &crate::client::space_ids::SpaceId {
-        match self {
-            Self::Workspace(check) => &check.workspace.id,
-            Self::Chat(chat) => &chat.id,
+        match &self.space {
+            Ending::Workspace(check) => &check.workspace.id,
+            Ending::Chat(chat) => &chat.id,
         }
     }
 
     /// The space with its kind, as a confirmation names it.
     pub(super) fn label(&self) -> String {
-        match self {
-            Self::Workspace(check) => format!("workspace {}", check.workspace.name),
-            Self::Chat(chat) => format!("chat {}", chat.name),
+        match &self.space {
+            Ending::Workspace(check) => format!("workspace {}", check.workspace.name),
+            Ending::Chat(chat) => format!("chat {}", chat.name),
         }
     }
 
-    /// Refuse to export a workspace without the workspaces below it, which
+    /// Consent to end the chat with the chats that go with it, the only
+    /// spaces below it its removal may take.
+    pub(in super::super) fn chat_ending(&self) -> UnsavedWork {
+        UnsavedWork::taking(self.carried.iter().map(|chat| chat.id.clone()).collect())
+    }
+
+    /// Refuse to export the space without the workspaces below it, which
     /// removing it here would take unexported, unless they are among the
-    /// `exported` too.
+    /// `exported` too; the chats below those go with them.
     pub(super) fn ensure_children_exported(&self, exported: &[&SpaceId]) -> Result<()> {
-        match self {
-            Self::Workspace(check) => ensure_children_exported(check, exported),
-            Self::Chat(_) => Ok(()),
-        }
+        let missing: Vec<&str> = (self.taken.iter())
+            .filter(|space| space.kind == SpaceKind::Workspace && !exported.contains(&&space.id))
+            .map(|space| space.name.as_str())
+            .collect();
+        ensure!(
+            missing.is_empty(),
+            "workspaces are below it ({}); export them with it, as shoal move export --all does, or remove them first",
+            missing.join(", ")
+        );
+        Ok(())
     }
 }
 
-/// What ending `space` for an export would do, refusing an export that
-/// would lose work or cut its own output off.
+/// What ending `space`, among the `spaces` there are, for an export would
+/// do, refusing an export that would lose work or cut its own output off.
 pub(super) async fn check_export(
     ctx: &Context,
     space: PresentSpace,
     output: &Output,
+    spaces: &Spaces,
 ) -> Result<Checked> {
-    match space {
-        PresentSpace::Workspace(workspace) => check_workspace_export(ctx, &workspace.id, output)
-            .await
-            .map(Checked::Workspace),
-        PresentSpace::Chat(chat) => check_chat_export(chat).map(Checked::Chat),
-    }
+    let carried = crate::transfer::carried_chats(&spaces.chats, space.id());
+    let carried = (carried.iter())
+        .filter_map(|id| spaces.chats.iter().find(|chat| chat.id == *id))
+        .cloned()
+        .collect();
+    let (space, taken) = match space {
+        PresentSpace::Workspace(workspace) => {
+            let check = check_workspace_export(ctx, &workspace.id, output).await?;
+            let taken = check.children.clone();
+            (Ending::Workspace(check), taken)
+        }
+        PresentSpace::Chat(chat) => {
+            let taken = spaces.taken_with(&chat.id);
+            (Ending::Chat(check_chat_export(chat)?), taken)
+        }
+    };
+    Ok(Checked {
+        space,
+        taken,
+        carried,
+    })
 }
 
 /// Refuse to export a chat whose agent reported no session, which would not
@@ -129,52 +166,48 @@ async fn check_workspace_export(
     Ok(check)
 }
 
-/// Refuse to export the workspace `check` describes without the workspaces
-/// below it, which removing it here would take unexported, unless they are
-/// among the `exported` too.
-fn ensure_children_exported(check: &RemovalCheck, exported: &[&SpaceId]) -> Result<()> {
-    let (chats, workspaces): (Vec<_>, Vec<_>) =
-        (check.children.iter()).partition(|child| child.kind == crate::model::SpaceKind::Chat);
-    let chats: Vec<&str> = chats.iter().map(|chat| chat.name.as_str()).collect();
-    ensure!(
-        chats.is_empty(),
-        "chats run in it or below it ({}), which shoal move does not move; remove them first",
-        chats.join(", ")
-    );
-    let missing: Vec<&str> = workspaces
-        .iter()
-        .filter(|child| !exported.contains(&&child.id))
-        .map(|child| child.name.as_str())
+/// The `spaces` an export of them all ends one by one: those that do not go
+/// with another of them, which its export ends, each after the spaces below
+/// it that its removal would otherwise take.
+pub(super) fn exported_alone(spaces: &[PresentSpace], tree: &Spaces) -> Vec<PresentSpace> {
+    let carried: Vec<SpaceId> = (spaces.iter())
+        .flat_map(|space| crate::transfer::carried_chats(&tree.chats, space.id()))
         .collect();
-    ensure!(
-        missing.is_empty(),
-        "workspaces were split from it ({}); export them with it, as shoal move export --all does, or remove them first",
-        missing.join(", ")
-    );
-    Ok(())
+    let mut alone: Vec<PresentSpace> = (spaces.iter())
+        .filter(|space| !carried.contains(space.id()))
+        .cloned()
+        .collect();
+    alone.sort_by_key(|space| tree.taken_with(space.id()).len());
+    alone
 }
 
 /// Ask under `heading`, unless `yes` confirms it, before ending the spaces
 /// `checks` describe where that needs the user: a chat, which the user
-/// talks with, or a workspace with holds that external sessions keep, which
-/// the export releases, naming each hold's workspace when there are several.
+/// talks with, with the chats that go with them, or a workspace with holds
+/// that external sessions keep, which the export releases, naming each
+/// hold's workspace when there are several.
 pub(super) fn confirm_ending(
     ctx: &Context,
     yes: bool,
     heading: String,
     checks: &[&Checked],
 ) -> Result<()> {
-    let chats: Vec<&Chat> = checks
-        .iter()
-        .filter_map(|check| match check {
-            Checked::Chat(chat) => Some(chat),
-            Checked::Workspace(_) => None,
-        })
-        .collect();
+    let mut chats: Vec<&Chat> = Vec::new();
+    for check in checks {
+        let own = match &check.space {
+            Ending::Chat(chat) => Some(chat),
+            Ending::Workspace(_) => None,
+        };
+        for chat in own.into_iter().chain(&check.carried) {
+            if !chats.iter().any(|listed| listed.id == chat.id) {
+                chats.push(chat);
+            }
+        }
+    }
     let held: Vec<&RemovalCheck> = checks
         .iter()
-        .filter_map(|check| match check {
-            Checked::Workspace(check) if !check.workspace.holds.is_empty() => Some(check),
+        .filter_map(|check| match &check.space {
+            Ending::Workspace(check) if !check.workspace.holds.is_empty() => Some(check),
             _ => None,
         })
         .collect();

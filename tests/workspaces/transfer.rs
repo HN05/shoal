@@ -1229,6 +1229,62 @@ fn a_removed_chat_moves_from_its_removal_record() {
 }
 
 #[test]
+fn a_workspace_moves_with_the_chat_in_its_worktree() {
+    let fixture = chat_moving_fixture();
+    let home = fixture.root.path();
+    let workspace = fixture.add("worker");
+    let path = PathBuf::from(workspace["path"].as_str().unwrap());
+    fs::copy(
+        fixture.repo.join("chat-agent.sh"),
+        path.join("chat-agent.sh"),
+    )
+    .unwrap();
+    let worker = fixture.id("worker");
+    std::thread::scope(|scope| {
+        let chat = scope.spawn(|| {
+            let start = [
+                "start", "--in", &worker, "--mode", "chat", "--here", "--agent", "claude",
+                "--name", "reading",
+            ];
+            fixture.interactive_command(fixture.command().current_dir(&path).args(start), "")
+        });
+        wait_until("chat started", || home.join("chat-started").exists());
+        fixture.ok(&["stop", &fixture.id("reading")]);
+        let (output, transcript) = chat.join().unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{transcript}",
+            printed(&output)
+        );
+    });
+    let chat = fixture.ok(&["list", "--chats"])[0].clone();
+    let file = home.join("worker.shoal");
+    let file = file.to_str().unwrap();
+
+    let exported = fixture.ok(&["move", "export", &worker, "-o", file, "--yes"]);
+    assert_eq!(
+        exported["manifest"]["chats"][0]["chat"]["name"], "reading",
+        "{exported}"
+    );
+    assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
+    let repo = fixture.repo.to_str().unwrap();
+    let imported = fixture.run(&["move", "import", file, "--repo", repo]);
+    assert!(imported.status.success(), "{}", printed(&imported));
+
+    // It opens again under its ID in the worktree, stopped.
+    let chats = fixture.ok(&["list", "--chats"]);
+    assert_eq!(
+        (
+            &chats[0]["id"],
+            &chats[0]["workspace"]["id"],
+            &chats[0]["running"]
+        ),
+        (&chat["id"], &workspace["id"], &Value::from(false)),
+        "{chats}"
+    );
+}
+
+#[test]
 fn the_sessions_of_a_profile_only_the_workspace_defines_move_with_it() {
     let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("profiled");

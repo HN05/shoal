@@ -27,8 +27,8 @@ mod checks;
 pub(super) mod copy;
 mod directory;
 
-pub(super) use checks::Checked;
-use checks::{check_export, confirm_ending};
+pub(super) use checks::{Checked, Ending};
+use checks::{check_export, confirm_ending, exported_alone};
 use directory::DirectoryReport;
 pub(super) use directory::ExportDirectory;
 
@@ -228,7 +228,8 @@ async fn export_space(
     yes: bool,
     output: &Output,
 ) -> Result<ExportedSpace> {
-    let check = check_export(ctx, space, output).await?;
+    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let check = check_export(ctx, space, output, &spaces).await?;
     check.ensure_children_exported(&[])?;
     confirm_ending(ctx, yes, format!("Export {}", check.label()), &[&check])?;
     export_checked(ctx, &check, output).await
@@ -236,8 +237,8 @@ async fn export_space(
 
 /// End the space `check` describes and export it to `output`.
 async fn export_checked(ctx: &Context, check: &Checked, output: &Output) -> Result<ExportedSpace> {
-    let exported = match check {
-        Checked::Workspace(check) => {
+    let exported = match &check.space {
+        Ending::Workspace(check) => {
             let space = check.workspace.id.clone();
             let unsaved = UnsavedWork::confirming(check);
             let exported = crate::client::transfer::export(
@@ -248,11 +249,11 @@ async fn export_checked(ctx: &Context, check: &Checked, output: &Output) -> Resu
             );
             super::super::workspaces::leaving(ctx, &check.workspace, exported).await?
         }
-        Checked::Chat(chat) => {
+        Ending::Chat(chat) => {
             crate::client::transfer::export(
                 &ctx.paths,
                 SpaceSelector::id(&chat.id),
-                UnsavedWork::default(),
+                check.chat_ending(),
                 output.file(),
             )
             .await?
@@ -331,20 +332,13 @@ impl PlannedExport {
     pub(super) fn file(&self) -> PathBuf {
         self.output.file()
     }
-
-    /// How many spaces below it its removal takes first.
-    pub(super) fn below(&self) -> usize {
-        match &self.check {
-            Checked::Workspace(check) => check.children.len(),
-            Checked::Chat(_) => 0,
-        }
-    }
 }
 
 /// Check every space before exporting any, refusing with each one that
 /// cannot be exported, then let the user end all of them at once where that
 /// needs the user, asking under `heading`; `operation` names the batch in
-/// refusals.
+/// refusals. The chats that go with another of them go in its export, and
+/// each space goes after the spaces below it.
 pub(super) async fn check_exports(
     ctx: &Context,
     spaces: &[PresentSpace],
@@ -353,12 +347,14 @@ pub(super) async fn check_exports(
     heading: &str,
     operation: Operation,
 ) -> Result<Vec<PlannedExport>> {
+    let tree = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let spaces = exported_alone(spaces, &tree);
     let mut planned = Vec::new();
     let mut refusals = Vec::new();
     let exported: Vec<&SpaceId> = spaces.iter().map(PresentSpace::id).collect();
-    for space in spaces {
+    for space in &spaces {
         let export = async {
-            let export = plan_export(ctx, space, directory, operation).await?;
+            let export = plan_export(ctx, space, directory, operation, &tree).await?;
             export.check.ensure_children_exported(&exported)?;
             Ok::<_, anyhow::Error>(export)
         };
@@ -378,16 +374,18 @@ pub(super) async fn check_exports(
     Ok(planned)
 }
 
-/// Reserve the space's file in `directory` and check it as a batch's.
+/// Reserve the space's file in `directory` and check it as a batch's,
+/// among the spaces `tree` shows.
 async fn plan_export(
     ctx: &Context,
     space: &PresentSpace,
     directory: &ExportDirectory,
     operation: Operation,
+    tree: &crate::model::Spaces,
 ) -> Result<PlannedExport> {
     let output = Output::reserve(&directory.file(space.id()))?;
-    let check = check_export(ctx, space.clone(), &output).await?;
-    if let Checked::Workspace(check) = &check {
+    let check = check_export(ctx, space.clone(), &output, tree).await?;
+    if let Ending::Workspace(check) = &check.space {
         super::super::workspaces::ensure_batch_removable(ctx, check, operation).await?;
     }
     Ok(PlannedExport { check, output })

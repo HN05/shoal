@@ -4,7 +4,7 @@
 use anyhow::{Context as _, Result};
 
 use super::{
-    super::export::{self, Checked, ExportDirectory, PlannedExport},
+    super::export::{self, Checked, Ending, ExportDirectory, PlannedExport},
     ImportFailure, Remote, arrived, summary,
 };
 use crate::cli::commands::restore::agents::queue::{Stopped, restore_stopped, saved_executions};
@@ -36,9 +36,7 @@ pub(super) async fn move_spaces(
         _ => format!("Move {} spaces to {}", spaces.len(), remote.host),
     };
     let operation = ("move", "move");
-    let mut planned =
-        export::check_exports(ctx, spaces, &directory, yes, &heading, operation).await?;
-    planned.sort_by_key(PlannedExport::below);
+    let planned = export::check_exports(ctx, spaces, &directory, yes, &heading, operation).await?;
     let mut report = ui::Report::new("move");
     for planned in planned {
         let name = planned.name().to_owned();
@@ -130,14 +128,14 @@ async fn end_moved(
     checked: &Checked,
     checkpoint: Option<CheckpointNumber>,
 ) -> Result<()> {
-    let removal = match checked {
-        Checked::Workspace(check) => {
+    let removal = match &checked.space {
+        Ending::Workspace(check) => {
             let space = SpaceSelector::id(&check.workspace.id);
             let unsaved = UnsavedWork::confirming(check);
             let ended = crate::client::transfer::end_moved(&ctx.paths, space, unsaved, checkpoint);
             super::super::super::workspaces::leaving(ctx, &check.workspace, ended).await?
         }
-        Checked::Chat(chat) => {
+        Ending::Chat(chat) => {
             let space = SpaceSelector::id(&chat.id);
             let unsaved = UnsavedWork::default();
             crate::client::transfer::end_moved(&ctx.paths, space, unsaved, None).await?
