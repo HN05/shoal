@@ -2311,7 +2311,8 @@ new workspace that opens the PR and goes once it merges, so backing out a merge
 needs no agent; a conflicting revert does, so it is abandoned rather than left
 half done. Which commits the merge added is established from their trees and
 patches, never assumed, since reverting a guess can undo someone else's work. Actions run in the
-daemon, where scope applies: they act as the workspace's agent account, while
+daemon, where scope applies: they act as the workspace's agent account, except
+an issue's assignee for a link the user's terminal makes, while
 merging, deleting a PR's branch and a review's verdict stay the user's
 decisions, so scoped callers can comment in a review but not merge, delete a
 branch, approve or request changes, and those act as the user's own login.
@@ -2378,7 +2379,9 @@ tooling stay with clients.
 An assigned issue shows on the forge as being worked on through its assignees,
 since every forge has them and a label would need one per repository: the link
 and unlink paths every `assigned` issue link goes through, removal among them,
-add the account the space acts as and take it back. Shoal records each
+add the account that links it and take it back: the agent account for a scoped
+caller, and the user's own login for a link from the user's own terminal, since
+that shows the user taking the issue on. Shoal records each
 assignment it made, per issue and login, so it takes back only its own and only
 once no space links the issue for that login; a closed issue keeps its assignee.
 Assigning never refuses or undoes the link: other assignees and forge failures
