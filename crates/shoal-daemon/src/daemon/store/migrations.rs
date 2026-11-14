@@ -4,10 +4,10 @@
 use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
 
-use super::{chat_names, place_owners, place_servers};
+use super::{chat_names, consumed_upgrades, place_owners, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 179;
+pub(super) const SCHEMA_VERSION: i64 = 180;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -452,6 +452,11 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
         179,
         include_str!("removed_spaces.sql"),
         Some(rekey_converted_records),
+    ),
+    (
+        180,
+        include_str!("consumed_upgrades.sql"),
+        Some(consumed_upgrades::refuse_unconsumed),
     ),
 ];
 
@@ -1093,15 +1098,20 @@ pub(super) const REMOVED_WORKSPACES: &str = "CREATE TABLE removed_workspaces (
 );";
 
 pub(super) fn migrate(db: &mut Connection) -> Result<()> {
+    migrate_to(db, SCHEMA_VERSION)
+}
+
+/// Apply the migrations up to version `last`.
+pub(super) fn migrate_to(db: &mut Connection, last: i64) -> Result<()> {
     let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     ensure!(
         version <= SCHEMA_VERSION,
         "state database was written by a newer Shoal version"
     );
-    if version == SCHEMA_VERSION {
+    if version >= last {
         return Ok(());
     }
-    let pending = MIGRATIONS.iter().filter(|(target, ..)| *target > version);
+    let pending = (MIGRATIONS.iter()).filter(|(target, ..)| *target > version && *target <= last);
     // Consecutive migrations share a transaction; a rebuild runs on its own.
     let mut batches: Vec<Vec<&(i64, &str, Option<Prepare>)>> = Vec::new();
     for migration in pending {

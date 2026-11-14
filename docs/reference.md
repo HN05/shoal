@@ -73,7 +73,9 @@ upgrade immediately. Tracked agents and commands keep running while the daemon
 is away and reattach to the next one; see [Daemon restarts](#daemon-restarts). State and installed skills live
 outside the package and survive; the next `shoal` command
 [updates installed skills](#agent-skill-outside-project-repositories) from
-Homebrew's stable `opt` path.
+Homebrew's stable `opt` path. An upgrade from before v0.17.0 starts v0.17.0
+once on the way: later daemons refuse a state database that still holds the
+upgrade state v0.17.0's daemon consumes, naming it.
 Packagers can set `SHOAL_SKILLS_DIR` to an absolute directory holding every
 bundled `<skill>/SKILL.md` at runtime. Without it, an adjacent `shoal-skills` symlink can point through
 a stable installation prefix; relative targets resolve lexically against its

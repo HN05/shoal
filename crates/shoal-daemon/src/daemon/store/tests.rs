@@ -568,6 +568,9 @@ fn historical_database(version: i64) -> Result<Connection> {
         rekey_converted_records(&db)?;
         db.execute_batch(include_str!("removed_spaces.sql"))?;
     }
+    if version >= 180 {
+        db.execute_batch(include_str!("consumed_upgrades.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -581,6 +584,34 @@ fn historical_database(version: i64) -> Result<Connection> {
             INSERT INTO executions(id,{space},state) VALUES ('execution','workspace','running');"
     ))?;
     Ok(db)
+}
+
+/// The schema version v0.17.0 wrote, the last release whose daemon
+/// consumes the upgrade state [`DROPS_UPGRADE_STATE`] drops.
+pub(super) const V0_17_0: i64 = 178;
+
+/// The migration that drops the upgrade state v0.17.0 consumes, which tests
+/// of the migrations that fill it stop before.
+const DROPS_UPGRADE_STATE: i64 = 180;
+
+/// Upgrade `db` as v0.17.0 does when its daemon starts: migrate it to that
+/// release's version, then consume the upgrade state the next migration
+/// refuses. A database already past it stays as it is.
+pub(super) fn start_v0_17_0(db: &mut Connection) -> Result<()> {
+    migrate_to(db, V0_17_0)?;
+    if db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))? == V0_17_0 {
+        db.execute_batch(
+            "DELETE FROM upgraded_chat_agents; DELETE FROM chat_legacy_names;
+             DELETE FROM earlier_attached_files;",
+        )?;
+    }
+    Ok(())
+}
+
+/// Migrate `db` as a user who started v0.17.0 on the way does.
+pub(super) fn migrate_through_v0_17_0(db: &mut Connection) -> Result<()> {
+    start_v0_17_0(db)?;
+    migrate(db)
 }
 
 fn schema_snapshot(db: &Connection) -> Result<Vec<String>> {
@@ -605,7 +636,7 @@ fn recorded_places_keep_the_server_their_data_names() -> Result<()> {
             rusqlite::params![place.host, place.id(), serde_json::to_string(place)?],
         )?;
     }
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
     let servers: Vec<(String, String)> = db
         .prepare("SELECT place,server FROM owned_places ORDER BY rowid")?
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
@@ -651,7 +682,7 @@ fn places_a_chat_took_over_become_the_chats() -> Result<()> {
             rusqlite::params![place, owner, serde_json::to_string(&block(place))?],
         )?;
     }
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
     let owners: Vec<(String, String)> = db
         .prepare("SELECT place,space_id FROM owned_places ORDER BY rowid")?
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
@@ -674,7 +705,8 @@ fn migrates_recorded_versions_to_the_same_schema(remainder: i64) -> Result<()> {
     assert_eq!(MIGRATIONS.last().unwrap().0, SCHEMA_VERSION);
     for version in (0..=SCHEMA_VERSION).filter(|version| version % MIGRATION_TESTS == remainder) {
         let mut db = historical_database(version)?;
-        migrate(&mut db).with_context(|| format!("upgrade from version {version}"))?;
+        migrate_through_v0_17_0(&mut db)
+            .with_context(|| format!("upgrade from version {version}"))?;
         assert_eq!(schema_snapshot(&db)?, expected, "from version {version}");
         assert_eq!(
             db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?,
@@ -737,7 +769,7 @@ fn migration_names_recorded_chats_and_keeps_what_they_own() -> Result<()> {
         Ok(db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))?)
     };
     let events = count(&db, "workspace_events")?;
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
 
     let names = db
         .prepare("SELECT id,name FROM chats ORDER BY id")?
@@ -788,7 +820,7 @@ fn migration_starts_earlier_agents_in_the_mode_they_ran_as() -> Result<()> {
          INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
              VALUES ('chat','repo','planning','claude',1,'b',1);",
     )?;
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
     let mode = |sql: &str| -> Result<Option<String>> { Ok(db.query_row(sql, [], |r| r.get(0))?) };
     assert_eq!(
         mode("SELECT mode FROM executions WHERE id='execution'")?.as_deref(),
@@ -824,7 +856,7 @@ fn migration_keeps_one_parent_for_each_space() -> Result<()> {
                 ('foreign','other','foreign','/foreign','foreign','ready',NULL,'chat');",
     )?;
     let events: i64 = db.query_row("SELECT COUNT(*) FROM workspace_events", [], |r| r.get(0))?;
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
 
     // The workspace a workspace was split from wins over the chat that
     // opened it; a parent that no longer exists, or one in another
@@ -865,7 +897,7 @@ fn migration_numbers_recorded_spaces_workspaces_first() -> Result<()> {
              VALUES ('later','repo','later','claude',1,'b',9),
                 ('earlier','repo','earlier','claude',1,'b',3);",
     )?;
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
     assert_eq!(
         space_numbers(&db)?,
         [
@@ -932,7 +964,7 @@ fn migration_names_spaces_after_their_titles_and_issues_without_journaling() -> 
         Ok(db.query_row("SELECT COUNT(*) FROM workspace_events", [], |r| r.get(0))?)
     };
     let before = events(&db)?;
-    migrate(&mut db)?;
+    migrate_to(&mut db, DROPS_UPGRADE_STATE - 1)?;
     let name = |sql: &str| -> Result<String> { Ok(db.query_row(sql, [], |r| r.get(0))?) };
     assert_eq!(
         name("SELECT name FROM workspaces WHERE id='titled'")?,
@@ -1014,7 +1046,7 @@ fn migration_numbers_items_within_their_space() -> Result<()> {
              (5,'worker','approval_requested','approval 4: hold it; approve with shoal approvals --approve 4','workspace','decided'),
              (6,'worker','approval_withdrawn','approval 4: hold it was withdrawn; no decision needed','workspace',NULL);"#,
     )?;
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
     let numbers = |table: &str| -> Result<Vec<(String, i64, i64)>> {
         let key = match table {
             "questions" => "question",
@@ -1092,7 +1124,7 @@ fn queued_launches_keep_their_order_as_typed_entries() -> Result<()> {
                 VALUES (7,'later','repo','later','claude','{}','{}','queued',1),
                        (3,'first','repo','first','claude','{}','{}','queued',1);",
     )?;
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
     let entries = db
         .prepare("SELECT id,kind FROM agent_queue ORDER BY seq")?
         .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
@@ -1118,7 +1150,7 @@ fn restores_outlive_their_execution_and_launches_keep_their_blockers() -> Result
          INSERT INTO agent_queue(seq,id,kind,repository_id,name,agent,execution_id,state,created_at,workspace_id)
                 VALUES (2,'restore','restore','repo','worker','claude','execution','queued',1,'workspace');",
     )?;
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
     let count = |sql: &str| -> Result<i64> { Ok(db.query_row(sql, [], |r| r.get(0))?) };
     assert_eq!(
         count("SELECT COUNT(*) FROM agent_queue_blockers WHERE kind='space'")?,
@@ -1142,7 +1174,7 @@ fn continued_workspaces_keep_their_protection_as_holds() -> Result<()> {
         "INSERT INTO workspace_continuation(workspace_id) VALUES ('workspace')",
         [],
     )?;
-    migrate(&mut db)?;
+    migrate_to(&mut db, DROPS_UPGRADE_STATE - 1)?;
     let hold: (String, String, bool) = db.query_row(
         "SELECT name,reason,from_continuation FROM workspace_holds WHERE workspace_id='workspace'",
         [],
@@ -1170,7 +1202,7 @@ fn migrated_hold_reason_no_longer_names_the_retired_command() -> Result<()> {
             INSERT INTO workspace_holds(workspace_id,name,reason,created_at,from_continuation)
                 VALUES ('other','thread','Kept by shoal continue',1,0);",
     )?;
-    migrate(&mut db)?;
+    migrate_to(&mut db, DROPS_UPGRADE_STATE - 1)?;
     let reasons = db
         .prepare("SELECT reason FROM workspace_holds ORDER BY workspace_id")?
         .query_map([], |r| r.get::<_, String>(0))?
@@ -1209,7 +1241,7 @@ fn removal_snapshots_become_checkpoints_their_records_name() -> Result<()> {
         })
         .to_string()],
     )?;
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
     let checkpoint: String = db.query_row(
         "SELECT record FROM checkpoints WHERE workspace_id='gone' AND number=1",
         [],
@@ -1301,7 +1333,7 @@ fn migrated_notifications_name_the_numbered_commands() -> Result<()> {
                 (2,'w','agent_message','run shoal access approve 7'),
                 (3,'w','question_asked','question 4 (answer with shoal answer 4): Which database?');",
         )?;
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
     let rows = db
         .prepare("SELECT kind,message FROM notifications ORDER BY id")?
         .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
@@ -1338,7 +1370,7 @@ fn migration_keeps_question_numbers_numbers_approvals_and_drops_delivered_questi
                 ('grant','workspace','port/web','web','{"id":"grant"}',0),
                 ('land','workspace','land','branch','{"id":"land"}',1);"#,
         )?;
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
     let questions = db
         .prepare("SELECT id,number FROM questions ORDER BY id")?
         .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))?
@@ -1375,7 +1407,7 @@ fn migration_retires_keep_requests_and_requests_the_cleanup_they_awaited() -> Re
                 ('workspace','{"head":"abc","cleanup":false,"error":null,"keep_request":1}'),
                 ('kept','{"head":"def","cleanup":false,"error":null}');"#,
     )?;
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
     let requests = db
         .prepare("SELECT id FROM access_requests")?
         .query_map([], |r| r.get::<_, String>(0))?
@@ -1411,7 +1443,7 @@ fn migration_remembers_the_latest_branch_each_removal_record_names() -> Result<(
                 ('new','kept','new',9,'{"removed_at":2,"checkpoint":{"branch":"topic","head":"bbb"}}'),
                 ('detached','kept','detached',9,'{"removed_at":3,"checkpoint":{"branch":null,"head":"ccc"}}');"#,
         )?;
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
     let kept = db
         .prepare("SELECT repository_id,branch,head,kept_at FROM kept_branches")?
         .query_map([], |r| {
@@ -1565,7 +1597,7 @@ fn migration_keeps_each_space_completion_in_one_table() -> Result<()> {
              VALUES ('workspace','{"head":"def","cleanup":false}','issue');"#,
     )?;
     let events: i64 = db.query_row("SELECT COUNT(*) FROM workspace_events", [], |r| r.get(0))?;
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
 
     let completions = db
         .prepare("SELECT space_id,record,cause FROM space_completion ORDER BY space_id")?
@@ -1628,11 +1660,63 @@ fn failed_migration_rolls_back_all_pending_steps() -> Result<()> {
         1
     );
     db.execute_batch("ALTER TABLE executions DROP COLUMN wrapper;")?;
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
     assert_eq!(
         executions(&db, &SpaceId::from("workspace"))?[0].state,
         ExecutionState::Running
     );
+    Ok(())
+}
+
+#[test]
+fn upgrade_state_left_unconsumed_refuses_the_migration_that_drops_it() -> Result<()> {
+    for (table, row) in [
+        (
+            "upgraded_chat_agents",
+            "INSERT INTO upgraded_chat_agents(chat_id,saved,automatic) VALUES ('chat',1,1)",
+        ),
+        (
+            "chat_legacy_names",
+            "INSERT INTO chat_legacy_names(chat_id,name) VALUES ('chat','before the cut')",
+        ),
+        (
+            "earlier_attached_files",
+            "INSERT INTO earlier_attached_files(repository_id) VALUES ('repo')",
+        ),
+    ] {
+        let mut db = historical_database(V0_17_0)?;
+        db.execute(
+            "INSERT INTO chats(id,repository_id,name,agent,started_at)
+                VALUES ('chat','repo','talk','claude',1)",
+            [],
+        )?;
+        db.execute(row, [])?;
+        let error = format!("{:#}", migrate(&mut db).unwrap_err());
+        assert!(
+            error.contains(table) && error.contains("v0.17.0"),
+            "{table}: {error}"
+        );
+        assert_eq!(
+            db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?,
+            V0_17_0
+        );
+        let rows: i64 = db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))?;
+        assert_eq!(rows, 1, "{table}");
+    }
+    Ok(())
+}
+
+#[test]
+fn a_hold_shoal_continue_made_stays_as_an_ordinary_hold() -> Result<()> {
+    let mut db = historical_database(V0_17_0)?;
+    db.execute(
+        "INSERT INTO workspace_holds(workspace_id,name,reason,created_at,from_continuation)
+            VALUES ('workspace','continue','Converted from an earlier Shoal version',1,1)",
+        [],
+    )?;
+    migrate(&mut db)?;
+    let held: String = db.query_row("SELECT name FROM workspace_holds", [], |r| r.get(0))?;
+    assert_eq!(held, "continue");
     Ok(())
 }
 
@@ -1835,7 +1919,7 @@ async fn failed_quarantine_rolls_back_without_undoing_migration() {
                 CREATE TRIGGER fail_quarantine BEFORE UPDATE OF state ON workspaces
                     BEGIN SELECT RAISE(ABORT, 'quarantine blocked'); END;",
             )?;
-            Ok(())
+            start_v0_17_0(db)
         })
         .await
         .unwrap();
@@ -1872,7 +1956,7 @@ async fn approval_records_survive_reopen_and_follow_workspace_ownership() {
                 PRAGMA user_version=16;
                 INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
                 INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES ('workspace','repo','worker','/work','worker','ready');")?;
-            Ok(())
+            start_v0_17_0(db)
         }).await.unwrap();
     let migrated = Store::open(path.clone()).await.unwrap();
     migrated.run(|db| {
@@ -1906,7 +1990,7 @@ async fn approval_records_survive_reopen_and_follow_workspace_ownership() {
 async fn migrates_original_database_without_losing_ownership_records() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("state.db");
-    let db = Connection::open(&path).unwrap();
+    let mut db = Connection::open(&path).unwrap();
     db.execute_batch("CREATE TABLE repositories(id TEXT PRIMARY KEY,path TEXT UNIQUE,source TEXT,last_used INTEGER);
             CREATE TABLE workspaces(id TEXT PRIMARY KEY,repository_id TEXT,name TEXT UNIQUE,path TEXT UNIQUE,branch TEXT,state TEXT,error TEXT);
             CREATE TABLE executions(id TEXT PRIMARY KEY,workspace_id TEXT,state TEXT);
@@ -1914,6 +1998,7 @@ async fn migrates_original_database_without_losing_ownership_records() {
             INSERT INTO workspaces VALUES ('workspace','repo','feature','/work','feature','ready',NULL);
             INSERT INTO executions VALUES ('execution','workspace','running');
             PRAGMA user_version=1;").unwrap();
+    start_v0_17_0(&mut db).unwrap();
     drop(db);
     let store = Store::open(path.clone()).await.unwrap();
     store
@@ -1978,7 +2063,7 @@ async fn migrates_semaphore_leases_and_definitions_from_version_eight() {
             let definition = r#"{"capacity":2,"reason":null,"resources":{"worker":{"capacity":2,"reason":null}}}"#;
             db.execute("INSERT INTO resource_pools(scope,name,definition) VALUES ('global','worker',?1)", [definition])?;
             db.execute("INSERT INTO resource_leases VALUES ('lease','workspace','global','worker','default','worker',NULL,123)", [])?;
-            Ok(())
+            start_v0_17_0(db)
         }).await.unwrap();
     let migrated = Store::open(path.clone()).await.unwrap();
     migrated
@@ -2036,7 +2121,7 @@ async fn migrates_setup_completion_without_losing_interrupted_state() {
                     ALTER TABLE workspaces DROP COLUMN setup_finished;
                     PRAGMA user_version=15;",
                 )?;
-                Ok(())
+                start_v0_17_0(db)
             })
             .await
             .unwrap();
@@ -2131,7 +2216,7 @@ fn chats_may_have_no_repository_once_migrated_and_keep_what_references_them() ->
         INSERT INTO chat_messages(chat_id,created_at,workspace,message)
             VALUES ('chat',1,'worker','Hello');",
     )?;
-    migrate(&mut db)?;
+    migrate_through_v0_17_0(&mut db)?;
     db.execute(
         "INSERT INTO chats(id,name,agent,started_at)
             VALUES ('master','master','codex',2)",
@@ -2243,7 +2328,7 @@ fn chats_keep_their_agents_to_restore_once_they_record_no_process() -> Result<()
          INSERT INTO space_agent_state(space_id,state,since) VALUES ('running','working',1);
          INSERT INTO workspace_events(record) VALUES ('{\"kind\":\"chat_saved\"}');",
     )?;
-    migrate(&mut db)?;
+    migrate_to(&mut db, DROPS_UPGRADE_STATE - 1)?;
     let mut statement = db.prepare(
         "SELECT chat_id,saved,automatic,turn FROM upgraded_chat_agents ORDER BY chat_id",
     )?;

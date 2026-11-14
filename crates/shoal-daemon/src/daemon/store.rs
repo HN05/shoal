@@ -19,6 +19,7 @@ use crate::{
 #[cfg(test)]
 mod benchmark;
 mod chat_names;
+mod consumed_upgrades;
 #[cfg(test)]
 mod event_tests;
 mod item_numbers;

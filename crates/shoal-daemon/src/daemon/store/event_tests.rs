@@ -200,6 +200,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    db.execute_batch(include_str!("consumed_upgrades_undo.sql"))?;
     db.execute_batch(include_str!("removed_spaces_undo.sql"))?;
     db.execute_batch(include_str!("gate_undo.sql"))?;
     db.execute_batch(include_str!("removed_space_files_undo.sql"))?;

@@ -3563,7 +3563,11 @@ proven stopped while preserving work and leases; `stop` stops survivors and asks
 before forgetting an execution it cannot prove ended. Every other command reports
 an unreachable or mismatched daemon itself, and `shoal cd` says when shell
 integration is not loaded. Opening
-persistence only migrates schema. Under the daemon lock, startup then atomically
+persistence only migrates schema. State that carries one upgrade across it,
+for that release's daemon to consume once, goes in a later migration, which
+refuses a database that still holds some and names the release to start
+first; earlier migrations stay, so a database that skips releases runs them
+in order. Under the daemon lock, startup then atomically
 quarantines interrupted operations in a separate transaction before ownership
 auditing, serving requests, or cleanup; failure aborts startup and leaves committed
 migrations available for retry. The daemon binds its socket before this work:

@@ -703,6 +703,8 @@ configured command for another agent, plus proven child
   only migrates schema; daemon startup
   quarantines interrupted operations atomically after migration and before ownership
   auditing, requests, or cleanup. Failure aborts startup without undoing migration.
+  A migration that drops one-time upgrade state refuses a database that still
+  holds some, naming the release to start first; earlier migrations stay.
   The separate native simulator state enum preserves
   unfamiliar strings and native spellings; only confirmed shutdown frees running
   capacity. Schema and state-file changes need a compatibility

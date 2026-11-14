@@ -5,7 +5,7 @@
 //! The migration renames without journal events, and a workspace's
 //! `renamed` event then records a new name or a branch rename. A cut chat
 //! keeps its name before the cut in `chat_legacy_names`, which its files
-//! were named after until the daemon moves them.
+//! were named after until the daemon of v0.17.0 or earlier moved them.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension as _, params};
 
@@ -156,7 +156,8 @@ fn name_title_events(db: &Connection) -> Result<()> {
 }
 
 /// The names chats had before the cut, which their files were named
-/// after; the daemon empties it once it has moved them.
+/// after; the daemon of v0.17.0 or earlier emptied it once it had moved
+/// them.
 fn create_legacy_chat_names(db: &Connection) -> Result<()> {
     db.execute_batch(
         "CREATE TABLE IF NOT EXISTS chat_legacy_names (

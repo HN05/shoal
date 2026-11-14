@@ -193,7 +193,7 @@ fn resource_lists_propagate_decoding_and_prepare_errors() -> Result<()> {
 #[test]
 fn execution_owner_reads_search_migrated_index() -> Result<()> {
     let mut db = populated_database()?;
-    migrate(&mut db)?;
+    super::tests::migrate_through_v0_17_0(&mut db)?;
     check_query_growth(
         &db,
         &executions_query(),
@@ -206,7 +206,7 @@ fn execution_owner_reads_search_migrated_index() -> Result<()> {
 #[test]
 fn repository_workspace_reads_search_migrated_index() -> Result<()> {
     let mut db = populated_database()?;
-    migrate(&mut db)?;
+    super::tests::migrate_through_v0_17_0(&mut db)?;
     // A missing repository exercises the entire lookup even with EXISTS short-circuiting.
     check_query_growth(
         &db,
@@ -262,6 +262,7 @@ async fn v17_upgrade_and_reopen_preserve_ownership_leases_and_executions() -> Re
             child='{"pid":456,"birth":"child"}', group_id=456;"#,
     )?;
     let before = ownership_snapshot(&mut old)?;
+    super::tests::start_v0_17_0(&mut old)?;
     old.execute("VACUUM INTO ?1", [path.to_str().unwrap()])?;
     drop(old);
     for _ in 0..2 {
