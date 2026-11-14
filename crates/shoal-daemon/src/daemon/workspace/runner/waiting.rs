@@ -16,8 +16,8 @@ use crate::client::space_names::SpaceName;
 use crate::{
     daemon::{log, workspace::Manager},
     forge::{
-        ForgeRepo,
-        ci::runner::{JobRun, Trigger},
+        ForgeRepo, RepoRequests,
+        ci::runner::{JobRun, RunnerRequests, Trigger},
     },
     git::default_branch::{self, DefaultBranchLookup},
     model::{QueuedJob, Repository},

@@ -9,10 +9,13 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Runs,
-    capability::Capability,
-    ci::run_action::Run,
+    capability::{Capability, CapabilityRequests},
+    ci::{
+        CiSteps,
+        run_action::{Run, RunActionSteps},
+    },
     numbers::PullNumber,
-    transport::api::{HttpMethod, Request},
+    transport::api::{HttpMethod, Request, TransportRequests},
 };
 
 /// The runs one page of a commit's runs holds.
@@ -32,6 +35,8 @@ pub struct WaitingRun {
     pub workflow: Option<String>,
 }
 
+/// Reading and approving runs that wait for approval.
+#[shoal_forge_derive::extension(pub ApprovalRequests)]
 impl ForgeRepo {
     /// The runs on the commit `head` that wait for approval, reading page
     /// after page while pages are full; none where the forge holds no runs

@@ -10,12 +10,12 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Checks,
-    capability::Capability,
-    ci::{CiCheck, JobState, Location},
-    items::link::ItemKind,
+    capability::{Capability, CapabilityRequests},
+    ci::{CiCheck, CiSteps, JobState, Location},
+    items::{action::ActionRequests, link::ItemKind},
     numbers::PullNumber,
     review::view::ItemView,
-    transport::api::Request,
+    transport::api::{Request, TransportRequests},
 };
 
 /// The most of a log's end a [`CheckLog`] keeps, in bytes.
@@ -92,6 +92,8 @@ pub fn validate_check_name(name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Reading failed checks' logs and PR heads.
+#[shoal_forge_derive::extension(pub CheckRequests, pub(crate) CheckSteps)]
 impl ForgeRepo {
     pub async fn failed_check_log(
         &self,

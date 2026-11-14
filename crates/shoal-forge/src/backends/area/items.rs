@@ -8,7 +8,7 @@ use crate::{
     account::Account,
     backends::{Backend, ForgeKind, LoginHint, rest},
     items::{
-        action::Edit,
+        action::{ActionRequests, Edit},
         comment::Found,
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState},

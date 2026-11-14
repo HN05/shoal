@@ -10,9 +10,9 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::{Manager, conflicts::recorded},
     forge::{
-        ForgeRepo,
+        ForgeRepo, RepoRequests,
         items::{
-            action::Action,
+            action::{Action, ActionRequests},
             item::Item,
             link::ItemKind,
             reference::{ItemInput, ItemRef},

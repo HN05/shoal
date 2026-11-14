@@ -18,8 +18,9 @@ use crate::{
         workspace::Manager,
     },
     forge::{
-        ForgeRepo,
+        ForgeRepo, RepoRequests,
         items::{
+            issue::IssueRequests,
             link::{ItemKind, LinkKind},
             reference::{ItemInput, ItemRef},
         },

@@ -2,8 +2,11 @@
 use anyhow::Result;
 
 use crate::{
-    ForgeRepo, account::Account, items::item::text, review::reviewers::Reviewer,
-    transport::api::Request,
+    ForgeRepo,
+    account::Account,
+    items::item::text,
+    review::reviewers::Reviewer,
+    transport::api::{Request, TransportRequests},
 };
 
 /// The users GitHub can assign the repository's items to.

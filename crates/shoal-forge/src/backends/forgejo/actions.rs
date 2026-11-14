@@ -12,10 +12,10 @@ use crate::{
         CiAction, Job, JobState, Location, Operation,
         checks::{CheckLog, MAX_LOG_BYTES, NoJobLog},
     },
-    items::link::ItemKind,
+    items::{action::ActionSteps, link::ItemKind},
     numbers::{JobId, RunId, RunNumber},
     transport::{
-        api::{Request, TIMEOUT, curl_body},
+        api::{Request, TIMEOUT, TransportRequests, curl_body},
         programs,
     },
 };

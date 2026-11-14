@@ -10,8 +10,9 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::{Backend, Runs},
-    capability::Capability,
+    capability::{Capability, CapabilityRequests},
     ci::workflow::{WorkflowLink, is_workflow_url},
+    transport::api::TransportRequests,
 };
 
 /// A workflow run to start.
@@ -91,6 +92,8 @@ pub(crate) fn workflow_segment(workflow: &str) -> Result<&str> {
     Ok(workflow)
 }
 
+/// Starting workflow runs.
+#[shoal_forge_derive::extension(pub RunRequests)]
 impl ForgeRepo {
     /// Start `run` and return it with the URL the forge reports.
     pub async fn start_run(&self, account: &Account, run: &NewRun) -> Result<StartedRun> {

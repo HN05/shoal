@@ -8,9 +8,9 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Attachments,
-    capability::Capability,
+    capability::{Capability, CapabilityRequests},
     transport::{
-        api::http_body,
+        api::{TransportRequests, http_body},
         response::{Fetched, Headed},
     },
 };
@@ -22,6 +22,8 @@ pub struct Download {
     pub bytes: Vec<u8>,
 }
 
+/// Downloading files from the repository's forge.
+#[shoal_forge_derive::extension(pub DownloadRequests)]
 impl ForgeRepo {
     /// The file at `url` on this repository's forge, read as `account`.
     pub async fn download(&self, account: &Account, url: &str) -> Result<Download> {

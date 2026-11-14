@@ -3,10 +3,15 @@
 use anyhow::{Context, Result};
 
 use crate::{
-    ForgeRepo, account::Account, backends::Backend, capability::Capability,
+    ForgeRepo,
+    account::Account,
+    backends::Backend,
+    capability::{Capability, CapabilityRequests},
     repo::remote_url::RemoteUrl,
 };
 
+/// Forking the repository.
+#[shoal_forge_derive::extension(pub ForkRequests)]
 impl ForgeRepo {
     /// Whether `account` may push branches to the repository.
     pub async fn pushable(&self, account: &Account) -> Result<bool> {

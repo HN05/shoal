@@ -78,19 +78,6 @@ impl ForgeRepo {
         Self::on(kind, host, path, web_scheme)
     }
 
-    /// The repository `remote` names, on the forge `hosts` says its host
-    /// serves, which this process then remembers when the host answered it.
-    pub async fn resolve(remote: &str, hosts: &impl HostTypes) -> Result<Self> {
-        let remote = RemoteUrl::parse(remote).context("issue lookup needs a forge remote")?;
-        let (host, path, web_scheme) = Self::location(&remote)?;
-        let resolved = hosts.forge_type(&host, web_scheme).await?;
-        if let HostType::Answered(kind) = resolved {
-            hosts::learn(&host, kind);
-        }
-        let kind = resolved.kind();
-        Self::on(kind, host, path, web_scheme)
-    }
-
     /// The web host, repository path and web scheme of `remote`.
     fn location<'a>(remote: &RemoteUrl<'a>) -> Result<(String, &'a str, &'static str)> {
         ensure!(
@@ -162,17 +149,6 @@ impl ForgeRepo {
         Ok(())
     }
 
-    /// The repository `input` names: a remote or web URL, on any forge, or
-    /// an `owner/repository` path on this repository's host.
-    pub async fn resolve_named(&self, input: &str, hosts: &impl HostTypes) -> Result<Self> {
-        if input.contains(':') {
-            return Self::resolve(input, hosts).await;
-        }
-        let path = repo::remote_url::repository_path(input);
-        Self::on(self.kind, self.host.clone(), path, self.web_scheme)
-            .with_context(|| format!("{input} names no repository"))
-    }
-
     /// `host` as a repository without a path, for asking it as `kind`.
     pub(crate) fn host(host: &str, web_scheme: &'static str, kind: ForgeKind) -> Self {
         Self {
@@ -181,17 +157,6 @@ impl ForgeRepo {
             path: String::new(),
             web_scheme,
         }
-    }
-
-    /// The issue `number`, open or closed, which must have a title.
-    pub async fn issue_details(
-        &self,
-        account: &account::Account,
-        number: IssueNumber,
-    ) -> Result<items::item::Current> {
-        let issue = self.kind.issue_details(self, account, number).await?;
-        ensure!(!issue.item.title.trim().is_empty(), "issue title is empty");
-        Ok(issue)
     }
 
     /// The user, organization or workspace the repository belongs to.
@@ -214,16 +179,6 @@ impl ForgeRepo {
         let (number, url) = self.kind.pull_route().resolve(self, input)?;
         Ok((PullNumber::new(number), url))
     }
-
-    /// Fail closed on changed output. Only commits actually listed in the
-    /// merged PR can authorize cleanup, including squash/rebase merges.
-    pub async fn merged_commits(
-        &self,
-        account: &account::Account,
-        number: PullNumber,
-    ) -> Result<Option<Vec<CommitId>>> {
-        self.kind.merged_commits(self, account, number).await
-    }
 }
 
 /// A PR's branches, for checking it out locally.
@@ -245,7 +200,54 @@ pub struct PullRequest {
     pub head_ref: Option<String>,
 }
 
+/// Reading a repository's PRs and resolving the forge a host serves.
+#[shoal_forge_derive::extension(pub RepoRequests, pub(crate) RepoSteps)]
 impl ForgeRepo {
+    /// The repository `remote` names, on the forge `hosts` says its host
+    /// serves, which this process then remembers when the host answered it.
+    pub async fn resolve(remote: &str, hosts: &impl HostTypes) -> Result<Self> {
+        let remote = RemoteUrl::parse(remote).context("issue lookup needs a forge remote")?;
+        let (host, path, web_scheme) = Self::location(&remote)?;
+        let resolved = hosts.forge_type(&host, web_scheme).await?;
+        if let HostType::Answered(kind) = resolved {
+            hosts::learn(&host, kind);
+        }
+        let kind = resolved.kind();
+        Self::on(kind, host, path, web_scheme)
+    }
+
+    /// The repository `input` names: a remote or web URL, on any forge, or
+    /// an `owner/repository` path on this repository's host.
+    pub async fn resolve_named(&self, input: &str, hosts: &impl HostTypes) -> Result<Self> {
+        if input.contains(':') {
+            return Self::resolve(input, hosts).await;
+        }
+        let path = repo::remote_url::repository_path(input);
+        Self::on(self.kind, self.host.clone(), path, self.web_scheme)
+            .with_context(|| format!("{input} names no repository"))
+    }
+
+    /// The issue `number`, open or closed, which must have a title.
+    pub async fn issue_details(
+        &self,
+        account: &account::Account,
+        number: IssueNumber,
+    ) -> Result<items::item::Current> {
+        let issue = self.kind.issue_details(self, account, number).await?;
+        ensure!(!issue.item.title.trim().is_empty(), "issue title is empty");
+        Ok(issue)
+    }
+
+    /// Fail closed on changed output. Only commits actually listed in the
+    /// merged PR can authorize cleanup, including squash/rebase merges.
+    pub async fn merged_commits(
+        &self,
+        account: &account::Account,
+        number: PullNumber,
+    ) -> Result<Option<Vec<CommitId>>> {
+        self.kind.merged_commits(self, account, number).await
+    }
+
     /// The PR `pull`, of this repository, with where its head is.
     pub async fn pull_request(
         &self,

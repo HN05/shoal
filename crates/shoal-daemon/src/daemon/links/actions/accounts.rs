@@ -10,7 +10,7 @@ use crate::{
         forges::{Forges, Whose},
     },
     daemon::workspace::Manager,
-    forge::{ForgeRepo, account::Account},
+    forge::{ForgeRepo, RepoRequests, account::Account},
     model::{Repository, Workspace},
     protocol::ItemContext,
 };

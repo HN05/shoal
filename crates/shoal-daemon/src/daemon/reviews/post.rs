@@ -12,8 +12,14 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{log, workspace::Manager},
     forge::{
-        items::{action::Action, link::ItemKind},
-        review::submit::{HeadMoved, LineComment, NewReview, ReviewVerdict, Side},
+        items::{
+            action::{Action, ActionRequests},
+            link::ItemKind,
+        },
+        review::{
+            diff::DiffRequests,
+            submit::{HeadMoved, LineComment, NewReview, ReviewVerdict, Side},
+        },
     },
     model::Workspace,
     protocol::ItemContext,

@@ -10,10 +10,10 @@ use crate::{
     config::forges::{self, Forges},
     daemon::{log, workspace::Manager},
     forge::{
-        ForgeRepo,
+        ForgeRepo, RepoRequests,
         backends::ForgeKind,
         hosts::{self, HostType, HostTypes},
-        items::reference::ItemRef,
+        items::reference::{ItemRef, ReferenceRequests},
     },
 };
 

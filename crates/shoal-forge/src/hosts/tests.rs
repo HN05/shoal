@@ -1,4 +1,5 @@
 use super::*;
+use crate::RepoRequests;
 
 /// Serializes the tests that replace this process's pins.
 static PIN_TESTS: Mutex<()> = Mutex::new(());

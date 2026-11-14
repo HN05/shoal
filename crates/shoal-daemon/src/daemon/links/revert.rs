@@ -20,7 +20,7 @@ use crate::{
             item::Opened,
             link::ItemKind,
             reference::ItemInput,
-            revert::{MergedPull, NewRevert, revert_options},
+            revert::{MergedPull, NewRevert, RevertRequests, revert_options},
         },
     },
 };

@@ -210,6 +210,8 @@ pub struct Entry {
     pub hint: Option<String>,
 }
 
+/// What the repository's forge supports.
+#[shoal_forge_derive::extension(pub CapabilityRequests, pub(crate) CapabilitySteps)]
 impl ForgeRepo {
     /// Refuse a request that needs `capability` when the forge lacks it.
     pub fn require(&self, capability: Capability) -> Result<()> {

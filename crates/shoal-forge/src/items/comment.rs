@@ -7,9 +7,14 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::{Activity, Items},
-    items::{action::Acted, link::ItemKind, reaction::Subject},
+    items::{
+        action::{Acted, ActionRequests},
+        link::ItemKind,
+        reaction::Subject,
+    },
     numbers::CommentId,
     review::view::Details,
+    transport::api::TransportRequests,
     updates::Edited,
 };
 
@@ -42,6 +47,8 @@ pub(crate) struct Found {
     pub body: String,
 }
 
+/// Commenting on items and editing comments.
+#[shoal_forge_derive::extension(pub(crate) CommentRequests)]
 impl ForgeRepo {
     /// Comment `comment` of item `number`, found among the item's comments
     /// and inline comments, which forges number apart or let a comment

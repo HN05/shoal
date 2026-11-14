@@ -17,7 +17,7 @@ use crate::{
     },
     items::attach::{Attachment, Holder, Media},
     transport::{
-        api::{Request, Upload, encode},
+        api::{Request, TransportRequests, Upload, encode},
         download,
         response::Fetched,
     },

@@ -15,7 +15,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::{Activity, rest::RestCheck},
-    ci::check_state::CheckState,
+    ci::{check_state::CheckState, run_view::RunViewRequests},
     items::{item::Current, link::LinkKind},
     numbers::{IssueNumber, PullNumber},
     review::status::CheckResult,
@@ -593,6 +593,8 @@ pub(crate) fn discussion_key(id: &serde_json::Value) -> String {
     activity_key(DISCUSSION, id)
 }
 
+/// Reading what changed on watched items.
+#[shoal_forge_derive::extension(pub UpdateRequests)]
 impl ForgeRepo {
     /// The activity of `item`.
     pub async fn item_activity(

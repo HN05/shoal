@@ -10,7 +10,7 @@ use crate::{
     account::Account,
     backends::Reviews,
     items::{
-        item::{Current, text},
+        item::{Current, ItemRequests, text},
         link::ItemKind,
     },
     numbers::{CommentId, PullNumber},
@@ -20,7 +20,7 @@ use crate::{
         submit::{PlacedReview, ReviewVerdict, Submission},
         thread::{Target, Thread},
     },
-    transport::api::{HttpMethod, Request},
+    transport::api::{HttpMethod, Request, TransportRequests},
     updates::discussion_key,
 };
 

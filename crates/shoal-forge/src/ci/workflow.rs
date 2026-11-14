@@ -3,8 +3,13 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    ForgeRepo, IssueInput, account::Account, backends::Backend, ci::run::workflow_segment,
-    hosts::HostTypes, items::link::decode_branch, transport::api::Request,
+    ForgeRepo, IssueInput, RepoRequests,
+    account::Account,
+    backends::Backend,
+    ci::run::workflow_segment,
+    hosts::HostTypes,
+    items::link::decode_branch,
+    transport::api::{Request, TransportRequests},
 };
 
 const WORKFLOW_URL: &str = "expected a workflow URL ending in /actions/workflows/<file> or \
@@ -88,6 +93,8 @@ fn file(path: &str) -> Option<(&str, &str, Option<&str>)> {
     })
 }
 
+/// Reading the repository's workflows.
+#[shoal_forge_derive::extension(pub WorkflowRequests)]
 impl ForgeRepo {
     /// The repository a workflow's web URL belongs to, on the forge `hosts`
     /// says its host serves, and the workflow it names.

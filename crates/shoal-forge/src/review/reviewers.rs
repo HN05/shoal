@@ -4,7 +4,11 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ForgeRepo, account::Account, backends::Reviews, items::link::ItemKind, numbers::PullNumber,
+    ForgeRepo,
+    account::Account,
+    backends::Reviews,
+    items::{action::ActionRequests, link::ItemKind},
+    numbers::PullNumber,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,6 +46,8 @@ pub(crate) fn team_name(name: &str) -> Option<(&str, &str)> {
     name.split_once('/')
 }
 
+/// Listing who can review a PR.
+#[shoal_forge_derive::extension(pub ReviewerRequests)]
 impl ForgeRepo {
     /// The users and teams PR `number` can ask for a review, in the forge's
     /// order, leaving out its author.

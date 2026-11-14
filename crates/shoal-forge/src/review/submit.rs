@@ -16,12 +16,12 @@ use crate::{
     account::Account,
     backends::{Items as _, Reviews},
     items::{
-        action::{Acted, after_post},
+        action::{Acted, ActionRequests, after_post},
         link::ItemKind,
     },
     numbers::PullNumber,
-    review::diff::{Bases, Diff, Placed},
-    transport::api::Request,
+    review::diff::{Bases, Diff, DiffRequests, Placed},
+    transport::api::{Request, TransportRequests},
     updates::Edited,
 };
 
@@ -215,7 +215,7 @@ impl Submission {
 
 /// What sending a submission left: the responses to the requests sent, in
 /// order, and the failure that stopped it, if any.
-struct Submitted {
+pub(crate) struct Submitted {
     responses: Vec<Value>,
     failure: Option<anyhow::Error>,
     /// Whether a request that posts the review reached the forge.
@@ -269,6 +269,8 @@ async fn discarded(forge: &impl Exchange, drafts: &[Value], error: anyhow::Error
     error
 }
 
+/// Submitting reviews.
+#[shoal_forge_derive::extension(pub SubmitRequests, pub(crate) SubmitSteps)]
 impl ForgeRepo {
     /// Submit `review` of PR `number` as `account`, refusing it before
     /// anything is sent when a line comment is off the PR's diff.

@@ -9,11 +9,15 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::{Activity, Merging},
-    capability::Capability,
+    capability::{Capability, CapabilityRequests},
     ci::approval::WaitingRun,
-    items::{action::MergeMethod, link::ItemKind, reaction::Reaction},
+    items::{
+        action::MergeMethod,
+        link::ItemKind,
+        reaction::{Reaction, ReactionRequests},
+    },
     numbers::{CommentId, PullNumber},
-    review::status::{CheckResult, PrStatus, ReviewState},
+    review::status::{CheckResult, PrStatus, ReviewState, StatusRequests},
 };
 
 /// A failed lookup leaves `details` empty, or the discussion it would have
@@ -131,6 +135,8 @@ pub struct ReviewComment {
     pub reactions: Vec<Reaction>,
 }
 
+/// Reading items as views.
+#[shoal_forge_derive::extension(pub ViewRequests, pub(crate) ViewSteps)]
 impl ForgeRepo {
     /// The item at `url` with its discussion when `comments` is set; PRs also
     /// carry the state `shoal status` reports.

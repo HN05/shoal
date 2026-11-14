@@ -16,7 +16,7 @@ use crate::{
         run_view::{RunFilter, RunJob},
     },
     numbers::RunNumber,
-    transport::api::{HttpMethod, Request},
+    transport::api::{HttpMethod, Request, TransportRequests},
 };
 
 impl Runs for Bitbucket {

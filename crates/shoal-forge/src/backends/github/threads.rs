@@ -8,7 +8,7 @@ use crate::{
     account::Account,
     numbers::{CommentId, PullNumber},
     review::thread::{Target, Thread},
-    transport::api::{HttpMethod, Request},
+    transport::api::{HttpMethod, Request, TransportRequests},
 };
 
 /// A GitHub review thread, which only GraphQL reports.

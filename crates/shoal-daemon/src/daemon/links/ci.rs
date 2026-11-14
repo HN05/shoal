@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use crate::{
     daemon::{events, workspace::Manager},
     forge::{
-        ci::{CiActed, CiAction, checks::validate_check_name},
+        ci::{CiActed, CiAction, CiRequests, checks::validate_check_name},
         items::{link::ItemKind, reference::ItemInput},
     },
     protocol::ItemContext,

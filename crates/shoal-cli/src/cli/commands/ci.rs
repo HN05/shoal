@@ -16,7 +16,7 @@ use crate::{
         ui,
     },
     forge::{
-        capability::Capability,
+        capability::{Capability, CapabilityRequests},
         ci::{CiAction, run_view::RunFilter},
         items::reference::ItemRef,
     },

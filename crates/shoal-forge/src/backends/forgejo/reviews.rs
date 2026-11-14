@@ -18,7 +18,7 @@ use crate::{
         submit::{PlacedReview, ReviewVerdict, Side, Submission},
         thread::{Target, Thread},
     },
-    transport::api::{HttpMethod, Request},
+    transport::api::{HttpMethod, Request, TransportRequests},
     updates::activity_key,
 };
 

@@ -11,8 +11,8 @@ use crate::{
     forge::{
         ForgeRepo,
         account::Account,
-        download::Download,
-        raw::{HttpMethod, RawRequest},
+        download::{Download, DownloadRequests},
+        raw::{HttpMethod, RawRequest, RawRequests},
     },
     protocol::ItemContext,
 };

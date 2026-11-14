@@ -6,12 +6,14 @@ use crate::{
     ForgeRepo,
     account::Account,
     items::{
-        action::{Action, Edit},
+        action::{Action, ActionSteps, Edit},
         link::ItemKind,
     },
     numbers::PullNumber,
 };
 
+/// Changing a PR's base branch.
+#[shoal_forge_derive::extension(pub RetargetRequests)]
 impl ForgeRepo {
     /// Retargeting follows the user's merge, so it uses the user's login.
     pub async fn retarget(

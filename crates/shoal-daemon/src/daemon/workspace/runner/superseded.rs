@@ -16,7 +16,16 @@ use shoal_refs::CommitId;
 use crate::client::space_names::SpaceName;
 use crate::{
     daemon::{log, notifications::NotificationKind, store::json_column, workspace::Manager},
-    forge::{ForgeRepo, ci::runner::JobRun, items::reference::ItemRef, numbers::PullNumber},
+    forge::{
+        ForgeRepo,
+        ci::{
+            checks::CheckRequests,
+            run_action::RunActionRequests,
+            runner::{JobRun, RunnerRequests},
+        },
+        items::reference::ItemRef,
+        numbers::PullNumber,
+    },
     model::QueuedJob,
     state::{QueueKind, QueueState},
 };

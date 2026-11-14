@@ -1,4 +1,5 @@
 use super::*;
+use crate::updates::UpdateRequests;
 use serde_json::json;
 
 #[test]

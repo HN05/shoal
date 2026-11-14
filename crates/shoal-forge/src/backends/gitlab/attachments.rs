@@ -10,7 +10,7 @@ use crate::{
     backends::Attachments,
     items::attach::{Attachment, Holder},
     transport::{
-        api::{Request, Upload, encode},
+        api::{Request, TransportRequests, Upload, encode},
         download,
         response::Fetched,
     },

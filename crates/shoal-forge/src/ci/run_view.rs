@@ -9,10 +9,14 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::{Checks, Runs},
-    capability::Capability,
-    ci::{JobState, checks::CheckLog, run_action::Run},
+    capability::{Capability, CapabilityRequests},
+    ci::{
+        JobState,
+        checks::CheckLog,
+        run_action::{Run, RunActionSteps},
+    },
     numbers::JobId,
-    transport::api::Request,
+    transport::api::{Request, TransportRequests},
     updates::{FailedJob, MAX_LISTED_JOBS, Snapshot, SnapshotKind, SnapshotState},
 };
 
@@ -139,6 +143,8 @@ fn numbered_job(jobs: &[RunJob], job: &JobRef) -> JobRef {
     }
 }
 
+/// Reading runs, their jobs and logs.
+#[shoal_forge_derive::extension(pub RunViewRequests, pub(crate) RunViewSteps)]
 impl ForgeRepo {
     /// The run `run`.
     pub async fn view_run(

@@ -15,7 +15,7 @@ use crate::{
     numbers::RunNumber,
     repo::locator::ItemRoute,
     transport::{
-        api::{Request, encode},
+        api::{Request, TransportRequests, encode},
         response::Response,
     },
 };

@@ -19,7 +19,7 @@ use crate::{
         test_support::{configure, git, manager, repository},
         workspace::{Ending, ExecutionKind, Manager, StartedExecution},
     },
-    forge::{backends::ForgeKind, ci::runner::JobCommand, test_support::Server},
+    forge::{RepoRequests, backends::ForgeKind, ci::runner::JobCommand, test_support::Server},
     model::{QueueEntry, Workspace},
     state::{QueueKind, QueueState},
 };

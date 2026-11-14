@@ -12,7 +12,11 @@ use rusqlite::{OptionalExtension, params};
 use crate::daemon::workspace::Manager;
 use crate::{
     daemon::notifications::NotificationKind,
-    forge::{ForgeRepo, account::Account, ci::runner::RegisteredRunner},
+    forge::{
+        ForgeRepo, RepoRequests,
+        account::Account,
+        ci::runner::{RegisteredRunner, RunnerRequests},
+    },
     model::Repository,
 };
 

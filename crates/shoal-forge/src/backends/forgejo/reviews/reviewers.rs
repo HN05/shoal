@@ -2,8 +2,12 @@
 use anyhow::{Context, Result};
 
 use crate::{
-    ForgeRepo, account::Account, backends::forgejo::organization, items::item::text,
-    review::reviewers::Reviewer, transport::api::Request,
+    ForgeRepo,
+    account::Account,
+    backends::forgejo::organization,
+    items::item::text,
+    review::reviewers::Reviewer,
+    transport::api::{Request, TransportRequests},
 };
 
 /// The users Forgejo offers as reviewers.

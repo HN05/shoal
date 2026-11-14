@@ -4,7 +4,12 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{ForgeRepo, account::Account, backends::Conventions, capability::Capability};
+use crate::{
+    ForgeRepo,
+    account::Account,
+    backends::Conventions,
+    capability::{Capability, CapabilityRequests},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Label {
@@ -15,6 +20,8 @@ pub struct Label {
     pub exclusive: bool,
 }
 
+/// Listing the repository's labels.
+#[shoal_forge_derive::extension(pub LabelRequests, pub(crate) LabelSteps)]
 impl ForgeRepo {
     /// Every label of the repository, in the forge's order; Bitbucket has none.
     pub async fn labels(&self, account: &Account) -> Result<Vec<Label>> {

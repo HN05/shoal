@@ -2,7 +2,10 @@
 use serde_json::Value;
 
 use super::GitLab;
-use crate::{ForgeRepo, backends::Conventions, conventions::Lookup, items::link::ItemKind};
+use crate::{
+    ForgeRepo, backends::Conventions, conventions::Lookup, items::link::ItemKind,
+    transport::api::TransportRequests,
+};
 
 impl Conventions for GitLab {
     fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {

@@ -9,11 +9,11 @@ use crate::{
     account::Account,
     backends::Reactions,
     items::{
-        item::text,
+        item::{ItemRequests, text},
         link::ItemKind,
         reaction::{Listed, Subject, allowed::AllowedReactions},
     },
-    transport::api::{HttpMethod, Request},
+    transport::api::{HttpMethod, Request, TransportRequests},
 };
 
 impl Reactions for GitLab {

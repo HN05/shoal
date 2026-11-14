@@ -155,6 +155,8 @@ impl Request {
     }
 }
 
+/// Sending requests and reading pages.
+#[shoal_forge_derive::extension(pub(crate) TransportRequests)]
 impl ForgeRepo {
     /// The API endpoint for `path` under this repository.
     pub(crate) fn repo_endpoint(&self, path: &str) -> String {

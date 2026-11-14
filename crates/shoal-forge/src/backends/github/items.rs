@@ -7,20 +7,22 @@ use super::GitHub;
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::github_rest::GitHubShapes,
-    backends::{Items, LoginHint, github_rest, rest},
+    backends::{
+        Items, LoginHint,
+        github_rest::{self, GitHubShapes},
+        rest,
+    },
     conventions::draft::DraftMarker,
     items::{
         action::Edit,
         create::{Head, NewIssue, NewPull},
-        item::{Current, Item, ItemState},
+        item::{Current, Item, ItemRequests, ItemState},
         link::ItemKind,
         list,
         reaction::Subject,
     },
-    numbers::CommentId,
-    numbers::{IssueNumber, PullNumber},
-    transport::api::{HttpMethod, Request, encode},
+    numbers::{CommentId, IssueNumber, PullNumber},
+    transport::api::{HttpMethod, Request, TransportRequests, encode},
     updates::DISCUSSION,
 };
 

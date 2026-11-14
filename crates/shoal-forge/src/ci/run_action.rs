@@ -6,14 +6,14 @@ use serde::{Deserialize, Serialize};
 use shoal_refs::CommitId;
 
 use crate::{
-    ForgeRepo,
+    ForgeRepo, RepoRequests,
     account::Account,
     backends::{Routes, Runs},
-    capability::{Capability, Unsupported},
-    ci::{CiAction, JobState, id},
+    capability::{Capability, CapabilityRequests, Unsupported},
+    ci::{CiAction, JobState, id, run_view::RunViewSteps},
     items::{link::LinkKind, reference::ItemRef},
     numbers::{JobId, PullNumber, RunId, RunNumber},
-    transport::api::{HttpMethod, Request},
+    transport::api::{HttpMethod, Request, TransportRequests},
 };
 
 /// A workflow run in the repository, as its forge reports it.
@@ -99,7 +99,11 @@ impl ForgeRepo {
         })?;
         Ok(format!("{}{route}{number}", self.repository_url()))
     }
+}
 
+/// Finding runs and acting on them.
+#[shoal_forge_derive::extension(pub RunActionRequests, pub(crate) RunActionSteps)]
+impl ForgeRepo {
     /// The run `run`, once the forge is known to apply `action` to runs.
     pub async fn find_run(
         &self,

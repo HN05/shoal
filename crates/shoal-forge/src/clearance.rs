@@ -9,9 +9,11 @@ use anyhow::Result;
 use crate::{
     ForgeRepo,
     account::Account,
-    ci::run_action::Run,
+    ci::{run_action::Run, run_view::RunViewRequests, workflow::WorkflowRequests},
     hosts::HostTypes,
-    items::{item::ItemState, link::ItemKind},
+    items::{
+        action::ActionRequests, item::ItemState, link::ItemKind, reference::ReferenceRequests,
+    },
 };
 
 /// What a blocker's lookup found.
@@ -62,6 +64,8 @@ fn item_clearance(kind: ItemKind, state: ItemState) -> Clearance {
     }
 }
 
+/// Reading whether a commit's runs cleared it.
+#[shoal_forge_derive::extension(pub(crate) ClearanceRequests)]
 impl ForgeRepo {
     /// Whether the run at `url` passed, as after a rerun, or a run of its
     /// workflow on the default branch that started after it did, whatever

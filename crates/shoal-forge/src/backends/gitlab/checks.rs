@@ -9,6 +9,7 @@ use crate::{
     backends::Checks,
     ci::{CiAction, CiCheck, Job, Location, Operation, check, checks::plain, id},
     numbers::JobId,
+    transport::api::TransportRequests,
 };
 
 impl Checks for GitLab {

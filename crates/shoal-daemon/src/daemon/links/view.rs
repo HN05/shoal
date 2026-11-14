@@ -9,11 +9,12 @@ use crate::{
     forge::{
         ForgeRepo,
         account::Account,
+        ci::checks::CheckRequests,
         items::{
             link::Selection,
             reference::{ItemInput, ItemRef},
         },
-        review::view::ItemView,
+        review::view::{ItemView, ViewRequests},
     },
     model::SelectedItem,
     protocol::ItemContext,

@@ -10,12 +10,12 @@ use crate::{
     backends::{Merging, github_rest},
     items::{
         action::{MergeMethod, UpdateMethod},
-        item::{Current, text},
+        item::{Current, ItemRequests, text},
         link::ItemKind,
         revert::NewRevert,
     },
     numbers::PullNumber,
-    transport::api::{HttpMethod, Request, encode},
+    transport::api::{HttpMethod, Request, TransportRequests, encode},
 };
 
 impl Merging for GitHub {

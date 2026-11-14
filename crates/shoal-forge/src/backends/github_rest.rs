@@ -11,9 +11,9 @@ use crate::{
     ci::{CiCheck, JobState, check},
     conventions::draft::DraftMarker,
     items::{
-        action::{Edit, MilestoneChange},
+        action::{ActionRequests, Edit, MilestoneChange},
         create::{Head, NewPull},
-        item::{Current, Item, ItemState, PrSummary, text, user_names},
+        item::{Current, Item, ItemRequests, ItemState, PrSummary, text, user_names},
         link::ItemKind,
         reaction::{Listed, Subject},
     },
@@ -22,7 +22,7 @@ use crate::{
         reviewers::team_name,
         view::{Comment, Details, PrDetails, labels, login, required, text_field},
     },
-    transport::api::{HttpMethod, Request, encode},
+    transport::api::{HttpMethod, Request, TransportRequests, encode},
 };
 
 /// What a forge serving GitHub's REST shapes serves its own way. The

@@ -1,8 +1,12 @@
 //! Milestones, which edits name by title and forges take by ID.
 use anyhow::{Context, Result};
 
-use crate::{ForgeRepo, account::Account, backends::Conventions};
+use crate::{
+    ForgeRepo, account::Account, backends::Conventions, transport::api::TransportRequests,
+};
 
+/// Reading milestones.
+#[shoal_forge_derive::extension(pub(crate) MilestoneRequests)]
 impl ForgeRepo {
     /// The ID the forge's edits take for the repository's milestone titled
     /// `title`, open or closed.

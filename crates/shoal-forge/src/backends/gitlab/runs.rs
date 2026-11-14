@@ -12,13 +12,14 @@ use crate::{
     ci::{
         CiAction, JobState, Location,
         check_state::CheckState,
+        checks::CheckSteps,
         run::NewRun,
         run_action::{Run, RunOperation},
         run_view::{JOBS_PAGE, RunFilter, RunJob},
     },
     items::item::text,
     numbers::{JobId, RunId, RunNumber},
-    transport::api::{HttpMethod, Request, encode},
+    transport::api::{HttpMethod, Request, TransportRequests, encode},
 };
 
 impl Runs for GitLab {

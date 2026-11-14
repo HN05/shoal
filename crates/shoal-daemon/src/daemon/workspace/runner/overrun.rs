@@ -16,7 +16,7 @@ use crate::{
         space_processes::Selection,
         workspace::{Manager, StopRequest, executions::Save},
     },
-    forge::ci::runner::took_job,
+    forge::ci::{run_view::RunViewRequests, runner::took_job},
 };
 
 /// How long a runner may run after the forge finished its job's run, as it

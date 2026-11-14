@@ -7,8 +7,8 @@ use crate::{
     daemon::{links::space::LinkSpace, workspace::Manager},
     forge::{
         ForgeRepo,
-        capability::Capability,
-        ci::checks::{CheckLog, failed_log_summary, validate_check_name},
+        capability::{Capability, CapabilityRequests},
+        ci::checks::{CheckLog, CheckRequests, failed_log_summary, validate_check_name},
         items::{
             link::{LinkKind, Selection},
             reference::ItemRef,

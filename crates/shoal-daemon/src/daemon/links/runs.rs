@@ -13,13 +13,13 @@ use crate::{
     daemon::{links::actions::Place, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
-        capability::Capability,
+        capability::{Capability, CapabilityRequests},
         ci::{
             CiAction,
-            checks::CheckLog,
-            run::{NewRun, StartedRun},
-            run_action::{Run, RunActed},
-            run_view::{JobRef, RunFilter, RunJob, validate_filter},
+            checks::{CheckLog, CheckRequests},
+            run::{NewRun, RunRequests, StartedRun},
+            run_action::{Run, RunActed, RunActionRequests},
+            run_view::{JobRef, RunFilter, RunJob, RunViewRequests, validate_filter},
         },
         items::{
             link::{ItemKind, LinkKind},

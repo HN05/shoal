@@ -11,7 +11,7 @@ use crate::{
         checks::{CheckLog, plain},
     },
     numbers::JobId,
-    transport::api::Request,
+    transport::api::{Request, TransportRequests},
 };
 
 impl Checks for Forgejo {

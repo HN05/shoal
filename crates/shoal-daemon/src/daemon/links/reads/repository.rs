@@ -4,8 +4,9 @@ use anyhow::Result;
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
     forge::{
-        capability::Capabilities, conventions::labels::Label,
-        items::reaction::allowed::AllowedReactions,
+        capability::{Capabilities, CapabilityRequests},
+        conventions::labels::{Label, LabelRequests},
+        items::reaction::allowed::{AllowedReactionRequests, AllowedReactions},
     },
     protocol::ItemContext,
 };

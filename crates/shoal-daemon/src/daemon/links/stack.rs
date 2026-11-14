@@ -15,8 +15,8 @@ use crate::{
         workspace::{Manager, record_base_changed},
     },
     forge::{
-        PullRequest,
-        items::link::ItemKind,
+        PullRequest, RepoRequests,
+        items::{link::ItemKind, retarget::RetargetRequests},
         updates::{Edited, Update, UpdateKind},
     },
     model::{Workspace, WorkspaceRef},

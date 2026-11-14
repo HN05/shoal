@@ -9,6 +9,7 @@ use crate::{
     backends::{Backend, ForgeKind},
     conventions::Lookup,
     items::link::ItemKind,
+    transport::api::TransportRequests,
 };
 
 /// The forge's description templates, labels and milestones.

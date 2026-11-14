@@ -3,7 +3,7 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ForgeRepo,
+    ForgeRepo, RepoRequests,
     account::Account,
     backends::Items,
     items::{item::ItemState, link::LinkKind, reference::ItemRef},
@@ -20,6 +20,8 @@ pub struct IssueDetails {
     pub labels: Vec<String>,
 }
 
+/// Reading issues.
+#[shoal_forge_derive::extension(pub IssueRequests, pub(crate) IssueSteps)]
 impl ForgeRepo {
     /// The issue `issue`, of this repository: an open one, which work
     /// starts on, or with `closed` one in any state, such as the issue a

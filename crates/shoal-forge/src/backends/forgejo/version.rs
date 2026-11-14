@@ -2,7 +2,11 @@
 //! Gitea serves the same version endpoint with its own numbering.
 use anyhow::{Context, Result};
 
-use crate::{ForgeRepo, account::Account, transport::api::Request};
+use crate::{
+    ForgeRepo,
+    account::Account,
+    transport::api::{Request, TransportRequests},
+};
 
 /// The first release whose API reruns runs and jobs.
 const RERUNS_SINCE: u64 = 17;

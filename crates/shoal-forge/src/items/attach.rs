@@ -13,8 +13,9 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::{Attachments, Backend},
-    capability::Capability,
+    capability::{Capability, CapabilityRequests},
     numbers::CommentId,
+    transport::api::TransportRequests,
 };
 
 /// The largest image Shoal uploads, which is GitHub's limit.
@@ -229,6 +230,8 @@ pub(crate) struct Pending {
     pub attachments: Vec<Attachment>,
 }
 
+/// Attaching files to items.
+#[shoal_forge_derive::extension(pub AttachRequests, pub(crate) AttachSteps)]
 impl ForgeRepo {
     /// Check `attachments`, and that this forge and `account` can upload
     /// them, before anything is posted. Returns whether the forge keeps

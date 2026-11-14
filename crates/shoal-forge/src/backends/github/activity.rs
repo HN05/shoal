@@ -12,6 +12,7 @@ use crate::{
     backends::{Activity, LoginHint, rest::read_pull},
     ci::check_state::CheckState,
     items::{
+        action::ActionRequests,
         item::{Current, ItemState},
         link::ItemKind,
     },
@@ -20,7 +21,7 @@ use crate::{
         status::{PrState, PrStatus, github_reviews},
         view::{Details, Review, login},
     },
-    transport::api::Request,
+    transport::api::{Request, TransportRequests},
     updates::{Check, DISCUSSION, Entry, Snapshot, id_text},
 };
 

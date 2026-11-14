@@ -12,7 +12,7 @@ use crate::{
     numbers::RunNumber,
     repo::locator::ItemRoute,
     transport::{
-        api::{Request, encode, full_page},
+        api::{Request, TransportRequests, encode, full_page},
         response::Response,
     },
 };

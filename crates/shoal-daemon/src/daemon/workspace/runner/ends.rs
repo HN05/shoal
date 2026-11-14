@@ -22,11 +22,10 @@ use crate::{
         notifications::NotificationKind,
         workspace::{Manager, capacity::Activity},
     },
-    forge::ci::CiAction,
+    forge::ci::{CiAction, run_action::RunActionRequests},
     model::QueuedJob,
     process::{execution::Processes, identity},
-    state::ExecutionState,
-    state::{QueueKind, QueueState},
+    state::{ExecutionState, QueueKind, QueueState},
 };
 
 /// A job the runner claimed.

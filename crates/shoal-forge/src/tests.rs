@@ -4,6 +4,7 @@ use crate::items::{
     item::{Current, Item, ItemState, PrSummary},
     link::ItemKind,
 };
+use crate::transport::api::TransportRequests;
 
 fn pull(head_repository: Option<&str>) -> Current {
     Current {

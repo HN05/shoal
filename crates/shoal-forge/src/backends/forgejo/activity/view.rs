@@ -9,12 +9,12 @@ use crate::{
         forgejo::threads::{review_comments, thread_key, threads},
         github_rest,
     },
-    items::link::ItemKind,
+    items::{action::ActionSteps, link::ItemKind},
     numbers::{CommentId, PullNumber},
     review::view::{
         AutoMerge, Details, Review, ReviewComment, login, review_comment, review_state, text_field,
     },
-    transport::api::Request,
+    transport::api::{Request, TransportRequests},
 };
 
 pub(crate) async fn details(

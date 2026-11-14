@@ -9,9 +9,13 @@ use crate::{
         github::threads::{GitHubThread, threads},
         github_rest,
     },
-    items::{action::MergeMethod, link::ItemKind},
+    items::{
+        action::{ActionSteps, MergeMethod},
+        link::ItemKind,
+    },
     numbers::{CommentId, PullNumber},
     review::view::{AutoMerge, Details, Review, login, review_comment, review_state, text_field},
+    transport::api::TransportRequests,
 };
 
 pub(crate) async fn details(

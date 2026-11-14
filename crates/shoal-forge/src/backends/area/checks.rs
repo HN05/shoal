@@ -9,7 +9,7 @@ use crate::{
     capability::Capability,
     ci::{
         CiAction, CiCheck, Job, Location, Operation,
-        checks::{CheckLog, plain},
+        checks::{CheckLog, CheckSteps, plain},
     },
     numbers::JobId,
 };

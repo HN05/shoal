@@ -16,7 +16,7 @@ use crate::{
         registration,
     },
     numbers::{JobId, RunId, RunnerId},
-    transport::api::{HttpMethod, Request, encode},
+    transport::api::{HttpMethod, Request, TransportRequests, encode},
 };
 
 impl Runners for Forgejo {

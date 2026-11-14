@@ -9,10 +9,10 @@ use crate::{
     capability::{self, Capability},
     items::{
         action::{MergeMethod, UpdateMethod},
-        item::Current,
+        item::{Current, ItemRequests},
         link::ItemKind,
     },
-    transport::api::{HttpMethod, Request, encode},
+    transport::api::{HttpMethod, Request, TransportRequests, encode},
 };
 
 impl Merging for Bitbucket {

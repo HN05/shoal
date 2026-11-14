@@ -6,7 +6,7 @@ use serde_json::Value;
 use shoal_refs::{BranchName, CommitId};
 
 use crate::backends::{Backend, Items};
-use crate::{ForgeRepo, items::link::ItemKind};
+use crate::{ForgeRepo, items::link::ItemKind, transport::api::TransportRequests};
 use shoal_states::states;
 
 states!(ItemState {
@@ -103,6 +103,19 @@ impl Current {
 }
 
 impl ForgeRepo {
+    /// The item Shoal records for the `kind` item numbered `number`.
+    pub fn item_url(
+        &self,
+        kind: ItemKind,
+        number: u64,
+    ) -> Result<crate::items::reference::ItemRef> {
+        crate::items::reference::ItemRef::numbered(self, kind.into(), number)
+    }
+}
+
+/// Reading issues and PRs.
+#[shoal_forge_derive::extension(pub(crate) ItemRequests)]
+impl ForgeRepo {
     /// The item's REST endpoint.
     pub(crate) fn item_endpoint(&self, kind: ItemKind, number: u64) -> String {
         let resource = match kind {
@@ -119,15 +132,6 @@ impl ForgeRepo {
             "the forge returned a different item than #{number}"
         );
         self.kind.current(self, kind, number, value)
-    }
-
-    /// The item Shoal records for the `kind` item numbered `number`.
-    pub fn item_url(
-        &self,
-        kind: ItemKind,
-        number: u64,
-    ) -> Result<crate::items::reference::ItemRef> {
-        crate::items::reference::ItemRef::numbered(self, kind.into(), number)
     }
 }
 

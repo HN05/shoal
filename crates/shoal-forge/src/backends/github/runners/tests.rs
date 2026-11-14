@@ -5,7 +5,7 @@ use serde_json::json;
 use super::*;
 use crate::{
     backends::ForgeKind,
-    ci::runner::{TookRun, answer_took_run, took_run},
+    ci::runner::{RunnerRequests, TookRun, answer_took_run, took_run},
     test_support::{Server, agent_on, repo_on},
 };
 

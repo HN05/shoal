@@ -2,7 +2,9 @@ use super::super::tests::{
     Fixture, admit_and_claim, fixture, hold_the_builds_permit, job, job_entries,
 };
 use crate::{
-    daemon::notifications::NotificationKind, forge::numbers::PullNumber, state::QueueState,
+    daemon::notifications::NotificationKind,
+    forge::{RepoRequests, numbers::PullNumber},
+    state::QueueState,
 };
 
 /// Move PR 12 past the commit its runs wait at.

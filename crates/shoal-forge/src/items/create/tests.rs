@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
     backends::{ForgeKind, Items},
+    capability::CapabilityRequests,
     test_support::{Server, agent_on, repo_on},
     transport::{api::HttpMethod, memory::Memory},
 };

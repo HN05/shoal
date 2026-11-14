@@ -11,7 +11,10 @@ use super::ends::ClaimedJob;
 use crate::client::queue::QueueEntryId;
 use crate::{
     daemon::workspace::Manager,
-    forge::{ci::runner::took_job, numbers::RunnerId},
+    forge::{
+        ci::runner::{RunnerRequests, took_job},
+        numbers::RunnerId,
+    },
 };
 
 /// How long a runner may wait for the forge to give it a job before the

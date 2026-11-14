@@ -11,7 +11,7 @@ use crate::{
     forge::{
         ForgeRepo,
         account::Account,
-        ci::approval::RunsApproved,
+        ci::approval::{ApprovalRequests, RunsApproved},
         items::{
             link::{ItemKind, LinkKind},
             reference::{ItemInput, ItemRef},

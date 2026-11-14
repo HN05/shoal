@@ -20,7 +20,7 @@ use crate::{
         account::Account,
         items::link::{LinkKind, Selection},
         transport::limits::rate_limited,
-        updates::{Snapshot, Update},
+        updates::{Snapshot, Update, UpdateRequests},
     },
     model::PresentSpace,
     time::UnixTime,

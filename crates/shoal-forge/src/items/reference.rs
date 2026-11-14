@@ -7,7 +7,7 @@ use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
-    ForgeRepo, IssueInput,
+    ForgeRepo, IssueInput, RepoRequests,
     hosts::HostTypes,
     items::link::LinkKind,
     numbers::{IssueNumber, PullNumber, RunNumber},
@@ -169,10 +169,14 @@ impl ItemRef {
     pub fn in_remote(&self, remote: &str) -> bool {
         self.0.repository.is_remote(remote)
     }
+}
 
+/// Resolving an item's forge.
+#[shoal_forge_derive::extension(pub ReferenceRequests)]
+impl ItemRef {
     /// Its repository, on the forge `hosts` says its host serves.
     pub async fn forge(&self, hosts: &impl HostTypes) -> Result<ForgeRepo> {
-        ForgeRepo::resolve(&self.0.repository.repository_url(), hosts).await
+        ForgeRepo::resolve(&self.repository().repository_url(), hosts).await
     }
 }
 

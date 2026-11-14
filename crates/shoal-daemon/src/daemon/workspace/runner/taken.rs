@@ -13,7 +13,9 @@ use crate::{
     daemon::workspace::Manager,
     forge::{
         ForgeRepo,
-        ci::runner::{JobRun, TookRun, WaitingJob, answer_took_run, reported_run, took_run},
+        ci::runner::{
+            JobRun, RunnerRequests, TookRun, WaitingJob, answer_took_run, reported_run, took_run,
+        },
         numbers::{RunId, RunnerId},
     },
     model::QueuedJob,

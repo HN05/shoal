@@ -23,11 +23,12 @@ use crate::{
         workspace::Manager,
     },
     forge::{
-        ForgeRepo,
+        ForgeRepo, RepoRequests,
         account::Account,
         conventions,
         items::{
-            create::{Created, NewIssue},
+            attach::AttachRequests,
+            create::{CreateRequests, Created, NewIssue},
             item::{Item, Opened},
             link::ItemKind,
         },

@@ -13,7 +13,7 @@ use crate::{
         github_rest::{self, GitHubShapes},
         rest,
     },
-    conventions::draft::DraftMarker,
+    conventions::{draft::DraftMarker, labels::LabelRequests},
     items::{
         action::Edit,
         create::{Head, NewIssue, NewPull},
@@ -23,7 +23,7 @@ use crate::{
         reaction::Subject,
     },
     numbers::{CommentId, IssueNumber, PullNumber},
-    transport::api::{HttpMethod, Request, encode},
+    transport::api::{HttpMethod, Request, TransportRequests, encode},
     updates::DISCUSSION,
 };
 

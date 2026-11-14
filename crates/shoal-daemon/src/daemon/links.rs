@@ -40,9 +40,13 @@ use crate::{
         scope::Caller,
         workspace::{Manager, review},
     },
-    forge::items::{
-        link::{ItemKind, LinkKind},
-        reference::{ItemInput, ItemRef},
+    forge::{
+        ci::run_view::RunViewRequests,
+        items::{
+            action::ActionRequests,
+            link::{ItemKind, LinkKind},
+            reference::{ItemInput, ItemRef},
+        },
     },
     model::{LinkedItem, Relation},
     state::WorkspaceState,

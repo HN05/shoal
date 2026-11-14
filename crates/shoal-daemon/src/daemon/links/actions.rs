@@ -21,8 +21,9 @@ use crate::{
         account::Account,
         conventions,
         items::{
-            action::{Action, Edit, Sent},
-            create::{NewPull, PullOptions},
+            action::{Action, ActionRequests, Edit, Sent},
+            attach::AttachRequests,
+            create::{CreateRequests, NewPull, PullOptions},
             item::{Item, ItemState, Opened},
             link::ItemKind,
             reference::{ItemInput, ItemRef},

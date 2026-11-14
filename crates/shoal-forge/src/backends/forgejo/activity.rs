@@ -17,7 +17,7 @@ use crate::{
         status::{PrStatus, Verdict, forgejo_reviews},
         view::{Details, Review, login},
     },
-    transport::api::Request,
+    transport::api::{Request, TransportRequests},
     updates::{Entry, Snapshot},
 };
 

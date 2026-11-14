@@ -17,9 +17,10 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Runners,
-    capability::Capability,
+    capability::{Capability, CapabilityRequests},
+    ci::checks::CheckRequests,
     numbers::{JobId, PullNumber, RunId, RunnerId},
-    transport::api::{HttpMethod, Request},
+    transport::api::{HttpMethod, Request, TransportRequests},
 };
 
 /// A job waiting in the forge's queue for a runner with its labels.
@@ -148,6 +149,21 @@ pub struct Installation {
 }
 
 impl ForgeRepo {
+    /// The web URL of the run with API ID `id`, which a forge whose runner
+    /// takes another run's job serves the run's page under.
+    pub fn run_page(&self, id: RunId) -> Result<ItemRef> {
+        ItemRef::numbered(self, LinkKind::Ci, id.get())
+    }
+
+    /// The web URL of the forge instance the repository is on.
+    pub fn instance_url(&self) -> String {
+        format!("{}://{}", self.web_scheme, self.host)
+    }
+}
+
+/// Running the forge's jobs on this machine.
+#[shoal_forge_derive::extension(pub RunnerRequests)]
+impl ForgeRepo {
     /// The program that runs one job, which must be on `PATH`, or why the
     /// forge cannot run jobs here.
     pub fn runner_program(&self) -> Result<&'static str> {
@@ -175,12 +191,6 @@ impl ForgeRepo {
         let read = Request::get(self.repo_endpoint(&self.kind.job_run_path(id)?));
         let value = self.send(account, &read).await?;
         self.kind.job_run(self, &value)
-    }
-
-    /// The web URL of the run with API ID `id`, which a forge whose runner
-    /// takes another run's job serves the run's page under.
-    pub fn run_page(&self, id: RunId) -> Result<ItemRef> {
-        ItemRef::numbered(self, LinkKind::Ci, id.get())
     }
 
     /// Whether `run` is for a PR whose head moved past its commit.
@@ -238,11 +248,6 @@ impl ForgeRepo {
         runner: RunnerId,
     ) -> Result<Option<WaitingJob>> {
         self.kind.runner_job(self, account, run, runner).await
-    }
-
-    /// The web URL of the forge instance the repository is on.
-    pub fn instance_url(&self) -> String {
-        format!("{}://{}", self.web_scheme, self.host)
     }
 }
 

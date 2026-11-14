@@ -13,13 +13,13 @@ use crate::{
     items::{
         action::{Edit, MilestoneChange, changed_set},
         create::{Head, NewIssue, NewPull},
-        item::{Current, Item, ItemState, PrSummary, text},
+        item::{Current, Item, ItemRequests, ItemState, PrSummary, text},
         link::ItemKind,
         list,
         reaction::Subject,
     },
     numbers::{IssueNumber, PullNumber},
-    transport::api::{HttpMethod, Request, encode},
+    transport::api::{HttpMethod, Request, TransportRequests, encode},
     updates::DISCUSSION,
 };
 

@@ -12,7 +12,8 @@ use crate::{
     },
     ci::check_state::CheckState,
     items::{
-        item::{Current, text},
+        action::ActionSteps,
+        item::{Current, ItemRequests, text},
         link::ItemKind,
     },
     numbers::{CommentId, IssueNumber, PullNumber},
@@ -20,6 +21,7 @@ use crate::{
         status::{PrStatus, Verdict},
         view::{Comment, Details, PrDetails, Review, ReviewComment},
     },
+    transport::api::TransportRequests,
     updates::{Entry, Snapshot},
 };
 

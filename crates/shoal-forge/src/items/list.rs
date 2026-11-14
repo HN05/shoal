@@ -8,7 +8,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Items,
-    capability::Capability,
+    capability::{Capability, CapabilityRequests},
     items::{
         item::{Item, ItemState},
         link::ItemKind,
@@ -98,6 +98,8 @@ impl Search {
     }
 }
 
+/// Listing issues and PRs.
+#[shoal_forge_derive::extension(pub ListRequests)]
 impl ForgeRepo {
     /// Up to `search.limit` issues or PRs that `search` matches, newest first.
     pub async fn list(

@@ -12,7 +12,10 @@ use crate::{
     forge::{
         ForgeRepo,
         account::Account,
-        items::{assignment::Assignment, reference::ItemRef},
+        items::{
+            assignment::{Assignment, AssignmentRequests},
+            reference::ItemRef,
+        },
     },
     model::{Assigner, IssueAssignee},
 };

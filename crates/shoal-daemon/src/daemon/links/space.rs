@@ -14,7 +14,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     config::Effective,
     daemon::{store, workspace::Manager},
-    forge::ForgeRepo,
+    forge::{ForgeRepo, RepoRequests},
     model::{Chat, PresentSpace, Repository, Workspace},
     protocol::ItemContext,
 };

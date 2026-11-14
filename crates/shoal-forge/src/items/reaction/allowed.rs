@@ -4,7 +4,12 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{ForgeRepo, account::Account, backends::Reactions, capability::Capability};
+use crate::{
+    ForgeRepo,
+    account::Account,
+    backends::Reactions,
+    capability::{Capability, CapabilityRequests},
+};
 
 /// GitHub's reactions, which every forge with reactions allows by default.
 const GITHUB: [&str; 8] = [
@@ -43,6 +48,8 @@ impl AllowedReactions {
     }
 }
 
+/// Reading which reactions the forge allows.
+#[shoal_forge_derive::extension(pub AllowedReactionRequests)]
 impl ForgeRepo {
     /// The reactions the forge allows; refused where it has none.
     pub async fn allowed_reactions(&self, account: &Account) -> Result<AllowedReactions> {

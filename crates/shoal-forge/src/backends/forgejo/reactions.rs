@@ -11,7 +11,7 @@ use crate::{
         link::ItemKind,
         reaction::{Listed, Subject, allowed::AllowedReactions},
     },
-    transport::api::{HttpMethod, Request},
+    transport::api::{HttpMethod, Request, TransportRequests},
 };
 
 impl Reactions for Forgejo {

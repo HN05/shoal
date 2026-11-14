@@ -9,14 +9,14 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::{Backend, Items},
-    capability::Capability,
+    capability::{Capability, CapabilityRequests},
     items::{
-        action::{Action, Edit, MilestoneChange},
-        attach::{Attachment, Pending},
+        action::{Action, ActionRequests, ActionSteps, Edit, MilestoneChange},
+        attach::{AttachRequests, AttachSteps, Attachment, Pending},
         item::{Item, ItemState, PrSummary},
         link::ItemKind,
     },
-    transport::api::Request,
+    transport::api::{Request, TransportRequests},
 };
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -168,7 +168,11 @@ impl ForgeRepo {
             web_scheme: self.web_scheme,
         }
     }
+}
 
+/// Opening issues and PRs.
+#[shoal_forge_derive::extension(pub CreateRequests, pub(crate) CreateSteps)]
+impl ForgeRepo {
     /// The commit `branch` points to, as the forge reports it: what a PR
     /// with it as its head would contain.
     pub async fn branch_commit(&self, account: &Account, branch: &BranchName) -> Result<CommitId> {

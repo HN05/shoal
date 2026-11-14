@@ -12,8 +12,8 @@ use crate::{
     },
     ci::check_state::CheckState,
     items::{
-        action::MergeMethod,
-        item::{Current, ItemState, text},
+        action::{ActionSteps, MergeMethod},
+        item::{Current, ItemRequests, ItemState, text},
         link::ItemKind,
     },
     numbers::{CommentId, IssueNumber, PullNumber},
@@ -21,7 +21,7 @@ use crate::{
         status::{PrStatus, Verdict},
         view::{AutoMerge, Comment, Details, PrDetails, Review, ReviewComment},
     },
-    transport::api::Request,
+    transport::api::{Request, TransportRequests},
     updates::{Entry, Snapshot},
 };
 

@@ -6,7 +6,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Reviews,
-    items::{item::Current, link::ItemKind},
+    items::{action::ActionRequests, item::Current, link::ItemKind},
     review::submit::{LineComment, Side},
 };
 
@@ -80,6 +80,8 @@ impl FileDiff {
     }
 }
 
+/// Reading a PR's diff.
+#[shoal_forge_derive::extension(pub DiffRequests)]
 impl ForgeRepo {
     /// The diff of the PR `current`, read at its head commit: refused when
     /// the PR gained commits while the forge was asked.

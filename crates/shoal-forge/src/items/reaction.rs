@@ -11,10 +11,14 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::{Backend, Reactions},
-    items::{action::Acted, comment, link::ItemKind},
+    items::{
+        action::{Acted, ActionRequests},
+        comment::{self, CommentRequests},
+        link::ItemKind,
+    },
     numbers::CommentId,
     review::view::Details,
-    transport::api::Request,
+    transport::api::{Request, TransportRequests},
     updates::Edited,
 };
 
@@ -83,6 +87,8 @@ impl Listed {
     }
 }
 
+/// Reacting to items and comments.
+#[shoal_forge_derive::extension(pub(crate) ReactionRequests)]
 impl ForgeRepo {
     /// Fill the reactions of the item `details` describes and of its
     /// comments, as the login of `account` sees them.

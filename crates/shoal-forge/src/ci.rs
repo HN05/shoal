@@ -20,10 +20,10 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Checks,
-    capability::Capability,
-    items::{item::ItemState, link::ItemKind},
+    capability::{Capability, CapabilityRequests},
+    items::{action::ActionRequests, item::ItemState, link::ItemKind},
     numbers::{JobId, PullNumber, RunId, RunNumber},
-    transport::api::{HttpMethod, Request},
+    transport::api::{HttpMethod, Request, TransportRequests},
 };
 
 states!(CiAction: ValueEnum {
@@ -137,6 +137,25 @@ impl CiAction {
 }
 
 impl ForgeRepo {
+    /// The path components of `target` after this repository's `section`.
+    /// Forges link jobs over HTTPS even when the remote uses HTTP.
+    pub(crate) fn repository_path<'a>(
+        &self,
+        target: &'a str,
+        section: &str,
+    ) -> Option<Vec<&'a str>> {
+        let path = target
+            .strip_prefix("https://")
+            .or_else(|| target.strip_prefix("http://"))?
+            .strip_prefix(&format!("{}/{}", self.host, self.path))?
+            .strip_prefix(section)?;
+        Some(path.split('/').collect())
+    }
+}
+
+/// Planning and posting actions on a PR's CI jobs.
+#[shoal_forge_derive::extension(pub CiRequests, pub(crate) CiSteps)]
+impl ForgeRepo {
     /// What applying `action` to the named checks on the open PR's head, or to
     /// every CI job it applies to, sends and reaches.
     pub async fn plan_ci(
@@ -201,21 +220,6 @@ impl ForgeRepo {
         let pull = self.read(account, ItemKind::Pr, number.get()).await?;
         ensure!(pull.item.state == ItemState::Open, "#{number} is not open");
         pull.head_sha.context("PR has no head commit")
-    }
-
-    /// The path components of `target` after this repository's `section`.
-    /// Forges link jobs over HTTPS even when the remote uses HTTP.
-    pub(crate) fn repository_path<'a>(
-        &self,
-        target: &'a str,
-        section: &str,
-    ) -> Option<Vec<&'a str>> {
-        let path = target
-            .strip_prefix("https://")
-            .or_else(|| target.strip_prefix("http://"))?
-            .strip_prefix(&format!("{}/{}", self.host, self.path))?
-            .strip_prefix(section)?;
-        Some(path.split('/').collect())
     }
 }
 

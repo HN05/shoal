@@ -1,5 +1,5 @@
 use super::*;
-use crate::{backends::Items, capability::Unsupported};
+use crate::{backends::Items, capability::Unsupported, items::item::ItemRequests};
 use serde_json::json;
 
 #[tokio::test]

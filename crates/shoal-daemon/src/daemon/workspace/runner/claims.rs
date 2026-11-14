@@ -27,8 +27,8 @@ use crate::{
     config::Runner,
     daemon::{allocation::Allocation, notifications::NotificationKind, workspace::Manager},
     forge::{
-        ForgeRepo,
-        ci::runner::{Installation, JobCommand, JobLaunch},
+        ForgeRepo, RepoRequests,
+        ci::runner::{Installation, JobCommand, JobLaunch, RunnerRequests},
     },
     model::{QueueEntry, QueuedJob, Workspace},
     removal::InspectionPolicy,

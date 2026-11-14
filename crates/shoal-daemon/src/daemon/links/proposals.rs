@@ -25,11 +25,13 @@ use crate::{
         ForgeRepo,
         account::Account,
         conventions,
-        items::action::{Action, Edit, Sent},
-        items::create::{NewIssue, NewPull},
-        items::item::{Item, Opened},
-        items::link::{ItemKind, LinkKind},
-        items::reference::{ItemInput, ItemRef},
+        items::{
+            action::{Action, ActionRequests, Edit, Sent},
+            create::{CreateRequests, NewIssue, NewPull},
+            item::{Item, Opened},
+            link::{ItemKind, LinkKind},
+            reference::{ItemInput, ItemRef},
+        },
     },
     model::Workspace,
 };

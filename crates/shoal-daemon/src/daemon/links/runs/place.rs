@@ -11,7 +11,7 @@ use crate::{
     forge::{
         ForgeRepo,
         account::Account,
-        ci::workflow::is_workflow_url,
+        ci::workflow::{WorkflowRequests, is_workflow_url},
         items::{
             link::{LinkKind, Selection},
             reference::{ItemInput, ItemRef},

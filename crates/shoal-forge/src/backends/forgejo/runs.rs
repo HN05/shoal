@@ -18,7 +18,7 @@ use crate::{
     },
     items::item::text,
     numbers::{JobId, PullNumber, RunId, RunNumber},
-    transport::api::{HttpMethod, Request, encode},
+    transport::api::{HttpMethod, Request, TransportRequests, encode},
 };
 
 impl Runs for Forgejo {

@@ -5,7 +5,11 @@ use anyhow::Result;
 
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
-    forge::items::{item::Item, link::ItemKind, list::Search},
+    forge::items::{
+        item::Item,
+        link::ItemKind,
+        list::{ListRequests, Search},
+    },
     protocol::ItemContext,
 };
 

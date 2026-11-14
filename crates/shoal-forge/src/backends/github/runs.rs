@@ -12,13 +12,14 @@ use crate::{
     ci::{
         CiAction, Location,
         approval::RUNS_PAGE,
+        checks::CheckSteps,
         run::{NewRun, workflow_segment},
         run_action::{Run, RunOperation},
         run_view::{JOBS_PAGE, RunFilter, RunJob},
     },
     items::item::text,
     numbers::{JobId, PullNumber, RunId, RunNumber},
-    transport::api::{HttpMethod, Request, encode},
+    transport::api::{HttpMethod, Request, TransportRequests, encode},
 };
 
 impl Runs for GitHub {

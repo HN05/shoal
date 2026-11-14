@@ -4,12 +4,12 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ForgeRepo,
+    ForgeRepo, RepoRequests,
     account::Account,
     backends::Items,
-    capability::Capability,
+    capability::{Capability, CapabilityRequests},
     items::{
-        action::{Action, Edit},
+        action::{Action, ActionSteps, Edit},
         item::{Item, ItemState},
         link::ItemKind,
         reference::ItemRef,
@@ -29,6 +29,8 @@ pub struct Assignment {
     pub others: Vec<String>,
 }
 
+/// Assigning items.
+#[shoal_forge_derive::extension(pub AssignmentRequests)]
 impl ForgeRepo {
     /// Add the login `account` signs in as to the assignees of `issue`, of
     /// this repository, unless it has the login already or is closed. An

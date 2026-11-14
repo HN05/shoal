@@ -17,13 +17,13 @@ use crate::{
         workspace::{Manager, PrGuard},
     },
     forge::{
-        ForgeRepo,
+        ForgeRepo, RepoRequests,
         account::Account,
         items::{
             link::{ItemKind, LinkKind},
             reference::{ItemInput, ItemRef},
         },
-        review::status::PrStatus,
+        review::status::{PrStatus, StatusRequests},
     },
     git,
     model::Workspace,

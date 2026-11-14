@@ -7,8 +7,10 @@ use anyhow::Result;
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    client::executions::{ProxyRetry, TurnRetry},
-    client::links::{issue, pr::Registration},
+    client::{
+        executions::{ProxyRetry, TurnRetry},
+        links::{issue, pr::Registration},
+    },
     config::permissions::Permissions,
     daemon::{
         approvals,
@@ -18,7 +20,12 @@ use crate::{
         workspace::{Manager, turn_retry},
         workspace_files,
     },
-    forge::{ForgeRepo, account::Account, items::reference::ItemRef, review::status::PrStatus},
+    forge::{
+        ForgeRepo, RepoRequests,
+        account::Account,
+        items::{issue::IssueRequests, reference::ItemRef},
+        review::status::PrStatus,
+    },
     model::{Attention, Completion, IssueStatus, PresentSpace, SpaceDetail, SpaceStatus},
     repository,
 };

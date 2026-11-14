@@ -9,7 +9,10 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Activity,
-    ci::{approval::WaitingRun, check_state::CheckState},
+    ci::{
+        approval::{ApprovalRequests, WaitingRun},
+        check_state::CheckState,
+    },
     items::item::ItemState,
     updates::Snapshot,
 };
@@ -115,6 +118,8 @@ impl PrStatus {
     }
 }
 
+/// Reading a PR's status.
+#[shoal_forge_derive::extension(pub StatusRequests, pub(crate) StatusSteps)]
 impl ForgeRepo {
     /// Each failed lookup is recorded on the result instead of failing it.
     pub async fn pr_status(

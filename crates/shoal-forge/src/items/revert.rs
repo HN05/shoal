@@ -8,15 +8,16 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::{Backend, Items, Merging, rest::commit_shas},
-    capability::Capability,
+    capability::{Capability, CapabilityRequests},
     items::{
-        action::Edit,
-        attach::Attachment,
-        create::{Created, PullOptions, pending_edit},
-        item::{Current, Item, ItemState, PrSummary},
+        action::{ActionRequests, Edit},
+        attach::{AttachRequests, AttachSteps, Attachment},
+        create::{CreateSteps, Created, PullOptions, pending_edit},
+        item::{Current, Item, ItemRequests, ItemState, PrSummary},
         link::ItemKind,
     },
     numbers::PullNumber,
+    transport::api::TransportRequests,
 };
 
 /// The PR that undoes a merged one.
@@ -101,6 +102,8 @@ impl NewRevert {
     }
 }
 
+/// Reverting merged PRs.
+#[shoal_forge_derive::extension(pub RevertRequests)]
 impl ForgeRepo {
     /// Have the forge open `revert` for `current`, a PR [`Self::merged`]
     /// read; only failing to open it fails.

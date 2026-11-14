@@ -7,6 +7,7 @@ use crate::{
     backends::Conventions,
     conventions::Lookup,
     items::{item::text, link::ItemKind},
+    transport::api::TransportRequests,
 };
 
 impl Conventions for Bitbucket {

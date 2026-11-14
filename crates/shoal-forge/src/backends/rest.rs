@@ -13,12 +13,14 @@ use crate::{
     backends::{Backend, LoginHint},
     ci::check_state::CheckState,
     items::{
-        item::{Current, Item, ItemState},
+        action::ActionRequests,
+        item::{Current, Item, ItemRequests, ItemState},
         link::ItemKind,
         list,
     },
     numbers::{IssueNumber, PullNumber},
     review::status::{PrState, PrStatus, Verdict},
+    transport::api::TransportRequests,
     updates::{DISCUSSION, Entry, Snapshot, verdict_entries},
 };
 

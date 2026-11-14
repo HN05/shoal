@@ -3,6 +3,7 @@ use super::{Manager, spotlight};
 use crate::client::repository_ids::RepositoryId;
 use crate::{
     daemon::store,
+    forge::repo::fork::ForkRequests,
     git,
     model::{Repository, Workspace},
     repository, validate,

@@ -13,7 +13,7 @@ use crate::{
     ForgeKind, ForgeRepo,
     account::Account,
     backends::Conventions,
-    conventions::labels::Label,
+    conventions::labels::{Label, LabelRequests},
     items::{item::Item, link::ItemKind},
     numbers::IssueNumber,
 };

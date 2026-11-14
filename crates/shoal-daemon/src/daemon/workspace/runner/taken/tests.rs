@@ -6,6 +6,7 @@ use crate::daemon::{
     test_support::git,
     workspace::runner::tests::{admit_and_claim, github_fixture, github_job, launched},
 };
+use crate::forge::ci::runner::RunnerRequests;
 use crate::forge::numbers::JobId;
 
 /// Claim GitHub's job 11 of run 1 and report, as its runner's hook does,

@@ -46,6 +46,8 @@ pub(crate) enum Target {
     },
 }
 
+/// Reading and acting on review threads.
+#[shoal_forge_derive::extension(pub ThreadRequests, pub(crate) ThreadSteps)]
 impl ForgeRepo {
     /// The thread of `comment` on PR `number`.
     pub async fn thread(

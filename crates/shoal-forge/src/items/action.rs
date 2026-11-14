@@ -12,17 +12,23 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::{Items, Merging},
-    capability::Capability,
+    capability::{Capability, CapabilityRequests},
+    conventions::labels::LabelRequests,
     items::{
-        attach::{Attachment, Holder, Pending},
-        comment::CommentEdit,
-        item::{Current, Item, ItemState},
+        attach::{AttachRequests, AttachSteps, Attachment, Holder, Pending},
+        comment::{CommentEdit, CommentRequests},
+        create::CreateRequests,
+        item::{Current, Item, ItemRequests, ItemState},
         link::ItemKind,
-        reaction::{ReactionChange, Subject},
+        milestone::MilestoneRequests,
+        reaction::{ReactionChange, ReactionRequests, Subject},
     },
     numbers::{CommentId, PullNumber},
-    review::submit::{NewReview, ReviewVerdict},
-    transport::api::Request,
+    review::{
+        submit::{NewReview, ReviewVerdict, SubmitSteps},
+        thread::{ThreadRequests, ThreadSteps},
+    },
+    transport::api::{Request, TransportRequests},
     updates::{Edited, ItemDetails},
 };
 
@@ -449,7 +455,7 @@ fn listing(noun: &str, names: &[String]) -> String {
 
 /// What an action's requests left on the forge.
 #[derive(Default)]
-struct Receipt {
+pub(crate) struct Receipt {
     /// The response to the first request, such as the comment it posted;
     /// none until a request reached the forge.
     first: Option<serde_json::Value>,
@@ -477,6 +483,8 @@ pub struct Acted {
     pub edited: Edited,
 }
 
+/// Acting on issues and PRs.
+#[shoal_forge_derive::extension(pub ActionRequests, pub(crate) ActionSteps)]
 impl ForgeRepo {
     /// Apply `action` as `account` and return the item as the forge reports it
     /// afterwards.

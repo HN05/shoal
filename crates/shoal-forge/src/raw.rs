@@ -10,7 +10,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Backend,
-    transport::api::{Request, encode},
+    transport::api::{Request, TransportRequests, encode},
 };
 
 /// A request to a path under the forge's API root, such as
@@ -76,6 +76,8 @@ fn decoded(text: &str) -> String {
     }
 }
 
+/// Sending requests a caller wrote.
+#[shoal_forge_derive::extension(pub RawRequests, pub(crate) RawSteps)]
 impl ForgeRepo {
     /// The forge's JSON response to `raw`, sent as `account`; null for an
     /// empty one.
