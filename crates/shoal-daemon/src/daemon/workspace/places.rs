@@ -52,6 +52,19 @@ fn record_chat_place(db: &Connection, chat: &SpaceId, place: &Origin) -> Result<
     take_over(db, chat, place)
 }
 
+/// Record `place` as the chat `chat`'s, and take it as [`record_chat_place`]
+/// does, unless the chat has a place already.
+fn place_unplaced_chat(db: &Connection, chat: &SpaceId, place: &Origin) -> Result<()> {
+    let placed = db.execute(
+        "UPDATE chats SET origin=?2 WHERE id=?1 AND origin IS NULL",
+        params![chat, serde_json::to_string(place)?],
+    )?;
+    if placed == 1 {
+        record_chat_place(db, chat, place)?;
+    }
+    Ok(())
+}
+
 /// Whether an agent of a space other than `space` is recorded at `place`,
 /// which it took over even before a record or label of the place says so;
 /// a nested command takes nothing.
@@ -120,24 +133,14 @@ impl Manager {
 
     /// Record `origin` as the place the chat `selector` names runs in when
     /// it has none, as a chat recorded before its queued agent started has,
-    /// and take that place as [`Self::take_chat_place`] does.
+    /// and take that place as [`Self::take_chat_place`] does, under the lock
+    /// place closes hold.
     pub(crate) async fn place_chat(&self, selector: &SpaceSelector, origin: Origin) -> Result<()> {
         let id = self.chat(selector).await?.id;
-        let recorded = serde_json::to_string(&origin)?;
-        let placed = self
-            .store
-            .run(move |db| {
-                Ok(db.execute(
-                    "UPDATE chats SET origin=?2 WHERE id=?1 AND origin IS NULL",
-                    params![id, recorded],
-                )?)
-            })
-            .await?;
-        if placed == 0 {
-            return Ok(());
-        }
-        let chat = self.chat(selector).await?;
-        self.take_chat_place(&chat).await
+        let _ownership = self.place_ownership.lock().await;
+        (self.store)
+            .write(move |tx| place_unplaced_chat(tx, &id, &origin))
+            .await
     }
 
     /// Whether a running chat or an agent of a space other than `space` is
