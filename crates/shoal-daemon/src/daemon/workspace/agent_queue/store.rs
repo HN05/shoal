@@ -233,8 +233,8 @@ pub(super) fn insert_launch(
     );
     let now = UnixTime::now();
     tx.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing,scope_space_id,priority)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing,scope_space_id,priority,issue_labels)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
         params![
             launch.id,
             QueueKind::Launch,
@@ -252,6 +252,7 @@ pub(super) fn insert_launch(
             crate::daemon::store::narrowing_column(&request.narrowing)?,
             launch.scope,
             request.priority,
+            serde_json::to_string(&request.issue_labels)?,
         ],
     )?;
     blockers::record(tx, &launch.id, &launch.repository, &request.blockers)?;
@@ -273,8 +274,8 @@ pub(super) fn copy_launch_waiting(
     workspace: &SpaceId,
 ) -> Result<()> {
     tx.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,opens_workspace_id,mode,narrowing,scope_space_id,priority)
-         SELECT ?2,kind,repository_id,name,agent,issue_title,?3,env,?4,created_at,?5,mode,narrowing,scope_space_id,priority
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,opens_workspace_id,mode,narrowing,scope_space_id,priority,issue_labels)
+         SELECT ?2,kind,repository_id,name,agent,issue_title,?3,env,?4,created_at,?5,mode,narrowing,scope_space_id,priority,issue_labels
          FROM agent_queue WHERE id=?1",
         params![from, id, plan, QueueState::Queued, workspace],
     )?;
