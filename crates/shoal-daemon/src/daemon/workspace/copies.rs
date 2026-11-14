@@ -5,7 +5,7 @@ use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use std::path::PathBuf;
 
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_refs::{BranchName, CommitId};
 
@@ -118,9 +118,17 @@ impl Manager {
         let SourceFiles::Worktree(path) = &source.files else {
             anyhow::bail!("only a live workspace's files are copied again");
         };
-        self.checkpoint(workspace, CheckpointCause::Refresh, None)
+        let kept = self
+            .checkpoint(workspace, CheckpointCause::Refresh, None)
             .await?;
-        git::copy::refill(path, &workspace.path, &source.head).await?;
+        git::copy::refill(path, &workspace.path, &source.head)
+            .await
+            .with_context(|| {
+                format!(
+                    "copying {}'s files into {} again failed; shoal restore {} {} returns it to what it held",
+                    source.name, workspace.name, workspace.number, kept.number
+                )
+            })?;
         self.record_copy_start(workspace, source, Ok(false)).await?;
         Ok(())
     }
