@@ -239,6 +239,17 @@ impl Manager {
         true
     }
 
+    /// The workspaces of the claimed jobs, none when they cannot be read.
+    pub(crate) async fn job_workspaces(&self) -> HashSet<SpaceId> {
+        match self.claimed_jobs().await {
+            Ok(jobs) => jobs.into_iter().map(|job| job.workspace_id).collect(),
+            Err(error) => {
+                crate::daemon::log!("runner: claimed jobs unavailable: {error:#}");
+                HashSet::new()
+            }
+        }
+    }
+
     /// The job claimed in the workspace `workspace_id`, if any.
     async fn workspace_claim(&self, workspace_id: &SpaceId) -> Result<Option<ClaimedJob>> {
         Ok(self

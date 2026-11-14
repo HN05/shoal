@@ -1276,11 +1276,14 @@ runners took, and conditional reads keep unchanged answers off the rate
 limit. Each job runs as a tracked execution in
 a disposable workspace at its commit, which goes once the forge's runner
 exits, at low CPU priority so that a build takes only the cores agents and the
-user leave idle. A job outlives a daemon that fails or restarts, since the
-daemon only decides when it starts: the next daemon takes its wrapper back, and the
-wrapper runs apart from the daemon's service, in a systemd scope of its own,
-so the service manager's stop of the service leaves it running. A job ends only on the forge's word, so stopping it cancels its run
-there and protection leaves it running; once the forge has finished the run,
+user leave idle. A job outlives the daemon, which only decides when it starts:
+a crash, a failed start, a restart and a signal, which the daemon cannot tell
+from a service stop, leave it running for the next daemon to take its wrapper
+back, and the wrapper runs apart from the daemon's service, in a systemd scope
+of its own, so the service manager's stop of the service leaves it running
+too. A job ends only on the forge's word, so stopping it, as `shoal daemon
+stop` and a system shutdown do, cancels its run there and protection leaves it
+running; once the forge has finished the run,
 a runner that outlives it by a grace period, held open by a process a step
 left, is Shoal's to end with every process of the job's workspace. The workspace that links a run's PR or owns its branch lists the job in its status, and a
 waiting one with what holds it back, as does every chat that links the PR, but

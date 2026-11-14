@@ -49,6 +49,13 @@ impl Shutdown {
             Self::Daemon => NotificationKind::DaemonStopped,
         }
     }
+
+    /// Whether the stop also ends CI jobs: a system shutdown ends them, while
+    /// the daemon's own end leaves them to the next daemon, since the forge's
+    /// runner does their work.
+    fn ends_jobs(self) -> bool {
+        matches!(self, Self::System)
+    }
 }
 
 impl Manager {
@@ -60,18 +67,23 @@ impl Manager {
 
     /// Stop the spaces `shoal stop --all` stops, each wrapper saving its
     /// agent before the stop and requesting restores that need no user,
-    /// which the stop keeps with those already waiting. Hold the agent queue
-    /// until a system shutdown is cancelled, so nothing starts again before
-    /// it. The user learns what to continue. An update waits for the stop.
-    /// Once a stop before a shutdown finished, later ones wait for it and
-    /// leave the work alone.
+    /// which the stop keeps with those already waiting, and leaving CI jobs
+    /// running unless `shutdown` ends them. Hold the agent queue until a
+    /// system shutdown is cancelled, so nothing starts again before it. The
+    /// user learns what to continue. An update waits for the stop. Once a
+    /// stop before a shutdown finished, later ones wait for it and leave the
+    /// work alone.
     pub(crate) async fn stop_for_shutdown_of(&self, shutdown: Shutdown) {
         let mut finished = self.shutdown_stopped.lock().await;
         if *finished {
             return;
         }
+        let left = match shutdown.ends_jobs() {
+            true => HashSet::new(),
+            false => self.job_workspaces().await,
+        };
         let stopped = self
-            .stop_every_target(shutdown.moment(), |space| async move {
+            .stop_every_target(shutdown.moment(), &left, |space| async move {
                 // A CI job's run ends on its forge, before its runner stops.
                 self.cancel_job_before_stopping(&space).await;
                 self.stop_keeping_restores(&SpaceSelector::id(&space), shutdown.request())
@@ -89,11 +101,16 @@ impl Manager {
         self.agent_queue.suspend(false).await;
     }
 
-    /// Stop each space `shoal stop --all` stops with `stop`, given its ID,
-    /// in parallel, holding the agent queue so nothing starts again, and
-    /// tell the user of each that failed to stop `moment`. Returns those
-    /// stopped.
-    pub(super) async fn stop_every_target<F, Fut>(&self, moment: &str, stop: F) -> Vec<PresentSpace>
+    /// Stop each space `shoal stop --all` stops but those `left`, with
+    /// `stop`, given its ID, in parallel, holding the agent queue so nothing
+    /// starts again, and tell the user of each that failed to stop `moment`.
+    /// Returns those stopped.
+    pub(super) async fn stop_every_target<F, Fut>(
+        &self,
+        moment: &str,
+        left: &HashSet<SpaceId>,
+        stop: F,
+    ) -> Vec<PresentSpace>
     where
         F: Fn(SpaceId) -> Fut,
         Fut: Future<Output = Result<()>>,
@@ -107,6 +124,9 @@ impl Manager {
                 return Vec::new();
             }
         };
+        let targets: Vec<PresentSpace> = (targets.into_iter())
+            .filter(|space| !left.contains(space.id()))
+            .collect();
         let results = join_all(targets.iter().map(|space| stop(space.id().clone()))).await;
         let mut stopped = Vec::new();
         for (space, result) in targets.into_iter().zip(results) {

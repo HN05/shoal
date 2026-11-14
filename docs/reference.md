@@ -160,7 +160,8 @@ How the daemon exits decides what becomes of tracked agents and commands:
   workspaces, which the next daemon starts.
 - SIGTERM or SIGINT, as a shutdown, a logout or a service manager's stop sends,
   stops them as the daemon does before a system shutdown: each wrapper saves its
-  agent first, and restores that need no user wait in the agent queue. The
+  agent first, and restores that need no user wait in the agent queue. CI jobs
+  keep running for the next daemon, as on a restart. The
   service definition's `ExitTimeOut` (launchd) or `TimeoutStopSec` (systemd)
   gives the stop time before the service manager kills the daemon.
 
@@ -3599,8 +3600,8 @@ leftovers in other process groups or whose parent exited, then the runner,
 and records a `job_ended` event in the workspace's log. `shoal stop` says
 which run it asked the forge to cancel (`cancelled_run` with `--json`), and
 `shoal rm` of a running job's workspace, `shoal daemon stop`, and the stop
-before a system shutdown or on a signal cancel the run before they stop the
-runner. A job that cannot start is passed over with a
+before a system shutdown cancel the run before they stop the runner, while a
+signal to the daemon leaves the job running. A job that cannot start is passed over with a
 `runner_failed` notification, and its workspace goes, also one whose
 checkout failed; a removal that fails is tried again until it succeeds.
 

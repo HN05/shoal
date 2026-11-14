@@ -950,38 +950,75 @@ async fn read<T: serde::de::DeserializeOwned>(
     .unwrap()
 }
 
-/// How the daemon can stop work as it exits; saving is how a signal or a
-/// system shutdown stops it.
-const ENDINGS: [Ending; 2] = [Ending::Stop, Ending::Save];
+#[tokio::test]
+async fn daemon_stop_cancels_a_jobs_run_and_stops_its_runner() {
+    let fixture = daemon_exit_with_runner(job("h3", 7, 3), Cancelling::DaemonStop).await;
+    assert!(cancelled(&fixture, 3));
+}
 
 #[tokio::test]
-async fn the_daemon_exiting_cancels_a_jobs_run_and_stops_its_runner() {
-    for ending in ENDINGS {
-        let fixture = daemon_exit_with_runner(job("h3", 7, 3), ending).await;
-        assert!(
-            fixture.server.received().iter().any(|request| request.line
-                == "POST /api/v1/repos/team/repo/actions/runs/3/cancel"),
-            "{ending:?}"
-        );
-    }
+async fn a_system_shutdown_cancels_a_jobs_run_and_stops_its_runner() {
+    let fixture = daemon_exit_with_runner(job("h3", 7, 3), Cancelling::SystemShutdown).await;
+    assert!(cancelled(&fixture, 3));
 }
 
 #[tokio::test]
 async fn the_daemon_exiting_stops_a_jobs_runner_when_the_forge_refuses_to_cancel_its_run() {
-    for ending in ENDINGS {
-        // The forge finds no run 1 to cancel.
-        let fixture = daemon_exit_with_runner(job("h1", 4, 1), ending).await;
-        let failures: Vec<_> = fixture
-            .manager
-            .notifications(true, 10)
-            .await
-            .unwrap()
-            .into_iter()
-            .filter(|notification| notification.kind == NotificationKind::RunnerFailed)
-            .map(|notification| notification.message)
-            .collect();
-        assert_eq!(failures.len(), 1, "{ending:?}: {failures:?}");
-    }
+    // The forge finds no run 1 to cancel.
+    let fixture = daemon_exit_with_runner(job("h1", 4, 1), Cancelling::DaemonStop).await;
+    let failures: Vec<_> = fixture
+        .manager
+        .notifications(true, 10)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|notification| notification.kind == NotificationKind::RunnerFailed)
+        .map(|notification| notification.message)
+        .collect();
+    assert_eq!(failures.len(), 1, "{failures:?}");
+}
+
+#[tokio::test]
+async fn a_signal_to_the_daemon_leaves_a_jobs_runner_running_for_the_next_daemon() {
+    use crate::protocol::Control;
+
+    let fixture = fixture(vec![job("h3", 7, 3)], "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    let ConnectedRunner {
+        mut connection,
+        executing,
+    } = connect_runner(manager, &claimed[0].workspace_id, true).await;
+
+    manager.end_work(Ending::Save).await;
+    // The exit's last step detaches what the signal's stop left running,
+    // the first control the runner hears.
+    manager.stop_for_shutdown().await;
+    let control: Control = read(&mut connection).await;
+    assert!(matches!(control, Control::Detach), "{control:?}");
+    executing.await.unwrap().unwrap();
+    assert!(!cancelled(&fixture, 3));
+    assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);
+}
+
+/// Whether the forge was asked to cancel `run`.
+fn cancelled(fixture: &Fixture, run: u64) -> bool {
+    let cancel = format!("POST /api/v1/repos/team/repo/actions/runs/{run}/cancel");
+    fixture
+        .server
+        .received()
+        .iter()
+        .any(|request| request.line == cancel)
+}
+
+/// How the daemon's exit cancels a running job's run and stops its runner.
+#[derive(Clone, Copy)]
+enum Cancelling {
+    /// `shoal daemon stop`.
+    DaemonStop,
+    /// The stop before a system shutdown.
+    SystemShutdown,
 }
 
 /// The runner of the job claimed in `workspace`, connected to the daemon
@@ -991,7 +1028,12 @@ struct ConnectedRunner {
     executing: tokio::task::JoinHandle<anyhow::Result<()>>,
 }
 
-async fn connect_runner(manager: &Arc<Manager>, workspace: &SpaceId) -> ConnectedRunner {
+/// `reattach` as a job's wrapper does, which outlives the daemon.
+async fn connect_runner(
+    manager: &Arc<Manager>,
+    workspace: &SpaceId,
+    reattach: bool,
+) -> ConnectedRunner {
     use tokio::{io::BufReader, net::UnixStream};
 
     use crate::{
@@ -1020,7 +1062,7 @@ async fn connect_runner(manager: &Arc<Manager>, workspace: &SpaceId) -> Connecte
             kind: ExecutionKind::Command,
             agent: None,
             recover: false,
-            reattach: false,
+            reattach,
             queue_entry: None,
             demo: None,
             origin: None,
@@ -1060,10 +1102,10 @@ async fn connect_runner(manager: &Arc<Manager>, workspace: &SpaceId) -> Connecte
     }
 }
 
-/// End the daemon's work with `ending` while `job` runs, connected as its
-/// wrapper runs it, checking the daemon stops the runner rather than
+/// End the daemon's work as `cancelling` does while `job` runs, connected
+/// as its wrapper runs it, checking the daemon stops the runner rather than
 /// waiting for it to see its run cancelled.
-async fn daemon_exit_with_runner(job: Value, ending: Ending) -> Fixture {
+async fn daemon_exit_with_runner(job: Value, cancelling: Cancelling) -> Fixture {
     use crate::protocol::{self, Control, ExecutionEvent};
 
     let fixture = fixture(vec![job], "").await;
@@ -1073,11 +1115,16 @@ async fn daemon_exit_with_runner(job: Value, ending: Ending) -> Fixture {
     let ConnectedRunner {
         mut connection,
         executing,
-    } = connect_runner(manager, &claimed[0].workspace_id).await;
+    } = connect_runner(manager, &claimed[0].workspace_id, false).await;
 
     let ending = tokio::spawn({
         let manager = manager.clone();
-        async move { manager.end_work(ending).await }
+        async move {
+            match cancelling {
+                Cancelling::DaemonStop => manager.end_work(Ending::Stop).await,
+                Cancelling::SystemShutdown => manager.stop_for_system_shutdown().await,
+            }
+        }
     });
     let control: Control = read(&mut connection).await;
     assert!(matches!(&control, Control::Pause { .. }), "{control:?}");
@@ -1119,7 +1166,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
     let ConnectedRunner {
         mut connection,
         executing,
-    } = connect_runner(manager, &workspace.id).await;
+    } = connect_runner(manager, &workspace.id, false).await;
     // What a cancelled step left behind, holding the runner's output open:
     // its parent gone, in a process group of its own, as a test's script
     // runs once the test is killed.

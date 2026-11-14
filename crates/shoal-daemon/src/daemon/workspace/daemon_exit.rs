@@ -2,7 +2,7 @@
 //! leaves it running, `shoal daemon stop` stops it as `shoal stop --all` does
 //! but leaves queued launches to the next daemon and stops CI jobs' runners
 //! after cancelling their runs, and a signal stops it saved first, since it
-//! may come from a shutdown.
+//! may come from a shutdown, but leaves CI jobs running, as a restart does.
 use super::{
     Manager,
     executions::{Save, StopRequest},
@@ -10,6 +10,7 @@ use super::{
 };
 use crate::client::space_names::SpaceSelector;
 use crate::protocol::{Exit, QueuedLaunches};
+use std::collections::HashSet;
 
 /// What becomes of running work as the daemon exits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -20,7 +21,8 @@ pub(crate) enum Ending {
     /// `shoal restore`, as running chats do.
     Stop,
     /// Work stops saved first, with restores that need no user queued and
-    /// running chats saved to come back, as before a system shutdown.
+    /// running chats saved to come back, as before a system shutdown, but
+    /// CI jobs detach.
     Save,
 }
 
@@ -57,7 +59,8 @@ impl Manager {
     /// is under way.
     async fn stop_all_for_exit(&self) {
         let _shutdown_stop = self.shutdown_stopped.lock().await;
-        self.stop_every_target("before the Shoal daemon stopped", |workspace| async move {
+        let moment = "before the Shoal daemon stopped";
+        self.stop_every_target(moment, &HashSet::new(), |workspace| async move {
             // A CI job's runner would end once it saw its run cancelled,
             // after the daemon has gone; stop it now, as removal does,
             // also when the forge refused the cancellation.
