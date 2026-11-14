@@ -229,3 +229,49 @@ async fn reading_the_user_s_notifications_follows_the_notifications_permission()
         .unwrap_err();
     assert!(error.downcast_ref::<Undecided>().is_none(), "{error:#}");
 }
+
+#[tokio::test]
+async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
+    let (_temp, manager) = manager().await;
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let lead = chat(&manager, "lead", "chat", None, Some(&master.id)).await;
+    let worker = chat(&manager, "worker", "chat", None, Some(&lead.id)).await;
+    let setup = || Action::new(PermissionKey::Admin, "shoal setup --skip 3");
+    let request = undecided(
+        manager
+            .authorize_action(Some(&caller(&worker.id)), setup())
+            .await,
+    );
+    let routed = manager.show_approval(request.number).await.unwrap();
+    assert_eq!(routed.decider.as_ref(), Some(&lead.id));
+
+    // The lead neither decides as the user nor holds admin at direct; the
+    // master decides it, though it went to the lead.
+    let (leading, mastering) = (caller(&lead.id), caller(&master.id));
+    let refused = manager.decide_approval_as(
+        Some(&leading),
+        request.number,
+        true,
+        None,
+        Default::default(),
+        None,
+    );
+    assert!(refused.await.is_err());
+    let decided = manager.decide_approval_as(
+        Some(&mastering),
+        request.number,
+        true,
+        None,
+        Default::default(),
+        None,
+    );
+    assert_eq!(decided.await.unwrap().status, DecisionStatus::Approved);
+    (manager.authorize_action(Some(&caller(&worker.id)), setup()))
+        .await
+        .unwrap();
+
+    // Its own requests stay another's to decide.
+    let own = Action::new(PermissionKey::Daemon, "shoal daemon restart");
+    let own = undecided(manager.authorize_action(Some(&mastering), own).await);
+    assert!(!manager.decides_as_user(&mastering, &own).await.unwrap());
+}

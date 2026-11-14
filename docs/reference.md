@@ -2439,8 +2439,9 @@ with its arguments, which the command reports with exit 2 and
 `code: "approval_pending"`, or `"approval_denied"` once denied. Once the
 request is approved, the same action proceeds once under every other check,
 and taking it again asks again; an approved command's own requests take
-what the same key governs without asking again. `notifications`, which is
-`"deny"` or `"direct"`, governs reading, clearing and watching your
+what the same key governs without asking again. `decide`, which is
+`"deny"` or `"direct"`, governs deciding the requests of the spaces below as
+you would; `notifications`, also `"deny"` or `"direct"`, governs reading, clearing and watching your
 notifications, Shoal's own log, and the untracked worktrees, cleanup errors
 and failing syncs the inbox lists; `user_holds` governs
 releasing the user's holds and removing a space the user holds, or holds
@@ -5963,7 +5964,10 @@ key that governs an [action](#permitted-actions) for it. It
 approves anything else only where it holds an approved grant for it, with the
 same target and settings, or a request to hold the workspace, which needs
 none. Otherwise `--approve` is refused, citing the permission or the missing
-grant, and it denies or passes the request up. A push a parent approves runs
+grant, and it denies or passes the request up. A space whose `decide`
+[permission](#permitted-actions) is `"direct"` decides any request of a
+space below it as you would, routed to it or not, and with or without a
+grant. A push a parent approves runs
 in the daemon's environment. When a chat's agent stops,
 or a space deciding a request is removed, such as below an issue
 proposal that outlives its workspace, the requests it had not decided go to

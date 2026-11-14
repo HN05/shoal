@@ -211,7 +211,8 @@ impl Manager {
     }
 
     /// Approval request `number`, which must be routed to the caller to
-    /// decide. Only the stored routing counts; the decision rechecks it with
+    /// decide, or one its `decide` permission lets it decide as the user
+    /// does. Only the stored routing counts; the decision rechecks it with
     /// its grant.
     pub(in crate::daemon) async fn routed_approval(
         &self,
@@ -220,8 +221,9 @@ impl Manager {
     ) -> Result<ApprovalRequest> {
         let request = self.show_approval(number).await?;
         ensure!(
-            request.decider.as_ref() == Some(&caller.space_id),
-            "workspace processes decide only the approval requests routed to them; ask the user to run this command"
+            request.decider.as_ref() == Some(&caller.space_id)
+                || self.decides_as_user(caller, &request).await?,
+            "workspace processes decide only the approval requests routed to them, or of the spaces below as their decide permission allows; ask the user to run this command"
         );
         Ok(request)
     }

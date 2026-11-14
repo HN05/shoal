@@ -441,6 +441,7 @@ admin = "propose"                     # "deny", "propose" or "direct"
 limits = "propose"                    # "deny", "propose" or "direct"
 user_holds = "propose"                # "deny", "propose" or "direct"
 notifications = "deny"                # "deny" or "direct"
+decide = "deny"                       # "deny" or "direct"
 ```
 
 Permissions say what agents may do: `"direct"` at once, `"propose"` after an
@@ -453,7 +454,8 @@ and `unmerge`, `push` pushes to the repository's remotes by `shoal pr open` or
 `shoal update`, `limits` starting agents regardless of `max_agents` and
 memory, `user_holds` releasing the user's holds and removing the spaces the
 user holds, `notifications` reading your notifications, Shoal's own log and
-the inbox's daemon-wide problems, and `admin` the rest of administering
+the inbox's daemon-wide problems, `decide` deciding the approval requests of
+the spaces below as you would, and `admin` the rest of administering
 Shoal: changing its
 config, registering, renaming and removing repositories and their local
 config and kept branches, `shoal cleanup`, `shoal setup --skip`,
@@ -465,8 +467,8 @@ key resolves, highest first, from its `permissions` in any layer, then
 `[permissions]` in any layer, then the built-in mode's default, then the key's
 default above; `chat`, `plan` and `orchestrate` default
 `issue_other_repositories` and `merge` to `"direct"`, and `orchestrate`
-defaults `admin`, `limits`, `user_holds` and `notifications` to `"direct"`
-and `daemon` to `"propose"`. A space's own permissions
+defaults `admin`, `limits`, `user_holds`, `notifications` and `decide` to
+`"direct"` and `daemon` to `"propose"`. A space's own permissions
 are then narrowed to its parent's and set by `--permission`; see
 [mode permissions](reference.md#mode-permissions).
 

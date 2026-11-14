@@ -168,10 +168,13 @@ refused with an error naming it.
 
 A child's approval request comes to its coordinator first.
 `shoal approvals --approve <S.N>` works for a request to hold a workspace
-below; for an issue or PR proposal, a push, a merge or an unmerge where the
-coordinator's own permission for it is `direct`, taking `--title` and `--body`
+below; for an issue or PR proposal, a push, a merge, an unmerge or another
+[permitted action](#permitted-actions) where the coordinator's own permission
+for it is `direct`, taking `--title` and `--body`
 for a proposal as the user's approval does; and for anything else only where
-the coordinator holds an approved grant for it. Otherwise it is refused.
+the coordinator holds an approved grant for it. Otherwise it is refused,
+unless the coordinator's `decide` permission is `direct`, which decides any
+request of a space below as the user does, routed to it or not.
 `--deny <S.N>` denies it, with `--reason`, or for an issue proposal
 `--duplicate-of` or `--duplicate-of-approval`, and `--escalate <S.N>` passes it
 to the space above or the user.
@@ -353,12 +356,14 @@ workspaces, `limits` starting agents regardless of the limits, with
 and removing what the user holds, and `daemon` the daemon's service
 commands and `shoal update`. `notifications`, `deny` or `direct`, lets a
 space read the user's notifications, Shoal's own log and the inbox's
-daemon-wide problems.
+daemon-wide problems, and `decide`, `deny` or `direct`, decide the requests
+of the spaces below as the user does.
 With `propose` the command exits 2 with `approval_pending` and the request,
 which goes to the space above whose own value is `direct`, or the user; once
 approved, the same command proceeds once. A master session has `admin`,
-`limits`, `user_holds` and `notifications` at `direct` and `daemon` at
-`propose`; other modes propose the first three and are denied the rest.
+`limits`, `user_holds`, `notifications` and `decide` at `direct` and
+`daemon` at `propose`; other modes propose the first three and are denied
+the rest.
 
 ## Links and watches
 

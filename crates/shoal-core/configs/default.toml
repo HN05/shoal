@@ -399,6 +399,9 @@ user_holds = "propose"
 # Reading your notifications, Shoal's own log and the inbox's daemon-wide
 # problems: "deny" or "direct".
 notifications = "deny"
+# Deciding the approval requests of the spaces below as you would: "deny" or
+# "direct".
+decide = "deny"
 
 # Run the repository's CI jobs on this machine: Shoal registers a runner for
 # it on its forge and runs each waiting job with these labels, plus

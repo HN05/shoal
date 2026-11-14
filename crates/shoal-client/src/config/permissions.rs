@@ -197,6 +197,8 @@ permission_keys! {
     /// Reading, clearing and watching the user's notifications, the
     /// daemon-wide problems the inbox lists, and Shoal's own log.
     notifications: Notifications => "notifications", Allowed;
+    /// Deciding, as the user would, any approval request of a space below.
+    decide: Decide => "decide", Allowed;
 }
 
 /// Refuse `value` of `key` where it is wider than `held`.
@@ -228,6 +230,7 @@ impl PermissionsConfig {
         limits: Some(Acting::Propose),
         user_holds: Some(Acting::Propose),
         notifications: Some(Allowed::Deny),
+        decide: Some(Allowed::Deny),
     };
 
     /// The defaults of a mode that coordinates rather than edits: it decides
@@ -246,6 +249,7 @@ impl PermissionsConfig {
         limits: Some(Acting::Direct),
         user_holds: Some(Acting::Direct),
         notifications: Some(Allowed::Direct),
+        decide: Some(Allowed::Direct),
         ..Self::COORDINATING
     };
 

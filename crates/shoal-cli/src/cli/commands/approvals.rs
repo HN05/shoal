@@ -89,6 +89,9 @@ async fn prompt_decision(ctx: &Context, request: Box<ApprovalRequest>) -> Result
     .await
 }
 
+/// Whether this process decides `request`: the user any, a scoped process
+/// one routed to its space, or one of another space as its `decide`
+/// permission allows, which the daemon confines to the spaces below.
 async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
     if !crate::env::inherits_scope(&ctx.paths.state) {
         return Ok(true);
@@ -103,7 +106,9 @@ async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
                 .id
         }
     };
-    Ok(request.decider.as_ref() == Some(&owner))
+    let decide = crate::config::permissions::PermissionKey::Decide;
+    Ok(request.decider.as_ref() == Some(&owner)
+        || (request.space_id != owner && crate::cli::commands::permits(ctx, decide).await?))
 }
 
 /// Read `y` or `n`; anything else leaves the request undecided.

@@ -1,6 +1,6 @@
 //! Routing a request to the space that decides it, passing it up, and
 //! recording that space's or the user's decision.
-use crate::client::space_ids::SpaceId;
+use crate::client::{repository_ids::RepositoryId, space_ids::SpaceId};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, Transaction, params};
 
@@ -174,7 +174,9 @@ fn decide_and_place(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<De
 }
 
 impl Manager {
-    /// Decide request `number` as `caller`: a scoped process decides only
+    /// Decide request `number` as `caller`: a scoped process whose `decide`
+    /// permission is `direct` decides a request of a space below its own as
+    /// the user does, in the daemon's environment; any other decides only
     /// what was routed to its space, as [`Self::decide_routed_approval`]
     /// allows.
     pub(in crate::daemon) async fn decide_approval_as(
@@ -186,7 +188,12 @@ impl Manager {
         details: proposals::ProposalDecision,
         env: Option<std::collections::BTreeMap<String, String>>,
     ) -> Result<ApprovalRequest> {
+        let request = self.show_approval(number).await?;
         match caller {
+            Some(caller) if self.decides_as_user(caller, &request).await? => {
+                self.decide_approval(number, approve, shown, details, None)
+                    .await
+            }
             Some(caller) => {
                 self.decide_routed_approval(&caller.space_id, number, approve, shown, details)
                     .await
@@ -196,6 +203,25 @@ impl Manager {
                     .await
             }
         }
+    }
+
+    /// Whether `caller` decides `request` as the user does: a request of a
+    /// space its scope reaches below its own, where its `decide` permission,
+    /// resolved in the repository of the request's action, is `direct`.
+    pub(in crate::daemon) async fn decides_as_user(
+        &self,
+        caller: &Caller,
+        request: &ApprovalRequest,
+    ) -> Result<bool> {
+        if request.space_id == caller.space_id
+            || request.space_removed
+            || !self.reaches(caller, &request.space_id).await?
+        {
+            return Ok(false);
+        }
+        let repository = self.request_repository(request).await?;
+        let permissions = (self.space_permissions(&caller.space_id, repository.as_ref())).await?;
+        Ok(permissions.acting(PermissionKey::Decide) == crate::config::permissions::Acting::Direct)
     }
 
     /// Record the decision and tell the requesting workspace's agents about a
@@ -286,12 +312,7 @@ impl Manager {
         if keys.is_empty() {
             return Ok(());
         }
-        let repository = match &request.repository_id {
-            Some(repository) => Some(repository.clone()),
-            None => (self.space_by_id(&request.space_id).await?)
-                .repository_id()
-                .cloned(),
-        };
+        let repository = self.request_repository(request).await?;
         let permissions = self
             .space_permissions(coordinator, repository.as_ref())
             .await?;
@@ -302,6 +323,17 @@ impl Manager {
             );
         }
         Ok(())
+    }
+
+    /// The repository `request`'s action is in: a proposed issue's, else
+    /// that of the space that made it.
+    async fn request_repository(&self, request: &ApprovalRequest) -> Result<Option<RepositoryId>> {
+        Ok(match &request.repository_id {
+            Some(repository) => Some(repository.clone()),
+            None => (self.space_by_id(&request.space_id).await?)
+                .repository_id()
+                .cloned(),
+        })
     }
 
     /// Refuse `coordinator`'s marking a proposal a duplicate of proposal
