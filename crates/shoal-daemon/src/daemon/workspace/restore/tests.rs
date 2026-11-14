@@ -817,8 +817,17 @@ async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
     let workspace = manager
-        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "topic".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let file = root.path().join("notes.md");
@@ -857,6 +866,18 @@ async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
         panic!("{files:?}");
     };
     assert_eq!((&file.path, file.expires_at), (&added.path, None));
+    // The restored workspace has no parent, so the old one reaches them no more.
+    let parents: Vec<Option<String>> = manager
+        .store
+        .run(|db| {
+            Ok(db
+                .prepare("SELECT parent_id FROM workspace_files")?
+                .query_map([], |row| row.get(0))?
+                .collect::<rusqlite::Result<_>>()?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(parents, [None]);
     let [listed] = listed.as_slice() else {
         panic!("{listed:?}");
     };

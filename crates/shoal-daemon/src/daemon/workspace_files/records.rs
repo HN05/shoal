@@ -309,13 +309,14 @@ pub(super) fn forget_expired(db: &mut Connection) -> Result<()> {
     Ok(())
 }
 
-/// Give the workspace `to` that restores the removed workspace `from` the
-/// files `from` kept, which stay where they are, in the transaction that
+/// Give the workspace `to` that restores the removed workspace `from`, and
+/// its parent, the files `from` kept, which stay where they are, in the transaction that
 /// records the restore.
 pub(crate) fn restore(tx: &Transaction<'_>, from: &SpaceId, to: &SpaceId) -> Result<()> {
     tx.execute(
         "UPDATE workspace_files SET space_id=?2,
-            space=(SELECT name FROM spaces WHERE id=?2)
+            space=(SELECT name FROM spaces WHERE id=?2),
+            parent_id=(SELECT parent_id FROM space_parents WHERE space_id=?2)
             WHERE space_id=?1",
         params![from, to],
     )?;
