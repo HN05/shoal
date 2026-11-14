@@ -374,37 +374,41 @@ sensitive = []
 [permissions]
 issue_open = "direct"
 pr_open = "direct"
-# Issues in other repositories than the workspace's: "deny", "propose" or "direct".
-issue_other_repositories = "propose"
-# shoal merge and unmerge, and merging a PR or deleting its branch:
-# "propose" or "direct".
-merge = "propose"
 # Pushes to the repository's remotes, by shoal pr open or git push: "direct",
 # "propose" or "deny". Unless "direct", shoal merge needs your approval too.
 push = "direct"
+# The keys below default per mode, and `orchestrate`, a master session, gets
+# more than the values shown, which are a worker's; a value set here applies
+# to every mode, over those defaults, and [modes.NAME.permissions] sets one
+# mode's.
+# Issues in other repositories than the workspace's: "deny", "propose" or "direct".
+# issue_other_repositories = "propose"
+# shoal merge and unmerge, and merging a PR or deleting its branch:
+# "propose" or "direct".
+# merge = "propose"
 # Requests through shoal forge api that are not reads, which you may always
 # send: "deny", "propose" or "direct".
-api_writes = "deny"
+# api_writes = "deny"
 # Installing, starting, stopping and restarting the daemon, and shoal update:
 # "deny", "propose" or "direct".
-daemon = "deny"
+# daemon = "deny"
 # Administering Shoal: config changes, repositories, shoal cleanup, repairing,
 # adopting, restoring and moving workspaces: "deny", "propose" or "direct".
-admin = "propose"
+# admin = "propose"
 # Starting agents regardless of max_agents and memory, with --now, --focus or
 # shoal queue start: "deny", "propose" or "direct".
-limits = "propose"
+# limits = "propose"
 # Releasing your holds and removing the spaces you hold: "deny", "propose" or
 # "direct".
-user_holds = "propose"
+# user_holds = "propose"
 # Reading your notifications, Shoal's own log and the inbox's daemon-wide
 # problems: "deny" or "direct".
-notifications = "deny"
+# notifications = "deny"
 # Deciding the approval requests of the spaces below as you would: "deny" or
 # "direct".
-decide = "deny"
+# decide = "deny"
 # Approving CI runs that wait for approval: "deny", "propose" or "direct".
-ci_approve = "propose"
+# ci_approve = "propose"
 
 # Run the repository's CI jobs on this machine: Shoal registers a runner for
 # it on its forge and runs each waiting job with these labels, plus
