@@ -397,6 +397,7 @@ pub async fn related(
         pids.insert(child.unwrap().pid);
         pids = descendants(pids, &rows);
     }
+    let agents = agents.as_listed(&rows);
     let others = agents.besides(wrapper);
     pids.retain(|pid| !others.run(*pid));
     let identities = pids
