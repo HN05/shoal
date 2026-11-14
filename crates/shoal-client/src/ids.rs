@@ -219,7 +219,9 @@ macro_rules! number {
         #[cfg(feature = "rusqlite")]
         impl rusqlite::types::ToSql for $name {
             fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-                i64::try_from(self.0)
+                // Through u64, which can overflow i64, so one conversion
+                // serves the widths that cannot as well.
+                i64::try_from(u64::from(self.0))
                     .map(rusqlite::types::ToSqlOutput::from)
                     .map_err(|error| rusqlite::Error::ToSqlConversionFailure(error.into()))
             }
