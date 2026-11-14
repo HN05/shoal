@@ -316,8 +316,8 @@ instead of the PR delivery guidance below.
   workspaces before cleanup can remove it, retargets only their PRs still
   targeting the head branch of one of its merged PRs, and queues a watch update; it never rebases or pushes.
   Forge writes are retargeting, the daemon's typed issue and PR actions and
-  `shoal forge api` requests, sent through the REST transport; scoped callers cannot
-  merge. `shoal forge api` paths stay under the forge's API root. Every forge
+  `shoal forge api` requests, sent through the REST transport; scoped callers
+  merge only as their `merge` permission allows, as the agent account. `shoal forge api` paths stay under the forge's API root. Every forge
   request sends the `[machine.forges."<host>"]` token of the repository's own
   host (`user_token` for the user; `agent_token` for the agent account, whose
   reads fall back to `user_token` but whose changes never do), validated, on curl's stdin, fetched
@@ -575,8 +575,8 @@ configured command for another agent, plus proven child
   process group; the reattach request stays accepted at every protocol version.
   Detached wrappers never write to the terminal while their command runs.
 - Shoal runs no forge CLI, reads no CLI's saved login, and never switches the
-  user's login. Forge changes for a workspace use the agent account except
-  merging, which uses the user's. The agent Git profile
+  user's login. Forge changes for a workspace use the agent account, except
+  the user's own merges and branch deletions, which use the user's. The agent Git profile
   reaches only a tracked agent's environment, the push of `shoal pr open` and
   approved pushes;
   it never writes Git config.

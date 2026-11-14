@@ -3562,7 +3562,8 @@ worktrees stay unresolved until restored. Any other ownership failure is
 recoverable by explicit reclaim, which a human requests after checking the
 worktree by adopting its recorded path again: it re-marks a linked worktree of the recorded repository at the
 recorded path on the recorded branch that no other workspace owns, then
-repairs normally. It is never automatic, and scoped callers cannot request it. A deleted directory means
+repairs normally. It is never automatic, and scoped callers request it only
+as their `admin` permission allows. A deleted directory means
 the user removed the worktree: the cleanup sweep forgets it through the shared
 removal path, releasing its leases and retaining its branch, unless it has
 commands Shoal cannot verify stopped.
