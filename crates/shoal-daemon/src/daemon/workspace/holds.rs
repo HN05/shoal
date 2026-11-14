@@ -7,12 +7,15 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::{GuardMode, Manager, ResourceGuard};
 use crate::client::space_names::SpaceSelector;
 use crate::{
+    config::permissions::PermissionKey,
     daemon::{
         allocation::Allocation,
         approvals::{
             self, ApprovalRequest, HoldSpecification, Lifetime, ReasonRequired, Specification,
             Target,
         },
+        permissions::Action,
+        scope::Caller,
         store,
     },
     model::{HoldPlacer, WorkspaceHold},
@@ -155,6 +158,30 @@ impl Manager {
         self.touch(&workspace.id).await;
         self.signals.wake_cleanup();
         Ok(())
+    }
+
+    /// Release the hold `name` for `caller`: a scoped caller releases one
+    /// the user placed as its `user_holds` permission allows.
+    pub(crate) async fn release_hold_as(
+        &self,
+        caller: Option<&Caller>,
+        selector: &SpaceSelector,
+        name: String,
+    ) -> Result<()> {
+        let Some(caller) = caller else {
+            return self.release_hold(selector, name, HoldPlacer::User).await;
+        };
+        let workspace = self.workspace(selector).await?;
+        let users = (workspace.holds.iter())
+            .any(|hold| hold.name == name && hold.placed_by == HoldPlacer::User);
+        if !users {
+            return self.release_hold(selector, name, HoldPlacer::Agent).await;
+        }
+        let release = format!("release the user's hold {name} on {}", workspace.name);
+        let action = Action::new(PermissionKey::UserHolds, release)
+            .in_repository(workspace.repository_id.clone());
+        self.authorize_action(Some(caller), action).await?;
+        self.release_hold(selector, name, HoldPlacer::User).await
     }
 
     pub async fn holds(&self, selector: &SpaceSelector) -> Result<Vec<WorkspaceHold>> {

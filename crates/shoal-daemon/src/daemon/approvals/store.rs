@@ -359,17 +359,20 @@ pub fn request_merge(
 
 /// Record `request` for an action a permission held back, or find the one
 /// recorded for the same action. Returns the request still awaiting or
-/// refused a decision; an approval lets the action proceed once, so taking
-/// it releases the request.
+/// refused a decision; an approval lets the action proceed once, so one
+/// that `takes` it releases the request.
 pub fn request_action(
     tx: &Transaction<'_>,
     request: ApprovalRequest,
+    takes: bool,
 ) -> Result<Option<ApprovalRequest>> {
     if let Some(existing) = current(tx, &request.space_id, &request.target, &request.name)?
         && existing.status == DecisionStatus::Approved
         && existing.specification == request.specification
     {
-        release(tx, &existing.space_id, &existing.target, &existing.name)?;
+        if takes {
+            release(tx, &existing.space_id, &existing.target, &existing.name)?;
+        }
         return Ok(None);
     }
     check(tx, request)

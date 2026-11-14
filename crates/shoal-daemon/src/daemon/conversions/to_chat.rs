@@ -125,7 +125,7 @@ impl Manager {
         );
         ensure!(
             !(workspace.holds.iter()).any(|hold| hold.placed_by == HoldPlacer::User),
-            "the user holds workspace {}; ask the user to release the hold first",
+            "the user holds workspace {}; release the hold first",
             workspace.name
         );
         if let Some(stacked) = workspace.stacked_workspaces.first() {

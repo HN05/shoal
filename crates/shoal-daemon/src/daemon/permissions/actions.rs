@@ -44,6 +44,14 @@ impl Action {
         }
     }
 
+    /// This action, taken in the registered repository `repository`.
+    pub(crate) fn in_repository(self, repository: RepositoryId) -> Self {
+        Self {
+            repository: Some(repository),
+            ..self
+        }
+    }
+
     /// `start`, which starts an agent regardless of `max_agents` and memory,
     /// as the `limits` permission governs.
     pub(crate) fn beyond_limits(start: String) -> Self {
@@ -101,7 +109,7 @@ impl Manager {
         caller: Option<&Caller>,
         action: Action,
     ) -> Result<()> {
-        self.take_action(caller, action).await.map(drop)
+        self.take_action(caller, action, Use::Take).await.map(drop)
     }
 
     /// Let `caller` send `request`, which the `admin` permission governs,
@@ -126,14 +134,31 @@ impl Manager {
         action: Action,
     ) -> Result<Option<ScopeToken>> {
         let key = action.key;
-        Ok(match (caller, self.take_action(caller, action).await?) {
-            (Some(caller), Taken::Approved) => Some(self.grants.issue(caller, key)),
-            _ => None,
-        })
+        Ok(
+            match (caller, self.take_action(caller, action, Use::Take).await?) {
+                (Some(caller), Taken::Approved) => Some(self.grants.issue(caller, key)),
+                _ => None,
+            },
+        )
     }
 
-    /// Take `action` for `caller`, saying whether an approval let it.
-    async fn take_action(&self, caller: Option<&Caller>, action: Action) -> Result<Taken> {
+    /// Refuse `caller` `action` as a check before taking it, which a
+    /// request of its own takes: as [`Self::authorize_action`] does, but an
+    /// approval stays for that request to use up.
+    pub(crate) async fn check_action(&self, caller: &Caller, action: Action) -> Result<()> {
+        self.take_action(Some(caller), action, Use::Leave)
+            .await
+            .map(drop)
+    }
+
+    /// Take `action` for `caller`, saying whether an approval let it, which
+    /// `using` says whether to use up.
+    async fn take_action(
+        &self,
+        caller: Option<&Caller>,
+        action: Action,
+        using: Use,
+    ) -> Result<Taken> {
         let Some(caller) = caller else {
             return Ok(Taken::AtOnce);
         };
@@ -148,17 +173,23 @@ impl Manager {
                 permissions.cited(action.key)
             ),
             Acting::Propose if caller.granted == Some(action.key) => Ok(Taken::AtOnce),
-            Acting::Propose => self.await_action_decision(caller, action).await,
+            Acting::Propose => self.await_action_decision(caller, action, using).await,
         }
     }
 
     /// Request approval of `action` for `caller`'s space, refusing until it
-    /// is approved, and using up the approval once it is.
-    async fn await_action_decision(&self, caller: &Caller, action: Action) -> Result<Taken> {
+    /// is approved, and using up the approval once it is where `using` says.
+    async fn await_action_decision(
+        &self,
+        caller: &Caller,
+        action: Action,
+        using: Use,
+    ) -> Result<Taken> {
         let request = action_request(caller, action);
+        let takes = using == Use::Take;
         let undecided = self
             .store
-            .write(move |tx| request_action(tx, request))
+            .write(move |tx| request_action(tx, request, takes))
             .await?;
         match undecided {
             Some(request) => {
@@ -168,6 +199,14 @@ impl Manager {
             None => Ok(Taken::Approved),
         }
     }
+}
+
+/// Whether taking an action uses up the approval that lets it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Use {
+    Take,
+    /// A check before the action leaves it for the action.
+    Leave,
 }
 
 /// How a caller took an action.

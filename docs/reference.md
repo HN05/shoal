@@ -2439,7 +2439,9 @@ with its arguments, which the command reports with exit 2 and
 `code: "approval_pending"`, or `"approval_denied"` once denied. Once the
 request is approved, the same action proceeds once under every other check,
 and taking it again asks again; an approved command's own requests take
-what the same key governs without asking again. `daemon` governs installing,
+what the same key governs without asking again. `user_holds` governs
+releasing the user's holds and removing a space the user holds, or holds
+one below; `daemon` governs installing,
 starting, stopping and restarting the daemon, and `shoal update`; `limits`
 starting agents regardless of `max_agents` and memory, with `--now`,
 `--focus`, `queue start` or the queue picker's start; `admin`
@@ -2601,8 +2603,9 @@ runs its setup, and records the parent, so work that needs its own PR gets its
 own branch and worktree. The parent must be ready. `--base` works as for
 `shoal start`; naming the parent's branch also [stacks](#stacked-workspaces) the
 child on it. Children can be split from children. Workspace processes may split
-from their own workspace, act on every space below it and `shoal rm` one unless
-the user holds it or a workspace below it. A split never starts an agent.
+from their own workspace, act on every space below it and `shoal rm` one, or
+one the user holds or holds a workspace below, as their space's
+[`user_holds` permission](#permitted-actions) allows. A split never starts an agent.
 Run inside a workspace or a chat, `shoal start` likewise creates a child of
 that space, or of a space below it that `--parent` names, in its repository,
 and a chat an agent starts opens in the background; that is the only creation
@@ -3995,8 +3998,8 @@ nearest space above with an agent, as other [approval requests](#resource-approv
 do: a workspace or a chat, which needs no grant to decide it, else the user;
 approval places the hold,
 and acquiring again returns it.
-Workspace processes release only the holds agents placed, on their own workspace
-or below it; the user's stay theirs to release. `status` and `list --json` show holds on the workspace record. `rm` lists holders before
+Workspace processes release the holds agents placed, on their own workspace
+or below it, and the user's as their space's [`user_holds` permission](#permitted-actions) allows. `status` and `list --json` show holds on the workspace record. `rm` lists holders before
 confirmation and includes them in its JSON result; `--yes` skips confirmation.
 
 ### Forges

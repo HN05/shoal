@@ -171,6 +171,7 @@ impl Scoped for ChatMethod {
                         caller,
                         chat,
                         "scoped processes remove only the chats below their own space",
+                        true,
                     )
                     .await?,
             ),

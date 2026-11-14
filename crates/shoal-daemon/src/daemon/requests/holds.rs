@@ -46,7 +46,7 @@ pub(super) async fn handle(
                 .await?,
         ),
         HoldMethod::HoldRelease { workspace, name } => {
-            manager.release_hold(&workspace, name, placer).await?;
+            manager.release_hold_as(caller, &workspace, name).await?;
             Body::Ok
         }
         HoldMethod::HoldList { workspace } => Body::Holds(manager.holds(&workspace).await?),

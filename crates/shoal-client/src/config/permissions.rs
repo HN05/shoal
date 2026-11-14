@@ -181,6 +181,9 @@ permission_keys! {
     admin: Admin => "admin", Acting;
     /// Starting agents regardless of `max_agents` and memory.
     limits: Limits => "limits", Acting;
+    /// Removing or converting a space the user holds, and releasing the
+    /// user's holds.
+    user_holds: UserHolds => "user_holds", Acting;
 }
 
 /// Refuse `value` of `key` where it is wider than `held`.
@@ -210,6 +213,7 @@ impl PermissionsConfig {
         daemon: Some(Acting::Deny),
         admin: Some(Acting::Propose),
         limits: Some(Acting::Propose),
+        user_holds: Some(Acting::Propose),
     };
 
     /// The defaults of a mode that coordinates rather than edits: it decides
@@ -226,6 +230,7 @@ impl PermissionsConfig {
         daemon: Some(Acting::Propose),
         admin: Some(Acting::Direct),
         limits: Some(Acting::Direct),
+        user_holds: Some(Acting::Direct),
         ..Self::COORDINATING
     };
 

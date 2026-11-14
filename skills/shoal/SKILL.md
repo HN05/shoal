@@ -113,7 +113,8 @@ checkpoints' files instead; an untouched copy goes with cleanup. `shoal start
 --copy [--fork] -- "<task>"` starts an agent in such a copy, and
 `shoal start --copy <workspace>` copies another workspace, live or removed.
 `shoal rm <child>` removes a child, including one a split left `preparing`;
-one the user holds, or with such a space below it, is the user's to remove.
+one the user holds, or with such a space below it, as the space's
+`user_holds` permission allows.
 
 ## Convert a space
 
@@ -348,13 +349,14 @@ Other keys govern what was once the user's alone, each `deny`, `propose` or
 `direct`: `admin` administering Shoal, such as `config set`, `repo add`,
 `cleanup`, `setup --skip`, `contribute`, `move`, and restoring removed
 workspaces, `limits` starting agents regardless of the limits, with
-`--now`, `--focus` or `queue start`, and `daemon` the daemon's service
+`--now`, `--focus` or `queue start`, `user_holds` releasing the user's holds
+and removing what the user holds, and `daemon` the daemon's service
 commands and `shoal update`.
 With `propose` the command exits 2 with `approval_pending` and the request,
 which goes to the space above whose own value is `direct`, or the user; once
-approved, the same command proceeds once. A master session has `admin` and
-`limits` at `direct` and `daemon` at `propose`; other modes propose `admin`
-and `limits` and are denied `daemon`.
+approved, the same command proceeds once. A master session has `admin`,
+`limits` and `user_holds` at `direct` and `daemon` at `propose`; other modes
+propose them and are denied `daemon`.
 
 ## Links and watches
 
@@ -549,8 +551,8 @@ shoal release hold --name <name>
 
 A hold keeps a workspace from cleanup. A workspace process asking to hold its
 own workspace makes an approval request to its coordinator, or the user;
-holding a workspace below it needs none. Scoped callers release only the holds
-agents placed.
+holding a workspace below it needs none. Scoped callers release the holds
+agents placed, and the user's as their `user_holds` permission allows.
 
 ## Remove, restore and move
 

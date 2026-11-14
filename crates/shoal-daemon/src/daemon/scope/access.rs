@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use super::Caller;
 use crate::{
     client::space_names::SpaceSelector,
+    config::permissions::PermissionKey,
     daemon::{
         approvals::ApprovalRequest, item_numbers::ItemNumber, permissions::Action,
         questions::Question, workspace::Manager,
@@ -170,31 +171,43 @@ impl Manager {
         Ok(workspace)
     }
 
-    /// `workspace`, which must be one below the caller's that the user
-    /// holds nothing of, nor of any workspace below it: removing it releases
-    /// their holds, and only the holds agents placed are agents' to release.
+    /// `workspace`, which must be one below the caller's. Removing it
+    /// releases the user's holds of it and of the spaces below it, which is
+    /// the `user_holds` permission's: a removal that `takes` the holds uses
+    /// up its approval, and a check before one asks for it but leaves it.
     pub(in crate::daemon) async fn unheld_workspace_below<'a>(
         &self,
         caller: &Caller,
         workspace: &'a mut SpaceSelector,
         refusal: &str,
+        takes: bool,
     ) -> Result<&'a mut SpaceSelector> {
         let workspace = self.workspace_below(caller, workspace, refusal).await?;
-        let id = self.space(workspace).await?.id().to_owned();
-        for id in self.subtree(&id).await? {
+        let space = self.space(workspace).await?;
+        if !self.user_holds_below(space.id()).await? {
+            return Ok(workspace);
+        }
+        let removal = format!("remove {}, which the user holds", space.name());
+        let action = Action::new(PermissionKey::UserHolds, removal);
+        match takes {
+            true => self.authorize_action(Some(caller), action).await?,
+            false => self.check_action(caller, action).await?,
+        }
+        Ok(workspace)
+    }
+
+    /// Whether the user holds the workspace `id` or one below it.
+    async fn user_holds_below(&self, id: &SpaceId) -> Result<bool> {
+        for id in self.subtree(id).await? {
             // A chat below has no holds.
             let Some(held) = self.find_workspace(&id).await? else {
                 continue;
             };
-            ensure!(
-                held.holds
-                    .iter()
-                    .all(|hold| hold.placed_by == crate::model::HoldPlacer::Agent),
-                "{} has holds, which are the user's; ask the user to remove it",
-                held.name
-            );
+            if (held.holds.iter()).any(|hold| hold.placed_by == crate::model::HoldPlacer::User) {
+                return Ok(true);
+            }
         }
-        Ok(workspace)
+        Ok(false)
     }
 
     /// Approval request `number`, which must be routed to the caller to

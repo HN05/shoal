@@ -209,11 +209,15 @@ impl Scoped for RemovalMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         const REFUSAL: &str = "workspace processes remove only the workspaces split from theirs; finish their own with shoal done";
         match self {
-            // The check refuses holds too, so a batch refuses before removing any.
-            RemovalMethod::CheckRemoval { workspace, .. }
-            | RemovalMethod::RemoveWorkspace { workspace, .. }
+            // The check asks for the user's holds too, so a batch refuses
+            // before removing any.
+            RemovalMethod::CheckRemoval { workspace, .. } => manager
+                .unheld_workspace_below(caller, workspace, REFUSAL, false)
+                .await
+                .map(Some),
+            RemovalMethod::RemoveWorkspace { workspace, .. }
             | RemovalMethod::StartRemoval { workspace, .. } => manager
-                .unheld_workspace_below(caller, workspace, REFUSAL)
+                .unheld_workspace_below(caller, workspace, REFUSAL, true)
                 .await
                 .map(Some),
             // Its answer confines the spaces to those below the caller's.

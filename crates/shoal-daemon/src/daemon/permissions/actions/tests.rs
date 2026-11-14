@@ -174,3 +174,39 @@ async fn administering_shoal_follows_the_admin_permission() {
     let routed = manager.show_approval(request.number).await.unwrap();
     assert_eq!(routed.decider.as_ref(), Some(&master.id));
 }
+
+#[tokio::test]
+async fn releasing_the_user_s_hold_follows_the_user_holds_permission() {
+    use crate::{client::space_names::SpaceSelector, model::HoldPlacer};
+
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap();
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let worker = crate::daemon::test_support::workspace_below(
+        &manager,
+        &repo,
+        "worker",
+        &master.id,
+        Some("worker".into()),
+    )
+    .await;
+    let selector = SpaceSelector::id(&worker.id);
+    let hold = || async {
+        (manager.acquire_hold(&selector, "keep".into(), None, HoldPlacer::User))
+            .await
+            .unwrap();
+    };
+    hold().await;
+    // The worker proposes releasing the user's hold; the master releases it.
+    let asking = caller(&worker.id);
+    let release = manager.release_hold_as(Some(&asking), &selector, "keep".into());
+    let request = undecided(release.await);
+    assert_eq!(request.target, Target::Action(PermissionKey::UserHolds));
+    (manager.release_hold_as(Some(&caller(&master.id)), &selector, "keep".into()))
+        .await
+        .unwrap();
+    assert!(manager.holds(&selector).await.unwrap().is_empty());
+}

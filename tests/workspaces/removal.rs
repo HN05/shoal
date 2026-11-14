@@ -690,7 +690,8 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
         );
         assert!(!output.status.success(), "{name}: {output:?}");
     }
-    // A held child is the user's: a batch naming it removes none.
+    // A held child asks for the user_holds permission: a batch naming it
+    // removes none.
     let held = scoped_command(&fixture, "parent", &["split", "held"]);
     assert!(held.status.success(), "{held:?}");
     fixture.ok(&[
