@@ -14,7 +14,7 @@ use crate::{
             tests::{add, create, limit_globally, register, request},
         },
     },
-    model::{Blocker, Dependency, InheritedRank, QueueRank, QueueRequest, Tier},
+    model::{Blocker, Dependency, InheritedRank, QueueRank, QueueRequest, SharedArea, Tier},
     state::QueueState,
 };
 
@@ -545,5 +545,155 @@ async fn a_queued_restore_reads_when_its_agents_prompt_cache_expires() {
     assert_eq!(
         caches,
         [Some(crate::client::time::UnixTime::from_seconds(500))]
+    );
+}
+
+/// The machine limited to one agent, with area labels prefixed `area/`.
+const AREAS: &str = "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n\
+     [issue]\narea_prefix = 'area/'\n";
+
+/// Assign `workspace` the issue `number` and watch its PR `number`, whose
+/// labels the background poll read as `issue` and `pr`.
+async fn assign_labelled(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+    number: u32,
+    (issue, pr): (&[&str], &[&str]),
+) {
+    let id = workspace.id.clone();
+    let issue_url = format!("https://forge.example/team/repo/issues/{number}");
+    let pr_url = format!("https://forge.example/team/repo/pulls/{number}");
+    let labels = |labels: &[&str]| serde_json::json!({"details": {"labels": labels}}).to_string();
+    let records = [
+        (issue_url.clone(), labels(issue)),
+        (pr_url.clone(), labels(pr)),
+    ];
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                params![id, issue_url],
+            )?;
+            db.execute(
+                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,json_object('url',?2))",
+                params![id, pr_url],
+            )?;
+            for (url, record) in records {
+                db.execute(
+                    "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,?3)",
+                    params![id, url, record],
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+/// Queue a launch of a new workspace `name` whose issue has `labels`.
+async fn queue_in_areas(
+    manager: &Manager,
+    repo: &crate::model::Repository,
+    name: &str,
+    labels: &[&str],
+) {
+    let request = QueueRequest {
+        issue_labels: labels.iter().map(|label| label.to_string()).collect(),
+        ..request(repo, name, false)
+    };
+    manager.queue_add(request).await.unwrap();
+}
+
+/// The waiting entries' names and shared areas, in queue order.
+async fn waiting_areas(manager: &Manager) -> Vec<(String, Vec<SharedArea>)> {
+    (manager.queue_entries().await.unwrap().into_iter())
+        .filter(|entry| entry.state == QueueState::Queued)
+        .map(|entry| (entry.name.to_string(), entry.rank.unwrap().shared_areas))
+        .collect()
+}
+
+#[tokio::test]
+async fn a_launch_shares_the_areas_of_existing_workspaces_issues_and_prs() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(AREAS));
+    add(&manager, &repo, "running").await;
+    let daemon = create(&manager, &repo, "daemon").await;
+    assign_labelled(&manager, &daemon, 1, (&["area/daemon", "type/bug"], &[])).await;
+    let cli = create(&manager, &repo, "cli").await;
+    assign_labelled(&manager, &cli, 2, (&[], &["area/cli", "area/daemon"])).await;
+    // A chat working on an issue occupies nothing.
+    let chat = (manager.start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None))
+        .await
+        .unwrap();
+    let chat_issue = "https://forge.example/team/repo/issues/3";
+    let chat_id = chat.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                params![chat_id, chat_issue],
+            )?;
+            db.execute(
+                "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,
+                    json_object('details',json_object('labels',json_array('area/docs'))))",
+                params![chat_id, chat_issue],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    queue_in_areas(&manager, &repo, "both", &["area/daemon", "area/cli"]).await;
+    queue_in_areas(
+        &manager,
+        &repo,
+        "daemon-only",
+        &["area/daemon", "type/feature"],
+    )
+    .await;
+    queue_in_areas(&manager, &repo, "docs", &["area/docs"]).await;
+
+    let holders = |area: &str, spaces: &[&crate::model::Workspace]| SharedArea {
+        area: area.into(),
+        spaces: spaces
+            .iter()
+            .map(|space| space.number.to_string())
+            .collect(),
+    };
+    assert_eq!(
+        waiting_areas(&manager).await,
+        [
+            ("docs".into(), vec![]),
+            (
+                "daemon-only".into(),
+                vec![holders("area/daemon", &[&daemon, &cli])]
+            ),
+            (
+                "both".into(),
+                vec![
+                    holders("area/cli", &[&cli]),
+                    holders("area/daemon", &[&daemon, &cli]),
+                ]
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn without_an_area_prefix_no_launch_shares_areas() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    add(&manager, &repo, "running").await;
+    let daemon = create(&manager, &repo, "daemon").await;
+    assign_labelled(&manager, &daemon, 1, (&["area/daemon"], &[])).await;
+    queue_in_areas(&manager, &repo, "shared", &["area/daemon"]).await;
+    queue_in_areas(&manager, &repo, "free", &[]).await;
+
+    assert_eq!(
+        waiting_areas(&manager).await,
+        [("shared".into(), vec![]), ("free".into(), vec![])]
     );
 }

@@ -733,6 +733,7 @@ required_labels = ["type/"]  # Default: []
 plan_label = "needs-plan"    # Default: unset
 planned_label = "planned"    # Default: unset
 assign = true                # Default: true
+area_prefix = "area/"        # Default: unset
 ```
 
 `required_labels` names entries that every new issue's labels must each start
@@ -741,7 +742,10 @@ with, so `area/` takes any area label; see
 marks issues that need a plan and `planned_label` those whose plan is settled;
 see [planning issues](reference.md#planning-issues). `assign` adds the account
 that links an issue as assigned to the issue's assignees on the forge; see
-[linked items](reference.md#linked-items-and-cleanup).
+[linked items](reference.md#linked-items-and-cleanup). `area_prefix` is the
+prefix of the labels that name an issue's areas, so the
+[agent queue](reference.md#queue-order) starts new workspaces whose issues share
+fewer areas with existing workspaces first; unset, areas order nothing.
 
 ```toml
 [priority.labels]   # Default: none

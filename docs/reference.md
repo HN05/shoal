@@ -2192,10 +2192,14 @@ the default `balanced`, they start by tier, highest first:
 space with an open PR it opened or was assigned or with a ready mark, and CI
 jobs on PRs and on the default branch; `started`, restores of agents that have
 worked in their space; `new`, other launches and CI jobs. An entry rises one
-tier for each full hour it waits, but never to a higher priority. Within a tier, the space with the larger
-share of its plan steps done goes first, then the space created earliest, then
-a CI job or review ahead of an agent of the same space, then the entry that
-arrived first.
+tier for each full hour it waits, but never to a higher priority. Within a
+tier, a launch of a new workspace whose issue shares fewer
+[areas](config.md#issues) with the workspaces of its repository goes first:
+an area is a label with the `[issue] area_prefix`, a workspace holds those of
+its assigned issues and PRs until it is removed, and a chat holds none. Then
+the space with the larger share of its plan steps done goes first, then the
+space created earliest, then a CI job or review ahead of an agent of the same
+space, then the entry that arrived first.
 
 Work that other work waits on takes that work's priority and tier where they
 are higher, each on its own, through any chain of waits: what blocks a queued launch or a space's progress, which

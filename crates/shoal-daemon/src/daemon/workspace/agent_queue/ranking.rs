@@ -1,6 +1,7 @@
-//! Ranking the queue: the snapshot the rank reads, from the store and from
-//! what the daemon keeps in memory, the waiting entries in rank order, and
-//! spaces in the order their agents would start.
+//! Ranking the queue: the snapshot the rank reads, from the store, from
+//! what the daemon keeps in memory and from the repositories' settings, the
+//! waiting entries in rank order, and spaces in the order their agents
+//! would start.
 use std::collections::{HashMap, hash_map};
 
 use anyhow::Result;
@@ -17,6 +18,7 @@ use crate::client::{
 use crate::config::{Effective, machine::Schedule};
 use crate::daemon::{approvals::Target, workspace::Manager};
 
+mod areas;
 mod edges;
 mod entries;
 mod spaces;
@@ -40,18 +42,22 @@ impl Manager {
         let oneshots = self.agent_queue.waiting_oneshots();
         let leases = self.queues.waiters();
         let schedule = self.config().machine.schedule;
-        let (mut snapshot, labelled) = (self.store)
+        let (mut snapshot, labelled, areas) = (self.store)
             .read(move |tx| {
                 Ok((
                     snapshot(tx, &jobs, &oneshots, &leases, schedule)?,
                     spaces::labelled(tx)?,
+                    areas::labels(tx)?,
                 ))
             })
             .await?;
-        let repositories = labelled.iter().map(|space| space.repository.clone());
-        let settings = self.settings_of(repositories.collect()).await;
+        let repositories = (labelled.iter().map(|space| space.repository.clone()))
+            .chain(areas.repositories())
+            .collect();
+        let settings = self.settings_of(repositories).await;
         let priorities = spaces::label_priorities(labelled, &settings);
         spaces::prioritize(&mut snapshot.spaces, priorities);
+        areas::place(&mut snapshot, areas, &settings);
         Ok(snapshot)
     }
 

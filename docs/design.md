@@ -1709,9 +1709,15 @@ its holders. A chat parent passes on only a priority of its own, set or from its
 labels, or passed down to it, so an
 orchestrator's children compete with every other worker. CI jobs and reviews have no rank of their
 own beyond a job's tier: each takes the rank of the spaces it serves and goes
-ahead of their agents, which wait on it. Within a tier, plan steps done, then
-the space's age, then arrival decide, and `shoal queue` explains a rank taken
-from other work, for its priority and its tier apart.
+ahead of their agents, which wait on it. Within a tier, a launch of a new
+workspace whose issue shares fewer areas, the labels with `[issue]
+area_prefix`, with existing workspaces of its repository goes first, so that
+queued issues run beside unrelated work rather than conflicting with it; an
+area only orders, never holds a launch while a slot is free, every area counts
+the same, the hourly rise keeps a launch that shares areas from starving, and
+only new workspaces move, since other work's branch already exists. Then plan steps done, the space's age and arrival decide, and
+`shoal queue` explains a rank taken from other work, for its priority and its
+tier apart.
 For the same reason
 every caller sees the whole queue, while acting on an entry keeps the scope
 rules. Each waiting entry carries what held it back at the last admission
