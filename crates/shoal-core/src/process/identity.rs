@@ -12,6 +12,7 @@ use std::{
     collections::HashSet, ffi::OsStr, os::unix::ffi::OsStrExt, path::PathBuf, time::Duration,
 };
 
+pub use agent_trees::AgentTrees;
 #[cfg(test)]
 pub(crate) use attribution::OwnedProcess;
 #[cfg(any(test, feature = "test-support"))]
@@ -373,13 +374,14 @@ pub async fn started_by(identities: &[Identity], wrappers: &[Identity]) -> Resul
 /// descending from it through live parents, except those below a process
 /// whose own environment lacks the marker of `execution`, such as a demo the
 /// command started. Without that proof, group members are candidates only and
-/// must not be killed. Neither is ever one of the `foreign` processes, the
-/// wrappers of other executions, nor anything they started.
+/// must not be killed. Neither is ever a process that `agents` tell belongs
+/// to another agent than the one `wrapper`, the execution's, runs.
 pub async fn related(
     child: Option<&Identity>,
     group: Option<u32>,
     execution: Option<&ExecutionId>,
-    foreign: &[Identity],
+    agents: &AgentTrees,
+    wrapper: Option<&Identity>,
 ) -> Result<(Vec<Identity>, Vec<Identity>)> {
     let Some(group) = group else {
         return Ok((vec![], vec![]));
@@ -395,8 +397,7 @@ pub async fn related(
         pids.insert(child.unwrap().pid);
         pids = descendants(pids, &rows);
     }
-    let foreign_tree = descendants(live_pids(foreign)?, &rows);
-    pids.retain(|pid| !foreign_tree.contains(pid));
+    pids.retain(|pid| !agents.foreign(*pid, wrapper));
     let identities = pids
         .into_iter()
         .map(capture)
@@ -410,7 +411,7 @@ pub async fn related(
     let Some(root) = child.and_then(Identity::lineage_root) else {
         return Ok((vec![], identities));
     };
-    let (execution, foreign) = (execution.cloned(), foreign.to_vec());
+    let (execution, foreign) = (execution.cloned(), agents.others(wrapper));
     let lineage =
         tokio::task::spawn_blocking(move || descended_from(root, &rows, execution, &foreign))
             .await
@@ -420,16 +421,6 @@ pub async fn related(
         .filter(|identity| !lineage.contains(identity))
         .collect();
     Ok((lineage, candidates))
-}
-
-/// The PIDs of the live processes among `roots` and of every process they
-/// started.
-pub async fn trees_of(roots: &[Identity]) -> Result<HashSet<u32>> {
-    let roots = live_pids(roots)?;
-    if roots.is_empty() {
-        return Ok(roots);
-    }
-    Ok(descendants(roots, &same_user_processes().await?))
 }
 
 /// Same-user processes other than init and the daemon, as (PID, process
@@ -495,17 +486,6 @@ fn descended_from(
     })
 }
 
-/// The PIDs of the live processes among `identities`.
-fn live_pids(identities: &[Identity]) -> Result<HashSet<u32>> {
-    let mut pids = HashSet::new();
-    for identity in identities {
-        if alive(identity)? {
-            pids.insert(identity.pid);
-        }
-    }
-    Ok(pids)
-}
-
 /// A parent's unique ID is lower than its children's, since the kernel
 /// assigns them in order, so one pass in that order finds every descendant.
 /// A descendant that `left` names is left out with its own descendants.
@@ -564,6 +544,7 @@ pub async fn stop_verified(targets: &[Identity]) -> Result<()> {
     Ok(())
 }
 
+mod agent_trees;
 mod attribution;
 pub(crate) mod details;
 mod marks;

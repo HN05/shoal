@@ -237,53 +237,99 @@ async fn only_marked_processes_outside_the_group_run_outside_it() {
     hook.wait().await.unwrap();
 }
 
-/// A process that hides its environment under another execution's agent
-/// wrapper, as `sh` does on macOS under a scoped caller's `start --here`,
-/// takes the marker the wrapper inherited from its starter.
-#[tokio::test]
-async fn a_foreign_agent_wrappers_processes_are_not_owned() -> anyhow::Result<()> {
+/// The agent wrapper a test starts in a process group of its own, as an
+/// agent's, and the process it runs in the background.
+async fn agent_wrapper(script: &str) -> anyhow::Result<(tokio::process::Child, Vec<u32>)> {
     use anyhow::Context;
     use tokio::io::AsyncBufReadExt;
     let mut wrapper = tokio::process::Command::new("sh")
-        .args(["-c", "sleep 60 & echo $!; wait"])
+        .args(["-c", script])
         .stdout(std::process::Stdio::piped())
         .process_group(0)
         .kill_on_drop(true)
         .spawn()?;
-    let wrapper_identity =
-        process::capture(wrapper.id().context("wrapper PID")?)?.context("wrapper")?;
     let mut stdout = tokio::io::BufReader::new(wrapper.stdout.take().context("stdout")?);
-    let mut line = String::new();
-    stdout.read_line(&mut line).await?;
-    let agent = process::capture(line.trim().parse()?)?.context("agent")?;
-    let execution = Execution {
+    let mut pids = Vec::new();
+    for _ in 0..script.matches("echo").count() {
+        let mut line = String::new();
+        stdout.read_line(&mut line).await?;
+        pids.push(line.trim().parse()?);
+    }
+    Ok((wrapper, pids))
+}
+
+/// An execution of `id` with `wrapper`, outside whose process group its
+/// tests' processes run.
+fn agent_execution(id: &str, wrapper: Option<process::Identity>) -> Execution {
+    Execution {
         narrowing: Default::default(),
         mode: None,
         model: Default::default(),
-        id: "starter".into(),
+        id: id.into(),
         space_id: "workspace".into(),
         state: crate::state::ExecutionState::Running,
-        wrapper: None,
+        wrapper,
         child: None,
-        group_id: None,
+        group_id: Some(std::process::id()),
         origin: None,
         agent: None,
         stopped: None,
-    };
-    let scan = process::Scan {
+    }
+}
+
+/// A scan that finds `process` carrying the marker of `owner`.
+fn marked_by(owner: &str, process: &process::Identity) -> process::Scan {
+    process::Scan {
         processes: vec![process::OwnedProcess {
-            owner: "starter".into(),
-            identity: agent.clone(),
+            owner: owner.into(),
+            identity: process.clone(),
         }],
         ..Default::default()
-    };
+    }
+}
+
+/// A process that hides its environment under another execution's agent
+/// wrapper, as `sh` does on macOS under a scoped caller's `start --here`,
+/// takes the marker the wrapper inherited from its starter, whose work it is
+/// not.
+#[tokio::test]
+async fn a_foreign_agent_wrappers_processes_are_not_the_starters() -> anyhow::Result<()> {
+    use anyhow::Context;
+    let (mut wrapper, pids) = agent_wrapper("sleep 60 & echo $!; wait").await?;
+    let wrapper_identity =
+        process::capture(wrapper.id().context("wrapper PID")?)?.context("wrapper")?;
+    let agent = process::capture(pids[0])?.context("agent")?;
+    let execution = agent_execution("starter", None);
+    let scan = marked_by("starter", &agent);
     let workspace = tempfile::tempdir()?;
-    let alone = Processes::inspect(&execution, workspace.path(), &scan, &[]).await;
     let wrappers = std::slice::from_ref(&wrapper_identity);
+    let alone = Processes::inspect(&execution, workspace.path(), &scan, &[]).await;
     let beside = Processes::inspect(&execution, workspace.path(), &scan, wrappers).await;
     process::signal(&agent, libc::SIGKILL)?;
     wrapper.wait().await?;
     assert_eq!(alone?.owned, [agent]);
     assert!(beside?.owned.is_empty());
+    Ok(())
+}
+
+/// An agent a scoped caller runs in its own terminal runs below the caller's
+/// agent wrapper too; what it runs stays its own.
+#[tokio::test]
+async fn an_agent_below_another_agents_wrapper_keeps_its_processes() -> anyhow::Result<()> {
+    use anyhow::Context;
+    let script = "sh -c 'echo $$; sleep 60 & echo $!; wait'; :";
+    let (mut outer, pids) = agent_wrapper(script).await?;
+    let outer_identity =
+        process::capture(outer.id().context("outer PID")?)?.context("outer wrapper")?;
+    let inner = process::capture(pids[0])?.context("inner wrapper")?;
+    let job = process::capture(pids[1])?.context("job")?;
+    let wrappers = [outer_identity, inner.clone()];
+    let execution = agent_execution("child", Some(inner));
+    let scan = marked_by("child", &job);
+    let workspace = tempfile::tempdir()?;
+    let inspected = Processes::inspect(&execution, workspace.path(), &scan, &wrappers).await;
+    process::signal(&job, libc::SIGKILL)?;
+    outer.wait().await?;
+    assert!(inspected?.owned.contains(&job));
     Ok(())
 }
