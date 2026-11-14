@@ -150,6 +150,7 @@ const REQUESTS: &[&str] = &[
     r#"{"stop_demos":{"workspace":"fix","name":"web"}}"#,
     // Issues and PRs.
     r#"{"link_item":{"space":"fix","kind":"issue","item":"1","relation":"related"}}"#,
+    r#"{"relink_space":{"space":"fix","links":{"issues":[{"kind":"issue","url":"https://github.com/o/r/issues/1"}],"prs":[],"opened":[],"related":[],"assignees":[{"url":"https://github.com/o/r/issues/1","account":"agent","added":true}]}}}"#,
     r#"{"unlink_items":{"space":"fix","relation":"assigned","kind":null,"item":null}}"#,
     r#"{"set_pr":{"space":"fix","url":"https://forge.example/team/app/pulls/7","clear":false}}"#,
     r#"{"pr_wait":{"workspace":"fix","timeout_secs":60}}"#,
