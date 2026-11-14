@@ -96,13 +96,18 @@ async fn launch_session(
     prepared: Box<dyn Prepared>,
     not_inherited: &[&str],
 ) -> Result<(DetachedExecution, Box<dyn Prepared>)> {
+    let env = prepared.env();
+    let wrapper = execution::Wrapper {
+        clear: not_inherited,
+        env: &env,
+        ..Default::default()
+    };
     let launched = execution::launch_detached(
         &ctx.paths,
         space,
         files.with_extension(crate::paths::SESSION_LOG),
         prepared.command(),
-        not_inherited,
-        &prepared.env(),
+        &wrapper,
         Some(agent),
     )
     .await;

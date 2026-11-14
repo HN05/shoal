@@ -47,6 +47,7 @@ tools! {
     Plutil => ("/usr/bin/plutil", None),
     Launchctl => ("launchctl", None),
     Systemctl => ("systemctl", None),
+    SystemdRun => ("systemd-run", None),
 }
 
 impl Tool {

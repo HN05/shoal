@@ -26,21 +26,31 @@ use crate::{
 
 /// Start `command` in `space`, a workspace or a chat, as a tracked
 /// execution that outlives this process: a new session running this
-/// binary's detached wrapper, with the command's output in `log`, the
-/// inherited `clear` variables removed and `env` added to its environment,
-/// and `agent` naming the shortcut for the exit notification. Returns once
-/// the daemon has recorded the launch.
+/// binary's detached wrapper as `wrapper` says, with the command's output in
+/// `log`, and `agent` naming the shortcut for the exit notification. Returns
+/// once the daemon has recorded the launch.
 pub async fn launch_detached(
     paths: &Paths,
     space: &ExecutionSpace,
     log: PathBuf,
     command: Vec<OsString>,
-    clear: &[&str],
-    env: &[(&str, String)],
+    wrapper: &Wrapper<'_>,
     agent: Option<&super::TrackedAgent>,
 ) -> Result<DetachedExecution> {
-    let launch = DetachedCommand::prepare(paths, space, log, command, clear, env, agent)?;
+    let launch = DetachedCommand::prepare(paths, space, log, command, wrapper, agent)?;
     launch.start().await
+}
+
+/// How the wrapper of a detached execution starts.
+#[derive(Default)]
+pub struct Wrapper<'a> {
+    /// The command it starts through, such as one that starts it apart from
+    /// the service this process runs as; empty starts it directly.
+    pub launcher: Vec<OsString>,
+    /// Inherited variables removed from its environment.
+    pub clear: &'a [&'a str],
+    /// Variables added to its environment.
+    pub env: &'a [(&'a str, String)],
 }
 
 /// A detached execution this process launched, whose wrapper it can still
@@ -108,8 +118,7 @@ impl DetachedCommand {
         space: &ExecutionSpace,
         log: PathBuf,
         command: Vec<OsString>,
-        clear: &[&str],
-        env: &[(&str, String)],
+        wrapper: &Wrapper<'_>,
         agent: Option<&super::TrackedAgent>,
     ) -> Result<Self> {
         ensure!(space.path.is_dir(), "{} directory is missing", space.kind);
@@ -124,7 +133,8 @@ impl DetachedCommand {
                 command: &command,
             },
         )?;
-        let child = spawn_detached_wrapper(&command, file, clear, env)?;
+        let argv: Vec<OsString> = wrapper.launcher.iter().cloned().chain(command).collect();
+        let child = spawn_detached_wrapper(&argv, file, wrapper)?;
         Ok(Self { log, child })
     }
 
@@ -177,27 +187,26 @@ fn prepare_detached_log(
 }
 
 fn spawn_detached_wrapper(
-    command: &[OsString],
+    argv: &[OsString],
     file: std::fs::File,
-    clear: &[&str],
-    env: &[(&str, String)],
+    wrapper: &Wrapper<'_>,
 ) -> Result<Child> {
-    let mut wrapper = detached_command(command);
-    wrapper
+    let mut command = detached_command(argv);
+    command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::from(file))
         .env_remove(env::SHELL_DIRECTIVE);
     // A launch from inside another launcher's session must not inherit its
     // attachment; the caller names what to drop and what to set.
-    for name in clear {
-        wrapper.env_remove(name);
+    for name in wrapper.clear {
+        command.env_remove(name);
     }
-    wrapper.envs(env.iter().map(|(name, value)| (*name, value)));
+    command.envs(wrapper.env.iter().map(|(name, value)| (*name, value)));
     if let Some(entry) = crate::env::queue_entry() {
-        wrapper.env(env::QUEUE_ENTRY, entry);
+        command.env(env::QUEUE_ENTRY, entry);
     }
-    wrapper.spawn().context("launch detached execution wrapper")
+    command.spawn().context("launch detached execution wrapper")
 }
 
 async fn detached_launch_failure(log: &Path, child: &mut Child) -> anyhow::Error {

@@ -59,6 +59,10 @@ pub(crate) struct Runners {
     job_files: tokio::sync::Mutex<()>,
     /// A repository's settings changed since the runners were checked.
     changed: std::sync::atomic::AtomicBool,
+    /// The command each job's wrapper starts through, apart from the
+    /// service the daemon runs as, so the service manager's stop of the
+    /// daemon leaves the job running.
+    launcher: std::sync::OnceLock<Vec<std::ffi::OsString>>,
     /// The `PATH` tests find the runner's program on instead of the process's.
     #[cfg(test)]
     pub(crate) path: Mutex<Option<std::ffi::OsString>>,
@@ -73,6 +77,19 @@ impl Runners {
             return path;
         }
         std::env::var_os("PATH").unwrap_or_default()
+    }
+
+    /// Start each job's wrapper apart from the service the daemon runs as
+    /// from now on, as a daemon its service manager started does.
+    pub(crate) async fn run_jobs_apart_from_service(&self) {
+        let _ = self.launcher.set(crate::service::apart::launcher().await);
+    }
+
+    /// The command each job's wrapper starts through; empty starts it
+    /// directly.
+    #[cfg(not(test))]
+    pub(crate) fn job_launcher(&self) -> Vec<std::ffi::OsString> {
+        self.launcher.get().cloned().unwrap_or_default()
     }
 
     /// Whether `repository_id`'s runner may be tried again.

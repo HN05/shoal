@@ -135,6 +135,9 @@ pub async fn run(
     let startup = startup::Startup::begin(ownership.listen()?);
     log!("shoal daemon listening on {}", paths.socket.display());
     let manager = start(&startup, &paths).await?;
+    if managed {
+        manager.runners.run_jobs_apart_from_service().await;
+    }
     manager.record_start().await;
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;

@@ -3583,7 +3583,12 @@ environment, scope token, `TMPDIR` and `[env]`, but no agent secrets and no
 forge login besides the token the forge gives the job. Once the execution ends,
 however it ended, the workspace goes whatever it holds, with its permit; after
 a daemon restart, a job whose runner is gone goes the same way and the forge
-times it out. Protection never stops a running job; the workflow's
+times it out. Where the daemon runs as a systemd user service, with systemd 254
+or later, each job's wrapper runs in a transient scope of its own in the
+service's slice, so that systemd's stop of the service, as once the daemon
+exited with a failure, leaves the job running for the next daemon; launchd
+ends only the daemon's own process group, which the wrapper has left.
+Protection never stops a running job; the workflow's
 `timeout-minutes` bounds it. `shoal stop` on the job's workspace, and `shoal ci
 cancel`, cancel the job's run on the forge, which cancels each of its jobs; the
 forge's runner then stops the job and its workspace goes. A runner still

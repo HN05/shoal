@@ -3,6 +3,7 @@ use crate::{paths::Paths, tools::Tool};
 use anyhow::{Result, bail, ensure};
 use std::path::Path;
 
+pub mod apart;
 mod control;
 mod definition;
 mod replacement;

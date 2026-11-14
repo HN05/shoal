@@ -358,7 +358,8 @@ impl Manager {
     }
 
     /// Run `command` in `workspace` as a tracked execution that outlives the
-    /// daemon, with its output in `log`, returning the execution's ID.
+    /// daemon, and the service it runs as, with its output in `log`,
+    /// returning the execution's ID.
     #[cfg(not(test))]
     async fn launch_job_command(
         &self,
@@ -371,13 +372,17 @@ impl Manager {
             .iter()
             .map(|(name, value)| (name.as_str(), value.clone()))
             .collect();
+        let wrapper = crate::execution::Wrapper {
+            launcher: self.runners.job_launcher(),
+            env: &env,
+            ..Default::default()
+        };
         let execution = crate::execution::launch_detached(
             &self.paths,
             &workspace.into(),
             log,
             command.argv,
-            &[],
-            &env,
+            &wrapper,
             None,
         )
         .await?;
