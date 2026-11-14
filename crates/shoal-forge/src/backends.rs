@@ -1,8 +1,8 @@
-//! What differs between forges. Each forge implements [`Backend`] and,
-//! in a module of its own for each, the area traits over it, such as
-//! [`Items`] and [`Runs`]; [`ForgeKind`] names the one a repository uses
-//! and forwards each call to it, so a new forge implements the traits and
-//! adds its variant here.
+//! What differs between forges. Each forge implements [`Routes`],
+//! [`Backend`] and, in a module of its own for each, the area traits over
+//! it, such as [`Items`] and [`Runs`]; [`ForgeKind`] names the one a
+//! repository uses and forwards each call to it, so a new forge implements
+//! the traits and adds its variant here.
 pub mod bitbucket;
 pub(crate) mod forgejo;
 pub(crate) mod github;
@@ -17,6 +17,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     capability::{Capability, Support},
+    numbers::RunNumber,
     repo::locator::ItemRoute,
     transport::{api::Request, resend::Transient, response::Response},
 };
@@ -103,32 +104,13 @@ pub(crate) use area::{
     Activity, Attachments, Checks, Conventions, Items, Merging, Reactions, Reviews, Runners, Runs,
 };
 
-/// What a forge does its own way that every area needs: its identity and
-/// support, routes and endpoints, sign-in, requests and pages. Methods that
-/// need the repository take it as `repo`.
+/// Where a forge keeps its items and runs on the web: what parsing a link or
+/// a remote needs, without a request. Methods that need the repository take
+/// it as `repo`.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
-pub(crate) trait Backend {
-    /// Whether `host`, a repository without a path, answers this forge's
-    /// version or metadata endpoint as `account`; an error when it could
-    /// not be asked.
-    async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool>;
-
+pub(crate) trait Routes {
     /// The forge's name in messages.
     fn name(&self) -> &'static str;
-
-    /// Whether the forge has `capability`.
-    fn support(&self, capability: Capability) -> Support;
-
-    /// Whether the server `repo` is on has `capability`, where the forge's
-    /// versions differ in it.
-    async fn server_support(
-        &self,
-        _repo: &ForgeRepo,
-        _account: &Account,
-        capability: Capability,
-    ) -> Result<Support> {
-        Ok(self.support(capability))
-    }
 
     /// Whether a repository path may have more than `owner/repository`.
     fn nests_groups(&self) -> bool;
@@ -149,6 +131,41 @@ pub(crate) trait Backend {
         ]
         .iter()
         .any(|route| url.contains(route))
+    }
+
+    /// What precedes a run's number in the forge's run web URLs, or `None`
+    /// where Shoal reads no runs.
+    fn run_route(&self) -> Option<&'static str> {
+        Some("/actions/runs/")
+    }
+
+    /// The number a workflow run's web URL in the repository names, if
+    /// `target` links one.
+    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber>;
+}
+
+/// What a forge does its own way that every area needs beyond its
+/// [`Routes`]: its support and endpoints, sign-in, requests and pages.
+/// Methods that need the repository take it as `repo`.
+#[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
+pub(crate) trait Backend: Routes {
+    /// Whether `host`, a repository without a path, answers this forge's
+    /// version or metadata endpoint as `account`; an error when it could
+    /// not be asked.
+    async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool>;
+
+    /// Whether the forge has `capability`.
+    fn support(&self, capability: Capability) -> Support;
+
+    /// Whether the server `repo` is on has `capability`, where the forge's
+    /// versions differ in it.
+    async fn server_support(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        capability: Capability,
+    ) -> Result<Support> {
+        Ok(self.support(capability))
     }
 
     /// The API endpoint for `path` under the repository.

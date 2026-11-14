@@ -12,7 +12,6 @@ use crate::{
     ci::{
         CiAction, Location,
         approval::RUNS_PAGE,
-        id,
         run::{NewRun, workflow_segment},
         run_action::{Run, RunOperation},
         run_view::{JOBS_PAGE, RunFilter, RunJob},
@@ -31,11 +30,6 @@ impl Runs for GitHub {
             repo.repo_endpoint(&format!("actions/workflows/{workflow}/dispatches")),
             Some(json!({"ref": run.branch, "inputs": run.inputs})),
         ))
-    }
-
-    /// A run's URL holds its API ID.
-    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
-        id(repo.repository_path(target, "/actions/runs/")?.first()?).map(RunNumber::new)
     }
 
     /// A run's number is its API ID.

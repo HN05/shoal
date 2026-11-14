@@ -8,7 +8,8 @@ use crate::{
     account::Account,
     backends::Runners,
     capability::{self, Capability, Support},
-    ci::check_state::CheckState,
+    ci::{check_state::CheckState, id},
+    numbers::RunNumber,
     repo::locator::ItemRoute,
     transport::{
         api::{Request, encode, full_page},
@@ -26,20 +27,51 @@ mod reactions;
 mod reviews;
 mod runs;
 
-use super::{Backend, LoginHint, rest};
+use super::{Backend, LoginHint, Routes, rest};
 
 #[derive(Clone, Copy)]
 pub(crate) struct GitLab;
+
+impl Routes for GitLab {
+    fn name(&self) -> &'static str {
+        "GitLab"
+    }
+
+    fn nests_groups(&self) -> bool {
+        true
+    }
+
+    fn issue_route(&self) -> ItemRoute {
+        ItemRoute::GitLabIssue
+    }
+
+    fn pull_route(&self) -> ItemRoute {
+        ItemRoute::MergeRequest
+    }
+
+    fn branch_route(&self) -> &'static str {
+        "/-/tree/"
+    }
+
+    fn run_route(&self) -> Option<&'static str> {
+        Some("/-/pipelines/")
+    }
+
+    /// A pipeline's URL holds its API ID.
+    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
+        let parts = repo.repository_path(target, "/-/pipelines/")?;
+        let [pipeline] = parts.as_slice() else {
+            return None;
+        };
+        id(pipeline).map(RunNumber::new)
+    }
+}
 
 impl Backend for GitLab {
     /// GitLab reports its version with the revision it was built from.
     async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool> {
         let version = host.send(account, &Request::get("version".into())).await?;
         Ok(version["version"].is_string() && version["revision"].is_string())
-    }
-
-    fn name(&self) -> &'static str {
-        "GitLab"
     }
 
     fn support(&self, capability: Capability) -> Support {
@@ -84,22 +116,6 @@ impl Backend for GitLab {
             | Capability::RequestChanges
             | Capability::Reactions => Support::Supported,
         }
-    }
-
-    fn nests_groups(&self) -> bool {
-        true
-    }
-
-    fn issue_route(&self) -> ItemRoute {
-        ItemRoute::GitLabIssue
-    }
-
-    fn pull_route(&self) -> ItemRoute {
-        ItemRoute::MergeRequest
-    }
-
-    fn branch_route(&self) -> &'static str {
-        "/-/tree/"
     }
 
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {

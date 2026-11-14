@@ -51,16 +51,8 @@ impl Runs for Bitbucket {
         ))
     }
 
-    fn locate_run(&self, _repo: &ForgeRepo, _target: &str) -> Option<RunNumber> {
-        None
-    }
-
     fn run_path(&self, number: RunNumber) -> String {
         format!("pipelines/{number}")
-    }
-
-    fn run_route(&self) -> Option<&'static str> {
-        None
     }
 
     /// Shoal reads no Pipelines run, which the capabilities refuse first.

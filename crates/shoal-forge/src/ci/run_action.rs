@@ -8,8 +8,8 @@ use shoal_refs::CommitId;
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Runs,
-    capability::{self, Capability},
+    backends::{Routes, Runs},
+    capability::{Capability, Unsupported},
     ci::{CiAction, JobState, id},
     items::{link::LinkKind, reference::ItemRef},
     numbers::{JobId, PullNumber, RunId, RunNumber},
@@ -89,12 +89,14 @@ impl ForgeRepo {
         Ok((number, self.run_url(number)?))
     }
 
-    /// The web URL of the run numbered `number`, without a job.
+    /// The web URL of the run numbered `number`, without a job. A forge
+    /// whose runs have no web URL is one Shoal reads no runs of.
     pub(crate) fn run_url(&self, number: RunNumber) -> Result<String> {
-        let route = self
-            .kind
-            .run_route()
-            .ok_or_else(|| capability::unsupported(&self.kind, Capability::ReadRuns))?;
+        let route = self.kind.run_route().ok_or(Unsupported {
+            forge: self.kind.name(),
+            capability: Capability::ReadRuns,
+            hint: None,
+        })?;
         Ok(format!("{}{route}{number}", self.repository_url()))
     }
 

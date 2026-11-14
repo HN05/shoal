@@ -12,7 +12,6 @@ use crate::{
     ci::{
         CiAction, JobState, Location,
         check_state::CheckState,
-        id,
         run::NewRun,
         run_action::{Run, RunOperation},
         run_view::{JOBS_PAGE, RunFilter, RunJob},
@@ -46,22 +45,9 @@ impl Runs for GitLab {
         response["web_url"].as_str().map(Into::into)
     }
 
-    /// A pipeline's URL holds its API ID.
-    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
-        let parts = repo.repository_path(target, "/-/pipelines/")?;
-        let [pipeline] = parts.as_slice() else {
-            return None;
-        };
-        id(pipeline).map(RunNumber::new)
-    }
-
     /// A pipeline's number is its API ID.
     fn run_path(&self, number: RunNumber) -> String {
         format!("pipelines/{number}")
-    }
-
-    fn run_route(&self) -> Option<&'static str> {
-        Some("/-/pipelines/")
     }
 
     /// A tag's pipeline ran on no branch, and a branch has one pipeline,

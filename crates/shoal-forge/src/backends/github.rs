@@ -16,11 +16,13 @@ mod runners;
 mod runs;
 pub(crate) mod threads;
 
-use super::{Backend, github_rest};
+use super::{Backend, Routes, github_rest};
 use crate::{
     ForgeRepo,
     account::Account,
     capability::{Capability, Support},
+    ci::id,
+    numbers::RunNumber,
     repo::locator::ItemRoute,
     transport::{
         api::{Request, full_page},
@@ -35,6 +37,33 @@ pub(crate) struct GitHub;
 /// `/api/v3` of its own host.
 const API: &str = "https://api.github.com";
 
+impl Routes for GitHub {
+    fn name(&self) -> &'static str {
+        "GitHub"
+    }
+
+    fn nests_groups(&self) -> bool {
+        false
+    }
+
+    fn issue_route(&self) -> ItemRoute {
+        ItemRoute::Issue
+    }
+
+    fn pull_route(&self) -> ItemRoute {
+        ItemRoute::Pull
+    }
+
+    fn branch_route(&self) -> &'static str {
+        "/tree/"
+    }
+
+    /// A run's URL holds its API ID.
+    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
+        id(repo.repository_path(target, "/actions/runs/")?.first()?).map(RunNumber::new)
+    }
+}
+
 impl Backend for GitHub {
     /// GitHub's metadata names its SSH keys' password policy, and an
     /// Enterprise Server its version.
@@ -43,10 +72,6 @@ impl Backend for GitHub {
         Ok(["verifiable_password_authentication", "installed_version"]
             .iter()
             .any(|field| meta.get(field).is_some()))
-    }
-
-    fn name(&self) -> &'static str {
-        "GitHub"
     }
 
     fn support(&self, capability: Capability) -> Support {
@@ -82,22 +107,6 @@ impl Backend for GitHub {
             | Capability::Reactions
             | Capability::RevertPrs => Support::Supported,
         }
-    }
-
-    fn nests_groups(&self) -> bool {
-        false
-    }
-
-    fn issue_route(&self) -> ItemRoute {
-        ItemRoute::Issue
-    }
-
-    fn pull_route(&self) -> ItemRoute {
-        ItemRoute::Pull
-    }
-
-    fn branch_route(&self) -> &'static str {
-        "/tree/"
     }
 
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {

@@ -8,7 +8,7 @@ use shoal_states::states;
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::{Backend, Routes},
     ci::CiAction,
     items::{
         action::{MergeMethod, UpdateMethod},

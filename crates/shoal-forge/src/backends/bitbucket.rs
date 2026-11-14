@@ -12,6 +12,7 @@ use crate::{
     account::Account,
     backends::Runners,
     capability::{self, Capability, Support},
+    numbers::RunNumber,
     repo::locator::ItemRoute,
     transport::{
         api::{Request, encode},
@@ -29,7 +30,7 @@ mod reactions;
 mod reviews;
 mod runs;
 
-use super::Backend;
+use super::{Backend, Routes};
 
 /// Bitbucket Cloud's API, which is not served from its web host.
 const API: &str = "https://api.bitbucket.org/2.0";
@@ -42,14 +43,40 @@ const PAGE_SIZE: usize = 50;
 #[derive(Clone, Copy)]
 pub(crate) struct Bitbucket;
 
+impl Routes for Bitbucket {
+    fn name(&self) -> &'static str {
+        "Bitbucket Cloud"
+    }
+
+    fn nests_groups(&self) -> bool {
+        false
+    }
+
+    fn issue_route(&self) -> ItemRoute {
+        ItemRoute::Issue
+    }
+
+    fn pull_route(&self) -> ItemRoute {
+        ItemRoute::PullRequests
+    }
+
+    fn branch_route(&self) -> &'static str {
+        "/branch/"
+    }
+
+    fn run_route(&self) -> Option<&'static str> {
+        None
+    }
+
+    fn locate_run(&self, _repo: &ForgeRepo, _target: &str) -> Option<RunNumber> {
+        None
+    }
+}
+
 impl Backend for Bitbucket {
     /// Bitbucket Cloud serves only `bitbucket.org`, which is known by name.
     async fn serves(&self, _host: &ForgeRepo, _account: &Account) -> Result<bool> {
         Ok(false)
-    }
-
-    fn name(&self) -> &'static str {
-        "Bitbucket Cloud"
     }
 
     /// Shoal starts Pipelines but reads none of their jobs.
@@ -101,22 +128,6 @@ impl Backend for Bitbucket {
                 "fork it on Bitbucket, add the fork as a remote and set remote.pushDefault to it",
             )),
         }
-    }
-
-    fn nests_groups(&self) -> bool {
-        false
-    }
-
-    fn issue_route(&self) -> ItemRoute {
-        ItemRoute::Issue
-    }
-
-    fn pull_route(&self) -> ItemRoute {
-        ItemRoute::PullRequests
-    }
-
-    fn branch_route(&self) -> &'static str {
-        "/branch/"
     }
 
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {

@@ -19,11 +19,12 @@ mod runs;
 pub(crate) mod threads;
 mod version;
 
-use super::{Backend, LoginHint, github_rest};
+use super::{Backend, LoginHint, Routes, github_rest};
 use crate::{
     ForgeRepo,
     account::Account,
     capability::{self, Capability, Support},
+    numbers::RunNumber,
     repo::locator::ItemRoute,
     transport::{
         api::{Request, full_page},
@@ -40,15 +41,37 @@ const PAGE_SIZE: usize = 50;
 #[derive(Clone, Copy)]
 pub(crate) struct Forgejo;
 
+impl Routes for Forgejo {
+    fn name(&self) -> &'static str {
+        "Forgejo or Gitea"
+    }
+
+    fn nests_groups(&self) -> bool {
+        false
+    }
+
+    fn issue_route(&self) -> ItemRoute {
+        ItemRoute::Issue
+    }
+
+    fn pull_route(&self) -> ItemRoute {
+        ItemRoute::Pulls
+    }
+
+    fn branch_route(&self) -> &'static str {
+        "/src/branch/"
+    }
+
+    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
+        actions::run_number(repo, target)
+    }
+}
+
 impl Backend for Forgejo {
     /// Forgejo and Gitea report their version under `/api/v1`.
     async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool> {
         let version = host.send(account, &Request::get("version".into())).await?;
         Ok(version["version"].is_string())
-    }
-
-    fn name(&self) -> &'static str {
-        "Forgejo or Gitea"
     }
 
     /// Shoal does not sign in to the web UI, where Forgejo resolves threads,
@@ -109,22 +132,6 @@ impl Backend for Forgejo {
             return Ok(Support::Supported);
         }
         Ok(self.support(capability))
-    }
-
-    fn nests_groups(&self) -> bool {
-        false
-    }
-
-    fn issue_route(&self) -> ItemRoute {
-        ItemRoute::Issue
-    }
-
-    fn pull_route(&self) -> ItemRoute {
-        ItemRoute::Pulls
-    }
-
-    fn branch_route(&self) -> &'static str {
-        "/src/branch/"
     }
 
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {

@@ -23,7 +23,7 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use shoal_refs::{BranchName, CommitId};
 
-use backends::{Backend, ForgeKind, Items, Merging};
+use backends::{ForgeKind, Items, Merging, Routes};
 use hosts::{HostType, HostTypes};
 use numbers::{IssueNumber, PullNumber};
 use repo::remote_url::{RemoteUrl, Transport};

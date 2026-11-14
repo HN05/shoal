@@ -30,19 +30,9 @@ pub(crate) trait Runs: Backend {
         None
     }
 
-    /// The number a workflow run's web URL in the repository names, if
-    /// `target` links one.
-    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber>;
-
     /// The path under the repository that reads the run numbered `number`
     /// in its web URL.
     fn run_path(&self, number: RunNumber) -> String;
-
-    /// What precedes a run's number in the forge's run web URLs, or `None`
-    /// where Shoal reads no runs.
-    fn run_route(&self) -> Option<&'static str> {
-        Some("/actions/runs/")
-    }
 
     /// The run numbered `number` that a read of its path returned as `value`.
     fn run(&self, repo: &ForgeRepo, _number: RunNumber, value: &Value) -> Result<Run> {

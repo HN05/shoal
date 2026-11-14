@@ -38,10 +38,6 @@ impl Runs for Forgejo {
         Some(format!("{}/actions/runs/{number}", repo.repository_url()))
     }
 
-    fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<RunNumber> {
-        actions::run_number(repo, target)
-    }
-
     /// Forgejo links a run by its number in the repository, not its API ID.
     fn run_path(&self, number: RunNumber) -> String {
         format!("actions/runs?run_number={number}")
