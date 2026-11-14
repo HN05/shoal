@@ -120,6 +120,26 @@ impl Manager {
         self.authorize_action(Some(caller), action).await
     }
 
+    /// [`Self::authorize_beyond_limits`] for `starting` the agent of the
+    /// space `selector` names, which the approval names by its ID, since a
+    /// number or a name may name another space later.
+    pub(crate) async fn authorize_start_beyond_limits(
+        &self,
+        caller: &Caller,
+        starting: &str,
+        selector: &crate::client::space_names::SpaceSelector,
+    ) -> Result<()> {
+        let space = self.space(selector).await?;
+        let start = format!(
+            "{starting} the agent of {} ({}) now",
+            space.name(),
+            space.id()
+        );
+        let repository = space.repository_id().cloned();
+        self.authorize_beyond_limits(caller, start, repository)
+            .await
+    }
+
     /// The repository of the space `selector` names, which an action on it
     /// is in; none for a chat without one.
     pub(crate) async fn space_repository(

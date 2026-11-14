@@ -422,10 +422,10 @@ impl Manager {
         caller: &Caller,
         request: &'a mut QueueRequest,
     ) -> Result<Option<&'a mut SpaceSelector>> {
-        let start = format!("start the agent of {} now", request.name);
         if request.workspace.is_none() {
             self.confine_new_launch(caller, request).await?;
             if request.now {
+                let start = format!("start the agent of new space {} now", request.name);
                 let repository = Some(self.repository(&request.repository).await?.id);
                 (self.authorize_beyond_limits(caller, start, repository)).await?;
             }
@@ -442,8 +442,7 @@ impl Manager {
         let target = self.worker_target(caller, target, mode.as_ref(), narrowing);
         let target = target.await?;
         if *now {
-            let repository = self.space_repository(target).await?;
-            (self.authorize_beyond_limits(caller, start, repository)).await?;
+            (self.authorize_start_beyond_limits(caller, "start", target)).await?;
         }
         Ok(Some(target))
     }

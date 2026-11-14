@@ -100,18 +100,14 @@ impl Scoped for QueueMethod {
                 let target = manager.worker_target(caller, workspace, mode, given);
                 let target = target.await?;
                 if launch.now {
-                    let start = format!("start the agent of {target} now");
-                    let repository = manager.space_repository(target).await?;
-                    (manager.authorize_beyond_limits(caller, start, repository)).await?;
+                    (manager.authorize_start_beyond_limits(caller, "start", target)).await?;
                 }
                 Some(target)
             }
             QueueMethod::QueueRestore { workspace, now, .. } => {
                 let target = manager.stopped_below(caller, workspace).await?;
                 if *now {
-                    let start = format!("restore the agent of {target} now");
-                    let repository = manager.space_repository(target).await?;
-                    (manager.authorize_beyond_limits(caller, start, repository)).await?;
+                    (manager.authorize_start_beyond_limits(caller, "restore", target)).await?;
                 }
                 Some(target)
             }
