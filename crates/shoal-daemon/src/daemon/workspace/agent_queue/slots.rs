@@ -18,14 +18,17 @@ use crate::{
 
 /// One used slot.
 pub(crate) struct Slot {
-    pub repository: RepositoryId,
+    /// The repository of its space; none for a chat without one, whose
+    /// slot counts toward the machine's limit alone.
+    pub repository: Option<RepositoryId>,
     pub activity: Activity,
 }
 
 /// What the store records toward used slots, read in one pass.
 struct PersistedSlots {
-    /// Each workspace that is not done, by ID, with its repository ID.
-    open: HashMap<SpaceId, RepositoryId>,
+    /// Each space that is not done, by ID, with its repository ID; none
+    /// for a chat without one.
+    open: HashMap<SpaceId, Option<RepositoryId>>,
     /// Executions whose state is unknown, other than CI jobs' runners:
     /// agents that may still run.
     unknown: Vec<UnknownExecution>,
@@ -36,16 +39,15 @@ struct PersistedSlots {
 /// An execution in the unknown state.
 struct UnknownExecution {
     id: ExecutionId,
-    workspace: SpaceId,
+    space: SpaceId,
 }
 
 /// A starting queue entry.
 struct StartingEntry {
-    /// Its space's repository; none for a chat without one, which takes no
-    /// slot.
+    /// Its space's repository; none for a chat without one.
     repository: Option<RepositoryId>,
-    /// The workspace it starts in, once known.
-    workspace: Option<SpaceId>,
+    /// The space it starts in, once known.
+    space: Option<SpaceId>,
     /// When its holder was last seen.
     seen_at: Option<UnixTime>,
     /// The execution a restore resumes; a launch has none.
@@ -54,12 +56,12 @@ struct StartingEntry {
     mode: Option<ModeName>,
 }
 
-/// Read the workspaces, executions and queue entries that slots are counted from.
+/// Read the spaces, executions and queue entries that slots are counted from.
 fn persisted_slots(db: &rusqlite::Connection) -> Result<PersistedSlots> {
     let open = db
         .prepare(
-            "SELECT id,repository_id FROM workspaces w WHERE NOT EXISTS
-                (SELECT 1 FROM space_completion c WHERE c.space_id=w.id)",
+            "SELECT id,repository_id FROM spaces s WHERE NOT EXISTS
+                (SELECT 1 FROM space_completion c WHERE c.space_id=s.id)",
         )?
         .query_map([], |row| Ok((row.get("id")?, row.get("repository_id")?)))?
         .collect::<rusqlite::Result<_>>()?;
@@ -71,7 +73,7 @@ fn persisted_slots(db: &rusqlite::Connection) -> Result<PersistedSlots> {
         .query_map([ExecutionState::Unknown], |row| {
             Ok(UnknownExecution {
                 id: row.get("id")?,
-                workspace: row.get("space_id")?,
+                space: row.get("space_id")?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
@@ -83,7 +85,7 @@ fn persisted_slots(db: &rusqlite::Connection) -> Result<PersistedSlots> {
         .query_map(params![QueueState::Starting, QueueKind::Job], |row| {
             Ok(StartingEntry {
                 repository: row.get("repository_id")?,
-                workspace: row.get("space_id")?,
+                space: row.get("space_id")?,
                 seen_at: row.get("seen_at")?,
                 execution: row.get("execution_id")?,
                 mode: row.get("mode")?,
@@ -98,7 +100,7 @@ fn persisted_slots(db: &rusqlite::Connection) -> Result<PersistedSlots> {
 }
 
 impl Manager {
-    /// The used slots. Each agent in a workspace that is not done uses one
+    /// The used slots. Each agent in a space that is not done uses one
     /// while it runs, awaits reattachment or waits for resume, counted once by
     /// its execution, except the `dormant` ones whose restore waits for an
     /// update; so does each starting launch until its agent registers. An
@@ -120,23 +122,21 @@ impl Manager {
         let starting_since = |seen_at: Option<UnixTime>| {
             Activity::Starting(now.duration_since(seen_at.unwrap_or(now)))
         };
-        let stopped = |workspace: SpaceId| (workspace, Activity::Stopped);
-        for UnknownExecution { id, workspace } in unknown {
-            agents.entry(id).or_insert_with(|| stopped(workspace));
+        let stopped = |space: SpaceId| (space, Activity::Stopped);
+        for UnknownExecution { id, space } in unknown {
+            agents.entry(id).or_insert_with(|| stopped(space));
         }
-        for workspace in open.keys() {
-            for execution in crate::execution::recovery::agent_records(&self.paths, workspace)? {
+        for space in open.keys() {
+            for execution in crate::execution::recovery::agent_records(&self.paths, space)? {
                 agents
                     .entry(execution)
-                    .or_insert_with(|| stopped(workspace.clone()));
+                    .or_insert_with(|| stopped(space.clone()));
             }
         }
         agents.retain(|execution, _| !dormant.contains(execution) && !light.execution(execution));
         let mut launches = Vec::new();
         for entry in starting {
-            let Some(repository) = &entry.repository else {
-                continue;
-            };
+            let repository = entry.repository.as_ref();
             if light.entry(entry.execution.as_ref(), repository, entry.mode.as_ref()) {
                 continue;
             }
@@ -147,19 +147,17 @@ impl Manager {
         }
         let mut slots: Vec<Slot> = agents
             .into_values()
-            .filter_map(|(workspace, activity)| {
+            .filter_map(|(space, activity)| {
                 Some(Slot {
-                    repository: open.get(&workspace)?.clone(),
+                    repository: open.get(&space)?.clone(),
                     activity,
                 })
             })
             .collect();
         for launch in launches {
-            if let Some(repository) = launch.repository
-                && (launch.workspace.as_ref()).is_none_or(|workspace| open.contains_key(workspace))
-            {
+            if (launch.space.as_ref()).is_none_or(|space| open.contains_key(space)) {
                 slots.push(Slot {
-                    repository,
+                    repository: launch.repository,
                     activity: starting_since(launch.seen_at),
                 });
             }

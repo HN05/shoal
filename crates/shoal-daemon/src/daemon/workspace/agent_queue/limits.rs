@@ -122,9 +122,6 @@ pub(crate) struct Waiting {
     pub light: bool,
     /// How long admission has held it back for its memory, pass after pass.
     pub waited_for_memory: Duration,
-    /// Whether the user attends its space, a chat, whose agent starts once
-    /// it waits for nothing else, without a slot or room.
-    pub attended: bool,
 }
 
 /// How long work that fits in memory may start ahead of a higher-ranked
@@ -150,7 +147,9 @@ impl Admission {
 }
 
 /// The waiting entries that fit, in queue order, and what holds back the
-/// others. `occupied` holds one repository ID per used slot. Under fixed
+/// others. `occupied` holds one repository ID per used slot, none for a
+/// chat without one, which counts toward the machine's limits alone, as an
+/// entry without one does. Under fixed
 /// limits a launch, like a restore an update woke, needs a free slot and
 /// another restore takes back its own; under dynamic admission each needs
 /// room for its memory. Those other restores, like one-shot runs protection
@@ -160,10 +159,9 @@ impl Admission {
 /// start, as an agent does. A light agent's entry needs no slot and no room,
 /// so it takes none of the pass's starts and, restored, none of the healthy
 /// interval's: only critical or missing readings and low disk hold it. An
-/// entry of a space the user attends starts once it waits for nothing else.
-/// An entry that waits or does not fit keeps its place and is passed over.
+/// entry that waits or does not fit keeps its place and is passed over.
 pub(crate) fn admit(
-    occupied: &[RepositoryId],
+    occupied: &[Option<RepositoryId>],
     waiting: &[Waiting],
     limits: &Limits,
     mut recovered: bool,
@@ -176,7 +174,7 @@ pub(crate) fn admit(
     // sample predates it.
     let mut started = false;
     let mut used: HashMap<&str, usize> = HashMap::new();
-    for repository in occupied {
+    for repository in occupied.iter().flatten() {
         *used.entry(repository.as_str()).or_default() += 1;
     }
     let mut jobs = limits.jobs.running;
@@ -221,11 +219,6 @@ pub(crate) fn admit(
             Work::Restore { waiting: false, .. } => continue,
             Work::Restore { waiting: true, .. } => 1,
         };
-        // Every space the user does not attend has a repository.
-        let (false, Some(repository)) = (entry.attended, &entry.repository) else {
-            admission.admitted.push(entry.id.clone());
-            continue;
-        };
         if entry.light {
             match light_hold(limits, writing) {
                 Some(held) => admission.hold(entry, Some(held)),
@@ -240,12 +233,13 @@ pub(crate) fn admit(
             admission.hold(entry, Some(HeldBy::MemoryKept));
             continue;
         }
-        let used = used.entry(repository.as_str()).or_default();
+        let repository = entry.repository.as_ref();
+        let in_repository = repository.map_or(0, |id| used.get(id.as_str()).copied().unwrap_or(0));
         // A one-shot run, such as a review, holds no agent slot, so of the
         // fixed limits only the disk's applies to it.
         let full = match entry.work {
             Work::OneShot { .. } => full_disk(limits, writing),
-            _ => full_limit(limits, repository, [total, writing, *used], own),
+            _ => full_limit(limits, repository, [total, writing, in_repository], own),
         };
         if let Err(held) = measured_fit(limits.room, started, capacity::Room::fits_agent) {
             // An entry a fixed limit holds anyway gains nothing from memory
@@ -259,7 +253,9 @@ pub(crate) fn admit(
             continue;
         }
         if !matches!(entry.work, Work::OneShot { .. }) {
-            *used += 1 - own;
+            if let Some(repository) = repository {
+                *used.entry(repository.as_str()).or_default() += 1 - own;
+            }
             total += 1 - own;
         }
         writing += 1 - own;
@@ -324,10 +320,10 @@ fn full_job_limit(limits: &JobLimits, running: u32) -> Option<HeldBy> {
 /// The fixed limit an agent's start in `repository` would exceed, with
 /// `total` slots used on the machine, `writing` slots and one-shot runs on
 /// its disk and `used` slots in the repository, `own` of them its own
-/// already.
+/// already. A chat without a repository meets the machine's limits alone.
 fn full_limit(
     limits: &Limits,
-    repository: &RepositoryId,
+    repository: Option<&RepositoryId>,
     [total, writing, used]: [usize; 3],
     own: usize,
 ) -> Option<HeldBy> {
@@ -338,7 +334,7 @@ fn full_limit(
         Some(HeldBy::MaxAgents)
     } else if full(writing, limits.disk) {
         Some(HeldBy::Disk)
-    } else if full(used, limits.repository(repository)) {
+    } else if full(used, repository.and_then(|id| limits.repository(id))) {
         Some(HeldBy::RepositoryLimit)
     } else {
         None
@@ -348,7 +344,7 @@ fn full_limit(
 /// Whether `limits` admit some job beside the `occupied` slots: one under
 /// any fixed limit, and under dynamic admission one that needs no more than
 /// whatever room is left, since a waiting job's cost may be that small.
-pub(crate) fn room_for_a_job(occupied: &[RepositoryId], limits: &Limits) -> bool {
+pub(crate) fn room_for_a_job(occupied: &[Option<RepositoryId>], limits: &Limits) -> bool {
     let probe = [Waiting {
         id: QueueEntryId::from(String::new()),
         repository: Some(String::new().into()),
@@ -357,7 +353,6 @@ pub(crate) fn room_for_a_job(occupied: &[RepositoryId], limits: &Limits) -> bool
         },
         light: false,
         waited_for_memory: Duration::ZERO,
-        attended: false,
     }];
     !admit(occupied, &probe, limits, false).admitted.is_empty()
 }
@@ -450,7 +445,7 @@ impl Manager {
         let slots = self.occupied_slots(&HashSet::new(), &light).await?;
         let jobs = self.job_activities().await?;
         let limits = self.agent_limits(Vec::new(), &slots, &jobs).await?;
-        let occupied: Vec<RepositoryId> = slots.into_iter().map(|slot| slot.repository).collect();
+        let occupied: Vec<_> = slots.into_iter().map(|slot| slot.repository).collect();
         Ok(room_for_a_job(&occupied, &limits))
     }
 
