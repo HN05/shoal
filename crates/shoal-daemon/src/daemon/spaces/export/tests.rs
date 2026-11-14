@@ -8,7 +8,7 @@ use crate::{
     },
     process::identity,
     removal::{InspectionPolicy, UnsavedWork},
-    transfer::{ExportedSpace, Import, Space},
+    transfer::{CarriedChatExt, ExportedSpace, Import, ManifestExt, Space},
 };
 
 mod moving;
@@ -242,37 +242,62 @@ async fn a_chat_in_a_workspace_is_not_moved() {
 }
 
 #[tokio::test]
-async fn a_workspace_with_a_chat_in_it_is_not_moved() {
-    let (root, manager) = manager().await;
-    let checkout = repository(root.path(), "repo");
-    let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+async fn a_workspace_moves_with_the_chats_in_it_and_below_it() {
+    let (source, exporting, source_repo, origin) = transfer::exporter().await;
+    let (_target, importing, target_repo) = transfer::importer(&origin).await;
+    let workspace = exporting
+        .create_workspace(&source_repo.id, "worker".into(), None, None, None)
         .await
         .unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "worker".into(), None, None, None)
+    let selector = SpaceSelector::id(&workspace.id);
+    let reading = exporting
+        .start_chat_in_workspace(&selector, "reading".into(), "claude".into(), None)
         .await
         .unwrap();
-    let chat = manager
-        .start_chat_in_workspace(
-            &SpaceSelector::id(&workspace.id),
-            "reading".into(),
-            "claude".into(),
-            None,
+    let chat = |name, parent| {
+        crate::daemon::test_support::chat(&exporting, name, "chat", Some(&source_repo), parent)
+    };
+    let child = chat("child", Some(&workspace.id)).await;
+    let grandchild = chat("grandchild", Some(&child.id)).await;
+    let file = source.path().join("worker.shoal");
+
+    exporting
+        .export_space(
+            &selector,
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+            file.clone(),
         )
         .await
         .unwrap();
-    let file = root.path().join("worker.shoal");
-    assert!(export(&manager, &workspace.name, &file).await.is_err());
-    assert!(!file.exists());
-    assert!(
-        manager
-            .find_workspace(&workspace.id)
-            .await
-            .unwrap()
-            .is_some()
-    );
-    assert!(manager.chat_by_id(&chat.id).await.unwrap().is_some());
+    assert!(exporting.chats().await.unwrap().is_empty());
+    let bytes = fs::read(&file).unwrap();
+    let import = Import::read(&mut &bytes[..]).unwrap();
+    let carried: Vec<_> = (import.manifest.chats.iter())
+        .map(|carried| &carried.chat.space_id)
+        .collect();
+    assert_eq!(carried.len(), 3, "{carried:?}");
+    let position = |id| carried.iter().position(|carried| *carried == id).unwrap();
+    assert!(position(&child.id) < position(&grandchild.id));
+    transfer::import(&importing, &target_repo, &bytes).await;
+    for carried in &import.manifest.chats {
+        let sessions = (import.manifest).chat_sessions_on(carried, Some("elsewhere"), None);
+        let chat = carried.chat_with(sessions);
+        let repository = (&target_repo.id).into();
+        importing.import_chat(&repository, chat).await.unwrap();
+    }
+
+    // Each opens again under its ID, stopped, where it ran.
+    let importing = &importing;
+    let place = |id| async move {
+        let chat = importing.chat_by_id(id).await.unwrap().unwrap();
+        assert!(!chat.running);
+        let parent = chat.parent.map(|parent| parent.id);
+        (parent, chat.workspace.map(|workspace| workspace.id))
+    };
+    assert_eq!(place(&reading.id).await, (None, Some(workspace.id.clone())));
+    assert_eq!(place(&child.id).await, (Some(workspace.id.clone()), None));
+    assert_eq!(place(&grandchild.id).await, (Some(child.id.clone()), None));
 }
 
 #[tokio::test]

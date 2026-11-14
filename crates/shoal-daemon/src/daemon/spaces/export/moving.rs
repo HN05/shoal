@@ -73,9 +73,6 @@ impl Manager {
     /// checkpoint, with every agent stopped there.
     async fn prepare_moving_workspace(&self, workspace: Workspace) -> Result<Prepared> {
         ensure_exportable(&workspace)?;
-        // Refuses the chats in it or below it, which its end would take.
-        self.exported_with(&workspace, &UnsavedWork::default())
-            .await?;
         // The spaces below it moved first; one that stayed keeps it here,
         // before anything stops or reaches the other machine.
         self.ensure_nothing_below_stays(&workspace).await?;
@@ -107,6 +104,11 @@ impl Manager {
     /// the session the agent reported.
     async fn prepare_moving_chat(&self, chat: Chat) -> Result<Prepared> {
         let (repo, _) = self.movable_chat(&chat).await?;
+        ensure!(
+            self.chats_carried_by(&chat.id).await?.is_empty(),
+            "chats below chat {} stay here; move or remove them first",
+            chat.name
+        );
         let selector = SpaceSelector::id(&chat.id);
         self.stop_space(&selector, StopRequest::moving()).await?;
         let chat = self.chat(&selector).await?;

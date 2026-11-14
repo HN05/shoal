@@ -19,7 +19,7 @@ use crate::{
     execution::recovery::{LastSession, StoppedAgent},
     model::{
         Chat, Checkpoint, KeptWorkspace, PresentSpace, RemovedKind, RemovedSpace, Repository,
-        SpaceKind, Workspace,
+        Workspace,
     },
     paths::Paths,
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
@@ -27,6 +27,7 @@ use crate::{
     transfer::{ExportedSpace, Manifest, SessionSource, Source},
 };
 
+mod carried;
 mod copy;
 mod moving;
 
@@ -158,54 +159,72 @@ impl Manager {
         unsaved: UnsavedWork,
         inspection: InspectionPolicy,
     ) -> Result<Prepared> {
-        let (removal, settings) = match self.workspace(selector).await {
+        let ended = match self.workspace(selector).await {
             Ok(workspace) => {
-                ensure_exportable(&workspace)?;
-                // Its own config may describe its agents, and goes with it.
-                let settings = self.workspace_settings(&workspace).await;
-                let removal = (self.remove_exported(&workspace, unsaved, inspection)).await?;
-                (Some((workspace.id.clone(), removal)), Some(settings))
+                Some((self.end_workspace_for_export(&workspace, unsaved, inspection)).await?)
             }
-            Err(_) => (None, None),
+            Err(_) => None,
         };
         let removed = self
             .removed_spaces()
             .await?
             .into_iter()
-            .find(|removed| match &removal {
-                Some((id, _)) => &removed.space_id == id,
+            .find(|removed| match &ended {
+                Some(ended) => removed.space_id == ended.id,
                 None => selector.given_id() == Some(&removed.space_id),
             })
             .with_context(|| format!("no space or restorable space {selector}"))?;
         match removed.kind {
-            RemovedKind::Workspace(_) => {
-                let removal = removal.map(|(_, removal)| removal);
-                self.prepare_removed_workspace(removed, removal, settings)
-                    .await
-            }
+            RemovedKind::Workspace(_) => self.prepare_removed_workspace(removed, ended).await,
             RemovedKind::Chat { .. } => self.prepare_removed_chat(removed).await,
         }
     }
 
-    /// Prepare the package of the workspace `removed` records, which
-    /// `removal` removed for the export when it did, with the `settings`
-    /// describing its agents when they are not its repository's, refusing
-    /// one whose removal could not keep its uncommitted files.
+    /// Remove `workspace` for its export with the spaces below it that
+    /// `unsaved` confirms, naming the chats that go with it.
+    async fn end_workspace_for_export(
+        &self,
+        workspace: &Workspace,
+        unsaved: UnsavedWork,
+        inspection: InspectionPolicy,
+    ) -> Result<EndedWorkspace> {
+        ensure_exportable(workspace)?;
+        // Its own config may describe its agents, and goes with it.
+        let settings = self.workspace_settings(workspace).await;
+        let carried = self.chats_carried_by(&workspace.id).await?;
+        let removal = (self.remove_exported(workspace, unsaved, inspection)).await?;
+        Ok(EndedWorkspace {
+            id: workspace.id.clone(),
+            removal,
+            settings,
+            carried,
+        })
+    }
+
+    /// Prepare the package of the workspace `removed` records, which the
+    /// export `ended` when it did, refusing one whose removal could not keep
+    /// its uncommitted files.
     async fn prepare_removed_workspace(
         &self,
         removed: RemovedSpace,
-        removal: Option<RemovalResult>,
-        settings: Option<Result<Effective>>,
+        ended: Option<EndedWorkspace>,
     ) -> Result<Prepared> {
         ensure!(
             !removed.kept_workspace()?.checkpoint.files_omitted,
             "the removal could not keep the uncommitted files; shoal restore {} opens the workspace here again",
             removed.space_id
         );
+        let (removal, settings, carried) = match ended {
+            Some(ended) => (Some(ended.removal), Some(ended.settings), ended.carried),
+            None => (None, None, Vec::new()),
+        };
         let repo = self.repository(removed.repository()?).await?;
+        let kept_sessions = kept_session_sources(&repo, &removed);
+        let mut manifest = Manifest::of(Some(&repo), Source::Workspace(removed)).await?;
+        manifest.chats = self.carried_records(&carried).await?;
         Ok(Prepared {
-            kept_sessions: kept_session_sources(&repo, &removed),
-            manifest: Manifest::of(Some(&repo), Source::Workspace(removed)).await?,
+            kept_sessions,
+            manifest,
             repo: Some(repo),
             removal,
             settings,
@@ -269,43 +288,33 @@ impl Manager {
     }
 
     /// The IDs of the spaces the export of `workspace` removes first, of
-    /// those `unsaved` confirms, refusing while chats run in its worktree or
-    /// in one below it, which its removal would take without exporting
-    /// them. The removal takes only these, so a chat that starts meanwhile
-    /// retains the workspace.
+    /// those `unsaved` confirms. The removal takes only these, so a space
+    /// that joins it meanwhile retains the workspace.
     async fn exported_with(
         &self,
         workspace: &Workspace,
         unsaved: &UnsavedWork,
     ) -> Result<Vec<SpaceId>> {
-        let (chats, taken): (Vec<_>, Vec<_>) = (self.spaces_taken_with(&workspace.id).await?)
-            .into_iter()
-            .partition(|space| space.kind == SpaceKind::Chat);
-        let chats: Vec<String> = chats.into_iter().map(|chat| chat.name.into()).collect();
-        ensure!(
-            chats.is_empty(),
-            "chats run in workspace {} or below it ({}), which shoal move does not move; remove them first",
-            workspace.name,
-            chats.join(", ")
-        );
         let confirmed = |id: &SpaceId| unsaved.children().is_none_or(|ids| ids.contains(id));
-        Ok(taken
+        Ok((self.spaces_taken_with(&workspace.id).await?)
             .into_iter()
             .map(|space| space.id)
             .filter(confirmed)
             .collect())
     }
 
-    /// Remove `chat` for its export, which takes no space below it, once its
-    /// agent has reported the session the package continues and its package
-    /// is made, stopping a running one, so the session's files stop changing
-    /// and only writing them is left.
+    /// Remove `chat` for its export, with the chats that go with it, once
+    /// its agent has reported the session the package continues and its
+    /// package is made, stopping the running agents, so their sessions'
+    /// files stop changing and only writing them is left.
     async fn end_chat_for_export(&self, chat: Chat) -> Result<Prepared> {
         let (repo, continues) = self.movable_chat(&chat).await?;
+        let carried = self.chats_carried_by(&chat.id).await?;
         let id = chat.id.clone();
-        let manifest = Manifest::of(repo.as_ref(), Source::Chat(chat)).await?;
-        self.remove_chat(&SpaceSelector::id(&id), Some(Vec::new()))
+        let mut manifest = Manifest::of(repo.as_ref(), Source::Chat(chat)).await?;
+        self.remove_chat(&SpaceSelector::id(&id), Some(carried.clone()))
             .await?;
+        manifest.chats = self.carried_records(&carried).await?;
         Ok(Prepared {
             repo,
             manifest,
@@ -319,7 +328,7 @@ impl Manager {
     /// The repository of `chat`, which moves to another machine, none for a
     /// chat without one, and how the user continues it here, refusing a chat
     /// in a workspace, one whose agent reported no session to continue and
-    /// one with spaces below it.
+    /// one with a space below it that does not go with it.
     async fn movable_chat(&self, chat: &Chat) -> Result<(Option<Repository>, String)> {
         if let Some(workspace) = &chat.workspace {
             anyhow::bail!(
@@ -337,11 +346,7 @@ impl Manager {
                 chat.name
             );
         };
-        ensure!(
-            self.children(&chat.id).await?.is_empty(),
-            "chat {} has spaces below it; move or remove them first",
-            chat.name
-        );
+        self.ensure_only_carried_below(&chat.id, &chat.name).await?;
         Ok((repo, continues))
     }
 
@@ -380,7 +385,7 @@ impl Manager {
             Vec::new()
         });
         let environments = Environments::new(&self.paths.home, &environments);
-        let sessions = manifest.sessions.clone().unwrap_or_default();
+        let sessions = manifest.every_session();
         let found = tokio::task::spawn_blocking(move || {
             crate::transfer::session_sources(&settings, &environments, &sessions)
         })
@@ -396,6 +401,15 @@ impl Manager {
             }
         }
     }
+}
+
+/// A workspace the export removed: its ID, its removal, the settings
+/// describing its agents and the chats that went with it.
+struct EndedWorkspace {
+    id: SpaceId,
+    removal: RemovalResult,
+    settings: Result<Effective>,
+    carried: Vec<SpaceId>,
 }
 
 /// Refuse to export `workspace` when disposable: the package is built from
