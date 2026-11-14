@@ -448,7 +448,11 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (176, include_str!("removed_space_files.sql"), None),
     (177, include_str!("chat_approvals.sql"), Some(chat_approvals)),
     (178, include_str!("gate.sql"), None),
-    (179, include_str!("removed_spaces.sql"), None),
+    (
+        179,
+        include_str!("removed_spaces.sql"),
+        Some(rekey_converted_records),
+    ),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
@@ -513,6 +517,35 @@ fn rebuild(db: &Connection, table: &str, from: &str, to: &str) -> Result<()> {
     db.pragma_update(None, "legacy_alter_table", false)?;
     for dependent in dependents {
         db.execute_batch(&dependent)?;
+    }
+    Ok(())
+}
+
+/// Give the removal record of each workspace converted into a chat, which
+/// the chat's ID named, and its checkpoints an ID of their own, as a
+/// conversion does now, so the chat's own record cannot replace it and it
+/// stays restorable beside the chat.
+pub(super) fn rekey_converted_records(db: &Connection) -> Result<()> {
+    let converted: Vec<String> = db
+        .prepare("SELECT workspace_id FROM removed_workspaces WHERE workspace_id IN (SELECT id FROM chats)")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    for id in converted {
+        let own = crate::client::space_ids::SpaceId::generate();
+        db.execute(
+            "UPDATE checkpoints SET workspace_id=?2, record=json_set(record,'$.workspace_id',?2)
+                WHERE workspace_id=?1",
+            rusqlite::params![id, own],
+        )?;
+        db.execute(
+            "UPDATE checkpoint_numbers SET workspace_id=?2 WHERE workspace_id=?1",
+            rusqlite::params![id, own],
+        )?;
+        db.execute(
+            "UPDATE removed_workspaces SET workspace_id=?2, record=json_set(record,
+                '$.workspace_id',?2,'$.checkpoint.workspace_id',?2) WHERE workspace_id=?1",
+            rusqlite::params![id, own],
+        )?;
     }
     Ok(())
 }

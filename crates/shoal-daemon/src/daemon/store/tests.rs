@@ -565,6 +565,7 @@ fn historical_database(version: i64) -> Result<Connection> {
         db.execute_batch(include_str!("gate.sql"))?;
     }
     if version >= 179 {
+        rekey_converted_records(&db)?;
         db.execute_batch(include_str!("removed_spaces.sql"))?;
     }
     db.pragma_update(None, "user_version", version)?;
@@ -2476,5 +2477,44 @@ fn removed_spaces_keep_their_files_until_their_chat_or_removal_record_expires() 
         |r| r.get(0),
     )?;
     assert_eq!(chat.as_deref(), Some("chat"));
+    Ok(())
+}
+
+#[test]
+fn a_converted_workspaces_record_takes_an_id_beside_its_chat() -> Result<()> {
+    let mut db = historical_database(178)?;
+    db.execute_batch(
+        r#"INSERT INTO chats(id,repository_id,name,agent,started_at)
+             VALUES ('converted','repo','converted','claude',1);
+         INSERT INTO checkpoints(workspace_id,number,repository_id,expires_at,record)
+             VALUES ('converted',1,'repo',unixepoch()+60,
+                 '{"workspace_id":"converted","number":1}');
+         INSERT INTO checkpoint_numbers(workspace_id,last) VALUES ('converted',1);
+         INSERT INTO removed_workspaces(workspace_id,repository_id,name,expires_at,record)
+             VALUES ('converted','repo','converted',unixepoch()+60,
+                 '{"workspace_id":"converted","checkpoint":{"workspace_id":"converted"}}'),
+                 ('gone','repo','gone',unixepoch()+60,'{"workspace_id":"gone"}');"#,
+    )?;
+    migrate(&mut db)?;
+    let records: Vec<(String, String, Option<String>)> = db
+        .prepare(
+            "SELECT space_id, json_extract(record,'$.workspace_id'),
+                json_extract(record,'$.checkpoint.workspace_id') FROM removed_spaces
+                ORDER BY name",
+        )?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let [(own, recorded, checkpoint), (gone, ..)] = records.as_slice() else {
+        panic!("{records:?}");
+    };
+    // The converted workspace's record and checkpoints leave the chat its ID.
+    assert_ne!(own, "converted");
+    assert_eq!((recorded, checkpoint.as_ref()), (own, Some(own)));
+    assert_eq!(gone, "gone");
+    let owners: Vec<String> = db
+        .prepare("SELECT workspace_id FROM checkpoints UNION ALL SELECT workspace_id FROM checkpoint_numbers")?
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(owners, [own.clone(), own.clone()]);
     Ok(())
 }
