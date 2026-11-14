@@ -304,9 +304,10 @@ allows;
 `issue ls` and `pr ls` take `--repo` too. `shoal pr revert [<number>]`
 opens a PR that undoes a merged one; where the forge cannot, it opens it from a
 child workspace already marked done, which goes once the revert merges.
-Workspace processes cannot merge a PR, delete its branch, approve or request
-changes on one, or approve CI runs: `pr merge`, `pr delete-branch`,
-`pr review --approve`, `--request-changes` and `ci approve` are refused.
+Workspace processes cannot merge a PR, delete its branch, or approve or
+request changes on one: `pr merge`, `pr delete-branch`, `pr review --approve`
+and `--request-changes` are refused. `ci approve` follows the space's
+`ci_approve` [permission](#permitted-actions).
 
 `shoal forge capabilities` lists what the forge supports, such as resolving
 threads, rerunning jobs or reading job logs, and what to do instead.
@@ -352,7 +353,8 @@ Other keys govern what was once the user's alone, each `deny`, `propose` or
 `direct`: `admin` administering Shoal, such as `config set`, `repo add`,
 `cleanup`, `setup --skip`, `contribute`, `move`, and restoring removed
 workspaces, `limits` starting agents regardless of the limits, with
-`--now`, `--focus` or `queue start`, `user_holds` releasing the user's holds
+`--now`, `--focus` or `queue start`, `ci_approve` approving CI runs that wait
+for approval, `user_holds` releasing the user's holds
 and removing what the user holds, and `daemon` the daemon's service
 commands and `shoal update`. `notifications`, `deny` or `direct`, lets a
 space read the user's notifications, Shoal's own log and the inbox's
@@ -360,10 +362,9 @@ daemon-wide problems, and `decide`, `deny` or `direct`, decide the requests
 of the spaces below as the user does.
 With `propose` the command exits 2 with `approval_pending` and the request,
 which goes to the space above whose own value is `direct`, or the user; once
-approved, the same command proceeds once. A master session has `admin`,
-`limits`, `user_holds`, `notifications` and `decide` at `direct` and
-`daemon` at `propose`; other modes propose the first three and are denied
-the rest.
+approved, the same command proceeds once. A master session has every one
+at `direct` but `daemon`, which it proposes; other modes propose `admin`,
+`limits`, `ci_approve` and `user_holds` and are denied the rest.
 
 ## Links and watches
 

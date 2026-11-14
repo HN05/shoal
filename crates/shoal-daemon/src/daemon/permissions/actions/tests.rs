@@ -275,3 +275,23 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
     let own = undecided(manager.authorize_action(Some(&mastering), own).await);
     assert!(!manager.decides_as_user(&mastering, &own).await.unwrap());
 }
+
+#[tokio::test]
+async fn approving_ci_runs_follows_the_ci_approve_permission() {
+    use crate::{
+        client::space_names::SpaceSelector,
+        daemon::scope::Scoped,
+        protocol::{CiMethod, ItemContext},
+    };
+
+    let (_temp, manager) = manager().await;
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let worker = chat(&manager, "worker", "chat", None, Some(&master.id)).await;
+    let mut approve = CiMethod::ApproveCiRuns {
+        context: ItemContext::Chat(SpaceSelector::id(&worker.id)),
+        run: Some("7".parse().unwrap()),
+        pr: None,
+    };
+    let request = undecided(approve.scope(&manager, &caller(&worker.id)).await.map(drop));
+    assert_eq!(request.target, Target::Action(PermissionKey::CiApprove));
+}

@@ -1,15 +1,19 @@
 //! The daemon's answers to [`CiMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 
 use super::super::{
     answer::Answer,
+    permissions::Action,
     scope::{Caller, Scoped},
     workspace::Manager,
 };
 use crate::client::space_names::SpaceSelector;
-use crate::protocol::{Body, CiMethod, ItemContext};
+use crate::{
+    config::permissions::PermissionKey,
+    protocol::{Body, CiMethod, ItemContext},
+};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -51,7 +55,7 @@ pub(super) async fn handle(
                 .await?,
         ),
         CiMethod::ApproveCiRuns { context, run, pr } => {
-            Body::CiRunsApproved(manager.approve_ci_runs(&context, run, pr).await?)
+            Body::CiRunsApproved(manager.approve_ci_runs(&context, run, pr, caller).await?)
         }
         CiMethod::ViewCiRun { context, run } => {
             Body::CiRun(manager.view_ci_run(context.as_ref(), run, caller).await?)
@@ -83,8 +87,16 @@ impl Scoped for CiMethod {
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
-            CiMethod::ApproveCiRuns { .. } => {
-                bail!("approving CI runs is the user's decision; ask them with shoal alerts send")
+            // Approving runs is the `ci_approve` permission's.
+            CiMethod::ApproveCiRuns { context, run, pr } => {
+                let runs = match (run.as_ref(), pr.as_ref()) {
+                    (Some(run), _) => format!("CI run {run}"),
+                    (None, Some(pr)) => format!("the CI runs of PR {pr}"),
+                    (None, None) => "the CI runs of the space's PR".to_owned(),
+                };
+                let action = Action::new(PermissionKey::CiApprove, format!("approve {runs}"));
+                manager.authorize_action(Some(caller), action).await?;
+                Some(super::items::change_context_space(manager, caller, context).await?)
             }
             // A chat without a repository acts in a registered checkout as
             // its own space, with its agent account.

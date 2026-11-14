@@ -199,6 +199,8 @@ permission_keys! {
     notifications: Notifications => "notifications", Allowed;
     /// Deciding, as the user would, any approval request of a space below.
     decide: Decide => "decide", Allowed;
+    /// Approving CI runs that wait for approval.
+    ci_approve: CiApprove => "ci_approve", Acting;
 }
 
 /// Refuse `value` of `key` where it is wider than `held`.
@@ -231,6 +233,7 @@ impl PermissionsConfig {
         user_holds: Some(Acting::Propose),
         notifications: Some(Allowed::Deny),
         decide: Some(Allowed::Deny),
+        ci_approve: Some(Acting::Propose),
     };
 
     /// The defaults of a mode that coordinates rather than edits: it decides
@@ -250,6 +253,7 @@ impl PermissionsConfig {
         user_holds: Some(Acting::Direct),
         notifications: Some(Allowed::Direct),
         decide: Some(Allowed::Direct),
+        ci_approve: Some(Acting::Direct),
         ..Self::COORDINATING
     };
 

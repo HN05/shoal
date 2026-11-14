@@ -402,6 +402,8 @@ notifications = "deny"
 # Deciding the approval requests of the spaces below as you would: "deny" or
 # "direct".
 decide = "deny"
+# Approving CI runs that wait for approval: "deny", "propose" or "direct".
+ci_approve = "propose"
 
 # Run the repository's CI jobs on this machine: Shoal registers a runner for
 # it on its forge and runs each waiting job with these labels, plus

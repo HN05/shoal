@@ -2439,7 +2439,8 @@ with its arguments, which the command reports with exit 2 and
 `code: "approval_pending"`, or `"approval_denied"` once denied. Once the
 request is approved, the same action proceeds once under every other check,
 and taking it again asks again; an approved command's own requests take
-what the same key governs without asking again. `decide`, which is
+what the same key governs without asking again. `ci_approve` governs
+approving CI runs that wait for approval; `decide`, which is
 `"deny"` or `"direct"`, governs deciding the requests of the spaces below as
 you would; `notifications`, also `"deny"` or `"direct"`, governs reading, clearing and watching your
 notifications, Shoal's own log, and the untracked worktrees, cleanup errors
@@ -4601,8 +4602,10 @@ with its `url` and `workflow`, and the text names how to approve them. GitHub
 reports the runs it holds; Forgejo and Gitea mark them among the head commit's
 runs; GitLab and Bitbucket hold none. `shoal ci approve` approves one run, which
 must be waiting, or with `--pr`, or neither for the linked PR, every waiting run
-on the PR's head, failing when none waits. It uses your login, as merging does,
-and records an `item_changed` event; workspace processes cannot approve. Only
+on the PR's head, failing when none waits. It uses your login, or the agent
+account for a scoped process, which approves as its space's
+[`ci_approve` permission](#permitted-actions) allows, and records an
+`item_changed` event. Only
 GitHub approves through its API: Forgejo and Gitea approve in the web UI, so
 there the command fails before any request. `--json` returns the `approved`
 runs' URLs.

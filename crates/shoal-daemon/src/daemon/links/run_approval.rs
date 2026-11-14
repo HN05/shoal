@@ -1,11 +1,12 @@
-//! Approving the CI runs a forge holds for approval, as the user, from a
-//! workspace or a registered checkout: approval lets a fork's or first-time
-//! contributor's code run, so it is the user's decision.
+//! Approving the CI runs a forge holds for approval, from a workspace or a
+//! registered checkout: approval lets a fork's or first-time contributor's
+//! code run, so it is the user's decision, or a scoped caller's as its
+//! `ci_approve` permission allows, as the agent account.
 use anyhow::{Context, Result};
 
 use super::actions::Place;
 use crate::{
-    daemon::{events, workspace::Manager},
+    daemon::{events, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
         account::Account,
@@ -27,11 +28,16 @@ impl Manager {
         context: &ItemContext,
         run: Option<ItemInput>,
         pr: Option<ItemInput>,
+        caller: Option<&Caller>,
     ) -> Result<RunsApproved> {
         let place = self.place(context).await?;
         let workspace = place.workspace();
         let forge = self.place_forge(&place).await?;
-        let account = self.user_account();
+        // A scoped caller approves as the agent account.
+        let account = match caller {
+            Some(_) => self.agent_account(),
+            None => self.user_account(),
+        };
         let approved = match run {
             Some(input) => {
                 let run = ItemRef::in_repository(&forge, LinkKind::Ci, &input)?;
