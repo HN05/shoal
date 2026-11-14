@@ -95,6 +95,16 @@ impl Manager {
         holds: impl Fn(&Path) -> bool,
     ) -> Result<bool> {
         let (home, _files) = self.lock_files_home(&self.space_home(space).await?).await?;
+        // A restore may have given the files to a workspace meanwhile.
+        let id = space.id.clone();
+        if (self
+            .store
+            .read(move |db| records::gone_space(db, &id))
+            .await?)
+            .is_none()
+        {
+            return Ok(false);
+        }
         let copies = self.kept_copies(&space.id).await?;
         let there = (home.layout()).is_some_and(|layout| {
             (layout.kept(&space.id).iter())

@@ -366,12 +366,14 @@ impl Manager {
 
     /// Give a reopened workspace the checkpoints, events and attached files
     /// of the removed one and drop its removal record, at once, so the
-    /// checkpoints always have an owner.
+    /// checkpoints always have an owner. The files gate keeps the deletion
+    /// of the removed one's files from coming between.
     pub(super) async fn adopt_removal(
         &self,
         removed: &RemovedWorkspace,
         workspace_id: &SpaceId,
     ) -> Result<()> {
+        let _files = self.gates.lock_message_files(&removed.repository_id).await;
         let (from, to) = (removed.workspace_id.clone(), workspace_id.to_owned());
         self.store
             .write(move |tx| {

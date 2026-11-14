@@ -842,6 +842,8 @@ async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
         )
         .await
         .unwrap();
+    // Disk cleanup lists the removed workspace before the restore.
+    let listed = manager.kept_results().await.unwrap();
     let restored = manager
         .restore_workspace(&SpaceSelector::id(&workspace.id))
         .await
@@ -855,6 +857,10 @@ async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
         panic!("{files:?}");
     };
     assert_eq!((&file.path, file.expires_at), (&added.path, None));
+    let [listed] = listed.as_slice() else {
+        panic!("{listed:?}");
+    };
+    assert!(!manager.delete_results_in(listed, |_| true).await.unwrap());
     assert!(added.path.exists());
 
     // Removed again, they expire with it.
