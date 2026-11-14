@@ -1392,9 +1392,9 @@ fn push_gate(fixture: &Fixture, command: &mut Command, remote: &str) {
             support::shoal_binary()
         ),
     );
-    let path_with_helper = std::env::join_paths(std::iter::once(helper.clone()).chain(
-        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
-    ))
+    let path_with_helper = std::env::join_paths(
+        std::iter::once(helper.clone()).chain(std::env::split_paths(&support::runner_path())),
+    )
     .unwrap();
     command
         .env("PATH", &path_with_helper)

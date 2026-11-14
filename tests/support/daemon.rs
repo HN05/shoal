@@ -1,7 +1,7 @@
 use std::{
-    fs::{self, File},
+    fs::File,
     io::{Read, Seek},
-    os::unix::{fs::PermissionsExt, process::CommandExt},
+    os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     time::{Duration, Instant},
@@ -234,43 +234,4 @@ fn processes_naming(text: &str) -> Vec<(i32, i32)> {
             (!stat.starts_with('Z')).then_some((pid, group))
         })
         .collect()
-}
-
-/// Give the daemon a `zmx`, last on its PATH, when the runner has none, so
-/// its startup check for required tools records no alert every test would
-/// count. A runner with zmx keeps its own, and the CLI's PATH is unchanged.
-pub fn provide_zmx(root: &Path, launch: &mut Command) {
-    let path = launch
-        .get_envs()
-        .find(|(name, _)| *name == "PATH")
-        .and_then(|(_, value)| value.map(ToOwned::to_owned))
-        .or_else(|| std::env::var_os("PATH"))
-        .unwrap_or_default();
-    if std::env::split_paths(&path).any(|dir| dir.join("zmx").is_file()) {
-        return;
-    }
-    let dir = root.join("daemon-bin");
-    write_zmx_stub(&dir);
-    let path = std::env::join_paths(std::env::split_paths(&path).chain([dir])).unwrap();
-    launch.env("PATH", path);
-}
-
-/// Write the stub `zmx` into `dir` once. A restarted daemon reuses it: the
-/// previous daemon's processes may still run it, and Linux refuses to write
-/// to a running executable. The stub is renamed into place complete, so no
-/// launch runs a partly written one.
-fn write_zmx_stub(dir: &Path) {
-    let zmx = dir.join("zmx");
-    if zmx.is_file() {
-        return;
-    }
-    fs::create_dir_all(dir).unwrap();
-    let partial = dir.join("zmx.partial");
-    fs::write(
-        &partial,
-        "#!/bin/sh\nif [ \"$1\" = list ]; then exit 0; fi\necho 'zmx is not installed on this test runner' >&2\nexit 127\n",
-    )
-    .unwrap();
-    fs::set_permissions(&partial, fs::Permissions::from_mode(0o755)).unwrap();
-    fs::rename(&partial, &zmx).unwrap();
 }

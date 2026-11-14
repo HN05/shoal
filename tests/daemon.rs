@@ -532,7 +532,11 @@ esac
         command
             .env(
                 "PATH",
-                format!("{}:{}", self.bin.display(), std::env::var("PATH").unwrap()),
+                format!(
+                    "{}:{}",
+                    self.bin.display(),
+                    support::runner_path().to_string_lossy()
+                ),
             )
             .env("SHOAL_BINARY", support::shoal_binary())
             .env("SHOAL_TEST_STATE", self.root.path().join("state"))

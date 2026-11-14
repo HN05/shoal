@@ -1,0 +1,6 @@
+#!/bin/sh
+# The zmx every test finds unless it installs its own: the passthrough zmx of
+# zmx.py, keeping its sessions and calls apart from those of a test's own zmx.
+root=${ZMX_TEST_ROOT:-$HOME/default-zmx}
+mkdir -p "$root"
+ZMX_TEST_ROOT=$root exec python3 "$(dirname "$0")/../zmx.py" "$@"

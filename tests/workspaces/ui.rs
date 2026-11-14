@@ -1036,7 +1036,7 @@ printf 'navigation-ok\n'
                     .parent()
                     .unwrap()
                     .display(),
-                std::env::var("PATH").unwrap()
+                support::runner_path().to_string_lossy()
             ),
         )
         .output()

@@ -248,9 +248,11 @@ fn tool_secrets_reach_only_their_tools() {
     // A hook started beneath an agent runs the tool without its launcher.
     let launchers = fixture.root.path().join("launchers");
     install_test_script(launchers.join("show-token"), "#!/bin/sh\necho launcher\n");
-    let path = std::env::join_paths([launchers.clone(), bin].into_iter().chain(
-        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
-    ))
+    let path = std::env::join_paths(
+        [launchers.clone(), bin]
+            .into_iter()
+            .chain(std::env::split_paths(&support::runner_path())),
+    )
     .unwrap();
     let output = fixture
         .command()
@@ -294,9 +296,10 @@ fn tool_secrets_reach_only_their_tools() {
         path.push(launchers);
     }
     path.push(bin);
-    let path = std::env::join_paths(path.into_iter().chain(std::env::split_paths(
-        &std::env::var_os("PATH").unwrap_or_default(),
-    )))
+    let path = std::env::join_paths(
+        path.into_iter()
+            .chain(std::env::split_paths(&support::runner_path())),
+    )
     .unwrap();
     let output = fixture
         .command()

@@ -286,7 +286,11 @@ fn a_chat_reviews_its_linked_pr_and_lists_and_cancels_that_review() {
     let mut pull = forgejo_pull(7, "open", "fix", &"7".repeat(40));
     pull["head"]["repo"]["full_name"] = "team/project".into();
     script_api(fixture.root.path(), "repos/team/project/pulls/7", &pull);
-    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        support::runner_path().to_string_lossy()
+    );
     let (mut agent, _) = start_test_chat(&fixture, "planning");
     let run = |args: &[&str]| {
         fixture
@@ -357,7 +361,11 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     pull["base"]["ref"] = "stack/base".into();
     pull["head"]["repo"]["full_name"] = "team/project".into();
     script_api(fixture.root.path(), "repos/team/project/pulls/7", &pull);
-    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        support::runner_path().to_string_lossy()
+    );
     let review = |target: &[&str]| {
         fixture
             .command()
@@ -2345,7 +2353,11 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
         pull["head"]["repo"]["full_name"] = "someone/project".into();
         script_api(fixture.root.path(), "repos/team/project/pulls/8", &pull);
     };
-    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        support::runner_path().to_string_lossy()
+    );
     let url = "https://forge.example/team/project/pulls/8";
     let run = |args: &[&str]| {
         fixture

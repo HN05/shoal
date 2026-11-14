@@ -53,7 +53,7 @@ impl Base {
     pub fn start(root: TempDir, config: &str, name: &str, files: &[(&str, &str)]) -> Self {
         write_global_config(root.path(), config);
         let repo = offline_repository(root.path(), name, files);
-        let daemon = DaemonGuard::start(root.path(), &mut daemon_launch(root.path()));
+        let daemon = DaemonGuard::start(root.path(), &mut support::cli(root.path()));
         let base = Self {
             sessions: Sessions::default(),
             commands: CommandGroup::new(),
@@ -68,7 +68,7 @@ impl Base {
 
     pub fn restart(&mut self) {
         self.daemon
-            .restart(self.root.path(), &mut daemon_launch(self.root.path()));
+            .restart(self.root.path(), &mut support::cli(self.root.path()));
     }
 
     pub fn command(&self) -> Command {
@@ -138,7 +138,7 @@ impl Base {
         // Agents already running keep the script they started with.
         support::install_test_script(self.root.path().join("bin/claude"), CHAT_AGENT);
         // A launch from a terminal runs in a session of the default host,
-        // zmx, which the runner need not have; a test's own zmx stays.
+        // zmx, which must give the chat a terminal; a test's own zmx stays.
         let zmx = self.root.path().join("bin/zmx");
         if !zmx.exists() {
             support::install_test_script(zmx, support::zmx::terminal_zmx());
@@ -273,12 +273,4 @@ fn offline_repository(root: &Path, name: &str, files: &[(&str, &str)]) -> PathBu
     // that serves SSH itself sets its own command.
     git(&repo, &["config", "core.sshCommand", "false"]);
     repo
-}
-
-/// How fixtures start their daemon: as the CLI runs, with a `zmx` on the
-/// daemon's PATH when the runner has none.
-fn daemon_launch(root: &Path) -> Command {
-    let mut launch = support::cli(root);
-    support::daemon::provide_zmx(root, &mut launch);
-    launch
 }

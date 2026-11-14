@@ -21,11 +21,11 @@ pub mod zmx;
 pub use shoal_core::test_support::printed;
 
 use std::{
-    ffi::OsStr,
+    ffi::{OsStr, OsString},
     fs,
     io::Write,
     os::unix::fs::PermissionsExt,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     time::Duration,
 };
@@ -89,7 +89,8 @@ pub fn install_fake_agent(dir: &Path) {
 }
 
 /// Keep commands and their descendants in a temporary home, state and cwd.
-/// Preserve PATH for test tooling, preferring executables in the fixture's bin.
+/// Preserve PATH for test tooling, preferring executables in the fixture's
+/// bin, then the fake hosts of [`runner_path`].
 pub fn isolated(root: &Path, program: impl AsRef<OsStr>) -> Command {
     let mut command = Command::new(program);
     for (name, _) in std::env::vars_os() {
@@ -104,9 +105,9 @@ pub fn isolated(root: &Path, program: impl AsRef<OsStr>) -> Command {
             command.env_remove(name);
         }
     }
-    let path = std::env::join_paths(std::iter::once(root.join("bin")).chain(
-        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
-    ))
+    let path = std::env::join_paths(
+        std::iter::once(root.join("bin")).chain(std::env::split_paths(&runner_path())),
+    )
     .unwrap();
     command
         // Whatever stdin the runner has must not reach a test: a command that
@@ -127,6 +128,20 @@ pub fn isolated(root: &Path, program: impl AsRef<OsStr>) -> Command {
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("PATH", path);
     command
+}
+
+/// The runner's PATH behind `fixtures/hosts`, whose fake terminal hosts
+/// answer in place of the runner's own, so no test starts a session of the
+/// machine's zmx whether or not it has one. The package's directory is read
+/// at run time, as [`shoal_binary`] is.
+pub fn runner_path() -> OsString {
+    let hosts = std::env::var_os("CARGO_MANIFEST_DIR")
+        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)
+        .join("tests/fixtures/hosts");
+    std::env::join_paths(std::iter::once(hosts).chain(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    )))
+    .unwrap()
 }
 
 pub fn cli(root: &Path) -> Command {

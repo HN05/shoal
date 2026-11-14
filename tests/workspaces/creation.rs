@@ -88,7 +88,11 @@ fn add_issue_takes_the_repository_of_the_current_checkout_or_workspace() {
         &serde_json::json!({"number": 12, "title": "Clarify retries", "state": "open",
             "body": "", "labels": [], "pull_request": null}),
     );
-    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        support::runner_path().to_string_lossy()
+    );
     // No terminal, as in a planning chat's tool call: no picker may run.
     let add = |cwd: &Path| {
         let output = fixture
