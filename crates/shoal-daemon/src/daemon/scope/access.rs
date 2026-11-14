@@ -18,7 +18,7 @@ use crate::{
         Chat, ChatQueueRequest, PresentSpace, QueueEntry, QueueRequest, Repository, RunningAgent,
         SpaceTarget,
     },
-    protocol::operations::WorkspaceStart,
+    protocol::{ChatStart, operations::WorkspaceStart},
     repository::Selector,
 };
 
@@ -485,15 +485,15 @@ impl Manager {
     }
 
     /// Confine the launch of a new chat's agent that `caller` queues: it
-    /// starts now only for the user, in the caller's own repository, with
-    /// permissions the caller holds, and its chat is recorded at once.
+    /// starts in the caller's own repository, with permissions the caller
+    /// holds, regardless of the limits as its `limits` permission allows,
+    /// and its chat is recorded at once.
     pub(in crate::daemon) async fn confine_chat_launch(
         &self,
         caller: &Caller,
         request: &mut ChatQueueRequest,
     ) -> Result<()> {
         const REFUSAL: &str = "workspace processes start chats only in their own repository";
-        ensure!(!request.now, NOT_NOW);
         // Its chat is recorded at once, below the caller, rather than by the
         // queue's later start, which acts as the user.
         request.records_when_waiting = true;
@@ -507,7 +507,33 @@ impl Manager {
             None => None,
         };
         let giver = Some(&caller.space_id);
-        (self.ensure_caller_holds(giver, &request.narrowing, repository.as_ref())).await
+        (self.ensure_caller_holds(giver, &request.narrowing, repository.as_ref())).await?;
+        if request.now {
+            let start = format!("start the agent of new chat {} now", request.name);
+            (self.authorize_beyond_limits(caller, start, repository)).await?;
+        }
+        Ok(())
+    }
+
+    /// Let `caller` start the agent of the new chat `start` now, regardless
+    /// of the limits, as its `limits` permission in the chat's repository
+    /// allows.
+    pub(in crate::daemon) async fn authorize_chat_now(
+        &self,
+        caller: &Caller,
+        start: &ChatStart,
+    ) -> Result<()> {
+        let repository = match (&start.workspace, &start.repository) {
+            (Some(workspace), _) => self.space_repository(workspace).await?,
+            (None, Some(repository)) => Some(self.repository(repository).await?.id),
+            (None, None) => None,
+        };
+        let start = match &start.name {
+            Some(name) => format!("start the agent of new chat {name} now"),
+            None => "start the agent of a new chat now".to_owned(),
+        };
+        self.authorize_beyond_limits(caller, start, repository)
+            .await
     }
 
     /// Question `number` for the caller to answer, which must be one of a

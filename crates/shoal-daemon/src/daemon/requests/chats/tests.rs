@@ -2,7 +2,11 @@ use std::collections::BTreeMap;
 
 use super::*;
 use crate::{
-    daemon::test_support::{chat, global_config, manager, repository},
+    config::permissions::PermissionKey,
+    daemon::{
+        approvals::{Target, Undecided},
+        test_support::{chat, global_config, manager, repository},
+    },
     model::ChatQueueRequest,
 };
 
@@ -25,6 +29,7 @@ async fn a_chat_recorded_for_a_scoped_launch_goes_below_its_queuer() {
     let caller = Caller {
         space_id: queuer.id.clone(),
         execution: None,
+        granted: None,
     };
     let launch = ChatQueueRequest {
         repository: Some((&repo.id).into()),
@@ -52,4 +57,52 @@ async fn a_chat_recorded_for_a_scoped_launch_goes_below_its_queuer() {
     let mut own = None;
     let scoped = queued_scope(&manager, Some(&caller), Some(&entry), &mut own).await;
     assert!(scoped.unwrap().is_none() && own.is_none());
+}
+
+/// A scoped caller starts a new chat's agent regardless of the limits only
+/// as its `limits` permission allows, whether the daemon starts the chat or
+/// queues its launch.
+#[tokio::test]
+async fn a_scoped_chat_start_now_asks_the_limits_permission() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let starter = chat(&manager, "starter", "chat", Some(&repo), None).await;
+    let caller = Caller {
+        space_id: starter.id.clone(),
+        execution: None,
+        granted: None,
+    };
+    let limits = |result: Result<()>| match result.unwrap_err().downcast::<Undecided>() {
+        Ok(Undecided(request)) => request.target,
+        Err(error) => panic!("expected an approval request: {error:#}"),
+    };
+
+    let mut launch = ChatMethod::LaunchChat {
+        start: Box::new(ChatStart {
+            repository: Some((&repo.id).into()),
+            now: true,
+            ..ChatStart::default()
+        }),
+    };
+    let launched = launch.scope(&manager, &caller).await.map(drop);
+    assert_eq!(limits(launched), Target::Action(PermissionKey::Limits));
+
+    let mut queued = ChatQueueRequest {
+        repository: Some((&repo.id).into()),
+        name: "talk".into(),
+        agent: "claude".into(),
+        mode: "chat".into(),
+        narrowing: Default::default(),
+        plan: "{}".into(),
+        env: BTreeMap::new(),
+        now: true,
+        priority: None,
+        records_when_waiting: false,
+    };
+    let confined = manager.confine_chat_launch(&caller, &mut queued).await;
+    assert_eq!(limits(confined), Target::Action(PermissionKey::Limits));
 }

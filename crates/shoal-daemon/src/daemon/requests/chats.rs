@@ -1,12 +1,12 @@
 //! The daemon's answers to [`ChatMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::super::{
     answer::Answer,
     chats::NewChat,
-    scope::{Caller, NOT_NOW, Scoped},
+    scope::{Caller, Scoped},
     workspace::Manager,
 };
 use crate::client::space_names::SpaceSelector;
@@ -169,13 +169,15 @@ impl Scoped for ChatMethod {
             // itself would: the worker acts with the caller's scope, which
             // puts it below the caller's own space without a parent.
             ChatMethod::LaunchChat { start } => {
-                ensure!(!start.now, NOT_NOW);
                 let ChatStart {
                     parent, workspace, ..
                 } = &mut **start;
                 (manager.ensure_parent_not_host(workspace.as_ref(), parent.as_ref())).await?;
                 manager.parent_below(caller, &mut parent.clone()).await?;
-                workspace.as_mut()
+                if start.now {
+                    manager.authorize_chat_now(caller, start).await?;
+                }
+                start.workspace.as_mut()
             }
             // Its check takes the parent as its start would.
             ChatMethod::CheckChatParent {
