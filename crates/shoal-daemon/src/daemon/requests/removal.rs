@@ -252,8 +252,8 @@ impl Scoped for RemovalMethod {
 }
 
 /// Let `caller` send `method`, which the `admin` permission governs, in its
-/// own repository where it imports into one, returning the space it moves,
-/// which its scope must reach before it asks approval.
+/// own repository where it imports into one, returning the existing space it
+/// acts on, which its scope must reach before it asks approval.
 async fn administer<'a>(
     manager: &Manager,
     caller: &Caller,
@@ -272,22 +272,24 @@ async fn administer<'a>(
         _ => None,
     };
     manager
-        .ensure_selected_reached(caller, moved(method))
+        .ensure_selected_reached(caller, administered(method))
         .await?;
-    let repository = match (moved(method), repository) {
+    let repository = match (administered(method), repository) {
         (Some(space), None) => manager.space_repository(space).await?,
         (_, repository) => repository,
     };
     manager.administer(caller, &*method, repository).await?;
-    Ok(moved(method))
+    Ok(administered(method))
 }
 
-/// The space `method` moves, if it moves one.
-fn moved(method: &mut RemovalMethod) -> Option<&mut SpaceSelector> {
+/// The existing space `method`, which the `admin` permission governs, acts
+/// on: one it moves, or a restored workspace whose kept sessions it drops.
+fn administered(method: &mut RemovalMethod) -> Option<&mut SpaceSelector> {
     match method {
         RemovalMethod::ExportSpace { space, .. }
         | RemovalMethod::ExportMovingSpace { space, .. }
-        | RemovalMethod::EndMovedSpace { space, .. } => Some(space),
+        | RemovalMethod::EndMovedSpace { space, .. }
+        | RemovalMethod::DropRestoredSessions { workspace: space } => Some(space),
         _ => None,
     }
 }
