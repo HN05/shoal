@@ -1042,22 +1042,7 @@ async fn upgrading_records_the_copies_messages_attached_before() {
     // A state database from before Shoal recorded attached files.
     manager
         .store
-        .run(|db| {
-            db.execute_batch(include_str!("../store/space_messages_undo.sql"))?;
-            db.execute_batch(include_str!("../store/chat_removed_events_undo.sql"))?;
-            db.execute_batch(include_str!("../store/space_records_undo.sql"))?;
-            db.execute_batch(include_str!("../store/chat_executions_undo.sql"))?;
-            db.execute_batch(include_str!("../store/space_priority_undo.sql"))?;
-            db.execute_batch(include_str!("../store/execution_spaces_undo.sql"))?;
-            db.execute_batch(include_str!("../store/agent_stops_undo.sql"))?;
-            db.execute_batch(include_str!("../store/agent_turns_undo.sql"))?;
-            db.execute_batch(include_str!("../store/agent_queue_scopes_undo.sql"))?;
-            db.execute_batch(include_str!("../store/agent_queue_blockers_undo.sql"))?;
-            db.execute_batch(include_str!("../store/space_completion_undo.sql"))?;
-            db.execute_batch(include_str!("../store/space_events_undo.sql"))?;
-            db.execute_batch(BEFORE_ATTACHED_FILES)?;
-            Ok(())
-        })
+        .run(|db| before_attached_files(db))
         .await
         .unwrap();
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
@@ -1174,22 +1159,7 @@ async fn an_earlier_copy_that_cannot_be_read_is_recorded_on_a_later_pass() {
         .clone();
     manager
         .store
-        .run(|db| {
-            db.execute_batch(include_str!("../store/space_messages_undo.sql"))?;
-            db.execute_batch(include_str!("../store/chat_removed_events_undo.sql"))?;
-            db.execute_batch(include_str!("../store/space_records_undo.sql"))?;
-            db.execute_batch(include_str!("../store/chat_executions_undo.sql"))?;
-            db.execute_batch(include_str!("../store/space_priority_undo.sql"))?;
-            db.execute_batch(include_str!("../store/execution_spaces_undo.sql"))?;
-            db.execute_batch(include_str!("../store/agent_stops_undo.sql"))?;
-            db.execute_batch(include_str!("../store/agent_turns_undo.sql"))?;
-            db.execute_batch(include_str!("../store/agent_queue_scopes_undo.sql"))?;
-            db.execute_batch(include_str!("../store/agent_queue_blockers_undo.sql"))?;
-            db.execute_batch(include_str!("../store/space_completion_undo.sql"))?;
-            db.execute_batch(include_str!("../store/space_events_undo.sql"))?;
-            db.execute_batch(BEFORE_ATTACHED_FILES)?;
-            Ok(())
-        })
+        .run(|db| before_attached_files(db))
         .await
         .unwrap();
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
@@ -1230,22 +1200,7 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
         .unwrap();
     manager
         .store
-        .run(|db| {
-            db.execute_batch(include_str!("../store/space_messages_undo.sql"))?;
-            db.execute_batch(include_str!("../store/chat_removed_events_undo.sql"))?;
-            db.execute_batch(include_str!("../store/space_records_undo.sql"))?;
-            db.execute_batch(include_str!("../store/chat_executions_undo.sql"))?;
-            db.execute_batch(include_str!("../store/space_priority_undo.sql"))?;
-            db.execute_batch(include_str!("../store/execution_spaces_undo.sql"))?;
-            db.execute_batch(include_str!("../store/agent_stops_undo.sql"))?;
-            db.execute_batch(include_str!("../store/agent_turns_undo.sql"))?;
-            db.execute_batch(include_str!("../store/agent_queue_scopes_undo.sql"))?;
-            db.execute_batch(include_str!("../store/agent_queue_blockers_undo.sql"))?;
-            db.execute_batch(include_str!("../store/space_completion_undo.sql"))?;
-            db.execute_batch(include_str!("../store/space_events_undo.sql"))?;
-            db.execute_batch(BEFORE_ATTACHED_FILES)?;
-            Ok(())
-        })
+        .run(|db| before_attached_files(db))
         .await
         .unwrap();
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
@@ -1269,6 +1224,25 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
         1
     );
     reopened.store.shutdown().await;
+}
+
+/// Turn the state database into one from before Shoal recorded attached
+/// files.
+fn before_attached_files(db: &rusqlite::Connection) -> anyhow::Result<()> {
+    db.execute_batch(include_str!("../store/space_messages_undo.sql"))?;
+    db.execute_batch(include_str!("../store/chat_removed_events_undo.sql"))?;
+    db.execute_batch(include_str!("../store/space_records_undo.sql"))?;
+    db.execute_batch(include_str!("../store/chat_executions_undo.sql"))?;
+    db.execute_batch(include_str!("../store/space_priority_undo.sql"))?;
+    db.execute_batch(include_str!("../store/execution_spaces_undo.sql"))?;
+    db.execute_batch(include_str!("../store/agent_stops_undo.sql"))?;
+    db.execute_batch(include_str!("../store/agent_turns_undo.sql"))?;
+    db.execute_batch(include_str!("../store/agent_queue_scopes_undo.sql"))?;
+    db.execute_batch(include_str!("../store/agent_queue_blockers_undo.sql"))?;
+    db.execute_batch(include_str!("../store/space_completion_undo.sql"))?;
+    db.execute_batch(include_str!("../store/space_events_undo.sql"))?;
+    db.execute_batch(BEFORE_ATTACHED_FILES)?;
+    Ok(())
 }
 
 /// Return a current state database to version 87, before Shoal recorded
