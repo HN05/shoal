@@ -91,11 +91,10 @@ pub(super) async fn check_export(
     output: &Output,
     spaces: &Spaces,
 ) -> Result<Checked> {
-    let carried = crate::transfer::carried_chats(&spaces.chats, space.id());
-    let carried = (carried.iter())
-        .filter_map(|id| spaces.chats.iter().find(|chat| chat.id == *id))
-        .cloned()
-        .collect();
+    let carried = carried_chats(spaces, space.id());
+    for chat in &carried {
+        ensure_not_running_in(chat)?;
+    }
     let (space, taken) = match space {
         PresentSpace::Workspace(workspace) => {
             let check = check_workspace_export(ctx, &workspace.id, output).await?;
@@ -114,21 +113,36 @@ pub(super) async fn check_export(
     })
 }
 
+/// The chats among `spaces` that go with the space `id`, each after its
+/// parent among them.
+fn carried_chats(spaces: &Spaces, id: &SpaceId) -> Vec<Chat> {
+    (crate::transfer::carried_chats(&spaces.chats, id).iter())
+        .filter_map(|id| spaces.chats.iter().find(|chat| chat.id == *id))
+        .cloned()
+        .collect()
+}
+
 /// Refuse to export a chat whose agent reported no session, which would not
-/// continue elsewhere, or the one this process runs in, which ending the
-/// chat would end before the export finished.
+/// continue elsewhere, or as [`ensure_not_running_in`] refuses.
 fn check_chat_export(chat: Chat) -> Result<Chat> {
     ensure!(
         chat.session.is_some(),
         "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",
         chat.name
     );
+    ensure_not_running_in(&chat)?;
+    Ok(chat)
+}
+
+/// Refuse to end `chat`, the one this process runs in, which ending the
+/// chat would end before the export finished.
+fn ensure_not_running_in(chat: &Chat) -> Result<()> {
     ensure!(
         crate::env::chat().as_ref() != Some(&chat.id),
         "this process runs in chat {}, which the export ends; export it from another terminal",
         chat.name
     );
-    Ok(chat)
+    Ok(())
 }
 
 /// What removing the workspace for an export would delete, refusing unsaved
