@@ -78,6 +78,13 @@ pub enum ChatMethod {
     ChatScope {
         chat: SpaceSelector,
     },
+    /// Record `origin` as the place the chat `chat`, recorded before its
+    /// queued agent started, now runs in, unless it has one: a place Shoal
+    /// opened for it becomes the chat's, as for a chat recorded there.
+    PlaceChat {
+        chat: SpaceSelector,
+        origin: crate::sessions::Origin,
+    },
     /// `root_dir`, where a chat without a repository runs, prepared as
     /// registering a repository prepares it.
     ChatRoot,

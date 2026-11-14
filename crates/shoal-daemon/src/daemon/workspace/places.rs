@@ -118,6 +118,28 @@ impl Manager {
             .await
     }
 
+    /// Record `origin` as the place the chat `selector` names runs in when
+    /// it has none, as a chat recorded before its queued agent started has,
+    /// and take that place as [`Self::take_chat_place`] does.
+    pub(crate) async fn place_chat(&self, selector: &SpaceSelector, origin: Origin) -> Result<()> {
+        let id = self.chat(selector).await?.id;
+        let recorded = serde_json::to_string(&origin)?;
+        let placed = self
+            .store
+            .run(move |db| {
+                Ok(db.execute(
+                    "UPDATE chats SET origin=?2 WHERE id=?1 AND origin IS NULL",
+                    params![id, recorded],
+                )?)
+            })
+            .await?;
+        if placed == 0 {
+            return Ok(());
+        }
+        let chat = self.chat(selector).await?;
+        self.take_chat_place(&chat).await
+    }
+
     /// Whether a running chat or an agent of a space other than `space` is
     /// recorded at `place`, which no removal of `space` closes.
     pub(super) async fn place_runs_elsewhere(

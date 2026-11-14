@@ -88,6 +88,10 @@ pub(super) async fn handle(
                 token: manager.chat_scope(&id).await?,
             })
         }
+        ChatMethod::PlaceChat { chat, origin } => {
+            manager.place_chat(&chat, origin).await?;
+            Body::Ok
+        }
     }))
 }
 
@@ -162,6 +166,15 @@ impl Scoped for ChatMethod {
                         caller,
                         chat,
                         "scoped processes start only the chats below their own space",
+                    )
+                    .await?,
+            ),
+            ChatMethod::PlaceChat { chat, .. } => Some(
+                manager
+                    .workspace_below(
+                        caller,
+                        chat,
+                        "scoped processes place only the chats below their own space",
                     )
                     .await?,
             ),
