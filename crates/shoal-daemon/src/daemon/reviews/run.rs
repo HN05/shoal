@@ -695,8 +695,10 @@ impl Manager {
     async fn remove_interrupted_runs(&self) -> Result<Vec<Unreconciled>> {
         let mut kept = Vec::new();
         for left in self.left_runs().await? {
+            // Read before a removal that fails partway can delete its file.
+            let review = left.files.review();
             let left_running = self.remove_interrupted_run(&left.files).await;
-            if let (Some(id), Some(left_running)) = (left.files.review(), left_running) {
+            if let (Some(id), Some(left_running)) = (review, left_running) {
                 kept.push(Unreconciled {
                     id,
                     left_running,
