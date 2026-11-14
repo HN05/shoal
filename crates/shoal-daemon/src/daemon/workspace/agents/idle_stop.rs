@@ -21,8 +21,8 @@ pub(super) struct Candidate {
     pub(super) execution: ExecutionId,
     pub(super) workspace_id: SpaceId,
     pub(super) workspace: SpaceName,
-    /// Whether the user attends its space.
-    pub(super) attended: bool,
+    /// Whether it is light, so that only its space's blocking stops it.
+    pub(super) light: bool,
     /// The idle turn it was found in.
     pub(super) turn: Turn,
 }
@@ -36,18 +36,18 @@ pub(super) struct Chosen {
 }
 
 impl Manager {
-    /// Put to sleep each idle agent whose space is blocked; each whose
-    /// prompt cache has expired in a done workspace whose cleanup is held,
-    /// which could otherwise run until the workspace goes, or in any
-    /// workspace whose `[sleep] idle` is enabled; each whose space sleeps
+    /// Put to sleep each idle agent whose space is blocked; each heavy one
+    /// whose prompt cache has expired in a done space whose cleanup is held,
+    /// which could otherwise run until the space goes, or in any space
+    /// whose `[sleep] idle` is enabled; each heavy one whose space sleeps
     /// after `shoal sleep` once that costs nothing; and those that make room
-    /// for queued work. A failure in one workspace does not skip the others.
+    /// for queued work. A failure in one space does not skip the others.
     pub(crate) async fn stop_idle_agents(&self) -> Result<()> {
         // The process scan that tells agents with work in flight waits until
         // some agent would stop.
         let turns = self.reported_turns().await?;
         let now = UnixTime::now();
-        let candidates = self.idle_candidates(&turns).await;
+        let candidates = self.idle_candidates(&turns).await?;
         let mut chosen = HashMap::new();
         let mut failed = crate::daemon::cleanup::SpaceFailures::default();
         for candidate in &candidates {
@@ -71,8 +71,10 @@ impl Manager {
     }
 
     /// The running agents with a restore command that `turns` shows idle.
-    async fn idle_candidates(&self, turns: &HashMap<ExecutionId, Turn>) -> Vec<Candidate> {
-        self.executions
+    async fn idle_candidates(&self, turns: &HashMap<ExecutionId, Turn>) -> Result<Vec<Candidate>> {
+        let light = self.light().await?;
+        Ok(self
+            .executions
             .with_agents(|agents| {
                 agents
                     .iter()
@@ -83,19 +85,18 @@ impl Manager {
                             execution: id.clone(),
                             workspace_id: agent.workspace_id.clone(),
                             workspace: agent.workspace.clone(),
-                            attended: agent.attended,
+                            light: light.execution(id),
                             turn,
                         })
                     })
                     .collect()
             })
-            .await
+            .await)
     }
 
     /// Why the `candidate` agent sleeps at `now`, if it does: its space is
-    /// blocked; or, unless the user attends its space, its prompt cache
-    /// expired where that frees memory, or its space sleeps and sleeping
-    /// costs nothing.
+    /// blocked; or, for a heavy agent, its prompt cache expired where that
+    /// frees memory, or its space sleeps and sleeping costs nothing.
     async fn idle_stop(&self, candidate: &Candidate, now: UnixTime) -> Result<Option<Chosen>> {
         let id = &candidate.workspace_id;
         let chosen = |protection, cache_expired_at| {
@@ -108,7 +109,7 @@ impl Manager {
         if self.space_blocked(id).await? {
             return Ok(chosen(Protection::blocked(), None));
         }
-        if candidate.attended {
+        if candidate.light {
             return Ok(None);
         }
         if candidate.turn.idle_without_cache(now)
@@ -131,9 +132,7 @@ impl Manager {
         if self.completion(id).await?.is_some() && self.keep_reason(id).await?.is_some() {
             return Ok(Some(Protection::idle_held()));
         }
-        let settings = self
-            .workspace_settings(&self.workspace_by_id(id).await?)
-            .await?;
+        let settings = (self.present_space_settings(&self.space_by_id(id).await?)).await?;
         Ok(settings.sleep.idle.then(Protection::idle_expired))
     }
 

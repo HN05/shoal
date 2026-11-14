@@ -6,7 +6,7 @@ fn candidate() -> Candidate {
         execution: "execution".into(),
         workspace_id: "space".into(),
         workspace: "space".into(),
-        attended: false,
+        light: false,
         turn: Turn {
             state: AgentState::Idle,
             since: UnixTime::from_seconds(0),
