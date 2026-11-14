@@ -464,6 +464,7 @@ pub fn space_links(db: &Connection, space_id: &SpaceId) -> rusqlite::Result<Spac
         prs,
         opened: recorded_items(db, space_id, Relation::Opened)?,
         related: recorded_items(db, space_id, Relation::Related)?,
+        assignees: crate::daemon::links::issue::assignees_of(db, space_id)?,
     })
 }
 

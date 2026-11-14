@@ -20,7 +20,6 @@ shoal-client = { workspace = true, features = ["rusqlite"] }
 shoal-core.workspace = true
 shoal-forge = { workspace = true, features = ["rusqlite"] }
 shoal-refs = { workspace = true, features = ["rusqlite"] }
-shoal-states = { workspace = true, features = ["rusqlite"] }
 shoal-subprocess.workspace = true
 socket2 = "0.6"
 tempfile.workspace = true

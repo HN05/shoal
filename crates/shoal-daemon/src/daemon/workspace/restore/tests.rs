@@ -818,6 +818,7 @@ fn a_record_from_before_one_relation_per_item_records_each_item_once() {
         prs: Vec::new(),
         opened: vec![item(issue), item(run)],
         related: vec![item(run), item(other)],
+        assignees: Vec::new(),
     };
     assert_eq!(
         super::recorded(&links),

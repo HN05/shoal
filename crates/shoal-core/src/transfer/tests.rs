@@ -101,6 +101,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
                 url: "https://forge.example/team/repo/issues/9".parse().unwrap(),
                 title: None,
             }],
+            assignees: Vec::new(),
         },
         review: Vec::new(),
         completion: None,

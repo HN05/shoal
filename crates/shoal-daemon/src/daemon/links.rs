@@ -83,7 +83,7 @@ impl Manager {
         title: Option<String>,
         caller: Option<&Caller>,
     ) -> Result<Vec<String>> {
-        let assigner = issue::Assigner::of(caller);
+        let assigner = <issue::Assigner as issue::AssignerOf>::of(caller);
         match (relation, kind) {
             (Relation::Assigned, LinkKind::Issue) => {
                 return self.set_issue(selector, input, title, assigner).await;

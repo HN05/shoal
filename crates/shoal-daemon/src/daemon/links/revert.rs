@@ -4,7 +4,11 @@
 use crate::daemon::links::proposals::OpenOutcomeExt;
 use anyhow::{Result, ensure};
 
-use super::{issue::Assigner, proposals::OpenOutcome, space::LinkSpace};
+use super::{
+    issue::{Assigner, AssignerOf},
+    proposals::OpenOutcome,
+    space::LinkSpace,
+};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::{Opening, Pushes},

@@ -20,22 +20,24 @@ enum Refuse {
 
 /// A Forgejo repository `team/repo` whose open issue 7 starts with the
 /// `assignees` and changes them as edits say, unless it refuses them, where
-/// the user's token signs in as `shoal-user`, and a manager under `config`
-/// with a workspace of each of `names` in a repository that has it as its
-/// origin.
+/// every token signs in as `shoal-user`, and a manager under `config` with a
+/// workspace of each of `names` in a repository that has it as its origin.
 struct Fixture {
     _root: tempfile::TempDir,
     manager: std::sync::Arc<Manager>,
     server: Server,
     workspaces: Vec<Workspace>,
+    refuse: Arc<Mutex<Refuse>>,
 }
 
 impl Fixture {
     async fn new(names: &[&str], assignees: &[&str], config: &str) -> Self {
-        Self::start(names, assignees, config, Refuse::Nothing).await
+        Self::start(names, assignees, config, "").await
     }
 
-    async fn start(names: &[&str], assignees: &[&str], config: &str, refuse: Refuse) -> Self {
+    /// [`Self::new`] with the forge host's `settings` beside the user's
+    /// token.
+    async fn start(names: &[&str], assignees: &[&str], config: &str, settings: &str) -> Self {
         let (root, manager) = manager().await;
         let path = repository(root.path(), "repo");
         let repository = manager
@@ -49,6 +51,8 @@ impl Fixture {
             workspaces.push(created.await.unwrap());
         }
         let assignees = Arc::new(Mutex::new(logins(assignees)));
+        let refuse = Arc::new(Mutex::new(Refuse::Nothing));
+        let refusing = refuse.clone();
         let server = Server::start(move |request| {
             let body = match request.line.as_str() {
                 "GET /api/v1/user" => json!({"login": "shoal-user"}),
@@ -60,14 +64,11 @@ impl Fixture {
                         .map(|login| login.as_str().unwrap())
                         .collect();
                     let mut current = assignees.lock().unwrap();
-                    let adds = edited.len() > current.len();
-                    if refuse
-                        == (if adds {
-                            Refuse::Adding
-                        } else {
-                            Refuse::Removing
-                        })
-                    {
+                    let change = match edited.len() > current.len() {
+                        true => Refuse::Adding,
+                        false => Refuse::Removing,
+                    };
+                    if *refusing.lock().unwrap() == change {
                         return (403, Vec::new(), r#"{"message":"forbidden"}"#.into());
                     }
                     *current = logins(&edited);
@@ -79,8 +80,9 @@ impl Fixture {
         });
         let host = &server.host;
         crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::Forgejo);
-        let forge =
-            format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n");
+        let forge = format!(
+            "[machine.forges.\"{host}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n{settings}"
+        );
         configure(&manager, &format!("{config}\n{forge}")).await;
         git(
             &path,
@@ -96,7 +98,13 @@ impl Fixture {
             manager,
             server,
             workspaces,
+            refuse,
         }
+    }
+
+    /// Refuse the assignee edits of `change` from now on.
+    fn refuse(&self, change: Refuse) {
+        *self.refuse.lock().unwrap() = change;
     }
 
     /// Link issue 7 to `workspace` as assigned, as the user's terminal does.
@@ -112,6 +120,15 @@ impl Fixture {
     async fn unlink(&self, workspace: &Workspace) -> Vec<String> {
         let selector = SpaceSelector::id(&workspace.id);
         self.manager.clear_issue(&selector, None).await.unwrap()
+    }
+
+    /// The token of each assignee edit the forge received, in order.
+    fn change_tokens(&self) -> Vec<String> {
+        let received = self.server.received();
+        (received.iter())
+            .filter(|request| request.line.starts_with("PATCH"))
+            .map(|request| request.header("Authorization").unwrap().to_owned())
+            .collect()
     }
 
     /// Each set of assignees the forge was asked to change to, in order.
@@ -185,7 +202,8 @@ async fn the_assignee_stays_while_another_space_of_the_login_links_the_issue() {
 
 #[tokio::test]
 async fn an_assignee_a_removal_cannot_take_back_notifies_the_user() {
-    let fixture = Fixture::start(&["fix"], &[], "", Refuse::Removing).await;
+    let fixture = Fixture::new(&["fix"], &[], "").await;
+    fixture.refuse(Refuse::Removing);
     let workspace = &fixture.workspaces[0];
     fixture.link(workspace).await;
     let selector = SpaceSelector::id(&workspace.id);
@@ -219,6 +237,43 @@ async fn a_moved_space_leaves_its_assignee_to_the_other_machine() {
 }
 
 #[tokio::test]
+async fn a_restored_space_assigns_its_issue_as_the_account_that_had_it() {
+    let agent = "agent_token = \"agent\"\n";
+    let fixture = Fixture::start(&["fix"], &[], "", agent).await;
+    let workspace = &fixture.workspaces[0];
+    let (manager, selector) = (&fixture.manager, SpaceSelector::id(&workspace.id));
+    (manager.set_issue(&selector, &"7".parse().unwrap(), None, Assigner::Agent))
+        .await
+        .unwrap();
+    (manager.remove_workspace(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly))
+        .await
+        .unwrap();
+    let restored = manager.restore_workspace(&selector).await.unwrap();
+    assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
+    assert_eq!(fixture.change_tokens(), ["token agent"; 3]);
+}
+
+#[tokio::test]
+async fn a_restored_space_takes_back_the_assignee_shoal_added_before() {
+    let fixture = Fixture::new(&["fix"], &[], "").await;
+    let workspace = &fixture.workspaces[0];
+    let (manager, selector) = (&fixture.manager, SpaceSelector::id(&workspace.id));
+    fixture.link(workspace).await;
+    // The removal could not take it back, so the forge still shows it.
+    fixture.refuse(Refuse::Removing);
+    (manager.remove_workspace(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly))
+        .await
+        .unwrap();
+    fixture.refuse(Refuse::Nothing);
+    let restored = manager.restore_workspace(&selector).await.unwrap();
+    fixture.unlink(&restored.opened.workspace).await;
+    assert_eq!(
+        fixture.changes(),
+        [json!(["shoal-user"]), json!([]), json!([])]
+    );
+}
+
+#[tokio::test]
 async fn linking_an_issue_others_are_assigned_names_them() {
     let fixture = Fixture::new(&["fix"], &["ann", "bob"], "").await;
     let workspace = &fixture.workspaces[0];
@@ -230,7 +285,8 @@ async fn linking_an_issue_others_are_assigned_names_them() {
 
 #[tokio::test]
 async fn a_refused_assignment_warns_and_keeps_the_link() {
-    let fixture = Fixture::start(&["fix"], &[], "", Refuse::Adding).await;
+    let fixture = Fixture::new(&["fix"], &[], "").await;
+    fixture.refuse(Refuse::Adding);
     let workspace = &fixture.workspaces[0];
     let warnings = fixture.link(workspace).await;
     assert!(warnings[0].contains("forbidden"), "{warnings:?}");

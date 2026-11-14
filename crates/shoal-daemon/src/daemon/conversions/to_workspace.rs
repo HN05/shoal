@@ -2,7 +2,7 @@
 //! worktree and its setup, after which its agent restarts there when its
 //! turn ends.
 use crate::client::space_ids::SpaceId;
-use crate::daemon::links::issue::Assigner;
+use crate::daemon::links::issue::{Assigner, AssignerOf};
 use crate::forge::items::reference::ItemInput;
 use std::{collections::BTreeMap, sync::Arc};
 

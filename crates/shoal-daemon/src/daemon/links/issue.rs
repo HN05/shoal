@@ -10,6 +10,7 @@ use rusqlite::Connection;
 mod assignees;
 
 pub(crate) use crate::client::links::issue::Registration;
+pub(crate) use crate::model::Assigner;
 use crate::{
     daemon::{
         events::{self, EventKind},
@@ -24,7 +25,7 @@ use crate::{
         },
     },
 };
-pub(crate) use assignees::{Assigner, Dropped};
+pub(crate) use assignees::{AssignerOf, Dropped, of_space as assignees_of};
 
 /// An open issue a new workspace is assigned.
 #[derive(Debug, Clone)]

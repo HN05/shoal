@@ -1377,7 +1377,6 @@ dependencies = [
  "shoal-core",
  "shoal-forge",
  "shoal-refs",
- "shoal-states",
  "shoal-subprocess",
  "socket2",
  "tempfile",

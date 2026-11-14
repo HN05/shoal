@@ -18,6 +18,29 @@ pub struct SpaceLinks {
     pub opened: Vec<LinkedItem>,
     /// Issues and PRs linked as related to the work, oldest first.
     pub related: Vec<LinkedItem>,
+    /// The forge assignees the assigned issues stand for, which a restore
+    /// or a move assigns again as the same account.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assignees: Vec<IssueAssignee>,
+}
+
+shoal_states::states!(
+    /// Whose account assigns an issue: the user's own, for the user's
+    /// terminal, or the agent account, for a scoped caller.
+    Assigner {
+        User => "user",
+        Agent => "agent",
+    }
+);
+
+/// The forge assignee an assigned issue stands for: the account that
+/// assigned it, and whether Shoal added that assignee, which it then takes
+/// back once no space links the issue.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct IssueAssignee {
+    pub url: ItemRef,
+    pub account: Assigner,
+    pub added: bool,
 }
 
 /// How [`SpaceLinks`] reads: removal records and move packages of earlier
@@ -36,6 +59,8 @@ struct LinksFields {
     opened: Vec<LinkedItem>,
     #[serde(default)]
     related: Vec<LinkedItem>,
+    #[serde(default)]
+    assignees: Vec<IssueAssignee>,
 }
 
 impl From<LinksFields> for SpaceLinks {
@@ -47,6 +72,7 @@ impl From<LinksFields> for SpaceLinks {
             prs: fields.prs.into_iter().map(PrField::into_item).collect(),
             opened: fields.opened,
             related: fields.related,
+            assignees: fields.assignees,
         }
     }
 }
@@ -71,7 +97,8 @@ impl PrField {
 
 impl SpaceLinks {
     /// The links a copy of the space keeps: its issues, without the PRs and
-    /// CI runs of the original's branch.
+    /// CI runs of the original's branch, or the original's assignees, which
+    /// the copy's own links assign again.
     pub fn copied(self) -> Self {
         let issues = |items: Vec<LinkedItem>| {
             items
@@ -83,6 +110,7 @@ impl SpaceLinks {
             prs: Vec::new(),
             opened: issues(self.opened),
             related: issues(self.related),
+            assignees: Vec::new(),
             ..self
         }
     }

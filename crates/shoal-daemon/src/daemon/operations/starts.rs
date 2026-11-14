@@ -4,7 +4,7 @@
 use crate::client::queue::QueueEntryId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
-use crate::daemon::links::issue::Assigner;
+use crate::daemon::links::issue::{Assigner, AssignerOf};
 use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context as _, Result, ensure};

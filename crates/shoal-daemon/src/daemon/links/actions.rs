@@ -7,7 +7,7 @@ use anyhow::{Context, Result, bail};
 use shoal_refs::BranchName;
 
 use super::{
-    issue::Assigner,
+    issue::{Assigner, AssignerOf},
     proposals::OpenOutcome,
     space::LinkSpace,
     wait::{OwnChange, record_received_change},

@@ -368,17 +368,22 @@ impl Manager {
     }
 
     /// Link the restored workspace's issues and recorded items again; the
-    /// caller links its PRs. Each failure becomes a warning.
+    /// caller links its PRs. Each issue is assigned on the forge as the
+    /// account it was, and Shoal takes on the assignments it had made. Each
+    /// failure becomes a warning.
     async fn relink(&self, workspace_id: &SpaceId, links: &SpaceLinks) -> Vec<String> {
         let mut warnings = Vec::new();
         for issue in &links.issues {
             let (selector, input) = (SpaceSelector::id(workspace_id), issue.url.clone().into());
-            // Only the user restores a removed workspace.
-            let title = issue.title.clone();
-            match (self.set_issue(&selector, &input, title, Assigner::User)).await {
+            let (title, assigner) = (issue.title.clone(), assigned_as(links, &issue.url));
+            match (self.set_issue(&selector, &input, title, assigner)).await {
                 Ok(assigned) => warnings.extend(assigned),
                 Err(error) => warnings.push(format!("cannot link issue {}: {error:#}", issue.url)),
             }
+        }
+        let assignees = links.assignees.clone();
+        if let Err(error) = self.claim_assignees(workspace_id, assignees).await {
+            warnings.push(format!("cannot record the issues' assignees: {error:#}"));
         }
         if let Err(error) = self.record_items(workspace_id, recorded(links)).await {
             warnings.push(format!("cannot link opened and related items: {error:#}"));
@@ -559,6 +564,14 @@ fn find(db: &Connection, id: &SpaceId) -> Result<Option<RemovedWorkspace>> {
     Ok(record
         .map(|record| serde_json::from_str(&record))
         .transpose()?)
+}
+
+/// The account `links` records the issue `url` assigned as; the user's own
+/// where it records none, since only the user restores a removed workspace.
+fn assigned_as(links: &SpaceLinks, url: &crate::forge::items::reference::ItemRef) -> Assigner {
+    (links.assignees.iter())
+        .find(|assignee| assignee.url == *url)
+        .map_or(Assigner::User, |assignee| assignee.account)
 }
 
 /// The opened and related items to record again from `links`, each under the

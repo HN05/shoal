@@ -2384,6 +2384,8 @@ caller, and the user's own login for a link from the user's own terminal, since
 that shows the user taking the issue on. Shoal records each
 assignment it made, per issue and login, so it takes back only its own and only
 once no space links the issue for that login; a closed issue keeps its assignee.
+A space's links carry each assignee's account and whether Shoal added it, so a
+restore or a move assigns as the same account and keeps Shoal's ownership.
 Assigning never refuses or undoes the link: other assignees and forge failures
 come back as warnings.
 

@@ -4,7 +4,6 @@
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension};
-use shoal_states::states;
 
 use crate::{
     daemon::{
@@ -15,20 +14,17 @@ use crate::{
         account::Account,
         items::{assignment::Assignment, reference::ItemRef},
     },
+    model::{Assigner, IssueAssignee},
 };
 
-states!(
-    /// Whose account assigns an issue: the user's own, for the user's
-    /// terminal, or the agent account, for a scoped caller.
-    Assigner {
-        User => "user",
-        Agent => "agent",
-    }
-);
+/// The account a caller assigns an issue as.
+pub(crate) trait AssignerOf {
+    /// The agent account for a scoped `caller`, else the user's own.
+    fn of(caller: Option<&Caller>) -> Self;
+}
 
-impl Assigner {
-    /// The account `caller` assigns as.
-    pub(crate) fn of(caller: Option<&Caller>) -> Self {
+impl AssignerOf for Assigner {
+    fn of(caller: Option<&Caller>) -> Self {
         match caller {
             Some(_) => Self::Agent,
             None => Self::User,
@@ -87,9 +83,9 @@ impl Manager {
             return Ok(None);
         };
         let (id, issue, login) = (id.to_owned(), url.clone(), assignment.login.clone());
-        let added = assignment.added.then_some(assigner);
+        let added = assignment.added;
         let dropped = (self.store)
-            .write(move |tx| record_assignee(tx, &id, issue.url(), &login, added))
+            .write(move |tx| record_assignee(tx, &id, issue.url(), &login, assigner, added))
             .await?;
         if let Some(dropped) = dropped {
             drop(gate);
@@ -107,6 +103,17 @@ impl Manager {
     pub(crate) async fn hand_over_assignees(&self, id: &SpaceId) -> Result<()> {
         let id = id.to_owned();
         self.store.write(move |tx| hand_over(tx, &id)).await
+    }
+
+    /// Take on the assignments `assignees` says Shoal added, which a
+    /// restored or moved space `id` carries, so its removal takes them back.
+    pub(crate) async fn claim_assignees(
+        &self,
+        id: &SpaceId,
+        assignees: Vec<IssueAssignee>,
+    ) -> Result<()> {
+        let id = id.to_owned();
+        self.store.write(move |tx| claim(tx, &id, &assignees)).await
     }
 
     /// Take the logins `dropped` names off their issues where Shoal added
@@ -159,25 +166,26 @@ fn unassigned(url: &ItemRef, error: &anyhow::Error) -> String {
     format!("{url} is linked, but assigning it on the forge failed: {error:#}")
 }
 
-/// Record that the space `id` stands for `login` among the assignees of the
-/// issue `url`, and with `added` that Shoal added it as that account. A
+/// Record that the space `id` stands for `login`, of `account`, among the
+/// assignees of the issue `url`, and with `added` that Shoal added it. A
 /// space that no longer links the issue gives the login back to release.
 fn record_assignee(
     db: &Connection,
     id: &SpaceId,
     url: &str,
     login: &str,
-    added: Option<Assigner>,
+    account: Assigner,
+    added: bool,
 ) -> Result<Option<Dropped>> {
-    if let Some(account) = added {
+    if added {
         db.execute(
             "INSERT OR IGNORE INTO issue_assignments(url,login,account) VALUES (?1,?2,?3)",
             rusqlite::params![url, login, account],
         )?;
     }
     let linked = db.execute(
-        "UPDATE space_issue SET assignee=?3 WHERE space_id=?1 AND url=?2",
-        rusqlite::params![id, url, login],
+        "UPDATE space_issue SET assignee=?3,assigner=?4 WHERE space_id=?1 AND url=?2",
+        rusqlite::params![id, url, login, account],
     )? == 1;
     Ok((!linked).then(|| Dropped {
         url: url.to_owned(),
@@ -201,6 +209,39 @@ pub(super) fn dropped(db: &Connection, id: &SpaceId, urls: &[ItemRef]) -> Result
         }));
     }
     Ok(dropped)
+}
+
+/// The forge assignees the space `id`'s assigned issues stand for, in the
+/// order the issues were assigned.
+pub(crate) fn of_space(db: &Connection, id: &SpaceId) -> rusqlite::Result<Vec<IssueAssignee>> {
+    db.prepare(
+        "SELECT url,assigner,EXISTS(SELECT 1 FROM issue_assignments a
+             WHERE a.url=s.url AND a.login=s.assignee)
+         FROM space_issue s WHERE space_id=?1 AND assignee IS NOT NULL ORDER BY rowid",
+    )?
+    .query_map([id], |row| {
+        Ok(IssueAssignee {
+            url: row.get(0)?,
+            account: row.get(1)?,
+            added: row.get(2)?,
+        })
+    })?
+    .collect()
+}
+
+/// Record as Shoal's the assignees of the space `id` that `assignees`
+/// says Shoal added, as a restored or moved space carries them, for the
+/// issues the space links with an assignee again.
+fn claim(db: &Connection, id: &SpaceId, assignees: &[IssueAssignee]) -> Result<()> {
+    for assignee in assignees.iter().filter(|assignee| assignee.added) {
+        db.execute(
+            "INSERT OR IGNORE INTO issue_assignments(url,login,account)
+             SELECT url,assignee,?3 FROM space_issue
+             WHERE space_id=?1 AND url=?2 AND assignee IS NOT NULL",
+            rusqlite::params![id, assignee.url.url(), assignee.account],
+        )?;
+    }
+    Ok(())
 }
 
 /// [`Manager::hand_over_assignees`] within the caller's transaction.

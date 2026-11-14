@@ -16,7 +16,7 @@ use crate::{
     daemon::{
         links::{
             LinkSpace,
-            issue::Assigner,
+            issue::{Assigner, AssignerOf},
             proposals::{OpenOutcome, Proposer},
         },
         scope::Caller,
