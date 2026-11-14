@@ -103,7 +103,7 @@ impl Inbox {
         // or daemon-wide failure is in, unless their `notifications`
         // permission shows them what the user sees.
         let notifications = crate::config::permissions::PermissionKey::Notifications;
-        if crate::cli::commands::permits(ctx, notifications).await? {
+        if crate::cli::commands::authorization::permits(ctx, notifications).await? {
             let untracked = crate::client::workspaces::untracked_worktrees(&ctx.paths).await?;
             items.extend(
                 untracked

@@ -52,15 +52,6 @@ impl Action {
         }
     }
 
-    /// `start`, which starts an agent regardless of `max_agents` and memory,
-    /// as the `limits` permission governs.
-    pub(crate) fn beyond_limits(start: String) -> Self {
-        Self::new(
-            PermissionKey::Limits,
-            format!("{start}, regardless of the agent limits"),
-        )
-    }
-
     /// Sending `request`, which `key` governs, in `repository`: the request
     /// as it goes over the wire, or for a long one its kind and a digest of
     /// it, so that another request is another action.
@@ -110,6 +101,18 @@ impl Manager {
         action: Action,
     ) -> Result<()> {
         self.take_action(caller, action, Use::Take).await.map(drop)
+    }
+
+    /// Let `caller` `start` an agent regardless of `max_agents` and memory,
+    /// as its `limits` permission allows.
+    pub(crate) async fn authorize_beyond_limits(
+        &self,
+        caller: &Caller,
+        start: String,
+    ) -> Result<()> {
+        let start = format!("{start}, regardless of the agent limits");
+        let action = Action::new(PermissionKey::Limits, start);
+        self.authorize_action(Some(caller), action).await
     }
 
     /// Let `caller` send `request`, which the `admin` permission governs,

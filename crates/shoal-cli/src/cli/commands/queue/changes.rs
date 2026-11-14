@@ -11,7 +11,7 @@ use crate::{cli::context::Context, model::QueueEntry, state::QueueKind};
 pub(super) async fn start(ctx: &Context, entry: Option<String>, attach: bool) -> Result<i32> {
     require_scope_token(ctx)?;
     let limits = crate::config::permissions::PermissionKey::Limits;
-    crate::cli::commands::authorize_key(ctx, limits).await?;
+    crate::cli::commands::authorization::authorize_key(ctx, limits).await?;
     ensure!(!attach || ctx.on_terminal(), "--attach requires a terminal");
     // A CI job runs without a session to attach.
     let offered = |queued: &QueueEntry| !attach || queued.kind != QueueKind::Job;

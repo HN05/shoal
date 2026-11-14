@@ -25,7 +25,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<i32> {
     let entry = selection::pick_entry(ctx, &waiting, "Queue> ").await?;
     let mut actions = vec![(Action::Cancel, "Cancel")];
     let limits = crate::config::permissions::PermissionKey::Limits;
-    if crate::cli::commands::permits(ctx, limits).await? {
+    if crate::cli::commands::authorization::permits(ctx, limits).await? {
         actions.insert(0, (Action::Start, "Start now"));
         // A CI job runs without a session.
         if entry.kind != QueueKind::Job {

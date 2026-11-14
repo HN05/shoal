@@ -108,7 +108,8 @@ async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
     };
     let decide = crate::config::permissions::PermissionKey::Decide;
     Ok(request.decider.as_ref() == Some(&owner)
-        || (request.space_id != owner && crate::cli::commands::permits(ctx, decide).await?))
+        || (request.space_id != owner
+            && crate::cli::commands::authorization::permits(ctx, decide).await?))
 }
 
 /// Read `y` or `n`; anything else leaves the request undecided.

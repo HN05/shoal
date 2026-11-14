@@ -157,7 +157,7 @@ async fn removed_workspaces(
         return Ok(Vec::new());
     }
     let admin = crate::config::permissions::PermissionKey::Admin;
-    crate::cli::commands::authorize_key(ctx, admin).await?;
+    crate::cli::commands::authorization::authorize_key(ctx, admin).await?;
     crate::client::removal::removed(&ctx.paths).await
 }
 

@@ -408,8 +408,7 @@ impl Manager {
     ) -> Result<Option<&'a mut SpaceSelector>> {
         if request.now {
             let start = format!("start the agent of {} now", request.name);
-            self.authorize_action(Some(caller), Action::beyond_limits(start))
-                .await?;
+            self.authorize_beyond_limits(caller, start).await?;
         }
         if request.workspace.is_none() {
             self.confine_new_launch(caller, request).await?;

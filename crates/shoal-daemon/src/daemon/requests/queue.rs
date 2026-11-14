@@ -5,7 +5,6 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
-    permissions::Action,
     queued_starts,
     scope::{Caller, Scoped, denied},
     workspace::Manager,
@@ -102,8 +101,7 @@ impl Scoped for QueueMethod {
                 let target = target.await?;
                 if launch.now {
                     let start = format!("start the agent of {target} now");
-                    let action = Action::beyond_limits(start);
-                    manager.authorize_action(Some(caller), action).await?;
+                    manager.authorize_beyond_limits(caller, start).await?;
                 }
                 Some(target)
             }
@@ -111,8 +109,7 @@ impl Scoped for QueueMethod {
                 let target = manager.stopped_below(caller, workspace).await?;
                 if *now {
                     let start = format!("restore the agent of {target} now");
-                    let action = Action::beyond_limits(start);
-                    manager.authorize_action(Some(caller), action).await?;
+                    manager.authorize_beyond_limits(caller, start).await?;
                 }
                 Some(target)
             }
@@ -121,8 +118,7 @@ impl Scoped for QueueMethod {
                     .ensure_entry_reached(caller, &entry.clone().into())
                     .await?;
                 let start = format!("start queue entry {entry} now");
-                let action = Action::beyond_limits(start);
-                manager.authorize_action(Some(caller), action).await?;
+                manager.authorize_beyond_limits(caller, start).await?;
                 None
             }
             // A caller holds, fails and attaches the launches it starts
