@@ -74,7 +74,8 @@ pub struct Arguments {
     pub model_args: Option<Vec<String>>,
     pub effort_args: Option<Vec<String>>,
     pub review: Option<Vec<String>>,
-    pub review_resume: Option<Vec<String>>,
+    pub gate: Option<Vec<String>>,
+    pub gate_resume: Option<Vec<String>>,
 }
 
 /// What a review's arguments name.
@@ -154,15 +155,21 @@ impl Arguments {
         Some(oneshot_args(self.review.as_ref()?, fields, None))
     }
 
-    /// The arguments of a one-shot run with `fields` that resumes
-    /// `session`; `None` when the tool cannot resume one.
-    pub fn review_resume_args(
+    /// The arguments of a gate run with `fields`; `None` when the tool has
+    /// no gate template.
+    pub fn gate_args(&self, fields: &ReviewFields) -> Option<Vec<OsString>> {
+        Some(oneshot_args(self.gate.as_ref()?, fields, None))
+    }
+
+    /// The arguments of a gate run with `fields` that resumes `session`;
+    /// `None` when the tool cannot resume one.
+    pub fn gate_resume_args(
         &self,
         fields: &ReviewFields,
         session: &AgentSessionId,
     ) -> Option<Vec<OsString>> {
         Some(oneshot_args(
-            self.review_resume.as_ref()?,
+            self.gate_resume.as_ref()?,
             fields,
             Some(session),
         ))
@@ -174,10 +181,16 @@ impl Arguments {
         names_output(self.review.as_deref())
     }
 
-    /// Whether a resumed one-shot run's result goes to `{output}` rather
-    /// than standard output.
-    pub fn review_resume_writes_output(&self) -> bool {
-        names_output(self.review_resume.as_deref())
+    /// Whether a gate run's result goes to `{output}` rather than standard
+    /// output.
+    pub fn gate_writes_output(&self) -> bool {
+        names_output(self.gate.as_deref())
+    }
+
+    /// Whether a resumed gate run's result goes to `{output}` rather than
+    /// standard output.
+    pub fn gate_resume_writes_output(&self) -> bool {
+        names_output(self.gate_resume.as_deref())
     }
 
     /// The arguments that give the agent `directory` as another working

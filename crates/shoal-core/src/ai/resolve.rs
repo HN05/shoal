@@ -260,9 +260,13 @@ fn arguments(configured: &[&Agent], builtin: Option<&Provider>) -> Arguments {
             |agent| agent.review.as_ref(),
             builtin.and_then(|provider| provider.review),
         ),
-        review_resume: pick(
-            |agent| agent.review_resume.as_ref(),
-            builtin.and_then(|provider| provider.review_resume),
+        gate: pick(
+            |agent| agent.gate.as_ref(),
+            builtin.and_then(|provider| provider.gate),
+        ),
+        gate_resume: pick(
+            |agent| agent.gate_resume.as_ref(),
+            builtin.and_then(|provider| provider.gate_resume),
         ),
     }
 }

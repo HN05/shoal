@@ -4500,13 +4500,13 @@ The gate reads the request in full, the space's name, mode and linked issues
 and PRs with their labels, CI and review state, the commits the request brings
 as `git log --stat`, and what the request leaves out of the repository's
 [conventions](#repository-conventions). It runs as a one-shot run of
-`[gate] agent`, else `agent.default`, through its `review` template, read-only
+`[gate] agent`, else `agent.default`, through its `gate` template, read-only
 in the repository's registered checkout, whose `[gate]` rules it reads rather
 than the requesting workspace's, for at most 10 minutes. It holds no agent slot
 and waits only for memory and disk room. Its runs keep one session per space
 and subject: the space's own branch, with its PR, merges and unmerges; its
 issue proposals for each repository; and its pushes to each other ref. A later
-request of a subject resumes its session through the tool's `review_resume`
+request of a subject resumes its session through the tool's `gate_resume`
 template and is given only what is new, such as the commits since the last
 verdict; a change of the agent or of its rules, or a session the tool can no
 longer resume, starts a new session, and the

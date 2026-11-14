@@ -52,9 +52,11 @@ pub struct Agent {
     /// Arguments of a one-shot, read-only review with `{prompt}`, `{schema}`
     /// or `{schema_json}`, and optionally `{output}`.
     pub review: Option<Vec<String>>,
-    /// Arguments of a one-shot run resuming session `{session}`, with
-    /// `review`'s placeholders.
-    pub review_resume: Option<Vec<String>>,
+    /// Arguments of the gate's one-shot, read-only run, with `review`'s
+    /// placeholders, which also lets it run Shoal's commands.
+    pub gate: Option<Vec<String>>,
+    /// Arguments of such a gate run resuming session `{session}`.
+    pub gate_resume: Option<Vec<String>>,
     /// The AI tool this one is a launch profile of: it inherits that tool's
     /// integration, launcher and arguments, each replaced by its own.
     pub base: Option<String>,

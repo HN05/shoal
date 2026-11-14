@@ -230,7 +230,7 @@ impl Manager {
         case: &Case,
     ) -> Option<Session> {
         let resumes = (case.settings.tools.get(case.agent.name()))
-            .is_some_and(|tool| tool.launch.arguments.review_resume.is_some());
+            .is_some_and(|tool| tool.launch.arguments.gate_resume.is_some());
         if !resumes {
             return None;
         }
@@ -393,15 +393,15 @@ fn gate_command(
         .with_context(|| format!("no AI tool runs {agent}"))?;
     let arguments = &tool.launch.arguments;
     let args = match session {
-        Some(session) => arguments.review_resume_args(&fields, session),
-        None => arguments.review_args(&fields),
+        Some(session) => arguments.gate_resume_args(&fields, session),
+        None => arguments.gate_args(&fields),
     }
-    .with_context(|| format!("{agent} has no template for a one-shot run"))?;
+    .with_context(|| format!("{agent} has no gate template"))?;
     let model = case.settings.model(agent, Default::default());
     Ok(GateCommand {
         command: oneshot::agent_command(&case.settings, agent, &model, args, environment, home)?,
-        result: match session.map_or(arguments.review_writes_output(), |_| {
-            arguments.review_resume_writes_output()
+        result: match session.map_or(arguments.gate_writes_output(), |_| {
+            arguments.gate_resume_writes_output()
         }) {
             true => output,
             false => oneshot::stdout(files),

@@ -30,9 +30,11 @@ pub struct Provider {
     /// arguments, which a launch with an effort sets to the same value.
     pub(super) effort_variable: Option<&'static str>,
     pub(super) review: Option<&'static [&'static str]>,
-    /// The arguments of a one-shot run that resumes `{session}`, read-only
-    /// as `review` is.
-    pub(super) review_resume: Option<&'static [&'static str]>,
+    /// The arguments of the gate's one-shot run: read-only as `review` is,
+    /// but able to reach the daemon for Shoal's commands.
+    pub(super) gate: Option<&'static [&'static str]>,
+    /// The arguments of a gate run that resumes `{session}`.
+    pub(super) gate_resume: Option<&'static [&'static str]>,
     /// How its review result comes back.
     pub(super) review_result: &'static ResultFormat,
 }
@@ -91,12 +93,42 @@ pub const PROVIDERS: &[Provider] = &[
             "{output}",
             "{prompt}",
         ]),
-        // Resuming takes no `--sandbox`, so the config sets it.
-        review_resume: Some(&[
+        // Its permissions read every file and write none, and its network
+        // reaches only the daemon's socket: the proxy it goes through allows
+        // no host.
+        gate: Some(&[
+            "exec",
+            "-c",
+            "default_permissions=\"shoal_gate\"",
+            "-c",
+            "permissions.shoal_gate.filesystem={\":root\"=\"read\"}",
+            "-c",
+            "permissions.shoal_gate.network.enabled=true",
+            "-c",
+            "permissions.shoal_gate.network.dangerously_allow_all_unix_sockets=true",
+            "-c",
+            "features.network_proxy=true",
+            "-c",
+            "approval_policy=\"never\"",
+            "--output-schema",
+            "{schema}",
+            "--output-last-message",
+            "{output}",
+            "{prompt}",
+        ]),
+        gate_resume: Some(&[
             "exec",
             "resume",
             "-c",
-            "sandbox_mode=\"read-only\"",
+            "default_permissions=\"shoal_gate\"",
+            "-c",
+            "permissions.shoal_gate.filesystem={\":root\"=\"read\"}",
+            "-c",
+            "permissions.shoal_gate.network.enabled=true",
+            "-c",
+            "permissions.shoal_gate.network.dangerously_allow_all_unix_sockets=true",
+            "-c",
+            "features.network_proxy=true",
             "-c",
             "approval_policy=\"never\"",
             "--output-schema",
@@ -142,7 +174,9 @@ pub const PROVIDERS: &[Provider] = &[
             "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*)",
             "--settings={\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":false,\"allowUnsandboxedCommands\":false}}",
         ]),
-        review_resume: Some(&[
+        // As `review`, with Shoal's commands, whose sandbox reaches the
+        // daemon's socket.
+        gate: Some(&[
             "-p",
             "{prompt}",
             "--output-format",
@@ -152,8 +186,21 @@ pub const PROVIDERS: &[Provider] = &[
             "--setting-sources=",
             "--permission-mode=dontAsk",
             "--tools=Read,Grep,Glob,Bash",
-            "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*)",
-            "--settings={\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":false,\"allowUnsandboxedCommands\":false}}",
+            "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(shoal:*)",
+            "--settings={\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":false,\"allowUnsandboxedCommands\":false,\"network\":{\"allowAllUnixSockets\":true}}}",
+        ]),
+        gate_resume: Some(&[
+            "-p",
+            "{prompt}",
+            "--output-format",
+            "json",
+            "--json-schema",
+            "{schema_json}",
+            "--setting-sources=",
+            "--permission-mode=dontAsk",
+            "--tools=Read,Grep,Glob,Bash",
+            "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(shoal:*)",
+            "--settings={\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":false,\"allowUnsandboxedCommands\":false,\"network\":{\"allowAllUnixSockets\":true}}}",
             "--resume",
             "{session}",
         ]),
@@ -174,7 +221,8 @@ pub const PROVIDERS: &[Provider] = &[
         effort_args: None,
         effort_variable: None,
         review: None,
-        review_resume: None,
+        gate: None,
+        gate_resume: None,
         review_result: &output::PLAIN,
     },
     Provider {
@@ -191,7 +239,8 @@ pub const PROVIDERS: &[Provider] = &[
         effort_args: None,
         effort_variable: None,
         review: None,
-        review_resume: None,
+        gate: None,
+        gate_resume: None,
         review_result: &output::PLAIN,
     },
     Provider {
@@ -208,7 +257,8 @@ pub const PROVIDERS: &[Provider] = &[
         effort_args: None,
         effort_variable: None,
         review: None,
-        review_resume: None,
+        gate: None,
+        gate_resume: None,
         review_result: &output::PLAIN,
     },
 ];

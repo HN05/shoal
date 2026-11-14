@@ -47,8 +47,8 @@ async fn fixture_deciding_by(gate: &str) -> Fixture {
     let dir = root.path().to_string_lossy();
     install_test_script(&script, &AGENT.replace("{dir}", &dir));
     let config = format!(
-        "[agents.fake]\nbase = 'codex'\ncommand = ['{}']\nreview = ['{{prompt}}', '{{schema}}']\n\
-         review_resume = ['resume', '{{session}}', '{{prompt}}', '{{schema}}']\n\
+        "[agents.fake]\nbase = 'codex'\ncommand = ['{}']\ngate = ['{{prompt}}', '{{schema}}']\n\
+         gate_resume = ['resume', '{{session}}', '{{prompt}}', '{{schema}}']\n\
          [gate]\nagent = '{gate}'\nescalate = ['a push to a tag']\n\
          [permissions]\npush = 'gate'\n\
          [machine]\nmax_agents = 4\n[machine.overload.disk]\nenabled = false\n",

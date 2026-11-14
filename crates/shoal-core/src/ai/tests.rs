@@ -482,7 +482,7 @@ fn review_templates_need_a_prompt_and_a_schema() {
 }
 
 #[test]
-fn a_resumed_one_shot_run_names_its_session_and_stays_read_only() {
+fn gate_runs_reach_shoal_and_stay_read_only() {
     let agents =
         parse("[agents.droid]\ncommand = ['droid']\nreview = ['-p', '{prompt}', '{schema}']\n")
             .unwrap();
@@ -493,33 +493,53 @@ fn a_resumed_one_shot_run_names_its_session_and_stays_read_only() {
         output: Path::new("/tmp/verdict.json"),
     };
     let session = crate::agent::AgentSessionId::from("0199a2".to_owned());
-    let codex = arguments(&agents, "codex")
-        .review_resume_args(&fields, &session)
-        .unwrap();
-    assert_eq!(codex[..2], ["exec", "resume"].map(OsString::from));
-    assert!(
-        codex.contains(&"sandbox_mode=\"read-only\"".into()),
-        "{codex:?}"
-    );
+    let (codex, claude) = (arguments(&agents, "codex"), arguments(&agents, "claude"));
+    let codex_runs = [
+        codex.gate_args(&fields).unwrap(),
+        codex.gate_resume_args(&fields, &session).unwrap(),
+    ];
+    for args in &codex_runs {
+        assert!(
+            args.contains(&"permissions.shoal_gate.filesystem={\":root\"=\"read\"}".into()),
+            "{args:?}"
+        );
+    }
+    let resumed = &codex_runs[1];
+    assert_eq!(resumed[..2], ["exec", "resume"].map(OsString::from));
     assert_eq!(
-        codex[codex.len() - 2..],
+        resumed[resumed.len() - 2..],
         ["0199a2", "Decide it"].map(OsString::from)
     );
-    let claude = arguments(&agents, "claude")
-        .review_resume_args(&fields, &session)
-        .unwrap();
-    let resume = claude.iter().position(|arg| arg == "--resume").unwrap();
-    assert_eq!(claude[resume + 1], "0199a2");
+    let claude_runs = [
+        claude.gate_args(&fields).unwrap(),
+        claude.gate_resume_args(&fields, &session).unwrap(),
+    ];
+    for args in &claude_runs {
+        assert!(args.contains(&"--permission-mode=dontAsk".into()));
+        let allowed = args
+            .iter()
+            .find_map(|arg| arg.to_str()?.strip_prefix("--allowedTools="))
+            .unwrap();
+        assert!(allowed.split(',').any(|tool| tool == "Bash(shoal:*)"));
+        let settings = args
+            .iter()
+            .find_map(|arg| arg.to_str()?.strip_prefix("--settings="))
+            .unwrap();
+        let settings: serde_json::Value = serde_json::from_str(settings).unwrap();
+        assert_eq!(settings["sandbox"]["allowUnsandboxedCommands"], false);
+        assert_eq!(settings["sandbox"]["network"]["allowAllUnixSockets"], true);
+    }
+    let resumed = &claude_runs[1];
+    let resume = resumed.iter().position(|arg| arg == "--resume").unwrap();
+    assert_eq!(resumed[resume + 1], "0199a2");
     // Each template says for itself where its result goes.
-    assert!(arguments(&agents, "codex").review_resume_writes_output());
-    assert!(!arguments(&agents, "claude").review_resume_writes_output());
-    assert!(claude.contains(&"--permission-mode=dontAsk".into()));
-    // A tool without the template starts a new run each time.
-    assert_eq!(
-        arguments(&agents, "droid").review_resume_args(&fields, &session),
-        None
-    );
+    assert!(codex.gate_resume_writes_output());
+    assert!(!claude.gate_resume_writes_output());
+    // A tool without the templates has no gate run.
+    let droid = arguments(&agents, "droid");
+    assert_eq!(droid.gate_args(&fields), None);
+    assert_eq!(droid.gate_resume_args(&fields, &session), None);
     let unnamed =
-        "[agents.droid]\ncommand = ['droid']\nreview_resume = ['-p', '{prompt}', '{schema}']\n";
+        "[agents.droid]\ncommand = ['droid']\ngate_resume = ['-p', '{prompt}', '{schema}']\n";
     assert!(parse(unnamed).is_err());
 }
