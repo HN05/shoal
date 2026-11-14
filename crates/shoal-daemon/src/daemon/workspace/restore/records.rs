@@ -1,9 +1,9 @@
-//! Removal records: every removal of an existing worktree takes a checkpoint
-//! and records what `shoal restore` needs to reopen the workspace, until the
-//! record expires.
+//! Removal records: every removal of a chat, and of an existing worktree
+//! with a checkpoint, records what `shoal restore` needs to reopen the
+//! space, until the record expires.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::space_ids::SpaceId;
-use crate::execution::recovery::LastSessionExt;
+use crate::execution::recovery::{LastSession, LastSessionExt, StoppedAgent};
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -13,9 +13,18 @@ use crate::daemon::workspace::Manager;
 use crate::{
     daemon::events::EventCause,
     git,
-    model::{CheckpointCause, KeptWorkspace, RemovedKind, RemovedSpace, Workspace},
+    model::{
+        CheckpointCause, KeptChat, KeptWorkspace, PresentSpace, RemovedKind, RemovedSpace,
+        Workspace,
+    },
     time::UnixTime,
 };
+
+/// SQL true when the space of a removal record is gone: no workspace has
+/// its ID, nor for a chat's record a chat. A workspace converted into a
+/// chat keeps the chat's ID, and its record restores beside it.
+const GONE: &str = "space_id NOT IN (SELECT id FROM workspaces)
+    AND NOT (chat AND space_id IN (SELECT id FROM chats))";
 
 impl Manager {
     /// Take the removal's checkpoint and record what `shoal restore` reopens
@@ -36,15 +45,7 @@ impl Manager {
         // those of the snapshot taken before it started; the spaces below go
         // first, so its parent is still there.
         let Workspace { links, parent, .. } = self.workspace_by_id(&workspace.id).await?;
-        // Removal has stopped every agent, and deletes the state their
-        // records are in.
-        let mut agents = crate::execution::recovery::stopped_agents(&self.paths, &workspace.id)?;
-        agents.retain(|agent| Some(&agent.execution) != carried_on);
-        // An unreadable last session is not worth keeping the workspace for.
-        let mut last_sessions =
-            crate::execution::recovery::LastSession::all(&self.paths, &workspace.id)
-                .unwrap_or_default();
-        last_sessions.retain(|last| Some(&last.execution) != carried_on);
+        let (agents, last_sessions) = self.saved_agents(&workspace.id, carried_on)?;
         let removed = RemovedSpace {
             space_id: workspace.id.clone(),
             repository_id: Some(workspace.repository_id.clone()),
@@ -68,6 +69,63 @@ impl Manager {
         let record = removed.clone();
         self.store.run(move |db| self::record(db, &record)).await?;
         Ok(removed)
+    }
+
+    /// Record what `shoal restore` reopens of the chat `id`, which `cause`
+    /// removes, before its state is deleted: how and where its agent ran,
+    /// with the stopped agent and last session it saved, until the
+    /// retention its files have too.
+    pub(in crate::daemon::workspace) async fn save_chat_removal_record(
+        &self,
+        id: &SpaceId,
+        cause: EventCause,
+    ) -> Result<RemovedSpace> {
+        // As for a workspace, its links and parent are final now.
+        let chat = (self.chat_by_id(id).await?).context("the chat was removed meanwhile")?;
+        let expires_at = (self.removed_files_expiry(&PresentSpace::Chat(chat.clone()))).await;
+        let (agents, last_sessions) = self.saved_agents(&chat.id, None)?;
+        let removed = RemovedSpace {
+            space_id: chat.id,
+            repository_id: chat.repository_id,
+            name: chat.name,
+            parent: chat.parent,
+            links: chat.links,
+            agents,
+            last_sessions,
+            cause,
+            removed_at: UnixTime::now(),
+            expires_at,
+            kind: RemovedKind::Chat {
+                chat: Box::new(KeptChat {
+                    agent: chat.agent,
+                    mode: chat.mode,
+                    narrowing: chat.narrowing,
+                    workspace: chat.workspace,
+                    root_dir: chat.root_dir,
+                    origin: chat.origin,
+                    session: chat.session,
+                }),
+            },
+        };
+        let record = removed.clone();
+        self.store.run(move |db| self::record(db, &record)).await?;
+        Ok(removed)
+    }
+
+    /// The stopped agents and last sessions the space `id` saved, which its
+    /// removal deletes with its state, leaving out the agent `carried_on`
+    /// ran as, which carries on elsewhere.
+    fn saved_agents(
+        &self,
+        id: &SpaceId,
+        carried_on: Option<&ExecutionId>,
+    ) -> Result<(Vec<StoppedAgent>, Vec<LastSession>)> {
+        let mut agents = crate::execution::recovery::stopped_agents(&self.paths, id)?;
+        agents.retain(|agent| Some(&agent.execution) != carried_on);
+        // An unreadable last session is not worth keeping the space for.
+        let mut last_sessions = LastSession::all(&self.paths, id).unwrap_or_default();
+        last_sessions.retain(|last| Some(&last.execution) != carried_on);
+        Ok((agents, last_sessions))
     }
 
     /// Whether a checkpoint would keep all of the workspace's unsaved files:
@@ -116,10 +174,10 @@ impl Manager {
     pub async fn removed_spaces(&self) -> Result<Vec<RemovedSpace>> {
         self.store
             .run(|db| {
-                db.prepare(
+                db.prepare(&format!(
                     "SELECT record FROM removed_spaces WHERE expires_at > unixepoch()
-                     AND space_id NOT IN (SELECT id FROM workspaces) ORDER BY rowid DESC",
-                )?
+                            AND {GONE} ORDER BY rowid DESC"
+                ))?
                 .query_map([], |row| row.get::<_, String>(0))?
                 .map(|record| Ok(serde_json::from_str(&record?)?))
                 .collect()
@@ -204,9 +262,10 @@ fn claim(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<Option<RemovedS
 fn find(db: &Connection, id: &SpaceId) -> Result<Option<RemovedSpace>> {
     let record: Option<String> = db
         .query_row(
-            "SELECT record FROM removed_spaces WHERE space_id=?1
-                AND expires_at > unixepoch() AND space_id NOT IN (SELECT id FROM workspaces)
-                ORDER BY rowid DESC LIMIT 1",
+            &format!(
+                "SELECT record FROM removed_spaces WHERE space_id=?1
+                    AND expires_at > unixepoch() AND {GONE} ORDER BY rowid DESC LIMIT 1"
+            ),
             [id],
             |row| row.get(0),
         )
@@ -215,3 +274,6 @@ fn find(db: &Connection, id: &SpaceId) -> Result<Option<RemovedSpace>> {
         .map(|record| serde_json::from_str(&record))
         .transpose()?)
 }
+
+#[cfg(test)]
+mod tests;

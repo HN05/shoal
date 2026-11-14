@@ -157,7 +157,9 @@ async fn removed_workspaces(
     }
     let admin = crate::config::permissions::PermissionKey::Admin;
     crate::cli::commands::authorization::authorize_key(ctx, admin).await?;
-    crate::client::removal::removed(&ctx.paths).await
+    let mut removed = crate::client::removal::removed(&ctx.paths).await?;
+    removed.retain(|removed| removed.workspace().is_some());
+    Ok(removed)
 }
 
 /// The picker entries of the `removed` workspaces, by ID.

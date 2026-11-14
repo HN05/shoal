@@ -440,7 +440,10 @@ impl Typed {
                 crate::client::chats::recorded(&paths).await?,
             ));
             let removed = crate::client::removal::removed(&paths).await?;
-            candidates.extend(removed.into_iter().map(|workspace| {
+            let workspaces = removed
+                .into_iter()
+                .filter(|removed| removed.workspace().is_some());
+            candidates.extend(workspaces.map(|workspace| {
                 let help = format!("{} (removed)", workspace.name);
                 CompletionCandidate::new(workspace.space_id.to_string()).help(Some(help.into()))
             }));

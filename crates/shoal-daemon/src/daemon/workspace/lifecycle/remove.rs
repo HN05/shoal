@@ -334,13 +334,30 @@ impl Manager {
             }
             None => None,
         };
+        self.end_space_record(space, removal, cause).await?;
+        Ok((children, worktree))
+    }
+
+    /// End the record of `space` once `removal` removed what it had: delete
+    /// it for `cause`, keeping a chat's removal record first, since a
+    /// workspace's went with its checkpoint, or for a conversion replace it
+    /// with the chat's.
+    async fn end_space_record(
+        &self,
+        space: &PresentSpace,
+        removal: Removal<'_>,
+        cause: EventCause,
+    ) -> Result<()> {
+        let id = space.id();
         if let Removal::Converted { chat } = removal {
             let released = self.commit_conversion(id, chat).await?;
             self.ask_user_about(&released).await;
-        } else {
-            self.delete_space_record(space, cause).await?;
+            return Ok(());
         }
-        Ok((children, worktree))
+        if space.worktree().is_none() {
+            self.save_chat_removal_record(id, cause).await?;
+        }
+        self.delete_space_record(space, cause).await
     }
 
     /// The spaces `removal` of the space `id` takes first: those below it,

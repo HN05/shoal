@@ -240,13 +240,14 @@ async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
     manager.sweep_contributions().await.unwrap();
     assert!(
         registered(&manager, &repo).await,
-        "the removed chat's files keep it"
+        "the removed chat's files and removal record keep it"
     );
 
     manager
         .store
         .run(|db| {
             db.execute("UPDATE removed_space_files SET expires_at=0", [])?;
+            db.execute("UPDATE removed_spaces SET expires_at=0", [])?;
             Ok(())
         })
         .await

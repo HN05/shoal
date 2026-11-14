@@ -70,7 +70,7 @@ async fn a_retained_chat_records_its_cleanup_as_the_cause() {
 }
 
 #[test]
-fn only_a_workspace_with_a_checkpoint_is_restorable() {
+fn every_removed_space_with_a_record_is_restorable() {
     let (id, name) = (SpaceId::from("id"), SpaceName::from("topic"));
     let space = |kind: SpaceKind| Announced {
         kind,
@@ -83,5 +83,6 @@ fn only_a_workspace_with_a_checkpoint_is_restorable() {
     assert!(restorable(SpaceKind::Workspace, Cleanup::Idle));
     assert!(restorable(SpaceKind::Workspace, Cleanup::Parent("parent")));
     assert!(!restorable(SpaceKind::Workspace, Cleanup::DeletedWorktree));
-    assert!(!restorable(SpaceKind::Chat, Cleanup::Parent("parent")));
+    assert!(restorable(SpaceKind::Chat, Cleanup::Parent("parent")));
+    assert!(restorable(SpaceKind::Chat, Cleanup::Idle));
 }

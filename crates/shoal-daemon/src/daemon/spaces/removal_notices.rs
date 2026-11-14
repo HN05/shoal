@@ -20,7 +20,8 @@ pub(crate) struct Announced<'a> {
     kind: SpaceKind,
     id: &'a SpaceId,
     name: &'a SpaceName,
-    /// Whether it has a worktree, whose checkpoint restores it.
+    /// Whether it has a worktree; notices of a space without one name its
+    /// kind.
     worktree: bool,
 }
 
@@ -58,16 +59,16 @@ impl<'a> From<&'a SpaceRef> for Announced<'a> {
 }
 
 impl Announced<'_> {
-    /// The notice that `cleanup` removed the space. One with a worktree says
-    /// how to restore it, unless the cleanup forgot it without a checkpoint.
+    /// The notice that `cleanup` removed the space, which says how to
+    /// restore it, unless the cleanup forgot it without a removal record.
     fn removal_notice(self, cleanup: Cleanup<'_>) -> String {
-        let removal = cleanup.removal();
-        if !self.worktree {
-            format!("{} {removal}", self.kind)
-        } else if matches!(cleanup, Cleanup::DeletedWorktree) {
-            removal
-        } else {
-            format!("{removal}; restore it with shoal restore {}", self.id)
+        let removal = match self.worktree {
+            true => cleanup.removal(),
+            false => format!("{} {}", self.kind, cleanup.removal()),
+        };
+        match cleanup {
+            Cleanup::DeletedWorktree => removal,
+            _ => format!("{removal}; restore it with shoal restore {}", self.id),
         }
     }
 }

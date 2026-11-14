@@ -441,7 +441,11 @@ async fn a_removed_chat_takes_its_executions_restores_and_recovery_records() {
         .unwrap();
     let state = manager.paths.space_state(&chat.id);
     std::fs::create_dir_all(&state).unwrap();
-    std::fs::write(state.join("stopped.recovery.json"), "{}").unwrap();
+    std::fs::write(
+        state.join("stopped.recovery.json"),
+        r#"{"agent":"claude","stage":"stopped"}"#,
+    )
+    .unwrap();
 
     manager
         .remove_chat(&SpaceSelector::id(&chat.id), None)

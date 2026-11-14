@@ -80,9 +80,39 @@ pub struct RemovedSpace {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum RemovedKind {
+    Chat {
+        chat: Box<KeptChat>,
+    },
     /// Its fields sit beside the shared ones, as in the records workspaces
     /// had before chats had any.
     Workspace(Box<KeptWorkspace>),
+}
+
+/// What a removal keeps of a chat only: how its agent ran, and where.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeptChat {
+    pub agent: crate::agent::Agent,
+    /// The mode its agent ran in, which its restore keeps.
+    pub mode: crate::config::modes::ModeName,
+    /// The permissions `--permission` gave its agent.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
+    )]
+    pub narrowing: crate::config::permissions::PermissionsConfig,
+    /// The workspace whose worktree it ran in; none for a chat in the
+    /// registered checkout or without a repository.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<super::WorkspaceRef>,
+    /// The `root_dir` a chat without a repository ran in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_dir: Option<std::path::PathBuf>,
+    /// Where it ran in a terminal host, when it ran in one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<crate::sessions::Origin>,
+    /// The agent session its hooks reported last.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<crate::agent::AgentSessionId>,
 }
 
 /// What a removal keeps of a workspace only.
@@ -111,6 +141,15 @@ impl RemovedSpace {
     pub fn workspace(&self) -> Option<&KeptWorkspace> {
         match &self.kind {
             RemovedKind::Workspace(workspace) => Some(workspace),
+            RemovedKind::Chat { .. } => None,
+        }
+    }
+
+    /// What it keeps as a chat; `None` for a workspace.
+    pub fn chat(&self) -> Option<&KeptChat> {
+        match &self.kind {
+            RemovedKind::Chat { chat } => Some(chat),
+            RemovedKind::Workspace(_) => None,
         }
     }
 
@@ -123,6 +162,7 @@ impl RemovedSpace {
     pub fn kept_workspace_mut(&mut self) -> anyhow::Result<&mut KeptWorkspace> {
         match &mut self.kind {
             RemovedKind::Workspace(workspace) => Ok(workspace),
+            RemovedKind::Chat { .. } => anyhow::bail!("{} was not a workspace", self.space_id),
         }
     }
 
