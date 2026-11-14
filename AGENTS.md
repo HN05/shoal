@@ -377,7 +377,10 @@ test in the PR.
 
 Run `cargo fmt --all --check`, `CARGO_BUILD_WARNINGS=deny cargo clippy
 --all-targets`, and `cargo nextest run` for Rust changes, with `cargo test --doc` when a change touches
-doc tests. Nextest runs every test in a process of its own, so a lock in a test
+doc tests. `python3 scripts/affected_packages.py origin/main` names the packages
+a branch's commits can affect; `cargo nextest run -E 'package(=NAME) | …'` runs
+only their tests and, unlike `-p`, builds with the workspace's features, which
+keeps the build's dependencies from rebuilding. Nextest runs every test in a process of its own, so a lock in a test
 binary's memory keeps no tests apart: tests that must not overlap take a lock
 other processes see, such as a file lock, and join a test group with
 `max-threads = 1` in `.config/nextest.toml`. Test in temporary state
