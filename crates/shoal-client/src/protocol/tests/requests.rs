@@ -124,6 +124,7 @@ const REQUESTS: &[&str] = &[
     r#""check_unmerge""#,
     r#""list_agents""#,
     r#"{"restart_agent":{"execution":"e1"}}"#,
+    r#"{"session_signalled":{"signal":"terminate"}}"#,
     // Chats.
     r#"{"start_chat":{"repository":"app","name":"app-chat","agent":"claude"}}"#,
     r#"{"launch_chat":{"start":{"repository":"app","agent":"claude","args":["Read the build"]}}}"#,
