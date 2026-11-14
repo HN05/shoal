@@ -13,6 +13,7 @@ use crate::{
     capability::Capability,
     ci::{CiCheck, JobState, Location},
     items::link::ItemKind,
+    numbers::PullNumber,
     review::view::ItemView,
     transport::api::Request,
 };
@@ -153,6 +154,18 @@ impl ForgeRepo {
         pull.belongs_to(self)?;
         let pull = self.read(account, ItemKind::Pr, pull.pull()?.get()).await?;
         pull.head_sha.context("PR has no head commit")
+    }
+
+    /// The head commit of PR `number` of this repository, open or not.
+    pub async fn numbered_pull_head(
+        &self,
+        account: &Account,
+        number: PullNumber,
+    ) -> Result<CommitId> {
+        let pull = ItemRef::numbered(self, LinkKind::Pr, number.get())?;
+        self.pull_head(account, &pull)
+            .await
+            .with_context(|| format!("read the head of {pull}"))
     }
 
     /// The log of the job at `location` as plain text, refused beyond

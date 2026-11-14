@@ -63,6 +63,21 @@ pub struct JobRun {
     pub reference: Option<String>,
 }
 
+impl JobRun {
+    /// The PR a PR event started it for.
+    pub fn pull(&self) -> Option<PullNumber> {
+        match self.trigger {
+            Trigger::Pull { number } => Some(number),
+            Trigger::Branch(_) | Trigger::Other => None,
+        }
+    }
+
+    /// Whether its PR, whose head is `head` now, moved past its commit.
+    pub fn superseded_by(&self, head: &CommitId) -> bool {
+        self.commit != *head
+    }
+}
+
 /// A runner the forge registered for the repository, with what it connects
 /// as. A forge whose runners each take one job registers none for the
 /// repository, only one per job.
@@ -170,11 +185,11 @@ impl ForgeRepo {
 
     /// Whether `run` is for a PR whose head moved past its commit.
     pub async fn run_superseded(&self, account: &Account, run: &JobRun) -> Result<bool> {
-        let Trigger::Pull { number } = run.trigger else {
+        let Some(number) = run.pull() else {
             return Ok(false);
         };
-        let pull = ItemRef::numbered(self, LinkKind::Pr, number.get())?;
-        Ok(self.pull_head(account, &pull).await? != run.commit)
+        let head = self.numbered_pull_head(account, number).await?;
+        Ok(run.superseded_by(&head))
     }
 
     /// Register a runner named `name` for this repository alone, or, on a

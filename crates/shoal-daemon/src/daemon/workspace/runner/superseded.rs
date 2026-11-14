@@ -9,19 +9,14 @@ use crate::client::queue::QueueEntryId;
 use crate::client::repository_ids::RepositoryId;
 use std::collections::{BTreeMap, HashSet};
 
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use rusqlite::params;
 use shoal_refs::CommitId;
 
 use crate::client::space_names::SpaceName;
 use crate::{
     daemon::{log, notifications::NotificationKind, store::json_column, workspace::Manager},
-    forge::{
-        ForgeRepo,
-        ci::runner::{JobRun, Trigger},
-        items::{link::LinkKind, reference::ItemRef},
-        numbers::PullNumber,
-    },
+    forge::{ForgeRepo, ci::runner::JobRun, items::reference::ItemRef, numbers::PullNumber},
     model::QueuedJob,
     state::{QueueKind, QueueState},
 };
@@ -63,7 +58,7 @@ impl Manager {
             };
             let superseded = entries
                 .into_iter()
-                .filter(|entry| entry.job.run.commit != head)
+                .filter(|entry| entry.job.run.superseded_by(&head))
                 .collect();
             self.pass_over_superseded(repository_id, forge, superseded)
                 .await?;
@@ -84,7 +79,7 @@ impl Manager {
             .await?;
         let mut by_pull = BTreeMap::<_, Vec<_>>::new();
         for entry in entries {
-            if let Trigger::Pull { number } = entry.job.run.trigger {
+            if let Some(number) = entry.job.run.pull() {
                 by_pull.entry(number).or_default().push(entry);
             }
         }
@@ -94,13 +89,8 @@ impl Manager {
     /// The head of PR `number`, whose jobs wait, or `None`, logged, when it
     /// cannot be read.
     async fn waiting_pull_head(&self, forge: &ForgeRepo, number: PullNumber) -> Option<CommitId> {
-        let head = async {
-            let pull = ItemRef::numbered(forge, LinkKind::Pr, number.get())?;
-            let head = forge.pull_head(&self.user_account(), &pull).await;
-            head.with_context(|| format!("read the head of {pull}"))
-        };
-        (head.await)
-            .inspect_err(|error| log!("runner: a PR's jobs stay queued: {error:#}"))
+        let head = forge.numbered_pull_head(&self.user_account(), number).await;
+        head.inspect_err(|error| log!("runner: a PR's jobs stay queued: {error:#}"))
             .ok()
     }
 
