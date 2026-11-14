@@ -127,11 +127,13 @@ impl Scoped for RepositoryMethod {
             }
             _ => None,
         };
-        manager.administer(caller, self, repository.clone()).await?;
+        // An edit that would give more than the caller holds is refused
+        // before it asks for approval.
         if let RepositoryMethod::EditLocalConfig { changes, .. } = self {
             let held = manager.space_permissions(&caller.space_id, repository.as_ref());
-            crate::config::permissions::ensure_edits_held(changes, &held.await?)?;
+            crate::config::edit::ensure_permissions_held(changes, &held.await?)?;
         }
+        manager.administer(caller, self, repository).await?;
         Ok(None)
     }
 }

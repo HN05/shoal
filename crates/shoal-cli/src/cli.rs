@@ -286,11 +286,7 @@ impl Command {
     /// resolves the permission of a chat without a repository.
     pub fn repository(&self) -> Option<&str> {
         match self {
-            Command::Service(ServiceCommand::Config {
-                command:
-                    ConfigCommand::Set { repository, .. } | ConfigCommand::Unset { repository, .. },
-            })
-            | Command::Repository(RepositoryCommand::Repo {
+            Command::Repository(RepositoryCommand::Repo {
                 command:
                     Some(
                         RepoCommand::Config { repository, .. }
@@ -328,11 +324,7 @@ impl Command {
             )
             | Command::Service(ServiceCommand::Config {
                 command:
-                    ConfigCommand::Install { .. }
-                    | ConfigCommand::Reset
-                    | ConfigCommand::Set { .. }
-                    | ConfigCommand::Setup(_)
-                    | ConfigCommand::Unset { .. },
+                    ConfigCommand::Install { .. } | ConfigCommand::Reset | ConfigCommand::Setup(_),
             }) => Some(PermissionKey::Admin),
             Command::Create(CreateCommand::Start(args)) if args.now => Some(PermissionKey::Limits),
             Command::Sessions(SessionsCommand::Restore { now, focus, .. }) if *now || *focus => {

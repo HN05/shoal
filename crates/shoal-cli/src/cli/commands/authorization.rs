@@ -36,14 +36,9 @@ pub(in crate::cli::commands) async fn authorize_key(
 /// [`authorize_key`] for an action in the registered repository
 /// `repository` names, in whose config a chat without one resolves it.
 async fn authorize_in(ctx: &Context, key: PermissionKey, repository: Option<&str>) -> Result<()> {
-    if !env::inherits_scope(&ctx.paths.state) {
+    if !scoped(ctx)? {
         return Ok(());
     }
-    // Without its scope token, the process would act as the user.
-    ensure!(
-        env::is_scoped(),
-        "this process runs below a scoped one without its scope; run it where the agent runs"
-    );
     // The daemon decides the permission, so none can when no daemon of this
     // Shoal answers, as before a start or an install after an upgrade.
     if key == PermissionKey::Daemon {
@@ -62,6 +57,20 @@ async fn authorize_in(ctx: &Context, key: PermissionKey, repository: Option<&str
         env::act_under_grant(token);
     }
     Ok(())
+}
+
+/// Whether this process acts for a space, which its permissions bound: one
+/// below a scoped process, refused when it cleared the scope token, without
+/// which the daemon would take it for the user.
+pub(in crate::cli::commands) fn scoped(ctx: &Context) -> Result<bool> {
+    if !env::inherits_scope(&ctx.paths.state) {
+        return Ok(false);
+    }
+    ensure!(
+        env::is_scoped(),
+        "this process runs below a scoped one without its scope; run it where the agent runs"
+    );
+    Ok(true)
 }
 
 /// Whether this process may take what the permission `key` governs, at once

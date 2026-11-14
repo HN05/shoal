@@ -228,27 +228,3 @@ fn a_narrowings_changes_and_a_changes_assignments_give_it_again() {
     let dropped = PermissionChange::assigned("merge=mode").unwrap();
     assert_eq!(dropped.assignments(), ["merge=mode"]);
 }
-
-#[test]
-fn a_scoped_config_edit_sets_only_permissions_its_space_holds() {
-    use crate::client::config::edit::Change;
-
-    let settings = settings("", "");
-    let worker = resolve(&settings, mode(&"worker".into())).unwrap();
-    let set = |key: &str, value: &str| Change {
-        key: key.into(),
-        value: Some(value.into()),
-    };
-    let held = |changes: &[Change]| ensure_edits_held(changes, &worker);
-    assert!(held(&[set("permissions.merge", "propose")]).is_ok());
-    assert!(held(&[set("modes.orchestrate.permissions.daemon", "\"deny\"")]).is_ok());
-    assert!(held(&[set("cleanup.auto.enabled", "false")]).is_ok());
-    assert!(held(&[set("permissions.merge", "direct")]).is_err());
-    assert!(held(&[set("modes.orchestrate.permissions.admin", "direct")]).is_err());
-    assert!(held(&[set("modes.orchestrate.permissions", "{}")]).is_err());
-    let unset = Change {
-        key: "permissions.push".into(),
-        value: None,
-    };
-    assert!(held(&[unset]).is_err());
-}

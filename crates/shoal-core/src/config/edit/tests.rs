@@ -44,3 +44,31 @@ fn applies_changes_in_order_and_names_the_failing_key() {
     let error = apply("", &[change("c", Some("x")), change("missing", None)]).unwrap_err();
     assert!(format!("{error:#}").contains("edit missing"), "{error:#}");
 }
+
+#[test]
+fn a_scoped_config_edit_sets_only_permissions_its_space_holds() {
+    use crate::config::{Config, permissions};
+
+    let settings = Config::from_toml("")
+        .unwrap()
+        .resolve(&Default::default())
+        .unwrap();
+    let worker = permissions::resolve(&settings, None).unwrap();
+    let set = |key: &str, value: &str| Change {
+        key: key.into(),
+        value: Some(value.into()),
+    };
+    let held = |changes: &[Change]| ensure_permissions_held(changes, &worker);
+    assert!(held(&[set("permissions.merge", "propose")]).is_ok());
+    assert!(held(&[set("modes.orchestrate.permissions.daemon", "\"deny\"")]).is_ok());
+    assert!(held(&[set("cleanup.auto.enabled", "false")]).is_ok());
+    assert!(held(&[set("permissions.merge", "direct")]).is_err());
+    assert!(held(&[set("\"permissions\" . merge", "'direct'")]).is_err());
+    assert!(held(&[set("modes.orchestrate.permissions.admin", "direct")]).is_err());
+    assert!(held(&[set("modes.orchestrate.permissions", "{}")]).is_err());
+    let unset = Change {
+        key: "permissions.push".into(),
+        value: None,
+    };
+    assert!(held(&[unset]).is_err());
+}

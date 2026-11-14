@@ -499,51 +499,6 @@ impl Permissions {
     }
 }
 
-/// Refuse `changes` to a config file, made by a scoped process whose space
-/// holds `held`, where one sets a permission wider than it holds, or
-/// removes one or a table of them, which would give the value below it
-/// that the process cannot check it holds; it changes other keys freely.
-pub fn ensure_edits_held(
-    changes: &[crate::config::edit::Change],
-    held: &Permissions,
-) -> Result<()> {
-    for change in changes {
-        let path: Vec<&str> = change.key.split('.').collect();
-        let key = match path.as_slice() {
-            ["permissions", key] | ["modes", _, "permissions", key] => *key,
-            ["permissions"] | ["modes"] | ["modes", _] | ["modes", _, "permissions"] => bail!(
-                "{}: a scoped process sets permissions one key at a time",
-                change.key
-            ),
-            _ => continue,
-        };
-        let Some(key) = PermissionKey::ALL
-            .iter()
-            .find(|known| known.as_str() == key)
-        else {
-            continue;
-        };
-        let Some(value) = &change.value else {
-            bail!(
-                "{}: removing a permission gives the value below it, which a scoped process cannot check it holds; set a value it holds instead",
-                change.key
-            );
-        };
-        let value = value.trim().trim_matches('"');
-        let wanted = (Acting::ALL.iter())
-            .find(|acting| acting.as_str() == value)
-            .with_context(|| format!("{}: unknown permission value {value}", change.key))?;
-        if *wanted > held.acting(*key) {
-            bail!(
-                "{} = \"{value}\" gives more than this space holds: {}; a space sets a permission only to a value it holds",
-                change.key,
-                held.cited(*key)
-            );
-        }
-    }
-    Ok(())
-}
-
 /// The mode an agent of a space started in, which resolves as a space of
 /// `kind` with or without a repository.
 #[derive(Debug, Clone, Copy)]
