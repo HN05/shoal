@@ -1176,3 +1176,57 @@ async fn a_restored_agent_forks_the_session_another_space_holds() {
             .is_some_and(|copied| copied.held_elsewhere)
     );
 }
+
+#[tokio::test]
+async fn a_scoped_caller_cannot_restore_a_chat_into_a_worktree_outside_its_scope() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let own = manager
+        .create_workspace(&repo.id, "own".into(), None, None, None)
+        .await
+        .unwrap();
+    let other = manager
+        .create_workspace(&repo.id, "other".into(), None, None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat_in_workspace(
+            &SpaceSelector::id(&other.id),
+            "review".into(),
+            "claude".into(),
+            None,
+        )
+        .await
+        .unwrap();
+    // The chat is below the caller's space, yet runs in another's worktree.
+    let (id, parent) = (chat.id.clone(), own.id.clone());
+    manager
+        .store
+        .write(move |tx| crate::daemon::workspace::tree::set_parent(tx, &id, Some(&parent)))
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&chat.id);
+    manager.remove_chat(&selector, None).await.unwrap();
+    let caller = Caller {
+        space_id: own.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+    };
+
+    let refused = (manager.ensure_restorable_by(&selector, &caller))
+        .await
+        .unwrap_err();
+    assert!(format!("{refused:#}").contains("the user's"), "{refused:#}");
+    assert!(
+        manager
+            .restorable_spaces(Some(&caller))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}

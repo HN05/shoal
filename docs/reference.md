@@ -3778,8 +3778,9 @@ workspace uses the branch, when the branch no longer contains the removed HEAD,
 or when it moved past HEAD while unsaved files would have to be applied to it;
 the error names the commit to recover by hand. A scoped process restores a
 removed space, of either kind, whose recorded parent exists and its scope
-reaches, always below that parent; any other removed space is the user's to
-restore, and the refusal says why. Its restore list and picker offer only those
+reaches, always below that parent, and a chat only where it could start one:
+in a worktree its scope reaches, with permissions its own space holds; any other
+removed space is the user's to restore, and the refusal says why. Its restore list and picker offer only those
 it may restore.
 
 Removal records the branch, base, parent, links, stopped agents and last sessions with its checkpoint, and

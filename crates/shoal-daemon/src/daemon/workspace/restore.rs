@@ -110,9 +110,39 @@ impl Manager {
                 "{name} was below {}, outside this space's scope, so restoring it is the user's",
                 parent.name
             ),
-            Some(_) => return Ok(None),
+            Some(_) => return self.scoped_chat_refusal(removed, caller).await,
         };
         Ok(Some(refusal))
+    }
+
+    /// Why the scoped `caller` may not restore the chat `removed`, as it
+    /// could not start that chat: in the worktree of a workspace outside
+    /// its scope, or with permissions its own space does not hold. A
+    /// workspace that is gone is the restore's own refusal.
+    async fn scoped_chat_refusal(
+        &self,
+        removed: &RemovedSpace,
+        caller: &Caller,
+    ) -> Result<Option<String>> {
+        let Some(kept) = removed.chat() else {
+            return Ok(None);
+        };
+        let name = &removed.name;
+        if let Some(workspace) = &kept.workspace
+            && self.find_space(&workspace.id).await?.is_some()
+            && !self.reaches(caller, &workspace.id).await?
+        {
+            return Ok(Some(format!(
+                "{name} ran in the worktree of {}, outside this space's scope, so restoring it is the user's",
+                workspace.name
+            )));
+        }
+        let repository = removed.repository_id.as_ref();
+        let held =
+            (self.ensure_caller_holds(Some(&caller.space_id), &kept.narrowing, repository)).await;
+        Ok(held.err().map(|error| {
+            format!("{name} was given permissions this space does not hold: {error:#}")
+        }))
     }
 
     /// Open the removed workspace `removed` again for `caller`, which
