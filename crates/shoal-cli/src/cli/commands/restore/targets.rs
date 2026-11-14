@@ -95,6 +95,8 @@ impl Selected {
         for selector in selectors {
             selected.add(resolve(spaces, removed, selector));
         }
+        // A workspace opens before a chat in its worktree.
+        (selected.removed).sort_by_key(|removed| removed.workspace().is_none());
         selected
     }
 
