@@ -263,7 +263,9 @@ instead of the PR delivery guidance below.
   its agent at start, restore or restart sets, as given, computed at each check
   through one daemon operation; flag a check that reads a repository's `[permissions]` directly.
   A scoped process gives only values its own space holds, including the value a `KEY=mode` drop
-  falls back to, which the daemon checks wherever such a process brings a value in; flag a path that records one unchecked.
+  falls back to and a permission it sets in config, which the daemon checks wherever such a process
+  brings a value in, and it never removes a permission from config or replaces a config file; flag a
+  path that records one unchecked.
   A key that governs an action takes it with `"direct"`, refuses it with `"deny"`, and with
   `"propose"` makes it an approval request bound to what it does, which lets the same action
   proceed once, and an approved command's own requests take its key's actions without asking

@@ -461,7 +461,9 @@ approval, and `admin` the rest of administering Shoal: changing its
 config, registering, renaming and removing repositories and their local
 config and kept branches, `shoal cleanup`, `shoal setup --skip`,
 `shoal contribute`, adopting worktrees, and restoring, copying and moving
-workspaces.
+workspaces. An agent sets a permission in config only to a value its space
+holds, and leaves replacing the config and `config setup` and `repo setup`
+to you.
 
 `[permissions]` and `[modes.<name>.permissions]` take the same keys. A mode's
 key resolves, highest first, from its `permissions` in any layer, then

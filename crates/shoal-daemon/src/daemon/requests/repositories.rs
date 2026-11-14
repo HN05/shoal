@@ -127,7 +127,11 @@ impl Scoped for RepositoryMethod {
             }
             _ => None,
         };
-        manager.administer(caller, self, repository).await?;
+        manager.administer(caller, self, repository.clone()).await?;
+        if let RepositoryMethod::EditLocalConfig { changes, .. } = self {
+            let held = manager.space_permissions(&caller.space_id, repository.as_ref());
+            crate::config::permissions::ensure_edits_held(changes, &held.await?)?;
+        }
         Ok(None)
     }
 }

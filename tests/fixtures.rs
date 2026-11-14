@@ -138,9 +138,9 @@ fn isolation_probe() {
         .args(["config", "install", "default"])
         .output()
         .unwrap();
-    // Scoped, it asks the daemon for its admin permission, which no daemon
-    // answers here.
+    // Scoped, it may not replace the config, which no check could hold to
+    // the permissions its space holds.
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("daemon.sock"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("key by key"));
     assert!(!root.join("state").exists());
 }

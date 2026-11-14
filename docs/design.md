@@ -2935,7 +2935,10 @@ action only where it holds that action's key at `"direct"`, so a key it
 proposes never passes through a child it starts. The daemon checks
 every request it receives, so a protocol client cannot step around the CLI;
 the CLI asks the daemon before what a command does itself, such as writing
-the config, so the two never disagree. A command sends several requests, so
+the config, so the two never disagree. Since config sets permissions, a
+scoped process edits it key by key and sets a permission only to a value it
+holds, as it gives one with `--permission`; replacing the file or having an
+agent edit it could drop a narrowing, so that stays the user's. A command sends several requests, so
 the approval of the command grants a scope token its requests carry, which
 takes that key's actions without asking again for an hour at most and dies
 with the daemon. Forge writes these keys allow go out as the agent account,

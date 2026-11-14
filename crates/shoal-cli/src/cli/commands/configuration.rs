@@ -61,6 +61,7 @@ pub(super) async fn edit(
         ctx.emit(&format!("Updated {}", edit.config.display()), &edit)?;
         return Ok(0);
     }
+    ensure_edits_held(ctx, &changes).await?;
     let (path, backup) = crate::config::Config::edit(&ctx.paths, &changes)?;
     let reloaded = reload_daemon(ctx).await;
     ctx.emit(
@@ -72,6 +73,17 @@ pub(super) async fn edit(
         },
     )?;
     Ok(0)
+}
+
+/// Refuse a scoped process `changes` to the global config that would give
+/// its space a permission it does not hold; the daemon checks a
+/// repository's.
+async fn ensure_edits_held(ctx: &Context, changes: &[Change]) -> Result<()> {
+    if !crate::env::inherits_scope(&ctx.paths.state) {
+        return Ok(());
+    }
+    let held = crate::client::workspaces::held_permissions(&ctx.paths, None).await?;
+    crate::config::permissions::ensure_edits_held(changes, &held)
 }
 
 pub(super) async fn reload(ctx: &Context) -> Result<i32> {

@@ -14,6 +14,10 @@ use crate::{
 /// request a permission asks for. An approval lets the requests the command
 /// sends take what it governs.
 pub(super) async fn authorize(ctx: &Context, command: &Command) -> Result<()> {
+    ensure!(
+        !(command.rewrites_config() && env::inherits_scope(&ctx.paths.state)),
+        "a scoped process changes Shoal's config only key by key, which it may check gives only the permissions it holds; ask the user to run this command"
+    );
     match command.permission() {
         Some(key) => authorize_in(ctx, key, command.repository()).await,
         None => Ok(()),

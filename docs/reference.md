@@ -2455,7 +2455,10 @@ starting agents regardless of `max_agents` and memory, with `--now`,
 `--focus`, `queue start` or the queue picker's start; `admin`
 governs the rest of administering Shoal, its config, repositories and
 cleanup, and repairing, adopting, restoring and moving workspaces, in the
-caller's own repository where the action names one.
+caller's own repository where the action names one. A scoped process changes
+Shoal's config only key by key, setting a permission only to a value its
+space holds and removing none, since that could hand it more; it never
+replaces the config or runs `config setup` or `repo setup`.
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the
 [review template](../crates/shoal-core/src/config/templates/review.md), its task,
@@ -2882,8 +2885,8 @@ install default` does. Every launch and restore of the agent gets the file's
 directory as another working directory; `--here` and `--agent` work as for
 `repo setup`.
 
-`repo setup` and `config setup` change the user's own config, so a scoped
-process runs them as its space's [`admin` permission](#permitted-actions) allows. Both start their agent at once regardless of the limits,
+`repo setup` and `config setup` change the user's own config, so only the
+user runs them. Both start their agent at once regardless of the limits,
 in a tab that takes focus whatever `terminal.focus` says; without a terminal,
 `repo setup` starts it detached and `config setup` in a
 background place.

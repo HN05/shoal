@@ -266,6 +266,22 @@ impl Command {
         )
     }
 
+    /// Whether the command replaces a config file, or starts an agent that
+    /// edits one, which may drop a narrowing of the permissions, so that no
+    /// scoped process can check it gives only what it holds.
+    pub fn rewrites_config(&self) -> bool {
+        matches!(
+            self,
+            Command::Repository(RepositoryCommand::Repo {
+                command: Some(RepoCommand::Setup { .. }),
+            }) | Command::Service(ServiceCommand::Config {
+                command: ConfigCommand::Install { .. }
+                    | ConfigCommand::Reset
+                    | ConfigCommand::Setup(_),
+            })
+        )
+    }
+
     /// The registered repository the command names to act in, whose config
     /// resolves the permission of a chat without a repository.
     pub fn repository(&self) -> Option<&str> {
