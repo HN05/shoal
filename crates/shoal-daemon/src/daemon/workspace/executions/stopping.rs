@@ -21,6 +21,7 @@ use std::collections::HashSet;
 use tokio::time::{Instant, sleep};
 
 use crate::daemon::conversions::ConversionStop;
+use crate::daemon::workspace::runner::JobStop;
 
 #[cfg(test)]
 mod tests;
@@ -293,7 +294,7 @@ impl Manager {
         acknowledge_unproven: bool,
         launches: QueuedLaunches,
     ) -> Result<StoppedSpace> {
-        if let Some(run) = self.cancel_job_in(selector).await? {
+        if let Some(run) = self.cancel_job_in(selector, JobStop::Stop).await? {
             return Ok(StoppedSpace {
                 cancelled_run: Some(run),
                 ..StoppedSpace::default()

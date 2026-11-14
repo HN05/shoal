@@ -2,6 +2,7 @@ use serde_json::json;
 
 use super::*;
 use crate::client::space_names::SpaceSelector;
+use crate::daemon::workspace::runner::JobStop;
 use crate::daemon::{
     test_support::git,
     workspace::runner::tests::{admit_and_claim, github_fixture, github_job, launched},
@@ -187,7 +188,7 @@ async fn stopping_a_job_before_its_report_is_followed_cancels_the_reported_run()
     fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
     let (job, _) = report(manager, 2).await;
     let cancelled = manager
-        .cancel_job_in(&SpaceSelector::id(&job.workspace_id))
+        .cancel_job_in(&SpaceSelector::id(&job.workspace_id), JobStop::Stop)
         .await
         .unwrap();
     assert!(cancelled.unwrap().ends_with("/actions/runs/2"));

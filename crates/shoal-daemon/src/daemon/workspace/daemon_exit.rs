@@ -9,6 +9,7 @@ use super::{
     shutdown_stop::Shutdown,
 };
 use crate::client::space_names::SpaceSelector;
+use crate::daemon::workspace::runner::JobStop;
 use crate::protocol::{Exit, QueuedLaunches};
 use std::collections::HashSet;
 
@@ -64,7 +65,7 @@ impl Manager {
             // A CI job's runner would end once it saw its run cancelled,
             // after the daemon has gone; stop it now, as removal does,
             // also when the forge refused the cancellation.
-            if self.cancel_job_before_stopping(&workspace).await {
+            if (self.cancel_job_before_stopping(&workspace, JobStop::DaemonStop)).await {
                 let request = StopRequest {
                     reason: "the Shoal daemon stopped".into(),
                     save: Save::Everything,

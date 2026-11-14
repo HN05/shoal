@@ -66,6 +66,15 @@ pub(crate) struct Runners {
     /// The `PATH` tests find the runner's program on instead of the process's.
     #[cfg(test)]
     pub(crate) path: Mutex<Option<std::ffi::OsString>>,
+    /// The workspace of each job whose stop Shoal's log recorded, with what
+    /// stopped it, for tests, which do not read the log.
+    #[cfg(test)]
+    pub(crate) stops: Mutex<
+        Vec<(
+            crate::client::space_ids::SpaceId,
+            super::workspace::runner::JobStop,
+        )>,
+    >,
 }
 
 impl Runners {

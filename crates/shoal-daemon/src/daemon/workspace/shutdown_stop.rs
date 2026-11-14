@@ -9,6 +9,7 @@ use futures_util::future::join_all;
 
 use super::{Manager, StopRequest};
 use crate::client::space_names::SpaceSelector;
+use crate::daemon::workspace::runner::JobStop;
 use crate::{
     daemon::{
         log,
@@ -50,6 +51,14 @@ impl Shutdown {
         }
     }
 
+    /// What stops a CI job's runner, as Shoal's log names it.
+    fn job_stop(self) -> JobStop {
+        match self {
+            Self::System => JobStop::SystemShutdown,
+            Self::Daemon => JobStop::DaemonSignal,
+        }
+    }
+
     /// Whether the stop also ends CI jobs: a system shutdown ends them, while
     /// the daemon's own end leaves them to the next daemon, since the forge's
     /// runner does their work.
@@ -85,7 +94,8 @@ impl Manager {
         let stopped = self
             .stop_every_target(shutdown.moment(), &left, |space| async move {
                 // A CI job's run ends on its forge, before its runner stops.
-                self.cancel_job_before_stopping(&space).await;
+                self.cancel_job_before_stopping(&space, shutdown.job_stop())
+                    .await;
                 self.stop_keeping_restores(&SpaceSelector::id(&space), shutdown.request())
                     .await
             })

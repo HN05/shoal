@@ -5,7 +5,7 @@
 //! however its workspace went, is deleted. A job ends only on the forge's
 //! word: stopping it, or removing its workspace while it runs, cancels its
 //! run there, and the forge's runner then stops it, or Shoal does once the
-//! runner outlives the run.
+//! runner outlives the run. Shoal's log names what stopped each runner.
 use crate::client::execution_ids::ExecutionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
@@ -43,6 +43,36 @@ pub(crate) struct ClaimedJob {
     pub job: QueuedJob,
     /// The runner the forge registered for this job alone, if it did.
     pub runner_id: Option<RunnerId>,
+}
+
+/// What stopped a job's runner, as Shoal's log names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum JobStop {
+    /// `shoal stop` of its workspace.
+    Stop,
+    /// `shoal daemon stop`.
+    DaemonStop,
+    /// A signal to the daemon.
+    DaemonSignal,
+    /// The stop before a system shutdown.
+    SystemShutdown,
+    /// The removal of its workspace.
+    Removal,
+    /// Its runner outliving its finished run.
+    Overrun,
+}
+
+impl std::fmt::Display for JobStop {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Stop => "shoal stop",
+            Self::DaemonStop => "shoal daemon stop",
+            Self::DaemonSignal => "a signal to the daemon",
+            Self::SystemShutdown => "the system shutting down",
+            Self::Removal => "its workspace's removal",
+            Self::Overrun => "its runner outliving its finished run",
+        })
+    }
 }
 
 impl Manager {
@@ -198,21 +228,29 @@ impl Manager {
     }
 
     /// Cancel on the forge the run of the job running in the workspace
-    /// `selector` names, returning the run's URL, or `None` when the
-    /// workspace runs no job.
-    pub(crate) async fn cancel_job_in(&self, selector: &SpaceSelector) -> Result<Option<String>> {
+    /// `selector` names, as `cause` stops it, returning the run's URL, or
+    /// `None` when the workspace runs no job.
+    pub(crate) async fn cancel_job_in(
+        &self,
+        selector: &SpaceSelector,
+        cause: JobStop,
+    ) -> Result<Option<String>> {
         let space = self.space(selector).await?;
         let Some(job) = self.workspace_claim(space.id()).await? else {
             return Ok(None);
         };
-        Ok(Some(self.cancel_job_run(&job).await?.to_string()))
+        Ok(Some(self.cancel_for_stop(&job, cause).await?.to_string()))
     }
 
     /// Cancel on the forge the run of a job still running in the workspace
-    /// `workspace_id` before the daemon stops its runner, returning whether
-    /// the workspace holds a job; a forge that refuses is told to the user,
-    /// and the run times out there.
-    pub(crate) async fn cancel_job_before_stopping(&self, workspace_id: &SpaceId) -> bool {
+    /// `workspace_id` before `cause` has the daemon stop its runner,
+    /// returning whether the workspace holds a job; a forge that refuses is
+    /// told to the user, and the run times out there.
+    pub(crate) async fn cancel_job_before_stopping(
+        &self,
+        workspace_id: &SpaceId,
+        cause: JobStop,
+    ) -> bool {
         let Ok(Some(job)) = self.workspace_claim(workspace_id).await else {
             return false;
         };
@@ -225,7 +263,7 @@ impl Manager {
         if !running.unwrap_or(true) {
             return true;
         }
-        if let Err(error) = self.cancel_job_run(&job).await {
+        if let Err(error) = self.cancel_for_stop(&job, cause).await {
             self.notify(
                 None,
                 NotificationKind::RunnerFailed,
@@ -257,6 +295,35 @@ impl Manager {
             .await?
             .into_iter()
             .find(|job| job.workspace_id == *workspace_id))
+    }
+
+    /// Record in Shoal's log that `cause` stopped the runner of `job`, with
+    /// the `outcome` for its run.
+    pub(super) fn log_job_stop(&self, job: &ClaimedJob, cause: JobStop, outcome: &str) {
+        crate::daemon::log!(
+            "runner: {} of run {} stopped by {cause}; {outcome}",
+            job.job.job.name,
+            job.job.run.url
+        );
+        #[cfg(test)]
+        self.runners
+            .stops
+            .lock()
+            .unwrap()
+            .push((job.workspace_id.clone(), cause));
+    }
+
+    /// Cancel `job`'s run as `cause` stops its runner, recording in Shoal's
+    /// log what stopped it and whether the run was cancelled, returning the
+    /// cancelled run's URL.
+    async fn cancel_for_stop(&self, job: &ClaimedJob, cause: JobStop) -> Result<ItemRef> {
+        let cancelled = self.cancel_job_run(job).await;
+        let outcome = match &cancelled {
+            Ok(_) => "cancelled its run".to_owned(),
+            Err(error) => format!("could not cancel its run: {error:#}"),
+        };
+        self.log_job_stop(job, cause, &outcome);
+        cancelled
     }
 
     /// Cancel `job`'s run on the forge its URL names, or the run its

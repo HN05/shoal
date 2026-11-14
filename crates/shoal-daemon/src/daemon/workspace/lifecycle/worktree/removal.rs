@@ -6,6 +6,7 @@ use super::super::super::{Manager, StopRequest};
 use super::super::{Removal, Stage};
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::space_processes::WorktreeTies;
+use crate::daemon::workspace::runner::JobStop;
 use crate::{
     daemon::events::EventCause,
     fsutil::off_runtime,
@@ -292,7 +293,7 @@ impl Manager {
     /// before its runner is stopped.
     pub(in crate::daemon::workspace) async fn stop_worktree_work(&self, worktree: &WorktreeStage) {
         self.stop_workspace_review(&worktree.workspace.id).await;
-        self.cancel_job_before_stopping(&worktree.workspace.id)
+        self.cancel_job_before_stopping(&worktree.workspace.id, JobStop::Removal)
             .await;
     }
 

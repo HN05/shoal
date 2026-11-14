@@ -14,6 +14,7 @@ mod superseded;
 mod taken;
 mod waiting;
 
+pub(crate) use ends::JobStop;
 pub(crate) use registration::Registration;
 
 /// The label every runner registers besides the configured ones, naming the

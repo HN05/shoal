@@ -16,7 +16,7 @@ use crate::{
     daemon::{
         notifications::NotificationKind,
         test_support::{configure, git, manager, repository},
-        workspace::{Ending, ExecutionKind, Manager, StartedExecution},
+        workspace::{Ending, ExecutionKind, Manager, StartedExecution, runner::JobStop},
     },
     forge::backends::ForgeKind,
     model::{QueueEntry, Workspace},
@@ -926,6 +926,7 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
             .iter()
             .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel")
     );
+    assert_eq!(logged_stops(manager), [JobStop::Stop]);
     // The job runs until the forge's runner stops it.
     manager.finish_ended_jobs().await.unwrap();
     assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);
@@ -954,12 +955,14 @@ async fn read<T: serde::de::DeserializeOwned>(
 async fn daemon_stop_cancels_a_jobs_run_and_stops_its_runner() {
     let fixture = daemon_exit_with_runner(job("h3", 7, 3), Cancelling::DaemonStop).await;
     assert!(cancelled(&fixture, 3));
+    assert_eq!(logged_stops(&fixture.manager), [JobStop::DaemonStop]);
 }
 
 #[tokio::test]
 async fn a_system_shutdown_cancels_a_jobs_run_and_stops_its_runner() {
     let fixture = daemon_exit_with_runner(job("h3", 7, 3), Cancelling::SystemShutdown).await;
     assert!(cancelled(&fixture, 3));
+    assert_eq!(logged_stops(&fixture.manager), [JobStop::SystemShutdown]);
 }
 
 #[tokio::test]
@@ -999,7 +1002,14 @@ async fn a_signal_to_the_daemon_leaves_a_jobs_runner_running_for_the_next_daemon
     assert!(matches!(control, Control::Detach), "{control:?}");
     executing.await.unwrap().unwrap();
     assert!(!cancelled(&fixture, 3));
+    assert!(logged_stops(manager).is_empty());
     assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);
+}
+
+/// What stopped each job whose stop Shoal's log recorded.
+fn logged_stops(manager: &Manager) -> Vec<JobStop> {
+    let stops = manager.runners.stops.lock().unwrap();
+    stops.iter().map(|(_, cause)| *cause).collect()
 }
 
 /// Whether the forge was asked to cancel `run`.
@@ -1225,6 +1235,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
         .map(|process| (process.pid, process.command.as_str()))
         .collect();
     assert_eq!(stopped, [(pid, "sleep 600")]);
+    assert_eq!(logged_stops(manager), [JobStop::Overrun]);
 }
 
 #[tokio::test]
@@ -1323,6 +1334,7 @@ async fn removing_a_running_jobs_workspace_cancels_its_run_first() {
             .iter()
             .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel")
     );
+    assert_eq!(logged_stops(manager), [JobStop::Removal]);
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
 }
 

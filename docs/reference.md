@@ -3601,7 +3601,9 @@ and records a `job_ended` event in the workspace's log. `shoal stop` says
 which run it asked the forge to cancel (`cancelled_run` with `--json`), and
 `shoal rm` of a running job's workspace, `shoal daemon stop`, and the stop
 before a system shutdown cancel the run before they stop the runner, while a
-signal to the daemon leaves the job running. A job that cannot start is passed over with a
+signal to the daemon leaves the job running. The daemon's log records each stop
+of a job's runner with the job, its run, what stopped it and whether the run
+was cancelled. A job that cannot start is passed over with a
 `runner_failed` notification, and its workspace goes, also one whose
 checkout failed; a removal that fails is tried again until it succeeds.
 

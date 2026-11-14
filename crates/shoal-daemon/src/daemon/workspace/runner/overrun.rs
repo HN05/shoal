@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 
+use super::JobStop;
 use super::ends::ClaimedJob;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
@@ -37,6 +38,7 @@ impl Manager {
             .stop_workspace_untracked(&workspace, Selection::Processes, None)
             .await?;
         self.stop_job_runner(job).await?;
+        self.log_job_stop(job, JobStop::Overrun, "its run had finished");
         let ended = ended_job(job.job.job.name.clone(), run, stopped);
         self.record_job_ended(&job.workspace_id, ended).await;
         Ok(true)
