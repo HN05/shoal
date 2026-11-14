@@ -158,10 +158,11 @@ fn marked<'a>(
     scan: &'a process::Scan,
     agents: &'a process::AgentTrees,
 ) -> impl Iterator<Item = &'a process::Identity> {
+    let others = agents.besides(execution.wrapper.as_ref());
     (scan.processes.iter())
         .filter(|p| p.owner == execution.id)
         .map(|p| &p.identity)
-        .filter(|p| !agents.foreign(p.pid, execution.wrapper.as_ref()))
+        .filter(move |p| !others.run(p.pid))
 }
 
 /// The PIDs of `processes`, separated by `separator`.

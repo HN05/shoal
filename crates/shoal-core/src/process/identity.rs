@@ -397,7 +397,8 @@ pub async fn related(
         pids.insert(child.unwrap().pid);
         pids = descendants(pids, &rows);
     }
-    pids.retain(|pid| !agents.foreign(*pid, wrapper));
+    let others = agents.besides(wrapper);
+    pids.retain(|pid| !others.run(*pid));
     let identities = pids
         .into_iter()
         .map(capture)
