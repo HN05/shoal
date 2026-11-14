@@ -9,6 +9,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
+use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::PermissionKey,
@@ -90,6 +91,59 @@ pub(super) async fn handle(
     }))
 }
 
+/// The repository an administering `method` of `caller` acts in, which must
+/// be the caller's own where the method names one, and where it names none,
+/// the caller's own repository, if it has one; none for one that acts in
+/// no single repository.
+async fn administered_repository(
+    manager: &Manager,
+    caller: &Caller,
+    method: &mut RepositoryMethod,
+) -> Result<Option<RepositoryId>> {
+    const REFUSAL: &str = "scoped processes administer only their own repository";
+    let own = async |named: &crate::repository::Selector| {
+        let selected = manager.own_repository(caller, named, REFUSAL).await?;
+        Ok::<_, anyhow::Error>(manager.repository(&selected).await?.id)
+    };
+    Ok(match method {
+        RepositoryMethod::RenameRepository { repository, .. }
+        | RepositoryMethod::LocalConfigPath { repository }
+        | RepositoryMethod::EditLocalConfig { repository, .. }
+        | RepositoryMethod::RemoveRepository { repository }
+        | RepositoryMethod::ListBranches { repository } => {
+            let id = own(repository).await?;
+            *repository = (&id).into();
+            Some(id)
+        }
+        RepositoryMethod::AgentEnvironments { repository_id }
+        | RepositoryMethod::ForgetAgentEnvironments { repository_id }
+        | RepositoryMethod::KeepRepositoryAgentEnvironment {
+            repository: repository_id,
+            ..
+        } => Some(own(&(&*repository_id).into()).await?),
+        RepositoryMethod::KeptBranches { repository } => {
+            let named = match repository.as_deref() {
+                Some(named) => Some(own(&named.into()).await?),
+                None => manager.caller_repository(caller).await?,
+            };
+            *repository = named.as_ref().map(ToString::to_string);
+            named
+        }
+        RepositoryMethod::DeleteKeptBranches { branches } => {
+            let mut repositories = Vec::new();
+            for branch in branches.iter() {
+                repositories.push(own(&(&branch.repository_id).into()).await?);
+            }
+            repositories.dedup();
+            match repositories.as_slice() {
+                [one] => Some(one.clone()),
+                _ => None,
+            }
+        }
+        _ => None,
+    })
+}
+
 /// A scoped caller syncs its own repository; administering repositories is
 /// the `admin` permission's, in its own where the request names one.
 impl Scoped for RepositoryMethod {
@@ -116,16 +170,7 @@ impl Scoped for RepositoryMethod {
                     .await?;
                 return Ok(None);
             }
-            RepositoryMethod::RenameRepository { repository, .. }
-            | RepositoryMethod::LocalConfigPath { repository }
-            | RepositoryMethod::EditLocalConfig { repository, .. }
-            | RepositoryMethod::RemoveRepository { repository }
-            | RepositoryMethod::ListBranches { repository } => {
-                const REFUSAL: &str = "scoped processes administer only their own repository";
-                *repository = manager.own_repository(caller, repository, REFUSAL).await?;
-                Some(manager.repository(&*repository).await?.id)
-            }
-            _ => None,
+            _ => administered_repository(manager, caller, self).await?,
         };
         // An edit that would give more than the caller holds is refused
         // before it asks for approval.
