@@ -271,6 +271,13 @@ impl Items for Bitbucket {
         same_account(&user, &comment["user"])
     }
 
+    /// Bitbucket names an issue's assignee by account ID.
+    async fn own_assignee(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
+        let user = repo.send(account, &Request::get("user".into())).await?;
+        let id = text(&user["account_id"]).context("Bitbucket did not report your account ID")?;
+        Ok(Some(id))
+    }
+
     /// Inline comments are among a pull request's comments.
     fn edit_comment(
         &self,

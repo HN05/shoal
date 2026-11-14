@@ -149,6 +149,12 @@ pub(crate) trait Items: Backend {
     /// opening it cannot set them by name.
     fn labels_issue_after_opening(&self) -> bool;
 
+    /// How `account` is named among an item's assignees, as edits name it:
+    /// its login; none when it reads anonymously.
+    async fn own_assignee(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
+        self.own_login(repo, account).await
+    }
+
     /// Whether the login of `account` wrote `comment` of item `number`.
     async fn wrote(
         &self,

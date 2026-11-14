@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::Items,
     capability::Capability,
     items::{
         action::{Action, Edit},
@@ -19,7 +19,8 @@ use crate::{
 /// What assigning an issue to the acting account found and did.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Assignment {
-    /// The login the account signs in as.
+    /// The login the account signs in as, as assignees name it: Bitbucket's
+    /// account ID.
     pub login: String,
     /// Whether the assignment added the login: not when the issue had it
     /// already, nor when it is closed.
@@ -44,7 +45,7 @@ impl ForgeRepo {
             return Ok(None);
         }
         self.require(Capability::IssueAssignees)?;
-        let login = (self.kind.own_login(self, account).await?)
+        let login = (self.kind.own_assignee(self, account).await?)
             .context("the forge did not report the account's login")?;
         let current = self.issue_details(account, number).await?.item;
         let assigned = has_assignee(&current, &login);
