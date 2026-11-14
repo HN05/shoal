@@ -150,7 +150,6 @@ fn workspace_flags(args: &StartArgs) -> Vec<&'static str> {
         ("--copy", args.copy.copy.is_some()),
         ("--checkpoint", args.copy.checkpoint.is_some()),
         ("--focus", args.focus),
-        ("--now", args.now),
         ("--add-blocker", !args.add_blocker.is_empty()),
         ("--skip-setup", args.creation.skip_setup),
         ("--disposable", args.creation.disposable),

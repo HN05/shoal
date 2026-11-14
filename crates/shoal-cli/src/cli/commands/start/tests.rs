@@ -15,12 +15,14 @@ fn start(args: &[&str]) -> StartArgs {
 fn a_start_refuses_flags_its_kind_of_space_cannot_use() {
     let chat = |args: &[&str]| ensure_fits(&start(args), SpaceKind::Chat, Some(&"plan".into()));
     chat(&["repo", "--issue", "7", "--name", "talk"]).unwrap();
+    // A chat's agent waits for a slot as a workspace's does, so it takes --now.
+    chat(&["repo", "--now"]).unwrap();
     for (args, flag) in [
         (&["repo", "--branch", "topic"][..], "--branch"),
         (&["repo", "--base", "main"], "--base"),
         (&["repo", "--path", "/work/x"], "--path"),
         (&["repo", "--skip-setup"], "--skip-setup"),
-        (&["repo", "--now"], "--now"),
+        (&["repo", "--focus"], "--focus"),
     ] {
         // The refusal names the flag and the kind of space.
         let error = chat(args).unwrap_err().to_string();
@@ -194,8 +196,9 @@ fn the_arguments_other_than_the_mode_decide_the_kind_they_fit() {
         fits(&["https://forge.example/o/r/pulls/8"]),
         Some(SpaceKind::Workspace)
     );
-    // A name fits either kind.
+    // A name and --now fit either kind.
     assert_eq!(fits(&["repo", "--name", "talk"]), None);
+    assert_eq!(fits(&["repo", "--now"]), None);
 }
 
 #[test]

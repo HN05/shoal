@@ -1780,7 +1780,8 @@ exiting cleanly differs: it sends no notification. A heavy chat's start
 waits in the queue when no slot is free, as a new workspace's does: from a
 terminal it records nothing until its entry starts, while one without a
 terminal or a scoped caller's records the chat at once, below where it goes,
-and reports it with its entry. The
+and reports it with its entry; `--now` starts the user's chat regardless of
+the limits. The
 daemon records each chat under its name, with the session the agent's
 session-start hook last reported, which
 [`shoal move`](#move-a-space-to-another-machine) continues on another machine.
