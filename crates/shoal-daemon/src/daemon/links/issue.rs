@@ -53,9 +53,9 @@ impl Manager {
 
     /// Association is part of opening a workspace, before tracked setup starts.
     /// The issue joins the space's assigned issues; linking an assigned one
-    /// again records a newly known title. A newly linked issue is assigned on
-    /// the forge to the account of `assigner`; returns the warnings that
-    /// gives.
+    /// again records a newly known title. An issue no assignee is recorded
+    /// for, a new one or one whose assignment failed, is assigned on the
+    /// forge to the account of `assigner`; returns the warnings that gives.
     pub async fn set_issue(
         &self,
         selector: &SpaceSelector,
@@ -84,13 +84,14 @@ impl Manager {
             .persist_issue_assignment(space.id(), &url, title)
             .await?
         {
+            // The forge shows it already.
             return Ok(Vec::new());
         }
         Ok(self.assign_on_forge(&space, &forge, &url, assigner).await)
     }
 
     /// Record the issue `url` as assigned to the space `id`, returning
-    /// whether it is newly linked.
+    /// whether the forge has yet to show it as the space's.
     async fn persist_issue_assignment(
         &self,
         id: &SpaceId,
@@ -179,16 +180,19 @@ impl Manager {
 /// Assign an issue within the caller's transaction, after those already
 /// assigned and in place of its opened or related link, retaining a known
 /// title when none is supplied and recording only a new association as
-/// linked. Returns whether the association is new.
+/// linked. Returns whether the forge has yet to show the link: no assignee
+/// is recorded for it, as for a new one or one whose assignment failed.
 fn assign(db: &Connection, id: &SpaceId, url: &str, title: Option<&str>) -> Result<bool> {
     super::ensure_accepts_links(db, id)?;
     let assigned = assigned_urls(db, id)?
         .iter()
         .any(|issue| issue.url() == url);
-    db.execute(
+    let assignee: Option<String> = db.query_row(
         "INSERT INTO space_issue(space_id,url,title) VALUES (?1,?2,?3)
-         ON CONFLICT(space_id,url) DO UPDATE SET title=COALESCE(excluded.title,title)",
+         ON CONFLICT(space_id,url) DO UPDATE SET title=COALESCE(excluded.title,title)
+         RETURNING assignee",
         rusqlite::params![id, url, title],
+        |row| row.get(0),
     )?;
     if !assigned {
         super::drop_recorded(db, id, url, None)?;
@@ -201,7 +205,7 @@ fn assign(db: &Connection, id: &SpaceId, url: &str, title: Option<&str>) -> Resu
             url,
         )?;
     }
-    Ok(!assigned)
+    Ok(assignee.is_none())
 }
 
 /// Remove the space's issue `selected` names, which must be assigned, or
