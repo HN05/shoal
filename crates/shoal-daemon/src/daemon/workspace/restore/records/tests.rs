@@ -115,3 +115,54 @@ async fn a_converted_workspace_keeps_its_record_beside_the_chat_it_became() {
     assert_eq!(restored.opened.workspace.id, record);
     assert!(manager.removed_spaces().await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn a_chat_a_conversion_removed_restores_in_the_workspace_restored_beside() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "fix-login".into(), None, None, None)
+        .await
+        .unwrap();
+    let resident = manager
+        .start_chat_in_workspace(
+            &SpaceSelector::id(&workspace.id),
+            "review".into(),
+            "claude".into(),
+            None,
+        )
+        .await
+        .unwrap();
+    let converted = crate::daemon::conversions::record::ConvertedChat {
+        agent: "claude".into(),
+        execution: crate::client::execution_ids::ExecutionId::generate(),
+        session: None,
+        origin: None,
+        mode: crate::model::chat_mode(),
+        narrowing: Default::default(),
+    };
+    (manager.convert_worktree_to_chat(&workspace.id, &converted))
+        .await
+        .unwrap();
+
+    let removed = manager.removed_workspaces().await.unwrap();
+    let [record] = removed.as_slice() else {
+        panic!("{removed:?}");
+    };
+    manager
+        .restore_space(&SpaceSelector::id(&record.space_id), None)
+        .await
+        .unwrap();
+    let restored = (manager.restore_space(&SpaceSelector::id(&resident.id), None))
+        .await
+        .unwrap();
+    let crate::model::RestoredSpace::Chat(restored) = restored else {
+        panic!("{restored:?}");
+    };
+    let place = restored.chat.workspace.map(|workspace| workspace.id);
+    assert_eq!(place.as_ref(), Some(&record.space_id));
+}

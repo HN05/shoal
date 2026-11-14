@@ -230,6 +230,13 @@ pub(in crate::daemon::workspace) fn rekey_converted(
          WHERE space_id=?1 AND NOT chat",
         params![id, own],
     )?;
+    // The chats the conversion removed from its worktree ran in the
+    // workspace the record restores, which the ID no longer names.
+    tx.execute(
+        "UPDATE removed_spaces SET record=json_set(record, '$.chat.workspace.id', ?2)
+         WHERE chat AND json_extract(record, '$.chat.workspace.id')=?1",
+        params![id, own],
+    )?;
     Ok(())
 }
 
