@@ -18,7 +18,6 @@ use crate::{
     state::WorkspaceState,
 };
 
-mod earlier;
 pub(crate) mod layout;
 mod records;
 mod retention;

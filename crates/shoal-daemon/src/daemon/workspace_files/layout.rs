@@ -158,37 +158,6 @@ impl Layout {
         Ok(())
     }
 
-    /// The copies kept for the workspace `workspace_id` outside its results:
-    /// the files two directories below its own, one directory per message and
-    /// one per file within it. A hidden message directory holds copies still
-    /// being made; the files themselves may have any name.
-    pub(crate) fn workspace_copies(&self, workspace_id: &SpaceId) -> Result<Vec<PathBuf>> {
-        let ours = self
-            .dir
-            .check_own()
-            .with_context(|| format!("read {}", self.root().display()))?;
-        if !ours {
-            return Ok(Vec::new());
-        }
-        let staging = |path: &PathBuf| {
-            path.file_name()
-                .is_some_and(|name| name.to_string_lossy().starts_with('.'))
-        };
-        let mut copies = Vec::new();
-        for message in entries(&self.root().join(workspace_id))? {
-            if !message.is_dir() || staging(&message) {
-                continue;
-            }
-            for file in entries(&message)? {
-                if file.is_dir() {
-                    copies.extend(entries(&file)?.into_iter().filter(|copy| copy.is_file()));
-                }
-            }
-        }
-        copies.sort();
-        Ok(copies)
-    }
-
     /// The directories that may hold the files kept for the space
     /// `space_id` after it is gone: its own, and the results it handed back.
     pub(crate) fn kept(&self, space_id: &SpaceId) -> [PathBuf; 2] {
@@ -280,17 +249,4 @@ impl Kept {
         }
         remove_if_empty(&self.workspace)
     }
-}
-
-/// The entries of `directory`, none when it does not exist.
-fn entries(directory: &Path) -> Result<Vec<PathBuf>> {
-    let listing = match std::fs::read_dir(directory) {
-        Ok(listing) => listing,
-        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(error).with_context(|| format!("read {}", directory.display())),
-    };
-    listing
-        .map(|entry| Ok(entry?.path()))
-        .collect::<std::io::Result<_>>()
-        .with_context(|| format!("read {}", directory.display()))
 }
