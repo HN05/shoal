@@ -20,6 +20,8 @@ use crate::{
 
 /// The most of a log's end a [`CheckLog`] keeps, in bytes.
 pub const TAIL_BYTES: usize = 8192;
+/// The most of one line a [`CheckLog`]'s tail keeps, in bytes.
+const LINE_BYTES: usize = 1024;
 /// The longest job URL a [`CheckLog`] keeps, in bytes.
 pub const JOB_URL_BYTES: usize = 512;
 /// The most of a job log Shoal downloads, in bytes.
@@ -199,7 +201,7 @@ impl ForgeRepo {
 }
 
 impl CheckLog {
-    /// The last [`TAIL_BYTES`] of the log `text`.
+    /// The [`Self::tail`] of the log `text`.
     pub(crate) fn from_text(
         url: &str,
         name: &str,
@@ -221,14 +223,25 @@ impl CheckLog {
         }
     }
 
-    /// The log's last [`TAIL_BYTES`], marked truncated when it is longer.
+    /// The log's last whole lines within [`TAIL_BYTES`], each longer than
+    /// [`LINE_BYTES`] shortened to its start and end, so that one long line
+    /// leaves room for the lines around it; marked truncated when it left
+    /// anything out.
     pub fn tail(mut self) -> Self {
-        let mut start = self.text.len().saturating_sub(TAIL_BYTES);
-        while !self.text.is_char_boundary(start) {
-            start += 1;
+        let mut lines = Vec::new();
+        let mut size = 0;
+        for line in self.text.split_inclusive('\n').rev() {
+            let line = shortened(line);
+            if size + line.len() > TAIL_BYTES {
+                break;
+            }
+            size += line.len();
+            lines.push(line);
         }
-        self.text.drain(..start);
-        self.truncated |= start > 0;
+        lines.reverse();
+        let tail = lines.concat();
+        self.truncated |= tail.len() < self.text.len();
+        self.text = tail;
         self
     }
 
@@ -238,6 +251,20 @@ impl CheckLog {
             ..self
         }
     }
+}
+
+/// What stands for the middle a long line's tail leaves out.
+const ELLIPSIS: &str = " … ";
+
+/// `line` within [`LINE_BYTES`], its middle left out when it is longer.
+fn shortened(line: &str) -> std::borrow::Cow<'_, str> {
+    if line.len() <= LINE_BYTES {
+        return line.into();
+    }
+    let kept = (LINE_BYTES - ELLIPSIS.len()) / 2;
+    let start = line.floor_char_boundary(kept);
+    let end = line.ceil_char_boundary(line.len() - kept);
+    format!("{}{ELLIPSIS}{}", &line[..start], &line[end..]).into()
 }
 
 #[cfg(test)]
