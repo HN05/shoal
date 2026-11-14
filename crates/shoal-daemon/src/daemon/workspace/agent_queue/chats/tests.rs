@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::client::space_names::SpaceSelector;
+use crate::client::{output::chat::StartedChat, space_names::SpaceSelector};
 use crate::{
     daemon::{
         test_support::{global_config, manager},
@@ -10,6 +10,7 @@ use crate::{
         },
     },
     model::{ChatQueueRequest, Repository},
+    protocol::ChatStart,
     state::QueueState,
 };
 
@@ -95,4 +96,36 @@ async fn a_waiting_chat_launch_starts_in_its_recorded_chat_once_a_slot_frees() {
     let entries = manager.queue_entries().await.unwrap();
     let starting = entries.iter().find(|queued| queued.id == entry.id).unwrap();
     assert_eq!(starting.space_id.as_ref(), Some(&chat.id));
+}
+
+/// A client's chat whose heavy agent must wait is recorded at once, and
+/// the answer names the chat and its agent's entry, without running the
+/// chat's start worker.
+#[tokio::test]
+async fn a_clients_chat_whose_agent_waits_is_recorded_with_its_entry() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    full_machine(&manager, &repo).await;
+    let start = ChatStart {
+        repository: Some((&repo.id).into()),
+        agent: Some("claude".into()),
+        mode: Some("pair".into()),
+        name: Some("queued talk".into()),
+        ..Default::default()
+    };
+
+    let started = manager.launch_chat(start, None).await.unwrap();
+
+    let StartedChat::Queued(queued) = started else {
+        panic!("expected a queued chat: {started:?}");
+    };
+    assert_eq!(queued.entry.state, QueueState::Queued);
+    let entries = manager.queue_entries().await.unwrap();
+    let entry = entries.iter().find(|entry| entry.id == queued.entry.id);
+    assert_eq!(entry.unwrap().space_id.as_ref(), Some(&queued.chat.id));
+    let launched = crate::daemon::chats::launches::tests::STARTED.lock();
+    let names: Vec<_> = (launched.unwrap().iter())
+        .filter_map(|(start, _)| start.name.clone())
+        .collect();
+    assert!(!names.contains(&"queued talk".into()), "{names:?}");
 }
