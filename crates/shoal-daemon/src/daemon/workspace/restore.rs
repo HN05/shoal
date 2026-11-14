@@ -64,6 +64,7 @@ impl Manager {
             base_commit: workspace.base_commit.clone(),
             at: workspace.at.clone(),
             links,
+            setup_skipped: workspace.setup_skipped,
             agents,
             last_sessions,
             session_files: self.unplaced_sessions(workspace).await,
@@ -243,6 +244,7 @@ impl Manager {
                 // A name an older Shoal recorded may be longer than one set
                 // now allows.
                 name: Some(SpaceName::derive(removed.name.as_str(), "workspace")),
+                skip_setup: removed.setup_skipped,
                 ..Default::default()
             },
             ..Default::default()

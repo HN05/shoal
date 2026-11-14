@@ -3317,7 +3317,8 @@ reads: no `hooks.pre_setup`, ignored-file copy, `setup.command` or
 `hooks.post_setup`, and since they tear down what setup made, no
 `hooks.pre_remove` or `hooks.post_remove` either. The [seed](#seed-builds) clone
 still happens. `status` shows `Setup: skipped` and `--json` `setup_skipped`;
-`shoal setup` runs the full setup later and clears it.
+`shoal setup` runs the full setup later and clears it. A removed workspace
+without setup is restored without it too.
 
 Hooks are untracked: they run as your own processes with `SHOAL_HOOK` (the key
 without `_cmd`), `SHOAL_WORKSPACE` (the workspace's `{workspace}`), `SHOAL_WORKSPACE_ID`, `SHOAL_WORKSPACE_PATH`,

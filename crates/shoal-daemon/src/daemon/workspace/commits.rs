@@ -390,7 +390,10 @@ impl Manager {
                 at,
                 diff_ref,
                 None,
-                CreationOptions::default(),
+                CreationOptions {
+                    skip_setup: removed.setup_skipped,
+                    ..Default::default()
+                },
             )
             .await?;
         let head = removed.checkpoint.head.as_str();

@@ -361,6 +361,7 @@ fn packaged_record(
         base_commit: workspace.base_commit.clone(),
         at: workspace.at.clone(),
         links: workspace.links.clone(),
+        setup_skipped: workspace.setup_skipped,
         agents,
         // An unreadable last session is not worth refusing the export for.
         last_sessions: LastSession::all(paths, &workspace.id).unwrap_or_default(),

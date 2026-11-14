@@ -54,6 +54,9 @@ pub struct RemovedWorkspace {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<StartingCommit>,
     pub links: SpaceLinks,
+    /// Whether it was created without setup, which its restore skips too.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub setup_skipped: bool,
     /// Agents stopped by the removal or before it, which `shoal restore`
     /// continues once the workspace is restored.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

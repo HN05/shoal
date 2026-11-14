@@ -676,6 +676,42 @@ async fn a_failed_removal_keeps_its_checkpoint() {
     );
 }
 
+/// A workspace created without setup comes back without it.
+#[tokio::test]
+async fn restore_skips_setup_a_workspace_skipped() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let new = super::super::NewWorkspace {
+        options: crate::protocol::CreationOptions {
+            skip_setup: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let workspace = manager
+        .create_workspace_with(&repo.id, "topic".into(), None, new)
+        .await
+        .unwrap();
+    manager
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::IncludeDirectoryProcesses,
+        )
+        .await
+        .unwrap();
+
+    let restored = manager
+        .restore_workspace(&manager.named("topic").await)
+        .await
+        .unwrap();
+    assert!(restored.opened.workspace.setup_skipped);
+}
+
 #[tokio::test]
 async fn restore_keeps_the_recorded_base_and_its_stack() {
     let (root, manager) = manager().await;
