@@ -93,6 +93,20 @@ pub(super) enum Ended {
     LeftRunning,
 }
 
+impl Ended {
+    /// This end without the session its reviewer reported, for a run whose
+    /// session no later review can find.
+    pub(super) fn without_session(self) -> Self {
+        match self {
+            Self::Returned { output, .. } => Self::Returned {
+                output,
+                session: None,
+            },
+            ended => ended,
+        }
+    }
+}
+
 /// Run `reviewer` until it exits, its timeout passes or `cancel` turns true,
 /// and read its result, which another reviewer of the run does not see.
 pub(super) async fn run(reviewer: &Reviewer<'_>, cancel: &mut watch::Receiver<bool>) -> Ended {

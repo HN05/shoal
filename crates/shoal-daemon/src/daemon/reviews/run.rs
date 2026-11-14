@@ -168,16 +168,16 @@ impl Manager {
         // The run's directory is the repository's, which a registration
         // older than it reserves first.
         let repository = (self.reserve_repository_directory(&workspace.repository_id)).await?;
-        let files = run_files(&repository, &review)?;
-        let checkout = self.hold_run(id, &repository.id, &files).await?;
+        let place = run_files(&repository, &review)?;
+        let held = self.hold_run(id, &repository.id, place).await?;
         if !self.start_review(id, &commits).await? {
             return Ok(Pass::Ended);
         }
         let ended = self
-            .run_in_checkout(&review, &workspace, &settings, &commits, &files, cancelled)
+            .run_in_checkout(&review, &workspace, &settings, &commits, &held, cancelled)
             .await;
         let left_running = matches!(ended, Ok((_, Ended::LeftRunning)));
-        release_run(id, &files, checkout, admission, left_running).await;
+        release_run(id, &held.files, held.checkout, admission, left_running).await;
         let (reviewer, ended) = ended?;
         self.record_end(id, &workspace, &reviewer, ended).await
     }
@@ -226,34 +226,48 @@ impl Manager {
         }
     }
 
-    /// Hold `files`, the run of review `id` of `repository`, once no earlier
-    /// run there holds it, as a cancelled review's does while it ends;
-    /// refused while one that could not be removed keeps it.
+    /// Hold the run of review `id` of `repository` at `place`, its
+    /// subject's, once no earlier run there holds it, as a cancelled
+    /// review's does while it ends; while a run that could not be removed
+    /// keeps the place, until a restarted daemon removes it, the review runs
+    /// beside it instead.
     async fn hold_run(
         &self,
         id: ReviewId,
         repository: &RepositoryId,
-        files: &Files,
-    ) -> Result<CheckoutHold<'_>> {
-        let kept = || {
-            anyhow!(
-                "an earlier review left its run at {} that could not be removed; restart the \
-                 daemon with `shoal daemon restart` to remove it",
-                files.directory.display()
-            )
-        };
+        place: Files,
+    ) -> Result<HeldRun<'_>> {
         let mut ended = self.reviews.ended.subscribe();
-        let hold = loop {
-            match self.reviews.hold_run(id, repository, &files.directory) {
-                Ok(hold) => break hold,
-                Err(true) => return Err(kept()),
+        loop {
+            match self.reviews.hold_run(id, repository, &place.directory) {
+                Ok(checkout) if !place.directory.exists() => {
+                    return Ok(HeldRun {
+                        files: place,
+                        checkout,
+                        at_place: true,
+                    });
+                }
+                Ok(checkout) => {
+                    drop(checkout);
+                    break;
+                }
+                Err(true) => break,
                 Err(false) => ended.changed().await.context("the daemon is stopping")?,
             }
-        };
-        match files.directory.exists() {
-            true => Err(kept()),
-            false => Ok(hold),
         }
+        log!(
+            "review {id}: an earlier review left its run at {} that could not be removed; this \
+             review runs beside it in a new session until `shoal daemon restart` removes it",
+            place.directory.display()
+        );
+        let files = run_beside(&place, id);
+        let checkout = (self.reviews.hold_run(id, repository, &files.directory))
+            .map_err(|_| anyhow!("{} is in use", files.directory.display()))?;
+        Ok(HeldRun {
+            files,
+            checkout,
+            at_place: false,
+        })
     }
 
     /// Record that review `id` started on `commits`; false when it is no
@@ -265,17 +279,19 @@ impl Manager {
             .await
     }
 
-    /// Check the reviewed commit out and run the reviewers there; returns
-    /// the agent that produced the result and how it ended.
+    /// Check the reviewed commit out in `held` and run the reviewers there,
+    /// continuing the subject's session when it is at the subject's place;
+    /// returns the agent that produced the result and how it ended.
     async fn run_in_checkout(
         &self,
         review: &Review,
         workspace: &Workspace,
         settings: &Effective,
         commits: &Commits,
-        files: &Files,
+        held: &HeldRun<'_>,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Result<(Agent, Ended)> {
+        let files = &held.files;
         self.prepare_checkout(review.id, workspace, &commits.head, files)
             .await?;
         let run = Run {
@@ -289,29 +305,49 @@ impl Manager {
                 .await?,
             files,
         };
+        // A run elsewhere finds no session there, and no later review its own.
+        if !held.at_place {
+            let (agent, ended) =
+                (self.review_with_fallback(&run, review, settings, None, cancelled)).await;
+            return Ok((agent, ended.without_session()));
+        }
+        let session = self.review_session(review, settings).await;
+        Ok((self.review_with_fallback(&run, review, settings, session, cancelled)).await)
+    }
+
+    /// `review`'s own agent's attempt at `run`, resuming `session` when
+    /// given, then once the fallback agent's after any failure but a
+    /// timeout; returns the agent that produced the result and how it ended.
+    async fn review_with_fallback(
+        &self,
+        run: &Run<'_>,
+        review: &Review,
+        settings: &Effective,
+        session: Option<AgentSessionId>,
+        cancelled: &mut watch::Receiver<bool>,
+    ) -> (Agent, Ended) {
         let agent = review.agent.clone();
         let model = settings.model(&agent, review.model.clone());
-        let session = self.review_session(review, settings).await;
         let ended = self
-            .review_by_agent(&run, review.id, &agent, &model, session, cancelled)
+            .review_by_agent(run, review.id, &agent, &model, session, cancelled)
             .await;
         let fallback = settings
             .review
             .fallback_agent
             .clone()
             .filter(|fallback| *fallback != agent && !settings.turned_off(fallback));
-        Ok(match (ended, fallback) {
+        match (ended, fallback) {
             (Ended::Failed(reason), Some(fallback)) if reason != FailureReason::TimedOut => {
                 log!(
                     "review {}: {agent} failed ({reason}); {fallback} reviews instead",
                     review.id
                 );
                 let model = settings.model(&fallback, Default::default());
-                let ended = self.attempt(&run, &fallback, &model, None, cancelled).await;
+                let ended = self.attempt(run, &fallback, &model, None, cancelled).await;
                 (fallback, ended)
             }
             (ended, _) => (agent, ended),
-        })
+        }
     }
 
     /// Review `id`'s run directory with its ID, the output schema and a
@@ -619,8 +655,13 @@ impl Manager {
         let review = self.store.run(move |db| store::load(db, id)).await.ok()??;
         let workspace = self.workspace_by_id(&review.workspace_id).await.ok()?;
         let repository = self.repository(&workspace.repository_id).await.ok()?;
+        let place = run_files(&repository, &review).ok()?;
+        let beside = run_beside(&place, id);
         Some(LeftRun {
-            files: run_files(&repository, &review).ok()?,
+            files: match beside.directory.exists() {
+                true => beside,
+                false => place,
+            },
             repository: Some(repository.id),
         })
     }
@@ -718,6 +759,14 @@ impl Manager {
         })
         .await?
     }
+}
+
+/// A review's held run, and whether it is at its subject's place, where
+/// the subject's session is found.
+struct HeldRun<'a> {
+    files: Files,
+    checkout: CheckoutHold<'a>,
+    at_place: bool,
 }
 
 /// A run a stopped daemon may have left, with the repository its checkout
@@ -883,6 +932,16 @@ fn run_files(repository: &Repository, review: &Review) -> Result<Files> {
     Ok(Files {
         directory: review_runs(repository)?.root().join(place),
     })
+}
+
+/// The files of review `id`'s run beside `place`, its subject's, which a
+/// run that could not be removed keeps.
+fn run_beside(place: &Files, id: ReviewId) -> Files {
+    let mut name = place.directory.file_name().unwrap_or_default().to_owned();
+    name.push(format!("-{id}"));
+    Files {
+        directory: place.directory.with_file_name(name),
+    }
 }
 
 /// The directory of the repository's review runs.

@@ -1097,11 +1097,13 @@ async fn each_review_of_a_workspace_runs_in_one_checkout_in_its_repository_direc
     assert!(!fixture.manager.paths.state.join("reviews").exists());
 }
 
-/// A reviewer that records each run as `new` or `resume <session>` in `runs`
-/// and the latest resumed run's prompt in `resumed`, reports session
+/// A reviewer that records each run as `new` or `resume <session>` in `runs`,
+/// its directory in `cwd` and the latest resumed run's prompt in `resumed`,
+/// reports session
 /// `s<run>`, or the one it resumes, as Codex does, and cannot resume while
 /// `stale` exists.
 const RESUMER: &str = r#"dir="$(dirname '{review}')"
+pwd >> "$dir/cwd"
 if [ "$1" = resume ]; then echo "resume $2" >> "$dir/runs"; session=$2; printf '%s' "$3" > "$dir/resumed"
 else echo new >> "$dir/runs"; session="s$(wc -l < "$dir/runs" | tr -d ' ')"; fi
 echo "session id: $session" >&2
@@ -1110,10 +1112,8 @@ cat '{review}'"#;
 
 #[tokio::test]
 async fn later_reviews_resume_the_session_of_the_agent_that_reviewed_last() {
-    let settings =
-        "base = 'codex'\nreview_resume = ['resume', '{session}', '{prompt}', '{schema}']\n";
     let reviewers = [("fake", RESUMER), ("other", RESUMER)];
-    let fixture = fixture_with(&reviewers, "agent = 'fake'", settings).await;
+    let fixture = fixture_with(&reviewers, "agent = 'fake'", RESUMES).await;
     let fixture = &fixture;
     let review = |agent| async move {
         let review = fixture.review_by(&fixture.workspace.id, agent).await;
@@ -1148,6 +1148,48 @@ async fn later_reviews_resume_the_session_of_the_agent_that_reviewed_last() {
             "resume s6"
         ]
     );
+}
+
+/// What makes [`RESUMER`] resume its sessions as Codex does.
+const RESUMES: &str =
+    "base = 'codex'\nreview_resume = ['resume', '{session}', '{prompt}', '{schema}']\n";
+
+#[tokio::test]
+async fn a_review_runs_beside_a_run_that_could_not_be_removed_in_a_new_session() {
+    let fixture = fixture_with(&[("fake", RESUMER)], "agent = 'fake'", RESUMES).await;
+    let manager = &fixture.manager;
+    let review = || async {
+        let review = fixture.review().await;
+        assert_eq!(review.state, ReviewState::Finished, "{review:?}");
+        review
+    };
+    review().await;
+    // A run that could not be removed keeps the workspace's place until a
+    // restart.
+    let kept = ReviewId(999);
+    let run = fixture.left_run(kept);
+    let repository = fixture.workspace.repository_id.clone();
+    (manager.reviews)
+        .hold_checkout(kept, &repository, &run)
+        .keep();
+    let beside = review().await;
+    assert!(run.exists());
+    // Once it is gone, the next review continues the session there.
+    manager.reviews.checkouts.lock().unwrap().remove(&kept);
+    std::fs::remove_dir_all(&run).unwrap();
+    review().await;
+    let root = fixture._root.path();
+    let runs = std::fs::read_to_string(root.join("runs")).unwrap();
+    assert_eq!(
+        runs.lines().collect::<Vec<_>>(),
+        ["new", "new", "resume s1"]
+    );
+    let cwd = std::fs::read_to_string(root.join("cwd")).unwrap();
+    let cwd: Vec<_> = cwd.lines().map(std::path::Path::new).collect();
+    let workspace = fixture.workspace.id.as_str();
+    let elsewhere = std::path::Path::new(&format!("{workspace}-{}", beside.id)).join("checkout");
+    assert!(cwd[1].ends_with(&elsewhere), "{cwd:?}");
+    assert_eq!(cwd[0], cwd[2]);
 }
 
 #[tokio::test]

@@ -1023,8 +1023,9 @@ edits and later commits stay out; no setup runs. Each workspace, and each PR
 reviewed in it, has one place there, so every review of it checks its commit out
 at the same path. The checkout's files are read-only whatever the reviewer's
 settings allow, and Shoal adds no trust entry for it; it is removed when the
-review ends. A checkout that cannot be removed stays until `shoal daemon restart`,
-and the repository cannot be moved or removed until then; one whose reviewer's processes
+review ends. A checkout that cannot be removed stays until `shoal daemon restart`;
+until then, later reviews of its workspace or PR run beside it, each in a new
+session, and the repository cannot be moved or removed; one whose reviewer's processes
 cannot be proven stopped also keeps counting toward the memory and disk that starts need. The daemon reads the workspace's configuration only once its
 worktree verifies as the workspace's. A queued review takes the
 workspace's HEAD when it starts. A workspace has at most one queued or running
