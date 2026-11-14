@@ -659,6 +659,26 @@ pub struct IssueConfig {
     /// to its assignees on the forge.
     #[option(default = true)]
     pub assign: Option<bool>,
+    /// The prefix of the labels that name the areas of the code an issue or
+    /// PR changes, which order the agent queue's new workspaces.
+    pub area_prefix: Option<String>,
+}
+
+impl Issue {
+    /// The areas among `labels`: those with the area prefix, none while it
+    /// is unset.
+    pub fn areas<'a>(&self, labels: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+        let Some(prefix) = &self.area_prefix else {
+            return Vec::new();
+        };
+        let mut areas: Vec<String> = (labels.into_iter())
+            .filter(|label| label.starts_with(prefix.as_str()))
+            .map(String::from)
+            .collect();
+        areas.sort();
+        areas.dedup();
+        areas
+    }
 }
 
 /// The priorities a space takes from the labels of the issues it works on.

@@ -354,3 +354,21 @@ fn the_highest_priority_an_issues_labels_map_to_wins() {
     assert_eq!(priority(&["bug"]), None);
     assert!(parse("[priority.labels]\nurgent = 101\n").is_err());
 }
+
+#[test]
+fn an_issues_areas_are_its_labels_with_the_area_prefix() {
+    use crate::config::options::Options;
+    let issue = |area_prefix: Option<&str>| {
+        let config = IssueConfig {
+            area_prefix: area_prefix.map(String::from),
+            ..IssueConfig::built_in()
+        };
+        config.resolve("issue").unwrap()
+    };
+    let labels = ["area/daemon", "type/feature", "area/cli", "area/daemon"];
+    assert_eq!(
+        issue(Some("area/")).areas(labels),
+        ["area/cli", "area/daemon"]
+    );
+    assert!(issue(None).areas(labels).is_empty());
+}

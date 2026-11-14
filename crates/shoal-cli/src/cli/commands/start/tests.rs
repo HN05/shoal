@@ -205,6 +205,7 @@ fn an_issues_labels_name_its_mode() {
         plan_label: Some("needs-plan".into()),
         planned_label: Some("planned".into()),
         assign: true,
+        area_prefix: None,
     };
     let mode = |labels: &[&str]| {
         let labels: Vec<String> = labels.iter().map(|label| (*label).into()).collect();
