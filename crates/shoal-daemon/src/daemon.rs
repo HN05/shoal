@@ -322,8 +322,11 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     if let Err(error) = startup.step("stopping interrupted gate runs", gate).await {
         log!("{error:#}");
     }
-    let chat_files = manager.rekey_chat_files();
-    if let Err(error) = startup.step("naming chat files", chat_files).await {
+    let chat_files = manager.remove_unowned_chat_files();
+    if let Err(error) = startup
+        .step("deleting ended chats' files", chat_files)
+        .await
+    {
         log!("{error:#}");
     }
     let unmoved = manager.move_unmoved_packages();
