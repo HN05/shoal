@@ -20,6 +20,7 @@ use crate::{
         approvals::{ApprovalRequest, release_decided_by},
         events,
         links::{self, issue::Dropped},
+        notifications::NotificationKind,
         spaces, workspace_files,
     },
     fsutil::off_runtime,
@@ -267,7 +268,8 @@ impl Manager {
             self.signals.notification_recorded(id);
         }
         for warning in self.release_assignees(deleted.assignees).await {
-            crate::daemon::log!("{} removed: {warning}", space.name());
+            let kind = NotificationKind::UnassignFailed;
+            (self.notify_space(space.name(), space.id(), kind, warning)).await;
         }
         Ok(())
     }

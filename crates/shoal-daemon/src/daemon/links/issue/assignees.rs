@@ -7,7 +7,9 @@ use rusqlite::{Connection, OptionalExtension};
 use shoal_states::states;
 
 use crate::{
-    daemon::{links::space::LinkSpace, scope::Caller, workspace::Manager},
+    daemon::{
+        links::space::LinkSpace, notifications::NotificationKind, scope::Caller, workspace::Manager,
+    },
     forge::{
         ForgeRepo,
         account::Account,
@@ -92,7 +94,8 @@ impl Manager {
         if let Some(dropped) = dropped {
             drop(gate);
             for warning in self.release_assignees(vec![dropped]).await {
-                crate::daemon::log!("{warning}");
+                self.notify(None, NotificationKind::UnassignFailed, warning)
+                    .await;
             }
         }
         Ok(Some(assignment))
@@ -107,7 +110,8 @@ impl Manager {
             if let Err(error) = self.release_assignee(&dropped).await {
                 let Dropped { url, login } = dropped;
                 warnings.push(format!(
-                    "{url} keeps its assignee {login}, since unassigning it on the forge failed: {error:#}"
+                    "{url} keeps its assignee {login}, since unassigning it on the forge failed: {error:#}; \
+                     shoal issue edit {url} --remove-assignee {login} takes it off"
                 ));
             }
         }

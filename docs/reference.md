@@ -4612,6 +4612,9 @@ issue's other assignees, or why the forge did not assign it; the link stands
 either way. When a space drops the link, by unlinking it or being removed,
 Shoal takes off the assignee it added once no other space links the issue for
 the same login; an assignee it did not add, and that of a closed issue, stays.
+An assignee the forge refuses to take off comes back as a warning, or after a
+removal as an `unassign_failed` notification, naming the
+`shoal issue edit --remove-assignee` command that takes it off.
 Assigned PRs accumulate without duplicates, and any PR of the repository can be
 assigned whatever its head branch, such as one pushed from the worktree on
 another branch. Assigned items suppress idle cleanup.

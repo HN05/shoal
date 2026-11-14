@@ -10,6 +10,14 @@ use crate::{
 };
 use serde_json::{Value, json};
 
+/// Which assignee edits the scripted forge refuses.
+#[derive(Clone, Copy, PartialEq)]
+enum Refuse {
+    Nothing,
+    Adding,
+    Removing,
+}
+
 /// A Forgejo repository `team/repo` whose open issue 7 starts with the
 /// `assignees` and changes them as edits say, unless it refuses them, where
 /// the user's token signs in as `shoal-user`, and a manager under `config`
@@ -24,10 +32,10 @@ struct Fixture {
 
 impl Fixture {
     async fn new(names: &[&str], assignees: &[&str], config: &str) -> Self {
-        Self::start(names, assignees, config, false).await
+        Self::start(names, assignees, config, Refuse::Nothing).await
     }
 
-    async fn start(names: &[&str], assignees: &[&str], config: &str, refuse: bool) -> Self {
+    async fn start(names: &[&str], assignees: &[&str], config: &str, refuse: Refuse) -> Self {
         let (root, manager) = manager().await;
         let path = repository(root.path(), "repo");
         let repository = manager
@@ -46,15 +54,23 @@ impl Fixture {
                 "GET /api/v1/user" => json!({"login": "shoal-user"}),
                 "GET /api/v1/repos/team/repo/issues/7" => json!({"number": 7,
                     "title": "Bug", "state": "open", "assignees": *assignees.lock().unwrap()}),
-                "PATCH /api/v1/repos/team/repo/issues/7" if refuse => {
-                    return (403, Vec::new(), r#"{"message":"forbidden"}"#.into());
-                }
                 "PATCH /api/v1/repos/team/repo/issues/7" => {
                     let edit: Value = serde_json::from_str(&request.body).unwrap();
                     let edited: Vec<&str> = (edit["assignees"].as_array().unwrap().iter())
                         .map(|login| login.as_str().unwrap())
                         .collect();
-                    *assignees.lock().unwrap() = logins(&edited);
+                    let mut current = assignees.lock().unwrap();
+                    let adds = edited.len() > current.len();
+                    if refuse
+                        == (if adds {
+                            Refuse::Adding
+                        } else {
+                            Refuse::Removing
+                        })
+                    {
+                        return (403, Vec::new(), r#"{"message":"forbidden"}"#.into());
+                    }
+                    *current = logins(&edited);
                     json!({})
                 }
                 _ => return (404, Vec::new(), Vec::new()),
@@ -168,6 +184,27 @@ async fn the_assignee_stays_while_another_space_of_the_login_links_the_issue() {
 }
 
 #[tokio::test]
+async fn an_assignee_a_removal_cannot_take_back_notifies_the_user() {
+    let fixture = Fixture::start(&["fix"], &[], "", Refuse::Removing).await;
+    let workspace = &fixture.workspaces[0];
+    fixture.link(workspace).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    (fixture.manager)
+        .remove_workspace(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    let notifications = fixture.manager.notifications(true, 10).await.unwrap();
+    let kept = (notifications.iter())
+        .find(|notification| notification.kind == NotificationKind::UnassignFailed)
+        .unwrap();
+    assert!(
+        kept.message.contains("--remove-assignee shoal-user"),
+        "{}",
+        kept.message
+    );
+}
+
+#[tokio::test]
 async fn linking_an_issue_others_are_assigned_names_them() {
     let fixture = Fixture::new(&["fix"], &["ann", "bob"], "").await;
     let workspace = &fixture.workspaces[0];
@@ -179,7 +216,7 @@ async fn linking_an_issue_others_are_assigned_names_them() {
 
 #[tokio::test]
 async fn a_refused_assignment_warns_and_keeps_the_link() {
-    let fixture = Fixture::start(&["fix"], &[], "", true).await;
+    let fixture = Fixture::start(&["fix"], &[], "", Refuse::Adding).await;
     let workspace = &fixture.workspaces[0];
     let warnings = fixture.link(workspace).await;
     assert!(warnings[0].contains("forbidden"), "{warnings:?}");
