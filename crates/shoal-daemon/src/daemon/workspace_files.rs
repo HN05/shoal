@@ -497,11 +497,6 @@ impl Manager {
         })
     }
 
-    /// The names of the chats without a repository whose files are kept.
-    pub(crate) async fn outside_files_kept(&self) -> Result<Vec<String>> {
-        self.store.run(|db| records::outside_repositories(db)).await
-    }
-
     /// Hold the gate of the attached files `key` keeps, with where they are
     /// once held: a move of a repository's directory, which holds the gate,
     /// may have finished meanwhile.

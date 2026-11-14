@@ -268,6 +268,22 @@ pub(super) fn record(db: &Connection, removed: &RemovedSpace) -> Result<()> {
     Ok(())
 }
 
+/// Record that the removed chat `id` runs in `root_dir` once restored, as a
+/// root move that took its files there says, when it has a removal record.
+pub(in crate::daemon::workspace) fn rehome_removed_chat(
+    db: &Connection,
+    id: &SpaceId,
+    root_dir: &std::path::Path,
+) -> Result<()> {
+    let Some(mut removed) = find(db, id)? else {
+        return Ok(());
+    };
+    if let RemovedKind::Chat { chat } = &mut removed.kind {
+        chat.root_dir = Some(root_dir.to_owned());
+    }
+    record(db, &removed)
+}
+
 /// How long a restore that started keeps its removal record, checkpoints and
 /// attached files from expiring.
 pub(super) const RESTORE_CLAIM: std::time::Duration = std::time::Duration::from_secs(3600);

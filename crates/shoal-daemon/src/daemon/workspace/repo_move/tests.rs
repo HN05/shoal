@@ -786,9 +786,9 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn a_root_move_waits_for_chats_without_a_repository_and_takes_their_temporary_directories()
--> Result<()> {
+/// A manager whose repository is in `root_dir`, with the running chat
+/// `master` without a repository, and that root.
+async fn with_master() -> Result<(tempfile::TempDir, Arc<Manager>, crate::model::Chat, PathBuf)> {
     let (temp, manager) = test_support::indexed_manager().await;
     let origin = test_support::repository(temp.path(), "origin");
     let repo = manager
@@ -809,82 +809,55 @@ async fn a_root_move_waits_for_chats_without_a_repository_and_takes_their_tempor
     };
     let chat = manager.start_new_chat(None, None, new).await?;
     let chat = manager.run_chat_agent(chat).await?;
-    let error = manager
-        .plan_repository_moves(None, Layout::Excluded)
-        .await
-        .unwrap_err();
-    assert!(format!("{error:#}").contains("master"), "{error:#}");
-    assert!(manager.move_repositories(Layout::Excluded).await.is_err());
+    Ok((temp, manager, chat, root))
+}
 
-    manager.end_executions(&chat.id).await;
-    manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
-        .await?;
-    assert!(root.join(".tmp").is_dir());
-    // A move elsewhere plans while root_dir is still the root it leaves.
-    let elsewhere = fs::canonicalize(temp.path())?.join("elsewhere");
-    manager
-        .plan_repository_moves(Some(&elsewhere), Layout::Regular)
-        .await?;
-    assert!(!root.join(".tmp").exists());
-    // So does a move into the root it links, once a chat's leftover
-    // directory is there again.
+#[tokio::test]
+async fn a_root_move_stops_the_chats_without_a_repository_and_takes_their_files() -> Result<()> {
+    let (_temp, manager, chat, root) = with_master().await?;
+    let tmp = chat.tmp_dir.clone().context("no temporary directory")?;
+    fs::write(tmp.join("notes"), "kept")?;
+    // A directory of no chat, which the move leaves behind.
     (manager.outside_tmp_layout())
         .context("no layout")?
         .prepare(&SpaceId::from("leftover"))?;
+
+    let planned = manager
+        .plan_repository_moves(None, Layout::Excluded)
+        .await?;
+    let stopping: Vec<_> = (planned.executions.iter())
+        .map(|execution| &execution.space_id)
+        .collect();
+    assert_eq!(
+        (planned.chats, stopping),
+        (vec!["master".into()], vec![&chat.id])
+    );
+    assert!(manager.move_repositories(Layout::Excluded).await.is_err());
+    manager.end_executions(&chat.id).await;
     manager.move_repositories(Layout::Excluded).await?;
+
     assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
-    assert!(!root.join(".tmp").exists());
+    let moved = manager.chat_by_id(&chat.id).await?.context("no chat")?;
+    assert_eq!(moved.root_dir.as_deref(), Some(root.as_path()));
+    assert_eq!(fs::read_to_string(tmp.join("notes"))?, "kept");
+    assert!(!root.join(".tmp/leftover").exists());
     Ok(())
 }
 
 #[tokio::test]
-async fn a_root_move_waits_for_the_files_of_removed_chats_without_a_repository() -> Result<()> {
-    let (temp, manager) = test_support::indexed_manager().await;
-    let origin = test_support::repository(temp.path(), "origin");
-    let repo = manager
-        .register_repository(format!("file://{}", origin.display()).into(), None, None)
-        .await?;
-    let root = (repo.workspaces_dir.as_deref())
-        .and_then(Path::parent)
-        .context("no root")?
-        .to_owned();
-    let new = crate::daemon::chats::NewChat {
-        priority: None,
-        narrowing: Default::default(),
-        name: "master".into(),
-        agent: "claude".into(),
-        mode: "orchestrate".into(),
-        origin: None,
-        parent: None,
-    };
-    let chat = manager.start_new_chat(None, None, new).await?;
-    let chat = manager.run_chat_agent(chat).await?;
+async fn a_root_move_takes_the_files_of_removed_chats_without_a_repository() -> Result<()> {
+    let (temp, manager, chat, root) = with_master().await?;
     let report = temp.path().join("report.md");
     fs::write(&report, "Plan")?;
-    manager
-        .add_attached_files(
-            &SpaceSelector::id(&chat.id),
-            vec![report.into()],
-            &Attacher::User,
-        )
-        .await?;
+    let selector = SpaceSelector::id(&chat.id);
+    (manager.add_attached_files(&selector, vec![report.into()], &Attacher::User)).await?;
     manager.end_executions(&chat.id).await;
-    manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
-        .await?;
-    let error = manager
-        .move_repositories(Layout::Excluded)
-        .await
-        .unwrap_err();
-    assert!(format!("{error:#}").contains("master"), "{error:#}");
+    manager.remove_chat(&selector, None).await?;
 
-    manager
-        .remove_attached_files(&SpaceSelector::id(&chat.id), Vec::new(), Vec::new())
-        .await?;
-    assert!(root.join(".attachments").is_dir());
     manager.move_repositories(Layout::Excluded).await?;
+
     assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
-    assert!(!root.join(".attachments").exists());
+    let kept = manager.attached_files(&selector).await?;
+    assert_eq!(fs::read_to_string(&kept[0].path)?, "Plan");
     Ok(())
 }

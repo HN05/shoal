@@ -49,6 +49,10 @@ pub struct RepositoryMoves {
     /// before the move.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub executions: Vec<Execution>,
+    /// The chats without a repository whose files move with the root,
+    /// running, stopped or removed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chats: Vec<crate::space_names::SpaceName>,
 }
 
 /// A repository directory moved into the configured `root_dir`.

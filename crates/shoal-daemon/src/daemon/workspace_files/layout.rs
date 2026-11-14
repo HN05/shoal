@@ -49,6 +49,28 @@ impl Layout {
         self.dir.root()
     }
 
+    /// The directory, when this Shoal created it for its owner.
+    pub(crate) fn own_root(&self) -> Option<&Path> {
+        self.dir.is_own().then(|| self.root())
+    }
+
+    /// The directory of the attached files of the space `id`, when this
+    /// Shoal keeps one there.
+    pub(crate) fn existing(&self, id: &SpaceId) -> Option<PathBuf> {
+        let directory = self.root().join(id);
+        (self.dir.is_own() && directory.is_dir()).then_some(directory)
+    }
+
+    /// The new, empty directory of the attached files of the space `id`,
+    /// creating the marked directory when missing.
+    pub(crate) fn prepare(&self, id: &SpaceId) -> Result<PathBuf> {
+        self.dir.create()?;
+        let directory = self.root().join(id);
+        std::fs::create_dir(&directory)
+            .with_context(|| format!("create {}", directory.display()))?;
+        Ok(directory)
+    }
+
     /// Copies of `files`, attached to `message` for the workspace
     /// `workspace_id`. The same message with the same files reuses its
     /// copies, so sending it again collapses with the unread one.

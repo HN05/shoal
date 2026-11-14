@@ -392,13 +392,3 @@ pub(crate) fn rebase(
     }
     Ok(())
 }
-
-/// The names of the chats without a repository whose files are recorded.
-pub(crate) fn outside_repositories(db: &Connection) -> Result<Vec<String>> {
-    Ok(db
-        .prepare(
-            "SELECT DISTINCT space FROM space_files WHERE repository_id IS NULL ORDER BY space",
-        )?
-        .query_map([], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?)
-}

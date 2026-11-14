@@ -54,11 +54,10 @@ struct Intent {
 
 impl Manager {
     /// The repositories [`Self::move_repositories`] would move into `root`, or
-    /// the configured `root_dir`, in `layout`, and the executions running in
-    /// them, which must stop first, refusing as the move would before
-    /// anything moves or changes. Only the leftovers of chats without a
-    /// repository in the configured root go, which the root being left would
-    /// keep otherwise.
+    /// the configured `root_dir`, in `layout`, the chats without a repository
+    /// whose files it would move there, and the executions running in them,
+    /// which must stop first, refusing as the move would before anything
+    /// moves or changes.
     pub async fn plan_repository_moves(
         &self,
         root: Option<&Path>,
@@ -70,39 +69,46 @@ impl Manager {
         if let Some(root) = root {
             target.path = root.to_owned();
         }
-        self.ensure_root_dir_unused().await?;
-        self.remove_root_dir_leftovers().await?;
         let (plan, repositories) = self
             .movable_repositories(&target, Running::StoppedFirst)
             .await?;
+        let directory = plan.destination()?;
         let mut executions = Vec::new();
         for repo in &repositories {
             executions.extend(self.repository_executions(&repo.id).await?);
         }
+        let chats = self.outside_chats_moving(&target.path, &directory, Running::StoppedFirst);
+        let mut chats = chats.await?;
+        for chat in &mut chats {
+            executions.append(&mut chat.running);
+        }
         Ok(RepositoryMoves {
-            directory: plan.destination()?,
+            directory,
             repositories,
             executions,
+            chats: chats.into_iter().map(|chat| chat.name).collect(),
         })
     }
 
     /// Move every repository directory outside the configured `root_dir` in
-    /// `layout` into it, with the workspaces and clone inside, then link a
-    /// root these moves emptied to the directory Spotlight skips. Each
-    /// repository must be idle; all are checked before the first moves.
+    /// `layout` into it, with the workspaces and clone inside, and the files
+    /// of the chats without a repository, then link a root these moves
+    /// emptied to the directory Spotlight skips. Each repository and chat
+    /// must be idle; all are checked before the first moves.
     pub async fn move_repositories(&self, layout: Layout) -> Result<Vec<MovedRepository>> {
         let _registry = self.gates.lock_registry().await;
         let mut target = self.configured_root()?;
         target.layout = layout;
-        self.ensure_root_dir_unused().await?;
-        self.remove_root_dir_leftovers().await?;
         let (plan, moving) = self.movable_repositories(&target, Running::Refused).await?;
-        plan.apply()?;
         let root = plan.destination()?;
+        let chats = (self.outside_chats_moving(&target.path, &root, Running::Refused)).await?;
+        plan.apply()?;
         let mut moved = Vec::with_capacity(moving.len());
         for repo in moving {
             moved.push(self.move_repository(&repo, &root).await?);
         }
+        let _files = self.gates.lock_outside_message_files().await;
+        (self.move_outside_chats(chats, &target.path, &root)).await?;
         self.root_plan(&target, &self.repositories().await?)
             .await?
             .apply()?;
@@ -111,8 +117,9 @@ impl Manager {
 
     /// What preparing `target` changes and the repositories outside its
     /// destination, after finishing interrupted moves; refused unless every
-    /// one of them can move and a root to link would be empty once they
-    /// have. Callers hold the registry gate.
+    /// one of them can move and a root to link would be empty once they,
+    /// and the files of the chats without a repository, have. Callers hold
+    /// the registry gate.
     async fn movable_repositories(
         &self,
         target: &registry::ConfiguredRoot,
@@ -129,47 +136,26 @@ impl Manager {
         for repo in &moving {
             self.check_movable(repo, running).await?;
         }
-        let directories: Vec<_> = moving
-            .iter()
+        let outside = self.outside_dirs(&target.path);
+        let directories: Vec<_> = (moving.iter())
             .filter_map(|repo| repo.workspaces_dir.as_deref())
+            .chain(outside.iter().map(PathBuf::as_path))
             .collect();
         plan.ensure_linkable(&directories)?;
         Ok((plan, moving))
     }
 
-    /// Refuse while a chat without a repository, which runs in `root_dir` and
-    /// keeps its temporary directory and attached files there, or a file
-    /// such a chat left is recorded. Callers hold the registry gate, which
-    /// recording such a chat takes too.
-    async fn ensure_root_dir_unused(&self) -> Result<()> {
-        let rootless: Vec<_> = (self.chats().await?.into_iter())
-            .filter(|chat| chat.repository_id.is_none())
-            .map(|chat| chat.name.to_string())
-            .collect();
-        ensure!(
-            rootless.is_empty(),
-            "chats without a repository run in root_dir and keep files there; remove {} first",
-            rootless.join(", ")
-        );
-        let kept = self.outside_files_kept().await?;
-        ensure!(
-            kept.is_empty(),
-            "root_dir keeps the files of the removed chats {}; shoal files rm --space <chat> \
-             deletes each one's",
-            kept.join(", ")
-        );
-        Ok(())
-    }
-
-    /// Delete what chats without a repository, none of which is left, kept
-    /// in the configured root: the root a plan moves out of, or the one a
-    /// move links, which must not hold it.
-    async fn remove_root_dir_leftovers(&self) -> Result<()> {
-        if let Some(tmp) = self.outside_tmp_layout() {
-            tokio::task::spawn_blocking(move || tmp.remove()).await??;
-        }
-        let files = self.outside_files_layout(&self.config().root_dir(&self.paths)?);
-        tokio::task::spawn_blocking(move || files.remove()).await?
+    /// The directories in `root` that keep the temporary directories and
+    /// attached files of the chats without a repository, where they are
+    /// this Shoal's, which move with the chats and leave the root.
+    fn outside_dirs(&self, root: &Path) -> Vec<PathBuf> {
+        let owner = self.root_dir_owner();
+        let tmp = crate::tmp_dirs::Layout::outside_repositories(root, &owner);
+        let files = self.outside_files_layout(root);
+        (tmp.own_root().into_iter())
+            .chain(files.own_root())
+            .map(Path::to_owned)
+            .collect()
     }
 
     /// Finish or roll back every move a stopped daemon or failed attempt left.
@@ -753,3 +739,5 @@ fn remove_recorded(path: &Path, identity: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests;
+
+mod outside;

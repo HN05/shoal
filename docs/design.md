@@ -677,7 +677,11 @@ worktree links are repaired, so a stopped daemon finishes a completed move and
 rolls back an incomplete one, deleting only directories with their recorded identity. Checkouts and workspaces outside it stay.
 `move root` stops the commands and agents running there as `shoal stop`
 does and queues the agents' restores after the move, trusting the new paths
-for them: a stop keeps sessions, which resume by ID from any directory. Registration is idempotent by normalized origin URL,
+for them: a stop keeps sessions, which resume by ID from any directory. The
+chats without a repository, which run in `root_dir`, go with the root: their temporary directories and attached files move
+into the directory that holds the repositories, and their records name the
+configured root, which is that directory or links to it, so a root that
+becomes a link is empty once they have moved. Registration is idempotent by normalized origin URL,
 then canonical path, never fetches, and keeps a stable UUID separate from the
 display name. Repository selectors preserve the caller's argument alongside its
 canonical path. IDs and sources win before path lookup; a registered name survives

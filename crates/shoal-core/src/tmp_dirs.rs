@@ -52,6 +52,12 @@ impl Layout {
         self.dir.root()
     }
 
+    /// The directory, when Shoal created it for this repository, or for
+    /// the chats without one.
+    pub fn own_root(&self) -> Option<&Path> {
+        self.dir.is_own().then(|| self.dir.root())
+    }
+
     /// The temporary directory of the workspace or chat `id`, without
     /// creating it.
     pub fn locate(&self, id: &SpaceId) -> PathBuf {

@@ -3075,12 +3075,10 @@ operation, a checkout leased as a repository resource, another repository's
 checkout or workspace or Shoal's state inside its directory, or a process
 other than those commands and agents whose working directory is inside it, so
 leave those directories first. A Git command the daemon itself runs there is
-waited for, for up to a minute, before it counts. A [master session](#master-session) or any
-other chat without a repository, running or stopped, also refuses the move,
-since it runs in `root_dir` and keeps its temporary directory and attached files
-there, and so do the files a removed one left; remove it first and delete those
-files with `shoal files rm --space <chat>`, and the move deletes the `.tmp` and
-`.attachments` left behind. The move is recorded before anything moves; a failed or
+waited for, for up to a minute, before it counts. The temporary directory and attached files of a [master session](#master-session)
+or any other chat without a repository, running, stopped or removed, move with
+the repositories into the new root, where the chat runs from then on, and the move deletes the `.tmp` and
+`.attachments` left in the root they left. The move is recorded before anything moves; a failed or
 interrupted move rolls back, or finishes once the directory has arrived, and the
 repository refuses other changes until the next `move root` or daemon start
 completes it. Agent trust for the old paths is removed, and the new paths are
@@ -3653,7 +3651,7 @@ exports its environment or records the chat, reserving the repository directory
 for a registration without one. It marks `.tmp` with the repository and refuses
 to start the process or chat while an unmarked `.tmp` is in the way. A chat
 without a repository has its directory in the `.tmp` of the `root_dir` it started
-in, where it stays when `root_dir` changes, and the daemon marks that `.tmp` with
+in, where it stays when `root_dir` changes until [`move root`](#move-repositories-to-a-new-root) takes it along, and the daemon marks that `.tmp` with
 its state directory: a daemon with another state directory that
 shares `root_dir` neither uses nor deletes it, and starts no chat without a
 repository there.

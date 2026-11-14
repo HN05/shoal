@@ -131,16 +131,14 @@ fn run_agent(fixture: &Fixture, args: &[&str]) -> Ran {
     })
 }
 
-#[test]
-fn a_master_session_moves_and_continues_its_session_in_root_dir() {
-    // The agent records where it runs and its arguments and reports its
-    // session, then talks until a signal ends it.
+/// A fixture whose chat agent records where it runs and its arguments and
+/// reports its session, then talks until a signal ends it.
+fn session_reporting_fixture() -> Fixture {
     let fixture = Fixture::with_config(Some(
         "[agents.claude]\ncommand = ['sh', '-c', '. \"$HOME/chat-agent.sh\"', 'agent']\n",
     ));
-    let home = fixture.root.path();
     fs::write(
-        home.join("chat-agent.sh"),
+        fixture.root.path().join("chat-agent.sh"),
         format!(
             "pwd -P > \"$HOME/chat-dir\"\n\
              printf %s \"$TMPDIR\" > \"$HOME/chat-tmp\"\n\
@@ -154,17 +152,26 @@ fn a_master_session_moves_and_continues_its_session_in_root_dir() {
         ),
     )
     .unwrap();
-    let start = [
-        "start",
-        "--mode",
-        "orchestrate",
-        "--here",
-        "--agent",
-        "claude",
-        "--name",
-        "master",
-    ];
-    run_agent(&fixture, &start);
+    fixture
+}
+
+/// `shoal start` of the master session `master` in this terminal.
+const START_MASTER: [&str; 8] = [
+    "start",
+    "--mode",
+    "orchestrate",
+    "--here",
+    "--agent",
+    "claude",
+    "--name",
+    "master",
+];
+
+#[test]
+fn a_master_session_moves_and_continues_its_session_in_root_dir() {
+    let fixture = session_reporting_fixture();
+    let home = fixture.root.path();
+    run_agent(&fixture, &START_MASTER);
     let file = home.join("master.shoal");
     let file = file.to_str().unwrap();
 
@@ -190,4 +197,23 @@ fn a_master_session_moves_and_continues_its_session_in_root_dir() {
     );
     let args = fs::read_to_string(home.join("chat-args")).unwrap();
     assert!(args.contains("\n--resume\nmaster-session\n"), "{args}");
+}
+
+#[test]
+fn a_root_move_takes_a_master_session_with_it() {
+    let fixture = session_reporting_fixture();
+    let home = fixture.root.path();
+    let started = run_agent(&fixture, &START_MASTER);
+    fs::write(started.tmp_dir.join("notes"), "kept").unwrap();
+
+    fixture.ok(&["move", "root", "~/moved", "--yes"]);
+
+    let moved = fs::canonicalize(home.join("moved")).unwrap();
+    let resumed = run_agent(&fixture, &["restore", &fixture.id("master"), "--focus"]);
+    assert_eq!(resumed.directory, moved);
+    assert_eq!(
+        fs::read_to_string(resumed.tmp_dir.join("notes")).unwrap(),
+        "kept"
+    );
+    assert!(resumed.tmp_dir.starts_with(&moved));
 }

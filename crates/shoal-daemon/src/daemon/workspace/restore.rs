@@ -456,7 +456,7 @@ mod records;
 
 #[cfg(test)]
 use records::RESTORE_CLAIM;
-pub(super) use records::rekey_converted;
+pub(super) use records::{rehome_removed_chat, rekey_converted};
 
 #[cfg(test)]
 pub(super) mod tests;
