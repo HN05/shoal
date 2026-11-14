@@ -6050,7 +6050,13 @@ fn proposed_issues_keep_their_attachments_until_decided() {
         .as_str()
         .unwrap()
         .to_owned();
-    assert!(kept.contains("/state/proposals/"), "{kept}");
+    // They live in the repository's directory, not Shoal's state.
+    let copies = Path::new(&kept).ancestors().nth(3).unwrap().to_owned();
+    assert!(copies.ends_with(".proposals"), "{kept}");
+    assert!(
+        !copies.starts_with(fixture.root.path().join("state")),
+        "{kept}"
+    );
     assert!(
         proposed["specification"]["issue"]["body"]
             .as_str()
@@ -6086,8 +6092,12 @@ fn proposed_issues_keep_their_attachments_until_decided() {
                 "body": "Before:\n\n![The error](https://github.com/user-attachments/assets/1)\n"}),
         ]
     );
-    let left = fs::read_dir(fixture.root.path().join("state/proposals")).unwrap();
-    assert_eq!(left.count(), 0);
+    let left = fs::read_dir(&copies).unwrap();
+    assert_eq!(
+        left.filter(|entry| entry.as_ref().unwrap().path().is_dir())
+            .count(),
+        0
+    );
 }
 
 #[test]
