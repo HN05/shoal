@@ -37,6 +37,7 @@ pub(crate) struct Gates {
     fetches: Keyed<Mutex<()>>,
     message_files: Keyed<Mutex<()>>,
     forge_hosts: Keyed<Mutex<()>>,
+    issue_assignees: Keyed<Mutex<()>>,
     resources: Keyed<RwLock<()>>,
     prs: Keyed<Mutex<()>>,
     /// Signalled when [`Self::try_lock_prs`] finds a gate held, so a test
@@ -338,6 +339,12 @@ impl Gates {
     /// Hold `host`'s gate, so concurrent first lookups ask a forge host once.
     pub(crate) async fn lock_forge_host(&self, host: &str) -> OwnedMutexGuard<()> {
         self.forge_hosts.gate(host).lock_owned().await
+    }
+
+    /// Hold the gate of the issue `url`'s assignees, so assigning it for one
+    /// space and taking back the assignment another dropped do not overlap.
+    pub(crate) async fn lock_issue_assignees(&self, url: &str) -> OwnedMutexGuard<()> {
+        self.issue_assignees.gate(url).lock_owned().await
     }
 
     /// The gate of `host`, for tests that count who waits on it.

@@ -35,6 +35,14 @@ pub struct Linked {
     pub warnings: Vec<String>,
 }
 
+/// What unlinking items reports beside removing the links: why an issue's
+/// assignee stays on the forge.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Unlinked {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+}
+
 /// Whether a push may go ahead, or waits for the user's approval of the
 /// request recorded for it.
 #[derive(Debug, Clone, Serialize, Deserialize)]

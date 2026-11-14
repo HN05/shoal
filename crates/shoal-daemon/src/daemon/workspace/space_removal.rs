@@ -18,7 +18,9 @@ use crate::{
     daemon::{
         agent_messages,
         approvals::{ApprovalRequest, release_decided_by},
-        events, spaces, workspace_files,
+        events,
+        links::{self, issue::Dropped},
+        spaces, workspace_files,
     },
     fsutil::off_runtime,
     model::{PresentSpace, Workspace},
@@ -249,7 +251,7 @@ impl Manager {
     /// Delete the record of `space`, which `cause` removed, and give the user
     /// what only it kept: the approval requests it had not decided, the
     /// messages it had not read and its attached files, which stay for the
-    /// retention period.
+    /// retention period. The forge assignments only it kept go.
     pub(crate) async fn delete_space_record(
         &self,
         space: &PresentSpace,
@@ -263,6 +265,9 @@ impl Manager {
         self.ask_user_about(&deleted.released).await;
         if let Some(id) = deleted.notification {
             self.signals.notification_recorded(id);
+        }
+        for warning in self.release_assignees(deleted.assignees).await {
+            crate::daemon::log!("{} removed: {warning}", space.name());
         }
         Ok(())
     }
@@ -310,6 +315,8 @@ struct Deleted {
     notification: Option<i64>,
     /// The approval requests the space had not decided.
     released: Vec<ApprovalRequest>,
+    /// The forge assignees the space stood for on its assigned issues.
+    assignees: Vec<Dropped>,
 }
 
 /// Delete the record of the space `id`, which `cause` removed, once the
@@ -333,6 +340,7 @@ fn delete_record(
     workspace_files::keep_removed(tx, id, expires_at)?;
     // With the record, so no request is left with a removed decider.
     let released = release_decided_by(tx, id)?;
+    let assignees = links::issue::removed_assignees(tx, id)?;
     ensure!(
         tx.execute("DELETE FROM space_records WHERE id=?1", [id])? == 1,
         "the space was removed meanwhile"
@@ -340,5 +348,6 @@ fn delete_record(
     Ok(Deleted {
         notification,
         released,
+        assignees,
     })
 }

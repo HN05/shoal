@@ -2377,9 +2377,12 @@ an agent opens is usually follow-up work. Browsing across repositories and revie
 tooling stay with clients.
 An assigned issue shows on the forge as being worked on through its assignees,
 since every forge has them and a label would need one per repository: the link
-path every `assigned` issue link goes through adds the account the space acts
-as. Assigning never refuses or undoes the link: other assignees and forge
-failures come back as warnings.
+and unlink paths every `assigned` issue link goes through, removal among them,
+add the account the space acts as and take it back. Shoal records each
+assignment it made, per issue and login, so it takes back only its own and only
+once no space links the issue for that login; a closed issue keeps its assignee.
+Assigning never refuses or undoes the link: other assignees and forge failures
+come back as warnings.
 
 `shoal pr open` pushes to the branch's push remote, then finds or opens the branch's
 PR and assigns it in one daemon request; a push remote on the origin's forge host

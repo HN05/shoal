@@ -167,9 +167,11 @@ async fn done_renames_and_links_go_through_the_protocol() {
         kind: Some(LinkKind::Issue),
         item: Some("40".parse().unwrap()),
     };
-    connection::request::<()>(&app, unlink()).await.unwrap();
+    connection::request::<crate::client::links::Unlinked>(&app, unlink())
+        .await
+        .unwrap();
     assert_eq!(
-        code(connection::request::<()>(&app, unlink()).await),
+        code(connection::request::<crate::client::links::Unlinked>(&app, unlink()).await),
         ErrorCode::NotFound
     );
 }

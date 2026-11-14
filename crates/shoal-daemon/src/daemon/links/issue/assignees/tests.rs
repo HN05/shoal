@@ -4,7 +4,10 @@ use super::*;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{configure, git, manager, repository};
 use crate::forge::test_support::Server;
-use crate::model::Workspace;
+use crate::{
+    model::Workspace,
+    removal::{InspectionPolicy, UnsavedWork},
+};
 use serde_json::{Value, json};
 
 /// A Forgejo repository `team/repo` whose open issue 7 starts with the
@@ -90,6 +93,11 @@ impl Fixture {
         .unwrap()
     }
 
+    async fn unlink(&self, workspace: &Workspace) -> Vec<String> {
+        let selector = SpaceSelector::id(&workspace.id);
+        self.manager.clear_issue(&selector, None).await.unwrap()
+    }
+
     /// Each set of assignees the forge was asked to change to, in order.
     fn changes(&self) -> Vec<Value> {
         let received = self.server.received();
@@ -117,6 +125,46 @@ async fn linking_assigns_the_account_once() {
     // Linking it again assigns nothing more.
     assert!(fixture.link(workspace).await.is_empty());
     assert_eq!(fixture.changes().len(), 1);
+}
+
+#[tokio::test]
+async fn unlinking_takes_back_the_assignee_shoal_added() {
+    let fixture = Fixture::new(&["fix"], &["ann"], "").await;
+    let workspace = &fixture.workspaces[0];
+    fixture.link(workspace).await;
+    assert!(fixture.unlink(workspace).await.is_empty());
+    assert_eq!(
+        fixture.changes(),
+        [json!(["ann", "shoal-user"]), json!(["ann"])]
+    );
+}
+
+#[tokio::test]
+async fn an_assignee_shoal_did_not_add_stays() {
+    let fixture = Fixture::new(&["fix"], &["shoal-user"], "").await;
+    let workspace = &fixture.workspaces[0];
+    fixture.link(workspace).await;
+    fixture.unlink(workspace).await;
+    assert!(fixture.changes().is_empty());
+}
+
+#[tokio::test]
+async fn the_assignee_stays_while_another_space_of_the_login_links_the_issue() {
+    let fixture = Fixture::new(&["first", "second"], &[], "").await;
+    let [first, second] = &fixture.workspaces[..] else {
+        unreachable!()
+    };
+    fixture.link(first).await;
+    fixture.link(second).await;
+    fixture.unlink(first).await;
+    assert_eq!(fixture.changes(), [json!(["shoal-user"])]);
+    // Removing the last space that links it takes it back.
+    let selector = SpaceSelector::id(&second.id);
+    (fixture.manager)
+        .remove_workspace(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    assert_eq!(fixture.changes(), [json!(["shoal-user"]), json!([])]);
 }
 
 #[tokio::test]
@@ -158,5 +206,6 @@ async fn assigning_off_leaves_assignees_alone() {
     let fixture = Fixture::new(&["fix"], &[], "[issue]\nassign = false\n").await;
     let workspace = &fixture.workspaces[0];
     assert!(fixture.link(workspace).await.is_empty());
+    fixture.unlink(workspace).await;
     assert!(fixture.server.received().is_empty());
 }

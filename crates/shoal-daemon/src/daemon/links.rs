@@ -31,7 +31,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
 
 use crate::{
-    client::links::Linked,
+    client::links::{Linked, Unlinked},
     daemon::{
         events::{self, EventKind},
         links::{pr::Action, space::LinkSpace},
@@ -136,7 +136,7 @@ impl Manager {
         relation: Relation,
         kind: Option<LinkKind>,
         input: Option<&ItemInput>,
-    ) -> Result<()> {
+    ) -> Result<Unlinked> {
         ensure!(
             input.is_none() || kind.is_some(),
             "an item to unlink needs its kind"
@@ -147,9 +147,11 @@ impl Manager {
                 Some(Some(kind)) => Some(kind),
                 Some(None) => bail!("{} linked as {relation}", nothing(kind)),
             };
-            return self.unassign(selector, kind, input).await;
+            let warnings = self.unassign(selector, kind, input).await?;
+            return Ok(Unlinked { warnings });
         }
-        self.forget_items(selector, relation, kind, input).await
+        self.forget_items(selector, relation, kind, input).await?;
+        Ok(Unlinked::default())
     }
 
     /// Record an opened or related run named by number or URL, once the
@@ -261,23 +263,26 @@ impl Manager {
             .await
     }
 
+    /// Unlink the assigned items of `kind`, or the one `input` names,
+    /// returning why an issue's assignee stays on the forge.
     async fn unassign(
         &self,
         selector: &SpaceSelector,
         kind: Option<ItemKind>,
         input: Option<&ItemInput>,
-    ) -> Result<()> {
+    ) -> Result<Vec<String>> {
         if input.is_none() {
             self.require_assigned(selector, kind).await?;
         }
+        let mut warnings = Vec::new();
         if kind != Some(ItemKind::Pr) {
-            self.clear_issue(selector, input).await?;
+            warnings = self.clear_issue(selector, input).await?;
         }
         if kind != Some(ItemKind::Issue) {
             let action = input.map_or(Action::Clear, |url| Action::Unwatch { url: url.clone() });
             self.set_pr(selector, action).await?;
         }
-        Ok(())
+        Ok(warnings)
     }
 
     /// Fail unless an item of `kind` is assigned: an issue, or a PR watch or

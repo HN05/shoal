@@ -47,7 +47,7 @@ pub async fn unlink(
     relation: Relation,
     kind: Option<LinkKind>,
     item: Option<ItemInput>,
-) -> Result<()> {
+) -> Result<crate::links::Unlinked> {
     let method = ItemMethod::UnlinkItems {
         space,
         relation,

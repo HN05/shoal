@@ -24,7 +24,7 @@ use crate::{
         },
     },
 };
-pub(crate) use assignees::Assigner;
+pub(crate) use assignees::{Assigner, Dropped};
 
 /// An open issue a new workspace is assigned.
 #[derive(Debug, Clone)]
@@ -103,11 +103,14 @@ impl Manager {
             .await
     }
 
+    /// Unlink the space's assigned issue `input` names, or every one, and
+    /// take back the forge assignments that only it kept. Returns why an
+    /// assignee stays.
     pub async fn clear_issue(
         &self,
         selector: &SpaceSelector,
         input: Option<&ItemInput>,
-    ) -> Result<()> {
+    ) -> Result<Vec<String>> {
         let id = self.link_space(selector).await?.id().to_owned();
         let _guard = self.gates.lock_prs([&id]).await;
         let space = self.link_space(&SpaceSelector::id(&id)).await?;
@@ -115,11 +118,12 @@ impl Manager {
             Some(input) => Some(self.issue_forge(space.origin_path(), input).await?.1),
             None => None,
         };
-        self.store
+        let dropped = self
+            .store
             .write(move |tx| unlink(tx, &id, selected.as_ref().map(ItemRef::url)))
             .await?;
         self.signals.wake_cleanup();
-        Ok(())
+        Ok(self.release_assignees(dropped).await)
     }
 
     /// The canonical URL, title and labels of the open issue `input` names in the
@@ -201,8 +205,9 @@ fn assign(db: &Connection, id: &SpaceId, url: &str, title: Option<&str>) -> Resu
 }
 
 /// Remove the space's issue `selected` names, which must be assigned, or
-/// else every assigned issue, along with what their links kept.
-fn unlink(db: &Connection, id: &SpaceId, selected: Option<&str>) -> Result<()> {
+/// else every assigned issue, along with what their links kept, returning
+/// the assignees the space stood for.
+fn unlink(db: &Connection, id: &SpaceId, selected: Option<&str>) -> Result<Vec<Dropped>> {
     super::ensure_accepts_links(db, id)?;
     let mut removed = assigned_urls(db, id)?;
     if let Some(url) = selected {
@@ -213,13 +218,20 @@ fn unlink(db: &Connection, id: &SpaceId, selected: Option<&str>) -> Result<()> {
         );
     }
     super::forget_assigned(db, id, ItemKind::Issue, &removed)?;
+    let dropped = assignees::dropped(db, id, &removed)?;
     for url in &removed {
         db.execute(
             "DELETE FROM space_issue WHERE space_id=?1 AND url=?2",
             rusqlite::params![id, url.url()],
         )?;
     }
-    Ok(())
+    Ok(dropped)
+}
+
+/// The assignees the space `id` stands for on every issue it links as
+/// assigned, which its removal drops.
+pub(crate) fn removed_assignees(db: &Connection, id: &SpaceId) -> Result<Vec<Dropped>> {
+    assignees::dropped(db, id, &assigned_urls(db, id)?)
 }
 
 /// The URLs of the space's assigned issues in the order they were assigned.

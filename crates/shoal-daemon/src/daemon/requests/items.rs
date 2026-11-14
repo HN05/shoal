@@ -223,12 +223,11 @@ pub(super) async fn handle(
             relation,
             kind,
             item,
-        } => {
+        } => Body::Unlinked(
             manager
                 .unlink_items(&workspace, relation, kind, item.as_ref())
-                .await?;
-            Body::Ok
-        }
+                .await?,
+        ),
         ItemMethod::SetPr {
             space: workspace,
             action,

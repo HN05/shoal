@@ -219,6 +219,7 @@ response_bodies! {
     ViewPieces(Vec<ViewPiece>),
     Opened(crate::links::OpenOutcome),
     Linked(crate::links::Linked),
+    Unlinked(crate::links::Unlinked),
     Push(crate::links::PushOutcome),
     BranchPush(crate::links::BranchPush),
     Completion(crate::model::Completion),
