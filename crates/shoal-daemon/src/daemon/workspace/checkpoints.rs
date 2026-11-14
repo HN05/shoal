@@ -364,9 +364,9 @@ impl Manager {
             .await
     }
 
-    /// Give a reopened workspace the checkpoints and events of the removed
-    /// one and drop its removal record, at once, so the checkpoints always
-    /// have an owner.
+    /// Give a reopened workspace the checkpoints, events and attached files
+    /// of the removed one and drop its removal record, at once, so the
+    /// checkpoints always have an owner.
     pub(super) async fn adopt_removal(
         &self,
         removed: &RemovedWorkspace,
@@ -377,6 +377,7 @@ impl Manager {
             .write(move |tx| {
                 reassign(tx, &from, &to)?;
                 crate::daemon::events::adopt(tx, &from, &to)?;
+                crate::daemon::workspace_files::restore(tx, &from, &to)?;
                 crate::daemon::events::record(
                     tx,
                     &to,

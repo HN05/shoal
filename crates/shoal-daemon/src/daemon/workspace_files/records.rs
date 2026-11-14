@@ -309,6 +309,34 @@ pub(super) fn forget_expired(db: &mut Connection) -> Result<()> {
     Ok(())
 }
 
+/// Give the workspace `to` that restores the removed workspace `from` the
+/// files `from` kept, which stay where they are, in the transaction that
+/// records the restore.
+pub(crate) fn restore(tx: &Transaction<'_>, from: &SpaceId, to: &SpaceId) -> Result<()> {
+    tx.execute(
+        "UPDATE workspace_files SET space_id=?2,
+            space=(SELECT name FROM spaces WHERE id=?2)
+            WHERE space_id=?1",
+        params![from, to],
+    )?;
+    tx.execute("DELETE FROM removed_space_files WHERE space_id=?1", [from])?;
+    Ok(())
+}
+
+/// Keep the files of the removed space `space_id` until `until` at least,
+/// while a restore of it runs.
+pub(crate) fn claim(
+    tx: &Transaction<'_>,
+    space_id: &SpaceId,
+    until: crate::time::UnixTime,
+) -> Result<()> {
+    tx.execute(
+        "UPDATE removed_space_files SET expires_at=?2 WHERE space_id=?1 AND expires_at < ?2",
+        params![space_id, until],
+    )?;
+    Ok(())
+}
+
 /// Move the records of files whose space was below the space `id`, which
 /// goes, to its own parent.
 fn reparent(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {

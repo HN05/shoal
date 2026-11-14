@@ -197,12 +197,14 @@ impl Layout {
         ]
     }
 
-    /// Delete the files kept for the space `space_id` after it
-    /// is gone.
-    pub(crate) fn remove_kept(&self, space_id: &SpaceId) -> Result<()> {
+    /// Delete the files kept for the space `space_id` after it is gone,
+    /// with the `copies` its records name elsewhere, as a restored workspace
+    /// keeps those of the ID it had before.
+    pub(crate) fn remove_kept(&self, space_id: &SpaceId, copies: &[PathBuf]) -> Result<()> {
         if !self.dir.is_own() {
             return Ok(());
         }
+        copies.iter().try_for_each(|copy| self.delete_copy(copy))?;
         for directory in self.kept(space_id) {
             ensure!(
                 self.contains(&directory),

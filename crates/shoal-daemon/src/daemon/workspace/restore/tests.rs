@@ -353,7 +353,7 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
 }
 
 #[tokio::test]
-async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
+async fn a_started_restore_keeps_expiry_from_its_record_checkpoints_and_files() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
@@ -373,7 +373,7 @@ async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
         )
         .await
         .unwrap();
-    // Both expire before a restore's claim would end.
+    // All expire before a restore's claim would end.
     let id = workspace.id.clone();
     let soon = crate::time::UnixTime::now() + RESTORE_CLAIM / 2;
     manager
@@ -387,6 +387,10 @@ async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
             db.execute(
                 "UPDATE checkpoints SET expires_at=?2, record=json_set(record, '$.expires_at', ?2)
                  WHERE workspace_id=?1",
+                rusqlite::params![id, soon],
+            )?;
+            db.execute(
+                "INSERT INTO removed_space_files(space_id,chat,expires_at) VALUES (?1,0,?2)",
                 rusqlite::params![id, soon],
             )?;
             Ok(())
@@ -404,18 +408,21 @@ async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
     assert_eq!(saved.expires_at, claimed.expires_at);
     assert_eq!(saved.checkpoint.expires_at, claimed.checkpoint.expires_at);
     let id = workspace.id.clone();
-    let checkpoint_expiry: crate::time::UnixTime = manager
+    let (checkpoint_expiry, files_expiry): (crate::time::UnixTime, crate::time::UnixTime) = manager
         .store
         .run(move |db| {
             Ok(db.query_row(
-                "SELECT expires_at FROM checkpoints WHERE workspace_id=?1",
+                "SELECT expires_at,
+                        (SELECT expires_at FROM removed_space_files WHERE space_id=?1)
+                    FROM checkpoints WHERE workspace_id=?1",
                 [id],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )?)
         })
         .await
         .unwrap();
     assert_eq!(checkpoint_expiry, claimed.checkpoint.expires_at);
+    assert!(files_expiry >= floor);
     manager
         .restore_workspace(&manager.named("topic").await)
         .await
@@ -799,4 +806,70 @@ async fn restore_cuts_a_name_an_older_shoal_recorded_to_fit() {
     let name = restored.opened.workspace.name;
     assert_eq!(name, SpaceName::derive(&legacy, "workspace"));
     assert_eq!(name.as_str().chars().count(), 40);
+}
+
+#[tokio::test]
+async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
+    use crate::daemon::workspace_files::Attacher;
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let file = root.path().join("notes.md");
+    fs::write(&file, "notes").unwrap();
+    let added = manager
+        .add_attached_files(
+            &SpaceSelector::id(&workspace.id),
+            vec![file.into()],
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    let [added] = added.as_slice() else {
+        panic!("{added:?}");
+    };
+    manager
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    let restored = manager
+        .restore_workspace(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+    let id = SpaceSelector::id(&restored.opened.workspace.id);
+
+    // They stay where the agent's session saw them, as the workspace's own.
+    manager.expire_results().await.unwrap();
+    let files = manager.attached_files(&id).await.unwrap();
+    let [file] = files.as_slice() else {
+        panic!("{files:?}");
+    };
+    assert_eq!((&file.path, file.expires_at), (&added.path, None));
+    assert!(added.path.exists());
+
+    // Removed again, they expire with it.
+    manager
+        .remove_workspace(&id, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    manager
+        .store
+        .run(|db| {
+            db.execute("UPDATE removed_space_files SET expires_at=0", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.expire_results().await.unwrap();
+    assert!(!added.path.exists());
 }

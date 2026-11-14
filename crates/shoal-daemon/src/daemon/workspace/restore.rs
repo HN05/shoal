@@ -495,12 +495,12 @@ fn record_imported(tx: &rusqlite::Transaction<'_>, mut removed: RemovedWorkspace
     Ok(())
 }
 
-/// How long a restore that started keeps its removal record and checkpoints
-/// from expiring.
+/// How long a restore that started keeps its removal record, checkpoints and
+/// attached files from expiring.
 pub(super) const RESTORE_CLAIM: std::time::Duration = std::time::Duration::from_secs(3600);
 
-/// Find a removal record and keep it and its checkpoints for at least
-/// [`RESTORE_CLAIM`].
+/// Find a removal record and keep it, its checkpoints and its attached files
+/// for at least [`RESTORE_CLAIM`].
 fn claim(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<Option<RemovedWorkspace>> {
     let Some(mut removed) = find(tx, id)? else {
         return Ok(None);
@@ -521,6 +521,7 @@ fn claim(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<Option<RemovedW
          WHERE workspace_id=?1 AND json_extract(record, '$.checkpoint.expires_at') < ?2",
         params![removed.workspace_id, until],
     )?;
+    crate::daemon::workspace_files::claim(tx, &removed.workspace_id, until)?;
     removed.expires_at = removed.expires_at.max(until);
     removed.checkpoint.expires_at = removed.checkpoint.expires_at.max(until);
     Ok(Some(removed))

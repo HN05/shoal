@@ -23,7 +23,9 @@ pub(crate) mod layout;
 mod records;
 mod retention;
 
-pub(crate) use records::{count, ids_at, keep_removed, rebase, record, sent_files, sent_ids};
+pub(crate) use records::{
+    claim, count, ids_at, keep_removed, rebase, record, restore, sent_files, sent_ids,
+};
 
 use layout::{Kept, Layout};
 

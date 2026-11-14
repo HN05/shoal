@@ -493,8 +493,8 @@ shoal done --attach report.md
 `files add` copies files of at most 100 MiB into the space's attached files
 without telling its agents; `PATH#TITLE` gives a title. `files` lists them, and
 `rm` deletes copies. A removed space's files outlive it for the retention
-period; the coordinator, or else the user, reads them with
-`shoal files <space>`.
+period, and `shoal restore` gives them back; the coordinator, or else the user,
+reads them with `shoal files <space>`.
 
 ## Completion
 

@@ -86,7 +86,7 @@ impl Manager {
     }
 
     /// Delete the files kept for the removed workspace or removed chat `space`
-    /// when they are where `holds` says, as on a filesystem low on space,
+    /// when they, or the directories that keep them, are where `holds` says, as on a filesystem low on space,
     /// and return whether it did. The place is checked with the files gate
     /// held, so a move of the repository's directory cannot come between.
     pub(crate) async fn delete_results_in(
@@ -95,8 +95,12 @@ impl Manager {
         holds: impl Fn(&Path) -> bool,
     ) -> Result<bool> {
         let (home, _files) = self.lock_files_home(&self.space_home(space).await?).await?;
-        let there = (home.layout())
-            .is_some_and(|layout| layout.kept(&space.id).iter().any(|path| holds(path)));
+        let copies = self.kept_copies(&space.id).await?;
+        let there = (home.layout()).is_some_and(|layout| {
+            (layout.kept(&space.id).iter())
+                .chain(&copies)
+                .any(|path| holds(path))
+        });
         if there {
             self.delete_kept_files(&home, space.id.clone()).await?;
         }
@@ -108,11 +112,18 @@ impl Manager {
     /// files.
     async fn delete_kept_files(&self, home: &FilesHome, space_id: SpaceId) -> Result<()> {
         if let Some(layout) = home.layout() {
-            let id = space_id.clone();
-            tokio::task::spawn_blocking(move || layout.remove_kept(&id)).await??;
+            let (id, copies) = (space_id.clone(), self.kept_copies(&space_id).await?);
+            tokio::task::spawn_blocking(move || layout.remove_kept(&id, &copies)).await??;
         }
         self.store
             .write(move |tx| records::forget_space(tx, &space_id))
             .await
+    }
+
+    /// The paths of the copies recorded for the removed space `space_id`.
+    async fn kept_copies(&self, space_id: &SpaceId) -> Result<Vec<std::path::PathBuf>> {
+        let id = space_id.clone();
+        let files = self.store.read(move |db| records::list(db, &id)).await?;
+        Ok(files.into_iter().map(|file| file.path).collect())
     }
 }

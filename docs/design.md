@@ -3074,8 +3074,8 @@ a bare number stays an issue, as `shoal start` takes one. A chat owns attached
 files as a workspace does, since its
 agent hands the user reports and pages too. A removed space keeps every
 attached file by one rule, whatever its kind: they stay for the same retention
-as its checkpoints, since an agent's session may refer to any of them and a
-chat has no worktree to clean up, so its files are what remain of it.
+as its checkpoints, since an agent's restored session may refer to any of them
+and a chat has no worktree to clean up, so its files are what remain of it.
 Files are keyed by their owner's ID, which a workspace and a
 chat never share, so no kind tells them apart: an owner is gone when neither
 has the ID, and a record of its own says how long its files stay, apart from
