@@ -546,7 +546,8 @@ async fn a_copy_of_an_earlier_checkpoint_marks_its_sessions_newer() {
     assert_eq!(
         exported.manifest.copy,
         Some(Copied {
-            earlier_files: true
+            earlier_files: true,
+            held_elsewhere: false,
         })
     );
     let restored = import(&manager, &repo, &fs::read(&file).unwrap()).await;

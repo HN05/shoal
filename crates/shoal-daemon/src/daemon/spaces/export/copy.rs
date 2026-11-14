@@ -66,6 +66,7 @@ impl Manager {
         let mut manifest = Manifest::of(&repo, Source::Workspace(copied)).await?;
         manifest.copy = Some(Copied {
             earlier_files: number.is_some(),
+            held_elsewhere: false,
         });
         Ok(Prepared {
             settings: Some(self.workspace_settings(&workspace).await),

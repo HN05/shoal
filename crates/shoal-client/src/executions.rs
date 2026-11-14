@@ -154,6 +154,10 @@ pub struct Copied {
     /// so the conversation describes work they do not contain.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub earlier_files: bool,
+    /// It is no copy: a restored space's agent whose session another space
+    /// holds, which forks it so both go on.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub held_elsewhere: bool,
 }
 
 /// The mode of an agent recorded before modes existed.

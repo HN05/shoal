@@ -119,9 +119,12 @@ pub fn moved_prompt(handoff: Option<&str>) -> String {
 /// of its session there when `forked`, followed by `handoff`; `copied` says
 /// whether the files are older than the conversation.
 pub fn copied_prompt(copied: Copied, forked: bool, handoff: Option<&str>) -> String {
-    let mut prompt = String::from(
-        "Shoal copied this workspace from another onto a branch of its own; the original keeps running with its branch and PRs.",
-    );
+    let mut prompt = String::from(match copied.held_elsewhere {
+        true => "Shoal restored this space while another space holds its agent's session.",
+        false => {
+            "Shoal copied this workspace from another onto a branch of its own; the original keeps running with its branch and PRs."
+        }
+    });
     prompt.push_str(if forked {
         " This conversation is a fork of its agent's, which continues there separately."
     } else {
@@ -879,6 +882,27 @@ pub fn reported_session(
         .ok()
         .filter(|session| valid_session(session))
         .map(AgentSessionId::from)
+}
+
+/// The agent sessions the space keeps: those its running agents reported,
+/// and those of its stopped agents and last sessions. A record that cannot
+/// be read holds none.
+pub fn held_sessions(paths: &Paths, space_id: &SpaceId) -> Vec<AgentSessionId> {
+    let mut held = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(paths.space_state(space_id)) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            if let Some(id) = name.to_string_lossy().strip_suffix(SESSION_SUFFIX) {
+                let id = ExecutionId::from(id.to_owned());
+                held.extend(reported_session(paths, space_id, &id));
+            }
+        }
+    }
+    let stopped = stopped_agents(paths, space_id).unwrap_or_default();
+    held.extend(stopped.into_iter().filter_map(|agent| agent.record.session));
+    let last = LastSession::all(paths, space_id).unwrap_or_default();
+    held.extend(last.into_iter().filter_map(|last| last.session));
+    held
 }
 
 /// Forget the session of an execution that has ended.

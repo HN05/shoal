@@ -597,6 +597,7 @@ fn copied_records_keep_their_mark_where_they_move() {
     let copied = Record {
         copied: Some(Copied {
             earlier_files: true,
+            held_elsewhere: false,
         }),
         ..record
     };
@@ -617,6 +618,7 @@ fn copied_agents_are_told_the_workspace_is_a_copy() {
     let earlier = copied_prompt(
         Copied {
             earlier_files: true,
+            held_elsewhere: false,
         },
         false,
         None,

@@ -1112,3 +1112,49 @@ async fn a_restored_workspace_goes_below_its_parent_while_that_exists() {
     assert_eq!(removed.len(), 1);
     assert_eq!(removed[0].space_id, parent.id);
 }
+
+#[tokio::test]
+async fn a_restored_agent_forks_the_session_another_space_holds() {
+    use crate::paths::StateFiles;
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let state = manager.paths.space_state(&workspace.id);
+    fs::create_dir_all(&state).unwrap();
+    fs::write(
+        state.join("saved.recovery.json"),
+        r#"{"agent":"claude","stage":"stopped","session":"s1"}"#,
+    )
+    .unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.remove_workspace(&selector, UnsavedWork::All, InspectionPolicy::GitOnly))
+        .await
+        .unwrap();
+    // A chat here continues the same session meanwhile.
+    let chat =
+        crate::daemon::test_support::chat(&manager, "holder", "chat", Some(&repo), None).await;
+    (manager.record_chat_session(&chat.id, "s1".into()))
+        .await
+        .unwrap();
+
+    let restored = manager.restore_workspace(&selector).await.unwrap();
+    assert_eq!(restored.warnings.len(), 1, "{:?}", restored.warnings);
+    assert!(restored.warnings[0].contains("holder"));
+    let agents = crate::execution::recovery::stopped_agents(&manager.paths, &workspace.id).unwrap();
+    let [agent] = agents.as_slice() else {
+        panic!("{agents:?}");
+    };
+    assert!(
+        agent
+            .record
+            .copied
+            .is_some_and(|copied| copied.held_elsewhere)
+    );
+}

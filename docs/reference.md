@@ -3769,7 +3769,10 @@ chat, under a new ID, with its checkpoints. Once its post-setup hook succeeds, i
 sessions as it restores a stopped space's, queued unless `--now` or `--focus`, under
 `--permission`; one it cannot restore is reported and stays saved, and the workspace
 stays open. `--no-agents` keeps them saved for a later `shoal restore`, keeping the
-workspace from idle cleanup as stopped work does, and `--forget` forgets them. It refuses when another
+workspace from idle cleanup as stopped work does, and `--forget` forgets them.
+An agent whose session another space here holds, running or stopped, starts
+from a fork of it, as a [copy](#copies)'s does, with a warning naming that
+space; this holds for a chat's restore too. It refuses when another
 workspace uses the branch, when the branch no longer contains the removed HEAD,
 or when it moved past HEAD while unsaved files would have to be applied to it;
 the error names the commit to recover by hand. Scoped processes reopen removed workspaces as their space's

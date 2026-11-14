@@ -428,6 +428,7 @@ fn a_session_with_an_unreadable_file_is_left_out_with_a_warning() {
 fn a_copy_forks_its_agents_sessions_in_no_place_of_the_original() {
     let copied = Copied {
         earlier_files: true,
+        held_elsewhere: false,
     };
     let manifest = Manifest {
         copy: Some(copied),

@@ -1,9 +1,12 @@
 //! Restoring a removed space from its removal record: a workspace opens
 //! again here, a chat in the module below.
+use crate::client::agent::AgentSessionId;
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
+use crate::execution::recovery::{Copied, LastSession, StoppedAgent};
 use shoal_refs::{BranchName, CommitId};
+use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -130,9 +133,11 @@ impl Manager {
     }
 
     /// Save for the agents of the space `id` that restores `removed` what
-    /// its record keeps of them: their stopped agents and last sessions, and
-    /// the session files an import carried, which it returns for the caller
-    /// to put in place. Each that fails adds a warning to `warnings`.
+    /// its record keeps of them: their stopped agents and last sessions, an
+    /// agent whose session another space here holds to start from a fork of
+    /// it, as a copy's does, and the session files an import carried, which
+    /// it returns for the caller to put in place. Each fork and each failure
+    /// adds a warning to `warnings`.
     pub(super) async fn restore_agents(
         &self,
         removed: &RemovedSpace,
@@ -145,14 +150,14 @@ impl Manager {
                 warnings.push(format!("cannot keep the agents' session files: {error:#}"));
                 Vec::new()
             });
-        let saved =
-            crate::execution::recovery::save_stopped_agents(&self.paths, id, &removed.agents);
+        let (agents, last_sessions) = self.forking_held_sessions(removed, id, warnings).await;
+        let saved = crate::execution::recovery::save_stopped_agents(&self.paths, id, &agents);
         if let Err(error) = saved {
             warnings.push(format!(
                 "cannot save stopped agents for shoal restore: {error:#}"
             ));
         }
-        for last in &removed.last_sessions {
+        for last in &last_sessions {
             if let Err(error) = last.write(&self.paths, id) {
                 warnings.push(format!(
                     "cannot save the last {} session for shoal restore: {error:#}",
@@ -161,6 +166,66 @@ impl Manager {
             }
         }
         session_files
+    }
+
+    /// The stopped agents and last sessions of `removed`, which the space
+    /// `id` restores, each whose session another space here holds marked to
+    /// start from a fork of it, with a warning in `warnings` naming that
+    /// space.
+    async fn forking_held_sessions(
+        &self,
+        removed: &RemovedSpace,
+        id: &SpaceId,
+        warnings: &mut Vec<String>,
+    ) -> (Vec<StoppedAgent>, Vec<LastSession>) {
+        let held = (self.sessions_held_elsewhere(id).await).unwrap_or_else(|error| {
+            warnings.push(format!(
+                "cannot read the sessions other spaces hold: {error:#}"
+            ));
+            HashMap::new()
+        });
+        let mut agents = removed.agents.clone();
+        for agent in &mut agents {
+            let record = &mut agent.record;
+            if let Some(holder) = (record.session.as_ref()).and_then(|session| held.get(session)) {
+                record.copied.get_or_insert(HELD_ELSEWHERE);
+                warnings.push(forked(&record.agent, holder));
+            }
+        }
+        let mut last_sessions = removed.last_sessions.clone();
+        for last in &mut last_sessions {
+            if let Some(holder) = (last.session.as_ref()).and_then(|session| held.get(session)) {
+                last.copied.get_or_insert(HELD_ELSEWHERE);
+                warnings.push(forked(&last.agent, holder));
+            }
+        }
+        (agents, last_sessions)
+    }
+
+    /// The agent sessions the spaces here other than `id` hold, running or
+    /// stopped, each with the name of a space that holds it.
+    async fn sessions_held_elsewhere(
+        &self,
+        id: &SpaceId,
+    ) -> Result<HashMap<AgentSessionId, SpaceName>> {
+        let workspaces = self.list_workspaces().await?;
+        let chats = self.chats().await?;
+        let spaces = (workspaces
+            .iter()
+            .map(|workspace| (&workspace.id, &workspace.name, None)))
+        .chain(
+            chats
+                .iter()
+                .map(|chat| (&chat.id, &chat.name, chat.session.as_ref())),
+        );
+        let mut held = HashMap::new();
+        for (space, name, session) in spaces.filter(|(space, ..)| *space != id) {
+            let sessions = crate::execution::recovery::held_sessions(&self.paths, space);
+            for session in sessions.into_iter().chain(session.cloned()) {
+                held.entry(session).or_insert_with(|| name.clone());
+            }
+        }
+        Ok(held)
     }
 
     /// The space the restore of `removed` opens it below: its recorded
@@ -304,6 +369,19 @@ impl Manager {
         .is_ok();
         Ok((exists.then(|| commit.clone())).map(String::from))
     }
+}
+
+/// How a restored agent whose session another space holds starts: from a
+/// fork of it, as a copy's does.
+const HELD_ELSEWHERE: Copied = Copied {
+    earlier_files: false,
+    held_elsewhere: true,
+};
+
+/// The warning that `agent` continues from a fork of its session, which
+/// the space `holder` holds too.
+fn forked(agent: &crate::agent::Agent, holder: &SpaceName) -> String {
+    format!("the {agent} session continues from a fork, since {holder} holds it too")
 }
 
 /// The unsaved files of a removal's checkpoint, written into the new worktree.
