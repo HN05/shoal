@@ -95,8 +95,8 @@ pub(super) async fn register(
             .await
             .map_err(refused)?;
     }
-    // The user attends a chat, whose agent starts at once.
-    let admitted = match tracks_agent && !target.space_kind().attended() {
+    // Only a workspace's agent may meet a conversion in progress.
+    let admitted = match tracks_agent && target.worktree().is_some() {
         true => Some(manager.admit_agent(&space).await.map_err(refused)?),
         false => None,
     };

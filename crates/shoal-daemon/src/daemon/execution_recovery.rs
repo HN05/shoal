@@ -230,10 +230,7 @@ async fn admit_restore(
     workspace_id: &SpaceId,
     hold: &mut Option<OwnedRwLockReadGuard<()>>,
 ) -> Result<Grant> {
-    if !manager
-        .restore_waits_for_update(workspace_id, execution_id)
-        .await
-    {
+    if !manager.restore_waits_for_update(workspace_id, execution_id) {
         return manager
             .admit_agent_restore(execution_id, workspace_id)
             .await;

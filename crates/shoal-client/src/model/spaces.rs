@@ -30,13 +30,6 @@ impl SpaceKind {
     pub fn has_worktree(self) -> bool {
         matches!(self, Self::Workspace)
     }
-
-    /// Whether the user attends a space of the kind's agent, as a chat's,
-    /// which therefore starts at once and never stops to free capacity,
-    /// unlike an unattended workspace agent.
-    pub fn attended(self) -> bool {
-        matches!(self, Self::Chat)
-    }
 }
 
 /// Something a space links or a workspace holds, for finding that space.
