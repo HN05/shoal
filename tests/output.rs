@@ -81,7 +81,7 @@ fn run_with_replies(
     {
         let _ = child.kill();
         let _ = child.wait();
-        panic!("output command stalled: {transcript:?}");
+        panic!("output command stalled:\n{transcript}");
     }
     let output = child.wait_with_output().unwrap();
     if let Some(server) = server {
@@ -407,13 +407,13 @@ fn shoal_output_json_refuses_to_prompt_on_a_terminal() {
     {
         let _ = child.kill();
         let _ = child.wait();
-        panic!("removal prompted: {transcript:?}");
+        panic!("removal prompted:\n{transcript}");
     }
     let output = child.wait_with_output().unwrap();
     server.join().unwrap();
     drain(&mut master, &mut transcript);
     drop(slave);
-    assert_eq!(output.status.code(), Some(1), "{transcript:?}");
+    assert_eq!(output.status.code(), Some(1), "{transcript}");
     assert!(output.stdout.is_empty());
     let error: serde_json::Value = serde_json::from_str(transcript.trim()).unwrap();
     assert_eq!(error["error"]["code"], "command_failed");

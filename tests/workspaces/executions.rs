@@ -118,7 +118,7 @@ finally:
             let _ = child.kill();
             let _ = master.read_to_string(&mut transcript);
             let _ = child.wait();
-            panic!("terminal driver hung: {mode} {term:?}: {transcript:?}");
+            panic!("terminal driver hung: {mode} {term:?}:\n{transcript}");
         }
         let output = child.wait_with_output().unwrap();
         assert!(

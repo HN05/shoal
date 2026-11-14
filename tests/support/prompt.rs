@@ -64,7 +64,10 @@ pub fn answer(command: &mut Command, answer: &str, options: AnswerOptions) -> (O
             let _ = child.kill();
             let _ = child.wait();
         }
-        panic!("hung after writing the answer ({written:?}): {transcript:?}");
+        panic!(
+            "hung after writing the answer ({written:?}):\n{}",
+            String::from_utf8_lossy(&transcript)
+        );
     });
     // Keep the slave open while draining: macOS can discard unread data on close.
     let _ = master.read_to_end(&mut transcript);
