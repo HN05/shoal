@@ -213,7 +213,12 @@ impl Action {
         Self::Edit(Box::new(edit))
     }
 
-    /// The action's name, which errors and the log show; a review's is its
+    /// The action as an error names it, such as "request changes".
+    pub fn verb(&self) -> String {
+        self.name().replace('_', " ")
+    }
+
+    /// The action's name, which the log records; a review's is its
     /// verdict's, so the log tells an approval from a comment.
     pub fn name(&self) -> &'static str {
         match self {
