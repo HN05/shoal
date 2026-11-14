@@ -960,7 +960,8 @@ workspace or chat, approves what a permission governs where its own
 permission for it is `direct`, anything else only where it holds an approved
 grant for it, and a hold on its child, and otherwise denies or passes the
 request up, unless its `decide` permission lets it decide any request below
-as the user would; the user
+as the user would, a request a permission governs still only where it holds
+that permission at `direct`; the user
 decides at the top, and a chat whose agent stops or a
 deciding space that is removed hands the user what it had not decided, since
 neither can decide any more. A space lists the requests it decides beside its
@@ -2929,7 +2930,9 @@ the action becomes an approval request bound to what it does, which lets
 the same action proceed once, so an approval never covers a later, different
 action. Deciding is a key of its own, `decide`, so a master session
 decides what reached a space between it and the requester, grants
-included, as the user would, but never its own requests. The daemon checks
+included, as the user would, but never its own requests, and approves an
+action only where it holds that action's key at `"direct"`, so a key it
+proposes never passes through a child it starts. The daemon checks
 every request it receives, so a protocol client cannot step around the CLI;
 the CLI asks the daemon before what a command does itself, such as writing
 the config, so the two never disagree. A command sends several requests, so

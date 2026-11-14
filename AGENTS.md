@@ -253,7 +253,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   only unscoped callers approve or deny, except that a request from a space
   with an agent goes to the nearest space above it with an agent, of either
   kind, and a space whose `decide` permission is `direct` decides any request
-  of a space below it as the user would. The space a request goes to decides
+  of a space below it as the user would, but approves one a permission
+  governs only where its own value for it is `direct`. The space a request goes to decides
   it or passes it up, the next such space above and the user at the top. For a
   request a permission governs, a parent space whose own effective
   permission for it is `direct` decides it as the user would, editing a

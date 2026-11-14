@@ -5976,7 +5976,8 @@ none. Otherwise `--approve` is refused, citing the permission or the missing
 grant, and it denies or passes the request up. A space whose `decide`
 [permission](#permitted-actions) is `"direct"` decides any request of a
 space below it as you would, routed to it or not, and with or without a
-grant. A push a parent approves runs
+grant, but approves one a permission governs only where its own value for
+it is `"direct"`. A push a parent approves runs
 in the daemon's environment. When a chat's agent stops,
 or a space deciding a request is removed, such as below an issue
 proposal that outlives its workspace, the requests it had not decided go to

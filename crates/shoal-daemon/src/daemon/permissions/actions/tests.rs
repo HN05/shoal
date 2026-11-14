@@ -233,6 +233,8 @@ async fn reading_the_user_s_notifications_follows_the_notifications_permission()
 #[tokio::test]
 async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
     let (_temp, manager) = manager().await;
+    let config = "[modes.chat.permissions]\ndaemon = 'propose'\n";
+    crate::daemon::test_support::configure(&manager, config).await;
     let master = chat(&manager, "master", "orchestrate", None, None).await;
     let lead = chat(&manager, "lead", "chat", None, Some(&master.id)).await;
     let worker = chat(&manager, "worker", "chat", None, Some(&lead.id)).await;
@@ -269,6 +271,34 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
     (manager.authorize_action(Some(&caller(&worker.id)), setup()))
         .await
         .unwrap();
+
+    // A key it only proposes stays the user's to approve, below it too,
+    // though it may deny.
+    let restart = || Action::new(PermissionKey::Daemon, "shoal daemon restart");
+    let below = undecided(
+        manager
+            .authorize_action(Some(&caller(&worker.id)), restart())
+            .await,
+    );
+    let approving = manager.decide_approval_as(
+        Some(&mastering),
+        below.number,
+        true,
+        None,
+        Default::default(),
+        None,
+    );
+    let refused = format!("{:#}", approving.await.unwrap_err());
+    assert!(refused.contains("daemon"), "{refused}");
+    let denied = manager.decide_approval_as(
+        Some(&mastering),
+        below.number,
+        false,
+        None,
+        Default::default(),
+        None,
+    );
+    assert_eq!(denied.await.unwrap().status, DecisionStatus::Denied);
 
     // Its own requests stay another's to decide.
     let own = Action::new(PermissionKey::Daemon, "shoal daemon restart");

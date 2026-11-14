@@ -300,7 +300,8 @@ instead of the PR delivery guidance below.
   for the same target and settings and otherwise denies or passes it up, as a
   chat does. Requests a permission governs take the decider's own permission instead of a
   grant, and a space whose `decide` permission is `direct` decides any request of a space below
-  it as the user does. That decision, which queues an agent message for the requester; failing to queue it
+  it as the user does, approving one a permission governs only where it holds that permission at
+  `direct` too, so a key it only proposes never passes through a child. That decision, which queues an agent message for the requester; failing to queue it
   never fails the decision. Pending requests reserve nothing; grant lifetime follows configuration
   and approval never bypasses capacity or simulator cleanup rules. Approval lookups
   validate their selected ID or active workspace/target/name record; grant reuse

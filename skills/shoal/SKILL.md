@@ -174,7 +174,8 @@ for it is `direct`, taking `--title` and `--body`
 for a proposal as the user's approval does; and for anything else only where
 the coordinator holds an approved grant for it. Otherwise it is refused,
 unless the coordinator's `decide` permission is `direct`, which decides any
-request of a space below as the user does, routed to it or not.
+request of a space below as the user does, routed to it or not, but approves
+one a permission governs only where its own value for it is `direct`.
 `--deny <S.N>` denies it, with `--reason`, or for an issue proposal
 `--duplicate-of` or `--duplicate-of-approval`, and `--escalate <S.N>` passes it
 to the space above or the user.

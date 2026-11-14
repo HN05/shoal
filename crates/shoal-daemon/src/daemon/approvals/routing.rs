@@ -176,9 +176,10 @@ fn decide_and_place(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<De
 impl Manager {
     /// Decide request `number` as `caller`: a scoped process whose `decide`
     /// permission is `direct` decides a request of a space below its own as
-    /// the user does, in the daemon's environment; any other decides only
-    /// what was routed to its space, as [`Self::decide_routed_approval`]
-    /// allows.
+    /// the user does, in the daemon's environment, though one a permission
+    /// governs only where it holds that permission at `direct` too; any
+    /// other decides only what was routed to its space, as
+    /// [`Self::decide_routed_approval`] allows.
     pub(in crate::daemon) async fn decide_approval_as(
         &self,
         caller: Option<&Caller>,
@@ -191,6 +192,8 @@ impl Manager {
         let request = self.show_approval(number).await?;
         match caller {
             Some(caller) if self.decides_as_user(caller, &request).await? => {
+                let needed = needed(&request, approve, &details);
+                (self.ensure_permitted(&caller.space_id, &request, &needed)).await?;
                 self.decide_approval(number, approve, shown, details, None)
                     .await
             }
