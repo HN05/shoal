@@ -4,7 +4,7 @@
 //! The user takes every one.
 use crate::client::{repository_ids::RepositoryId, scope_tokens::ScopeToken};
 use crate::daemon::approvals::ApprovalRequestExt;
-use anyhow::{Result, bail};
+use anyhow::Result;
 use std::{
     collections::HashMap,
     sync::{Mutex, PoisonError},
@@ -12,7 +12,7 @@ use std::{
 };
 
 use crate::{
-    config::permissions::{Acting, PermissionKey},
+    config::permissions::{Acting, PermissionKey, Permissions},
     daemon::{
         approvals::{
             ActionSpecification, ApprovalRequest, Lifetime, Specification, Target, Undecided,
@@ -179,6 +179,22 @@ impl Manager {
         )
     }
 
+    /// Refuse `caller` the actions `key` governs in `repository` where its
+    /// space's permission is `deny`, before the work that names one, such
+    /// as reading what approving it binds.
+    pub(crate) async fn refuse_denied(
+        &self,
+        caller: &Caller,
+        key: PermissionKey,
+        repository: Option<&RepositoryId>,
+    ) -> Result<()> {
+        let permissions = self.space_permissions(&caller.space_id, repository).await?;
+        match permissions.acting(key) {
+            Acting::Deny => Err(denied(key.as_str(), &permissions, key)),
+            Acting::Propose | Acting::Direct => Ok(()),
+        }
+    }
+
     /// Refuse `caller` `action` as a check before taking it, which a
     /// request of its own takes: as [`Self::authorize_action`] does, but an
     /// approval stays for that request to use up.
@@ -204,11 +220,7 @@ impl Manager {
             .await?;
         match permissions.acting(action.key) {
             Acting::Direct => Ok(Taken::AtOnce),
-            Acting::Deny => bail!(
-                "{}: {}; ask the user to run it",
-                action.action,
-                permissions.cited(action.key)
-            ),
+            Acting::Deny => Err(denied(&action.action, &permissions, action.key)),
             Acting::Propose if caller.granted == Some(action.key) => Ok(Taken::AtOnce),
             Acting::Propose => self.await_action_decision(caller, action, using).await,
         }
@@ -236,6 +248,14 @@ impl Manager {
             None => Ok(Taken::Approved),
         }
     }
+}
+
+/// The refusal of `action`, which `key` governs and `permissions` deny.
+fn denied(action: &str, permissions: &Permissions, key: PermissionKey) -> anyhow::Error {
+    anyhow::anyhow!(
+        "{action}: {}; ask the user to run it",
+        permissions.cited(key)
+    )
 }
 
 /// Whether taking an action uses up the approval that lets it.
