@@ -21,7 +21,8 @@ use crate::{
 };
 
 /// Start the chat whose resolved start the daemon writes to standard input,
-/// reporting it on standard output.
+/// reporting it on standard output. Its agent takes the slot of the queue
+/// entry the daemon passed down, if any.
 pub async fn run(paths: &CommandPaths) -> Result<i32> {
     let start: ChatStart =
         serde_json::from_reader(std::io::stdin().lock()).context("read the chat's start")?;
@@ -36,6 +37,20 @@ pub async fn run(paths: &CommandPaths) -> Result<i32> {
     let chat = chat.start_in_background(paths, handoff).await?;
     outln!("{}", crate::client::output::json(&chat)?);
     Ok(0)
+}
+
+/// Start the chat of an admitted launch whose resolved `start` waited in
+/// the queue, in its chat the daemon recorded meanwhile, as the user would.
+pub(crate) async fn start_queued(paths: &CommandPaths, start: &ChatStart) -> Result<()> {
+    let chat = NewChat::resolve(paths, start).await?;
+    let handoff = Handoff::create(None)?;
+    handoff.hand_start(start)?;
+    if chat.runs_its_own_way() {
+        let code = run_worker(paths, &handoff).await?;
+        anyhow::ensure!(code == 0, "the chat's start failed ({code})");
+        return Ok(());
+    }
+    chat.start_in_background(paths, handoff).await.map(drop)
 }
 
 /// A chat the daemon resolved, with where it runs and the settings it
@@ -141,7 +156,11 @@ async fn home(paths: &CommandPaths, start: &ChatStart) -> Result<(Option<Reposit
 /// one's, returning its exit status.
 async fn run_worker(paths: &CommandPaths, handoff: &Handoff) -> Result<i32> {
     let argv = internal_command(paths, true, chat_worker(handoff))?;
-    let status = tokio::process::Command::new(&argv[0])
+    let mut command = tokio::process::Command::new(&argv[0]);
+    if let Some(entry) = crate::env::queue_entry() {
+        command.env(crate::env::QUEUE_ENTRY, entry.as_str());
+    }
+    let status = command
         .args(&argv[1..])
         .stdin(Stdio::null())
         .status()

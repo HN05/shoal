@@ -25,13 +25,24 @@ pub struct RemovedChat {
     pub children: Vec<SpaceName>,
 }
 
+/// A new chat recorded at once whose agent waits in the agent queue.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct QueuedChat {
+    pub chat: crate::model::Chat,
+    pub entry: crate::model::QueueEntry,
+    /// Entries waiting, this one included.
+    pub waiting: usize,
+}
+
 /// A new chat the daemon started for a client: in a background place, or
-/// in an app that runs its agent detached.
+/// in an app that runs its agent detached, or recorded with its agent
+/// queued.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum StartedChat {
+    Queued(Box<QueuedChat>),
     Background(BackgroundChat),
     Detached(Box<crate::output::agents::DetachedChat>),
 }
 
-outputs!(BackgroundChat, RemovedChat, StartedChat);
+outputs!(BackgroundChat, QueuedChat, RemovedChat, StartedChat);

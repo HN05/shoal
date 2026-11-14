@@ -18,9 +18,14 @@ use crate::{
     workers::{Worker, internal_command},
 };
 
-/// Start the add worker for the admitted launch `entry`.
+/// Start the admitted launch `entry`: a chat's in its place, else a new
+/// workspace's add worker.
 pub(super) async fn start(paths: &CommandPaths, entry: &QueueEntryId) -> Result<()> {
-    let (queued, plan) = plan(paths, entry).await?;
+    let queued = queue::plan(paths, entry.clone()).await?;
+    if let Some(chat) = super::chat::ChatPlan::of(&queued.plan) {
+        return super::chat::start(paths, entry, chat).await;
+    }
+    let (queued, plan) = add_plan(paths, entry, queued).await?;
     let QueueEntry { opens, name, .. } = &queued.entry;
     // Nothing reads this worker's output.
     start_admitted(paths, plan, opens.as_ref(), name, false).await
@@ -55,6 +60,15 @@ pub async fn start_admitted(
 /// existing workspace it was queued for.
 pub async fn plan(paths: &CommandPaths, entry: &QueueEntryId) -> Result<(QueuedPlan, AddPlan)> {
     let queued = queue::plan(paths, entry.clone()).await?;
+    add_plan(paths, entry, queued).await
+}
+
+/// [`plan`] of the starting launch `entry` from the plan `queued` with it.
+async fn add_plan(
+    paths: &CommandPaths,
+    entry: &QueueEntryId,
+    queued: QueuedPlan,
+) -> Result<(QueuedPlan, AddPlan)> {
     let mut plan: AddPlan = serde_json::from_str(&queued.plan)?;
     plan.queue_entry = Some(entry.clone());
     if let Some(workspace) = &queued.entry.opens {

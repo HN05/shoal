@@ -144,11 +144,15 @@ pub fn place_env(paths: &CommandPaths) -> Result<Vec<(&'static str, String)>> {
 }
 
 /// The variables a chat in a place Shoal opens for it needs: those of
-/// [`place_env`], and the mark that tells the chat the place is its own, which
-/// it records so its removal closes the place.
+/// [`place_env`], the mark that tells the chat the place is its own, which
+/// it records so its removal closes the place, and the queue entry whose
+/// slot this process's agent takes, which the chat's agent takes instead.
 pub fn chat_place_env(paths: &CommandPaths) -> Result<Vec<(&'static str, String)>> {
     let mut env = place_env(paths)?;
     env.push((env::OPENED_CHAT_PLACE, "1".to_owned()));
+    if let Some(entry) = env::queue_entry() {
+        env.push((env::QUEUE_ENTRY, entry.to_string()));
+    }
     Ok(env)
 }
 

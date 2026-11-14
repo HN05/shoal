@@ -11,7 +11,7 @@ use crate::{
         commands::chat::{Narrowing, Relaunch, Topic},
         context::Context,
     },
-    client::output::chat::StartedChat,
+    client::output::chat::{QueuedChat, StartedChat},
     protocol::ChatStart,
 };
 
@@ -70,9 +70,14 @@ pub(super) fn request(
 }
 
 /// Have the daemon start the chat `start` describes, reporting one that
-/// runs in a background place to the caller and one an app runs here.
+/// runs in a background place to the caller, one an app runs here, and one
+/// whose agent waits in the agent queue.
 pub(super) async fn start(ctx: &Context, start: ChatStart) -> Result<Started> {
     match crate::client::chats::launch(&ctx.paths, start).await? {
+        StartedChat::Queued(queued) => {
+            report_queued(ctx, &queued)?;
+            Ok(Started::Exited(0))
+        }
         StartedChat::Background(chat) => Ok(Started::Background(chat)),
         StartedChat::Detached(report) => {
             let text = format!(
@@ -84,6 +89,19 @@ pub(super) async fn start(ctx: &Context, start: ChatStart) -> Result<Started> {
             Ok(Started::Exited(0))
         }
     }
+}
+
+/// Report the recorded chat of `queued`, whose agent waits in the queue.
+pub(super) fn report_queued(ctx: &Context, queued: &QueuedChat) -> Result<()> {
+    let entry = &queued.entry;
+    let text = format!(
+        "Queued chat {} (position {} of {}); its agent starts {}",
+        queued.chat.name,
+        entry.position.unwrap_or(queued.waiting),
+        queued.waiting,
+        crate::cli::commands::queued_agents::starts_when(entry)
+    );
+    ctx.emit(&text, queued)
 }
 
 #[cfg(test)]
