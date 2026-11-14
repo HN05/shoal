@@ -655,8 +655,8 @@ pub struct IssueConfig {
     pub plan_label: Option<String>,
     /// Marks an issue whose body holds a settled plan.
     pub planned_label: Option<String>,
-    /// Whether linking an issue as assigned adds the account the space acts
-    /// as to its assignees on the forge.
+    /// Whether linking an issue as assigned adds the account that links it
+    /// to its assignees on the forge.
     #[option(default = true)]
     pub assign: Option<bool>,
 }

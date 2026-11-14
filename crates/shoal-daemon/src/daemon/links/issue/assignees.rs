@@ -1,6 +1,6 @@
-//! The forge assignees of the issues spaces link as assigned: the account a
-//! space acts as joins them when it links an issue, and leaves them once no
-//! space of that login links the issue, if Shoal added it.
+//! The forge assignees of the issues spaces link as assigned: the account
+//! that links an issue joins them, and leaves them once no space of that
+//! login links the issue, if Shoal added it.
 use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension};
