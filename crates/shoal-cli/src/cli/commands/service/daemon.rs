@@ -224,12 +224,12 @@ pub(super) async fn stop_daemon(
 ) -> Result<Stopping> {
     let mut waited_for = Vec::new();
     let exiting = loop {
-        match client::exit(paths, request, &mut waiting).await? {
-            ExitAnswer::Exiting(exiting) => {
-                // Only the exiting daemon knows a granted scope token.
-                crate::env::release_grant();
-                break exiting;
-            }
+        let answer = client::exit(paths, request, &mut waiting).await?;
+        // Only the daemon asked to exit knows a granted scope token, so no
+        // later request carries it, to that daemon's successor least of all.
+        crate::env::release_grant();
+        match answer {
+            ExitAnswer::Exiting(exiting) => break exiting,
             ExitAnswer::Refused(work) => return Ok(Stopping::Refused(work)),
             ExitAnswer::Unanswered => {
                 terminate(paths).await?;
