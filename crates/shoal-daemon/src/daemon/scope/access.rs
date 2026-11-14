@@ -523,11 +523,7 @@ impl Manager {
         caller: &Caller,
         start: &ChatStart,
     ) -> Result<()> {
-        let repository = match (&start.workspace, &start.repository) {
-            (Some(workspace), _) => self.space_repository(workspace).await?,
-            (None, Some(repository)) => Some(self.repository(repository).await?.id),
-            (None, None) => None,
-        };
+        let repository = self.new_chat_repository(start).await?;
         let start = match &start.name {
             Some(name) => format!("start the agent of new chat {name} now"),
             None => "start the agent of a new chat now".to_owned(),

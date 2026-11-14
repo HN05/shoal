@@ -207,7 +207,10 @@ impl Manager {
     /// The repository of the chat `start` describes: that of the ready
     /// workspace it runs in, else the one it names; none for a chat without
     /// one.
-    async fn new_chat_repository(&self, start: &ChatStart) -> Result<Option<RepositoryId>> {
+    pub(in crate::daemon) async fn new_chat_repository(
+        &self,
+        start: &ChatStart,
+    ) -> Result<Option<RepositoryId>> {
         Ok(match (&start.workspace, &start.repository) {
             (Some(workspace), _) => Some(self.chat_workspace(workspace).await?.repository_id),
             (None, Some(repository)) => Some(self.repository(repository.clone()).await?.id),
