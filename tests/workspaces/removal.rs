@@ -2,6 +2,7 @@
 //! restoring removed workspaces.
 use super::chats::start_test_chat;
 use super::forge::wait_removed;
+use super::zmx::wait_zmx_sessions_ended;
 use super::*;
 
 #[test]
@@ -263,6 +264,8 @@ impl RemovedWithAgent {
         let fixture = Fixture::with_config(Some(
             "[agents.claude]\ncommand = ['sh', './agent.sh']\nresume_command = ['sh', './resume.sh']\n",
         ));
+        // A restore queues its agents only where a host can start them.
+        install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
         let workspace = fixture.add("removed");
         let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
         install_fake_agent(&path);
@@ -361,6 +364,7 @@ fn restoring_a_removed_workspace_queues_the_agent_its_removal_stopped() {
         "{restored}"
     );
     assert_eq!(reopened.get("agents_saved"), None, "{restored}");
+    wait_zmx_sessions_ended(removed.fixture.root.path());
 }
 
 #[test]
