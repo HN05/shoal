@@ -95,7 +95,10 @@ impl Manager {
     }
 
     /// Cancel the run of each of the superseded `entries` of
-    /// `repository_id` once, and pass each over.
+    /// `repository_id` once, and pass each over while it still waits for
+    /// admission; one admitted since is left to its claim, which checks it
+    /// again. Passing a job over keeps one whose run the forge did not
+    /// cancel from joining the queue again.
     async fn pass_over_superseded(
         &self,
         repository_id: &RepositoryId,
@@ -108,7 +111,7 @@ impl Manager {
                 self.cancel_superseded(&entry.name, forge, &entry.job.run.url)
                     .await;
             }
-            self.pass_over_waiting(repository_id, entry).await?;
+            (self.pass_over_job(&entry.id, repository_id, &entry.job)).await?;
         }
         Ok(())
     }
@@ -129,34 +132,6 @@ impl Manager {
             ),
         )
         .await;
-    }
-
-    /// Leave the job of `entry` to other runners while it still waits for
-    /// admission; one admitted since is left to its claim, which checks it
-    /// again. Passing it over keeps a job whose run the forge did not
-    /// cancel from joining the queue again.
-    async fn pass_over_waiting(
-        &self,
-        repository_id: &RepositoryId,
-        entry: WaitingEntry,
-    ) -> Result<()> {
-        let repository = repository_id.to_owned();
-        self.store
-            .write(move |tx| {
-                let removed = tx.execute(
-                    "DELETE FROM agent_queue WHERE id=?1 AND state=?2",
-                    params![entry.id, QueueState::Queued],
-                )?;
-                if removed > 0 {
-                    tx.execute(
-                        "INSERT OR IGNORE INTO ci_passed_jobs(repository_id,handle)
-                         VALUES (?1,?2)",
-                        params![repository, entry.job.job.handle],
-                    )?;
-                }
-                Ok(())
-            })
-            .await
     }
 }
 

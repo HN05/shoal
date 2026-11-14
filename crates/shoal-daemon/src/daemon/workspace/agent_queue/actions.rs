@@ -2,6 +2,7 @@
 //! and the cancelling of the launches a stopped workspace waits for. Each holds the queue gate, so dispatch cannot start
 //! the entry meanwhile.
 use crate::client::execution_ids::ExecutionId;
+use crate::client::repository_ids::RepositoryId;
 use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use std::collections::{HashMap, HashSet};
 
@@ -160,7 +161,7 @@ impl Manager {
         }
         // A stopped wrapper removes its entry as it finishes, which may come first.
         let deleted = match &entry.job {
-            Some(job) => self.pass_over_job(&entry, job).await?,
+            Some(job) => (self.pass_over_job(&entry.id, entry.job_repository()?, job)).await?,
             None => self.delete_waiting_entry(entry.id.clone()).await?,
         };
         ensure!(
@@ -237,14 +238,16 @@ impl Manager {
         self.store.run(move |db| delete_waiting(db, &id)).await
     }
 
-    /// Delete the waiting job `entry`, leaving its `job` to other runners,
-    /// returning whether it still waited.
-    async fn pass_over_job(&self, entry: &QueueEntry, job: &QueuedJob) -> Result<bool> {
-        let (id, repository, handle) = (
-            entry.id.clone(),
-            entry.repository_id.clone(),
-            job.job.handle.clone(),
-        );
+    /// Delete `repository`'s job entry `id` if it still waits, leaving its
+    /// `job` to other runners, returning whether it still waited.
+    pub(in crate::daemon::workspace) async fn pass_over_job(
+        &self,
+        id: &QueueEntryId,
+        repository: &RepositoryId,
+        job: &QueuedJob,
+    ) -> Result<bool> {
+        let (id, repository, handle) =
+            (id.to_owned(), repository.to_owned(), job.job.handle.clone());
         self.store
             .write(move |tx| {
                 let deleted = delete_waiting(tx, &id)?;
