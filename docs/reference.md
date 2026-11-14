@@ -3948,8 +3948,8 @@ ends. `--shoal <path>` names the program there when the remote shell's `PATH`
 lacks it, and `--no-restore` leaves the workspaces' agents stopped; chats still
 start in the background there. It checks the spaces as a batch export does and
 asks once before ending them. Each space then moves on its own, after the
-spaces below it: Shoal stops its agents, saving their sessions, exports it
-while it stays here, and imports it there, and only once that import succeeds
+spaces below it: Shoal stops its agents and those of the chats that go with it,
+saving their sessions, exports it while they stay here, and imports it there, and only once that import succeeds
 ends it here through the export's removal. When the export fails, `ssh` cannot
 run, or the import fails with `not_imported`, the space stays here, its stopped agents' restores are queued, and the report gives the other
 machine's error. When the import fails otherwise, as when setup there fails or

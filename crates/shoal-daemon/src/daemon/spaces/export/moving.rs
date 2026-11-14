@@ -39,9 +39,9 @@ impl Manager {
     /// End the space `selector` names, which another machine imported,
     /// through the export's removal: a workspace once it still has what its
     /// checkpoint `exported` keeps, which the other machine now has, and no
-    /// space below it stays here, taking only the spaces below it that
-    /// `unsaved` names, or a chat. Its issues' forge assignees stay for the
-    /// space on the other machine.
+    /// space below it that does not go with it stays here, or a chat, taking
+    /// only the spaces below it that `unsaved` names. Its issues' forge
+    /// assignees stay for the space on the other machine.
     pub async fn end_moved_space(
         &self,
         selector: &SpaceSelector,
@@ -51,8 +51,9 @@ impl Manager {
         let workspace = match self.space(selector).await? {
             PresentSpace::Workspace(workspace) => workspace,
             PresentSpace::Chat(chat) => {
+                let taking = self.chat_taking(&chat.id, &unsaved).await?;
                 self.hand_over_assignees(&chat.id).await?;
-                (self.remove_chat(&SpaceSelector::id(&chat.id), Some(Vec::new()))).await?;
+                (self.remove_chat(&SpaceSelector::id(&chat.id), Some(taking))).await?;
                 return Ok(None);
             }
         };
@@ -69,15 +70,20 @@ impl Manager {
         Ok(Some(removal))
     }
 
-    /// Stop the agents of `workspace` and prepare its package at a new
-    /// checkpoint, with every agent stopped there.
+    /// Stop the agents of `workspace` and of the chats that go with it and
+    /// prepare its package at a new checkpoint, with every agent stopped
+    /// there.
     async fn prepare_moving_workspace(&self, workspace: Workspace) -> Result<Prepared> {
         ensure_exportable(&workspace)?;
-        // The spaces below it moved first; one that stayed keeps it here,
-        // before anything stops or reaches the other machine.
-        self.ensure_nothing_below_stays(&workspace).await?;
+        // The spaces below it that do not go with it moved first; one that
+        // stayed keeps it here, before anything stops or reaches the other
+        // machine.
+        self.ensure_only_carried_below(&workspace.id, &workspace.name)
+            .await?;
+        let carried = self.chats_carried_by(&workspace.id).await?;
         let selector = SpaceSelector::id(&workspace.id);
         self.stop_space(&selector, StopRequest::moving()).await?;
+        let chats = self.stopped_records(&carried).await?;
         let checkpoint = self.take_checkpoint(&selector, None).await?;
         ensure!(
             !checkpoint.files_omitted,
@@ -89,9 +95,12 @@ impl Manager {
         let mut record = packaged_record(&self.paths, &workspace, checkpoint, agents);
         record.kept_workspace_mut()?.session_files = self.unplaced_sessions(&workspace).await;
         let repo = self.repository(&workspace.repository_id).await?;
+        let kept_sessions = kept_session_sources(&repo, &record);
+        let mut manifest = Manifest::of(Some(&repo), Source::Workspace(record)).await?;
+        manifest.chats = chats;
         Ok(Prepared {
-            kept_sessions: kept_session_sources(&repo, &record),
-            manifest: Manifest::of(Some(&repo), Source::Workspace(record)).await?,
+            kept_sessions,
+            manifest,
             // Its own config may describe its agents, and goes with it.
             settings: Some(self.workspace_settings(&workspace).await),
             repo: Some(repo),
@@ -100,20 +109,19 @@ impl Manager {
         })
     }
 
-    /// Stop the agent of `chat` and prepare its package, which continues
-    /// the session the agent reported.
+    /// Stop the agents of `chat` and of the chats that go with it and
+    /// prepare its package, which continues the session the agent reported.
     async fn prepare_moving_chat(&self, chat: Chat) -> Result<Prepared> {
         let (repo, _) = self.movable_chat(&chat).await?;
-        ensure!(
-            self.chats_carried_by(&chat.id).await?.is_empty(),
-            "chats below chat {} stay here; move or remove them first",
-            chat.name
-        );
+        let carried = self.chats_carried_by(&chat.id).await?;
         let selector = SpaceSelector::id(&chat.id);
         self.stop_space(&selector, StopRequest::moving()).await?;
+        let chats = self.stopped_records(&carried).await?;
         let chat = self.chat(&selector).await?;
+        let mut manifest = Manifest::of(repo.as_ref(), Source::Chat(chat)).await?;
+        manifest.chats = chats;
         Ok(Prepared {
-            manifest: Manifest::of(repo.as_ref(), Source::Chat(chat)).await?,
+            manifest,
             repo,
             removal: None,
             settings: None,
@@ -124,7 +132,8 @@ impl Manager {
 
     /// The checkpoint `exported` of `workspace`, refusing to end it once it
     /// differs from it, as after a commit made here since its export, or
-    /// while a space below it stays here, which joined it since.
+    /// while a space below it that does not go with it stays here, which
+    /// joined it since.
     async fn ensure_unchanged_since_export(
         &self,
         workspace: &Workspace,
@@ -136,24 +145,8 @@ impl Manager {
             "workspace {} changed here after its export: its HEAD or unsaved files differ from checkpoint {exported}",
             workspace.name
         );
-        self.ensure_nothing_below_stays(workspace).await?;
+        (self.ensure_only_carried_below(&workspace.id, &workspace.name)).await?;
         Ok(checkpoint)
-    }
-
-    /// Refuse to move `workspace` while a space below it stays here, as one
-    /// whose own move failed, which its end here would take.
-    async fn ensure_nothing_below_stays(&self, workspace: &Workspace) -> Result<()> {
-        let staying: Vec<String> = (self.spaces_taken_with(&workspace.id).await?)
-            .into_iter()
-            .map(|space| space.name.into())
-            .collect();
-        ensure!(
-            staying.is_empty(),
-            "spaces below workspace {} stay here ({})",
-            workspace.name,
-            staying.join(", ")
-        );
-        Ok(())
     }
 }
 

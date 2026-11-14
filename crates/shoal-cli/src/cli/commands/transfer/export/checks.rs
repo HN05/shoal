@@ -40,7 +40,7 @@ impl Checked {
         }
     }
 
-    pub(super) fn id(&self) -> &crate::client::space_ids::SpaceId {
+    pub(in super::super) fn id(&self) -> &crate::client::space_ids::SpaceId {
         match &self.space {
             Ending::Workspace(check) => &check.workspace.id,
             Ending::Chat(chat) => &chat.id,
@@ -53,6 +53,11 @@ impl Checked {
             Ending::Workspace(check) => format!("workspace {}", check.workspace.name),
             Ending::Chat(chat) => format!("chat {}", chat.name),
         }
+    }
+
+    /// The space and the chats that go with it, whose agents a move stops.
+    pub(in super::super) fn spaces(&self) -> impl Iterator<Item = &SpaceId> {
+        std::iter::once(self.id()).chain(self.carried.iter().map(|chat| &chat.id))
     }
 
     /// Consent to end the chat with the chats that go with it, the only

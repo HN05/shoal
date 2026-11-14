@@ -3,9 +3,14 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::client::space_ids::SpaceId;
-use crate::client::space_names::SpaceName;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{
+        events::EventCause,
+        workspace::{Manager, StopRequest},
+    },
+    model::RemovedSpace,
+    removal::UnsavedWork,
     transfer::{CarriedChat, CarriedChatExt},
 };
 
@@ -36,24 +41,55 @@ impl Manager {
         Ok(())
     }
 
+    /// The IDs of the spaces below the chat `id` that its end for a move
+    /// takes: those `unsaved` confirms, else the chats that go with it.
+    pub(super) async fn chat_taking(
+        &self,
+        id: &SpaceId,
+        unsaved: &UnsavedWork,
+    ) -> Result<Vec<SpaceId>> {
+        match unsaved.children() {
+            Some(confirmed) => Ok(confirmed.to_vec()),
+            None => self.chats_carried_by(id).await,
+        }
+    }
+
     /// What a package holds of the chats `ids` that went with its space,
     /// from the removal records their removal saved.
     pub(super) async fn carried_records(&self, ids: &[SpaceId]) -> Result<Vec<CarriedChat>> {
         let removed = self.removed_spaces().await?;
-        let machine = crate::process::machine::id();
         let mut carried = Vec::new();
         for id in ids {
             let record = (removed.iter().find(|removed| &removed.space_id == id))
                 .with_context(|| format!("the removal of chat {id} kept no record"))?;
-            let remote_url = match &record.repository_id {
-                Some(repository) => {
-                    let repo = self.repository(repository).await?;
-                    crate::repository::remote_url_from_source(&repo.source).await?
-                }
-                None => None,
-            };
-            carried.push(CarriedChat::of(remote_url, machine.clone(), record.clone()));
+            carried.push(self.carried(record.clone()).await?);
         }
         Ok(carried)
+    }
+
+    /// Stop the agents of the chats `ids`, saving their sessions, and say
+    /// what a package holds of each, as their removal would record them,
+    /// for a move that ends them only once another machine imported it.
+    pub(super) async fn stopped_records(&self, ids: &[SpaceId]) -> Result<Vec<CarriedChat>> {
+        let mut carried = Vec::new();
+        for id in ids {
+            (self.stop_space(&SpaceSelector::id(id), StopRequest::moving())).await?;
+            let record = self.chat_removal_record(id, EventCause::Manual).await?;
+            carried.push(self.carried(record).await?);
+        }
+        Ok(carried)
+    }
+
+    /// What a package holds of the chat `record` records.
+    async fn carried(&self, record: RemovedSpace) -> Result<CarriedChat> {
+        let remote_url = match &record.repository_id {
+            Some(repository) => {
+                let repo = self.repository(repository).await?;
+                crate::repository::remote_url_from_source(&repo.source).await?
+            }
+            None => None,
+        };
+        let machine = crate::process::machine::id();
+        Ok(CarriedChat::of(remote_url, machine, record))
     }
 }

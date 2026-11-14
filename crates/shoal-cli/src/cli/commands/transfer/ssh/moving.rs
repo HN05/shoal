@@ -59,7 +59,7 @@ pub(super) async fn move_spaces(
 /// export stopped restore here; when how the import ended is unknown, they
 /// stay stopped, since the space may continue there.
 async fn move_one(ctx: &Context, remote: &Remote, planned: &PlannedExport) -> Result<Imported> {
-    let saved = saved_executions(ctx, planned.id()).await?;
+    let saved = saved_now(ctx, planned).await?;
     let checkpoint = match export_moving(ctx, planned).await {
         Ok(checkpoint) => checkpoint,
         Err(error) => return Err(stays_here(ctx, planned, saved, error).await),
@@ -94,7 +94,7 @@ async fn move_one(ctx: &Context, remote: &Remote, planned: &PlannedExport) -> Re
 async fn stays_here(
     ctx: &Context,
     planned: &PlannedExport,
-    saved: BTreeSet<ExecutionId>,
+    saved: Stopped,
     error: anyhow::Error,
 ) -> anyhow::Error {
     restore_here(ctx, planned, saved).await;
@@ -137,7 +137,7 @@ async fn end_moved(
         }
         Ending::Chat(chat) => {
             let space = SpaceSelector::id(&chat.id);
-            let unsaved = UnsavedWork::default();
+            let unsaved = checked.chat_ending();
             crate::client::transfer::end_moved(&ctx.paths, space, unsaved, None).await?
         }
     };
@@ -145,15 +145,33 @@ async fn end_moved(
     Ok(())
 }
 
+/// The executions whose stopped work the planned space, and each chat that
+/// goes with it, saves now.
+async fn saved_now(ctx: &Context, planned: &PlannedExport) -> Result<Stopped> {
+    let mut saved = Stopped::new();
+    for space in planned.checked().spaces() {
+        saved.insert(space.clone(), saved_executions(ctx, space).await?);
+    }
+    Ok(saved)
+}
+
 /// Queue the restores of the agents the export of the planned space
-/// stopped: those it saves now beyond the `saved` before the export.
-async fn restore_here(ctx: &Context, planned: &PlannedExport, saved: BTreeSet<ExecutionId>) {
-    let stopped = match saved_executions(ctx, planned.id()).await {
-        Ok(now) => now.difference(&saved).cloned().collect(),
+/// stopped, its own and those of the chats that go with it: those they
+/// save now beyond the `saved` before the export.
+async fn restore_here(ctx: &Context, planned: &PlannedExport, saved: Stopped) {
+    let now = match saved_now(ctx, planned).await {
+        Ok(now) => now,
         Err(error) => {
             eprintln!("warning: cannot read the stopped agents; run shoal restore: {error:#}");
             return;
         }
     };
-    restore_stopped(ctx, &Stopped::from([(planned.id().clone(), stopped)])).await;
+    let stopped = (now.into_iter())
+        .map(|(space, now)| {
+            let before = saved.get(&space).cloned().unwrap_or_default();
+            let stopped: BTreeSet<ExecutionId> = now.difference(&before).cloned().collect();
+            (space, stopped)
+        })
+        .collect();
+    restore_stopped(ctx, &stopped).await;
 }

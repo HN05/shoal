@@ -6,7 +6,10 @@ use super::transfer::{exporter, import, importer, packaged_workspace};
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::Reason;
 use crate::{
-    daemon::{test_support::commit, workspace::Manager},
+    daemon::{
+        test_support::{self, commit},
+        workspace::Manager,
+    },
     execution::recovery,
     model::Workspace,
     process::identity,
@@ -152,6 +155,35 @@ async fn a_moving_chat_stops_its_agent_and_stays_until_its_end() {
         .await
         .unwrap();
     assert!(ended.is_none());
+    assert!(manager.chats().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_moving_chat_stops_the_chats_below_it_and_takes_them_at_its_end() {
+    let (root, manager, _pid) = super::chat("lead").await;
+    let lead = manager.chats().await.unwrap().remove(0);
+    manager
+        .record_chat_session(&lead.id, "s1".into())
+        .await
+        .unwrap();
+    let repo = manager.repositories().await.unwrap().remove(0);
+    let child = test_support::chat(&manager, "child", "chat", Some(&repo), Some(&lead.id)).await;
+    let mut process = test_support::agent_process(&manager, &child.id).await;
+    let selector = SpaceSelector::id(&lead.id);
+
+    let (_, file) = export_moving(&manager, &selector, root.path()).await;
+    process.wait().unwrap();
+    assert_eq!(manager.chats().await.unwrap().len(), 2);
+    let import = Import::read(&mut &file[..]).unwrap();
+    let carried: Vec<_> = (import.manifest.chats.iter())
+        .map(|carried| &carried.chat.space_id)
+        .collect();
+    assert_eq!(carried, [&child.id]);
+
+    let confirmed = UnsavedWork::taking(vec![child.id.clone()]);
+    (manager.end_moved_space(&selector, confirmed, None))
+        .await
+        .unwrap();
     assert!(manager.chats().await.unwrap().is_empty());
 }
 

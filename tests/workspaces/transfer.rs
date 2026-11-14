@@ -382,6 +382,37 @@ fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
     wait_zmx_sessions_ended(there.root.path());
 }
 
+#[test]
+fn move_ssh_takes_the_chat_in_a_workspace_with_it() {
+    let (here, there) = two_machines(Some(CHAT_AGENT_CONFIG));
+    let workspace = chat_in_worktree(&here, &chat_agent(), || {
+        here.ok(&["stop", &here.id("reading")]);
+    });
+    let chat = here.ok(&["list", "--chats"])[0].clone();
+
+    let shoal = support::shoal_binary();
+    let worker = here.id("worker");
+    let args = [
+        "move",
+        "ssh",
+        "mini",
+        &worker,
+        "--shoal",
+        shoal,
+        "--no-restore",
+        "--yes",
+    ];
+    let moved = here.ok(&args);
+    assert_eq!(moved["failed"], serde_json::json!([]), "{moved}");
+    assert_eq!(here.ok(&["list", "--chats"]), serde_json::json!([]));
+    let chats = there.ok(&["list", "--chats"]);
+    assert_eq!(
+        (&chats[0]["id"], &chats[0]["workspace"]["id"]),
+        (&chat["id"], &workspace["id"]),
+        "{chats}"
+    );
+}
+
 /// A machine `here` with `config`, whose repository has no origin, so an
 /// import on the second machine its `ssh mini` reaches fails.
 fn failing_machines(config: Option<&str>) -> (Fixture, Fixture) {
@@ -1084,23 +1115,56 @@ fn export_carries_session_files_that_import_puts_back() {
 /// does, then talks until a signal ends it; resumed, it only records its
 /// arguments.
 fn chat_moving_fixture() -> Fixture {
-    let fixture = Fixture::with_config(Some(
-        "[agents.claude]\ncommand = ['sh', './chat-agent.sh']\n",
-    ));
-    fs::write(
-        fixture.repo.join("chat-agent.sh"),
-        format!(
-            "printf '%s\\n' \"$@\" > \"$HOME/chat-args\"\n\
-             case \" $* \" in *' --resume '*) exit 0;; esac\n\
-             printf '{{\"session_id\":\"chat-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n\
-             trap 'exit 0' TERM\n\
-             touch \"$HOME/chat-started\"\n\
-             while :; do sleep 1; done\n",
-            support::shoal_binary()
-        ),
-    )
-    .unwrap();
+    let fixture = Fixture::with_config(Some(CHAT_AGENT_CONFIG));
+    fs::write(fixture.repo.join("chat-agent.sh"), chat_agent()).unwrap();
     fixture
+}
+
+/// The config of machines whose chat agent runs `chat-agent.sh` where the
+/// chat runs.
+const CHAT_AGENT_CONFIG: &str = "[agents.claude]\ncommand = ['sh', './chat-agent.sh']\n";
+
+/// A chat agent that reports its session as Claude Code's hook does, then
+/// talks until a signal ends it; resumed, it only records its arguments.
+fn chat_agent() -> String {
+    format!(
+        "printf '%s\\n' \"$@\" > \"$HOME/chat-args\"\n\
+         case \" $* \" in *' --resume '*) exit 0;; esac\n\
+         printf '{{\"session_id\":\"chat-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n\
+         trap 'exit 0' TERM\n\
+         touch \"$HOME/chat-started\"\n\
+         while :; do sleep 1; done\n",
+        support::shoal_binary()
+    )
+}
+
+/// Add the workspace `worker` to `fixture`, whose worktree holds the chat
+/// agent `agent`, and run the chat `reading` in it until `ending` ends it
+/// once it started; returns the workspace.
+fn chat_in_worktree(fixture: &Fixture, agent: &str, ending: impl FnOnce()) -> Value {
+    let home = fixture.root.path();
+    let workspace = fixture.add("worker");
+    let path = PathBuf::from(workspace["path"].as_str().unwrap());
+    fs::write(path.join("chat-agent.sh"), agent).unwrap();
+    let worker = fixture.id("worker");
+    std::thread::scope(|scope| {
+        let chat = scope.spawn(|| {
+            let start = [
+                "start", "--in", &worker, "--mode", "chat", "--here", "--agent", "claude",
+                "--name", "reading",
+            ];
+            fixture.interactive_command(fixture.command().current_dir(&path).args(start), "")
+        });
+        wait_until("chat started", || home.join("chat-started").exists());
+        ending();
+        let (output, transcript) = chat.join().unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{transcript}",
+            printed(&output)
+        );
+    });
+    workspace
 }
 
 /// The directory the chat agent's transcripts go to.
@@ -1232,31 +1296,10 @@ fn a_removed_chat_moves_from_its_removal_record() {
 fn a_workspace_moves_with_the_chat_in_its_worktree() {
     let fixture = chat_moving_fixture();
     let home = fixture.root.path();
-    let workspace = fixture.add("worker");
-    let path = PathBuf::from(workspace["path"].as_str().unwrap());
-    fs::copy(
-        fixture.repo.join("chat-agent.sh"),
-        path.join("chat-agent.sh"),
-    )
-    .unwrap();
-    let worker = fixture.id("worker");
-    std::thread::scope(|scope| {
-        let chat = scope.spawn(|| {
-            let start = [
-                "start", "--in", &worker, "--mode", "chat", "--here", "--agent", "claude",
-                "--name", "reading",
-            ];
-            fixture.interactive_command(fixture.command().current_dir(&path).args(start), "")
-        });
-        wait_until("chat started", || home.join("chat-started").exists());
+    let workspace = chat_in_worktree(&fixture, &chat_agent(), || {
         fixture.ok(&["stop", &fixture.id("reading")]);
-        let (output, transcript) = chat.join().unwrap();
-        assert!(
-            output.status.success(),
-            "{}\n{transcript}",
-            printed(&output)
-        );
     });
+    let worker = fixture.id("worker");
     let chat = fixture.ok(&["list", "--chats"])[0].clone();
     let file = home.join("worker.shoal");
     let file = file.to_str().unwrap();
@@ -1288,24 +1331,11 @@ fn a_workspace_moves_with_the_chat_in_its_worktree() {
 fn a_chat_from_a_worktree_moves_back_into_it() {
     let fixture = chat_moving_fixture();
     let home = fixture.root.path();
-    let workspace = fixture.add("worker");
-    let path = PathBuf::from(workspace["path"].as_str().unwrap());
-    // Its agent says where it ran: the worktree's copy marks it.
-    let agent = fs::read_to_string(fixture.repo.join("chat-agent.sh")).unwrap();
-    let marked = format!("touch \"$HOME/in-worktree\"\n{agent}");
-    fs::write(path.join("chat-agent.sh"), marked).unwrap();
-    let worker = fixture.id("worker");
     let file = home.join("reading.shoal");
     let file = file.to_str().unwrap();
-    std::thread::scope(|scope| {
-        let chat = scope.spawn(|| {
-            let start = [
-                "start", "--in", &worker, "--mode", "chat", "--here", "--agent", "claude",
-                "--name", "reading",
-            ];
-            fixture.interactive_command(fixture.command().current_dir(&path).args(start), "")
-        });
-        wait_until("chat started", || home.join("chat-started").exists());
+    // Its agent says where it ran: the worktree's copy marks it.
+    let marked = format!("touch \"$HOME/in-worktree\"\n{}", chat_agent());
+    let workspace = chat_in_worktree(&fixture, &marked, || {
         let exported = fixture.ok(&[
             "move",
             "export",
@@ -1314,17 +1344,10 @@ fn a_chat_from_a_worktree_moves_back_into_it() {
             file,
             "--yes",
         ]);
-        assert_eq!(
-            exported["manifest"]["workspace"]["id"], workspace["id"],
-            "{exported}"
-        );
-        let (output, transcript) = chat.join().unwrap();
-        assert!(
-            output.status.success(),
-            "{}\n{transcript}",
-            printed(&output)
-        );
+        let ran_in = &exported["manifest"]["workspace"]["id"];
+        assert_eq!(ran_in, &fixture.ok(&["list"])[0]["id"], "{exported}");
     });
+    assert_eq!(fixture.ok(&["list"])[0]["id"], workspace["id"]);
     fs::remove_file(home.join("in-worktree")).unwrap();
 
     let repo = fixture.repo.to_str().unwrap();

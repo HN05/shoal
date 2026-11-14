@@ -84,6 +84,19 @@ impl Manager {
         cause: EventCause,
     ) -> Result<RemovedSpace> {
         // As for a workspace, its links and parent are final now.
+        let removed = self.chat_removal_record(id, cause).await?;
+        let record = removed.clone();
+        self.store.run(move |db| self::record(db, &record)).await?;
+        Ok(removed)
+    }
+
+    /// What a removal of the chat `id` for `cause` would record of it now,
+    /// without recording it.
+    pub(crate) async fn chat_removal_record(
+        &self,
+        id: &SpaceId,
+        cause: EventCause,
+    ) -> Result<RemovedSpace> {
         let chat = (self.chat_by_id(id).await?).context("the chat was removed meanwhile")?;
         let expires_at = (self.removed_files_expiry(&PresentSpace::Chat(chat.clone()))).await;
         let (agents, last_sessions) = self.saved_agents(&chat.id, None)?;
@@ -110,8 +123,6 @@ impl Manager {
                 }),
             },
         };
-        let record = removed.clone();
-        self.store.run(move |db| self::record(db, &record)).await?;
         Ok(removed)
     }
 

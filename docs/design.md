@@ -3427,8 +3427,8 @@ when no terminal attends the import, as queued agents start. Export and import
 move work through any byte stream, where the user runs both halves and chooses
 their order. `move ssh` runs both over SSH after checking Shoal answers there,
 and ends a space here only once its import there succeeded, since a chat keeps
-no record once it ends: it stops the space's agents, saving their sessions,
-exports it while it stays, and queues their restores here, keeping no file,
+no record once it ends: it stops the agents of the space and of the chats that
+go with it, saving their sessions, exports it while they stay, and queues their restores here, keeping no file,
 once the import there failed before recording anything; an import that may have
 recorded the space there leaves them stopped, so its agents never run on both
 machines. A space that cannot end here after its import, such as a workspace

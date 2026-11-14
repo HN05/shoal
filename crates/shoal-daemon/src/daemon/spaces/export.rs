@@ -304,10 +304,7 @@ impl Manager {
     async fn end_chat_for_export(&self, chat: Chat, unsaved: &UnsavedWork) -> Result<Prepared> {
         let (repo, continues) = self.movable_chat(&chat).await?;
         let carried = self.chats_carried_by(&chat.id).await?;
-        let taking = match unsaved.children() {
-            Some(confirmed) => confirmed.to_vec(),
-            None => carried.clone(),
-        };
+        let taking = self.chat_taking(&chat.id, unsaved).await?;
         let id = chat.id.clone();
         let mut manifest = Manifest::of(repo.as_ref(), Source::Chat(chat)).await?;
         (self.remove_chat(&SpaceSelector::id(&id), Some(taking))).await?;
