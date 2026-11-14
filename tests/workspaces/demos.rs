@@ -539,7 +539,7 @@ assert terminal_settings() == before, (before, terminal_settings())
     if finished.is_none() {
         let _ = child.kill();
         let _ = child.wait();
-        panic!("terminal driver hung: {transcript:?}");
+        panic!("terminal driver hung:\n{transcript}");
     }
     drop(slave);
     let _ = master.read_to_string(&mut transcript);
