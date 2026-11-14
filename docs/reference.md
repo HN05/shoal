@@ -5801,7 +5801,9 @@ The [`[env]`](config.md#environment) variables join this exported environment as
 they join tracked executions and lifecycle hooks. `{workspace}` there is the
 last part of `{path}`, which never changes. Desktop handoffs may reuse an existing process and do
 not receive these variables.
-Only unscoped callers can export or revoke tokens, and export requires a ready,
+Only unscoped callers revoke tokens; a scoped process exports one for a
+space its scope reaches as its [`admin` permission](#permitted-actions)
+allows, and export requires a ready,
 verified worktree. Add the returned variables to the processes your app starts.
 Each exported token survives daemon restarts until `shoal internal env [workspace] --revoke
 <token>` or successful workspace removal; revoking one leaves other tokens valid.
