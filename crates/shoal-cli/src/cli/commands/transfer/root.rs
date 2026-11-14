@@ -22,17 +22,17 @@ use crate::{
         ui,
     },
     config::{Config, edit::Change},
-    model::{Execution, MovedRepository, Repository, RepositoryMoves, Workspace},
+    model::{Execution, MovedRepository, Repository, RepositoryMoves, Spaces, Workspace},
     protocol::{QueuedLaunches, UntrackedProcesses},
     repository,
 };
 
 /// Check that every repository outside the root `args` name, or the
-/// configured root, can move, confirm, save that root as `root_dir` when
-/// given, stop the commands and agents running in them, then have the
-/// daemon move them, into a directory Spotlight skips unless they ask for a
-/// regular one, and queue the stopped agents' restores, even when the move
-/// fails.
+/// configured root, can move, with the files of the chats without a
+/// repository, confirm, save that root as `root_dir` when given, stop the
+/// commands and agents running in them, then have the daemon move them,
+/// into a directory Spotlight skips unless they ask for a regular one, and
+/// queue the stopped agents' restores, even when the move fails.
 pub(super) async fn run(ctx: &Context, args: RootArgs) -> Result<()> {
     let RootArgs {
         root,
@@ -45,9 +45,10 @@ pub(super) async fn run(ctx: &Context, args: RootArgs) -> Result<()> {
         .transpose()?;
     let before = Registrations::load(ctx).await?;
     let moves = plan_moves(ctx, root.clone(), regular_dir).await?;
-    if !confirmed && !moves.repositories.is_empty() {
+    if !confirmed && !(moves.repositories.is_empty() && moves.chats.is_empty()) {
+        let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
         ensure!(
-            ui::confirm(ctx, &plan(&moves, &before.workspaces), "--yes")?,
+            ui::confirm(ctx, &plan(&moves, &spaces), "--yes")?,
             "repository move canceled"
         );
     }
@@ -78,10 +79,10 @@ async fn plan_moves(
     .await
 }
 
-/// Stop the workspaces `executions` run in, keeping their agents' sessions,
-/// and add to `stopped` the executions each stop saved for `shoal restore`,
-/// by workspace, including any started since the plan or ended by a stop
-/// that failed. A CI job's workspace is waited for until the job, whose run
+/// Stop the spaces `executions` run in, keeping their agents' sessions, and
+/// add to `stopped` the executions each stop saved for `shoal restore`, by
+/// space, including any started since the plan or ended by a stop that
+/// failed. A CI job's workspace is waited for until the job, whose run
 /// the stop cancelled, ends and its workspace goes, and stays out of
 /// `stopped`. An execution Shoal cannot prove ended stops once the user
 /// confirms it did, or when `confirmed`.
@@ -95,7 +96,7 @@ async fn stop_running(
     for workspace in workspaces {
         // A CI job ends with the other jobs of its run, which a stop before
         // cancelled, and its workspace goes with it.
-        if !workspace_listed(ctx, workspace).await? {
+        if !space_listed(ctx, workspace).await? {
             continue;
         }
         let saved_before = saved_executions(ctx, workspace).await?;
@@ -132,10 +133,10 @@ async fn stop_running(
     Ok(())
 }
 
-/// Whether the daemon still lists `workspace`.
-async fn workspace_listed(ctx: &Context, workspace: &SpaceId) -> Result<bool> {
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-    Ok(workspaces.iter().any(|listed| listed.id == *workspace))
+/// Whether the daemon still lists the space `id`.
+async fn space_listed(ctx: &Context, id: &SpaceId) -> Result<bool> {
+    let selector = SpaceSelector::id(id);
+    Ok((crate::client::workspaces::present_space(&ctx.paths, &selector).await?).is_some())
 }
 
 /// How long a move waits for a cancelled CI job's runner to stop it.
@@ -146,7 +147,7 @@ const JOB_END: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 async fn job_ended(ctx: &Context, workspace: &SpaceId) -> Result<()> {
     let deadline = tokio::time::Instant::now() + JOB_END;
     loop {
-        if !workspace_listed(ctx, workspace).await? {
+        if !space_listed(ctx, workspace).await? {
             return Ok(());
         }
         ensure!(
@@ -242,7 +243,7 @@ fn show(ctx: &Context, moved: &Vec<MovedRepository>, queued: Option<&Queued>) ->
     })
 }
 
-fn plan(moves: &RepositoryMoves, workspaces: &[Workspace]) -> String {
+fn plan(moves: &RepositoryMoves, spaces: &Spaces) -> String {
     let mut text = format!(
         "Move repository directories into {}:",
         moves.directory.display()
@@ -256,14 +257,18 @@ fn plan(moves: &RepositoryMoves, workspaces: &[Workspace]) -> String {
             ));
         }
     }
+    if !moves.chats.is_empty() {
+        text.push_str("\nMove the files of these chats without a repository:");
+    }
+    for chat in &moves.chats {
+        text.push_str(&format!("\n  {chat}"));
+    }
     if !moves.executions.is_empty() {
         text.push_str("\nStop, then restore after the move:");
     }
     for execution in &moves.executions {
-        let workspace = workspaces
-            .iter()
-            .find(|workspace| workspace.id == execution.space_id)
-            .map_or(execution.space_id.as_str(), |workspace| &workspace.name);
+        let space = spaces.find(&SpaceSelector::id(&execution.space_id));
+        let workspace = (space.as_ref()).map_or(execution.space_id.as_str(), |space| space.name());
         let what = execution
             .agent
             .as_ref()

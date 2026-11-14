@@ -3059,8 +3059,8 @@ files; `--regular-dir` keeps `root_dir` a regular directory, replacing that link
 and moving the repositories back. A root on another filesystem is copied, then the original is deleted. A
 checkout or workspace placed outside the repository directory stays where it is.
 A path argument is saved as the global `root_dir` and the daemon reloads it first.
-Interactive calls run the checks below, then list the directories to move and
-the commands and agents running in them, and ask; `-y`/`--yes` skips the prompt
+Interactive calls run the checks below, then list the directories to move, the
+chats whose files move and the commands and agents running in them, and ask; `-y`/`--yes` skips the prompt
 and is required for scripts and `--json`, which returns each moved
 `repository`, its old directory as `from` and its old `workspace_paths`.
 Those commands and agents stop as [`shoal stop`](#recovery) stops them,
@@ -3077,7 +3077,8 @@ other than those commands and agents whose working directory is inside it, so
 leave those directories first. A Git command the daemon itself runs there is
 waited for, for up to a minute, before it counts. The temporary directory and attached files of a [master session](#master-session)
 or any other chat without a repository, running, stopped or removed, move with
-the repositories into the new root, where the chat runs from then on, and the move deletes the `.tmp` and
+the repositories into the new root, where the chat runs from then on; a running
+one stops and restores as their agents do, and the move deletes the `.tmp` and
 `.attachments` left in the root they left. The move is recorded before anything moves; a failed or
 interrupted move rolls back, or finishes once the directory has arrived, and the
 repository refuses other changes until the next `move root` or daemon start
