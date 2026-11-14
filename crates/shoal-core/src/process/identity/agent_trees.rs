@@ -47,22 +47,40 @@ impl AgentTrees {
             .collect()
     }
 
-    /// Whether the process `pid` belongs to another execution's agent than
-    /// the one `own` wraps: whether it is, or runs below, an agent wrapper
-    /// other than `own` that is nearer to it than `own`. An agent a scoped
-    /// caller runs in its own terminal runs below the caller's wrapper too,
-    /// and its processes stay its own.
-    pub fn foreign(&self, pid: u32, own: Option<&Identity>) -> bool {
-        let own = own.filter(|own| alive(own).unwrap_or(false));
+    /// The processes that agents other than `own`, the wrapper of the
+    /// execution whose processes are sought, run.
+    pub fn besides(&self, own: Option<&Identity>) -> Besides<'_> {
+        Besides {
+            trees: self,
+            own: own
+                .filter(|own| alive(own).unwrap_or(false))
+                .map(|own| own.pid),
+        }
+    }
+}
+
+/// The processes that agents other than one execution's run.
+pub struct Besides<'a> {
+    trees: &'a AgentTrees,
+    /// The PID of the execution's live wrapper.
+    own: Option<u32>,
+}
+
+impl Besides<'_> {
+    /// Whether the process `pid` is, or runs below, an agent wrapper other
+    /// than the execution's that is nearer to it than the execution's. An
+    /// agent a scoped caller runs in its own terminal runs below the caller's
+    /// wrapper too, and its processes stay its own.
+    pub fn run(&self, pid: u32) -> bool {
         let mut current = pid;
-        for _ in 0..=self.parents.len() {
-            if own.is_some_and(|own| own.pid == current) {
+        for _ in 0..=self.trees.parents.len() {
+            if self.own == Some(current) {
                 return false;
             }
-            if self.wrappers.contains_key(&current) {
+            if self.trees.wrappers.contains_key(&current) {
                 return true;
             }
-            match self.parents.get(&current) {
+            match self.trees.parents.get(&current) {
                 Some(&parent) if parent > 1 => current = parent,
                 _ => return false,
             }
