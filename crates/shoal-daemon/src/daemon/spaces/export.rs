@@ -32,11 +32,11 @@ mod copy;
 mod moving;
 
 /// A space prepared for its package, ended here or copied: its repository,
-/// none for a chat without one, the package without its session files, the removal that ended a
-/// workspace, the settings describing its agents when they are not the
-/// repository's, the session files an import kept for it, and how the user
-/// continues the space here when writing the package fails, unless a
-/// removal record or the space itself keeps it.
+/// none for a chat without one, the package without its session files, the
+/// removal that ended a workspace, the settings describing its agents when
+/// they are not the repository's, the session files an import kept for it,
+/// and how the user continues the space here when writing the package
+/// fails, unless a removal record or the space itself keeps it.
 struct Prepared {
     repo: Option<Repository>,
     manifest: Manifest,
@@ -49,9 +49,9 @@ struct Prepared {
 impl Manager {
     /// Write a space for another Shoal to the new file `file`, removing it
     /// here first with the spaces below it that `unsaved` confirms, a
-    /// running chat once its agent stopped. A selector that
-    /// names neither exports the removal record of the workspace or chat
-    /// with that ID, which stays. The daemon writes the file, so closing
+    /// running chat once its agent stopped. A selector that names neither
+    /// exports the removal record of the workspace or chat with that ID,
+    /// which stays. The daemon writes the file, so closing
     /// the caller's terminal with the space cannot cut the export short; it
     /// checks that it can before ending anything, since its file access can
     /// differ from the caller's.
@@ -132,9 +132,9 @@ impl Manager {
     }
 
     /// Write `manifest`'s package, a space of `repo` or of none, whose
-    /// agents `settings` describes, with their session files to the new file `file`, those
-    /// of a session in `kept` from there, and the warnings for what it left
-    /// out.
+    /// agents `settings` describes, with their session files to the new
+    /// file `file`, those of a session in `kept` from there, and the
+    /// warnings for what it left out.
     async fn write_package(
         &self,
         repo: Option<&Repository>,
@@ -339,9 +339,8 @@ impl Manager {
 
     /// The files of the sessions the agents of the package `manifest`, of
     /// `repo` or of none, reported, as `settings` describes the agents,
-    /// wherever they ran, with
-    /// a warning for each session left out, which then starts over on the
-    /// importing machine.
+    /// wherever they ran, with a warning for each session left out, which
+    /// then starts over on the importing machine.
     async fn session_sources(
         &self,
         repo: Option<&Repository>,
