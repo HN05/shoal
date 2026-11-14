@@ -1214,7 +1214,12 @@ async fn a_review_queued_while_a_cancelled_one_ends_waits_for_its_run() {
         changed.changed().await.unwrap();
     }
     assert_eq!(state(second.id).await, ReviewState::Running);
-    assert!(fixture.run().join("checkout").exists());
+    // It holds the workspace's place, which it takes before it starts, not
+    // one beside the cancelled run.
+    let held = manager.reviews.checkouts.lock().unwrap()[&second.id]
+        .run
+        .clone();
+    assert_eq!(held, fixture.run());
 }
 
 #[tokio::test]
