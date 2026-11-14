@@ -1,11 +1,12 @@
 //! Running queued reviews: each starts at once, takes the workspace's HEAD,
-//! runs its reviewer in a detached checkout, falls back to a second
-//! reviewer once, and records what it found.
+//! runs its reviewer in a detached checkout at the place of the workspace's
+//! or PR's reviews, falls back to a second reviewer once, and records what
+//! it found.
 use std::{collections::HashSet, path::Path, sync::Arc};
 
 use crate::client::repository_ids::RepositoryId;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use shoal_refs::{BranchName, CommitId};
 use tokio::{sync::watch, task::JoinSet};
 
@@ -167,11 +168,11 @@ impl Manager {
         // The run's directory is the repository's, which a registration
         // older than it reserves first.
         let repository = (self.reserve_repository_directory(&workspace.repository_id)).await?;
-        let files = run_files(&repository, id)?;
+        let files = run_files(&repository, &review)?;
+        let checkout = self.hold_run(id, &repository.id, &files).await?;
         if !self.start_review(id, &commits).await? {
             return Ok(Pass::Ended);
         }
-        let checkout = self.reviews.hold_checkout(id, &workspace.repository_id);
         let ended = self
             .run_in_checkout(&review, &workspace, &settings, &commits, &files, cancelled)
             .await;
@@ -225,6 +226,36 @@ impl Manager {
         }
     }
 
+    /// Hold `files`, the run of review `id` of `repository`, once no earlier
+    /// run there holds it, as a cancelled review's does while it ends;
+    /// refused while one that could not be removed keeps it.
+    async fn hold_run(
+        &self,
+        id: ReviewId,
+        repository: &RepositoryId,
+        files: &Files,
+    ) -> Result<CheckoutHold<'_>> {
+        let kept = || {
+            anyhow!(
+                "an earlier review left its run at {} that could not be removed; restart the \
+                 daemon with `shoal daemon restart` to remove it",
+                files.directory.display()
+            )
+        };
+        let mut ended = self.reviews.ended.subscribe();
+        let hold = loop {
+            match self.reviews.hold_run(id, repository, &files.directory) {
+                Ok(hold) => break hold,
+                Err(true) => return Err(kept()),
+                Err(false) => ended.changed().await.context("the daemon is stopping")?,
+            }
+        };
+        match files.directory.exists() {
+            true => Err(kept()),
+            false => Ok(hold),
+        }
+    }
+
     /// Record that review `id` started on `commits`; false when it is no
     /// longer queued.
     async fn start_review(&self, id: ReviewId, commits: &Commits) -> Result<bool> {
@@ -245,7 +276,7 @@ impl Manager {
         files: &Files,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Result<(Agent, Ended)> {
-        self.prepare_checkout(workspace, &commits.head, files)
+        self.prepare_checkout(review.id, workspace, &commits.head, files)
             .await?;
         let run = Run {
             runs: &self.oneshot_runs,
@@ -280,10 +311,11 @@ impl Manager {
         })
     }
 
-    /// The run's directory with the output schema and a detached checkout
-    /// of `head`.
+    /// Review `id`'s run directory with its ID, the output schema and a
+    /// detached checkout of `head`.
     async fn prepare_checkout(
         &self,
+        id: ReviewId,
         workspace: &Workspace,
         head: &CommitId,
         files: &Files,
@@ -292,6 +324,7 @@ impl Manager {
         review_runs(&repository)?.create()?;
         std::fs::create_dir_all(&files.directory)
             .with_context(|| format!("create {}", files.directory.display()))?;
+        reviewer::write_id(files, id)?;
         reviewer::write_schema(files)?;
         crate::git::detached::add(&repository.path, &files.checkout(), head.as_str()).await
     }
@@ -521,7 +554,7 @@ impl Manager {
         let workspace = self.workspace_by_id(&review.workspace_id).await.ok()?;
         let repository = self.repository(&workspace.repository_id).await.ok()?;
         Some(LeftRun {
-            files: run_files(&repository, id).ok()?,
+            files: run_files(&repository, &review).ok()?,
             repository: Some(repository.id),
         })
     }
@@ -541,7 +574,9 @@ impl Manager {
         let Some(repository) = &left.repository else {
             return;
         };
-        self.reviews.hold_checkout(run.id, repository).keep();
+        (self.reviews)
+            .hold_checkout(run.id, repository, &left.files.directory)
+            .keep();
         if run.left_running {
             self.agent_queue.hold_oneshot(repository);
         }
@@ -733,10 +768,18 @@ fn run_directories(directory: &Path) -> Result<Vec<Files>> {
     Ok(runs)
 }
 
-/// The files of review `id`'s run, in the reviewed repository's directory.
-fn run_files(repository: &Repository, id: ReviewId) -> Result<Files> {
+/// The files of `review`'s run, in the reviewed repository's directory, at
+/// one place for each workspace and each PR reviewed in it, so its reviewers
+/// run in the same directory each time, where an AI tool finds the sessions
+/// it saved there.
+fn run_files(repository: &Repository, review: &Review) -> Result<Files> {
+    let workspace = review.workspace_id.as_str();
+    let place = match &review.target {
+        ReviewTarget::Workspace => workspace.to_owned(),
+        ReviewTarget::Pr { url, .. } => format!("{workspace}-pr-{}", url.pull()?),
+    };
     Ok(Files {
-        directory: review_runs(repository)?.root().join(id.to_string()),
+        directory: review_runs(repository)?.root().join(place),
     })
 }
 

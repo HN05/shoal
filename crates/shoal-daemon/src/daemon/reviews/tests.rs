@@ -64,9 +64,18 @@ async fn fixture(reviewers: &[(&str, &str)], review: &str) -> Fixture {
 }
 
 impl Fixture {
-    /// The directory of review `id`'s run.
-    fn run(&self, id: ReviewId) -> std::path::PathBuf {
-        self.runs.root().join(id.to_string())
+    /// The directory of the runs of the workspace's reviews.
+    fn run(&self) -> std::path::PathBuf {
+        self.runs.root().join(self.workspace.id.as_str())
+    }
+
+    /// The workspace's run, as review `id` left it, without a checkout.
+    fn left_run(&self, id: ReviewId) -> std::path::PathBuf {
+        self.runs.create().unwrap();
+        let run = self.run();
+        std::fs::create_dir_all(&run).unwrap();
+        std::fs::write(run.join("review"), id.to_string()).unwrap();
+        run
     }
 
     /// A review of the workspace, once its run ended and delivered it.
@@ -144,7 +153,7 @@ async fn a_review_reads_the_committed_head_and_stores_its_findings() {
         review.findings[0].id.to_string(),
         format!("{}.1", review.id)
     );
-    assert!(!fixture.run(review.id).exists());
+    assert!(!fixture.run().exists());
     let worktrees = crate::git::run(&fixture.workspace.path, &["worktree", "list"])
         .await
         .unwrap();
@@ -274,7 +283,7 @@ async fn cancelling_stops_the_reviewer_and_removes_its_checkout() {
         .unwrap();
     assert_eq!(cancelled.state, ReviewState::Cancelled);
     ended.changed().await.unwrap();
-    assert!(!fixture.run(queued.id).exists());
+    assert!(!fixture.run().exists());
     let again = manager.cancel_review(None, Some(queued.id), None).await;
     assert!(again.is_err());
 }
@@ -337,9 +346,7 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
         })
         .await
         .unwrap();
-    fixture.runs.create().unwrap();
-    let checkout = fixture.run(queued).join("checkout");
-    std::fs::create_dir_all(checkout.parent().unwrap()).unwrap();
+    let checkout = fixture.left_run(queued).join("checkout");
     let head = crate::git::run(&fixture.workspace.path, &["rev-parse", "HEAD"])
         .await
         .unwrap();
@@ -416,18 +423,33 @@ async fn a_review_checkout_holds_its_repository_until_it_is_removed() {
     assert!(manager.ensure_no_reviews_in(&repository).await.is_err());
     // Its records go with its workspace while its run still removes the
     // checkout.
-    let checkout = manager.reviews.hold_checkout(queued, &repository);
+    let run = fixture.run();
+    let checkout = manager.reviews.hold_checkout(queued, &repository, &run);
     manager
         .store
         .run(move |db| Ok(db.execute("DELETE FROM reviews WHERE id=?1", [queued])?))
         .await
         .unwrap();
     assert!(manager.ensure_no_reviews_in(&repository).await.is_err());
+    // The next review there waits for it.
+    let next = ReviewId(queued.0 + 1);
+    assert!(matches!(
+        manager.reviews.hold_run(next, &repository, &run),
+        Err(false)
+    ));
     drop(checkout);
     manager.ensure_no_reviews_in(&repository).await.unwrap();
-    // A checkout its run could not remove waits for a restarted daemon.
-    manager.reviews.hold_checkout(queued, &repository).keep();
+    drop(manager.reviews.hold_run(next, &repository, &run).unwrap());
+    // A checkout its run could not remove waits for a restarted daemon,
+    // which the next review there is told.
+    (manager.reviews)
+        .hold_checkout(queued, &repository, &run)
+        .keep();
     assert!(manager.ensure_no_reviews_in(&repository).await.is_err());
+    assert!(matches!(
+        manager.reviews.hold_run(next, &repository, &run),
+        Err(true)
+    ));
 }
 
 #[tokio::test]
@@ -490,7 +512,7 @@ async fn removing_the_workspace_stops_its_review() {
         .unwrap();
     ended.changed().await.unwrap();
     assert!(manager.review(queued.id).await.is_err());
-    assert!(!fixture.run(queued.id).exists());
+    assert!(!fixture.run().exists());
 }
 
 #[tokio::test]
@@ -1048,16 +1070,45 @@ async fn removing_the_repository_stops_its_reviews_first() {
 }
 
 #[tokio::test]
-async fn a_review_runs_in_its_repository_directory() {
-    let script = "pwd > \"$(dirname '{review}')/cwd\"\ncat '{review}'";
+async fn each_review_of_a_workspace_runs_in_one_checkout_in_its_repository_directory() {
+    let script = "pwd >> \"$(dirname '{review}')/cwd\"\ncat '{review}'";
     let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
-    let review = fixture.review().await;
-    assert_eq!(review.state, ReviewState::Finished, "{review:?}");
+    for _ in 0..2 {
+        let review = fixture.review().await;
+        assert_eq!(review.state, ReviewState::Finished, "{review:?}");
+    }
     let cwd = std::fs::read_to_string(fixture._root.path().join("cwd")).unwrap();
-    let cwd = std::fs::canonicalize(cwd.trim()).unwrap_or_else(|_| cwd.trim().into());
-    let run = fixture.run(review.id);
-    assert!(cwd.starts_with(&run), "{cwd:?} outside {run:?}");
+    let cwd: Vec<_> = cwd.lines().map(std::path::Path::new).collect();
+    assert_eq!(cwd[0], cwd[1]);
+    // A temporary directory's path may lead through a link.
+    let checkout = std::path::Path::new(fixture.workspace.id.as_str()).join("checkout");
+    assert!(cwd[0].ends_with(&checkout), "{cwd:?}");
     assert!(!fixture.manager.paths.state.join("reviews").exists());
+}
+
+#[tokio::test]
+async fn a_review_queued_while_a_cancelled_one_ends_waits_for_its_run() {
+    let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
+    let manager = &fixture.manager;
+    let selector = SpaceSelector::id(&fixture.workspace.id);
+    let queue =
+        || manager.queue_review(&selector, ReviewTarget::Workspace, None, Default::default());
+    let first = queue().await.unwrap();
+    let mut changed = manager.store.watch_changes();
+    let state = |id| async move { manager.review(id).await.unwrap().state };
+    while state(first.id).await != ReviewState::Running {
+        changed.changed().await.unwrap();
+    }
+    manager
+        .cancel_review(None, Some(first.id), None)
+        .await
+        .unwrap();
+    let second = queue().await.unwrap();
+    while state(second.id).await == ReviewState::Queued {
+        changed.changed().await.unwrap();
+    }
+    assert_eq!(state(second.id).await, ReviewState::Running);
+    assert!(fixture.run().join("checkout").exists());
 }
 
 #[tokio::test]
@@ -1081,7 +1132,7 @@ async fn a_run_left_in_the_repository_directory_holds_back_its_move_and_removal(
     let repository = fixture.workspace.repository_id.clone();
     fixture.runs.create().unwrap();
     manager.ensure_no_reviews_in(&repository).await.unwrap();
-    let run = fixture.run(ReviewId(7));
+    let run = fixture.left_run(ReviewId(7));
     std::fs::create_dir_all(run.join("checkout")).unwrap();
     assert!(manager.ensure_no_reviews_in(&repository).await.is_err());
     assert!(manager.remove_repository(&repository).await.is_err());
@@ -1125,8 +1176,7 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
         })
         .await
         .unwrap();
-    fixture.runs.create().unwrap();
-    let run = fixture.run(stuck);
+    let run = fixture.left_run(stuck);
     std::fs::create_dir_all(run.join("checkout").join("file")).unwrap();
     // Without write access to the run, its checkout cannot go.
     std::fs::set_permissions(&run, std::fs::Permissions::from_mode(0o500)).unwrap();
@@ -1186,9 +1236,13 @@ async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_admission() {
         })
         .await
         .unwrap();
-    // The second run's review went with its workspace.
-    fixture.runs.create().unwrap();
-    let runs = [stuck, ReviewId(stuck.0 + 1)].map(|id| fixture.run(id));
+    // The second run's review, which an earlier version named it by, went
+    // with its workspace.
+    let gone = ReviewId(stuck.0 + 1);
+    let runs = [
+        fixture.left_run(stuck),
+        fixture.runs.root().join(gone.to_string()),
+    ];
     for run in &runs {
         std::fs::create_dir_all(run.join("checkout")).unwrap();
     }
@@ -1203,14 +1257,15 @@ async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_admission() {
     assert!(runs.iter().all(|run| run.join("checkout").exists()));
     // Until a restart, the repository stays held and the slots used.
     let held = manager.reviews.checkouts.lock().unwrap().clone();
-    let both = [stuck, ReviewId(stuck.0 + 1)].map(|id| {
+    let both = [stuck, gone].into_iter().zip(&runs).map(|(id, run)| {
         let held = HeldCheckout {
             repository: repository.clone(),
+            run: run.clone(),
             kept: true,
         };
         (id, held)
     });
-    assert_eq!(held, std::collections::HashMap::from(both));
+    assert_eq!(held, both.collect());
     let slots = manager.agent_queue.admitted_oneshots();
     assert_eq!(slots.len(), 2);
     assert!(slots.iter().all(|(held, _)| *held == repository));

@@ -3,7 +3,10 @@
 //! workspace's agent answered it.
 use crate::client::repository_ids::RepositoryId;
 use crate::client::space_ids::SpaceId;
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result, bail, ensure};
 use tokio::sync::watch;
@@ -33,8 +36,9 @@ pub(crate) struct Reviews {
     queued: tokio::sync::Notify,
     /// Stops each review that has started to run.
     cancels: std::sync::Mutex<HashMap<ReviewId, std::sync::Arc<watch::Sender<bool>>>>,
-    /// The repository of each review whose checkout, a worktree of it, may
-    /// exist, which outlives the review's records when its workspace goes.
+    /// The repository and run of each review whose checkout, a worktree of
+    /// the repository, may exist, which outlives the review's records when
+    /// its workspace goes.
     checkouts: std::sync::Mutex<HashMap<ReviewId, HeldCheckout>>,
     /// Counts the runs that ended, for waits on one.
     ended: watch::Sender<u64>,
@@ -52,17 +56,36 @@ impl Default for Reviews {
 }
 
 impl Reviews {
-    /// Record that review `id` may have a checkout of `repository` until the
-    /// returned value is dropped, once it is removed.
-    fn hold_checkout(&self, id: ReviewId, repository: &RepositoryId) -> CheckoutHold<'_> {
-        self.checkouts.lock().unwrap().insert(
-            id,
-            HeldCheckout {
-                repository: repository.clone(),
-                kept: false,
-            },
-        );
+    /// Record that review `id` may have a checkout of `repository` in its
+    /// run at `run` until the returned value is dropped, once it is removed.
+    fn hold_checkout(
+        &self,
+        id: ReviewId,
+        repository: &RepositoryId,
+        run: &Path,
+    ) -> CheckoutHold<'_> {
+        self.checkouts
+            .lock()
+            .unwrap()
+            .insert(id, HeldCheckout::new(repository, run));
         CheckoutHold { reviews: self, id }
+    }
+
+    /// Hold the run at `run` for review `id` as [`Self::hold_checkout`]
+    /// does, unless another review's run there holds it; then whether that
+    /// one is kept, which only a restarted daemon removes.
+    fn hold_run(
+        &self,
+        id: ReviewId,
+        repository: &RepositoryId,
+        run: &Path,
+    ) -> Result<CheckoutHold<'_>, bool> {
+        let mut checkouts = self.checkouts.lock().unwrap();
+        if let Some(held) = checkouts.values().find(|held| held.run == run) {
+            return Err(held.kept);
+        }
+        checkouts.insert(id, HeldCheckout::new(repository, run));
+        Ok(CheckoutHold { reviews: self, id })
     }
 
     /// Whether a review's checkout of `repository` may exist that its run
@@ -80,8 +103,20 @@ impl Reviews {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct HeldCheckout {
     repository: RepositoryId,
+    /// The run's directory, which holds the checkout.
+    run: PathBuf,
     /// Whether its run ended without removing it.
     kept: bool,
+}
+
+impl HeldCheckout {
+    fn new(repository: &RepositoryId, run: &Path) -> Self {
+        Self {
+            repository: repository.clone(),
+            run: run.to_owned(),
+            kept: false,
+        }
+    }
 }
 
 /// A review's possible checkout, until it is removed.

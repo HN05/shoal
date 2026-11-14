@@ -24,9 +24,19 @@ pub(super) struct Files {
 }
 
 impl Files {
-    /// The review whose run these are, named by their directory.
+    /// The review whose run these are, named in its [`Self::id`] file, or
+    /// by the directory, as earlier versions named it.
     pub fn review(&self) -> Option<ReviewId> {
-        self.directory.file_name()?.to_str()?.parse().ok()
+        match fs::read_to_string(self.id()) {
+            Ok(id) => id.trim().parse().ok(),
+            Err(_) => self.directory.file_name()?.to_str()?.parse().ok(),
+        }
+    }
+
+    /// The ID of the review whose run these are, written first, since the
+    /// directory names the review's subject.
+    pub fn id(&self) -> PathBuf {
+        self.directory.join("review")
     }
 
     pub fn checkout(&self) -> PathBuf {
@@ -143,6 +153,11 @@ const RESULT_LIMIT: u64 = 8 * 1024 * 1024;
 /// The most of each diagnostic stream that is read, from its end, where
 /// a failure is reported.
 const DIAGNOSTIC_LIMIT: u64 = 64 * 1024;
+
+/// Write the ID of review `id`, whose run these files are.
+pub(super) fn write_id(files: &Files, id: ReviewId) -> Result<()> {
+    fs::write(files.id(), id.to_string()).with_context(|| format!("write {}", files.id().display()))
+}
 
 /// Write the output schema the reviewer is given.
 pub(super) fn write_schema(files: &Files) -> Result<()> {
