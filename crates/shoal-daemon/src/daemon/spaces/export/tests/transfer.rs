@@ -357,15 +357,17 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
         "{}\n"
     );
 
-    // The restore that opens it gives them to the workspace, for its caller
-    // to put in place; the sweep leaves them while the workspace exists.
+    // The restore that opens it under its own ID gives them to the
+    // workspace where they are, for its caller to put in place; the sweep
+    // leaves them while the workspace exists.
     git(&target_repo.path, &["branch", "-q", "-D", "topic"]);
     let restored = importing
         .restore_workspace(&SpaceSelector::id(&removed[0].space_id))
         .await
         .unwrap();
     assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
-    let handed = sessions.join(&restored.opened.workspace.id);
+    assert_eq!(restored.opened.workspace.id, removed[0].space_id);
+    let handed = kept;
     assert_eq!(
         restored.session_files,
         [CarriedSessionFile {
@@ -373,7 +375,6 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
             contents: handed.join("0"),
         }]
     );
-    assert!(!kept.exists());
     assert_eq!(fs::read_to_string(handed.join("0")).unwrap(), "{}\n");
     // Those of a workspace that neither exists nor has a removal record go.
     let unowned = sessions.join("gone");

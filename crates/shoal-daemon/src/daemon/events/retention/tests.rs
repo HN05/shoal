@@ -1,5 +1,6 @@
 use super::*;
 use crate::daemon::test_support::manager;
+use rusqlite::params;
 
 /// The spaces with events, in the order of their first one.
 fn spaces(db: &Connection) -> Result<Vec<String>> {
@@ -54,23 +55,6 @@ async fn gone_spaces_keep_their_events_for_the_retention_after_their_removal() {
     manager.expire_events().await.unwrap();
     let left = manager.store.run(|db| spaces(db)).await.unwrap();
     assert_eq!(left, ["just-removed", "restorable"]);
-}
-
-#[tokio::test]
-async fn a_restored_workspace_takes_the_removed_ones_events() {
-    let (_temp, manager) = manager().await;
-    let left = manager
-        .store
-        .run(|db| {
-            journal(db, "removed", "removed", 0)?;
-            journal(db, "other", "created", 0)?;
-            journal(db, "restored", "created", 0)?;
-            adopt(db, &"removed".into(), &"restored".into())?;
-            spaces(db)
-        })
-        .await
-        .unwrap();
-    assert_eq!(left, ["restored", "other"]);
 }
 
 #[tokio::test]

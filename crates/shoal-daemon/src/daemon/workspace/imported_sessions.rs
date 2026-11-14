@@ -97,6 +97,10 @@ impl Manager {
         let layout = Layout::of(&repo).context("the repository has no directory")?;
         let kept = layout.kept(to, session_files);
         let (from, to) = (removed.space_id.clone(), to.clone());
+        // A space restored under its own ID owns them where they are.
+        if from == to {
+            return Ok(kept);
+        }
         let _sweep = self.gates.lock_checkpoints().await;
         tokio::task::spawn_blocking(move || layout.hand_over(&from, &to))
             .await

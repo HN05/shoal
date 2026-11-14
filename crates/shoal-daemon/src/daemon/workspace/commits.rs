@@ -46,6 +46,14 @@ impl RecordedJobWorkspace {
     }
 }
 
+/// The ID a new workspace's record takes, a new one unless a restore keeps
+/// its own, and the space it goes below, or none at the top.
+#[derive(Default)]
+struct NewRecord {
+    id: Option<SpaceId>,
+    parent: Option<SpaceId>,
+}
+
 impl Manager {
     /// Create a workspace at the commit `start` names in `repository`: a
     /// child of the space `parent`, by ID, or without one a top-level
@@ -145,7 +153,7 @@ impl Manager {
                 (&start.directory, name),
                 start.at,
                 start.diff_ref,
-                parent,
+                NewRecord { id: None, parent },
                 options,
             )
             .await?;
@@ -180,7 +188,14 @@ impl Manager {
             ..Default::default()
         };
         let workspace = self
-            .record_commit_workspace(&repo, (directory, name), at, None, None, options)
+            .record_commit_workspace(
+                &repo,
+                (directory, name),
+                at,
+                None,
+                NewRecord::default(),
+                options,
+            )
             .await?;
         Ok(RecordedJobWorkspace {
             repo,
@@ -370,6 +385,7 @@ impl Manager {
     pub(super) async fn restore_commit_workspace(
         &self,
         removed: &RemovedSpace,
+        id: Option<SpaceId>,
         at: StartingCommit,
         files: Option<RestoredFiles>,
     ) -> Result<Workspace> {
@@ -388,7 +404,7 @@ impl Manager {
                 ),
                 at,
                 diff_ref,
-                None,
+                NewRecord { id, parent: None },
                 CreationOptions {
                     skip_setup: removed.kept_workspace()?.setup_skipped,
                     ..Default::default()
@@ -403,28 +419,32 @@ impl Manager {
     }
 
     /// Record a new workspace at a commit in a directory named after
-    /// `directory`, with `name`, which started `at`, below `parent`, whose
-    /// diff compares with `diff_ref`, else with `at`. The caller holds the
-    /// repository's Git gate.
+    /// `directory`, with `name`, which started `at`, as `new` places it,
+    /// whose diff compares with `diff_ref`, else with `at`. The caller holds
+    /// the repository's Git gate.
     async fn record_commit_workspace(
         &self,
         repo: &Repository,
         (directory, name): (&str, SpaceName),
         at: StartingCommit,
         diff_ref: Option<String>,
-        parent: Option<SpaceId>,
+        new: NewRecord,
         options: CreationOptions,
     ) -> Result<Workspace> {
         let path = self.new_workspace_path(repo, directory, None).await?;
+        let record =
+            Workspace::new_record(repo.id.clone(), name, path, None, WorkspaceState::Preparing);
         let workspace = Workspace {
+            id: new.id.unwrap_or(record.id),
             base_commit: Some(at.commit.clone()),
             base_ref: diff_ref,
             at: Some(at),
             setup_skipped: options.skip_setup,
             disposable: options.disposable,
-            ..Workspace::new_record(repo.id.clone(), name, path, None, WorkspaceState::Preparing)
+            ..record
         };
-        self.insert_workspace(workspace, None, parent, true).await
+        self.insert_workspace(workspace, None, new.parent, true)
+            .await
     }
 
     /// Check out `head` and configure the worktree with `files` written into

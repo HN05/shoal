@@ -194,6 +194,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<RestoredWorkspace> {
         let removed = self.claim_removed_workspace(selector).await?;
+        let id = self.restored_id(&removed).await?;
         let kept = removed.kept_workspace()?;
         let checkpoint = &kept.checkpoint;
         let files = (checkpoint.commit != checkpoint.head).then(|| RestoredFiles {
@@ -202,37 +203,15 @@ impl Manager {
         });
         let opened = match kept.at.clone() {
             Some(at) => OpenedWorkspace {
-                workspace: self.restore_commit_workspace(&removed, at, files).await?,
+                workspace: (self.restore_commit_workspace(&removed, id, at, files)).await?,
                 reused: false,
             },
-            None => self.restore_branch_workspace(&removed, files).await?,
+            None => self.restore_branch_workspace(&removed, id, files).await?,
         };
-        let mut warnings = (self.relink_space(&opened.workspace.id, &removed.links, caller)).await;
-        let session_files = self
-            .hand_over_imported_sessions(&removed, &opened.workspace.id)
-            .await
-            .unwrap_or_else(|error| {
-                warnings.push(format!("cannot keep the agents' session files: {error:#}"));
-                Vec::new()
-            });
-        if let Err(error) = crate::execution::recovery::save_stopped_agents(
-            &self.paths,
-            &opened.workspace.id,
-            &removed.agents,
-        ) {
-            warnings.push(format!(
-                "cannot save stopped agents for shoal restore: {error:#}"
-            ));
-        }
-        for last in &removed.last_sessions {
-            if let Err(error) = last.write(&self.paths, &opened.workspace.id) {
-                warnings.push(format!(
-                    "cannot save the last {} session for shoal restore: {error:#}",
-                    last.agent
-                ));
-            }
-        }
-        self.adopt_removal(&removed, &opened.workspace.id).await?;
+        let id = &opened.workspace.id;
+        let mut warnings = self.relink_space(id, &removed.links, caller).await;
+        let session_files = self.restore_agents(&removed, id, &mut warnings).await;
+        self.adopt_removal(&removed, id).await?;
         Ok(RestoredWorkspace {
             opened,
             removed,
@@ -241,11 +220,54 @@ impl Manager {
         })
     }
 
-    /// Open the removed workspace `removed` again on its branch at the
-    /// removed HEAD, with `files` from its checkpoint.
+    /// Save for the agents of the space `id` that restores `removed` what
+    /// its record keeps of them: their stopped agents and last sessions, and
+    /// the session files an import carried, which it returns for the caller
+    /// to put in place. Each that fails adds a warning to `warnings`.
+    async fn restore_agents(
+        &self,
+        removed: &RemovedSpace,
+        id: &SpaceId,
+        warnings: &mut Vec<String>,
+    ) -> Vec<CarriedSessionFile> {
+        let session_files = (self.hand_over_imported_sessions(removed, id))
+            .await
+            .unwrap_or_else(|error| {
+                warnings.push(format!("cannot keep the agents' session files: {error:#}"));
+                Vec::new()
+            });
+        let saved =
+            crate::execution::recovery::save_stopped_agents(&self.paths, id, &removed.agents);
+        if let Err(error) = saved {
+            warnings.push(format!(
+                "cannot save stopped agents for shoal restore: {error:#}"
+            ));
+        }
+        for last in &removed.last_sessions {
+            if let Err(error) = last.write(&self.paths, id) {
+                warnings.push(format!(
+                    "cannot save the last {} session for shoal restore: {error:#}",
+                    last.agent
+                ));
+            }
+        }
+        session_files
+    }
+
+    /// The ID the restore of `removed` opens it under: its own, unless the
+    /// chat a conversion made of it has it, beside which it opens as a new
+    /// space.
+    async fn restored_id(&self, removed: &RemovedSpace) -> Result<Option<SpaceId>> {
+        let taken = self.find_space(&removed.space_id).await?.is_some();
+        Ok((!taken).then(|| removed.space_id.clone()))
+    }
+
+    /// Open the removed workspace `removed` again under `id` on its branch
+    /// at the removed HEAD, with `files` from its checkpoint.
     async fn restore_branch_workspace(
         &self,
         removed: &RemovedSpace,
+        id: Option<SpaceId>,
         files: Option<RestoredFiles>,
     ) -> Result<OpenedWorkspace> {
         let branch = self.restore_branch(removed).await?;
@@ -258,6 +280,7 @@ impl Manager {
                 skip_setup: removed.kept_workspace()?.setup_skipped,
                 ..Default::default()
             },
+            id,
             ..Default::default()
         };
         let opened = self

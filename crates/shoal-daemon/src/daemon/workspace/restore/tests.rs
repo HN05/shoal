@@ -317,6 +317,32 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
         .await
         .unwrap();
     assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
+    // It keeps its ID, so its log goes on where its removal ended it.
+    assert_eq!(restored.opened.workspace.id, workspace.id);
+    let id = workspace.id.clone();
+    let kinds: Vec<String> = (manager.store)
+        .run(move |db| {
+            Ok(db
+                .prepare(
+                    "SELECT json_extract(record,'$.kind') FROM workspace_events
+                        WHERE space_id=?1 ORDER BY id",
+                )?
+                .query_map([&id], |row| row.get(0))?
+                .collect::<rusqlite::Result<_>>()?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        kinds.first().map(String::as_str),
+        Some("created"),
+        "{kinds:?}"
+    );
+    assert_eq!(
+        kinds.last().map(String::as_str),
+        Some("restored"),
+        "{kinds:?}"
+    );
+    assert!(kinds.iter().any(|kind| kind == "removed"), "{kinds:?}");
     let path = &restored.opened.workspace.path;
     assert!(!restored.opened.reused);
     assert_eq!(
@@ -357,7 +383,7 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
         [("https://github.com/acme/repo/pull/3".to_owned(), None)]
     );
     assert!(manager.removed_workspaces().await.unwrap().is_empty());
-    // The removal's checkpoint belongs to the new workspace.
+    // The removal's checkpoint stays the workspace's.
     let checkpoints = manager
         .checkpoints(&manager.named("topic").await, None)
         .await

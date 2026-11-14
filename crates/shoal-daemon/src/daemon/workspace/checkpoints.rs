@@ -374,22 +374,22 @@ impl Manager {
             .await
     }
 
-    /// Give a reopened workspace the checkpoints, events and attached files
-    /// of the removed one and drop its removal record, at once, so the
-    /// checkpoints always have an owner. The files gate keeps the deletion
-    /// of the removed one's files from coming between.
-    pub(super) async fn adopt_removal(
-        &self,
-        removed: &RemovedSpace,
-        workspace_id: &SpaceId,
-    ) -> Result<()> {
+    /// Drop the removal record of `removed`, which the space `id` restores,
+    /// with what keeps its attached files from expiring, and record the
+    /// restore, at once. Restored under its own ID, it keeps its
+    /// checkpoints, events and files where they are; opened beside the chat
+    /// a conversion made of it, it takes the checkpoints, so they keep an
+    /// owner. The files gate keeps the deletion of the removed space's files
+    /// from coming between.
+    pub(super) async fn adopt_removal(&self, removed: &RemovedSpace, id: &SpaceId) -> Result<()> {
         let _files = self.gates.lock_message_files(removed.repository()?).await;
-        let (from, to) = (removed.space_id.clone(), workspace_id.to_owned());
+        let (from, to) = (removed.space_id.clone(), id.to_owned());
         self.store
             .write(move |tx| {
-                reassign(tx, &from, &to)?;
-                crate::daemon::events::adopt(tx, &from, &to)?;
-                crate::daemon::workspace_files::restore(tx, &from, &to)?;
+                if from != to {
+                    reassign(tx, &from, &to)?;
+                }
+                crate::daemon::workspace_files::restore(tx, &to)?;
                 crate::daemon::events::record(
                     tx,
                     &to,

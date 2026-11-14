@@ -3755,12 +3755,13 @@ restore their own workspace's checkpoints.
 and restores the one picked; without a terminal, or with `--json`, it lists them
 instead. It takes one workspace, and none of the flags that restore agents.
 [`shoal restore`](#recovery) without a space also offers the removed workspaces.
-`shoal restore <id>` of a removed workspace opens that removed workspace on its branch and recorded base, which restores its stack link while the base
+`shoal restore <id>` of a removed workspace opens that removed workspace again under its ID, with a new number, on its branch and recorded base, which restores its stack link while the base
 workspace exists, recreating the branch at the removed HEAD when it was deleted,
 puts its unsaved files back as uncommitted changes, links its issue and its
 opened and related items, saves the agents stopped by the removal or before it
-and the last sessions, runs setup, links its PRs, and keeps its checkpoints; a link or save that fails is
-a warning. Once its post-setup hook succeeds, it restores those agents and last
+and the last sessions, runs setup, links its PRs, and keeps its checkpoints, log and attached
+files; a link or save that fails is a warning. A workspace converted into a chat
+opens beside that chat, under a new ID, with its checkpoints. Once its post-setup hook succeeds, it restores those agents and last
 sessions as it restores a stopped space's, queued unless `--now` or `--focus`, under
 `--permission`; one it cannot restore is reported and stays saved, and the workspace
 stays open. `--no-agents` keeps them saved for a later `shoal restore`, keeping the

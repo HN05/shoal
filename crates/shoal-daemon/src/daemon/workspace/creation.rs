@@ -35,6 +35,8 @@ pub(crate) struct NewWorkspace<'a> {
     /// Its new branch takes exactly the requested name, which a taken name
     /// refuses instead of suffixing.
     pub exact_branch: bool,
+    /// The ID it keeps, as a restored space does; a new one otherwise.
+    pub id: Option<SpaceId>,
 }
 
 /// A worktree Git created and Shoal configured, which settling seeds.
@@ -158,6 +160,7 @@ impl Manager {
             parent: below,
             converts,
             exact_branch: _,
+            id,
         } = new;
         let existing = match &source {
             WorkspaceSource::Existing { .. } => Some(branch.as_str()),
@@ -186,16 +189,18 @@ impl Manager {
             Some(given) => given.checked()?,
             None => SpaceName::derive(&name, "workspace"),
         };
+        let record = Workspace::new_record(
+            repo.id.clone(),
+            name,
+            path,
+            Some(branch),
+            WorkspaceState::Preparing,
+        );
         let workspace = Workspace {
+            id: id.unwrap_or(record.id),
             setup_skipped: options.skip_setup,
             disposable: options.disposable,
-            ..Workspace::new_record(
-                repo.id.clone(),
-                name,
-                path,
-                Some(branch),
-                WorkspaceState::Preparing,
-            )
+            ..record
         };
         let converted_mode = converts.as_ref().map(|converting| converting.mode.clone());
         let placement = match converts {

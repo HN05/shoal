@@ -7,7 +7,7 @@ use crate::client::repository_ids::RepositoryId;
 use std::{collections::HashMap, time::Duration};
 
 use anyhow::Result;
-use rusqlite::{Connection, Transaction, params};
+use rusqlite::{Connection, Transaction};
 
 use crate::{
     client::space_ids::SpaceId,
@@ -135,18 +135,6 @@ fn forget_shoal_before(tx: &Transaction<'_>, time: UnixTime) -> Result<()> {
     tx.execute(
         "DELETE FROM workspace_events WHERE space_id IS NULL AND created_at<?1",
         [time],
-    )?;
-    Ok(())
-}
-
-/// Give the events of the removed workspace `from` to the workspace `to`
-/// that restores it, in the transaction that hands it the checkpoints, so
-/// its log goes on where it ended.
-pub(crate) fn adopt(db: &Connection, from: &SpaceId, to: &SpaceId) -> Result<()> {
-    db.execute(
-        "UPDATE workspace_events SET record=json_set(record,'$.workspace_id',?2)
-            WHERE space_id=?1 AND json_extract(record,'$.workspace_id')=?1",
-        params![from, to],
     )?;
     Ok(())
 }

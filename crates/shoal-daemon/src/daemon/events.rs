@@ -578,7 +578,6 @@ impl Manager {
 mod retention;
 mod shoal_log;
 mod space_log;
-pub(crate) use retention::adopt;
 
 #[cfg(test)]
 mod tests;
