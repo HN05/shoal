@@ -363,3 +363,21 @@ async fn deleting_a_pr_s_branch_follows_the_merge_permission() {
     let request = undecided(delete.scope(&manager, &caller(&chat.id)).await.map(drop));
     assert_eq!(request.target, Target::Action(PermissionKey::Merge));
 }
+
+#[test]
+fn a_long_request_names_its_start_and_a_digest_of_all_of_it() {
+    use crate::forge::raw::{HttpMethod, RawRequest};
+
+    let write = |body: &str| RawRequest {
+        method: HttpMethod::Patch,
+        path: "repos/{owner}/{repo}/issues/3".into(),
+        body: Some(serde_json::json!({ "body": body.repeat(100) })),
+    };
+    let named = |body| Action::request(PermissionKey::ApiWrites, &write(body), None).action;
+    let (first, other) = (named("a"), named("b"));
+    assert!(
+        first.starts_with(r#"{"method":"PATCH","path":"repos/{owner}/{repo}/issues/3""#),
+        "{first}"
+    );
+    assert_ne!(first, other);
+}

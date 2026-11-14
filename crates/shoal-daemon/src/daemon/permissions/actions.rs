@@ -52,9 +52,8 @@ impl Action {
         }
     }
 
-    /// Sending `request`, which `key` governs, in `repository`: the request
-    /// as it goes over the wire, or for a long one its kind and a digest of
-    /// it, so that another request is another action.
+    /// Sending `request`, which `key` governs, in `repository`, named as
+    /// [`request_text`] names it.
     pub(crate) fn request(
         key: PermissionKey,
         request: &impl serde::Serialize,
@@ -68,26 +67,28 @@ impl Action {
     }
 }
 
-/// The longest request an action names whole.
+/// The longest request an action names whole, and how much of a longer
+/// one it shows.
 const NAMED_WHOLE: usize = 160;
 
-/// `request` as an action names it: its JSON, or for a long one, the kind
-/// of request and a digest of its JSON.
+/// `request` as an action names it: its JSON, or for a long one the start
+/// of it, in the order its fields are written, such as a forge API
+/// request's method and path, and a digest of all of it, so that another
+/// request is another action.
 fn request_text(request: &impl serde::Serialize) -> String {
     use sha2::{Digest, Sha256};
-    let json = serde_json::to_value(request).unwrap_or_default();
-    let text = json.to_string();
+    let text = serde_json::to_string(request).unwrap_or_default();
     if text.len() <= NAMED_WHOLE {
         return text;
     }
-    let kind = match &json {
-        serde_json::Value::Object(fields) => fields.keys().next().cloned(),
-        _ => None,
-    };
+    let shown = (text.char_indices())
+        .take_while(|(at, _)| *at < NAMED_WHOLE)
+        .map(|(_, c)| c)
+        .collect::<String>();
     let digest: String = (Sha256::digest(text.as_bytes()).iter().take(8))
         .map(|byte| format!("{byte:02x}"))
         .collect();
-    format!("{} {digest}", kind.unwrap_or_default())
+    format!("{shown}… (sha256 {digest})")
 }
 
 impl Manager {
