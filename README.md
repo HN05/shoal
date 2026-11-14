@@ -86,6 +86,7 @@ shoal branch base set feature-api --workspace 4        # Record that workspace 4
 shoal split fix-typo --workspace 4           # Create a child workspace for work in its own PR
 shoal start --copy 4 --fork                  # Try another approach from workspace 4's current files
 shoal start --copy 4 --checkpoint 3          # Start from workspace 4's checkpoint 3, live or removed
+shoal refresh 4                              # Bring workspace 4 up to date with what it was made from
 shoal start my-project --branch origin/feature/api --agent codex  # An existing branch opens
 shoal start my-project --branch quick-fix --path ../quick-fix
 shoal start my-project --branch fix-login --name "Login retries"  # Name it apart from its branch

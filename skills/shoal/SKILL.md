@@ -574,6 +574,7 @@ and leaves it running here.
 shoal repo sync
 shoal conflicts [<branch>]
 shoal branch base [set <workspace>]
+shoal refresh [<workspace>]
 shoal merge [<workspace>]
 shoal unmerge [<workspace>]
 ```
@@ -584,6 +585,11 @@ fast-forwards the local default branch, advancing the registered checkout when
 it has that branch checked out, where `git fetch origin main:main` is refused.
 It never pushes or changes a workspace's branch. Branches of other workspaces
 are shared refs, and pushed ones are current as `origin/<branch>` after a sync.
+`shoal refresh [workspace]` brings a workspace that holds nothing of its own up
+to date with what it was made from: a branch fast-forwards to its upstream or
+the branch it builds on, a workspace at a commit moves to its PR's head or
+branch's tip, and a copy takes its live source's files again; work of its own
+refuses it, named with what deals with it.
 `conflicts` checks committed HEAD against the base workspace's branch,
 otherwise the local default branch, or the branch named, without touching the
 worktree; exit 1 lists the conflicting paths. It also lists a file the

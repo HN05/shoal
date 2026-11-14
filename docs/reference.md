@@ -2598,7 +2598,8 @@ tags once and try again, and naming the parent's branch starts it at the parent'
 commit without stacking it. It is named after the branch at its short commit
 (`main at 3f2a9c1`), the tag or the commit, in a directory such as
 `main-3f2a9c1` with the usual suffix when taken, and
-`shoal diff` compares with its starting commit. Run by a workspace's or a chat's
+`shoal diff` compares with its starting commit, which
+[`shoal refresh`](#refresh) moves to a PR's new head or a branch's new tip. Run by a workspace's or a chat's
 process it is a child of the caller's space, or of `--workspace` when that names
 one below it; run by the user it is a child of `--workspace`
 or the current workspace, and outside one a top-level workspace of the current
@@ -2751,7 +2752,8 @@ holds, questions, ready marks or checkpoints, and no agent session: `shoal start
 --copy --fork` starts its agent from a fork of the copied workspace's agent's
 session, which stays unchanged, and `--fork` does not combine with
 `--checkpoint`. Its parent follows the usual rules, not the source. A copy is an
-ordinary, writable workspace with one editing agent of its own.
+ordinary, writable workspace with one editing agent of its own, which
+[`shoal refresh`](#refresh) copies its live source's files into again.
 
 Once its files are in, a copy takes a checkpoint of itself, its starting
 checkpoint, which keeps every unsaved file whatever `archive_max_mb` and does not
@@ -2809,7 +2811,8 @@ is; a missing upstream, failed fetch, divergence, or a dirty or managed checkout
 of the default branch leaves it unchanged until fixed. Workspace status shows the
 last sync and its error; once syncs have failed for 30 minutes of the machine
 being awake, the repository joins the inbox and one `sync_failed` alert tells you. `shoal repo sync [repository]` syncs at once and
-reports the result or the error. Syncing never pushes or moves workspace branches.
+reports the result or the error. Syncing never pushes or moves workspace
+branches; [`shoal refresh`](#refresh) fast-forwards one when asked.
 
 ### Set up config
 
@@ -3118,6 +3121,56 @@ when:
 The default branch has the same requirements as for `merge`, and an agent's scoped
 `unmerge` needs approval under the same `merge` and `push` permissions: the
 request names the merge it undoes, and after approval the agent's retry undoes it.
+
+### Refresh
+
+```sh
+shoal refresh              # The workspace this runs in, otherwise a picker
+shoal refresh 4            # Workspace 4
+```
+
+`shoal refresh [WORKSPACE]` brings a workspace up to date with what it was made
+from while it holds nothing of its own:
+
+| Workspace | Refresh moves it to |
+|---|---|
+| On a branch with an upstream | the upstream, fetched |
+| Any other branch workspace | the branch it builds on: its base workspace's, else the branch its recorded base names (a remote one fetched), else the local default branch, synced first as `shoal repo sync` does |
+| At a commit made for a PR | the PR's head as the forge reports it now |
+| At a commit made for a branch | the branch's tip, resolved as `--base` resolves it |
+| At a tag or a bare commit, or a copy of a checkpoint | nothing: it is up to date |
+| A copy of a live workspace | the source's current files, copied again |
+
+A branch moves only by fast-forward, never by rebase or merge. A workspace at a
+commit is checked out at its new commit, which becomes its starting commit and
+what `shoal diff` compares with. A workspace that already has its target's
+commits, or a copy whose source still has the HEAD, index and unsaved files it
+was copied with, is up to date. Otherwise work of its own refuses the refresh,
+which names it: commits its target lacks, or for a workspace at a commit
+commits after its starting commit, with their subjects and for a branch the
+`git rebase` that moves them; uncommitted changes, by path, to commit, stash or
+discard; for a [copy](#copies), commits since it was copied and files that
+differ from those it started with, as cleanup compares them, with `shoal start
+--copy` for a fresh copy. Nothing refreshes on its own.
+
+A copy is copied again in place, as `--copy` copies: the source must pass the
+same checks, and a removed source is refused. A [checkpoint](#checkpoints-and-restore)
+first keeps the copy's state, then its tracked, untracked and ignored files and
+its index become the source's, and HEAD moves to the source's, its branch with
+it. A new starting checkpoint records what it now holds, and the old one expires
+as any checkpoint does. Setup and the post-setup hook run again, as `shoal
+setup` runs them, unless the copy was created with `--skip-setup`; the other
+cases run no setup. The diff base, links, leases, holds and agent session stay.
+
+The workspace must be ready, with no Git operation under way, and no command or
+agent may run there but the caller's own: an agent refreshes its own workspace,
+and a coordinator not one where a child's agent runs; the refusal names what
+runs and `shoal stop`. A refresh takes the workspace's `updating` state, so it
+does not overlap removal, restore or setup. A chat has no worktree to refresh,
+and `shoal refresh` run from a chat, even one in a workspace's worktree, is
+refused. Workspace processes refresh their own workspace and those below it.
+`--json` prints the workspace with `target`, `from` and `to` (HEAD before and
+after), `up_to_date`, and `setup`, whether setup ran again.
 
 ### Diff
 

@@ -821,6 +821,17 @@ source's work: links, leases, holds, questions, ready marks, checkpoints or the
 session. Agents copy only within their scope, and a removed workspace's
 checkpoint, like reopening it, stays the user's.
 
+`shoal refresh` brings a workspace up to date with what its record says it was
+made from: its upstream or the branch it builds on, a PR's head or a branch's
+tip for a workspace at a commit, or a copy's live source, whose files it copies
+in again in place after a checkpoint keeps the copy's. It moves a branch only by
+fast-forward and refuses work of the workspace's own, naming it and the command
+that deals with it, rather than rebasing, merging or carrying it over: resolving
+those is the agent's or the user's work, and a refresh must never lose any. It
+runs only when asked, since a checkout moving under a working agent would
+surprise it, and like restore it refuses while another command or agent runs
+there.
+
 A space changes kind with `shoal convert`, since only its agent learns what the
 work is, and a merged workspace's conversation can still be worth keeping. The
 space stays the same: its row moves between `chats` and `workspaces` under the

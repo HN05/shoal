@@ -187,7 +187,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
 - The daemon keeps each registered checkout's default branch in sync with its
   remote in the background, and `shoal repo sync` syncs it at once; commands that
   only read the default branch use what the checkout has. Syncing never pushes or
-  moves workspace branches; agents update their branch from it with plain Git.
+  moves workspace branches: only an explicit `shoal refresh` fast-forwards one
+  that holds nothing of its own, and agents otherwise update it with plain Git.
 - Cleanup is space cleanup: chats follow the workspace rules below, with their
   repository's config, or the global config for a chat without one, meeting every condition on a worktree; a running agent
   is use, a restore that waits to run its agent keeps a chat as a queued
