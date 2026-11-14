@@ -106,3 +106,35 @@ async fn a_scoped_chat_start_now_asks_the_limits_permission() {
     let confined = manager.confine_chat_launch(&caller, &mut queued).await;
     assert_eq!(limits(confined), Target::Action(PermissionKey::Limits));
 }
+
+/// A scoped `--now` start in a workspace outside the caller's scope is
+/// refused before it asks the `limits` permission, so it makes no approval
+/// request.
+#[tokio::test]
+async fn a_scoped_chat_start_now_elsewhere_is_refused_without_asking() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let starter = chat(&manager, "starter", "chat", Some(&repo), None).await;
+    let other = (manager.create_workspace(&repo.id, "other".into(), None, None, None))
+        .await
+        .unwrap();
+    let caller = Caller {
+        space_id: starter.id.clone(),
+        execution: None,
+        granted: None,
+    };
+
+    let mut launch = ChatMethod::LaunchChat {
+        start: Box::new(ChatStart {
+            workspace: Some(SpaceSelector::id(&other.id)),
+            now: true,
+            ..ChatStart::default()
+        }),
+    };
+    let error = launch.scope(&manager, &caller).await.map(drop).unwrap_err();
+    assert!(error.downcast_ref::<Undecided>().is_none(), "{error:#}");
+}

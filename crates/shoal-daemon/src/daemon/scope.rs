@@ -61,19 +61,31 @@ pub(crate) async fn authorize(
         .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?;
     let reads_only = method.reads_space();
     if let Some(target) = method.scope(manager, &caller).await? {
-        let space = manager.space(target).await?;
-        let id = space.id().to_owned();
-        if !manager.reaches(&caller, &id).await? {
-            let home = manager.chat_home(&caller.space_id).await?;
-            ensure!(home.as_ref() == Some(&id), "{}", outside_scope(&space));
-            ensure!(
-                reads_only,
-                "a chat only reads the workspace it runs in; ask the user, or the workspace's agent, to change it"
-            );
-        }
-        *target = SpaceSelector::id(&id);
+        confine_target(manager, &caller, target, reads_only).await?;
     }
     Ok(Some(caller))
+}
+
+/// Refuse a `target` outside `caller`'s scope, except the workspace a chat
+/// runs in for a request that only `reads` it, and name it by ID.
+pub(in crate::daemon) async fn confine_target(
+    manager: &Manager,
+    caller: &Caller,
+    target: &mut SpaceSelector,
+    reads: bool,
+) -> Result<()> {
+    let space = manager.space(target).await?;
+    let id = space.id().to_owned();
+    if !manager.reaches(caller, &id).await? {
+        let home = manager.chat_home(&caller.space_id).await?;
+        ensure!(home.as_ref() == Some(&id), "{}", outside_scope(&space));
+        ensure!(
+            reads,
+            "a chat only reads the workspace it runs in; ask the user, or the workspace's agent, to change it"
+        );
+    }
+    *target = SpaceSelector::id(&id);
+    Ok(())
 }
 
 /// A request whose access a scoped caller's scope decides.

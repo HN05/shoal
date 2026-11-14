@@ -6,7 +6,7 @@ use anyhow::Result;
 use super::super::{
     answer::Answer,
     chats::NewChat,
-    scope::{Caller, Scoped},
+    scope::{Caller, Scoped, confine_target},
     workspace::Manager,
 };
 use crate::client::space_names::SpaceSelector;
@@ -175,6 +175,11 @@ impl Scoped for ChatMethod {
                 (manager.ensure_parent_not_host(workspace.as_ref(), parent.as_ref())).await?;
                 manager.parent_below(caller, &mut parent.clone()).await?;
                 if start.now {
+                    // Its workspace is confined before it asks, so a start
+                    // the scope refuses makes no approval request.
+                    if let Some(workspace) = start.workspace.as_mut() {
+                        confine_target(manager, caller, workspace, false).await?;
+                    }
                     manager.authorize_chat_now(caller, start).await?;
                 }
                 start.workspace.as_mut()
