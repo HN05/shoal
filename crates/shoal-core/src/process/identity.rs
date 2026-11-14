@@ -422,6 +422,16 @@ pub async fn related(
     Ok((lineage, candidates))
 }
 
+/// The PIDs of the live processes among `roots` and of every process they
+/// started.
+pub async fn trees_of(roots: &[Identity]) -> Result<HashSet<u32>> {
+    let roots = live_pids(roots)?;
+    if roots.is_empty() {
+        return Ok(roots);
+    }
+    Ok(descendants(roots, &same_user_processes().await?))
+}
+
 /// Same-user processes other than init and the daemon, as (PID, process
 /// group, parent PID).
 async fn same_user_processes() -> Result<Vec<(u32, u32, u32)>> {

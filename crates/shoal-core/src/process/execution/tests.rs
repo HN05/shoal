@@ -236,3 +236,54 @@ async fn only_marked_processes_outside_the_group_run_outside_it() {
     hook.kill().await.unwrap();
     hook.wait().await.unwrap();
 }
+
+/// A process that hides its environment under another execution's agent
+/// wrapper, as `sh` does on macOS under a scoped caller's `start --here`,
+/// takes the marker the wrapper inherited from its starter.
+#[tokio::test]
+async fn a_foreign_agent_wrappers_processes_are_not_owned() -> anyhow::Result<()> {
+    use anyhow::Context;
+    use tokio::io::AsyncBufReadExt;
+    let mut wrapper = tokio::process::Command::new("sh")
+        .args(["-c", "sleep 60 & echo $!; wait"])
+        .stdout(std::process::Stdio::piped())
+        .process_group(0)
+        .kill_on_drop(true)
+        .spawn()?;
+    let wrapper_identity =
+        process::capture(wrapper.id().context("wrapper PID")?)?.context("wrapper")?;
+    let mut stdout = tokio::io::BufReader::new(wrapper.stdout.take().context("stdout")?);
+    let mut line = String::new();
+    stdout.read_line(&mut line).await?;
+    let agent = process::capture(line.trim().parse()?)?.context("agent")?;
+    let execution = Execution {
+        narrowing: Default::default(),
+        mode: None,
+        model: Default::default(),
+        id: "starter".into(),
+        space_id: "workspace".into(),
+        state: crate::state::ExecutionState::Running,
+        wrapper: None,
+        child: None,
+        group_id: None,
+        origin: None,
+        agent: None,
+        stopped: None,
+    };
+    let scan = process::Scan {
+        processes: vec![process::OwnedProcess {
+            owner: "starter".into(),
+            identity: agent.clone(),
+        }],
+        ..Default::default()
+    };
+    let workspace = tempfile::tempdir()?;
+    let alone = Processes::inspect(&execution, workspace.path(), &scan, &[]).await;
+    let wrappers = std::slice::from_ref(&wrapper_identity);
+    let beside = Processes::inspect(&execution, workspace.path(), &scan, wrappers).await;
+    process::signal(&agent, libc::SIGKILL)?;
+    wrapper.wait().await?;
+    assert_eq!(alone?.owned, [agent]);
+    assert!(beside?.owned.is_empty());
+    Ok(())
+}

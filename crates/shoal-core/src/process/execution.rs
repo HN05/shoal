@@ -35,10 +35,15 @@ impl Processes {
             .filter(|other| execution.wrapper.as_ref() != Some(other))
             .cloned()
             .collect();
+        // A process that hides its environment, as a platform binary does
+        // on macOS, takes the marker of the nearest ancestor that tells,
+        // which for an agent's process can be its wrapper, started with the
+        // marker of the execution that started it.
+        let foreign_trees = process::trees_of(&foreign).await?;
         let mut owned: Vec<_> = scan
             .processes
             .iter()
-            .filter(|p| p.owner == execution.id && !foreign.contains(&p.identity))
+            .filter(|p| p.owner == execution.id && !foreign_trees.contains(&p.identity.pid))
             .map(|p| p.identity.clone())
             .collect();
         let (related, group_candidates) = process::related(
