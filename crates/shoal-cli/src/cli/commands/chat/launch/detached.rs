@@ -66,6 +66,7 @@ pub(super) fn request(
         args,
         priority: options.priority,
         env: Some(crate::terminal::start_environment()),
+        now: options.now,
     })
 }
 

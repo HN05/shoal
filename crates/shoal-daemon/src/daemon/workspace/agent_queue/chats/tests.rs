@@ -138,3 +138,27 @@ async fn a_clients_chat_whose_agent_waits_is_recorded_with_its_entry() {
         .collect();
     assert!(!names.contains(&"queued talk".into()), "{names:?}");
 }
+
+/// A client's chat asked to start now runs its agent past the full
+/// machine, still taking a slot.
+#[tokio::test]
+async fn a_clients_chat_started_now_runs_past_the_limits() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    full_machine(&manager, &repo).await;
+    let start = ChatStart {
+        repository: Some((&repo.id).into()),
+        agent: Some("claude".into()),
+        mode: Some("pair".into()),
+        name: Some("urgent talk".into()),
+        now: true,
+        ..Default::default()
+    };
+
+    let started = manager.launch_chat(start, None).await.unwrap();
+
+    assert!(!matches!(started, StartedChat::Queued(_)), "{started:?}");
+    let entries = manager.queue_entries().await.unwrap();
+    let entry = entries.iter().find(|entry| entry.name == "urgent talk");
+    assert_eq!(entry.unwrap().state, QueueState::Starting);
+}

@@ -155,6 +155,15 @@ pub(super) async fn attach_launch(ctx: &Context, chat: &Chat) -> Result<()> {
     Ok(())
 }
 
+/// Free the slot of the launch this process's agent was to take, whose
+/// start failed with `error`, unless the agent took it over already.
+pub(super) async fn fail_launch(ctx: &Context, error: &anyhow::Error) {
+    if let Some(entry) = crate::env::queue_entry() {
+        // An agent that took the slot over ended the entry; nothing is left.
+        let _ = queue::fail(&ctx.paths, entry.clone(), format!("{error:#}")).await;
+    }
+}
+
 /// Keep the slot of the launch this process's agent takes until the agent
 /// takes it over.
 pub(super) async fn hold_launch(ctx: &Context) -> Option<Hold> {
