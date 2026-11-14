@@ -69,11 +69,19 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         .unwrap_err();
     assert_eq!(sent(), ["GET /api/v3/repos/team/repo"]);
 
-    manager
-        .write_local_config(
-            &repo.id,
-            Some("[permissions]\napi_writes = 'direct'\n".into()),
-        )
+    // A proposed write waits for its approval, which lets it go once.
+    let permissions = |api_writes: &str| {
+        let config = format!("[permissions]\napi_writes = '{api_writes}'\n");
+        manager.write_local_config(&repo.id, Some(config))
+    };
+    permissions("propose").await.unwrap();
+    let held = manager
+        .forge_api(&context, &request(HttpMethod::Patch), None, Some(&caller))
+        .await
+        .unwrap_err();
+    let crate::daemon::approvals::Undecided(proposed) = held.downcast().unwrap();
+    assert_eq!(sent().len(), 1);
+    (manager.decide_approval(proposed.number, true, None, Default::default(), None))
         .await
         .unwrap();
     manager
@@ -81,6 +89,13 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         .await
         .unwrap();
     assert_eq!(sent()[1], "PATCH /api/v3/repos/team/repo");
+
+    permissions("direct").await.unwrap();
+    manager
+        .forge_api(&context, &request(HttpMethod::Patch), None, Some(&caller))
+        .await
+        .unwrap();
+    assert_eq!(sent()[2], "PATCH /api/v3/repos/team/repo");
 
     // Another repository is only read, whatever the workspace's allows.
     let read = manager
@@ -103,8 +118,8 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         .await
         .unwrap_err();
     let sent = sent();
-    assert_eq!(sent.len(), 3, "{sent:?}");
-    assert_eq!(sent[2], "GET /api/v3/repos/team/tool");
+    assert_eq!(sent.len(), 4, "{sent:?}");
+    assert_eq!(sent[3], "GET /api/v3/repos/team/tool");
 }
 
 #[tokio::test]

@@ -4637,7 +4637,9 @@ Forgejo's Actions lists otherwise ignore `limit` and return every run.
 Processes inside a workspace and a chat's agent send it as the
 [agent account](#agent-accounts), and only GET unless their space's `api_writes`
 [permission](#mode-permissions) lets them send other methods to their space's repository, which could merge, approve or skip required labels
-around Shoal's checks; to another repository they send only GET. Anyone
+around Shoal's checks: `"direct"` sends them, and `"propose"` makes each an
+approval request bound to its method, path and body; to another repository
+they send only GET. Anyone
 else sends any request with your own logins.
 
 #### Forge downloads

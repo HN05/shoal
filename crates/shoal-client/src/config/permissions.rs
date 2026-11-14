@@ -46,15 +46,6 @@ states!(
 
 states!(
     #[derive(PartialOrd, Ord)]
-    /// Whether a scoped caller may send forge API requests that are not reads.
-    ApiWrites {
-        Deny => "deny",
-        Direct => "direct",
-    }
-);
-
-states!(
-    #[derive(PartialOrd, Ord)]
     /// Whether a scoped caller takes an action at once, after approval, or
     /// not at all.
     Acting: Variants {
@@ -183,7 +174,7 @@ permission_keys! {
     /// or plain `git push`.
     push: Push => "push", Pushes;
     /// Forge API requests through `shoal forge api` that are not reads.
-    api_writes: ApiWrites => "api_writes", ApiWrites;
+    api_writes: ApiWrites => "api_writes", Acting;
     /// Installing, starting, stopping and restarting the daemon, and
     /// updating Shoal.
     daemon: Daemon => "daemon", Acting;
@@ -227,7 +218,7 @@ impl PermissionsConfig {
         issue_other_repositories: Some(OtherRepositories::Propose),
         merge: Some(Opening::Propose),
         push: Some(Pushes::Direct),
-        api_writes: Some(ApiWrites::Deny),
+        api_writes: Some(Acting::Deny),
         daemon: Some(Acting::Deny),
         admin: Some(Acting::Propose),
         limits: Some(Acting::Propose),
@@ -248,6 +239,7 @@ impl PermissionsConfig {
     /// what the user would, but proposes what stops every agent.
     pub const ORCHESTRATING: Self = Self {
         merge: Some(Opening::Direct),
+        api_writes: Some(Acting::Propose),
         daemon: Some(Acting::Propose),
         admin: Some(Acting::Direct),
         limits: Some(Acting::Direct),

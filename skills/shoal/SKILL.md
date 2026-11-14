@@ -314,7 +314,9 @@ its `ci_approve` [permission](#permitted-actions).
 threads, rerunning jobs or reading job logs, and what to do instead.
 `shoal forge api 'repos/{owner}/{repo}/<path>'` sends a GET to the forge's API
 and prints the JSON, `--repo OWNER/NAME` for another repository; other methods
-are refused unless the space's `api_writes` permission is `direct`.
+go to the space's own repository as its `api_writes` permission allows:
+`direct` sends them, `propose` asks for approval bound to the method, path
+and body, and `deny` refuses them.
 `shoal forge download <url> --output <file>` saves an image or attached file
 from the forge with the same login.
 
@@ -364,8 +366,9 @@ of the spaces below as the user does.
 With `propose` the command exits 2 with `approval_pending` and the request,
 which goes to the space above whose own value is `direct`, or the user; once
 approved, the same command proceeds once. A master session has every one
-at `direct` but `daemon`, which it proposes; other modes propose `admin`,
-`limits`, `ci_approve` and `user_holds` and are denied the rest.
+at `direct` but `daemon`, which it proposes, as it proposes `api_writes`;
+other modes propose `admin`, `limits`, `ci_approve` and `user_holds` and
+are denied the rest.
 
 ## Links and watches
 

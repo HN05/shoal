@@ -383,7 +383,7 @@ merge = "propose"
 # "propose" or "deny". Unless "direct", shoal merge needs your approval too.
 push = "direct"
 # Requests through shoal forge api that are not reads, which you may always
-# send: "deny" or "direct".
+# send: "deny", "propose" or "direct".
 api_writes = "deny"
 # Installing, starting, stopping and restarting the daemon, and shoal update:
 # "deny", "propose" or "direct".

@@ -1,13 +1,13 @@
 //! Requests `shoal forge api` and `shoal forge download` send to the forge of
 //! a space's repository or another one, so a scoped caller acts as its
-//! agent account and only reads, unless the space's repository lets agents
-//! write there.
+//! agent account and only reads, unless its `api_writes` permission lets it
+//! write to its own repository.
 use anyhow::{Result, ensure};
 use serde_json::Value;
 
 use crate::{
-    config::permissions::ApiWrites,
-    daemon::{links::space::LinkSpace, scope::Caller, workspace::Manager},
+    config::permissions::PermissionKey,
+    daemon::{links::space::LinkSpace, permissions::Action, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
         account::Account,
@@ -27,9 +27,8 @@ impl Manager {
         repository: Option<&str>,
         caller: Option<&Caller>,
     ) -> Result<Value> {
-        let (forge, account) = self
-            .api_forge(context, repository, request.method, caller)
-            .await?;
+        let write = (request.method != HttpMethod::Get).then_some(request);
+        let (forge, account) = (self.api_forge(context, repository, write, caller)).await?;
         forge.raw(&account, request).await
     }
 
@@ -42,21 +41,20 @@ impl Manager {
         repository: Option<&str>,
         caller: Option<&Caller>,
     ) -> Result<Download> {
-        let (forge, account) = self
-            .api_forge(context, repository, HttpMethod::Get, caller)
-            .await?;
+        let (forge, account) = (self.api_forge(context, repository, None, caller)).await?;
         forge.download(&account, url).await
     }
 
     /// The repository of `context`, or the one `repository` names, and the
-    /// account that sends a `method` request there: the space's agent
-    /// account for a scoped `caller` and the user's own logins otherwise.
-    /// Only unscoped callers send from a registered checkout.
+    /// account that sends a request there, `write` when it is not a read:
+    /// the space's agent account for a scoped `caller` and the user's own
+    /// logins otherwise. Only unscoped callers send from a registered
+    /// checkout.
     async fn api_forge(
         &self,
         context: &ItemContext,
         repository: Option<&str>,
-        method: HttpMethod,
+        write: Option<&RawRequest>,
         caller: Option<&Caller>,
     ) -> Result<(ForgeRepo, Account)> {
         match context {
@@ -68,7 +66,7 @@ impl Manager {
                 let account = match caller {
                     Some(caller) => {
                         let elsewhere = forge != own;
-                        (self.api_agent_account(&space, method, elsewhere, caller)).await?
+                        (self.api_agent_account(&space, write, elsewhere, caller)).await?
                     }
                     None => self.user_account(),
                 };
@@ -83,34 +81,27 @@ impl Manager {
         }
     }
 
-    /// The agent account that may send `caller`'s `method` request, which
-    /// is only a read in a repository `elsewhere` than the space's, and in
-    /// its own unless the caller's `api_writes` permission allows more.
+    /// The agent account that may send `caller`'s request, which is only a
+    /// read in a repository `elsewhere` than the space's; in its own, a
+    /// `write` is the `api_writes` permission's, bound by its approval to
+    /// its method, path and body.
     async fn api_agent_account(
         &self,
         space: &LinkSpace,
-        method: HttpMethod,
+        write: Option<&RawRequest>,
         elsewhere: bool,
         caller: &Caller,
     ) -> Result<Account> {
-        // One snapshot, so a reload cannot pair a permission with other tokens.
-        let config = self.config();
-        if method != HttpMethod::Get {
+        if let Some(write) = write {
             ensure!(
                 !elsewhere,
                 "scoped processes can only send GET requests to another repository"
             );
-            let permissions = self
-                .caller_permissions_from(&config, caller, space.repository_id())
-                .await?;
-            ensure!(
-                permissions.api_writes.value == ApiWrites::Direct,
-                "scoped processes can only send GET requests: {}; \"direct\" lets agents send \
-                 {method}",
-                permissions.api_writes.cited("api_writes")
-            );
+            let repository = Some(space.repository_id().clone());
+            let action = Action::request(PermissionKey::ApiWrites, write, repository);
+            self.authorize_action(Some(caller), action).await?;
         }
-        Ok(self.agent_account_from(&config))
+        Ok(self.agent_account())
     }
 }
 

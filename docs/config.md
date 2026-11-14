@@ -435,7 +435,7 @@ pr_open = "direct"                    # "propose" or "direct"
 issue_other_repositories = "propose"  # "deny", "propose" or "direct"
 merge = "propose"                     # "propose" or "direct"
 push = "direct"                       # "deny", "propose" or "direct"
-api_writes = "deny"                   # "deny" or "direct"
+api_writes = "deny"                   # "deny", "propose" or "direct"
 daemon = "deny"                       # "deny", "propose" or "direct"
 admin = "propose"                     # "deny", "propose" or "direct"
 limits = "propose"                    # "deny", "propose" or "direct"
@@ -469,7 +469,7 @@ key resolves, highest first, from its `permissions` in any layer, then
 default above; `chat`, `plan` and `orchestrate` default
 `issue_other_repositories` to `"direct"`, and `orchestrate` defaults `merge`,
 `admin`, `limits`, `user_holds`, `notifications`, `decide` and `ci_approve` to
-`"direct"` and `daemon` to `"propose"`. A space's own permissions
+`"direct"` and `api_writes` and `daemon` to `"propose"`. A space's own permissions
 are then narrowed to its parent's and set by `--permission`; see
 [mode permissions](reference.md#mode-permissions).
 
