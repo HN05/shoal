@@ -188,7 +188,10 @@ impl Manager {
             return Ok(workspace);
         }
         let removal = format!("remove {}, which the user holds", space.name());
-        let action = Action::new(PermissionKey::UserHolds, removal);
+        let action = Action {
+            repository: space.repository_id().cloned(),
+            ..Action::new(PermissionKey::UserHolds, removal)
+        };
         match takes {
             true => self.authorize_action(Some(caller), action).await?,
             false => self.check_action(caller, action).await?,
@@ -335,12 +338,20 @@ impl Manager {
         caller: &Caller,
         id: &QueueEntryId,
     ) -> Result<()> {
+        self.reached_entry(caller, id).await.map(drop)
+    }
+
+    /// The queue entry `id`, refused unless `caller` may act on it, as
+    /// [`Self::ensure_entry_reached`] refuses it.
+    pub(in crate::daemon) async fn reached_entry(
+        &self,
+        caller: &Caller,
+        id: &QueueEntryId,
+    ) -> Result<QueueEntry> {
         let reachable = self.reachable_queue(Some(caller)).await?;
-        ensure!(
-            reachable.iter().any(|entry| entry.id == *id),
-            "queue entry {id} is outside this space's scope"
-        );
-        Ok(())
+        (reachable.into_iter())
+            .find(|entry| entry.id == *id)
+            .with_context(|| format!("queue entry {id} is outside this space's scope"))
     }
 
     /// Refuse the queue entry `id` that `caller`'s `start` names unless it
@@ -410,7 +421,8 @@ impl Manager {
         if request.workspace.is_none() {
             self.confine_new_launch(caller, request).await?;
             if request.now {
-                self.authorize_beyond_limits(caller, start).await?;
+                let repository = Some(self.repository(&request.repository).await?.id);
+                (self.authorize_beyond_limits(caller, start, repository)).await?;
             }
             return Ok(None);
         }
@@ -425,7 +437,8 @@ impl Manager {
         let target = self.worker_target(caller, target, mode.as_ref(), narrowing);
         let target = target.await?;
         if *now {
-            self.authorize_beyond_limits(caller, start).await?;
+            let repository = self.space_repository(target).await?;
+            (self.authorize_beyond_limits(caller, start, repository)).await?;
         }
         Ok(Some(target))
     }

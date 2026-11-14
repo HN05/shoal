@@ -266,6 +266,28 @@ impl Command {
         )
     }
 
+    /// The registered repository the command names to act in, whose config
+    /// resolves the permission of a chat without a repository.
+    pub fn repository(&self) -> Option<&str> {
+        match self {
+            Command::Service(ServiceCommand::Config {
+                command:
+                    ConfigCommand::Set { repository, .. } | ConfigCommand::Unset { repository, .. },
+            })
+            | Command::Repository(RepositoryCommand::Repo {
+                command:
+                    Some(
+                        RepoCommand::Config { repository, .. }
+                        | RepoCommand::Rename { repository, .. }
+                        | RepoCommand::Setup { repository, .. }
+                        | RepoCommand::Rm { repository, .. },
+                    ),
+            }) => repository.as_deref(),
+            Command::Lifecycle(LifecycleCommand::Cleanup { args, .. }) => args.repo.as_deref(),
+            _ => None,
+        }
+    }
+
     /// The permission that governs the command, which a scoped process runs
     /// as its space's permission for it allows.
     pub fn permission(&self) -> Option<PermissionKey> {

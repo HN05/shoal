@@ -447,6 +447,10 @@ async fn administer<'a>(
     manager
         .ensure_selected_reached(caller, administered(method))
         .await?;
+    let repository = match (administered(method), repository) {
+        (Some(space), None) => manager.space_repository(space).await?,
+        (_, repository) => repository,
+    };
     manager.administer(caller, &*method, repository).await?;
     Ok(administered(method))
 }

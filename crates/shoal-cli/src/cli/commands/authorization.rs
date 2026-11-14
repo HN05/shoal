@@ -15,7 +15,7 @@ use crate::{
 /// sends take what it governs.
 pub(super) async fn authorize(ctx: &Context, command: &Command) -> Result<()> {
     match command.permission() {
-        Some(key) => authorize_key(ctx, key).await,
+        Some(key) => authorize_in(ctx, key, command.repository()).await,
         None => Ok(()),
     }
 }
@@ -26,6 +26,12 @@ pub(in crate::cli::commands) async fn authorize_key(
     ctx: &Context,
     key: PermissionKey,
 ) -> Result<()> {
+    authorize_in(ctx, key, None).await
+}
+
+/// [`authorize_key`] for an action in the registered repository
+/// `repository` names, in whose config a chat without one resolves it.
+async fn authorize_in(ctx: &Context, key: PermissionKey, repository: Option<&str>) -> Result<()> {
     if !env::inherits_scope(&ctx.paths.state) {
         return Ok(());
     }
@@ -34,7 +40,11 @@ pub(in crate::cli::commands) async fn authorize_key(
         env::is_scoped(),
         "this process runs below a scoped one without its scope; run it where the agent runs"
     );
-    let granted = crate::client::approvals::authorize(&ctx.paths, key, command_line()).await?;
+    let repository = (repository.map(str::to_owned))
+        .map(crate::cli::ui::repository_selector)
+        .transpose()?;
+    let action = command_line();
+    let granted = crate::client::approvals::authorize(&ctx.paths, key, action, repository).await?;
     if let Some(token) = granted {
         env::act_under_grant(token);
     }

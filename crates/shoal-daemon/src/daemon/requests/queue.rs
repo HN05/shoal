@@ -101,7 +101,8 @@ impl Scoped for QueueMethod {
                 let target = target.await?;
                 if launch.now {
                     let start = format!("start the agent of {target} now");
-                    manager.authorize_beyond_limits(caller, start).await?;
+                    let repository = manager.space_repository(target).await?;
+                    (manager.authorize_beyond_limits(caller, start, repository)).await?;
                 }
                 Some(target)
             }
@@ -109,16 +110,16 @@ impl Scoped for QueueMethod {
                 let target = manager.stopped_below(caller, workspace).await?;
                 if *now {
                     let start = format!("restore the agent of {target} now");
-                    manager.authorize_beyond_limits(caller, start).await?;
+                    let repository = manager.space_repository(target).await?;
+                    (manager.authorize_beyond_limits(caller, start, repository)).await?;
                 }
                 Some(target)
             }
             QueueMethod::QueueStart { entry, .. } => {
-                manager
-                    .ensure_entry_reached(caller, &entry.clone().into())
-                    .await?;
+                let id = entry.clone().into();
+                let repository = manager.reached_entry(caller, &id).await?.repository_id;
                 let start = format!("start queue entry {entry} now");
-                manager.authorize_beyond_limits(caller, start).await?;
+                (manager.authorize_beyond_limits(caller, start, repository)).await?;
                 None
             }
             // A caller holds, fails and attaches the launches it starts

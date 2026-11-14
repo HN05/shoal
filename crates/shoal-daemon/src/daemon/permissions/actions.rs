@@ -104,16 +104,29 @@ impl Manager {
         self.take_action(caller, action, Use::Take).await.map(drop)
     }
 
-    /// Let `caller` `start` an agent regardless of `max_agents` and memory,
-    /// as its `limits` permission allows.
+    /// Let `caller` `start` an agent in `repository` regardless of
+    /// `max_agents` and memory, as its `limits` permission allows.
     pub(crate) async fn authorize_beyond_limits(
         &self,
         caller: &Caller,
         start: String,
+        repository: Option<RepositoryId>,
     ) -> Result<()> {
         let start = format!("{start}, regardless of the agent limits");
-        let action = Action::new(PermissionKey::Limits, start);
+        let action = Action {
+            repository,
+            ..Action::new(PermissionKey::Limits, start)
+        };
         self.authorize_action(Some(caller), action).await
+    }
+
+    /// The repository of the space `selector` names, which an action on it
+    /// is in; none for a chat without one.
+    pub(crate) async fn space_repository(
+        &self,
+        selector: &crate::client::space_names::SpaceSelector,
+    ) -> Result<Option<RepositoryId>> {
+        Ok(self.space(selector).await?.repository_id().cloned())
     }
 
     /// Let `caller` send `request`, which the `admin` permission governs,

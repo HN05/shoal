@@ -56,8 +56,19 @@ pub(super) async fn handle(
         ApprovalMethod::RequestPush { workspace, push } => {
             Body::Push(manager.request_push(&workspace, push, caller).await?)
         }
-        ApprovalMethod::AuthorizeAction { key, action } => {
-            let action = Action::new(key, action);
+        ApprovalMethod::AuthorizeAction {
+            key,
+            action,
+            repository,
+        } => {
+            let repository = match repository {
+                Some(repository) => Some(manager.repository(&repository).await?.id),
+                None => None,
+            };
+            let action = Action {
+                repository,
+                ..Action::new(key, action)
+            };
             Body::Granted(manager.grant_action(caller, action).await?)
         }
         ApprovalMethod::FinishPush { key, failure } => {

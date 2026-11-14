@@ -381,3 +381,25 @@ fn a_long_request_names_its_start_and_a_digest_of_all_of_it() {
     );
     assert_ne!(first, other);
 }
+
+#[tokio::test]
+async fn a_chat_without_a_repository_takes_an_action_as_its_repository_allows() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap();
+    let config = "[modes.orchestrate.permissions]\nlimits = 'deny'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let start = || "start the agent of worker now".to_owned();
+    let mastering = caller(&master.id);
+    (manager.authorize_beyond_limits(&mastering, start(), None))
+        .await
+        .unwrap();
+    let denied = manager.authorize_beyond_limits(&mastering, start(), Some(repo.id.clone()));
+    let error = denied.await.unwrap_err();
+    assert!(error.downcast_ref::<Undecided>().is_none(), "{error:#}");
+}

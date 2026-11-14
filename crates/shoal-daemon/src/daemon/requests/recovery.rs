@@ -69,7 +69,11 @@ impl Scoped for RecoveryMethod {
             manager
                 .ensure_selected_reached(caller, workspace.as_mut())
                 .await?;
-            manager.administer(caller, self, None).await?;
+            let repository = match workspace {
+                Some(workspace) => manager.space_repository(workspace).await?,
+                None => None,
+            };
+            manager.administer(caller, self, repository).await?;
         }
         Ok(match self {
             RecoveryMethod::Checkpoint { workspace, .. }

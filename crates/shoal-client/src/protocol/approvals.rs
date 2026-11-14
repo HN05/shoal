@@ -60,6 +60,10 @@ pub enum ApprovalMethod {
     AuthorizeAction {
         key: crate::config::permissions::PermissionKey,
         action: String,
+        /// The registered repository the action is in, in whose config a
+        /// chat without a repository resolves its permission.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        repository: Option<crate::repository::Selector>,
     },
     /// The push approval `key` started has ended, failed with `failure`
     /// or done; a done push decides the request.

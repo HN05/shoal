@@ -774,8 +774,9 @@ pub async fn withdraw(
     request(daemon, ApprovalMethod::WithdrawApproval { space, number }).await
 }
 
-/// Let this process take `action`, which the permission `key` governs, as
-/// its space's permission allows: at once, once approved, or not at all,
+/// Let this process take `action`, which the permission `key` governs, in
+/// the registered repository `repository` names, as its space's permission
+/// allows: at once, once approved, or not at all,
 /// failing with the approval request it waits for. An approval returns the
 /// scope token the process sends its requests with from then on, which take
 /// the actions `key` governs without asking again.
@@ -783,8 +784,14 @@ pub async fn authorize(
     daemon: &impl Daemon,
     key: PermissionKey,
     action: String,
+    repository: Option<crate::repository::Selector>,
 ) -> Result<Option<crate::scope_tokens::ScopeToken>> {
-    request(daemon, ApprovalMethod::AuthorizeAction { key, action }).await
+    let method = ApprovalMethod::AuthorizeAction {
+        key,
+        action,
+        repository,
+    };
+    request(daemon, method).await
 }
 
 /// Whether the `push` permission holds back the push of `workspace`'s branch.
