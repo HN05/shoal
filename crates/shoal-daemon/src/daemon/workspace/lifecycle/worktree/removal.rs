@@ -14,7 +14,7 @@ use crate::{
         worktree::{BranchRemoval, FileRemoval},
     },
     hooks::{self, Hook, HookKind},
-    model::{PresentSpace, RemovedWorkspace, Workspace},
+    model::{PresentSpace, RemovedSpace, Workspace},
     removal::{
         self, BranchOutcome, IdleRestore, Inspection, InspectionPolicy, RemovalCheck, RemovalResult,
     },
@@ -497,7 +497,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         removal: Removal<'_>,
-    ) -> Result<Option<RemovedWorkspace>> {
+    ) -> Result<Option<RemovedSpace>> {
         if workspace.disposable {
             return Ok(None);
         }
@@ -563,13 +563,14 @@ impl Manager {
 fn ensure_checkpoint_keeps_files(
     check: &Inspection,
     removal: Removal<'_>,
-    record: Option<&RemovedWorkspace>,
+    record: Option<&RemovedSpace>,
 ) -> Result<()> {
     if check.dirty
         && (removal.discards_archived_files() || removal.unsaved().promises_restorable_files())
     {
         ensure!(
-            record.is_some_and(|record| !record.checkpoint.files_omitted),
+            (record.and_then(RemovedSpace::workspace))
+                .is_some_and(|kept| !kept.checkpoint.files_omitted),
             "a checkpoint cannot keep the unsaved files; retaining the workspace"
         );
     }

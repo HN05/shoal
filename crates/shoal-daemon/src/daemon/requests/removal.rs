@@ -35,7 +35,7 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::CheckStop { .. }
         | RemovalMethod::StopProcesses { .. }
         | RemovalMethod::CheckRemoval { .. }
-        | RemovalMethod::RemovedWorkspaces
+        | RemovalMethod::RemovedSpaces
         | RemovalMethod::DropRestoredSessions { .. } => false,
     }
 }
@@ -49,9 +49,9 @@ pub(super) async fn handle(
         manager.gates.admit()?;
     }
     Ok(Answer::Body(match method {
-        RemovalMethod::RemovedWorkspaces => {
-            let listed = manager.removed_workspaces().await;
-            return Ok(Answer::pages(listed, Body::RemovedWorkspaces));
+        RemovalMethod::RemovedSpaces => {
+            let listed = manager.removed_spaces().await;
+            return Ok(Answer::pages(listed, Body::RemovedSpaces));
         }
         RemovalMethod::StopTargets => {
             let targets = manager.stop_targets(QueuedLaunches::Cancel).await?;
@@ -240,7 +240,7 @@ impl Scoped for RemovalMethod {
             // Cleaning up, restoring removed workspaces and moving spaces is
             // the `admin` permission's.
             RemovalMethod::Cleanup { .. }
-            | RemovalMethod::RemovedWorkspaces
+            | RemovalMethod::RemovedSpaces
             | RemovalMethod::RestoreWorkspace { .. }
             | RemovalMethod::DropRestoredSessions { .. }
             | RemovalMethod::ExportSpace { .. }

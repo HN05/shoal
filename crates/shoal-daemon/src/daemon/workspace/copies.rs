@@ -141,7 +141,7 @@ impl Manager {
                 Ok(db
                     .query_row(
                         "SELECT removed.name FROM workspaces copy
-                         JOIN removed_workspaces removed ON removed.workspace_id=copy.copied_from
+                         JOIN removed_spaces removed ON removed.space_id=copy.copied_from
                          WHERE copy.id=?1",
                         [id],
                         |row| row.get(0),
@@ -250,18 +250,20 @@ impl Manager {
     ) -> Result<Source> {
         let removed = self.claim_removed_workspace(selector).await?;
         let checkpoint = self
-            .copied_checkpoint(&removed.workspace_id, &removed.name, number)
+            .copied_checkpoint(&removed.space_id, &removed.name, number)
             .await?;
-        let base_branch = (removed.base_ref.as_deref())
+        let repository_id = removed.repository()?.clone();
+        let kept = removed.kept_workspace()?.clone();
+        let base_branch = (kept.base_ref.as_deref())
             .and_then(git::strip_local)
             .map(str::to_owned);
         Ok(Source {
-            workspace_id: removed.workspace_id,
-            repository_id: removed.repository_id,
+            workspace_id: removed.space_id,
+            repository_id,
             name: removed.name.into(),
             branch: checkpoint.branch,
-            base_ref: removed.base_ref,
-            base_commit: removed.base_commit,
+            base_ref: kept.base_ref,
+            base_commit: kept.base_commit,
             base_branch: base_branch.map(BranchName::from),
             head: checkpoint.head,
             files: SourceFiles::Checkpoint {

@@ -17,7 +17,10 @@ use crate::{
         workspace::{Manager, kept_session_sources},
     },
     execution::recovery::{LastSession, StoppedAgent},
-    model::{Chat, Checkpoint, PresentSpace, RemovedWorkspace, Repository, SpaceKind, Workspace},
+    model::{
+        Chat, Checkpoint, PresentSpace, RemovedKind, RemovedSpace, RemovedWorkspace, Repository,
+        SpaceKind, Workspace,
+    },
     paths::Paths,
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
     time::UnixTime,
@@ -167,16 +170,16 @@ impl Manager {
             .await?
             .into_iter()
             .find(|removed| match &removal {
-                Some((id, _)) => &removed.workspace_id == id,
-                None => selector.given_id() == Some(&removed.workspace_id),
+                Some((id, _)) => &removed.space_id == id,
+                None => selector.given_id() == Some(&removed.space_id),
             })
             .with_context(|| format!("no space or restorable workspace {selector}"))?;
         ensure!(
-            !removed.checkpoint.files_omitted,
+            !removed.kept_workspace()?.checkpoint.files_omitted,
             "the removal could not keep the uncommitted files; shoal restore {} opens the workspace here again",
-            removed.workspace_id
+            removed.space_id
         );
-        let repo = self.repository(&removed.repository_id).await?;
+        let repo = self.repository(removed.repository()?).await?;
         Ok(Prepared {
             kept_sessions: kept_session_sources(&repo, &removed),
             manifest: Manifest::of(&repo, Source::Workspace(removed)).await?,
@@ -350,24 +353,26 @@ fn packaged_record(
     workspace: &Workspace,
     checkpoint: Checkpoint,
     agents: Vec<StoppedAgent>,
-) -> RemovedWorkspace {
-    RemovedWorkspace {
-        workspace_id: workspace.id.clone(),
-        repository_id: workspace.repository_id.clone(),
+) -> RemovedSpace {
+    RemovedSpace {
+        space_id: workspace.id.clone(),
+        repository_id: Some(workspace.repository_id.clone()),
         name: workspace.name.clone(),
         expires_at: checkpoint.expires_at,
-        checkpoint,
-        base_ref: workspace.base_ref.clone(),
-        base_commit: workspace.base_commit.clone(),
-        at: workspace.at.clone(),
         links: workspace.links.clone(),
-        setup_skipped: workspace.setup_skipped,
         agents,
         // An unreadable last session is not worth refusing the export for.
         last_sessions: LastSession::all(paths, &workspace.id).unwrap_or_default(),
-        session_files: Vec::new(),
         cause: EventCause::Manual,
         removed_at: UnixTime::now(),
+        kind: RemovedKind::Workspace(Box::new(RemovedWorkspace {
+            checkpoint,
+            base_ref: workspace.base_ref.clone(),
+            base_commit: workspace.base_commit.clone(),
+            at: workspace.at.clone(),
+            setup_skipped: workspace.setup_skipped,
+            session_files: Vec::new(),
+        })),
     }
 }
 

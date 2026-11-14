@@ -127,7 +127,7 @@ outputs!(
     crate::model::PortOverview,
     crate::model::PortReservation,
     crate::model::QueueEntry,
-    crate::model::RemovedWorkspace,
+    crate::model::RemovedSpace,
     crate::model::Repository,
     crate::model::RepositoryRemoval,
     crate::model::RestoredCheckpoint,

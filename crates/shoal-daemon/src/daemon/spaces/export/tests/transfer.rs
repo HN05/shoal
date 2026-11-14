@@ -13,7 +13,7 @@ use crate::{
         workspace::Manager,
     },
     execution::recovery::{self, Copied, Record},
-    model::{RemovedWorkspace, Repository},
+    model::{RemovedSpace, Repository},
     removal::{InspectionPolicy, UnsavedWork},
     transfer::*,
 };
@@ -127,7 +127,7 @@ async fn import_record(
     manager: &Manager,
     repo: &Repository,
     import: &Import,
-    workspace: RemovedWorkspace,
+    workspace: RemovedSpace,
 ) -> crate::model::RestoredWorkspace {
     let packaged = packaged_workspace(&import.manifest);
     manager
@@ -313,7 +313,7 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
     assert!(imported.is_err());
     let removed = importing.removed_workspaces().await.unwrap();
     assert_eq!(
-        removed[0].session_files,
+        removed[0].kept_workspace().unwrap().session_files,
         std::slice::from_ref(&session_file)
     );
     // The repository's directory keeps them, beside its workspaces.
@@ -324,7 +324,7 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
         .workspaces_dir
         .unwrap()
         .join(".sessions");
-    let kept = sessions.join(&removed[0].workspace_id);
+    let kept = sessions.join(&removed[0].space_id);
     assert_eq!(fs::read_to_string(kept.join("0")).unwrap(), "{}\n");
 
     // Exported again, the record takes them along.
@@ -332,7 +332,7 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
     let again = directory.path().join("again.shoal");
     importing
         .export_space(
-            &SpaceSelector::id(&removed[0].workspace_id),
+            &SpaceSelector::id(&removed[0].space_id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
             again.clone(),
@@ -347,6 +347,8 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
     assert!(
         packaged_workspace(&reread.manifest)
             .workspace
+            .kept_workspace()
+            .unwrap()
             .session_files
             .is_empty()
     );
@@ -359,7 +361,7 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
     // to put in place; the sweep leaves them while the workspace exists.
     git(&target_repo.path, &["branch", "-q", "-D", "topic"]);
     let restored = importing
-        .restore_workspace(&SpaceSelector::id(&removed[0].workspace_id))
+        .restore_workspace(&SpaceSelector::id(&removed[0].space_id))
         .await
         .unwrap();
     assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);

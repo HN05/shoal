@@ -564,6 +564,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 178 {
         db.execute_batch(include_str!("gate.sql"))?;
     }
+    if version >= 179 {
+        db.execute_batch(include_str!("removed_spaces.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -957,15 +960,15 @@ fn migration_names_spaces_after_their_titles_and_issues_without_journaling() -> 
     );
     assert_eq!(
         name(
-            "SELECT name || ' ' || json_extract(record,'$.name') FROM removed_workspaces
-                WHERE workspace_id='gone'"
+            "SELECT name || ' ' || json_extract(record,'$.name') FROM removed_spaces
+                WHERE space_id='gone'"
         )?,
         "Gone issue Gone issue"
     );
     assert_eq!(
         name(
-            "SELECT name || ' ' || (json_type(record,'$.title') IS NULL) FROM removed_workspaces
-                WHERE workspace_id='titled-gone'"
+            "SELECT name || ' ' || (json_type(record,'$.title') IS NULL) FROM removed_spaces
+                WHERE space_id='titled-gone'"
         )?,
         "Gone title 1"
     );
@@ -1228,10 +1231,18 @@ fn removal_snapshots_become_checkpoints_their_records_name() -> Result<()> {
             expires_at: UnixTime::from_seconds(200),
         }
     );
-    let removed: String =
-        db.query_row("SELECT record FROM removed_workspaces", [], |r| r.get(0))?;
-    let removed: crate::model::RemovedWorkspace = serde_json::from_str(&removed)?;
-    assert_eq!(removed.checkpoint, checkpoint);
+    // A workspace's record reads as one in every removed space's table.
+    let (removed, chat): (String, bool) =
+        db.query_row("SELECT record,chat FROM removed_spaces", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })?;
+    let removed: crate::model::RemovedSpace = serde_json::from_str(&removed)?;
+    assert!(!chat);
+    assert_eq!(removed.space_id, "gone");
+    assert_eq!(
+        removed.workspace().map(|w| &w.checkpoint),
+        Some(&checkpoint)
+    );
     let last: i64 = db.query_row(
         "SELECT last FROM checkpoint_numbers WHERE workspace_id='gone'",
         [],

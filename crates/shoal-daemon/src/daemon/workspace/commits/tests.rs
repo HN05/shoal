@@ -891,8 +891,8 @@ async fn a_restored_workspace_at_a_commit_cuts_a_name_an_older_shoal_recorded() 
         .store
         .write(move |tx| {
             tx.execute(
-                "UPDATE removed_workspaces SET name=?2, record=json_set(record,'$.name',?2)
-                    WHERE workspace_id=?1",
+                "UPDATE removed_spaces SET name=?2, record=json_set(record,'$.name',?2)
+                    WHERE space_id=?1",
                 rusqlite::params![id, name],
             )?;
             Ok(())

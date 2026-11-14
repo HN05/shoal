@@ -67,7 +67,7 @@ impl Operation {
                 | Self::Removal(
                     RemovalMethod::CheckRemoval { .. }
                         | RemovalMethod::CheckStop { .. }
-                        | RemovalMethod::RemovedWorkspaces
+                        | RemovalMethod::RemovedSpaces
                 )
                 | Self::Repository(
                     RepositoryMethod::ListRepositories

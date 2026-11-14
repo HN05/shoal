@@ -68,7 +68,12 @@ async fn a_moving_workspace_stays_until_its_import_ends_it() {
         "work\n"
     );
 
-    let checkpoint = packaged.workspace.checkpoint.number;
+    let checkpoint = packaged
+        .workspace
+        .kept_workspace()
+        .unwrap()
+        .checkpoint
+        .number;
     let ended = exporting
         .end_moved_space(&selector, UnsavedWork::default(), Some(checkpoint))
         .await
@@ -76,7 +81,7 @@ async fn a_moving_workspace_stays_until_its_import_ends_it() {
     assert!(ended.is_some());
     assert!(!workspace.path.exists());
     let removed = exporting.removed_workspaces().await.unwrap();
-    assert_eq!(removed[0].workspace_id, workspace.id);
+    assert_eq!(removed[0].space_id, workspace.id);
     assert_eq!(removed[0].agents.len(), 1);
 }
 
@@ -90,6 +95,8 @@ async fn files_written_before_the_export_end_with_the_workspace_the_caller_saw_c
     let (exported, _) = export_moving(&exporting, &selector, source.path()).await;
     let checkpoint = packaged_workspace(&exported.manifest)
         .workspace
+        .kept_workspace()
+        .unwrap()
         .checkpoint
         .number;
 
@@ -109,6 +116,8 @@ async fn a_workspace_that_changed_after_its_export_stays() {
     let (exported, _) = export_moving(&exporting, &selector, source.path()).await;
     let checkpoint = packaged_workspace(&exported.manifest)
         .workspace
+        .kept_workspace()
+        .unwrap()
         .checkpoint
         .number;
     let end = || exporting.end_moved_space(&selector, UnsavedWork::All, Some(checkpoint));

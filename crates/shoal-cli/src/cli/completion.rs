@@ -442,7 +442,7 @@ impl Typed {
             let removed = crate::client::removal::removed(&paths).await?;
             candidates.extend(removed.into_iter().map(|workspace| {
                 let help = format!("{} (removed)", workspace.name);
-                CompletionCandidate::new(workspace.workspace_id.to_string()).help(Some(help.into()))
+                CompletionCandidate::new(workspace.space_id.to_string()).help(Some(help.into()))
             }));
             return Ok(candidates);
         }

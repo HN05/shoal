@@ -173,9 +173,12 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
     let removed = manager.removed_workspaces().await.unwrap();
     let record = removed
         .iter()
-        .find(|removed| removed.workspace_id == workspace.id)
+        .find(|removed| removed.space_id == workspace.id)
         .expect("a removal record restores the files");
-    assert!(record.checkpoint.commit != record.checkpoint.head);
+    assert!(
+        record.kept_workspace().unwrap().checkpoint.commit
+            != record.kept_workspace().unwrap().checkpoint.head
+    );
     // The chat carries the agent on, so a restore does not bring it back.
     assert!(
         record.last_sessions.is_empty(),

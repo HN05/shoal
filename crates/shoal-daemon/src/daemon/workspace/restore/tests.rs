@@ -22,13 +22,13 @@ pub(in crate::daemon::workspace) fn checkpoint_refs(repo: &std::path::Path) -> V
     refs
 }
 
-async fn record(manager: &Manager, id: &str) -> Option<RemovedWorkspace> {
+async fn record(manager: &Manager, id: &str) -> Option<RemovedSpace> {
     let id = id.to_owned();
     manager
         .store
         .run(move |db| {
             let record: Option<String> = rusqlite::OptionalExtension::optional(db.query_row(
-                "SELECT record FROM removed_workspaces WHERE workspace_id=?1",
+                "SELECT record FROM removed_spaces WHERE space_id=?1",
                 [id],
                 |row| row.get(0),
             ))?;
@@ -93,7 +93,13 @@ async fn removal_checkpoint_keeps_files_workspace_processes_write_as_they_stop()
     assert_eq!(
         git(
             &checkout,
-            &["show", &format!("{}:flushed", removed.checkpoint.commit)]
+            &[
+                "show",
+                &format!(
+                    "{}:flushed",
+                    removed.kept_workspace().unwrap().checkpoint.commit
+                )
+            ]
         ),
         "flushed\n"
     );
@@ -140,25 +146,44 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
     assert_ne!(git(&checkout, &["branch", "--list", "topic"]), "");
     let removed = record(&manager, workspace.id.as_str()).await.unwrap();
     assert_eq!(removed.name, "topic");
-    assert_eq!(removed.checkpoint.branch, Some("topic".into()));
-    assert_eq!(removed.checkpoint.head, head.trim());
-    assert_eq!(removed.checkpoint.cause, CheckpointCause::Removal);
-    assert!(!removed.checkpoint.files_omitted);
+    assert_eq!(
+        removed.kept_workspace().unwrap().checkpoint.branch,
+        Some("topic".into())
+    );
+    assert_eq!(
+        removed.kept_workspace().unwrap().checkpoint.head,
+        head.trim()
+    );
+    assert_eq!(
+        removed.kept_workspace().unwrap().checkpoint.cause,
+        CheckpointCause::Removal
+    );
+    assert!(!removed.kept_workspace().unwrap().checkpoint.files_omitted);
     assert_eq!(removed.cause, EventCause::Manual);
     assert_eq!(
         removed.links.issue().map(|issue| issue.url.url()),
         Some("https://forge/team/repo/issues/1")
     );
-    assert_eq!(removed.expires_at, removed.checkpoint.expires_at);
-    let reference = git::checkpoint::reference(&removed.checkpoint.commit);
+    assert_eq!(
+        removed.expires_at,
+        removed.kept_workspace().unwrap().checkpoint.expires_at
+    );
+    let reference =
+        git::checkpoint::reference(&removed.kept_workspace().unwrap().checkpoint.commit);
     assert_eq!(
         git(&checkout, &["rev-parse", &reference]).trim(),
-        removed.checkpoint.commit
+        removed.kept_workspace().unwrap().checkpoint.commit
     );
     assert_eq!(
         git(
             &checkout,
-            &["show", &format!("{}:scratch", removed.checkpoint.commit)]
+            &[
+                "show",
+                &format!(
+                    "{}:scratch",
+                    removed.kept_workspace().unwrap().checkpoint.commit
+                )
+            ]
         ),
         "notes\n"
     );
@@ -170,7 +195,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE removed_workspaces SET expires_at=unixepoch() WHERE workspace_id=?1",
+                "UPDATE removed_spaces SET expires_at=unixepoch() WHERE space_id=?1",
                 [&id],
             )?;
             Ok(())
@@ -189,7 +214,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE removed_workspaces SET expires_at=?2 WHERE workspace_id=?1",
+                "UPDATE removed_spaces SET expires_at=?2 WHERE space_id=?1",
                 rusqlite::params![id, expires_at],
             )?;
             Ok(())
@@ -215,7 +240,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE removed_workspaces SET expires_at=0 WHERE workspace_id=?1",
+                "UPDATE removed_spaces SET expires_at=0 WHERE space_id=?1",
                 [&id],
             )?;
             db.execute(
@@ -380,8 +405,8 @@ async fn a_started_restore_keeps_expiry_from_its_record_checkpoints_and_files() 
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE removed_workspaces SET expires_at=?2, record=json_set(record,
-                    '$.expires_at', ?2, '$.checkpoint.expires_at', ?2) WHERE workspace_id=?1",
+                "UPDATE removed_spaces SET expires_at=?2, record=json_set(record,
+                    '$.expires_at', ?2, '$.checkpoint.expires_at', ?2) WHERE space_id=?1",
                 rusqlite::params![id, soon],
             )?;
             db.execute(
@@ -403,10 +428,13 @@ async fn a_started_restore_keeps_expiry_from_its_record_checkpoints_and_files() 
         .await
         .unwrap();
     assert!(claimed.expires_at >= floor);
-    assert!(claimed.checkpoint.expires_at >= floor);
+    assert!(claimed.kept_workspace().unwrap().checkpoint.expires_at >= floor);
     let saved = record(&manager, workspace.id.as_str()).await.unwrap();
     assert_eq!(saved.expires_at, claimed.expires_at);
-    assert_eq!(saved.checkpoint.expires_at, claimed.checkpoint.expires_at);
+    assert_eq!(
+        saved.kept_workspace().unwrap().checkpoint.expires_at,
+        claimed.kept_workspace().unwrap().checkpoint.expires_at
+    );
     let id = workspace.id.clone();
     let (checkpoint_expiry, files_expiry): (crate::time::UnixTime, crate::time::UnixTime) = manager
         .store
@@ -421,7 +449,10 @@ async fn a_started_restore_keeps_expiry_from_its_record_checkpoints_and_files() 
         })
         .await
         .unwrap();
-    assert_eq!(checkpoint_expiry, claimed.checkpoint.expires_at);
+    assert_eq!(
+        checkpoint_expiry,
+        claimed.kept_workspace().unwrap().checkpoint.expires_at
+    );
     assert!(files_expiry >= floor);
     manager
         .restore_workspace(&manager.named("topic").await)
@@ -662,13 +693,21 @@ async fn a_failed_removal_keeps_its_checkpoint() {
     assert_eq!(
         git(
             &checkout,
-            &["show", &format!("{}:scratch", record.checkpoint.commit)]
+            &[
+                "show",
+                &format!(
+                    "{}:scratch",
+                    record.kept_workspace().unwrap().checkpoint.commit
+                )
+            ]
         ),
         "notes\n"
     );
     assert_eq!(
         checkpoint_refs(&checkout),
-        [git::checkpoint::reference(&record.checkpoint.commit)]
+        [git::checkpoint::reference(
+            &record.kept_workspace().unwrap().checkpoint.commit
+        )]
     );
     assert!(
         manager.removed_workspaces().await.unwrap().is_empty(),
@@ -769,7 +808,10 @@ async fn a_retried_removal_keeps_earlier_checkpoints_and_reuses_an_unchanged_one
             .save_removal_record(&workspace, EventCause::Manual, None)
             .await
             .unwrap()
+            .kept_workspace()
+            .unwrap()
             .checkpoint
+            .clone()
     };
     fs::write(workspace.path.join("first"), "first\n").unwrap();
     let first = save().await;
@@ -785,6 +827,8 @@ async fn a_retried_removal_keeps_earlier_checkpoints_and_reuses_an_unchanged_one
     assert_eq!(
         record(&manager, workspace.id.as_str())
             .await
+            .unwrap()
+            .kept_workspace()
             .unwrap()
             .checkpoint,
         second
@@ -828,8 +872,8 @@ async fn restore_cuts_a_name_an_older_shoal_recorded_to_fit() {
         .store
         .write(move |tx| {
             tx.execute(
-                "UPDATE removed_workspaces SET name=?2, record=json_set(record,'$.name',?2)
-                    WHERE workspace_id=?1",
+                "UPDATE removed_spaces SET name=?2, record=json_set(record,'$.name',?2)
+                    WHERE space_id=?1",
                 rusqlite::params![id, name],
             )?;
             Ok(())

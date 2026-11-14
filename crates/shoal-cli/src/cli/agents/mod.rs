@@ -25,7 +25,7 @@ use crate::{
     ai::IntegrationKind,
     cli::{context::Context, ui},
     config::{Effective, modes, named_commands::Commands, templates},
-    model::{Chat, ChatHome, Relation, RemovedWorkspace, Repository, SpaceLinks, Workspace},
+    model::{Chat, ChatHome, Relation, RemovedSpace, Repository, SpaceLinks, Workspace},
     protocol::ConfigTarget,
     tools::{ensure_program, program_available},
 };
@@ -509,7 +509,7 @@ pub(in crate::cli) fn plan_change(
 pub(in crate::cli) async fn trust_resumed(
     ctx: &Context,
     workspace: &Workspace,
-    removed: &RemovedWorkspace,
+    removed: &RemovedSpace,
 ) {
     let stopped = removed
         .agents

@@ -354,10 +354,13 @@ async fn removal_waiting_for_creation_keeps_what_creation_recorded() {
     let removed = manager.removed_workspaces().await.unwrap();
     let removed = removed
         .iter()
-        .find(|removed| removed.workspace_id == workspace.id)
+        .find(|removed| removed.space_id == workspace.id)
         .unwrap();
     assert_eq!(
-        (removed.base_ref.clone(), removed.base_commit.clone()),
+        (
+            removed.kept_workspace().unwrap().base_ref.clone(),
+            removed.kept_workspace().unwrap().base_commit.clone()
+        ),
         base
     );
 }

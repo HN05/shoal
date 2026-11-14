@@ -4,7 +4,7 @@ use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    model::{Chat, QueueEntry, RemovedWorkspace, Workspace},
+    model::{Chat, QueueEntry, RemovedSpace, Workspace},
     output::{batch::Failure, outputs},
     saved::SavedSummary,
 };
@@ -81,7 +81,7 @@ pub struct Queued {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reopened {
     pub workspace: Workspace,
-    pub removed: RemovedWorkspace,
+    pub removed: RemovedSpace,
     pub warnings: Vec<String>,
     /// Its stopped agents stay saved for a later `shoal restore`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -105,7 +105,7 @@ pub struct StoppedWorkspace {
 pub struct Restorable {
     pub stopped: Vec<StoppedWorkspace>,
     pub chats: Vec<Chat>,
-    pub removed: Vec<RemovedWorkspace>,
+    pub removed: Vec<RemovedSpace>,
 }
 
 outputs!(

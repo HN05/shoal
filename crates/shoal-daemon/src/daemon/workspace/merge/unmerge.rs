@@ -83,7 +83,7 @@ impl Manager {
 fn removed_name(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<String>> {
     Ok(db
         .query_row(
-            "SELECT name FROM removed_workspaces WHERE workspace_id=?1",
+            "SELECT name FROM removed_spaces WHERE space_id=?1",
             [id],
             |row| row.get(0),
         )

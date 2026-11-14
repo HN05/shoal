@@ -15,7 +15,7 @@ use crate::{
         output::{Palette, Style},
         shell, terminal,
     },
-    model::{RemovedWorkspace, RestoredWorkspace},
+    model::{RemovedSpace, RestoredWorkspace},
     state::WorkspaceState,
 };
 
@@ -23,10 +23,7 @@ use crate::{
 /// and run its post-setup hook, in which the agents restored for it start;
 /// an error once one fails names those opened before it. A workspace
 /// opened alone becomes the directory of a shell that follows the caller.
-pub(super) async fn reopen_each(
-    ctx: &Context,
-    removed: &[RemovedWorkspace],
-) -> Result<Vec<Reopened>> {
+pub(super) async fn reopen_each(ctx: &Context, removed: &[RemovedSpace]) -> Result<Vec<Reopened>> {
     let mut reopened = Vec::new();
     for workspace in removed {
         let opened = reopen(ctx, workspace).await;
@@ -42,9 +39,9 @@ pub(super) async fn reopen_each(
 
 /// Open the removed `workspace` again, set it up, link its PRs and run its
 /// post-setup hook.
-async fn reopen(ctx: &Context, workspace: &RemovedWorkspace) -> Result<Reopened> {
+async fn reopen(ctx: &Context, workspace: &RemovedSpace) -> Result<Reopened> {
     let restore =
-        crate::client::removal::restore(&ctx.paths, SpaceSelector::id(&workspace.workspace_id));
+        crate::client::removal::restore(&ctx.paths, SpaceSelector::id(&workspace.space_id));
     let restored = ctx.progress("Restoring workspace", restore).await?;
     let number = restored.opened.workspace.number;
     let opened = (prepare_reopened(ctx, *restored).await?).with_context(|| {
@@ -121,9 +118,10 @@ impl ReopenedExt for Reopened {
         let Self {
             workspace, removed, ..
         } = self;
-        let files = if removed.checkpoint.commit != removed.checkpoint.head {
+        let checkpoint = removed.workspace().map(|kept| &kept.checkpoint);
+        let files = if checkpoint.is_some_and(|checkpoint| checkpoint.commit != checkpoint.head) {
             "; unsaved files restored"
-        } else if removed.checkpoint.files_omitted {
+        } else if checkpoint.is_some_and(|checkpoint| checkpoint.files_omitted) {
             "; unsaved files were not kept"
         } else {
             ""
@@ -222,25 +220,31 @@ pub(in crate::cli::commands) async fn prepare_reopened(
     }))
 }
 
-/// One aligned line per removed workspace: its name, branch, when and why
-/// it was removed, and the number of the checkpoint its removal took.
-pub(super) fn removed_lines(removed: &[RemovedWorkspace]) -> Vec<String> {
+/// One aligned line per removed space: its name, a workspace's branch, when
+/// and why it was removed, and the number of the checkpoint a workspace's
+/// removal took.
+pub(super) fn removed_lines(removed: &[RemovedSpace]) -> Vec<String> {
     let width = removed
         .iter()
-        .map(|workspace| workspace.name.chars().count())
+        .map(|space| space.name.chars().count())
         .max()
         .unwrap_or(0);
     removed
         .iter()
-        .map(|workspace| {
-            let branch = branch_label(workspace.checkpoint.branch.as_ref());
+        .map(|space| {
+            let (branch, checkpoint) = match space.workspace() {
+                Some(kept) => (
+                    format!("  {}", branch_label(kept.checkpoint.branch.as_ref())),
+                    format!(", checkpoint {}", kept.checkpoint.number),
+                ),
+                None => Default::default(),
+            };
             format!(
-                "{:width$}  {branch}  removed {} ({}), checkpoint {}, restorable until {}",
-                workspace.name,
-                workspace.removed_at.local_seconds(),
-                workspace.cause,
-                workspace.checkpoint.number,
-                workspace.expires_at.local_seconds(),
+                "{:width$}{branch}  removed {} ({}){checkpoint}, restorable until {}",
+                space.name,
+                space.removed_at.local_seconds(),
+                space.cause,
+                space.expires_at.local_seconds(),
             )
         })
         .collect()

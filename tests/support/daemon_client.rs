@@ -61,7 +61,7 @@ pub fn space_id(root: &Path, name: &str) -> String {
         .or(listed("list_chats").iter().find(named))
         .map(|space| space["id"].clone())
         .or_else(|| {
-            (listed("removed_workspaces").iter().find(named))
+            (listed("removed_spaces").iter().find(named))
                 .map(|removed| removed["workspace_id"].clone())
         });
     found

@@ -190,11 +190,11 @@ fn restore_lists_removed_workspaces_beyond_one_protocol_frame() {
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
         "WITH RECURSIVE copies(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM copies WHERE n < 40)
-         INSERT INTO removed_workspaces(workspace_id,repository_id,name,expires_at,record)
-         SELECT 'copy-' || n, repository_id, 'copy-' || n, expires_at,
+         INSERT INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record)
+         SELECT 'copy-' || n, repository_id, chat, 'copy-' || n, expires_at,
              json_set(record, '$.workspace_id', 'copy-' || n, '$.name', 'copy-' || n,
                  '$.checkpoint.name', replace(hex(zeroblob(1000)), '0', 'x'))
-         FROM removed_workspaces, copies",
+         FROM removed_spaces, copies",
         [],
     )
     .unwrap();

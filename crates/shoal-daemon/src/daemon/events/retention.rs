@@ -91,7 +91,7 @@ fn gone(db: &Connection) -> Result<Vec<Gone>> {
             WHERE space_id IS NOT NULL
                 AND space_id NOT IN (SELECT id FROM workspaces)
                 AND space_id NOT IN (SELECT id FROM chats)
-                AND space_id NOT IN (SELECT workspace_id FROM removed_workspaces)
+                AND space_id NOT IN (SELECT space_id FROM removed_spaces)
                 AND space_id NOT IN (SELECT space_id FROM removed_space_files
                     WHERE expires_at > unixepoch())
             GROUP BY space_id)",
@@ -118,7 +118,7 @@ fn forget(tx: &Transaction<'_>, ids: &[SpaceId]) -> Result<()> {
             "DELETE FROM workspace_events WHERE space_id=?1
                 AND ?1 NOT IN (SELECT id FROM workspaces)
                 AND ?1 NOT IN (SELECT id FROM chats)
-                AND ?1 NOT IN (SELECT workspace_id FROM removed_workspaces)",
+                AND ?1 NOT IN (SELECT space_id FROM removed_spaces)",
             [id],
         )?;
     }

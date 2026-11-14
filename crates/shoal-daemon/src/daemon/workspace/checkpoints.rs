@@ -15,9 +15,7 @@ use crate::model::CheckpointNumber;
 use crate::{
     daemon::{log, scope::Caller},
     git,
-    model::{
-        Checkpoint, CheckpointCause, RemovedWorkspace, Repository, RestoredCheckpoint, Workspace,
-    },
+    model::{Checkpoint, CheckpointCause, RemovedSpace, Repository, RestoredCheckpoint, Workspace},
     state::WorkspaceState,
     time::UnixTime,
 };
@@ -382,11 +380,11 @@ impl Manager {
     /// of the removed one's files from coming between.
     pub(super) async fn adopt_removal(
         &self,
-        removed: &RemovedWorkspace,
+        removed: &RemovedSpace,
         workspace_id: &SpaceId,
     ) -> Result<()> {
-        let _files = self.gates.lock_message_files(&removed.repository_id).await;
-        let (from, to) = (removed.workspace_id.clone(), workspace_id.to_owned());
+        let _files = self.gates.lock_message_files(removed.repository()?).await;
+        let (from, to) = (removed.space_id.clone(), workspace_id.to_owned());
         self.store
             .write(move |tx| {
                 reassign(tx, &from, &to)?;
@@ -399,10 +397,7 @@ impl Manager {
                     crate::daemon::events::EventCause::Manual,
                     None,
                 )?;
-                tx.execute(
-                    "DELETE FROM removed_workspaces WHERE workspace_id=?1",
-                    [&from],
-                )?;
+                tx.execute("DELETE FROM removed_spaces WHERE space_id=?1", [&from])?;
                 Ok(())
             })
             .await
@@ -577,12 +572,12 @@ fn reassign(db: &Connection, from: &SpaceId, to: &SpaceId) -> Result<()> {
 /// neither exist nor have a removal record or checkpoint left.
 fn delete_expired_removals(db: &Connection) -> Result<()> {
     db.execute(
-        "DELETE FROM removed_workspaces WHERE expires_at <= unixepoch()",
+        "DELETE FROM removed_spaces WHERE expires_at <= unixepoch()",
         [],
     )?;
     db.execute(
         "DELETE FROM checkpoint_numbers WHERE workspace_id NOT IN (SELECT id FROM workspaces)
-            AND workspace_id NOT IN (SELECT workspace_id FROM removed_workspaces)
+            AND workspace_id NOT IN (SELECT space_id FROM removed_spaces)
             AND workspace_id NOT IN (SELECT workspace_id FROM checkpoints)",
         [],
     )?;
@@ -597,7 +592,7 @@ fn delete_expired(db: &Connection, repository_id: &RepositoryId) -> Result<()> {
         &format!(
             "DELETE FROM checkpoints WHERE repository_id=?1
                 AND (NOT {KEPT} OR (workspace_id NOT IN (SELECT id FROM workspaces)
-                    AND workspace_id NOT IN (SELECT workspace_id FROM removed_workspaces)))"
+                    AND workspace_id NOT IN (SELECT space_id FROM removed_spaces)))"
         ),
         [repository_id],
     )?;

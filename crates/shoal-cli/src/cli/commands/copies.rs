@@ -66,8 +66,10 @@ async fn removed(
     let removed = crate::client::removal::removed(&ctx.paths).await?;
     let removed = removed
         .into_iter()
-        .find(|removed| selector.given_id() == Some(&removed.workspace_id))
+        .find(|removed| selector.given_id() == Some(&removed.space_id))
         .with_context(|| format!("no workspace or removed workspace {selector}"))?;
-    let named = (removed.checkpoint.branch.map(String::from)).unwrap_or(removed.name.into());
-    Ok((removed.workspace_id, removed.repository_id, named))
+    let branch = removed.kept_workspace()?.checkpoint.branch.clone();
+    let repository = removed.repository()?.clone();
+    let named = (branch.map(String::from)).unwrap_or(removed.name.into());
+    Ok((removed.space_id, repository, named))
 }

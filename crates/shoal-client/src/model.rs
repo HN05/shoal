@@ -41,7 +41,8 @@ pub use queue::{
 };
 pub use ready::{ReadyMarks, ReadyOutcome, ReviewMark, SkippedPr};
 pub use removal::{
-    BranchTarget, KeptBranch, RemovedWorkspace, RestoredWorkspace, UntrackedWorktree,
+    BranchTarget, KeptBranch, RemovedKind, RemovedSpace, RemovedWorkspace, RestoredWorkspace,
+    UntrackedWorktree,
 };
 pub use repositories::{
     LocalConfigEdit, MovedRepository, Repository, RepositoryMoves, RepositoryRemoval,

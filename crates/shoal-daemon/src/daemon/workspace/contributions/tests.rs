@@ -177,7 +177,7 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
         .store
         .run(|db| {
             db.execute_batch(
-                "UPDATE checkpoints SET expires_at=0; UPDATE removed_workspaces SET expires_at=0;",
+                "UPDATE checkpoints SET expires_at=0; UPDATE removed_spaces SET expires_at=0;",
             )?;
             Ok(())
         })

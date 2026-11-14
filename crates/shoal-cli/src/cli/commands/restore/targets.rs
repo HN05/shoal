@@ -9,7 +9,7 @@ use crate::client::output::restore::{Restorable, StoppedWorkspace};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, context::Context, ui},
-    model::{Chat, PresentSpace, RemovedWorkspace, Spaces},
+    model::{Chat, PresentSpace, RemovedSpace, Spaces},
 };
 
 /// The space a `shoal restore` target names.
@@ -22,21 +22,21 @@ pub(super) enum Target {
     /// has, which the daemon refuses.
     Space(SpaceSelector),
     /// A removed workspace, which a restore opens again.
-    Removed(Box<RemovedWorkspace>),
+    Removed(Box<RemovedSpace>),
 }
 
 /// The space `selector` names among `spaces` and the `removed` workspaces:
 /// a running chat, another space or a removed workspace.
 pub(super) fn resolve(
     spaces: &Spaces,
-    removed: &[RemovedWorkspace],
+    removed: &[RemovedSpace],
     selector: SpaceSelector,
 ) -> Target {
     match spaces.find(&selector) {
         Some(PresentSpace::Chat(chat)) if chat.running => Target::Running(Box::new(chat)),
         Some(space) => Target::Space(SpaceSelector::id(space.id())),
         None => match (removed.iter())
-            .find(|workspace| selector.given_id() == Some(&workspace.workspace_id))
+            .find(|workspace| selector.given_id() == Some(&workspace.space_id))
         {
             Some(workspace) => Target::Removed(Box::new(workspace.clone())),
             None => Target::Space(selector),
@@ -58,7 +58,7 @@ pub(super) struct Selected {
     /// others.
     pub setups: Vec<FailedSetup>,
     /// The removed workspaces named, which open again.
-    pub removed: Vec<RemovedWorkspace>,
+    pub removed: Vec<RemovedSpace>,
 }
 
 impl Selected {
@@ -89,11 +89,7 @@ impl Selected {
 
     /// The spaces `selectors` name among `spaces` and the `removed`
     /// workspaces, each once.
-    fn resolved(
-        spaces: &Spaces,
-        removed: &[RemovedWorkspace],
-        selectors: Vec<SpaceSelector>,
-    ) -> Self {
+    fn resolved(spaces: &Spaces, removed: &[RemovedSpace], selectors: Vec<SpaceSelector>) -> Self {
         let mut selected = Self {
             spaces: Some(Vec::new()),
             ..Self::default()
@@ -124,8 +120,8 @@ impl Selected {
                 }
             }
             Target::Removed(workspace) => {
-                let id = &workspace.workspace_id;
-                if !self.removed.iter().any(|named| named.workspace_id == *id) {
+                let id = &workspace.space_id;
+                if !self.removed.iter().any(|named| named.space_id == *id) {
                     self.removed.push(*workspace);
                 }
             }
@@ -152,7 +148,7 @@ async fn removed_workspaces(
     ctx: &Context,
     spaces: &Spaces,
     names: &[SpaceSelector],
-) -> Result<Vec<RemovedWorkspace>> {
+) -> Result<Vec<RemovedSpace>> {
     let scoped = crate::env::inherits_scope(&ctx.paths.state);
     if (scoped && names.is_empty())
         || (!names.is_empty() && names.iter().all(|name| spaces.find(name).is_some()))
@@ -165,10 +161,10 @@ async fn removed_workspaces(
 }
 
 /// The picker entries of the `removed` workspaces, by ID.
-fn removed_entries(removed: &[RemovedWorkspace]) -> ui::Entries {
+fn removed_entries(removed: &[RemovedSpace]) -> ui::Entries {
     removed
         .iter()
-        .map(|workspace| workspace.workspace_id.to_string())
+        .map(|workspace| workspace.space_id.to_string())
         .zip(super::reopen::removed_lines(removed))
         .collect()
 }
@@ -180,7 +176,7 @@ async fn list(
     ctx: &Context,
     spaces: &Spaces,
     chats: Vec<Chat>,
-    removed: Vec<RemovedWorkspace>,
+    removed: Vec<RemovedSpace>,
 ) -> Result<()> {
     let summaries = ui::saved_summaries(&ctx.paths).await;
     let mut stopped: Vec<_> = (spaces.workspaces.iter())
@@ -227,7 +223,7 @@ fn print_restorable(restorable: &Restorable) {
         outln!("Removed workspaces:");
     }
     for (workspace, line) in removed.iter().zip(super::reopen::removed_lines(removed)) {
-        outln!("  {}  {line}", workspace.workspace_id);
+        outln!("  {}  {line}", workspace.space_id);
     }
 }
 

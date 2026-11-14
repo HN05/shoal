@@ -28,7 +28,7 @@ fn a_workspace_package_keeps_the_version_earlier_shoals_read() {
     // branch; one before it refuses the package.
     let mut at_commit = manifest.clone();
     if let Space::Workspace(packaged) = &mut at_commit.space {
-        packaged.workspace.at = Some(crate::model::StartingCommit {
+        packaged.workspace.kept_workspace_mut().unwrap().at = Some(crate::model::StartingCommit {
             commit: "abc".into(),
             made_for: None,
         });
@@ -266,7 +266,7 @@ fn manifest_with_sessions() -> Manifest {
         stop: None,
         converted: false,
     };
-    let workspace: RemovedWorkspace = serde_json::from_value(serde_json::json!({
+    let workspace: RemovedSpace = serde_json::from_value(serde_json::json!({
         "workspace_id": "w1",
         "repository_id": "r1",
         "name": "topic",

@@ -9,7 +9,7 @@ use crate::space_names::SpaceSelector;
 use crate::{
     cleanup::{ManualCleanup, Selection},
     connection::{Daemon, pages, request},
-    model::{RemovedWorkspace, RestoredWorkspace, Workspace},
+    model::{RemovedSpace, RestoredWorkspace, Workspace},
     protocol::RemovalMethod,
 };
 
@@ -337,8 +337,8 @@ pub async fn clean_up(
 }
 
 /// The removed workspaces whose records allow restoring them.
-pub async fn removed(daemon: &impl Daemon) -> Result<Vec<RemovedWorkspace>> {
-    pages(daemon, RemovalMethod::RemovedWorkspaces).await
+pub async fn removed(daemon: &impl Daemon) -> Result<Vec<RemovedSpace>> {
+    pages(daemon, RemovalMethod::RemovedSpaces).await
 }
 
 /// Open the removed `workspace` again from its record.

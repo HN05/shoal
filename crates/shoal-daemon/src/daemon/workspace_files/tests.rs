@@ -1257,6 +1257,7 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
 /// Turn the state database into one from before Shoal recorded attached
 /// files.
 fn before_attached_files(db: &rusqlite::Connection) -> anyhow::Result<()> {
+    db.execute_batch(include_str!("../store/removed_spaces_undo.sql"))?;
     db.execute_batch(include_str!("../store/gate_undo.sql"))?;
     db.execute_batch(include_str!("../store/issue_assignees_undo.sql"))?;
     db.execute_batch(include_str!("../store/space_pr_titles_undo.sql"))?;

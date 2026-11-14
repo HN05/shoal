@@ -479,9 +479,9 @@ async fn removal_keeps_starting_files_above_the_archive_limit() {
     let removed = f.manager.removed_workspaces().await.unwrap();
     let removed = removed
         .iter()
-        .find(|removed| removed.workspace_id == copy.id)
+        .find(|removed| removed.space_id == copy.id)
         .unwrap();
-    assert!(!removed.checkpoint.files_omitted);
+    assert!(!removed.kept_workspace().unwrap().checkpoint.files_omitted);
 }
 
 #[tokio::test]

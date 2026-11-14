@@ -19,7 +19,7 @@ use super::Manager;
 use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    model::{RemovedWorkspace, Repository, Workspace},
+    model::{RemovedSpace, Repository, Workspace},
     shoal_dirs::{Contents, ShoalDir, remove_dir},
     transfer::{CarriedSessionFile, SessionFile, SessionSource},
 };
@@ -32,10 +32,11 @@ impl Manager {
     pub(super) async fn keep_imported_sessions(
         &self,
         repo: &Repository,
-        mut removed: RemovedWorkspace,
+        mut removed: RemovedSpace,
         files: &[CarriedSessionFile],
-    ) -> Result<RemovedWorkspace> {
-        removed.session_files = files.iter().map(|carried| carried.file.clone()).collect();
+    ) -> Result<RemovedSpace> {
+        let listed: Vec<_> = files.iter().map(|carried| carried.file.clone()).collect();
+        removed.kept_workspace_mut()?.session_files = listed.clone();
         let layout = match files.is_empty() {
             true => Layout::of(repo),
             false => Some(Layout::new(&self.workspaces_dir(repo).await?, &repo.id)),
@@ -45,10 +46,10 @@ impl Manager {
         };
         let copies: Vec<_> = files
             .iter()
-            .zip(layout.kept(&removed.workspace_id, &removed.session_files))
+            .zip(layout.kept(&removed.space_id, &listed))
             .map(|(carried, kept)| (carried.contents.clone(), kept.contents))
             .collect();
-        let (workspace_id, listed) = (removed.workspace_id.clone(), removed.session_files.clone());
+        let workspace_id = removed.space_id.clone();
         tokio::task::spawn_blocking(move || layout.keep(&workspace_id, &listed, &copies))
             .await
             .context("keep the agents' session files")??;
@@ -85,16 +86,17 @@ impl Manager {
     /// before the move and deleting them after it.
     pub(super) async fn hand_over_imported_sessions(
         &self,
-        removed: &RemovedWorkspace,
+        removed: &RemovedSpace,
         to: &SpaceId,
     ) -> Result<Vec<CarriedSessionFile>> {
-        if removed.session_files.is_empty() {
+        let session_files = &removed.kept_workspace()?.session_files;
+        if session_files.is_empty() {
             return Ok(Vec::new());
         }
-        let repo = self.repository(&removed.repository_id).await?;
+        let repo = self.repository(removed.repository()?).await?;
         let layout = Layout::of(&repo).context("the repository has no directory")?;
-        let kept = layout.kept(to, &removed.session_files);
-        let (from, to) = (removed.workspace_id.clone(), to.clone());
+        let kept = layout.kept(to, session_files);
+        let (from, to) = (removed.space_id.clone(), to.clone());
         let _sweep = self.gates.lock_checkpoints().await;
         tokio::task::spawn_blocking(move || layout.hand_over(&from, &to))
             .await
@@ -137,13 +139,13 @@ impl Manager {
 /// of its export.
 pub(crate) fn kept_session_sources(
     repo: &Repository,
-    removed: &RemovedWorkspace,
+    removed: &RemovedSpace,
 ) -> Vec<SessionSource> {
-    let Some(layout) = Layout::of(repo) else {
+    let (Some(layout), Some(kept)) = (Layout::of(repo), removed.workspace()) else {
         return Vec::new();
     };
     layout
-        .kept(&removed.workspace_id, &removed.session_files)
+        .kept(&removed.space_id, &kept.session_files)
         .into_iter()
         .map(|kept| SessionSource {
             agent: kept.file.agent,
@@ -295,7 +297,7 @@ impl Layout {
 /// The IDs of the workspaces and removal records that keep their session
 /// files.
 fn session_owners(db: &Connection) -> Result<HashSet<String>> {
-    db.prepare("SELECT id FROM workspaces UNION SELECT workspace_id FROM removed_workspaces")?
+    db.prepare("SELECT id FROM workspaces UNION SELECT space_id FROM removed_spaces")?
         .query_map([], |row| row.get(0))?
         .map(|id| Ok(id?))
         .collect()

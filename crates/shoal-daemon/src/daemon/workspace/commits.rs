@@ -14,8 +14,7 @@ use crate::{
     daemon::scope::Caller,
     git,
     model::{
-        MadeFor, OpenedWorkspace, RemovedWorkspace, Repository, SpaceKind, StartingCommit,
-        Workspace,
+        MadeFor, OpenedWorkspace, RemovedSpace, Repository, SpaceKind, StartingCommit, Workspace,
     },
     protocol::{CommitStart, CreationOptions, PullHead},
     state::WorkspaceState,
@@ -370,12 +369,12 @@ impl Manager {
     /// the commit it started `at`.
     pub(super) async fn restore_commit_workspace(
         &self,
-        removed: &RemovedWorkspace,
+        removed: &RemovedSpace,
         at: StartingCommit,
         files: Option<RestoredFiles>,
     ) -> Result<Workspace> {
-        let (repo, git) = self.lock_repository(&removed.repository_id).await?;
-        let diff_ref = surviving_ref(&repo, removed.base_ref.as_deref()).await?;
+        let (repo, git) = self.lock_repository(removed.repository()?).await?;
+        let diff_ref = surviving_ref(&repo, removed.kept_workspace()?.base_ref.as_deref()).await?;
         // Its directory comes from where it started, never its name.
         let directory = at.directory_seed();
         let workspace = self
@@ -391,12 +390,12 @@ impl Manager {
                 diff_ref,
                 None,
                 CreationOptions {
-                    skip_setup: removed.setup_skipped,
+                    skip_setup: removed.kept_workspace()?.setup_skipped,
                     ..Default::default()
                 },
             )
             .await?;
-        let head = removed.checkpoint.head.as_str();
+        let head = removed.kept_workspace()?.checkpoint.head.as_str();
         let result = self
             .materialize_commit_worktree(&repo, &workspace, &head.into(), files.as_ref())
             .await;

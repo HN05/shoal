@@ -116,7 +116,9 @@ async fn export_moving(ctx: &Context, planned: &PlannedExport) -> Result<Option<
 /// The number of the checkpoint the package of a workspace holds.
 fn exported_checkpoint(exported: &ExportedSpace) -> Option<CheckpointNumber> {
     match &exported.manifest.space {
-        Space::Workspace(packaged) => Some(packaged.workspace.checkpoint.number),
+        Space::Workspace(packaged) => {
+            (packaged.workspace.workspace()).map(|kept| kept.checkpoint.number)
+        }
         Space::Chat(_) => None,
     }
 }

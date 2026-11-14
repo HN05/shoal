@@ -87,7 +87,7 @@ pub enum RemovalMethod {
         selection: crate::cleanup::Selection,
     },
     /// Removed workspaces that can still be restored.
-    RemovedWorkspaces,
+    RemovedSpaces,
     /// Open a removed workspace again from its removal record.
     RestoreWorkspace { workspace: SpaceSelector },
     /// Delete the agents' session files the restore that opened `workspace`
@@ -126,7 +126,7 @@ pub enum RemovalMethod {
         repository: crate::repository::Selector,
         bundle: Option<std::path::PathBuf>,
         prerequisite: Option<String>,
-        workspace: Box<crate::model::RemovedWorkspace>,
+        workspace: Box<crate::model::RemovedSpace>,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         copy: bool,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]

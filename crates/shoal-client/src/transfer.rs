@@ -10,7 +10,7 @@ use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, request},
     executions::{Copied, LastSession, StoppedAgent},
-    model::{CheckpointNumber, RemovedWorkspace, RestoredWorkspace},
+    model::{CheckpointNumber, RemovedSpace, RestoredWorkspace},
     protocol::{RemovalMethod, WorkspaceMethod},
     removal::{RemovalResult, UnsavedWork},
     repository::Selector,
@@ -62,7 +62,7 @@ pub struct PackagedWorkspace {
     /// already has a checkpoint without one.
     pub bundle: bool,
     /// The removal record, with agents that start new sessions.
-    pub workspace: RemovedWorkspace,
+    pub workspace: RemovedSpace,
 }
 
 /// A chat, which the import starts again in the repository's checkout,
@@ -227,7 +227,7 @@ pub async fn import(
     repository: Selector,
     bundle: Option<PathBuf>,
     prerequisite: Option<String>,
-    workspace: RemovedWorkspace,
+    workspace: RemovedSpace,
     copy: bool,
     session_files: Vec<CarriedSessionFile>,
 ) -> Result<Box<RestoredWorkspace>> {

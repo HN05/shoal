@@ -38,8 +38,8 @@ async fn gone_spaces_keep_their_events_for_the_retention_after_their_removal() {
                 [],
             )?;
             db.execute(
-                "INSERT INTO removed_workspaces(workspace_id,repository_id,name,expires_at,record)
-                    VALUES ('restorable','repo','restorable',unixepoch()+60,'{}')",
+                "INSERT INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record)
+                    VALUES ('restorable','repo',0,'restorable',unixepoch()+60,'{}')",
                 [],
             )?;
             db.execute(

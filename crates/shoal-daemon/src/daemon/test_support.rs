@@ -164,7 +164,7 @@ impl Manager {
             .or_else(|| {
                 (removed.into_iter())
                     .find(|removed| removed.name == name)
-                    .map(|removed| removed.workspace_id)
+                    .map(|removed| removed.space_id)
             })
             .unwrap_or_else(SpaceId::generate);
         crate::client::space_names::SpaceSelector::Id(id)

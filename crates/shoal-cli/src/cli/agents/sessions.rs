@@ -15,7 +15,7 @@ use crate::{
     cli::{commands::workspaces, context::Context},
     client::transcripts::{self, AgentEnvironment},
     config::Effective,
-    model::{RemovedWorkspace, Workspace},
+    model::{RemovedSpace, Workspace},
     protocol::ConfigTarget,
     transfer::CarriedSessionFile,
 };
@@ -116,7 +116,7 @@ pub(in crate::cli) async fn install_session_files(
 pub(in crate::cli) async fn install_kept_session_files(
     ctx: &Context,
     workspace: &Workspace,
-    restored: &RemovedWorkspace,
+    restored: &RemovedSpace,
     files: &[CarriedSessionFile],
 ) {
     if files.is_empty() {

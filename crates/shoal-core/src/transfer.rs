@@ -25,7 +25,7 @@ use crate::{
     config::Effective,
     execution::recovery::{Copied, LastSession, Record, StoppedAgent},
     git::{self, default_branch::DefaultBranchLookup},
-    model::{Chat, RemovedWorkspace, Repository},
+    model::{Chat, RemovedSpace, Repository},
 };
 
 /// The first line of a package names its format and the version of it,
@@ -42,7 +42,11 @@ const VERSION: u32 = 5;
 fn version(manifest: &Manifest) -> u32 {
     match (&manifest.space, manifest.session_files.is_empty()) {
         _ if manifest.copy.is_some() => VERSION,
-        (Space::Workspace(packaged), _) if packaged.workspace.at.is_some() => 4,
+        (Space::Workspace(packaged), _)
+            if (packaged.workspace.workspace()).is_some_and(|kept| kept.at.is_some()) =>
+        {
+            4
+        }
         (Space::Chat(_), _) => 3,
         (Space::Workspace(_), false) => 2,
         (Space::Workspace(_), true) => 1,
@@ -57,7 +61,7 @@ fn version(manifest: &Manifest) -> u32 {
     reason = "a package is made from one space, moved into it"
 )]
 pub enum Source {
-    Workspace(RemovedWorkspace),
+    Workspace(RemovedSpace),
     Chat(Chat),
 }
 
@@ -326,15 +330,15 @@ pub trait PackagedWorkspaceExt: Sized {
     /// The package of `removed`, a workspace of the repository at `repo`:
     /// a bundle unless the default branch the importer fetches already has
     /// the checkpoint.
-    async fn of(repo: &Path, removed: RemovedWorkspace) -> Result<Self>;
+    async fn of(repo: &Path, removed: RemovedSpace) -> Result<Self>;
 
     /// The removal record to import, whose agents have `sessions`.
-    fn workspace_with(&self, sessions: Sessions) -> RemovedWorkspace;
+    fn workspace_with(&self, sessions: Sessions) -> RemovedSpace;
 }
 
 impl PackagedWorkspaceExt for PackagedWorkspace {
-    async fn of(repo: &Path, removed: RemovedWorkspace) -> Result<Self> {
-        let commit = removed.checkpoint.commit.clone();
+    async fn of(repo: &Path, removed: RemovedSpace) -> Result<Self> {
+        let commit = removed.kept_workspace()?.checkpoint.commit.clone();
         let shared = shared_commit(repo).await?;
         let bundle = match &shared {
             Some(shared) => {
@@ -349,8 +353,8 @@ impl PackagedWorkspaceExt for PackagedWorkspace {
         })
     }
 
-    fn workspace_with(&self, sessions: Sessions) -> RemovedWorkspace {
-        RemovedWorkspace {
+    fn workspace_with(&self, sessions: Sessions) -> RemovedSpace {
+        RemovedSpace {
             agents: sessions.agents,
             last_sessions: sessions.last_sessions,
             ..self.workspace.clone()
@@ -418,7 +422,8 @@ impl Bundle {
         let bundle = Self {
             directory: tempfile::tempdir()?,
         };
-        let reference = git::checkpoint::reference(&packaged.workspace.checkpoint.commit);
+        let checkpoint = &packaged.workspace.kept_workspace()?.checkpoint;
+        let reference = git::checkpoint::reference(&checkpoint.commit);
         let exclude = packaged.prerequisite.as_deref();
         git::bundle::create(repo, &bundle.path(), &reference, exclude).await?;
         Ok(bundle)
@@ -589,17 +594,20 @@ async fn shared_commit(repo: &Path) -> Result<Option<String>> {
 
 /// The record for another machine, where its agents' sessions do not exist
 /// and the package carries the session files it kept.
-fn moved(removed: RemovedWorkspace) -> RemovedWorkspace {
-    RemovedWorkspace {
+fn moved(removed: RemovedSpace) -> RemovedSpace {
+    let mut moved = RemovedSpace {
         agents: removed.agents.into_iter().map(moved_agent).collect(),
         last_sessions: removed
             .last_sessions
             .into_iter()
             .map(LastSession::moved)
             .collect(),
-        session_files: Vec::new(),
         ..removed
+    };
+    if let Ok(kept) = moved.kept_workspace_mut() {
+        kept.session_files = Vec::new();
     }
+    moved
 }
 
 /// `sessions` of a copy, whose agents start from forks of their sessions
