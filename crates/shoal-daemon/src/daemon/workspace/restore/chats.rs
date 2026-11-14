@@ -34,7 +34,7 @@ impl Manager {
                 removed.name
             ));
         }
-        self.adopt_removal(&removed, id).await?;
+        self.adopt_removal(&removed).await?;
         let chat = (self.chat_by_id(id).await?).context("the chat was removed meanwhile")?;
         Ok(RestoredChat {
             chat,

@@ -3764,8 +3764,9 @@ and the last sessions, runs setup, links its PRs, and keeps its checkpoints, log
 files; a link or save that fails is a warning. It goes below the space it was
 below while that exists and takes it as a child; otherwise it opens at the top
 level with a warning naming that space. It restores alone: the spaces removed
-with it keep their records. A workspace converted into a chat opens beside that
-chat, under a new ID, with its checkpoints. Once its post-setup hook succeeds, it restores those agents and last
+with it keep their records. The record of a workspace converted into a chat, which
+keeps the workspace's ID, takes an ID of its own with the checkpoints, which
+`shoal restore` lists and opens it under beside that chat. Once its post-setup hook succeeds, it restores those agents and last
 sessions as it restores a stopped space's, queued unless `--now` or `--focus`, under
 `--permission`; one it cannot restore is reported and stays saved, and the workspace
 stays open. `--no-agents` keeps them saved for a later `shoal restore`, keeping the

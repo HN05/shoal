@@ -80,14 +80,11 @@ impl Manager {
         self.discard_imported_sessions(&repo, &workspace.id).await
     }
 
-    /// Give the session files kept for `removed` to the workspace `to` that
-    /// restores it, for the caller to put in place, returning them there.
-    /// The checkpoint gate keeps the sweep from reading the files' owners
-    /// before the move and deleting them after it.
-    pub(super) async fn hand_over_imported_sessions(
+    /// The session files kept for `removed`, which the workspace restoring
+    /// it under its ID owns where they are, for the caller to put in place.
+    pub(super) async fn imported_sessions(
         &self,
         removed: &RemovedSpace,
-        to: &SpaceId,
     ) -> Result<Vec<CarriedSessionFile>> {
         let Some(kept) = removed.workspace() else {
             return Ok(Vec::new());
@@ -98,17 +95,7 @@ impl Manager {
         }
         let repo = self.repository(removed.repository()?).await?;
         let layout = Layout::of(&repo).context("the repository has no directory")?;
-        let kept = layout.kept(to, session_files);
-        let (from, to) = (removed.space_id.clone(), to.clone());
-        // A space restored under its own ID owns them where they are.
-        if from == to {
-            return Ok(kept);
-        }
-        let _sweep = self.gates.lock_checkpoints().await;
-        tokio::task::spawn_blocking(move || layout.hand_over(&from, &to))
-            .await
-            .context("hand over the kept session files")??;
-        Ok(kept)
+        Ok(layout.kept(&removed.space_id, session_files))
     }
 
     /// The session files kept for `workspace` that its restore's caller did
@@ -263,14 +250,6 @@ impl Layout {
             Err(error) if error.kind() == ErrorKind::NotFound => Ok(Vec::new()),
             Err(error) => Err(error).with_context(|| format!("read {}", list.display())),
         }
-    }
-
-    /// Move the files kept for the workspace `from` to the workspace `to`.
-    fn hand_over(&self, from: &SpaceId, to: &SpaceId) -> Result<()> {
-        self.dir.ensure_own()?;
-        let (from, to) = (self.root().join(from), self.root().join(to));
-        std::fs::rename(&from, &to)
-            .with_context(|| format!("move {} to {}", from.display(), to.display()))
     }
 
     fn remove_one(&self, id: &SpaceId) -> Result<()> {

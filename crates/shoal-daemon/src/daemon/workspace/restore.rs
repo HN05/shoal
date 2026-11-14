@@ -124,7 +124,7 @@ impl Manager {
     ) -> Result<RestoredWorkspace> {
         let mut warnings = Vec::new();
         let new = NewRecord {
-            id: self.restored_id(&removed).await?,
+            id: Some(removed.space_id.clone()),
             parent: (self.restored_parent(&removed, caller, &mut warnings)).await?,
         };
         let kept = removed.kept_workspace()?;
@@ -143,7 +143,7 @@ impl Manager {
         let id = &opened.workspace.id;
         warnings.extend(self.relink_space(id, &removed.links, caller).await);
         let session_files = self.restore_agents(&removed, id, &mut warnings).await;
-        self.adopt_removal(&removed, id).await?;
+        self.adopt_removal(&removed).await?;
         Ok(RestoredWorkspace {
             opened,
             removed,
@@ -164,7 +164,7 @@ impl Manager {
         id: &SpaceId,
         warnings: &mut Vec<String>,
     ) -> Vec<CarriedSessionFile> {
-        let session_files = (self.hand_over_imported_sessions(removed, id))
+        let session_files = (self.imported_sessions(removed))
             .await
             .unwrap_or_else(|error| {
                 warnings.push(format!("cannot keep the agents' session files: {error:#}"));
@@ -287,14 +287,6 @@ impl Manager {
                 Ok(None)
             }
         }
-    }
-
-    /// The ID the restore of `removed` opens it under: its own, unless the
-    /// chat a conversion made of it has it, beside which it opens as a new
-    /// space.
-    async fn restored_id(&self, removed: &RemovedSpace) -> Result<Option<SpaceId>> {
-        let taken = self.find_space(&removed.space_id).await?.is_some();
-        Ok((!taken).then(|| removed.space_id.clone()))
     }
 
     /// Open the removed workspace `removed` again as `new` places it, on its

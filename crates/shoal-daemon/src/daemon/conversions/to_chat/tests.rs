@@ -173,7 +173,7 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
     let removed = manager.removed_workspaces().await.unwrap();
     let record = removed
         .iter()
-        .find(|removed| removed.space_id == workspace.id)
+        .find(|removed| removed.name == workspace.name)
         .expect("a removal record restores the files");
     assert!(
         record.kept_workspace().unwrap().checkpoint.commit
@@ -208,8 +208,14 @@ async fn a_converted_workspace_restores_beside_the_chat_it_became() {
         .await
         .unwrap();
 
+    // Its record has an ID of its own, the chat keeping the workspace's.
+    let removed = manager.removed_workspaces().await.unwrap();
+    let [record] = removed.as_slice() else {
+        panic!("{removed:?}");
+    };
+    assert_ne!(record.space_id, workspace.id);
     let restored = manager
-        .restore_workspace(&SpaceSelector::id(&workspace.id))
+        .restore_workspace(&SpaceSelector::id(&record.space_id))
         .await
         .unwrap();
 

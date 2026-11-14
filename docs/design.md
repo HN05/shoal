@@ -3304,8 +3304,9 @@ one stays. When the removal's checkpoint keeps HEAD only, merged cleanup retains
 the workspace. A workspace's record expires with its checkpoint; a chat's, taken
 before its state is deleted, with its attached files. A restored space keeps its
 ID and takes a new number, so its checkpoints, events, files and proposals are
-its own again without rewriting; a workspace converted into a chat, whose ID the
-chat keeps, opens beside it under a new one. It goes below its recorded parent
+its own again without rewriting. A workspace converted into a chat leaves the
+chat its ID, so the conversion records it, with its checkpoints, under an ID of
+its own, which its restore opens it under beside the chat. It goes below its recorded parent
 while that takes it, else at the top level with a warning, and alone: the spaces
 removed with it keep their records. `shoal restore`
 reopens the branch through the existing-branch path, creating it at the removed

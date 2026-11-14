@@ -374,33 +374,28 @@ impl Manager {
             .await
     }
 
-    /// Drop the removal record of `removed`, which the space `id` restores,
-    /// with what keeps its attached files from expiring, and record the
-    /// restore, at once. Restored under its own ID, it keeps its
-    /// checkpoints, events and files where they are; opened beside the chat
-    /// a conversion made of it, it takes the checkpoints, so they keep an
-    /// owner. The files gate keeps the deletion of the removed space's files
-    /// from coming between.
-    pub(super) async fn adopt_removal(&self, removed: &RemovedSpace, id: &SpaceId) -> Result<()> {
+    /// Drop the removal record of `removed`, which its restore opened under
+    /// its ID, with what keeps its attached files from expiring, and record
+    /// the restore, at once; its checkpoints, events and files stay where
+    /// they are. The files gate keeps the deletion of the removed space's
+    /// files from coming between.
+    pub(super) async fn adopt_removal(&self, removed: &RemovedSpace) -> Result<()> {
         let _files = match &removed.repository_id {
             Some(repository) => Some(self.gates.lock_message_files(repository).await),
             None => None,
         };
-        let (from, to) = (removed.space_id.clone(), id.to_owned());
+        let id = removed.space_id.clone();
         self.store
             .write(move |tx| {
-                if from != to {
-                    reassign(tx, &from, &to)?;
-                }
-                crate::daemon::workspace_files::restore(tx, &to)?;
+                crate::daemon::workspace_files::restore(tx, &id)?;
                 crate::daemon::events::record(
                     tx,
-                    &to,
+                    &id,
                     crate::daemon::events::EventKind::Restored,
                     crate::daemon::events::EventCause::Manual,
                     None,
                 )?;
-                tx.execute("DELETE FROM removed_spaces WHERE space_id=?1", [&from])?;
+                tx.execute("DELETE FROM removed_spaces WHERE space_id=?1", [&id])?;
                 Ok(())
             })
             .await
@@ -547,7 +542,7 @@ fn extend(db: &Connection, checkpoint: &Checkpoint) -> Result<bool> {
 }
 
 /// Give `to` the unexpired checkpoints of `from`.
-fn reassign(db: &Connection, from: &SpaceId, to: &SpaceId) -> Result<()> {
+pub(super) fn reassign(db: &Connection, from: &SpaceId, to: &SpaceId) -> Result<()> {
     db.execute(
         "INSERT INTO checkpoint_numbers(workspace_id,last)
             SELECT ?2, last FROM checkpoint_numbers WHERE workspace_id=?1

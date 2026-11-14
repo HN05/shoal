@@ -20,34 +20,43 @@ use crate::{
     time::UnixTime,
 };
 
-/// SQL true when the space of a removal record is gone: no workspace has
-/// its ID, nor for a chat's record a chat. A workspace converted into a
-/// chat keeps the chat's ID, and its record restores beside it.
-const GONE: &str = "space_id NOT IN (SELECT id FROM workspaces)
-    AND NOT (chat AND space_id IN (SELECT id FROM chats))";
+/// SQL true when the space of a removal record is gone: no space has its ID.
+const GONE: &str = "space_id NOT IN (SELECT id FROM spaces)";
 
 impl Manager {
     /// Take the removal's checkpoint and record what `shoal restore` reopens
     /// before any file is deleted, so an interrupted or failed removal stays
     /// restorable, leaving out the agent `carried_on` ran as, which carries on
-    /// elsewhere, as in the chat a workspace becomes. Records of workspaces
-    /// that still exist are not listed.
+    /// in the chat the workspace becomes. That chat keeps the workspace's
+    /// ID, so the record of a conversion, with the checkpoints, takes one of
+    /// its own, which its restore opens it under beside the chat. Records of
+    /// spaces that still exist are not listed.
     pub(in crate::daemon::workspace) async fn save_removal_record(
         &self,
         workspace: &Workspace,
         cause: EventCause,
         carried_on: Option<&ExecutionId>,
     ) -> Result<RemovedSpace> {
-        let checkpoint = self
+        let mut checkpoint = self
             .checkpoint(workspace, CheckpointCause::Removal, None)
             .await?;
+        let id = match carried_on {
+            Some(_) => SpaceId::generate(),
+            None => workspace.id.clone(),
+        };
+        checkpoint.workspace_id = id.clone();
         // Removal refuses link changes, so links read now are final, unlike
         // those of the snapshot taken before it started; the spaces below go
         // first, so its parent is still there.
         let Workspace { links, parent, .. } = self.workspace_by_id(&workspace.id).await?;
         let (agents, last_sessions) = self.saved_agents(&workspace.id, carried_on)?;
+        // The agents carrying on in the chat keep the session files.
+        let session_files = match carried_on {
+            Some(_) => Vec::new(),
+            None => self.unplaced_sessions(workspace).await,
+        };
         let removed = RemovedSpace {
-            space_id: workspace.id.clone(),
+            space_id: id,
             repository_id: Some(workspace.repository_id.clone()),
             name: workspace.name.clone(),
             expires_at: checkpoint.expires_at,
@@ -63,11 +72,18 @@ impl Manager {
                 base_commit: workspace.base_commit.clone(),
                 at: workspace.at.clone(),
                 setup_skipped: workspace.setup_skipped,
-                session_files: self.unplaced_sessions(workspace).await,
+                session_files,
             })),
         };
-        let record = removed.clone();
-        self.store.run(move |db| self::record(db, &record)).await?;
+        let (record, from) = (removed.clone(), workspace.id.clone());
+        self.store
+            .write(move |tx| {
+                if record.space_id != from {
+                    super::super::checkpoints::reassign(tx, &from, &record.space_id)?;
+                }
+                self::record(tx, &record)
+            })
+            .await?;
         Ok(removed)
     }
 
@@ -256,13 +272,13 @@ fn claim(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<Option<RemovedS
     Ok(Some(removed))
 }
 
-/// The unexpired removal record of the removed workspace `id`.
+/// The unexpired removal record of the removed space `id`.
 fn find(db: &Connection, id: &SpaceId) -> Result<Option<RemovedSpace>> {
     let record: Option<String> = db
         .query_row(
             &format!(
                 "SELECT record FROM removed_spaces WHERE space_id=?1
-                    AND expires_at > unixepoch() AND {GONE} ORDER BY rowid DESC LIMIT 1"
+                    AND expires_at > unixepoch() AND {GONE}"
             ),
             [id],
             |row| row.get(0),
