@@ -65,6 +65,8 @@ REQUIRED_CHECKS = ("ci / rust (fmt, clippy, test, scripts) (push)",
 # Release version commits start with this subject, and ci.yml runs no checks on them.
 VERSION_COMMIT = "chore: prepare release v"
 CI_POLL_SECONDS = 30
+# Longer than main's CI takes with a runner free; a missing runner fails the release instead.
+CI_WAIT_SECONDS = 3600
 
 
 def validate(commit):
@@ -89,7 +91,8 @@ def tested_commit(commit):
 
 
 def await_passed_ci(commit):
-    """Wait while a required check on *commit* is pending; fail unless each passed."""
+    """Wait while a required check on *commit* is pending; fail unless each passed in time."""
+    deadline = time.monotonic() + CI_WAIT_SECONDS
     while True:
         states = ci_states(commit)
         failed = [f"{check} is {states.get(check, 'missing')}" for check in REQUIRED_CHECKS
@@ -99,6 +102,9 @@ def await_passed_ci(commit):
         pending = [check for check in REQUIRED_CHECKS if states[check] == "pending"]
         if not pending:
             return
+        if time.monotonic() >= deadline:
+            raise ValueError(f"main commit {commit} has not passed CI in "
+                             f"{CI_WAIT_SECONDS // 60} minutes: {', '.join(pending)} pending")
         print(f"Waiting for {', '.join(pending)} on {commit}", flush=True)
         time.sleep(CI_POLL_SECONDS)
 

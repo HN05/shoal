@@ -216,6 +216,17 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(forge.call_count, 2)
         sleep.assert_called_once_with(release.CI_POLL_SECONDS)
 
+    def test_ci_status_stops_waiting_at_the_deadline(self):
+        clock = iter([0, release.CI_WAIT_SECONDS - 1, release.CI_WAIT_SECONDS])
+        with patch.object(release, "forge",
+                          return_value=self.statuses(rust="success", musl="pending")) as forge, \
+                patch.object(release.time, "monotonic", side_effect=lambda: next(clock)), \
+                patch.object(release.time, "sleep"), \
+                self.assertRaises(ValueError) as refused:
+            release.await_passed_ci("m" * 40)
+        self.assertEqual(forge.call_count, 2)
+        self.assertIn(release.REQUIRED_CHECKS[1], str(refused.exception))
+
     def test_ci_status_refuses_a_failed_or_missing_check(self):
         cases = {
             "failure": (self.statuses(rust="success", musl="failure"), release.REQUIRED_CHECKS[1]),
