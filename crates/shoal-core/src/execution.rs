@@ -71,6 +71,9 @@ pub async fn run(
     agent: Option<TrackedAgent>,
 ) -> Result<i32> {
     ensure!(!command.is_empty(), "a command is required after --");
+    // The execution acts in its own right, never under what an approval of
+    // the command that started it granted.
+    crate::env::release_grant();
     let ran_agent = agent.is_some();
     let result = run_tracked(
         paths,

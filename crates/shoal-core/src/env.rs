@@ -417,8 +417,11 @@ fn held_scope() -> Option<ScopeToken> {
         .clone()
 }
 
-/// Hold `token` in place of the scope token this process inherited.
+/// Hold `token` in place of the scope token this process inherited, as a
+/// process that acts for another space from then on, which no grant of the
+/// command so far covers.
 fn hold_scope(token: ScopeToken) {
+    release_grant();
     *(HANDED_SCOPE.write()).unwrap_or_else(std::sync::PoisonError::into_inner) = Some(token);
 }
 
