@@ -539,8 +539,11 @@ instead of the PR delivery guidance below.
   before that job's first step) at nice 10, whose time CPU readings count as
   idle, as a tracked execution in a disposable
   workspace at its commit that starts from the seed, and ends only through the
-  forge: stopping it cancels its run there, protection leaves it running, and
-  its workspace goes once the execution ends. Forge-specific steps are
+  forge: stopping it cancels its run there, as its wrapper has the daemon do
+  when a hangup or terminate signal reaches it, protection leaves it running,
+  and its workspace goes once the execution ends. It outlives the daemon: its
+  wrapper runs apart from a systemd service's control group, in a scope of its
+  own, and Shoal's log names what stopped each job's runner. Forge-specific steps are
   operations of the forge's `Runners`; the daemon never matches on the forge kind.
 - Machine-wide memory overload protection is opt-out; sustained CPU protection is
   opt-in. The machine-only `load` level sets the CPU and memory thresholds the
@@ -581,9 +584,9 @@ configured command for another agent, plus proven child
   threshold is free, and other executions as manual stop does; recovery requires
   that free space too.
   Only a planned restart, which service commands request over the socket at any
-  protocol version, or an update detaches wrappers; a signal to the daemon stops
-  all work saved first, as before a system shutdown, and `shoal daemon stop`
-  stops it as `shoal stop --all` does.
+  protocol version, or an update detaches wrappers, and a signal to the daemon
+  detaches CI jobs' wrappers too; it stops all other work saved first, as before
+  a system shutdown, and `shoal daemon stop` stops it as `shoal stop --all` does.
   Manual stop, refused reattachment and a restart's stop of wrappers that cannot
   reattach save agent recovery and user command arguments for explicit restore,
   preserve work and leases, and never rerun a recorded command. Every daemon stop
