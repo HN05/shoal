@@ -72,6 +72,8 @@ pub(super) async fn restore(
         permission_change::check(ctx, &selected, options.execution.as_ref(), change).await?;
     }
     if scoped && restores_agents {
+        let mut reopened = super::reopen::reopen_each(ctx, &selected.removed).await?;
+        select_reopened(ctx, &mut selected, &mut reopened).await?;
         let now = options.now || options.focus;
         return queue::queue_below(ctx, selected, options.execution, change, now).await;
     }
