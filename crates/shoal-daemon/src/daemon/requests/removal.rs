@@ -6,7 +6,7 @@ use anyhow::Result;
 use super::super::{
     answer::Answer,
     cleanup,
-    scope::{Caller, Scoped, denied},
+    scope::{Caller, Scoped},
     workspace::Manager,
 };
 use crate::client::space_names::SpaceSelector;
@@ -230,7 +230,40 @@ impl Scoped for RemovalMethod {
             // commands descend from its execution, which keeps them.
             RemovalMethod::StopProcesses { space, .. } => Ok(Some(space)),
             RemovalMethod::CheckStop { space } => Ok(Some(space)),
-            _ => Err(denied()),
+            // Cleaning up, restoring removed workspaces and moving spaces is
+            // the `admin` permission's.
+            RemovalMethod::Cleanup { .. }
+            | RemovalMethod::RemovedWorkspaces
+            | RemovalMethod::RestoreWorkspace { .. }
+            | RemovalMethod::DropRestoredSessions { .. }
+            | RemovalMethod::ExportSpace { .. }
+            | RemovalMethod::ExportMovingSpace { .. }
+            | RemovalMethod::EndMovedSpace { .. }
+            | RemovalMethod::ImportWorkspace { .. } => administer(manager, caller, self).await,
         }
     }
+}
+
+/// Let `caller` send `method`, which the `admin` permission governs, in its
+/// own repository where it imports into one, returning the space it moves.
+async fn administer<'a>(
+    manager: &Manager,
+    caller: &Caller,
+    method: &'a mut RemovalMethod,
+) -> Result<Option<&'a mut SpaceSelector>> {
+    let repository = match method {
+        RemovalMethod::ImportWorkspace { repository, .. } => {
+            const REFUSAL: &str = "scoped processes import only into their own repository";
+            *repository = manager.own_repository(caller, repository, REFUSAL).await?;
+            Some(manager.repository(&*repository).await?.id)
+        }
+        _ => None,
+    };
+    manager.administer(caller, &*method, repository).await?;
+    Ok(match method {
+        RemovalMethod::ExportSpace { space, .. }
+        | RemovalMethod::ExportMovingSpace { space, .. }
+        | RemovalMethod::EndMovedSpace { space, .. } => Some(space),
+        _ => None,
+    })
 }

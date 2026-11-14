@@ -2438,8 +2438,11 @@ with its arguments, which the command reports with exit 2 and
 `code: "approval_pending"`, or `"approval_denied"` once denied. Once the
 request is approved, the same action proceeds once under every other check,
 and taking it again asks again; an approved command's own requests take
-what the same key governs without asking again. `daemon` governs installing, starting,
-stopping and restarting the daemon, and `shoal update`.
+what the same key governs without asking again. `daemon` governs installing,
+starting, stopping and restarting the daemon, and `shoal update`; `admin`
+governs the rest of administering Shoal, its config, repositories and
+cleanup, and repairing, adopting, restoring and moving workspaces, in the
+caller's own repository where the action names one.
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the
 [review template](../crates/shoal-core/src/config/templates/review.md), its task,
@@ -2865,8 +2868,8 @@ install default` does. Every launch and restore of the agent gets the file's
 directory as another working directory; `--here` and `--agent` work as for
 `repo setup`.
 
-Only the user runs `repo setup` and `config setup`, since both change the
-user's own config. Both start their agent at once regardless of the limits,
+`repo setup` and `config setup` change the user's own config, so a scoped
+process runs them as its space's [`admin` permission](#permitted-actions) allows. Both start their agent at once regardless of the limits,
 in a tab that takes focus whatever `terminal.focus` says; without a terminal,
 `repo setup` starts it detached and `config setup` in a
 background place.
@@ -2975,7 +2978,8 @@ runs, until the file is fixed. Its resource leases are the exception: since the
 file may name their hooks, acquiring or releasing one, and removing a
 workspace that holds one, fails until it is fixed. `move root` moves the
 file with the repository's directory and `repo rm` deletes it. `--json` returns `path` and `toml`, unset
-while the file does not exist. Scoped workspace commands cannot administer it.
+while the file does not exist. Scoped processes read and change it as their
+space's [`admin` permission](#permitted-actions) allows.
 
 ### Delete a repository
 
@@ -3280,7 +3284,8 @@ hook, from the prompt, `shoal setup` or `shoal restore <workspace>`, the queue
 starts it with its mode, task and permissions, or `shoal restore` does as its
 options say, linking the PR a start from a PR names, and a failed hook keeps
 it waiting. Then choose explicitly; `--skip`
-leaves what setup did and is not available to workspace processes:
+leaves what setup did, which a scoped process does as its space's
+[`admin` permission](#permitted-actions) allows:
 
 ```sh
 shoal setup 3                         # Rerun setup and the post-setup hook
@@ -3681,7 +3686,8 @@ with `--yes`; it checks every branch first and deletes none when one has moved
 since it was listed, is checked out or is no longer kept, or when its
 repository's default branch is unknown. Name a branch kept in several repositories
 with `--repo`. The removal's checkpoint still holds the commits until it expires.
-Workspace processes cannot list or delete kept branches.
+Scoped processes list and delete kept branches as their space's
+[`admin` permission](#permitted-actions) allows.
 
 ### Checkpoints and restore
 
@@ -3732,7 +3738,8 @@ stays open. `--no-agents` keeps them saved for a later `shoal restore`, keeping 
 workspace from idle cleanup as stopped work does, and `--forget` forgets them. It refuses when another
 workspace uses the branch, when the branch no longer contains the removed HEAD,
 or when it moved past HEAD while unsaved files would have to be applied to it;
-the error names the commit to recover by hand. Workspace processes cannot reopen removed workspaces.
+the error names the commit to recover by hand. Scoped processes reopen removed workspaces as their space's
+[`admin` permission](#permitted-actions) allows.
 
 Removal records the branch, base, links, stopped agents and last sessions with its checkpoint, and
 keeps them until the checkpoint expires. Links cannot change once removal
@@ -5160,7 +5167,8 @@ nothing selected; Tab selects several, and deleting kept branches asks first unl
 `--yes` is given. `shoal cleanup spaces`, `branches` and `caches` act on one
 kind alone, where only `branches` without names or `--all` opens a picker; `spaces` takes spaces by number or ID, and those that stay are reported in `kept`, and
 any it retained in `retained`. `--repo` limits each kind to one repository.
-Removals record the `manual` event cause. Workspace processes cannot run it.
+Removals record the `manual` event cause. Scoped processes run it as their space's
+[`admin` permission](#permitted-actions) allows.
 
 ### Space log
 

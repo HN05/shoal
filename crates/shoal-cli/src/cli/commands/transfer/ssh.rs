@@ -23,7 +23,6 @@ use crate::{
 const NOT_FOUND: i32 = 127;
 
 pub(super) async fn run(ctx: &Context, args: SshArgs) -> Result<i32> {
-    export::ensure_unscoped_export(ctx)?;
     let remote = Remote {
         host: args.host,
         shoal: args.shoal,

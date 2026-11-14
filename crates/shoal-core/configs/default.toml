@@ -387,6 +387,9 @@ api_writes = "deny"
 # Installing, starting, stopping and restarting the daemon, and shoal update:
 # "deny", "propose" or "direct".
 daemon = "deny"
+# Administering Shoal: config changes, repositories, shoal cleanup, repairing,
+# adopting, restoring and moving workspaces: "deny", "propose" or "direct".
+admin = "propose"
 
 # Run the repository's CI jobs on this machine: Shoal registers a runner for
 # it on its forge and runs each waiting job with these labels, plus

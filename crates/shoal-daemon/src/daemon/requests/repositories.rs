@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
-    scope::{Caller, Scoped, denied},
+    scope::{Caller, Scoped},
     workspace::Manager,
 };
 use crate::client::space_names::SpaceSelector;
@@ -88,14 +88,16 @@ pub(super) async fn handle(
     }))
 }
 
+/// A scoped caller syncs its own repository; administering repositories is
+/// the `admin` permission's, in its own where the request names one.
 impl Scoped for RepositoryMethod {
     async fn scope(
         &mut self,
         manager: &Manager,
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
-        Ok(match self {
-            RepositoryMethod::ListRepositories => None,
+        let repository = match self {
+            RepositoryMethod::ListRepositories => return Ok(None),
             RepositoryMethod::SyncRepository { repository } => {
                 *repository = manager
                     .own_repository(
@@ -104,23 +106,20 @@ impl Scoped for RepositoryMethod {
                         "workspace processes can only sync their own repository",
                     )
                     .await?;
-                None
+                return Ok(None);
             }
-            RepositoryMethod::RegisterRepository { .. }
-            | RepositoryMethod::RegisterContribution { .. }
-            | RepositoryMethod::RenameRepository { .. }
-            | RepositoryMethod::LocalConfigPath { .. }
-            | RepositoryMethod::EditLocalConfig { .. }
-            | RepositoryMethod::RemoveRepository { .. }
-            | RepositoryMethod::PlanRepositoryMoves { .. }
-            | RepositoryMethod::MoveRepositories { .. }
-            | RepositoryMethod::FailingSyncs
-            | RepositoryMethod::ListBranches { .. }
-            | RepositoryMethod::KeptBranches { .. }
-            | RepositoryMethod::DeleteKeptBranches { .. }
-            | RepositoryMethod::AgentEnvironments { .. }
-            | RepositoryMethod::ForgetAgentEnvironments { .. }
-            | RepositoryMethod::KeepRepositoryAgentEnvironment { .. } => return Err(denied()),
-        })
+            RepositoryMethod::RenameRepository { repository, .. }
+            | RepositoryMethod::LocalConfigPath { repository }
+            | RepositoryMethod::EditLocalConfig { repository, .. }
+            | RepositoryMethod::RemoveRepository { repository }
+            | RepositoryMethod::ListBranches { repository } => {
+                const REFUSAL: &str = "scoped processes administer only their own repository";
+                *repository = manager.own_repository(caller, repository, REFUSAL).await?;
+                Some(manager.repository(&*repository).await?.id)
+            }
+            _ => None,
+        };
+        manager.administer(caller, self, repository).await?;
+        Ok(None)
     }
 }

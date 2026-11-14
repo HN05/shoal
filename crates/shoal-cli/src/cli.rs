@@ -266,27 +266,6 @@ impl Command {
         )
     }
 
-    /// Lifecycle and service administration is denied to scoped workspace
-    /// processes; everything else is ordinary workspace work.
-    pub fn is_administrative(&self) -> bool {
-        matches!(
-            self,
-            Command::Create(CreateCommand::Contribute(_))
-                | Command::Repository(RepositoryCommand::Repo {
-                    command: Some(RepoCommand::Setup { .. }),
-                })
-                | Command::Workspace(WorkspaceCommand::Setup { skip: true, .. })
-                | Command::Lifecycle(LifecycleCommand::Cleanup { .. })
-                | Command::Service(ServiceCommand::Config {
-                    command: ConfigCommand::Install { .. }
-                        | ConfigCommand::Reset
-                        | ConfigCommand::Set { .. }
-                        | ConfigCommand::Setup(_)
-                        | ConfigCommand::Unset { .. }
-                })
-        )
-    }
-
     /// The permission that governs the command, which a scoped process runs
     /// as its space's permission for it allows.
     pub fn permission(&self) -> Option<PermissionKey> {
@@ -294,6 +273,29 @@ impl Command {
             Command::Service(ServiceCommand::Update | ServiceCommand::Daemon { .. }) => {
                 Some(PermissionKey::Daemon)
             }
+            Command::Create(CreateCommand::Contribute(_))
+            | Command::Repository(RepositoryCommand::Repo {
+                command:
+                    Some(
+                        RepoCommand::Setup { .. }
+                        | RepoCommand::Add { .. }
+                        | RepoCommand::Rename { .. }
+                        | RepoCommand::Rm { .. }
+                        | RepoCommand::Config { .. },
+                    ),
+            })
+            | Command::Workspace(WorkspaceCommand::Setup { skip: true, .. })
+            | Command::Lifecycle(
+                LifecycleCommand::Cleanup { .. } | LifecycleCommand::Move { .. },
+            )
+            | Command::Service(ServiceCommand::Config {
+                command:
+                    ConfigCommand::Install { .. }
+                    | ConfigCommand::Reset
+                    | ConfigCommand::Set { .. }
+                    | ConfigCommand::Setup(_)
+                    | ConfigCommand::Unset { .. },
+            }) => Some(PermissionKey::Admin),
             _ => None,
         }
     }

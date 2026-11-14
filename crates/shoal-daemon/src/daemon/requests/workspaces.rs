@@ -412,13 +412,38 @@ impl Scoped for WorkspaceMethod {
             WorkspaceMethod::ReopenWorkspace { .. }
             | WorkspaceMethod::AdoptWorkspace { .. }
             | WorkspaceMethod::WorkspaceEnv { .. }
-            | WorkspaceMethod::RevokeWorkspaceEnv { .. }
             | WorkspaceMethod::UntrackedWorktrees
+            | WorkspaceMethod::CopySpace { .. } => administer(manager, caller, self).await?,
+            WorkspaceMethod::RevokeWorkspaceEnv { .. }
             | WorkspaceMethod::OwnedPlaces
-            | WorkspaceMethod::CopySpace { .. }
             | WorkspaceMethod::WatchWorkspaceEvents { .. } => return Err(denied()),
         })
     }
+}
+
+/// Let `caller` send `method`, which the `admin` permission governs, in its
+/// own repository where it adopts a worktree there, returning the space it
+/// acts on.
+async fn administer<'a>(
+    manager: &Manager,
+    caller: &Caller,
+    method: &'a mut WorkspaceMethod,
+) -> Result<Option<&'a mut SpaceSelector>> {
+    let repository = match method {
+        WorkspaceMethod::AdoptWorkspace { repository, .. } => {
+            const REFUSAL: &str = "scoped processes adopt worktrees only in their own repository";
+            *repository = manager.own_repository(caller, repository, REFUSAL).await?;
+            Some(manager.repository(&*repository).await?.id)
+        }
+        _ => None,
+    };
+    manager.administer(caller, &*method, repository).await?;
+    Ok(match method {
+        WorkspaceMethod::ReopenWorkspace { workspace }
+        | WorkspaceMethod::WorkspaceEnv { workspace } => Some(workspace),
+        WorkspaceMethod::CopySpace { space, .. } => Some(space),
+        _ => None,
+    })
 }
 
 pub(in crate::daemon) async fn watch_workspace_events(

@@ -342,6 +342,18 @@ approved commit and opens the PR that waited for it. A new commit outdates the
 request until the next push or `pr open`. A pending push keeps the workspace.
 With `push = "deny"`, `pr open` and `git push` fail with the reason.
 
+### Permitted actions
+
+Other keys govern what was once the user's alone, each `deny`, `propose` or
+`direct`: `admin` administering Shoal, such as `config set`, `repo add`,
+`cleanup`, `setup --skip`, `contribute`, `move`, and restoring removed
+workspaces, and `daemon` the daemon's service commands and `shoal update`.
+With `propose` the command exits 2 with `approval_pending` and the request,
+which goes to the space above whose own value is `direct`, or the user; once
+approved, the same command proceeds once. A master session has `admin` at
+`direct` and `daemon` at `propose`; other modes propose `admin` and are
+denied `daemon`.
+
 ## Links and watches
 
 ```sh
@@ -557,7 +569,8 @@ asks what to do with unmerged work. `rm` returns once its checks pass and
 removes a workspace in the background; a later failure arrives as a message,
 and `--wait` waits for the removal. A checkpoint keeps HEAD and unsaved files;
 Shoal also takes one when an agent exits or is stopped. `restore` also reopens
-a removed workspace with its agents, which only the user does; `restore --checkpoint` lists a workspace's checkpoints,
+a removed workspace with its agents, as the space's `admin` permission
+allows, as do `cleanup` and `move`; `restore --checkpoint` lists a workspace's checkpoints,
 and with a number returns to one after keeping the current state in a new
 checkpoint, refusing while another command runs in the workspace. `cleanup spaces` removes every
 space automatic cleanup would remove without waiting for its idle delay;
@@ -710,9 +723,7 @@ process of the workspace Shoal does not track, never the agent or its shells.
 ## Daemon
 
 Installing, starting, stopping and restarting the daemon and `shoal update`
-follow the space's `daemon` permission: `deny` for agents, and `propose` for
-a master session, whose command then returns `approval_pending` until the
-user approves, after which the same command proceeds once.
+follow the space's `daemon` [permission](#permitted-actions).
 Stopping the daemon stops every agent. While a stop or restart waits for the
 work the daemon runs itself, commands that would start more, such as `shoal rm`,
 wait and run on the next daemon, or fail for a stop; while it restarts, every agent's other `shoal`

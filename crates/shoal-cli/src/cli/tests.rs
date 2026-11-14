@@ -147,18 +147,21 @@ fn link_arguments_end_with_a_relation_and_accept_hash_numbers() {
 fn done_remains_available_to_agents() {
     for args in [vec!["shoal", "done"], vec!["shoal", "done", "--cleanup"]] {
         let command = Cli::try_parse_from(args).unwrap().command.unwrap();
-        assert!(!command.is_administrative());
+        assert_eq!(command.permission(), None);
     }
 }
 
 #[test]
 fn config_show_and_reference_are_available_to_workspace_processes() {
     let show = Cli::try_parse_from(["shoal", "config", "show", "4"]).unwrap();
-    assert!(!show.command.unwrap().is_administrative());
+    assert_eq!(show.command.unwrap().permission(), None);
     let reference = Cli::try_parse_from(["shoal", "config", "reference"]).unwrap();
-    assert!(!reference.command.unwrap().is_administrative());
+    assert_eq!(reference.command.unwrap().permission(), None);
     let reset = Cli::try_parse_from(["shoal", "config", "reset"]).unwrap();
-    assert!(reset.command.unwrap().is_administrative());
+    assert_eq!(
+        reset.command.unwrap().permission(),
+        Some(PermissionKey::Admin)
+    );
 }
 
 #[test]
@@ -181,23 +184,32 @@ fn the_daemon_permission_governs_the_service_commands() {
 }
 
 #[test]
-fn only_the_user_sets_up_config() {
+fn setting_up_config_is_the_admin_permission_s() {
     let setup = Cli::try_parse_from(["shoal", "repo", "setup", "app"]).unwrap();
-    assert!(setup.command.unwrap().is_administrative());
+    assert_eq!(
+        setup.command.unwrap().permission(),
+        Some(PermissionKey::Admin)
+    );
     let global = Cli::try_parse_from(["shoal", "config", "setup"]).unwrap();
-    assert!(global.command.unwrap().is_administrative());
+    assert_eq!(
+        global.command.unwrap().permission(),
+        Some(PermissionKey::Admin)
+    );
 }
 
 #[test]
-fn skipping_setup_is_administrative() {
+fn skipping_setup_is_the_admin_permission_s() {
     let skip = Cli::try_parse_from(["shoal", "setup", "--skip"]).unwrap();
-    assert!(skip.command.unwrap().is_administrative());
+    assert_eq!(
+        skip.command.unwrap().permission(),
+        Some(PermissionKey::Admin)
+    );
     let retry = Cli::try_parse_from(["shoal", "setup"]).unwrap();
-    assert!(!retry.command.unwrap().is_administrative());
+    assert_eq!(retry.command.unwrap().permission(), None);
 }
 
 #[test]
-fn cleanup_commands_are_administrative() {
+fn cleanup_commands_are_the_admin_permission_s() {
     for args in [
         vec!["shoal", "cleanup"],
         vec!["shoal", "cleanup", "--dry-run"],
@@ -206,15 +218,15 @@ fn cleanup_commands_are_administrative() {
         vec!["shoal", "cleanup", "caches", "--dry-run"],
     ] {
         let command = Cli::try_parse_from(args).unwrap().command.unwrap();
-        assert!(command.is_administrative());
+        assert_eq!(command.permission(), Some(PermissionKey::Admin));
     }
 }
 
 #[test]
-fn registering_a_contribution_is_administrative() {
+fn registering_a_contribution_is_the_admin_permission_s() {
     let args = ["shoal", "contribute", "https://github.com/owner/repo"];
     let command = Cli::try_parse_from(args).unwrap().command.unwrap();
-    assert!(command.is_administrative());
+    assert_eq!(command.permission(), Some(PermissionKey::Admin));
 }
 
 #[test]

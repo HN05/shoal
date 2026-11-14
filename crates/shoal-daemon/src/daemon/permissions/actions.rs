@@ -43,6 +43,43 @@ impl Action {
             repository: None,
         }
     }
+
+    /// Sending `request`, which `key` governs, in `repository`: the request
+    /// as it goes over the wire, or for a long one its kind and a digest of
+    /// it, so that another request is another action.
+    pub(crate) fn request(
+        key: PermissionKey,
+        request: &impl serde::Serialize,
+        repository: Option<RepositoryId>,
+    ) -> Self {
+        Self {
+            key,
+            action: request_text(request),
+            repository,
+        }
+    }
+}
+
+/// The longest request an action names whole.
+const NAMED_WHOLE: usize = 160;
+
+/// `request` as an action names it: its JSON, or for a long one, the kind
+/// of request and a digest of its JSON.
+fn request_text(request: &impl serde::Serialize) -> String {
+    use sha2::{Digest, Sha256};
+    let json = serde_json::to_value(request).unwrap_or_default();
+    let text = json.to_string();
+    if text.len() <= NAMED_WHOLE {
+        return text;
+    }
+    let kind = match &json {
+        serde_json::Value::Object(fields) => fields.keys().next().cloned(),
+        _ => None,
+    };
+    let digest: String = (Sha256::digest(text.as_bytes()).iter().take(8))
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    format!("{} {digest}", kind.unwrap_or_default())
 }
 
 impl Manager {
@@ -56,6 +93,18 @@ impl Manager {
         action: Action,
     ) -> Result<()> {
         self.take_action(caller, action).await.map(drop)
+    }
+
+    /// Let `caller` send `request`, which the `admin` permission governs,
+    /// in `repository`, as [`Self::authorize_action`] lets it take an action.
+    pub(crate) async fn administer(
+        &self,
+        caller: &Caller,
+        request: &impl serde::Serialize,
+        repository: Option<RepositoryId>,
+    ) -> Result<()> {
+        let action = Action::request(PermissionKey::Admin, request, repository);
+        self.authorize_action(Some(caller), action).await
     }
 
     /// [`Self::authorize_action`] for a command the caller runs itself,

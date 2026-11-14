@@ -146,6 +146,8 @@ fn stopped_chats(spaces: &Spaces) -> Vec<Chat> {
 
 /// The removed workspaces, which `names` may name, or which a picker or
 /// list offers when it names none; none when every name is a space's.
+/// Restoring them is the `admin` permission's, which a scoped process asks
+/// for first.
 async fn removed_workspaces(
     ctx: &Context,
     spaces: &Spaces,
@@ -154,6 +156,8 @@ async fn removed_workspaces(
     if !names.is_empty() && names.iter().all(|name| spaces.find(name).is_some()) {
         return Ok(Vec::new());
     }
+    let admin = crate::config::permissions::PermissionKey::Admin;
+    crate::cli::commands::authorize_key(ctx, admin).await?;
     crate::client::removal::removed(&ctx.paths).await
 }
 

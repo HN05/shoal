@@ -152,3 +152,25 @@ async fn an_approved_command_takes_its_permission_s_actions_without_asking_again
     }
     undecided(manager.authorize_action(Some(&asking), restart()).await);
 }
+
+#[tokio::test]
+async fn administering_shoal_follows_the_admin_permission() {
+    use crate::{daemon::scope::Scoped, protocol::RecoveryMethod};
+
+    let (_temp, manager) = manager().await;
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let worker = chat(&manager, "worker", "chat", None, Some(&master.id)).await;
+    let repair = || RecoveryMethod::Reconcile {
+        workspace: None,
+        options: Default::default(),
+    };
+    // A master session administers at once; the chat below it asks it.
+    (repair().scope(&manager, &caller(&master.id)))
+        .await
+        .unwrap();
+    let mut asking = repair();
+    let request = undecided(asking.scope(&manager, &caller(&worker.id)).await.map(drop));
+    assert_eq!(request.target, Target::Action(PermissionKey::Admin));
+    let routed = manager.show_approval(request.number).await.unwrap();
+    assert_eq!(routed.decider.as_ref(), Some(&master.id));
+}

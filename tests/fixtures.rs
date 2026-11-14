@@ -138,7 +138,9 @@ fn isolation_probe() {
         .args(["config", "install", "default"])
         .output()
         .unwrap();
+    // Scoped, it asks the daemon for its admin permission, which no daemon
+    // answers here.
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot administer"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("daemon.sock"));
     assert!(!root.join("state").exists());
 }

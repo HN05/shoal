@@ -95,7 +95,7 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
     // One command of each kind of refusal: administration, deciding
     // for a scope, and acting only with one.
     for (args, refusal) in [
-        (config, "cannot administer"),
+        (config, "without its scope"),
         ("questions 1.1 --answer yes", "without their scope token"),
         ("start . --branch child", "only with their scope token"),
     ] {

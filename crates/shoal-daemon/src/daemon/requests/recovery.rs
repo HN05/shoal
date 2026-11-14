@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
-    scope::{Caller, Scoped, denied},
+    scope::{Caller, Scoped},
     workspace::Manager,
 };
 use crate::client::space_names::SpaceSelector;
@@ -58,15 +58,23 @@ fn pieces(saved: Result<Saved>) -> Result<Vec<SavedPiece>> {
         .collect())
 }
 
+/// Repairing workspaces is the `admin` permission's.
 impl Scoped for RecoveryMethod {
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut SpaceSelector>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
+        if let RecoveryMethod::Reconcile { .. } = self {
+            manager.administer(caller, self, None).await?;
+        }
         Ok(match self {
             RecoveryMethod::Checkpoint { workspace, .. }
             | RecoveryMethod::Checkpoints { workspace, .. }
             | RecoveryMethod::RestoreCheckpoint { workspace, .. }
             | RecoveryMethod::Saved { space: workspace } => Some(workspace),
+            RecoveryMethod::Reconcile { workspace, .. } => workspace.as_mut(),
             RecoveryMethod::SavedSummaries => None,
-            RecoveryMethod::Reconcile { .. } => return Err(denied()),
         })
     }
 }

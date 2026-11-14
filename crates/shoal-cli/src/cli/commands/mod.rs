@@ -318,16 +318,21 @@ pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
 /// request a permission asks for. An approval lets the requests the command
 /// sends take what it governs.
 async fn authorize(ctx: &Context, command: &Command) -> Result<()> {
+    match command.permission() {
+        Some(key) => authorize_key(ctx, key).await,
+        None => Ok(()),
+    }
+}
+
+/// Refuse a scoped process what the permission `key` governs, as
+/// [`authorize`] refuses a command, once the command knows it takes it.
+pub(in crate::cli::commands) async fn authorize_key(
+    ctx: &Context,
+    key: crate::config::permissions::PermissionKey,
+) -> Result<()> {
     if !env::inherits_scope(&ctx.paths.state) {
         return Ok(());
     }
-    ensure!(
-        !command.is_administrative(),
-        "workspace processes cannot administer Shoal; ask the user to run this command"
-    );
-    let Some(key) = command.permission() else {
-        return Ok(());
-    };
     // Without its scope token, the process would act as the user.
     ensure!(
         env::is_scoped(),

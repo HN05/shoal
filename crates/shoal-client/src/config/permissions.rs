@@ -176,6 +176,9 @@ permission_keys! {
     /// Installing, starting, stopping and restarting the daemon, and
     /// updating Shoal.
     daemon: Daemon => "daemon", Acting;
+    /// Administering Shoal: its config, repositories, cleanup, the repair,
+    /// adoption, restoring and moving of workspaces.
+    admin: Admin => "admin", Acting;
 }
 
 /// Refuse `value` of `key` where it is wider than `held`.
@@ -203,6 +206,7 @@ impl PermissionsConfig {
         push: Some(Pushes::Direct),
         api_writes: Some(ApiWrites::Deny),
         daemon: Some(Acting::Deny),
+        admin: Some(Acting::Propose),
     };
 
     /// The defaults of a mode that coordinates rather than edits: it decides
@@ -217,6 +221,7 @@ impl PermissionsConfig {
     /// what the user would, but proposes what stops every agent.
     pub const ORCHESTRATING: Self = Self {
         daemon: Some(Acting::Propose),
+        admin: Some(Acting::Direct),
         ..Self::COORDINATING
     };
 

@@ -437,6 +437,7 @@ merge = "propose"                     # "propose" or "direct"
 push = "direct"                       # "deny", "propose" or "direct"
 api_writes = "deny"                   # "deny" or "direct"
 daemon = "deny"                       # "deny", "propose" or "direct"
+admin = "propose"                     # "deny", "propose" or "direct"
 ```
 
 Permissions say what agents may do: `"direct"` at once, `"propose"` after an
@@ -444,16 +445,20 @@ approval, and `"deny"` never, in that order from widest to narrowest.
 `issue_open` and `pr_open` cover issues and PRs in the space's repository,
 `issue_other_repositories` issues in other repositories, `merge` `shoal merge`
 and `unmerge`, `push` pushes to the repository's remotes by `shoal pr open` or
-`git push`, `api_writes` `shoal forge api` requests other than reads, and
+`git push`, `api_writes` `shoal forge api` requests other than reads,
 `daemon` installing, starting, stopping and restarting the daemon and
-`shoal update`.
+`shoal update`, and `admin` the rest of administering Shoal: changing its
+config, registering, renaming and removing repositories and their local
+config and kept branches, `shoal cleanup`, `shoal setup --skip`,
+`shoal contribute`, adopting worktrees, and restoring, copying and moving
+workspaces.
 
 `[permissions]` and `[modes.<name>.permissions]` take the same keys. A mode's
 key resolves, highest first, from its `permissions` in any layer, then
 `[permissions]` in any layer, then the built-in mode's default, then the key's
 default above; `chat`, `plan` and `orchestrate` default
 `issue_other_repositories` and `merge` to `"direct"`, and `orchestrate`
-defaults `daemon` to `"propose"`. A space's own permissions
+defaults `admin` to `"direct"` and `daemon` to `"propose"`. A space's own permissions
 are then narrowed to its parent's and set by `--permission`; see
 [mode permissions](reference.md#mode-permissions).
 

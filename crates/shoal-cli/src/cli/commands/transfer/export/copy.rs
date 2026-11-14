@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, ensure};
 
 use super::{
-    super::STANDARD_STREAM, DirectoryReport, ExportDirectory, Output, ensure_unscoped_export,
-    repository_spaces, selected_spaces, warn,
+    super::STANDARD_STREAM, DirectoryReport, ExportDirectory, Output, repository_spaces,
+    selected_spaces, warn,
 };
 use crate::client::space_names::SpaceSelector;
 use crate::model::CheckpointNumber;
@@ -29,7 +29,6 @@ pub(in super::super) async fn export_copy(
     file: PathBuf,
     checkpoint: Option<CheckpointNumber>,
 ) -> Result<i32> {
-    ensure_unscoped_export(ctx)?;
     if names.len() > 1 || file.is_dir() {
         ensure!(
             file != Path::new(STANDARD_STREAM),
@@ -51,7 +50,6 @@ pub(in super::super) async fn export_all_copies(
     repository: String,
     directory: PathBuf,
 ) -> Result<i32> {
-    ensure_unscoped_export(ctx)?;
     let spaces = repository_spaces(ctx, repository).await?;
     copy_into(ctx, &spaces, directory, None).await
 }

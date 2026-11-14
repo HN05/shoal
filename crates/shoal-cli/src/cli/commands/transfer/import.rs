@@ -60,10 +60,6 @@ pub(super) async fn import(
     files: Vec<PathBuf>,
     options: ImportOptions,
 ) -> Result<i32> {
-    ensure!(
-        !crate::env::inherits_scope(&ctx.paths.state),
-        "workspace processes cannot import spaces; ask the user to run shoal move import"
-    );
     if let [file] = files.as_slice()
         && !file.is_dir()
     {

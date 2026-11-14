@@ -39,7 +39,6 @@ pub(super) async fn export(
     file: PathBuf,
     yes: bool,
 ) -> Result<i32> {
-    ensure_unscoped_export(ctx)?;
     if let [selector] = names.as_slice()
         && crate::client::workspaces::present_space(&ctx.paths, selector)
             .await?
@@ -76,7 +75,6 @@ pub(super) async fn export_all(
     directory: PathBuf,
     yes: bool,
 ) -> Result<i32> {
-    ensure_unscoped_export(ctx)?;
     let spaces = repository_spaces(ctx, repository).await?;
     export_into(ctx, &spaces, directory, yes).await
 }
@@ -119,14 +117,6 @@ async fn export_into(
 pub(super) type Operation = (&'static str, &'static str);
 
 const EXPORT: Operation = ("export", "export");
-
-pub(super) fn ensure_unscoped_export(ctx: &Context) -> Result<()> {
-    ensure!(
-        !crate::env::inherits_scope(&ctx.paths.state),
-        "workspace processes cannot export spaces; ask the user to run shoal move export"
-    );
-    Ok(())
-}
 
 /// Where an export goes: a new file whose directory takes a file before
 /// the space ends, so an unwritable destination fails first, or a
