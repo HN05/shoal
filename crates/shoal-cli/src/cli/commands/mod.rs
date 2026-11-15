@@ -7,7 +7,6 @@ mod api;
 mod approvals;
 mod authorization;
 mod base;
-mod blockers;
 mod branches;
 mod capabilities;
 mod catalog;

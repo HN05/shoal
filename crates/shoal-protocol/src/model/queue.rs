@@ -195,6 +195,28 @@ impl TryFrom<BlockerFields> for Blocker {
     }
 }
 
+impl std::str::FromStr for Blocker {
+    type Err = anyhow::Error;
+
+    /// The blocker `input` names: an issue by number or URL, a PR or CI run
+    /// by URL, and otherwise a space by its ID. Unlike every other space
+    /// argument, a bare number here is an issue, never a space's number.
+    fn from_str(input: &str) -> anyhow::Result<Self> {
+        use anyhow::Context as _;
+        if crate::forge::IssueInput::parse(input) == crate::forge::IssueInput::Invalid {
+            return Ok(Self::Space(input.to_owned()));
+        }
+        let item = input
+            .parse::<ItemInput>()
+            .context("a blocker is an issue, PR, CI run or space")?;
+        Ok(match item {
+            ItemInput::Url(url) if url.kind() == LinkKind::Pr => Self::Pr(url),
+            ItemInput::Url(url) if url.kind() == LinkKind::Ci => Self::CiRun(url),
+            issue => Self::Issue(issue),
+        })
+    }
+}
+
 /// An agent launch `shoal start` asks the daemon to admit or queue. The plan
 /// is JSON in the format of the binary's `start_plan::AddPlan`, which the
 /// daemon also writes for the launches it queues itself and the

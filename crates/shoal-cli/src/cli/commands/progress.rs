@@ -84,13 +84,13 @@ fn blocker_change(flags: BlockerFlags) -> Result<Option<ProgressChange>> {
             let reason = reason.context("--add-blocker needs --reason")?;
             shoal_protocol::progress::validate_line("blocker reasons", &reason)?;
             Some(ProgressChange::AddBlocker {
-                blocker: super::blockers::parse(&add)?,
+                blocker: add.parse()?,
                 step,
                 reason,
             })
         }
         (None, Some(remove)) => Some(ProgressChange::RemoveBlocker {
-            blocker: super::blockers::parse(&remove)?,
+            blocker: remove.parse()?,
             step,
         }),
         (None, None) => {

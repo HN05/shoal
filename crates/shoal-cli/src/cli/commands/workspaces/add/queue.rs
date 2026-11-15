@@ -12,7 +12,7 @@ use super::{
 use crate::{
     cli::{
         client,
-        commands::{self, issues, queued_agents},
+        commands::{issues, queued_agents},
         context::Context,
     },
     model::Blocker,
@@ -32,7 +32,7 @@ pub(super) async fn named_blockers(
     let repo = target.repository(ctx).await?;
     let mut blockers = Vec::new();
     for input in named {
-        blockers.push(match commands::blockers::parse(input)? {
+        blockers.push(match input.parse()? {
             Blocker::Issue(issue) => Blocker::Issue(issues::issue(ctx, repo, &issue).await?.into()),
             blocker => blocker,
         });
