@@ -49,8 +49,9 @@ impl Manager {
     /// Open a chat another Shoal's package carried: record it as a removed
     /// chat of the repository `selector` names, or without one in
     /// `root_dir`, as its removal here would, and restore it under its ID,
-    /// below its parent and in the worktree it ran in where those are here.
-    /// A failed restore leaves the record for `shoal restore`.
+    /// below its parent where that is here, and in the worktree it ran in
+    /// where that workspace is ready here, else in the checkout, with a
+    /// warning. A failed restore leaves the record for `shoal restore`.
     pub async fn import_chat(
         &self,
         selector: Option<&crate::repository::Selector>,
@@ -67,16 +68,42 @@ impl Manager {
             ),
             None => None,
         };
-        let removed = self.imported_record(repo.as_ref(), removed).await?;
+        let mut removed = self.imported_record(repo.as_ref(), removed).await?;
+        let moved_out = self.without_absent_worktree(&mut removed).await;
         let id = removed.space_id.clone();
         self.store
             .write(move |tx| record_imported_chat(tx, &removed))
             .await?;
-        self.restore_space(&SpaceSelector::id(&id), None)
+        let mut restored = (self.restore_space(&SpaceSelector::id(&id), None))
             .await
             .with_context(|| {
                 format!("the imported chat is recorded as removed; shoal restore {id} retries")
-            })
+            })?;
+        if let (Some(warning), RestoredSpace::Chat(chat)) = (moved_out, &mut restored) {
+            chat.warnings.push(warning);
+        }
+        Ok(restored)
+    }
+
+    /// Record that the imported chat `removed` runs in its repository's
+    /// checkout when the workspace whose worktree it ran in is not ready
+    /// here, which its restore would otherwise wait for in vain, with the
+    /// warning that says so.
+    async fn without_absent_worktree(&self, removed: &mut RemovedSpace) -> Option<String> {
+        let RemovedKind::Chat { chat } = &mut removed.kind else {
+            return None;
+        };
+        let workspace = chat.workspace.as_ref()?;
+        let selector = SpaceSelector::id(&workspace.id);
+        if self.chat_workspace(&selector).await.is_ok() {
+            return None;
+        }
+        let warning = format!(
+            "{} ran in the worktree of {}, which is not ready here, so it opens in the checkout",
+            removed.name, workspace.name
+        );
+        chat.workspace = None;
+        Some(warning)
     }
 
     /// Record the packaged `removed` as a removed workspace of the

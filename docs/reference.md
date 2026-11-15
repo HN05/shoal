@@ -3926,8 +3926,9 @@ restore` does, under the importing machine's agent limits. Every reopen, by impo
 without a kept session `shoal restore` starts as `shoal start --in` starts a new
 one, telling it the workspace moved, instead of running
 its `resume_command`. The chats a file carries open again after its space as `shoal restore` reopens a
-removed chat, under their IDs, stopped, below their parents and in the worktrees
-they ran in where those are there, and `--restore` queues their agents'
+removed chat, under their IDs, stopped, below their parents where those are
+there and in the worktrees they ran in where those workspaces are ready there,
+otherwise in the checkout with a warning, and `--restore` queues their agents'
 restores; an imported chat's own chat starts under a new ID, so the chats it
 carries open at the top level. An imported chat starts as a chat starts: in the
 worktree of the workspace it ran in where the importing machine has that

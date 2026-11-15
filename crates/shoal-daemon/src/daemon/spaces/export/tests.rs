@@ -582,3 +582,44 @@ async fn a_chat_without_a_repository_below_one_moves_with_it_into_root_dir() {
         (None, Some(root_dir))
     );
 }
+
+#[tokio::test]
+async fn a_carried_chat_whose_worktree_is_not_here_opens_in_the_checkout() {
+    let (_source, exporting, source_repo, origin) = transfer::exporter().await;
+    let (_target, importing, target_repo) = transfer::importer(&origin).await;
+    let workspace = exporting
+        .create_workspace(&source_repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    let reading = exporting
+        .start_chat_in_workspace(
+            &SpaceSelector::id(&workspace.id),
+            "reading".into(),
+            "claude".into(),
+            None,
+        )
+        .await
+        .unwrap();
+    exporting
+        .record_chat_session(&reading.id, "s1".into())
+        .await
+        .unwrap();
+    (exporting.remove_chat(&SpaceSelector::id(&reading.id), None))
+        .await
+        .unwrap();
+    let removed = (exporting.removed_spaces().await.unwrap().into_iter())
+        .find(|removed| removed.space_id == reading.id)
+        .unwrap();
+
+    let repository = (&target_repo.id).into();
+    let restored = importing
+        .import_chat(Some(&repository), removed)
+        .await
+        .unwrap();
+
+    let crate::model::RestoredSpace::Chat(restored) = restored else {
+        panic!("not a chat");
+    };
+    assert_eq!(restored.chat.workspace, None);
+    assert_eq!(restored.warnings.len(), 1, "{:?}", restored.warnings);
+}
