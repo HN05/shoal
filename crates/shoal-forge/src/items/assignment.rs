@@ -71,6 +71,21 @@ impl ForgeRepo {
         }))
     }
 
+    /// Remove the login `account` signs in as from the assignees of `issue`,
+    /// of this repository, returning whether it did: a closed issue keeps
+    /// its assignees, and an account without a login of its own there has
+    /// none to remove.
+    pub async fn unassign_own(&self, account: &Account, issue: &ItemRef) -> Result<bool> {
+        issue.belongs_to(self)?;
+        if !account.has_login(self) {
+            return Ok(false);
+        }
+        self.require(Capability::IssueAssignees)?;
+        let login = (self.kind().own_assignee(self, account).await?)
+            .context("the forge did not report the account's login")?;
+        self.unassign(account, issue, &login).await
+    }
+
     /// Remove `login` from the assignees of `issue`, of this repository,
     /// returning whether it did: a closed issue keeps its assignees.
     pub async fn unassign(&self, account: &Account, issue: &ItemRef, login: &str) -> Result<bool> {
