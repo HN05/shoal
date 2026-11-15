@@ -500,7 +500,9 @@ impl Manager {
     /// The scope token the agent of the chat `id` carries.
     pub(crate) async fn chat_scope(&self, id: &SpaceId) -> Result<ScopeToken> {
         let id = id.to_owned();
-        let token = self.store.run(move |db| scope_token(db, &id)).await?;
+        let token = (self.store)
+            .run(move |db| crate::daemon::scope::tokens::chat_token(db, &id))
+            .await?;
         token.context("no such chat")
     }
 }
@@ -554,8 +556,8 @@ fn insert(
         workspace::set_parent(tx, &chat.id, Some(parent))?;
     }
     tx.execute(
-        "INSERT INTO chats(id,agent,started_at,origin,scope_token,workspace_id,root_dir,session)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+        "INSERT INTO chats(id,agent,started_at,origin,workspace_id,root_dir,session)
+         VALUES (?1,?2,?3,?4,?5,?6,?7)",
         params![
             chat.id,
             chat.agent,
@@ -564,7 +566,6 @@ fn insert(
                 .as_ref()
                 .map(serde_json::to_string)
                 .transpose()?,
-            crate::daemon::scope::new_token(),
             workspace,
             (chat.root_dir.as_deref()).map(|root| root.to_string_lossy().into_owned()),
             chat.session,
@@ -582,20 +583,11 @@ fn insert(
             narrowing: &chat.narrowing,
         },
     )?;
+    crate::daemon::scope::tokens::issue(tx, &chat.id)?;
     if parent.is_some() {
         chat.parent = workspace::parent(tx, &chat.id)?;
     }
     Ok(chat)
-}
-
-/// The scope token of the chat `id`, which its agent carries.
-pub(crate) fn scope_token(db: &Connection, id: &SpaceId) -> Result<Option<ScopeToken>> {
-    Ok(db
-        .query_row("SELECT scope_token FROM chats WHERE id=?1", [id], |row| {
-            row.get(0)
-        })
-        .optional()?
-        .flatten())
 }
 
 /// Refuse a chat in the repository `repository_id` while it is being

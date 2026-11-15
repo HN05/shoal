@@ -591,6 +591,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 186 {
         db.execute_batch(include_str!("space_columns.sql"))?;
     }
+    if version >= 187 {
+        db.execute_batch(include_str!("space_scopes.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -1682,6 +1685,43 @@ fn migration_keeps_each_space_completion_in_one_table() -> Result<()> {
         |r| r.get(0),
     )?;
     assert_eq!(undone, 0);
+    Ok(())
+}
+
+#[test]
+fn migration_keeps_every_scope_token_acting_for_its_space() -> Result<()> {
+    let mut db = historical_database(186)?;
+    db.execute_batch(
+        "BEGIN;
+         INSERT INTO chats(id,agent,started_at,scope_token) VALUES ('chat','claude',1,'chat-token');
+         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('chat','chat','repo','chat');
+         COMMIT;
+         INSERT INTO workspace_scopes(token,workspace_id)
+            VALUES ('exported','workspace'),('exported-again','workspace');",
+    )?;
+
+    migrate(&mut db)?;
+
+    let tokens = db
+        .prepare("SELECT token,space_id FROM space_scopes ORDER BY token")?
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let token = |token: &str, space: &str| (token.to_owned(), space.to_owned());
+    assert_eq!(
+        tokens,
+        [
+            token("chat-token", "chat"),
+            token("exported", "workspace"),
+            token("exported-again", "workspace"),
+        ]
+    );
+    // A removed space's tokens go with it.
+    db.execute_batch("DELETE FROM spaces WHERE id='chat';")?;
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM space_scopes", [], |r| r
+            .get::<_, i64>(0))?,
+        2
+    );
     Ok(())
 }
 

@@ -13,6 +13,7 @@ use crate::{
     config::{modes::ModeName, permissions::PermissionsConfig},
     daemon::{
         approvals::{ApprovalRequest, release_decided_by},
+        scope::tokens,
         spaces::records as spaces,
     },
     model::SpaceKind,
@@ -66,7 +67,6 @@ const CHAT_COLUMNS: &[&str] = &[
     "origin",
     "session",
     "asks_in_chat",
-    "scope_token",
     "workspace_id",
     "root_dir",
     "converted",
@@ -76,9 +76,9 @@ const CHAT_COLUMNS: &[&str] = &[
 /// what the chat's agent ran in.
 const SPACE_COLUMNS: &[&str] = &["repository_id", "name", "number", "mode", "narrowing"];
 
-/// A chat's row: its scope token, kept as one, and its other columns as a
-/// JSON object, with what restarting its agent reads from it, and the
-/// chat's completion, which a failed conversion gives back with the row.
+/// A chat's row: its scope token, and its columns as a JSON object, with
+/// what restarting its agent reads from it, and the chat's completion, which
+/// a failed conversion gives back with the row.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ChatRow {
     #[serde(default)]
@@ -279,8 +279,8 @@ pub(crate) fn record_chat_conversion(
 /// ID, with that workspace, whose agent runs in `mode` with the permissions
 /// `narrowing` gives it, unless a stop saved the chat meanwhile: its
 /// questions, approval requests and unread messages become the workspace's,
-/// and its agent's scope token reaches the workspace until the agent
-/// restarts there.
+/// and its agent's scope token, which it keeps, acts for the workspace until
+/// the agent restarts there.
 /// Returns the row the chat had.
 pub(crate) fn replace_chat(
     tx: &Transaction<'_>,
@@ -298,11 +298,6 @@ pub(crate) fn replace_chat(
         "the chat was stopped meanwhile; it stays a chat"
     );
     let row = chat_row(tx, id)?;
-    tx.execute(
-        "INSERT INTO workspace_scopes(token,workspace_id)
-            SELECT scope_token,id FROM chats WHERE id=?1 AND scope_token IS NOT NULL",
-        [id],
-    )?;
     forget_completion(tx, id)?;
     spaces::convert(tx, id, SpaceKind::Workspace, mode, narrowing)?;
     tx.execute("DELETE FROM chats WHERE id=?1", [id])?;
@@ -318,14 +313,15 @@ pub(crate) fn relocated_chat(
     token: Option<&ScopeToken>,
 ) -> Result<()> {
     if let Some(token) = token {
-        tx.execute("DELETE FROM workspace_scopes WHERE token=?1", [token])?;
+        tokens::revoke(tx, id, token)?;
     }
     forget(tx, id)
 }
 
 /// Give back the chat `row`, which the workspace `id` replaced, and remove
 /// that workspace's row: its completion, questions, approval requests and
-/// unread messages return to the chat.
+/// unread messages return to the chat, and of its scope tokens only the
+/// chat's own stays.
 pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) -> Result<()> {
     give_back_chat_row(tx, id, row)?;
     // The chat's agent, which has yet to move, runs on as the chat's.
@@ -368,8 +364,8 @@ pub(crate) fn replace_workspace(
     chat: &ConvertedChat,
 ) -> Result<Vec<ApprovalRequest>> {
     tx.execute(
-        "INSERT INTO chats(id,agent,started_at,origin,session,scope_token,converted)
-         VALUES (?1,?2,unixepoch(),?3,?4,?5,1)",
+        "INSERT INTO chats(id,agent,started_at,origin,session,converted)
+         VALUES (?1,?2,unixepoch(),?3,?4,1)",
         params![
             id,
             chat.agent,
@@ -377,10 +373,13 @@ pub(crate) fn replace_workspace(
                 .map(serde_json::to_string)
                 .transpose()?,
             chat.session,
-            crate::daemon::scope::new_token(),
         ],
     )?;
     spaces::convert(tx, id, SpaceKind::Chat, &chat.mode, &chat.narrowing)?;
+    // The environments the workspace exported go with its worktree, and the
+    // chat's agent carries a token of its own.
+    tokens::clear(tx, id)?;
+    tokens::issue(tx, id)?;
     // Requests bound to the worktree, its branch or its leases go with them.
     tx.execute(
         "DELETE FROM access_requests WHERE space_id=?1 AND target_key NOT LIKE 'action/%'",
@@ -427,6 +426,7 @@ fn chat_row(db: &Connection, id: &SpaceId) -> Result<ChatRow> {
         .optional()?
         .with_context(|| format!("no chat {id}"))?;
     let mut row: ChatRow = serde_json::from_str(&row)?;
+    row.scope_token = tokens::chat_token(db, id)?;
     row.space_completion = db
         .query_row(
             "SELECT record,cause FROM space_completion WHERE space_id=?1",
@@ -456,7 +456,12 @@ fn give_back_chat_row(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) -> Resu
         [serde_json::to_string(row)?],
     )?;
     let narrowing = row.agent()?.narrowing()?;
-    spaces::convert(tx, id, SpaceKind::Chat, &row.mode()?, &narrowing)
+    spaces::convert(tx, id, SpaceKind::Chat, &row.mode()?, &narrowing)?;
+    tokens::clear(tx, id)?;
+    match &row.scope_token {
+        Some(token) => tokens::record(tx, id, token),
+        None => Ok(()),
+    }
 }
 
 #[cfg(test)]

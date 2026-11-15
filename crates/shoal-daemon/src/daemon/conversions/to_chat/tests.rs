@@ -1,5 +1,6 @@
 use crate::client::execution_ids::ExecutionId;
 use crate::client::progress::ProgressChange;
+use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::{
@@ -185,6 +186,37 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
         "{:?}",
         record.last_sessions
     );
+}
+
+#[tokio::test]
+async fn a_workspace_that_becomes_a_chat_keeps_only_the_chats_own_token() {
+    let (root, manager) = manager().await;
+    let repo = registered(root.path(), &manager).await;
+    let workspace = manager
+        .create_workspace(&repo.id, "fix-login".into(), None, None, None)
+        .await
+        .unwrap();
+    let exported = (manager.workspace_environment(&SpaceSelector::id(&workspace.id)))
+        .await
+        .unwrap();
+    let exported = ScopeToken::from(exported[crate::env::SCOPE_TOKEN].clone());
+    let chat = ConvertedChat {
+        agent: "claude".into(),
+        execution: ExecutionId::generate(),
+        session: None,
+        origin: None,
+        mode: crate::model::chat_mode(),
+        narrowing: Default::default(),
+    };
+
+    (manager.convert_worktree_to_chat(&workspace.id, &chat))
+        .await
+        .unwrap();
+
+    assert!(manager.caller(&exported).await.unwrap().is_none());
+    let token = manager.chat_scope(&workspace.id).await.unwrap();
+    let caller = manager.caller(&token).await.unwrap().unwrap();
+    assert_eq!(caller.space_id, workspace.id);
 }
 
 #[tokio::test]

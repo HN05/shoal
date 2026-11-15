@@ -95,6 +95,18 @@ async fn the_agent_restarts_in_the_worktree_once_its_turn_ends() {
 }
 
 #[tokio::test]
+async fn a_converted_chats_token_acts_for_the_workspace_it_became() {
+    let (root, manager) = manager().await;
+    let (workspace, _process, token) = converted(root.path(), &manager).await;
+    // As after a restart, before the agent's wrapper connects again.
+    manager.executions.scopes().await.clear();
+
+    let caller = manager.caller(&token).await.unwrap().unwrap();
+
+    assert_eq!(caller.space_id, workspace.id);
+}
+
+#[tokio::test]
 async fn a_working_agent_finishes_its_turn_where_it_runs() {
     let (root, manager) = manager().await;
     let (workspace, _process, token) = converted(root.path(), &manager).await;

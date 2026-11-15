@@ -1,49 +1,16 @@
-//! Persistent scope for processes whose lifetime belongs to an external caller.
+//! A workspace's exported environment, for processes whose lifetime belongs
+//! to an external caller, with a scope token that lasts until it revokes it.
 use super::Manager;
 use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::{scope::Caller, store},
+    daemon::{scope::tokens, store},
     env,
 };
 use anyhow::{Context, Result, ensure};
-use rusqlite::{OptionalExtension, params};
 use std::collections::BTreeMap;
 
 impl Manager {
-    pub(crate) async fn caller(&self, token: &ScopeToken) -> Result<Option<Caller>> {
-        if let Some(caller) = self.executions.scope(token).await {
-            return Ok(Some(caller));
-        }
-        if let Some(caller) = self.operations.caller(token) {
-            return Ok(Some(caller));
-        }
-        if let Some(caller) = self.grants.caller(token) {
-            return Ok(Some(caller));
-        }
-        let token = token.to_owned();
-        self.store
-            .run(move |db| {
-                // A workspace's exported environment, or a chat's agent.
-                Ok(db
-                    .query_row(
-                        "SELECT workspace_id FROM workspace_scopes WHERE token=?1
-                            UNION ALL SELECT id FROM chats WHERE scope_token=?1",
-                        [token],
-                        |row| {
-                            Ok(Caller {
-                                space_id: row.get(0)?,
-                                execution: None,
-                                granted: None,
-                                read_only: false,
-                            })
-                        },
-                    )
-                    .optional()?)
-            })
-            .await
-    }
-
     pub(crate) async fn workspace_environment(
         &self,
         selector: &SpaceSelector,
@@ -61,11 +28,11 @@ impl Manager {
         let configured = settings.env;
         let repository_name = crate::repository::name(&repository).to_owned();
         let workspace_id = workspace.id.clone();
-        let token = crate::daemon::scope::new_token();
         let paths = self.paths.clone();
         self.store
             .write(move |tx| {
                 store::require_ready(tx, &workspace_id)?;
+                let token = tokens::issue(tx, &workspace_id)?;
                 let ports = store::ports(tx, Some(&workspace_id))?;
                 let mut values = env::render_configured_environment(
                     &configured,
@@ -90,10 +57,6 @@ impl Manager {
                         Ok((name, value))
                     })
                     .collect::<Result<BTreeMap<_, _>>>()?;
-                tx.execute(
-                    "INSERT INTO workspace_scopes(token,workspace_id) VALUES (?1,?2)",
-                    params![token, workspace_id],
-                )?;
                 Ok(values)
             })
             .await
@@ -107,11 +70,10 @@ impl Manager {
         let workspace_id = self.workspace(selector).await?.id;
         self.store
             .run(move |db| {
-                let deleted = db.execute(
-                    "DELETE FROM workspace_scopes WHERE workspace_id=?1 AND token=?2",
-                    params![workspace_id, token],
-                )?;
-                ensure!(deleted == 1, "unknown workspace environment token");
+                ensure!(
+                    tokens::revoke(db, &workspace_id, &token)?,
+                    "unknown workspace environment token"
+                );
                 Ok(())
             })
             .await

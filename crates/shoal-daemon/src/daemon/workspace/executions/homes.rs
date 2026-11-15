@@ -13,7 +13,7 @@ use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
 use super::{ExecutionKind, ExecutionKindExt, ProcessDirectories};
 use crate::{
     config::Effective,
-    daemon::{chats, store, workspace::Manager},
+    daemon::{scope::tokens, store, workspace::Manager},
     fsutil::off_runtime,
     model::{Chat, ExecutionSpace, PortReservation, PresentSpace, Repository, Workspace},
 };
@@ -198,7 +198,7 @@ impl Home {
     pub(super) fn scope_token(&self, tx: &Transaction<'_>) -> Result<ScopeToken> {
         match self {
             Self::Workspace { .. } => Ok(crate::daemon::scope::new_token()),
-            Self::Chat { chat, .. } => chats::scope_token(tx, &chat.id)?.context("no such chat"),
+            Self::Chat { chat, .. } => tokens::chat_token(tx, &chat.id)?.context("no such chat"),
         }
     }
 

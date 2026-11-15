@@ -125,10 +125,10 @@ async fn exporting_requires_ready_verified_worktree_without_minting_on_failure()
     assert_eq!(
         manager
             .store
-            .run(|db| Ok(
-                db.query_row("SELECT count(*) FROM workspace_scopes", [], |r| r
-                    .get::<_, i64>(0))?
-            ))
+            .run(
+                |db| Ok(db.query_row("SELECT count(*) FROM space_scopes", [], |r| r
+                    .get::<_, i64>(0))?)
+            )
             .await
             .unwrap(),
         0
