@@ -185,7 +185,8 @@ fn agent_record(db: &Connection, id: &SpaceId) -> Result<AgentRecord> {
     Ok(db.query_row(
         "SELECT EXISTS(SELECT 1 FROM space_completion WHERE space_id=?1),
             EXISTS(SELECT 1 FROM executions WHERE space_id=?1 AND agent IS NOT NULL)
-            OR EXISTS(SELECT 1 FROM agent_queue WHERE space_id=?1 AND kind IN (?2,?3))
+            OR EXISTS(SELECT 1 FROM agent_queue WHERE kind IN (?2,?3)
+                AND ?1 IN (space_id,opens_workspace_id))
             OR EXISTS(SELECT 1 FROM space_conversions WHERE space_id=?1)",
         params![id, QueueKind::Launch, QueueKind::Restore],
         |row| {

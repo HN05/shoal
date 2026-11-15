@@ -169,6 +169,9 @@ impl Manager {
             "{} is no longer waiting",
             entry.name
         );
+        if let Some(space) = entry.space() {
+            self.agent_settles.request(space);
+        }
         Ok(entry)
     }
 
@@ -179,10 +182,14 @@ impl Manager {
         workspace_id: &SpaceId,
     ) -> Result<Vec<QueueEntry>> {
         let _gate = self.agent_queue.lock_admission().await;
-        let workspace_id = workspace_id.to_owned();
-        self.store
-            .write(move |tx| delete_waiting_launches(tx, &workspace_id))
-            .await
+        let id = workspace_id.to_owned();
+        let cancelled = (self.store)
+            .write(move |tx| delete_waiting_launches(tx, &id))
+            .await?;
+        if !cancelled.is_empty() {
+            self.agent_settles.request(workspace_id);
+        }
+        Ok(cancelled)
     }
 
     /// The workspaces a waiting launch opens. Requires the queue gate, which

@@ -331,10 +331,15 @@ impl Manager {
     /// agent in: a workspace as [`Self::attach_workspace`] does, a chat as
     /// [`Self::attach_chat`] does.
     pub async fn queue_attach(&self, id: &QueueEntryId, space: &SpaceSelector) -> Result<()> {
-        match self.space(space).await? {
+        let space = self.space(space).await?;
+        let space_id = space.id().clone();
+        match space {
             PresentSpace::Workspace(workspace) => self.attach_workspace(id, workspace).await,
             PresentSpace::Chat(chat) => self.attach_chat(id, &chat.id).await,
-        }
+        }?;
+        // Its queued agent works its issues.
+        self.agent_settles.request(&space_id);
+        Ok(())
     }
 
     /// Record `workspace` as the one a starting entry opened, or the
@@ -496,6 +501,9 @@ impl Manager {
             Some((name, true, workspace)) => (name, workspace),
         };
         self.fail_renewal_started_by(id, error).await;
+        if let Some(space) = &workspace {
+            self.agent_settles.request(space);
+        }
         // A launch that opened no workspace has its name alone, which no
         // workspace's identifies since names repeat.
         let (kind, message) = (
