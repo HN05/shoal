@@ -195,6 +195,35 @@ pub(super) fn denied() -> anyhow::Error {
     )
 }
 
+/// A refusal by the caller's scope that a request's handler makes, once it
+/// knows what the request reaches, which answers as the scope's own
+/// refusals do.
+#[derive(Debug)]
+pub(crate) struct ScopeRefusal(anyhow::Error);
+
+impl ScopeRefusal {
+    /// `result`, its error a refusal by the caller's scope, except an
+    /// approval request and a refusal with a reason of its own, such as a
+    /// target that does not exist, which answer as they do anyway.
+    pub(crate) fn of<T>(result: Result<T>) -> Result<T> {
+        result.map_err(|error| {
+            let undecided = error.downcast_ref::<crate::daemon::approvals::Undecided>();
+            match undecided.is_some() || crate::refusal::Reason::of(&error).is_some() {
+                true => error,
+                false => Self(error).into(),
+            }
+        })
+    }
+}
+
+impl std::fmt::Display for ScopeRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:#}", self.0)
+    }
+}
+
+impl std::error::Error for ScopeRefusal {}
+
 /// Refuse a scoped caller a record of a workspace outside its tree.
 pub(super) async fn inspect_owner(
     manager: &Manager,

@@ -8,7 +8,7 @@ use anyhow::{Context as _, Result, ensure};
 use super::{
     AddOptions,
     agent::AddSettings,
-    finish::{AgentStart, add_planned, execute_add_with_target, queued_launch, report_queued_in},
+    finish::{AgentStart, add_planned, execute_add_with_target},
     plan::planned_workspace_name,
     queue::{admit_launch, failing_entry, launch_blockers},
     target::AddTarget,
@@ -27,12 +27,12 @@ use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::queue::WorkerStart;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Whether the plan's agent starts detached, unless `--here` asks to run it
-/// in place: for a scoped caller, whose own processes it must not be, and
-/// for one without a terminal to start it beside. A scoped caller's
-/// addition without an agent opens its workspace the detached way too.
-pub(super) fn starts_detached(ctx: &Context, plan: &AddPlan, options: &AddOptions) -> bool {
-    let agent = plan.agent_name().is_some();
+/// Whether a start's agent, if `agent`, starts detached, unless `--here`
+/// asks to run it in place: for a scoped caller, whose own processes it
+/// must not be, and for one without a terminal to start it beside. A scoped
+/// caller's addition without an agent opens its workspace the detached way
+/// too.
+pub(super) fn starts_detached(ctx: &Context, agent: bool, options: &AddOptions) -> bool {
     if crate::env::is_scoped() {
         return !(agent && options.here);
     }
@@ -54,11 +54,6 @@ pub(super) async fn add_detached(
         return add_planned(ctx, plan, target, issue, AgentStart::Here).await;
     }
     let blockers = launch_blockers(ctx, &target, issue.as_ref(), options.now, blockers).await?;
-    // A scoped caller's agent in a recorded workspace queues directly, for
-    // the daemon to start; the user's is placed as a new workspace's is.
-    if plan.workspace.is_some() && crate::env::is_scoped() {
-        return queue_in_existing(ctx, plan, issue.as_ref(), (options.now, blockers)).await;
-    }
     if blockers.is_empty() {
         let start = match crate::env::is_scoped() {
             true => AgentStart::Queued { now: options.now },
@@ -88,59 +83,39 @@ pub(super) async fn add_detached(
     start_admitted(ctx, &target, plan).await
 }
 
-/// Queue the agent of the existing workspace `plan` opens, which the daemon
-/// starts detached once admitted, at once regardless of the limits when
-/// `now` and once what `blockers` names clears, and report the workspace and the
-/// entry. Nothing reopens the workspace here; the start the daemon makes
-/// once the entry is admitted does, as a scoped caller's detached start of
-/// the worker of a workspace below its own space has it do.
-async fn queue_in_existing(
-    ctx: &Context,
-    plan: AddPlan,
-    issue: Option<&issues::Issue>,
-    (now, blockers): (bool, Vec<Blocker>),
-) -> Result<i32> {
-    let workspace = plan
-        .workspace
-        .clone()
-        .context("the plan opens no workspace")?;
-    let told = (&plan.prompt, plan.args.as_slice(), &plan.fork);
-    let launch = queued_launch(&plan.agent, issue, (&plan.mode, plan.narrowing), told, now)?
-        .context("the plan starts no agent")?;
-    let start = WorkerStart {
-        workspace: SpaceSelector::Id(workspace.clone()),
-        launch: (*launch).into(),
-        blockers,
-        pr: None,
-    };
-    let entry = crate::client::queue::start_agent(&ctx.paths, start).await?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::Id(workspace))
-        .await?
-        .workspace;
-    ctx.show(&workspace, |_| ())?;
-    report_queued_in(ctx, &workspace, &entry)
-}
-
-/// Refuse, before any work is created, a detached start of the plan's
-/// agent that `--focus` asks to focus, which nothing shows. The daemon starts the agent from the background, which
-/// some host must take, unless the user's agent runs its own way.
+/// Refuse, before any work is created, a detached start of `agent` that
+/// `--focus` asks to focus, which nothing shows. The daemon starts the
+/// agent from the background, which some host must take, unless the user's
+/// agent runs its own way.
 pub(super) async fn ensure_detachable(
     settings: &AddSettings<'_>,
-    plan: &AddPlan,
+    agent: Option<&crate::agent::Agent>,
     options: &AddOptions,
 ) -> Result<()> {
-    if plan.agent_name().is_none() {
+    let Some(agent) = agent else {
         return Ok(());
-    }
+    };
     ensure!(
         !options.focus,
         "a call without a terminal starts its agent detached, with nothing to focus; leave out --focus, or pass --here to run it in place"
     );
     let settings = settings.get().await?;
-    if !crate::env::is_scoped() && runs_its_own_way(settings, plan) {
+    if !crate::env::is_scoped() && agents::runs_its_own_way(agent, settings) {
         return Ok(());
     }
     crate::terminal::queued::ensure_background(settings)
+}
+
+/// Whether the user's detached start of `agent` starts it in this process,
+/// which an agent that runs its own way leaves at once.
+pub(super) async fn starts_here(
+    settings: &AddSettings<'_>,
+    agent: Option<&crate::agent::Agent>,
+) -> Result<bool> {
+    let Some(agent) = agent.filter(|_| !crate::env::is_scoped()) else {
+        return Ok(false);
+    };
+    Ok(agents::runs_its_own_way(agent, settings.get().await?))
 }
 
 /// Whether the plan's agent runs its own way under the checkout's

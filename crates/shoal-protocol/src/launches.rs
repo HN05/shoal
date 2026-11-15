@@ -12,6 +12,7 @@ use crate::{
     chats::StartedChat,
     config::{modes::ModeName, permissions::PermissionsConfig},
     forge::items::reference::ItemInput,
+    model::{QueueEntry, Workspace},
     space_names::{SpaceName, SpaceSelector},
 };
 
@@ -115,6 +116,17 @@ pub struct Launch {
 pub enum Launched {
     /// In a new chat.
     Chat(StartedChat),
+    /// As the worker of an existing workspace.
+    Worker(Box<QueuedWorker>),
+}
+
+/// The worker of an existing workspace a launch queued.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct QueuedWorker {
+    pub workspace: Workspace,
+    /// Its entry in the agent queue; none when no agent is named or
+    /// configured, so the launch starts none.
+    pub entry: Option<QueueEntry>,
 }
 
 /// What made a launch, which the journal records with its agent's start.

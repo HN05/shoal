@@ -10,6 +10,8 @@ use anyhow::{Result, ensure};
 use super::{
     AddOptions, Planned,
     agent::{AddSettings, AgentLaunch, choose_add_agent, resolve_add_agent},
+    detached::{starts_detached, starts_here},
+    launch::launch_worker,
     mode::choose_add_mode,
     plan::start_as,
     queue::named_blockers,
@@ -59,6 +61,12 @@ pub(in crate::cli::commands) async fn start_worker(
     let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
     let agent = choose_add_agent(&settings, AgentLaunch::Add(agent)).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
+    let launches = starts_detached(ctx, agent.agent.is_some(), &options)
+        && !starts_here(&settings, agent.agent.as_ref()).await?;
+    if launches {
+        let picked = (mode, agent);
+        return launch_worker(ctx, &workspace, picked, args, (options, &settings)).await;
+    }
     // A task after `--` replaces the issue as the agent's subject.
     let issue = match agent.agent.is_some() && args.is_empty() {
         true => {

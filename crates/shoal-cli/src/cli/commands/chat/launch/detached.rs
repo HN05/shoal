@@ -70,8 +70,12 @@ pub(super) fn request(
 /// whose agent waits in the agent queue.
 pub(super) async fn start(ctx: &Context, launch: Launch) -> Result<Started> {
     let source = LaunchSource::Manual;
+    // A launch that asks for a chat starts in one.
     let Launched::Chat(started) =
-        crate::client::launches::launch(&ctx.paths, launch, source).await?;
+        crate::client::launches::launch(&ctx.paths, launch, source).await?
+    else {
+        anyhow::bail!("the daemon started the chat's agent in no chat");
+    };
     match started {
         StartedChat::Queued(queued) => {
             report_queued(ctx, &queued)?;

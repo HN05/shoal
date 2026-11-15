@@ -145,7 +145,9 @@ workspace's settings, `agent.default` for the agent, and the agent works on the
 start's issue unless the request gives it an issue or a task, so an app needs
 no configuration of its own to start one as the CLI does. `QueueAgent` queues
 the worker of an existing workspace the same way, on the workspace's issue,
-and every detached start of such a worker sends it, `shoal start`'s included.
+and `shoal start`'s detached start of such a worker sends a `Launch` that
+queues it so, once the daemon has resolved the blockers it names and the
+issues its forge records as blocking the workspace's issue.
 A new chat that runs detached, a scoped caller's, one started without a
 terminal or an app's, goes through `Launch`, which carries what `shoal start`
 takes and what made the launch: the daemon decides the mode, the kind of

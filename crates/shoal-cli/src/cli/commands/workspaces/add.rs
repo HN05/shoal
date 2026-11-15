@@ -5,6 +5,7 @@ mod detached;
 mod existing;
 mod finish;
 mod handoff;
+mod launch;
 pub(in crate::cli::commands) mod link;
 mod mode;
 mod place;
@@ -166,8 +167,8 @@ async fn start_planned(
         issue,
         blockers,
     } = planned;
-    if starts_detached(ctx, &plan, &options) {
-        ensure_detachable(settings, &plan, &options).await?;
+    if starts_detached(ctx, plan.agent_name().is_some(), &options) {
+        ensure_detachable(settings, plan.agent.agent.as_ref(), &options).await?;
         // Boxed, as are the launches below it: the start path's futures
         // nest deep enough to overflow the main thread's stack in debug
         // builds on Linux.

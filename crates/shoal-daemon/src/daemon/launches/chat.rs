@@ -9,7 +9,10 @@ use shoal_protocol::launches::{IssueChoice, Launch, LaunchSource, SpaceChoice};
 use super::shape::Shape;
 use crate::{
     config::modes::ModeName,
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{
+        scope::{Caller, ScopeRefusal},
+        workspace::Manager,
+    },
     forge::items::{link::ItemKind, reference::ItemInput},
     launches,
     protocol::ChatStart,
@@ -122,9 +125,9 @@ impl Manager {
         let (workspace, parent) = (start.workspace.as_ref(), start.parent.as_ref());
         self.ensure_parent_not_host(workspace, parent).await?;
         if let Some(caller) = caller {
-            self.parent_below(caller, &mut start.parent.clone()).await?;
+            ScopeRefusal::of(self.parent_below(caller, &mut start.parent.clone()).await)?;
             if start.now {
-                self.authorize_chat_now(caller, start).await?;
+                ScopeRefusal::of(self.authorize_chat_now(caller, start).await)?;
             }
         }
         let place = (start.repository.as_ref(), start.workspace.as_ref());

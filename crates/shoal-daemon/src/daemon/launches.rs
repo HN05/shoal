@@ -13,8 +13,10 @@ use crate::{
     model::SpaceKind,
 };
 
+mod blockers;
 mod chat;
 mod shape;
+mod worker;
 
 impl Manager {
     /// Start an agent as `launch`, which `source` made, asks for `caller`.
@@ -33,8 +35,14 @@ impl Manager {
             SpaceKind::Chat => (self.launch_in_chat(launch, shape, source, caller))
                 .await
                 .map(Launched::Chat),
+            SpaceKind::Workspace if launch.in_workspace.is_some() => (self
+                .launch_worker(launch, shape, source, caller))
+            .await
+            .map(|worker| Launched::Worker(Box::new(worker))),
             SpaceKind::Workspace => {
-                anyhow::bail!("the daemon launches agents only in chats so far")
+                anyhow::bail!(
+                    "the daemon launches agents only in chats and existing workspaces so far"
+                )
             }
         }
     }

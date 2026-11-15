@@ -128,6 +128,8 @@ fn error_code(error: &anyhow::Error) -> ErrorCode {
         ErrorCode::RestartWaits
     } else if let Some(exiting) = error.downcast_ref::<workspace::Exiting>() {
         exiting.code()
+    } else if error.downcast_ref::<super::scope::ScopeRefusal>().is_some() {
+        ErrorCode::ScopeDenied
     } else {
         Reason::of(error).map_or(ErrorCode::OperationFailed, Reason::code)
     }

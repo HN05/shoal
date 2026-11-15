@@ -30,7 +30,7 @@ use crate::{
     state::WorkspaceState,
 };
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::launches::{Launch, LaunchSource, StartTarget};
+use shoal_protocol::launches::{Launch, LaunchSource, Launched, SpaceChoice, StartTarget};
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_protocol::{
     approvals::ApprovalRequest,
@@ -381,6 +381,57 @@ async fn an_app_queues_an_agent_once_it_can_run() {
         .await
         .unwrap();
     assert_eq!(child.agent, "probe");
+}
+
+#[tokio::test]
+async fn a_launch_in_a_workspace_queues_its_worker_on_the_launchs_task() {
+    let daemon = TestDaemon::start().await;
+    crate::daemon::test_support::configure(
+        &daemon.manager,
+        "[agent]\ndefault = \"probe\"\n[agents.probe]\ncommand = [\"true\"]\n",
+    )
+    .await;
+    let parent = daemon.workspace("parent").await;
+    let app = daemon.connector();
+    let launch = |workspace: &Workspace, agent: Option<&str>| Launch {
+        in_workspace: Some(SpaceChoice::Space(SpaceSelector::id(&workspace.id))),
+        agent: agent.map(Into::into),
+        task: vec!["Fix the build".into()],
+        ..Launch::default()
+    };
+    let worker = |launched| match launched {
+        Launched::Worker(worker) => *worker,
+        launched => panic!("expected a worker: {launched:?}"),
+    };
+    let send = |connector, launch| async move {
+        crate::client::launches::launch(connector, launch, LaunchSource::Manual).await
+    };
+    let queued = worker(send(&app, launch(&parent, Some("probe"))).await.unwrap());
+    assert_eq!(queued.workspace.id, parent.id);
+    let entry = queued.entry.unwrap();
+    assert_eq!(entry.agent, "probe");
+    let plan: crate::start_plan::AddPlan =
+        serde_json::from_value(queued_plan(&daemon, &entry).await).unwrap();
+    assert_eq!(plan.args, ["Fix the build"]);
+    // Without an agent of its own, it starts none, as a start without a
+    // terminal to pick one does, whatever `agent.default` names.
+    let none = worker(send(&app, launch(&parent, None)).await.unwrap());
+    assert!(none.entry.is_none());
+
+    // A workspace's agent starts the workers of the workspaces below its
+    // own only.
+    let split = WorkspaceMethod::SplitWorkspace {
+        workspace: SpaceSelector::id(&parent.id),
+        name: "child".into(),
+        base: Some("HEAD".into()),
+        options: Default::default(),
+    };
+    let child = connection::request::<Workspace>(&app, split).await.unwrap();
+    let agent = daemon.scoped(&parent).await;
+    let own = send(&agent, launch(&parent, Some("probe"))).await;
+    assert_eq!(code(own), ErrorCode::ScopeDenied);
+    let below = worker(send(&agent, launch(&child, Some("probe"))).await.unwrap());
+    assert_eq!(below.entry.unwrap().agent, "probe");
 }
 
 #[tokio::test]
