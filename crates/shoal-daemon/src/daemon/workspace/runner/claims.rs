@@ -25,7 +25,11 @@ use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     client::resources::ResourceRequest,
     config::Runner,
-    daemon::{allocation::Allocation, notifications::NotificationKind, workspace::Manager},
+    daemon::{
+        allocation::Allocation,
+        notifications::NotificationKind,
+        workspace::{Manager, commits::RecordedJobWorkspace},
+    },
     forge::ForgeRepo,
     model::{QueueEntry, QueuedJob, Workspace},
     removal::InspectionPolicy,
@@ -146,25 +150,40 @@ impl Manager {
             runner: &settings.runner,
         };
         let started = self.start_claimed(claim).await;
-        if !matches!(started, Ok(Claim::Started))
-            && let Err(error) = self.remove_job_workspace(&workspace.id).await
-        {
-            crate::daemon::log!("runner: {error:#}");
+        if !matches!(started, Ok(Claim::Started)) {
+            self.discard_job_workspace(&workspace.id).await;
         }
         started
     }
 
-    /// Create the workspace `entry`'s job runs in and record the claim of
-    /// the job there, before the workspace takes a permit or runs anything,
-    /// so the claim's end removes it with what it holds, also after a
-    /// restart. A workspace whose checkout failed is claimed too and
-    /// removed, so a removal that fails is tried again until it succeeds.
+    /// Create the workspace `entry`'s job runs in, claimed by the job, and
+    /// remove one whose checkout failed; a removal that fails is tried again
+    /// until it succeeds.
     pub(super) async fn create_claimed_workspace(
         &self,
         entry: &QueueEntry,
         forge: &ForgeRepo,
         job: &QueuedJob,
     ) -> Result<Workspace> {
+        let recorded = self.record_claimed_workspace(entry, forge, job).await?;
+        let id = recorded.id().clone();
+        let created = self.check_out_job_workspace(recorded).await;
+        if created.is_err() {
+            self.discard_job_workspace(&id).await;
+        }
+        created
+    }
+
+    /// Record the workspace `entry`'s job runs in and the claim of the job
+    /// there, before the workspace is checked out, takes a permit or runs
+    /// anything, so the claim's end removes it with what it holds, also
+    /// after a restart.
+    pub(super) async fn record_claimed_workspace(
+        &self,
+        entry: &QueueEntry,
+        forge: &ForgeRepo,
+        job: &QueuedJob,
+    ) -> Result<RecordedJobWorkspace> {
         let recorded = self
             .record_job_workspace(
                 entry.job_repository()?,
@@ -174,16 +193,21 @@ impl Manager {
             )
             .await?;
         let id = recorded.id().clone();
-        let created = self.check_out_job_workspace(recorded).await;
-        let claimed = self.record_claim(entry, &id, forge, job).await;
-        let error = match (created, claimed) {
-            (Ok(workspace), Ok(())) => return Ok(workspace),
-            (Err(error), _) | (Ok(_), Err(error)) => error,
-        };
-        if let Err(removal) = self.remove_job_workspace(&id).await {
-            crate::daemon::log!("runner: {removal:#}");
+        if let Err(error) = self.record_claim(entry, &id, forge, job).await {
+            // The removal takes the repository's Git gate it holds.
+            drop(recorded);
+            self.discard_job_workspace(&id).await;
+            return Err(error);
         }
-        Err(error)
+        Ok(recorded)
+    }
+
+    /// Remove the job workspace `id` that a claim could not use, logging a
+    /// removal that fails.
+    async fn discard_job_workspace(&self, id: &SpaceId) {
+        if let Err(error) = self.remove_job_workspace(id).await {
+            crate::daemon::log!("runner: {error:#}");
+        }
     }
 
     /// Start `claim`'s job in its workspace once it holds its permit.

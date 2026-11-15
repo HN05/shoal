@@ -1379,6 +1379,64 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
 }
 
+/// The job workspace of the fixture's one job as a restart leaves it when
+/// it comes before the claim checked the workspace out, recorded and claimed
+/// but still preparing.
+async fn workspace_a_restart_caught_preparing(fixture: &Fixture) -> Workspace {
+    let manager = &fixture.manager;
+    manager.refresh_waiting_jobs().await.unwrap();
+    manager.dispatch_queue().await.unwrap();
+    let admitted = manager.admitted_jobs().await.unwrap();
+    let (entry, job) = (&admitted[0], admitted[0].job.as_deref().unwrap());
+    let forge = crate::forge::ForgeRepo::resolve(
+        &format!("http://{}/team/repo", fixture.server.host),
+        &manager.forge_hosts(),
+    )
+    .await
+    .unwrap();
+    let recorded = manager
+        .record_claimed_workspace(entry, &forge, job)
+        .await
+        .unwrap();
+    let id = recorded.id().clone();
+    drop(recorded);
+    let workspace = manager.workspace_by_id(&id).await.unwrap();
+    assert_eq!(workspace.state, crate::state::WorkspaceState::Preparing);
+    workspace
+}
+
+/// Whether the cut-short claim of `workspace` went with it.
+async fn removed_with_its_claim(manager: &Manager, workspace: &Workspace) -> bool {
+    manager.finish_ended_jobs().await.unwrap();
+    manager.workspace_by_id(&workspace.id).await.is_err()
+        && manager.claimed_jobs().await.unwrap().is_empty()
+}
+
+#[tokio::test]
+async fn a_jobs_workspace_a_restart_caught_before_its_checkout_is_removed() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
+    let workspace = workspace_a_restart_caught_preparing(&fixture).await;
+    assert!(removed_with_its_claim(&fixture.manager, &workspace).await);
+}
+
+#[tokio::test]
+async fn a_jobs_workspace_a_restart_caught_seeding_is_removed() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
+    let workspace = workspace_a_restart_caught_preparing(&fixture).await;
+    // As if the daemon stopped during the seed clone, once Git had added
+    // the worktree and Shoal recorded it.
+    let manager = &fixture.manager;
+    let checkout = manager.repository(&fixture.repository).await.unwrap().path;
+    let path = workspace.path.to_str().unwrap();
+    git(
+        &checkout,
+        &["worktree", "add", "--detach", path, &fixture.head],
+    );
+    manager.record_worktree_identity(&workspace).await.unwrap();
+    assert!(removed_with_its_claim(manager, &workspace).await);
+    assert!(!workspace.path.exists());
+}
+
 #[tokio::test]
 async fn removing_a_running_jobs_workspace_cancels_its_run_first() {
     let fixture = fixture(vec![job("h3", 7, 3)], "").await;

@@ -3610,7 +3610,8 @@ without the cancel and says why in the job's log. The daemon's log records each 
 of a job's runner with the job, its run, what stopped it and whether the run
 was cancelled. A job that cannot start is passed over with a
 `runner_failed` notification, and its workspace goes, also one whose
-checkout failed; a removal that fails is tried again until it succeeds.
+checkout failed or a restart cut short; a removal that fails is tried again
+until it succeeds.
 
 `shoal list` shows a running job's workspace below the workspace that links its
 run's PR, or owns the branch it ran on, with the job and what its processes
