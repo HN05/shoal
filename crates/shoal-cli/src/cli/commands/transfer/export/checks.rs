@@ -5,10 +5,10 @@ use anyhow::{Result, ensure};
 
 use super::Output;
 use crate::client::space_ids::SpaceId;
-use crate::client::space_names::SpaceSelector;
+use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     cli::{context::Context, ui},
-    model::{Chat, PresentSpace, SpaceKind, SpaceRef, Spaces},
+    model::{Chat, PresentSpace, SpaceHold, SpaceKind, SpaceRef, Spaces},
     removal::{RemovalCheck, UnsavedWork},
 };
 
@@ -53,6 +53,23 @@ impl Checked {
             Ending::Workspace(check) => format!("workspace {}", check.workspace.name),
             Ending::Chat(chat) => format!("chat {}", chat.name),
         }
+    }
+
+    /// The space and the chats that go with it, each with its holds, which
+    /// ending them here releases.
+    fn holds(&self) -> impl Iterator<Item = (&SpaceId, &SpaceName, &[SpaceHold])> {
+        let own = match &self.space {
+            Ending::Workspace(check) => (
+                &check.workspace.id,
+                &check.workspace.name,
+                &check.workspace.holds,
+            ),
+            Ending::Chat(chat) => (&chat.id, &chat.name, &chat.holds),
+        };
+        let carried = (self.carried.iter()).map(|chat| (&chat.id, &chat.name, &chat.holds));
+        std::iter::once(own)
+            .chain(carried)
+            .map(|(id, name, holds)| (id, name, holds.as_slice()))
     }
 
     /// The space and the chats that go with it, whose agents a move stops.
@@ -195,9 +212,9 @@ pub(super) fn exported_alone(spaces: &[PresentSpace], tree: &Spaces) -> Vec<Pres
 
 /// Ask under `heading`, unless `yes` confirms it, before ending the spaces
 /// `checks` describe where that needs the user: a chat, which the user
-/// talks with, with the chats that go with them, or a workspace with holds
-/// that external sessions keep, which the export releases, naming each
-/// hold's workspace when there are several.
+/// talks with, with the chats that go with them, or a space with holds that
+/// external sessions keep, which the export releases, naming each hold's
+/// space when there are several.
 pub(super) fn confirm_ending(
     ctx: &Context,
     yes: bool,
@@ -216,13 +233,12 @@ pub(super) fn confirm_ending(
             }
         }
     }
-    let held: Vec<&RemovalCheck> = checks
-        .iter()
-        .filter_map(|check| match &check.space {
-            Ending::Workspace(check) if !check.workspace.holds.is_empty() => Some(check),
-            _ => None,
-        })
-        .collect();
+    let mut held: Vec<(&SpaceId, &SpaceName, &[SpaceHold])> = Vec::new();
+    for space in checks.iter().flat_map(|check| check.holds()) {
+        if !space.2.is_empty() && !held.iter().any(|listed| listed.0 == space.0) {
+            held.push(space);
+        }
+    }
     if yes || (chats.is_empty() && held.is_empty()) {
         return Ok(());
     }
@@ -234,13 +250,13 @@ pub(super) fn confirm_ending(
         }
     }
     if !held.is_empty() {
-        action.push_str("\nRemoves the workspaces here and releases these holds:");
+        action.push_str("\nRemoves the spaces here and releases these holds:");
     }
-    for check in &held {
-        for hold in &check.workspace.holds {
+    for (_, name, holds) in &held {
+        for hold in *holds {
             action.push_str("\n  ");
-            if checks.len() > 1 {
-                action.push_str(&format!("{}: ", check.workspace.name));
+            if checks.len() > 1 || held.len() > 1 {
+                action.push_str(&format!("{name}: "));
             }
             action.push_str(&hold.name);
             if let Some(reason) = &hold.reason {

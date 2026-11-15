@@ -9,7 +9,8 @@ use crate::{
 };
 
 /// What removing `chat` takes besides it, as `spaces` shows: the spaces
-/// below it, with the chats in their worktrees, and its running agent.
+/// below it, with the chats in their worktrees, its running agent and its
+/// holds.
 pub(in crate::cli::commands) fn losses(chat: &Chat, spaces: &Spaces) -> Vec<String> {
     let mut lines = Vec::new();
     let below: Vec<String> = (spaces.taken_with(&chat.id).into_iter())
@@ -24,6 +25,7 @@ pub(in crate::cli::commands) fn losses(chat: &Chat, spaces: &Spaces) -> Vec<Stri
     if chat.running {
         lines.push("Stops its agent".into());
     }
+    lines.extend(super::super::holds::losses(&chat.holds));
     lines
 }
 

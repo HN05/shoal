@@ -587,14 +587,24 @@ fn a_hold_keeps_a_stopped_chat_until_it_is_released() {
     fixture.end_chat_agent(&chat);
     agent.wait().unwrap();
     let space = fixture.id("notes");
-    let held = fixture.ok(&["acquire", "hold", "--space", &space, "--name", "keep"]);
+    let held = fixture.ok(&[
+        "acquire",
+        "hold",
+        "--space",
+        &space,
+        "--name",
+        "quay-thread",
+    ]);
     assert_eq!(held["space_id"], chat.as_str(), "{held}");
     assert_eq!(
         fixture.ok(&["leases", "hold", "--space", &space])[0]["name"],
-        "keep"
+        "quay-thread"
     );
     let status = fixture.ok(&["status", &space]);
-    assert_eq!(status["chat"]["holds"][0]["name"], "keep", "{status}");
+    assert_eq!(
+        status["chat"]["holds"][0]["name"], "quay-thread",
+        "{status}"
+    );
     assert_eq!(status["cleanup_reason"]["reason"], "held", "{status}");
     let preview = fixture.ok(&["cleanup", "--dry-run"]);
     assert_eq!(
@@ -606,8 +616,19 @@ fn a_hold_keeps_a_stopped_chat_until_it_is_released() {
     assert_eq!(report["removed"], serde_json::json!([]), "{report}");
     let port = fixture.run(&["acquire", "port", "web", "--space", &space]);
     assert!(!port.status.success(), "{}", printed(&port));
+    // Removing it names the hold it releases before asking.
+    let (no, prompt) = fixture.interactive(&["rm", &space], "n\n");
+    assert!(!no.status.success());
+    assert!(prompt.contains("quay-thread"), "{prompt}");
 
-    fixture.ok(&["release", "hold", "--space", &space, "--name", "keep"]);
+    fixture.ok(&[
+        "release",
+        "hold",
+        "--space",
+        &space,
+        "--name",
+        "quay-thread",
+    ]);
     let report = fixture.ok(&["cleanup", "spaces"]);
     assert_eq!(report["removed"], serde_json::json!(["notes"]), "{report}");
 }

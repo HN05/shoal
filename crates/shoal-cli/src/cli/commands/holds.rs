@@ -97,6 +97,22 @@ async fn pick(ctx: &Context, space: &SpaceSelector) -> Result<String> {
     ui::pick(ctx, "Hold> ", entries)
 }
 
+/// What a removal that releases `holds` names before it asks: each hold,
+/// with its reason; nothing without one.
+pub(in crate::cli::commands) fn losses(holds: &[SpaceHold]) -> Vec<String> {
+    if holds.is_empty() {
+        return Vec::new();
+    }
+    let lines = (holds.iter()).map(|hold| {
+        format!(
+            "  {}{}",
+            hold.name,
+            optional(hold.reason.as_deref(), |r| format!(" ({r})"))
+        )
+    });
+    std::iter::once("Holds:".to_owned()).chain(lines).collect()
+}
+
 fn render(holds: &[SpaceHold]) {
     if holds.is_empty() {
         outln!("No holds");

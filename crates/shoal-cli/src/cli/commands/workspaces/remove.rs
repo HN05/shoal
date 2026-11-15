@@ -344,15 +344,7 @@ fn removal_losses(ctx: &Context, check: &RemovalCheck) -> Vec<String> {
             "The checkpoint cannot keep the uncommitted files (they are too large, or include a repository or a changed submodule), so they cannot be restored.".into()
         });
     }
-    if !holds.is_empty() {
-        lines.push("Holds:".into());
-        for hold in holds {
-            let reason = crate::cli::context::optional(hold.reason.as_deref(), |reason| {
-                format!(" ({reason})")
-            });
-            lines.push(format!("  {}{reason}", hold.name));
-        }
-    }
+    lines.extend(super::super::holds::losses(holds));
     if ctx.interactive() && (!check.changed_files.is_empty() || check.changed_files_omitted > 0) {
         lines.push("Uncommitted changes and untracked files (Git status):".into());
         for file in &check.changed_files {
