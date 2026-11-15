@@ -410,7 +410,8 @@ given, as [`shoal start`](#mode-permissions) gives it, `KEY=mode` dropping
 one given before, while the keys it leaves out keep theirs. A value the
 caller does not hold is refused before any agent stops, and so is
 `--permission` for an agent another run is restarting. With `--in-place` the
-wrapper restarts the agent under them, as a new one would. An agent protection stopped waits
+wrapper restarts the agent under them, as a new one would; one of a release
+before that leaves the agent stopped for a restore in a new wrapper. An agent protection stopped waits
 for its restore and is left out; a named space whose only agent waits is
 reported with why it stopped and that `shoal queue start` restores it now. An agent that does not start
 again, as when no terminal host can open its new place, stays stopped for
