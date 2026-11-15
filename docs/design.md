@@ -2969,8 +2969,12 @@ holds a value it sets, so a drop cannot hand a child what a space between them
 was given. The change goes
 into the record a restore reads, so a restore here, in the background or from
 the queue runs with it alike. A wrapper that restores its own agent, after an
-in-place restart or a protection stop, keeps the push rules it launched with,
-so it refuses a change rather than half apply it. Effective
+in-place restart or a protection stop, restores it under the values that
+record holds then, as a new wrapper would, rebuilding its push rewrites when
+they changed; the daemon claims the record until the agent starts, so no
+change lands unseen. A wrapper of a release before that would keep the push
+rules it launched with, so its restore of a changed agent fails rather than
+half apply it, leaving the record to a new wrapper. Effective
 permissions are computed at each check from the current config, the recorded
 modes and given values and the tree, never stored, so a config change reaches
 running agents; only the push rewrites, which are

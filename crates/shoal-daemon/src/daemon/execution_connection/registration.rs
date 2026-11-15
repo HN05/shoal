@@ -173,6 +173,7 @@ pub(super) async fn register(
         unqueued: takes_entry.is_none(),
         // Registration requires this daemon's protocol.
         hears_restore_waits: true,
+        takes_narrowing: true,
         stopped: false,
         stop,
         records: RecordChange::of(&plan),

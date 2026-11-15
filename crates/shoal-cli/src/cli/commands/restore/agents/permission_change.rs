@@ -3,7 +3,7 @@
 //! scoped process gives only what it holds, which is checked for every
 //! selected space before anything is set up or restores, and a restore makes
 //! the change in the records it restores or starts once nothing refuses it.
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result};
 
 use super::super::targets::Selected;
 use super::setups::FailedSetup;
@@ -15,26 +15,18 @@ use crate::{
 };
 
 /// Refuse `change` for the stopped agents and last sessions of the
-/// `selected` workspaces, only `execution`'s when given, the selected chats
-/// and the agents waiting for the selected failed setups, where this
-/// process does not hold what it gives or one's waiting wrapper restores
-/// it, which keeps the permissions it launched with. It writes nothing: a
-/// resume makes the change with [`apply`] once nothing refuses it.
+/// `selected` workspaces, the selected chats and the agents waiting for the
+/// selected failed setups, where this process does not hold what it gives. It writes nothing: a resume makes
+/// the change with [`apply`] once nothing refuses it.
 pub(super) async fn check(
     ctx: &Context,
     selected: &Selected,
-    execution: Option<&ExecutionId>,
     change: &PermissionChange,
 ) -> Result<()> {
     let selectors = (selected.spaces.as_deref())
         .context("--permission changes the permissions of the spaces a restore names")?;
     for selector in selectors {
-        let (space, saved) = saved_agents(ctx, selector, execution).await?;
-        ensure!(
-            !saved.agents.iter().any(|agent| agent.waits_in_wrapper),
-            "the agent of {} restores in the wrapper that waits for it, which keeps its permissions; restore it without --permission",
-            space.name()
-        );
+        let space = super::present_space(ctx, selector).await?;
         let repository = space.repository_id().map(|id| id.as_str().into());
         crate::cli::commands::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
@@ -47,21 +39,6 @@ pub(super) async fn check(
         crate::cli::commands::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
     Ok(())
-}
-
-/// The space `selector` names with the agents and last sessions it saved,
-/// only `execution`'s when given.
-async fn saved_agents(
-    ctx: &Context,
-    selector: &SpaceSelector,
-    execution: Option<&ExecutionId>,
-) -> Result<(PresentSpace, Saved)> {
-    let space = super::present_space(ctx, selector).await?;
-    let mut saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(space.id())).await?;
-    if let Some(execution) = execution {
-        saved.retain_execution(execution, false);
-    }
-    Ok((space, saved))
 }
 
 /// Have the daemon make `change`, when given, to the permissions each agent

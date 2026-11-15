@@ -69,7 +69,7 @@ pub(super) async fn restore(
     }
     selected.refuse_running()?;
     if let Some(change) = change {
-        permission_change::check(ctx, &selected, options.execution.as_ref(), change).await?;
+        permission_change::check(ctx, &selected, change).await?;
     }
     if scoped && restores_agents {
         let mut reopened = super::reopen::reopen_each(ctx, &selected.removed).await?;

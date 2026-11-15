@@ -178,10 +178,10 @@ impl Manager {
         launch.with_context(|| format!("no agent waits for the setup of {}", workspace.name))
     }
 
-    /// What the stopped `agent` saved, refusing one that saved nothing, one
-    /// its waiting wrapper restores, which keeps the permissions that
-    /// wrapper launched it with, and `change` where `giver` does not hold
-    /// what it gives, as [`Manager::ensure_change_held`] refuses it.
+    /// What the stopped `agent` saved, refusing one that saved nothing and
+    /// `change` where `giver` does not hold what it gives, as
+    /// [`Manager::ensure_change_held`] refuses it. A wrapper waiting to
+    /// restore the agent restores it under the changed record.
     async fn changeable(
         &self,
         agent: &SavedAgent,
@@ -196,11 +196,6 @@ impl Manager {
         ensure!(
             !(saved.agents.is_empty() && saved.sessions.is_empty()),
             "{} has no stopped agent {execution}",
-            space.name()
-        );
-        ensure!(
-            !saved.agents.iter().any(|agent| agent.waits_in_wrapper),
-            "the agent of {} restores in the wrapper that waits for it, which keeps its permissions; restore it without --permission",
             space.name()
         );
         Ok(saved)

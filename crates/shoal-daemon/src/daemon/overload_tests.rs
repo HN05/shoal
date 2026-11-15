@@ -696,6 +696,42 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
     serving.abort();
 }
 
+/// A permission change made while the wrapper waits reaches the agent it
+/// restores, which the space then records as a new wrapper's start would.
+#[tokio::test]
+async fn a_waiting_wrapper_restores_its_agent_under_a_permission_change() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    wait_paused(&manager, &workspace).await;
+    wait_restore_queued(&manager).await;
+    let execution = only_execution(&manager, &workspace).await;
+    let change = crate::config::permissions::PermissionChange::assigned("push=propose").unwrap();
+    let agents = [crate::protocol::SavedAgent {
+        workspace: SpaceSelector::id(&workspace.id),
+        execution: execution.clone(),
+    }];
+    let targets = crate::daemon::workspace::PermissionTargets {
+        agents: &agents,
+        launches: &[],
+    };
+    (manager.change_stopped_permissions(targets, &change, None))
+        .await
+        .unwrap();
+    let epoch = manager.overload_recovery.epoch();
+    manager.overload_recovery.publish(Some(epoch));
+    assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
+    assert!(workspace.path.join("restored").is_file());
+    let recorded = manager.workspace_by_id(&workspace.id).await.unwrap();
+    assert_eq!(recorded.narrowing, change.applied_to(Default::default()));
+    serving.abort();
+}
+
 /// A wrapper that cannot start the agent it restores, as one whose binary an
 /// upgrade removed cannot, leaves the restore to the agent queue instead of
 /// keeping the agent as one that exited on its own.

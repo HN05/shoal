@@ -530,6 +530,25 @@ impl Manager {
             .await;
     }
 
+    /// Have the tracked agent of `id` run under `narrowing`, which its
+    /// restore in the wrapper that waited for it gives it, and record it as
+    /// a new wrapper's start records it.
+    pub(crate) async fn give_agent_narrowing(
+        &self,
+        id: &ExecutionId,
+        narrowing: crate::config::permissions::PermissionsConfig,
+    ) {
+        let tracked = (self.executions)
+            .with_agent(id, |agent| {
+                agent.narrowing = narrowing;
+                agent.tracked()
+            })
+            .await;
+        if let Some(tracked) = tracked {
+            self.record_execution_agent(id, &tracked).await;
+        }
+    }
+
     /// Keep the name, model, effort, mode and narrowing of the agent
     /// execution `id` runs with its record, which outlives this daemon,
     /// unlike the tracked agent; the mode and narrowing become its

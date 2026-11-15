@@ -486,9 +486,10 @@ that.
 with that [permission](#mode-permissions) given, `KEY=mode` dropping one
 given before, while the keys it leaves out keep theirs; its records keep them
 from then on. It needs the spaces named or picked. A value the caller does not
-hold is refused before anything is restored, and so is an agent its waiting
-wrapper restores or one whose interrupted turn continues, since both keep the
-launch they run under.
+hold is refused before anything is restored, and so is an agent whose
+interrupted turn continues, since it keeps the launch it runs under. A wrapper
+waiting to restore its agent restores it under them; one of a release before
+that leaves the agent stopped for a restore in a new wrapper.
 A stopped [chat's](#chats) agent restores as a workspace's does, without
 waiting for an agent slot, and `--forget` forgets its stopped work. A running
 chat has nothing to restore. `--all` never reopens removed workspaces.

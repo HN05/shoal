@@ -17,15 +17,26 @@ use super::workspace::{Grant, Manager, Pause, Protection, StopRequest};
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::log;
 use crate::{
+    config::permissions::PermissionsConfig,
     execution::recovery,
     model::PortReservation,
     protocol::{self, Control, ExecutionEvent, timing},
 };
 
 pub(super) enum Action {
-    Resume(Vec<PortReservation>),
+    Resume(Resumed),
     Stop(Cancel),
     Finished(i32),
+}
+
+/// A resume of the waiting agent: the workspace's ports, the narrowing its
+/// saved record gives it in place of the one it ran with, from a permission
+/// change made while it waited, and the claim on that record, which keeps
+/// such changes out until the restored agent starts.
+pub(super) struct Resumed {
+    pub ports: Vec<PortReservation>,
+    pub narrowing: Option<PermissionsConfig>,
+    pub claim: Option<recovery::RecoveryClaim>,
 }
 
 /// A cancelled restore, as the wrapper reports it.
@@ -63,20 +74,40 @@ impl Cancel {
     }
 }
 
+/// The wrapper of a paused execution: what reaches it with what holds its
+/// restore back, when its release reads that, the narrowing its agent runs
+/// under, and whether it restores the agent under another.
+pub(super) struct Wrapper<'a> {
+    pub notices: Option<&'a mut OwnedWriteHalf>,
+    pub runs_under: Option<PermissionsConfig>,
+    pub takes_narrowing: bool,
+}
+
 /// `hold` is the operation guard that holds back a daemon update while the
-/// wrapper waits, which a wait for an update lets go of. `notices` reaches a
-/// wrapper whose release reads what holds its restore back.
+/// wrapper waits, which a wait for an update lets go of.
 pub(super) async fn pause(
     manager: &Manager,
     execution_id: &ExecutionId,
     workspace_id: &SpaceId,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
-    notices: Option<&mut OwnedWriteHalf>,
+    wrapper: Wrapper<'_>,
     hold: &mut Option<OwnedRwLockReadGuard<()>>,
 ) -> Result<Action> {
+    let Wrapper {
+        notices,
+        runs_under,
+        takes_narrowing,
+    } = wrapper;
+    let resumes = Resumes {
+        manager,
+        execution_id,
+        workspace_id,
+        runs_under,
+        takes_narrowing,
+    };
     if manager.restart_requested(execution_id).await {
-        return restart(manager, execution_id, workspace_id, incoming, stop, notices).await;
+        return restart(resumes, incoming, stop, notices).await;
     }
     let Some(protection) = manager.agent_overload(execution_id).await else {
         return Ok(Action::Stop(requested_cancel(manager, execution_id).await));
@@ -124,7 +155,7 @@ pub(super) async fn pause(
             !follows_policy || manager.config().machine.overload.recovery.enabled,
             "overload recovery was disabled while the agent waited"
         );
-        prepare_resume(manager, execution_id, workspace_id, grant, &protection).await
+        prepare_resume(resumes, grant, &protection).await
     }
     .await;
     Ok(resume.unwrap_or_else(restore_failed))
@@ -134,15 +165,13 @@ pub(super) async fn pause(
 /// stopped, here or in a new wrapper, answering the restart when it does
 /// neither.
 async fn restart(
-    manager: &Manager,
-    execution_id: &ExecutionId,
-    workspace_id: &SpaceId,
+    resumes: Resumes<'_>,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
     notices: Option<&mut OwnedWriteHalf>,
 ) -> Result<Action> {
-    let action =
-        restart_once_stopped(manager, execution_id, workspace_id, incoming, stop, notices).await;
+    let (manager, execution_id) = (resumes.manager, resumes.execution_id);
+    let action = restart_once_stopped(resumes, incoming, stop, notices).await;
     if let Ok(Action::Stop(cancel)) = &action {
         let reason = cancel
             .reason
@@ -154,13 +183,13 @@ async fn restart(
 }
 
 async fn restart_once_stopped(
-    manager: &Manager,
-    execution_id: &ExecutionId,
-    workspace_id: &SpaceId,
+    resumes: Resumes<'_>,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
     notices: Option<&mut OwnedWriteHalf>,
 ) -> Result<Action> {
+    let (manager, execution_id, workspace_id) =
+        (resumes.manager, resumes.execution_id, resumes.workspace_id);
     let stopped = match manager
         .pause_agent_execution(execution_id, workspace_id, timing::PROCESS_PROOF_TIMEOUT)
         .await
@@ -181,7 +210,7 @@ async fn restart_once_stopped(
         ready?;
         manager.verify_restore_space(workspace_id).await?;
         if manager.restart_in_place(execution_id).await {
-            resume(manager, execution_id, workspace_id, None).await
+            resumes.resume(None).await
         } else {
             hand_over(manager, execution_id).await
         }
@@ -347,35 +376,101 @@ async fn recovery_disabled(manager: &Manager) {
 }
 
 async fn prepare_resume(
-    manager: &Manager,
-    execution_id: &ExecutionId,
-    workspace_id: &SpaceId,
+    resumes: Resumes<'_>,
     grant: Grant,
     protection: &Protection,
 ) -> Result<Action> {
-    if manager
-        .done_cancels_restore(workspace_id, protection)
+    if (resumes.manager)
+        .done_cancels_restore(resumes.workspace_id, protection)
         .await?
     {
         return Ok(cancelled_as_done());
     }
-    resume(manager, execution_id, workspace_id, Some(grant)).await
+    resumes.resume(Some(grant)).await
 }
 
-/// Resume the stopped agent with the workspace's ports, unless a stop
-/// cancelled its restore. `grant` is what admitted an automatic restore.
-async fn resume(
-    manager: &Manager,
-    execution_id: &ExecutionId,
-    workspace_id: &SpaceId,
-    grant: Option<Grant>,
-) -> Result<Action> {
-    let ports = manager
-        .list_ports(Some(&SpaceSelector::id(workspace_id)))
-        .await?;
-    if manager.resume_agent_execution(execution_id, grant).await? {
-        Ok(Action::Resume(ports))
-    } else {
-        Ok(Action::Stop(requested_cancel(manager, execution_id).await))
+/// What resumes the stopped agent of `execution_id` in the space
+/// `workspace_id`, which its wrapper runs under `runs_under`, restoring it
+/// under another narrowing when `takes_narrowing`.
+#[derive(Clone, Copy)]
+struct Resumes<'a> {
+    manager: &'a Manager,
+    execution_id: &'a ExecutionId,
+    workspace_id: &'a SpaceId,
+    runs_under: Option<PermissionsConfig>,
+    takes_narrowing: bool,
+}
+
+impl Resumes<'_> {
+    /// Resume the stopped agent with the workspace's ports, under the
+    /// narrowing its saved record gives it, unless a stop cancelled its
+    /// restore. `grant` is what admitted an automatic restore.
+    async fn resume(self, grant: Option<Grant>) -> Result<Action> {
+        let Self {
+            manager,
+            execution_id,
+            workspace_id,
+            ..
+        } = self;
+        let ports = manager
+            .list_ports(Some(&SpaceSelector::id(workspace_id)))
+            .await?;
+        let (claim, narrowing) = self.saved_narrowing().await?;
+        if !manager.resume_agent_execution(execution_id, grant).await? {
+            return Ok(Action::Stop(requested_cancel(manager, execution_id).await));
+        }
+        if let Some(narrowing) = narrowing {
+            manager.give_agent_narrowing(execution_id, narrowing).await;
+        }
+        Ok(Action::Resume(Resumed {
+            ports,
+            narrowing,
+            claim,
+        }))
+    }
+
+    /// The claim on the agent's saved record, when it saved one, and the
+    /// narrowing the record gives it when that differs from the one it ran
+    /// with, which only a wrapper that `takes_narrowing` restores it
+    /// under; an older one leaves it to a new wrapper.
+    async fn saved_narrowing(
+        self,
+    ) -> Result<(Option<recovery::RecoveryClaim>, Option<PermissionsConfig>)> {
+        let path = recovery::record_path(&self.manager.paths, self.workspace_id, self.execution_id);
+        let Some((claim, record)) = claim_saved(&path).await? else {
+            return Ok((None, None));
+        };
+        let narrowing = (self.runs_under)
+            .filter(|ran| *ran != record.narrowing)
+            .map(|_| record.narrowing);
+        ensure!(
+            narrowing.is_none() || self.takes_narrowing,
+            "the agent's wrapper runs an earlier Shoal, which cannot restore it under the permissions it was given since; shoal restore {} restores it in a new one",
+            self.workspace_id
+        );
+        Ok((Some(claim), narrowing))
+    }
+}
+
+/// How often a resume tries to claim a saved record that a permission
+/// change holds for the moment it rewrites it.
+const CLAIM_ATTEMPTS: u32 = 20;
+
+/// Claim the saved record at `path` and read it, unless the wrapper saved
+/// none.
+async fn claim_saved(
+    path: &std::path::Path,
+) -> Result<Option<(recovery::RecoveryClaim, recovery::Record)>> {
+    let mut attempts = 1;
+    loop {
+        if !path.exists() {
+            return Ok(None);
+        }
+        match recovery::claim_record(path) {
+            Ok(claimed) => return Ok(Some(claimed)),
+            Err(_) if attempts < CLAIM_ATTEMPTS => attempts += 1,
+            Err(error) => return Err(error.context("claim the agent's saved record")),
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
     }
 }

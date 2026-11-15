@@ -73,6 +73,9 @@ struct Connected {
     unqueued: bool,
     /// The wrapper reads [`Control::RestoreWaits`].
     hears_restore_waits: bool,
+    /// The wrapper restores its agent under the narrowing a
+    /// [`Control::Resume`] gives.
+    takes_narrowing: bool,
     /// The daemon stopped the command before it finished.
     stopped: bool,
     stop: watch::Receiver<bool>,
@@ -162,6 +165,7 @@ pub(super) async fn reattach(
         // Its agent started before the daemon restarted.
         unqueued: false,
         hears_restore_waits: version >= protocol::RESTORE_WAITS,
+        takes_narrowing: version >= protocol::RESUME_NARROWING,
         stopped: false,
         stop,
         records: None,
@@ -288,6 +292,7 @@ async fn relay(
         resuming,
         unqueued,
         hears_restore_waits,
+        takes_narrowing,
         stopped,
         stop,
         ..
@@ -305,6 +310,9 @@ async fn relay(
     let mut resumed_pause = std::mem::take(awaiting_restore);
     let mut sent_stop = resumed_pause;
     let mut recovering = resumed_pause;
+    // Keeps permission changes out of the record a resumed agent restores
+    // from until it starts.
+    let mut _restored_record = None;
     loop {
         let event = if std::mem::take(&mut resumed_pause) {
             ExecutionEvent::Paused
@@ -344,6 +352,7 @@ async fn relay(
             } => {
                 awaiting_started = false;
                 *started = true;
+                _restored_record = None;
                 let resumed_here = std::mem::take(resuming);
                 let _operation = match unattachable.take() {
                     Some(operation) => operation,
@@ -421,33 +430,47 @@ async fn relay(
                     execution_recovery::stop_survivors(manager, execution_id, space.id()).await;
                     continue;
                 }
-                use execution_recovery::Action;
+                use execution_recovery::{Action, Resumed};
                 // An update waits for the restore; other shutdowns hand the
                 // wait to the next daemon.
                 if unattachable.is_none() {
                     *unattachable = manager.gates.try_owned_operation();
                 }
+                let wrapper = execution_recovery::Wrapper {
+                    notices: hears_restore_waits.then_some(&mut *writer),
+                    runs_under: agent.as_ref().map(|agent| agent.narrowing),
+                    takes_narrowing: *takes_narrowing,
+                };
                 match execution_recovery::pause(
                     manager,
                     execution_id,
                     space.id(),
                     incoming,
                     stop,
-                    hears_restore_waits.then_some(&mut *writer),
+                    wrapper,
                     unattachable,
                 )
                 .await?
                 {
-                    Action::Resume(ports) => {
+                    Action::Resume(resumed) => {
                         *handoff_claimed = false;
                         awaiting_started = true;
                         *resuming = true;
                         sent_stop = false;
+                        let Resumed {
+                            ports,
+                            narrowing,
+                            claim,
+                        } = resumed;
+                        _restored_record = claim;
+                        if let (Some(tracked), Some(narrowing)) = (agent.as_mut(), narrowing) {
+                            tracked.narrowing = narrowing;
+                        }
                         let executable = crate::installed::started().identity();
                         let resume = Control::Resume {
                             ports,
                             executable,
-                            narrowing: None,
+                            narrowing,
                         };
                         protocol::write(writer, &resume).await?;
                     }
