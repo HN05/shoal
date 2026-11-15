@@ -10,7 +10,7 @@ use crate::{
         test_support::{global_config, manager},
         workspace::agent_queue::{
             Serving, last_seq,
-            rank::{Carries, Edge, Node},
+            schedule::snapshot::{Carries, Edge, Node},
             tests::{add, create, limit_globally, register, request},
         },
     },

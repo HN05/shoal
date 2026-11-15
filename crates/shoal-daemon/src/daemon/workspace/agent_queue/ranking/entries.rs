@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 use super::super::{
-    rank::{Entry, Work},
+    schedule::snapshot::{Entry, Work},
     state::WaitingOneShot,
 };
 use crate::client::time::UnixTime;

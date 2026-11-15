@@ -1,4 +1,9 @@
 use super::*;
+use crate::daemon::workspace::agent_queue::schedule::leads::{LongestChain, Nothing, WarmCache};
+
+const BALANCED: Ranking<Nothing> = Ranking::new(Nothing);
+const SPEED: Ranking<LongestChain> = Ranking::new(LongestChain);
+const CACHE: Ranking<WarmCache> = Ranking::new(WarmCache);
 
 const NOW: i64 = 100_000;
 
@@ -62,16 +67,19 @@ fn snapshot() -> Snapshot {
     }
 }
 
+/// The order of `snapshot`'s entries under the `balanced` schedule.
 fn order(snapshot: &Snapshot) -> Vec<String> {
-    rank(snapshot)
-        .into_iter()
+    order_by(&BALANCED, snapshot)
+}
+
+fn order_by(scheduler: &dyn Scheduler, snapshot: &Snapshot) -> Vec<String> {
+    (scheduler.rank(snapshot).into_iter())
         .map(|ranked| ranked.id.to_string())
         .collect()
 }
 
 fn rank_of(snapshot: &Snapshot, id: &str) -> QueueRank {
-    rank(snapshot)
-        .into_iter()
+    (BALANCED.rank(snapshot).into_iter())
         .find(|ranked| ranked.id.as_str() == id)
         .unwrap()
         .rank
@@ -525,8 +533,7 @@ fn speed_starts_the_work_with_the_longest_chain_waiting_on_it_first() {
         entry(&mut snapshot, id, restore(id));
     }
     assert_eq!(order(&snapshot), ["finishing", "awaited"]);
-    snapshot.schedule = Schedule::Speed;
-    assert_eq!(order(&snapshot), ["awaited", "finishing"]);
+    assert_eq!(order_by(&SPEED, &snapshot), ["awaited", "finishing"]);
 }
 
 #[test]
@@ -547,9 +554,8 @@ fn cache_restores_agents_with_a_warm_prompt_cache_first_the_latest_to_expire_fir
         snapshot.entries[index].prompt_cache_until = Some(at(NOW + offset));
     }
     assert_eq!(order(&snapshot), ids);
-    snapshot.schedule = Schedule::Cache;
     assert_eq!(
-        order(&snapshot),
+        order_by(&CACHE, &snapshot),
         ["warmest", "warm", "finishing", "expired"]
     );
 }
@@ -564,10 +570,9 @@ fn a_schedule_passes_over_no_entry_that_waited_as_long_as_rises_a_tier() {
     for id in ["awaited", "alone"] {
         entry(&mut snapshot, id, restore(id));
     }
-    snapshot.schedule = Schedule::Speed;
-    assert_eq!(order(&snapshot), ["awaited", "alone"]);
+    assert_eq!(order_by(&SPEED, &snapshot), ["awaited", "alone"]);
     snapshot.entries[1].queued_at = at(NOW - RISE_AFTER.as_secs() as i64);
-    assert_eq!(order(&snapshot), ["alone", "awaited"]);
+    assert_eq!(order_by(&SPEED, &snapshot), ["alone", "awaited"]);
 }
 
 #[test]
@@ -586,12 +591,16 @@ fn an_overdue_entry_ties_with_the_top_lead_and_keeps_its_tier_order() {
     prioritize(&mut snapshot, "urgent", Priority::URGENT);
     edge(&mut snapshot, "waiting", "urgent", Dependency::Blocked);
     entry(&mut snapshot, "urgent", restore("urgent"));
-    for schedule in [Schedule::Balanced, Schedule::Speed, Schedule::Cache] {
-        snapshot.schedule = schedule;
+    let schedules: [(&str, &dyn Scheduler); 3] = [
+        ("balanced", &BALANCED),
+        ("speed", &SPEED),
+        ("cache", &CACHE),
+    ];
+    for (schedule, scheduler) in schedules {
         assert_eq!(
-            order(&snapshot),
+            order_by(scheduler, &snapshot),
             ["urgent", "finishing", "new"],
-            "{schedule:?}"
+            "{schedule}"
         );
     }
 }
@@ -611,8 +620,7 @@ fn spaces_order_as_their_agents_would_start_with_what_waits_on_them() {
         .into_iter()
         .map(Into::into)
         .collect();
-    let ordered: Vec<(String, Priority)> = spaces_in_order(&snapshot, &ids)
-        .into_iter()
+    let ordered: Vec<(String, Priority)> = (BALANCED.spaces_in_order(&snapshot, &ids).into_iter())
         .map(|(id, priority)| (id.to_string(), priority))
         .collect();
     assert_eq!(

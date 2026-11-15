@@ -1,197 +1,112 @@
-//! The rank of the queue's waiting work, which decides what starts first.
-//! Each entry has a priority, how much its work matters, which goes first,
-//! and a tier, how close its work is to finished, which rises one level for
-//! each hour it waits. Both flow along the dependency graph, from work that
-//! waits to the work it waits on, so that an entry ranks at least as high as
-//! anything waiting on it; a CI job or review ranks with the spaces it
-//! serves. Within a priority the schedule may put other work first: the
-//! work with the longest chain of work waiting on it, or restores whose
-//! prompt cache is still warm. Within a tier the launch of a new workspace
-//! that shares fewer areas with its repository's workspaces goes first,
-//! then the larger share of a space's plan steps done, then the space
-//! started earliest, then a CI job or review ahead of an agent, then
-//! arrival.
+//! The ranking the built-in schedules share, which decides what starts
+//! first. Each entry has a priority, how much its work matters, which goes
+//! first, and a tier, how close its work is to finished, which rises one
+//! level for each hour it waits. Both flow along the dependency graph, from
+//! work that waits to the work it waits on, so that an entry ranks at least
+//! as high as anything waiting on it; a CI job or review ranks with the
+//! spaces it serves. Within a priority a schedule's [`Lead`] may put other
+//! work first. Within a tier the launch of a new workspace that shares
+//! fewer areas with its repository's workspaces goes first, then the larger
+//! share of a space's plan steps done, then the space started earliest,
+//! then a CI job or review ahead of an agent, then arrival.
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, HashMap, hash_map},
+    collections::{HashMap, hash_map},
     time::Duration,
 };
 
 use crate::client::time::UnixTime;
-use crate::config::machine::Schedule;
-use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_schedule::{
     priority::Priority,
     rank::{Dependency, InheritedRank, QueueRank, SharedArea, Tier},
 };
 
+use super::{
+    scheduler::{Ranked, Scheduler},
+    snapshot::{Carries, Edge, Entry, Node, Snapshot, Space, Steps, Work},
+};
+
 /// How long an entry waits to rise one tier.
 const RISE_AFTER: Duration = Duration::from_secs(60 * 60);
 
-/// What ranking reads: the waiting entries, the spaces they and the work
-/// waiting on them belong to, and what waits on what.
-#[derive(Debug, Default)]
-pub(crate) struct Snapshot {
-    pub entries: Vec<Entry>,
-    pub spaces: HashMap<SpaceId, Space>,
-    pub edges: Vec<Edge>,
-    pub now: UnixTime,
-    /// What goes first within a priority.
-    pub schedule: Schedule,
-    /// The areas the workspaces of each repository occupy, each with the
-    /// workspaces holding it.
-    pub occupied: HashMap<RepositoryId, Occupied>,
+/// What a schedule puts first within a priority, ahead of the tier: the
+/// part of the order the built-in schedules differ in.
+pub trait Lead {
+    /// What it reads of the whole snapshot once, before it leads any entry.
+    type Context;
+    /// What an entry leads with, higher first.
+    type Key: Copy + Ord;
+
+    fn context(&self, snapshot: &Snapshot) -> Self::Context;
+
+    /// What `entry` leads with, from the snapshot's `context`.
+    fn key(&self, entry: &Entry, context: &Self::Context, snapshot: &Snapshot) -> Self::Key;
 }
 
-/// The areas a repository's workspaces occupy, each with the workspaces
-/// holding it.
-pub(crate) type Occupied = BTreeMap<String, Vec<SpaceId>>;
-
-/// A waiting entry.
-#[derive(Debug)]
-pub(crate) struct Entry {
-    pub id: QueueEntryId,
-    /// What explanations call a launch that has no space yet.
-    pub name: String,
-    /// The priority a launch was queued with, which ranks it while it has
-    /// no space or its space has none of its own.
-    pub priority: Option<Priority>,
-    pub work: Work,
-    pub queued_at: UnixTime,
-    /// Its place in the order entries arrived in.
-    pub arrival: usize,
-    /// When the prompt cache of a restore's agent expires, as its hooks last
-    /// reported it.
-    pub prompt_cache_until: Option<UnixTime>,
-    /// The repository it starts in, if any.
-    pub repository: Option<RepositoryId>,
-    /// The areas of the issue a launch of a new workspace starts on.
-    pub areas: Vec<String>,
+/// The shared ranking, leading within a priority with what `L` puts first.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Ranking<L> {
+    lead: L,
 }
 
-/// What a waiting entry starts.
-#[derive(Debug)]
-pub(crate) enum Work {
-    /// An agent's launch, in the space it opens once that is known.
-    Launch { space: Option<SpaceId> },
-    /// The restore of an agent that has worked in `space`.
-    Restore { space: SpaceId },
-    /// A CI job of its own `tier`, for `spaces`.
-    Job { tier: Tier, spaces: Vec<SpaceId> },
-    /// A review of `space`, which a review the daemon left running has not.
-    Review { space: Option<SpaceId> },
-}
-
-/// A space as ranking sees it.
-#[derive(Debug)]
-pub(crate) struct Space {
-    /// What explanations call it: its number, else its name.
-    pub label: String,
-    /// The priority set on it, else the highest its issue's labels map to;
-    /// it has the default without one.
-    pub priority: Option<Priority>,
-    /// Its own tier: `Finishing` with an open PR or a ready mark, `Started`
-    /// once an agent has worked in it.
-    pub tier: Tier,
-    pub steps: Steps,
-    pub created_at: UnixTime,
-}
-
-/// How many of a space's plan steps are done.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) struct Steps {
-    pub done: usize,
-    pub total: usize,
-}
-
-impl Steps {
-    /// Compares the shares of steps done, a space without steps counting
-    /// as none done.
-    fn cmp_share(self, other: Self) -> Ordering {
-        let share = |steps: Self, by: Self| steps.done * by.total.max(1);
-        share(self, other).cmp(&share(other, self))
+impl<L> Ranking<L> {
+    pub const fn new(lead: L) -> Self {
+        Self { lead }
     }
 }
 
-/// Work that waits or is waited on: a space, or an entry of its own, such
-/// as a queued launch that has opened no space yet or a CI job.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) enum Node {
-    Space(SpaceId),
-    Entry(QueueEntryId),
-}
+impl<L: Lead> Scheduler for Ranking<L> {
+    fn rank(&self, snapshot: &Snapshot) -> Vec<Ranked> {
+        let standing = standing(snapshot);
+        let context = self.lead.context(snapshot);
+        let mut placed: Vec<Placed<L::Key>> = (snapshot.entries.iter())
+            .map(|entry| {
+                let lead = self.lead.key(entry, &context, snapshot);
+                place(entry, lead, &standing, snapshot)
+            })
+            .collect();
+        lead_overdue(&mut placed);
+        placed.sort_by(Placed::order);
+        placed
+            .into_iter()
+            .map(|placed| Ranked {
+                id: placed.id,
+                rank: placed.rank,
+            })
+            .collect()
+    }
 
-/// `waiting` waits on `on`, so `on` ranks at least as high as what the
-/// edge carries.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct Edge {
-    pub waiting: Node,
-    pub on: Node,
-    pub dependency: Dependency,
-    pub carries: Carries,
-}
-
-/// What of the waiting work's rank an edge passes on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum Carries {
-    /// Its priority and tier, its own or inherited.
-    Rank,
-    /// Only a priority of its space's own, set or from its issue's labels,
-    /// or passed down to it, as a chat passes to its children, which
-    /// compete with every other worker.
-    SetPriority,
-}
-
-/// A waiting entry with its rank, in queue order.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Ranked {
-    pub id: QueueEntryId,
-    pub rank: QueueRank,
-}
-
-/// The waiting entries of `snapshot` in the order they start.
-pub(crate) fn rank(snapshot: &Snapshot) -> Vec<Ranked> {
-    let mut standing = own_standing(snapshot);
-    inherit(&mut standing, snapshot);
-    let chains = schedule_chains(snapshot);
-    let mut placed: Vec<Placed> = (snapshot.entries.iter())
-        .map(|entry| place(entry, &standing, &chains, snapshot))
-        .collect();
-    lead_overdue(&mut placed);
-    placed.sort_by(Placed::order);
-    placed
-        .into_iter()
-        .map(|placed| Ranked {
-            id: placed.id,
-            rank: placed.rank,
-        })
-        .collect()
-}
-
-/// The spaces `ids` in the order their agents would start, first first,
-/// each with its priority: at its own rank raised by the work that waits on
-/// it, as entries rank.
-pub(crate) fn spaces_in_order(snapshot: &Snapshot, ids: &[SpaceId]) -> Vec<(SpaceId, Priority)> {
-    let mut standing = own_standing(snapshot);
-    inherit(&mut standing, snapshot);
-    let mut ranked: Vec<(SpaceId, QueueRank)> = (ids.iter())
-        .map(|id| {
-            let held = standing.get(&Node::Space(id.clone())).cloned();
-            (
-                id.clone(),
-                held.unwrap_or_else(|| own(Priority::default(), Tier::New)),
-            )
-        })
-        .collect();
-    let space = |id: &SpaceId| snapshot.spaces.get(id);
-    ranked.sort_by(|a, b| first_space((&a.1, space(&a.0)), (&b.1, space(&b.0))));
-    (ranked.into_iter())
-        .map(|(id, rank)| (id, rank.priority))
-        .collect()
+    /// Each space at its own rank raised by the work that waits on it, as
+    /// entries rank, whatever leads.
+    fn spaces_in_order(&self, snapshot: &Snapshot, ids: &[SpaceId]) -> Vec<(SpaceId, Priority)> {
+        let standing = standing(snapshot);
+        let mut ranked: Vec<(SpaceId, QueueRank)> = (ids.iter())
+            .map(|id| {
+                let held = standing.get(&Node::Space(id.clone())).cloned();
+                (
+                    id.clone(),
+                    held.unwrap_or_else(|| own(Priority::default(), Tier::New)),
+                )
+            })
+            .collect();
+        let space = |id: &SpaceId| snapshot.spaces.get(id);
+        ranked.sort_by(|a, b| first_space((&a.1, space(&a.0)), (&b.1, space(&b.0))));
+        (ranked.into_iter())
+            .map(|(id, rank)| (id, rank.priority))
+            .collect()
+    }
 }
 
 /// Each node's rank, with the work it inherited each part from.
 type Standing = HashMap<Node, QueueRank>;
+
+/// Each node's rank: its own, raised by what waits on it.
+fn standing(snapshot: &Snapshot) -> Standing {
+    let mut standing = own_standing(snapshot);
+    inherit(&mut standing, snapshot);
+    standing
+}
 
 /// A rank of `priority` and `tier` taken from nothing.
 fn own(priority: Priority, tier: Tier) -> QueueRank {
@@ -215,7 +130,7 @@ fn own_standing(snapshot: &Snapshot) -> Standing {
         })
         .collect();
     for entry in &snapshot.entries {
-        let Some(node) = agent_node(entry) else {
+        let Some(node) = entry.agent_node() else {
             continue;
         };
         let tier = aged(base_tier(entry, snapshot), entry, snapshot.now);
@@ -333,17 +248,6 @@ fn label(node: &Node, snapshot: &Snapshot) -> String {
     }
 }
 
-/// The node of an agent's entry: its space, or the launch itself.
-fn agent_node(entry: &Entry) -> Option<Node> {
-    match &entry.work {
-        Work::Launch { space: Some(space) } | Work::Restore { space } => {
-            Some(Node::Space(space.clone()))
-        }
-        Work::Launch { space: None } => Some(Node::Entry(entry.id.clone())),
-        Work::Job { .. } | Work::Review { .. } => None,
-    }
-}
-
 /// The tier of `work` on its own, before it waits or inherits.
 fn own_tier(work: &Work) -> Tier {
     match work {
@@ -377,12 +281,12 @@ fn aged(tier: Tier, entry: &Entry, now: UnixTime) -> Tier {
     })
 }
 
-/// An entry with what orders it.
-struct Placed {
+/// An entry with what orders it, leading with a `K`.
+struct Placed<K> {
     id: QueueEntryId,
     rank: QueueRank,
     /// What the schedule puts first within a priority, higher first.
-    lead: Lead,
+    lead: K,
     /// Whether it has waited as long as rises a tier.
     overdue: bool,
     /// How many areas a launch of a new workspace shares with workspaces.
@@ -394,7 +298,7 @@ struct Placed {
     arrival: usize,
 }
 
-impl Placed {
+impl<K: Ord> Placed<K> {
     fn order(&self, other: &Self) -> Ordering {
         (other.rank.priority.cmp(&self.rank.priority))
             .then_with(|| other.lead.cmp(&self.lead))
@@ -407,14 +311,9 @@ impl Placed {
     }
 }
 
-/// `entry` with its rank and the space whose progress and age order it
-/// within its tier.
-fn place(
-    entry: &Entry,
-    standing: &Standing,
-    chains: &HashMap<Node, usize>,
-    snapshot: &Snapshot,
-) -> Placed {
+/// `entry` leading with `lead`, with its rank and the space whose progress
+/// and age order it within its tier.
+fn place<K>(entry: &Entry, lead: K, standing: &Standing, snapshot: &Snapshot) -> Placed<K> {
     let tier = aged(own_tier(&entry.work), entry, snapshot.now);
     let (mut rank, space) = match &entry.work {
         Work::Job { spaces, .. } => served(tier, spaces, standing, snapshot),
@@ -431,7 +330,7 @@ fn place(
     rank.shared_areas = shared_areas(entry, snapshot);
     Placed {
         id: entry.id.clone(),
-        lead: lead(entry, chains, snapshot),
+        lead,
         overdue: snapshot.now.duration_since(entry.queued_at) >= RISE_AFTER,
         shared: rank.shared_areas.len(),
         rank,
@@ -465,66 +364,19 @@ fn shared_areas(entry: &Entry, snapshot: &Snapshot) -> Vec<SharedArea> {
         .collect()
 }
 
-/// What a schedule puts first within a priority: under `speed` the length
-/// of the longest chain of work waiting on the entry, under `cache` when a
-/// restore's warm prompt cache expires.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
-enum Lead {
-    #[default]
-    None,
-    Chain(usize),
-    Cache(UnixTime),
-}
-
 /// Give each overdue entry the highest lead any entry of its priority has,
 /// so that no schedule passes it over and nothing starves within its
 /// priority, while the tier still orders it among the entries it ties with.
-fn lead_overdue(placed: &mut [Placed]) {
-    let mut top: HashMap<Priority, Lead> = HashMap::new();
+fn lead_overdue<K: Copy + Ord>(placed: &mut [Placed<K>]) {
+    let mut top: HashMap<Priority, K> = HashMap::new();
     for placed in placed.iter() {
-        let lead = top.entry(placed.rank.priority).or_default();
-        *lead = (*lead).max(placed.lead);
+        (top.entry(placed.rank.priority))
+            .and_modify(|lead| *lead = (*lead).max(placed.lead))
+            .or_insert(placed.lead);
     }
     for placed in placed.iter_mut().filter(|placed| placed.overdue) {
         placed.lead = top[&placed.rank.priority];
     }
-}
-
-/// The chains of work waiting on each node, which only `speed` reads.
-fn schedule_chains(snapshot: &Snapshot) -> HashMap<Node, usize> {
-    match snapshot.schedule {
-        Schedule::Speed => chains::chains(&snapshot.edges),
-        Schedule::Balanced | Schedule::Cache => HashMap::new(),
-    }
-}
-
-/// What `entry` leads with under the snapshot's schedule, from the `chains`
-/// of work waiting on each node.
-fn lead(entry: &Entry, chains: &HashMap<Node, usize>, snapshot: &Snapshot) -> Lead {
-    match snapshot.schedule {
-        Schedule::Balanced => Lead::None,
-        Schedule::Speed => Lead::Chain(chain_behind(entry, chains)),
-        Schedule::Cache => match (&entry.work, entry.prompt_cache_until) {
-            (Work::Restore { .. }, Some(until)) if until > snapshot.now => Lead::Cache(until),
-            _ => Lead::None,
-        },
-    }
-}
-
-/// The longest chain of work waiting on `entry`: on its agent's node, or
-/// for a CI job or review on itself or the spaces it serves, which wait on
-/// it.
-fn chain_behind(entry: &Entry, chains: &HashMap<Node, usize>) -> usize {
-    let chain = |node: &Node| chains.get(node).copied().unwrap_or(0);
-    let served = match &entry.work {
-        Work::Job { spaces, .. } => spaces.clone(),
-        Work::Review { space } => space.iter().cloned().collect(),
-        Work::Launch { .. } | Work::Restore { .. } => Vec::new(),
-    };
-    let own = agent_node(entry).unwrap_or_else(|| Node::Entry(entry.id.clone()));
-    (served.into_iter())
-        .map(|space| 1 + chain(&Node::Space(space)))
-        .fold(chain(&own), usize::max)
 }
 
 /// The rank of the agent `entry` at its own `tier`: its node's priority,
@@ -535,7 +387,7 @@ fn agent_rank<'a>(
     standing: &Standing,
     snapshot: &'a Snapshot,
 ) -> (QueueRank, Option<&'a Space>) {
-    let node = agent_node(entry).expect("an agent's entry has a node");
+    let node = entry.agent_node().expect("an agent's entry has a node");
     let rank = match standing.get(&node) {
         Some(held) => {
             let mut rank = QueueRank {
@@ -602,8 +454,6 @@ fn first_space(a: (&QueueRank, Option<&Space>), b: (&QueueRank, Option<&Space>))
         .then_with(|| steps(b.1).cmp_share(steps(a.1)))
         .then_with(|| created(a.1).cmp(&created(b.1)))
 }
-
-mod chains;
 
 #[cfg(test)]
 mod tests;

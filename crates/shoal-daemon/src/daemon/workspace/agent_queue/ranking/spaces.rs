@@ -7,7 +7,7 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{
-    super::rank::{Space, Steps},
+    super::schedule::snapshot::{Space, Steps},
     Settings,
     labels::{self, Labelled},
 };

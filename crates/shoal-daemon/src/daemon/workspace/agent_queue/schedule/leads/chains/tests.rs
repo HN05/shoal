@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::workspace::agent_queue::rank::Carries;
+use crate::daemon::workspace::agent_queue::schedule::snapshot::Carries;
 use shoal_schedule::rank::Dependency;
 
 fn edges(waits: &[(&str, &str)]) -> Vec<Edge> {

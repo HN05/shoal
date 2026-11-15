@@ -11,7 +11,7 @@ use rusqlite::{OptionalExtension, params};
 use super::{
     blockers,
     dispatch::Start,
-    rank::Ranked,
+    schedule::scheduler::Ranked,
     store::{self, ENTRY_COLUMNS, Launch, entry, insert_launch, opens_existing_branch},
 };
 use crate::client::{

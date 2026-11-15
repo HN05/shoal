@@ -6,7 +6,7 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 
 use super::{
-    super::rank::{Snapshot, Work},
+    super::schedule::snapshot::{Snapshot, Work},
     Settings,
     labels::{self, Labelled},
 };

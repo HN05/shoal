@@ -5,7 +5,7 @@
 //! are visited in.
 use std::collections::{HashMap, HashSet};
 
-use super::{Edge, Node};
+use crate::daemon::workspace::agent_queue::schedule::snapshot::{Edge, Node};
 
 /// The length of the longest chain of waits ending at each node of `edges`.
 pub(super) fn chains(edges: &[Edge]) -> HashMap<Node, usize> {

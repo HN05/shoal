@@ -1,14 +1,19 @@
 //! Ranking the queue: the snapshot the rank reads, from the store, from
 //! what the daemon keeps in memory and from the repositories' settings, the
-//! waiting entries in rank order, and spaces in the order their agents
-//! would start.
+//! policy `machine.schedule` names, the waiting entries in its order, and
+//! spaces in the order their agents would start.
 use std::collections::{HashMap, hash_map};
 
 use anyhow::Result;
 use rusqlite::Transaction;
 
 use super::{
-    rank::{self, Ranked, Snapshot},
+    schedule::{
+        leads::{LongestChain, Nothing, WarmCache},
+        ranking::Ranking,
+        scheduler::{Ranked, Scheduler},
+        snapshot::Snapshot,
+    },
     state::WaitingOneShot,
 };
 use crate::client::time::UnixTime;
@@ -27,13 +32,15 @@ impl Manager {
     /// The waiting entries, one-shot runs among them, in the order they
     /// start, each with its rank.
     pub(super) async fn ranked_queue(&self) -> Result<Vec<Ranked>> {
-        Ok(rank::rank(&self.ranking_snapshot().await?))
+        let snapshot = self.ranking_snapshot().await?;
+        Ok(scheduler(self.config().machine.schedule).rank(&snapshot))
     }
 
     /// The spaces `ids` in the order their agents would start, first
     /// first, each with its priority, as the queue ranks its entries.
     pub(crate) async fn ranked_spaces(&self, ids: &[SpaceId]) -> Result<Vec<(SpaceId, Priority)>> {
-        Ok(rank::spaces_in_order(&self.ranking_snapshot().await?, ids))
+        let snapshot = self.ranking_snapshot().await?;
+        Ok(scheduler(self.config().machine.schedule).spaces_in_order(&snapshot, ids))
     }
 
     /// What ranking reads now.
@@ -41,11 +48,10 @@ impl Manager {
         let jobs = self.waiting_job_spaces().await?;
         let oneshots = self.agent_queue.waiting_oneshots();
         let leases = self.queues.waiters();
-        let schedule = self.config().machine.schedule;
         let (mut snapshot, labelled, areas) = (self.store)
             .read(move |tx| {
                 Ok((
-                    snapshot(tx, &jobs, &oneshots, &leases, schedule)?,
+                    snapshot(tx, &jobs, &oneshots, &leases)?,
                     spaces::labelled(tx)?,
                     areas::labels(tx)?,
                 ))
@@ -80,22 +86,29 @@ impl Manager {
 /// settings do not resolve.
 type Settings = HashMap<RepositoryId, Option<Effective>>;
 
+/// The policy that orders the queue under `schedule`.
+fn scheduler(schedule: Schedule) -> Box<dyn Scheduler> {
+    match schedule {
+        Schedule::Balanced => Box::new(Ranking::new(Nothing)),
+        Schedule::Speed => Box::new(Ranking::new(LongestChain)),
+        Schedule::Cache => Box::new(Ranking::new(WarmCache)),
+    }
+}
+
 /// What ranking reads now, with the spaces each waiting job serves now by
-/// its entry's ID in `jobs`, the `oneshots` waiting for admission, the spaces
-/// waiting for the `leases` they queue for and the machine's `schedule`.
+/// its entry's ID in `jobs`, the `oneshots` waiting for admission and the
+/// spaces waiting for the `leases` they queue for.
 fn snapshot(
     tx: &Transaction<'_>,
     jobs: &HashMap<QueueEntryId, Vec<SpaceId>>,
     oneshots: &[WaitingOneShot],
     leases: &[(Target, SpaceId)],
-    schedule: Schedule,
 ) -> Result<Snapshot> {
     Ok(Snapshot {
         entries: entries::waiting(tx, jobs, oneshots)?,
         spaces: spaces::ranked(tx)?,
         edges: edges::waits(tx, leases)?,
         now: UnixTime::now(),
-        schedule,
         occupied: HashMap::new(),
     })
 }

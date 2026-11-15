@@ -6,7 +6,7 @@
 use anyhow::Result;
 use rusqlite::{Connection, params};
 
-use super::super::rank::{Carries, Edge, Node};
+use super::super::schedule::snapshot::{Carries, Edge, Node};
 use crate::{
     daemon::{approvals::Target, progress, questions, store},
     model::QueuedJob,
