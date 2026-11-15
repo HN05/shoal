@@ -1401,13 +1401,7 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
         "profiled",
     ]);
     fixture.add("profiled");
-    let port = fixture.ok(&[
-        "acquire",
-        "port",
-        "web",
-        "--workspace",
-        &fixture.id("profiled"),
-    ]);
+    let port = fixture.ok(&["acquire", "port", "web", "--space", &fixture.id("profiled")]);
     let reserved = format!("WEB_PORT={}", port["port"]);
     let repository = fixture.ok(&["repo", "ls"])[0].clone();
     let checkout = fs::canonicalize(repository["path"].as_str().unwrap()).unwrap();

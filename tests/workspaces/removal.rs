@@ -701,7 +701,7 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
     fixture.ok(&[
         "acquire",
         "hold",
-        "--workspace",
+        "--space",
         &fixture.id("held"),
         "--name",
         "review",
@@ -1071,7 +1071,7 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
     let hold = fixture.ok(&[
         "acquire",
         "hold",
-        "--workspace",
+        "--space",
         &fixture.id("held"),
         "--name",
         "app-thread",
@@ -1086,13 +1086,13 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
     );
     assert_eq!(fixture.ok(&["list"])[0]["holds"], expected);
     assert_eq!(
-        fixture.ok(&["leases", "hold", "--workspace", &fixture.id("held")]),
+        fixture.ok(&["leases", "hold", "--space", &fixture.id("held")]),
         expected
     );
-    let empty = fixture.run(&["release", "--workspace", &fixture.id("held")]);
+    let empty = fixture.run(&["release", "--space", &fixture.id("held")]);
     assert!(!empty.status.success(), "{}", printed(&empty));
     assert_eq!(
-        fixture.ok(&["leases", "hold", "--workspace", &fixture.id("held")]),
+        fixture.ok(&["leases", "hold", "--space", &fixture.id("held")]),
         expected
     );
     assert_eq!(
@@ -1140,7 +1140,7 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
     assert!(!release.status.success());
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["leases", "hold", "--workspace", &fixture.id("held")]),
+        fixture.ok(&["leases", "hold", "--space", &fixture.id("held")]),
         expected
     );
     let (no, prompt) = fixture.interactive(&["rm", "--wait", &fixture.id("held")], "n\n");
@@ -1165,7 +1165,7 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
     fixture.ok(&[
         "acquire",
         "hold",
-        "--workspace",
+        "--space",
         &fixture.id("missing-held"),
         "--name",
         "app",

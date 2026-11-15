@@ -146,7 +146,7 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
         "acquire",
         "port",
         "test",
-        "--workspace",
+        "--space",
         &fixture.id("adopt/topic"),
     ]);
     fixture.ok(&["repo", "rm", fixture.repo.to_str().unwrap(), "--yes"]);

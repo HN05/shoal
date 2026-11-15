@@ -827,25 +827,19 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
     fs::write(first_path.join("dirty"), "uncommitted work").unwrap();
     fs::write(first_path.join(".shoal.toml"), "[resources.local-lock]\n").unwrap();
     fs::write(fixture.repo.join("untracked"), "repo changes").unwrap();
-    fixture.ok(&[
-        "acquire",
-        "port",
-        "web",
-        "--workspace",
-        &fixture.id("first"),
-    ]);
+    fixture.ok(&["acquire", "port", "web", "--space", &fixture.id("first")]);
     fixture.ok(&[
         "acquire",
         "resource",
         "local-lock",
-        "--workspace",
+        "--space",
         &fixture.id("first"),
     ]);
     fixture.ok(&[
         "acquire",
         "resource",
         "global-lock",
-        "--workspace",
+        "--space",
         &fixture.id("second"),
     ]);
     let declined = fixture.run(&["repo", "rm", "doomed"]);
@@ -1183,24 +1177,18 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     fs::write(&input, "[ports.web]\n").unwrap();
     let saved = fixture.save_local_config(id, &input);
     let workspace = fixture.add("worker");
-    let port = fixture.ok(&[
-        "acquire",
-        "port",
-        "web",
-        "--workspace",
-        &fixture.id("worker"),
-    ]);
+    let port = fixture.ok(&["acquire", "port", "web", "--space", &fixture.id("worker")]);
     let resource = fixture.ok(&[
         "acquire",
         "resource",
         "lock",
-        "--workspace",
+        "--space",
         &fixture.id("worker"),
     ]);
     fixture.ok(&[
         "acquire",
         "sim",
-        "--workspace",
+        "--space",
         &fixture.id("worker"),
         "--clean",
         "--reason",
@@ -1211,11 +1199,11 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     assert!(fixture.repo.exists());
     assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
     assert_eq!(
-        fixture.ok(&["leases", "port", "--workspace", &fixture.id("worker")])["reserved"][0],
+        fixture.ok(&["leases", "port", "--space", &fixture.id("worker")])["reserved"][0],
         port
     );
     assert_eq!(
-        fixture.ok(&["leases", "resource", "--workspace", &fixture.id("worker")])["leases"][0],
+        fixture.ok(&["leases", "resource", "--space", &fixture.id("worker")])["leases"][0],
         resource
     );
     fixture.restart();

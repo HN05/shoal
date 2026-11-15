@@ -35,21 +35,21 @@ fn simulator_omitted_runtime_uses_latest_ios_and_preserves_existing_lease() {
     };
     set_runtimes(false);
     fixture.add("worker");
-    let first = fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("worker")]);
+    let first = fixture.ok(&["acquire", "sim", "--space", &fixture.id("worker")]);
     assert_eq!(
         first["runtime"],
         "com.apple.CoreSimulator.SimRuntime.iOS-26-10"
     );
     set_runtimes(true);
     assert_eq!(
-        fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("worker")]),
+        fixture.ok(&["acquire", "sim", "--space", &fixture.id("worker")]),
         first
     );
     assert_eq!(
         fixture.ok(&[
             "acquire",
             "sim",
-            "--workspace",
+            "--space",
             &fixture.id("worker"),
             "--device",
             "Phone"
@@ -60,7 +60,7 @@ fn simulator_omitted_runtime_uses_latest_ios_and_preserves_existing_lease() {
         fixture.ok(&[
             "acquire",
             "sim",
-            "--workspace",
+            "--space",
             &fixture.id("worker"),
             "--profile",
             "phone"
@@ -72,13 +72,13 @@ fn simulator_omitted_runtime_uses_latest_ios_and_preserves_existing_lease() {
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("worker"),
     ]);
     let next = fixture.ok(&[
         "acquire",
         "sim",
-        "--workspace",
+        "--space",
         &fixture.id("worker"),
         "--device",
         "Phone",
@@ -103,23 +103,17 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
     let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
     fixture.add("first");
     fixture.add("second");
-    let first = fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("first")]);
+    let first = fixture.ok(&["acquire", "sim", "--space", &fixture.id("first")]);
     assert_eq!(first["state"], "leased");
     assert_eq!(
         fixture.ok(&["status", &fixture.id("first")])["simulators"][0],
         first
     );
     assert_eq!(
-        fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("first")]),
+        fixture.ok(&["acquire", "sim", "--space", &fixture.id("first")]),
         first
     );
-    let busy = fixture.run(&[
-        "--json",
-        "acquire",
-        "sim",
-        "--workspace",
-        &fixture.id("second"),
-    ]);
+    let busy = fixture.run(&["--json", "acquire", "sim", "--space", &fixture.id("second")]);
     assert_eq!(busy.status.code(), Some(2));
     assert_eq!(
         serde_json::from_slice::<Value>(&busy.stdout).unwrap()["acquired"],
@@ -132,7 +126,7 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
             "--json",
             "acquire",
             "sim",
-            "--workspace",
+            "--space",
             &fixture.id("second"),
             "--queue",
         ])
@@ -146,7 +140,7 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("first"),
     ]);
     assert_eq!(
@@ -214,10 +208,10 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
 fn simulator_leases_journal_acquisition_and_release() {
     let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
     fixture.add("first");
-    let sim = fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("first")]);
-    fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("first")]);
-    fixture.ok(&["release", "sim", "--workspace", &fixture.id("first")]);
-    fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("first")]);
+    let sim = fixture.ok(&["acquire", "sim", "--space", &fixture.id("first")]);
+    fixture.ok(&["acquire", "sim", "--space", &fixture.id("first")]);
+    fixture.ok(&["release", "sim", "--space", &fixture.id("first")]);
+    fixture.ok(&["acquire", "sim", "--space", &fixture.id("first")]);
     // Removal deletes the leased device, which releases the lease.
     fixture.ok(&["rm", "--wait", &fixture.id("first")]);
     let events: Vec<_> = journal(&fixture)
@@ -252,12 +246,12 @@ fn simulator_failures_retain_claims_and_restart_never_reassigns_them() {
     fs::write(fixture.root.path().join("sim-fail"), "bootstatus").unwrap();
     assert!(
         !fixture
-            .run(&["acquire", "sim", "--workspace", &fixture.id("first")])
+            .run(&["acquire", "sim", "--space", &fixture.id("first")])
             .status
             .success()
     );
     assert_eq!(
-        fixture.ok(&["leases", "sim", "--workspace", &fixture.id("first")])["simulators"][0]["state"],
+        fixture.ok(&["leases", "sim", "--space", &fixture.id("first")])["simulators"][0]["state"],
         "failed"
     );
     fs::remove_file(fixture.root.path().join("sim-fail")).unwrap();
@@ -266,19 +260,19 @@ fn simulator_failures_retain_claims_and_restart_never_reassigns_them() {
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("first"),
     ]);
-    let lease = fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("first")]);
+    let lease = fixture.ok(&["acquire", "sim", "--space", &fixture.id("first")]);
     fixture.daemon.kill();
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("first")]),
+        fixture.ok(&["acquire", "sim", "--space", &fixture.id("first")]),
         lease
     );
     assert_eq!(
         fixture
-            .run(&["acquire", "sim", "--workspace", &fixture.id("second")])
+            .run(&["acquire", "sim", "--space", &fixture.id("second")])
             .status
             .code(),
         Some(2)
@@ -291,7 +285,7 @@ fn simulator_failures_retain_claims_and_restart_never_reassigns_them() {
             .success()
     );
     assert_eq!(
-        fixture.ok(&["leases", "sim", "--workspace", &fixture.id("first")])["simulators"][0]["udid"],
+        fixture.ok(&["leases", "sim", "--space", &fixture.id("first")])["simulators"][0]["udid"],
         lease["udid"]
     );
     fs::remove_file(fixture.root.path().join("sim-fail")).unwrap();
@@ -313,11 +307,11 @@ fn simulator_requires_confirmed_native_boot_and_shutdown_states() {
             serde_json::json!({"bootstatus": native}).to_string(),
         )
         .unwrap();
-        let output = fixture.run(&["acquire", "sim", "--workspace", &fixture.id("worker")]);
+        let output = fixture.run(&["acquire", "sim", "--space", &fixture.id("worker")]);
         assert!(!output.status.success());
-        let failed =
-            fixture.ok(&["leases", "sim", "--workspace", &fixture.id("worker")])["simulators"][0]
-                .clone();
+        let failed = fixture.ok(&["leases", "sim", "--space", &fixture.id("worker")])["simulators"]
+            [0]
+        .clone();
         assert_eq!(failed["state"], "failed");
 
         fs::write(
@@ -330,12 +324,12 @@ fn simulator_requires_confirmed_native_boot_and_shutdown_states() {
             "sim",
             "--name",
             "default",
-            "--workspace",
+            "--space",
             &fixture.id("worker"),
         ]);
         assert!(!output.status.success());
         assert_eq!(
-            fixture.ok(&["leases", "sim", "--workspace", &fixture.id("worker")])["simulators"][0]["udid"],
+            fixture.ok(&["leases", "sim", "--space", &fixture.id("worker")])["simulators"][0]["udid"],
             failed["udid"]
         );
         let events = fs::read_to_string(fixture.root.path().join("sim-events")).unwrap();
@@ -346,29 +340,29 @@ fn simulator_requires_confirmed_native_boot_and_shutdown_states() {
             "sim",
             "--name",
             "default",
-            "--workspace",
+            "--space",
             &fixture.id("worker"),
         ]);
     }
 
-    let lease = fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("worker")]);
+    let lease = fixture.ok(&["acquire", "sim", "--space", &fixture.id("worker")]);
     let devices_path = fixture.root.path().join("sim-devices.json");
     let mut devices: Value =
         serde_json::from_str(&fs::read_to_string(&devices_path).unwrap()).unwrap();
     for native in ["Shutdown", "Booting", "Shutting Down", "Future State"] {
         devices[0]["state"] = serde_json::json!(native);
         fs::write(&devices_path, devices.to_string()).unwrap();
-        let output = fixture.run(&["acquire", "sim", "--workspace", &fixture.id("worker")]);
+        let output = fixture.run(&["acquire", "sim", "--space", &fixture.id("worker")]);
         assert!(!output.status.success());
         assert_eq!(
-            fixture.ok(&["leases", "sim", "--workspace", &fixture.id("worker")])["simulators"][0],
+            fixture.ok(&["leases", "sim", "--space", &fixture.id("worker")])["simulators"][0],
             lease
         );
     }
     devices[0]["state"] = serde_json::json!("Booted");
     fs::write(&devices_path, devices.to_string()).unwrap();
     assert_eq!(
-        fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("worker")]),
+        fixture.ok(&["acquire", "sim", "--space", &fixture.id("worker")]),
         lease
     );
 }
@@ -383,20 +377,20 @@ fn simulator_policy_capacity_reclamation_and_external_devices() {
         "[simulators]\npreferred = [\"tablet\"]\n",
     )
     .unwrap();
-    let tablet = fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("worker")]);
+    let tablet = fixture.ok(&["acquire", "sim", "--space", &fixture.id("worker")]);
     assert_eq!(tablet["device"], "type.Tablet");
     fixture.ok(&[
         "release",
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("worker"),
     ]);
     let phone = fixture.ok(&[
         "acquire",
         "sim",
-        "--workspace",
+        "--space",
         &fixture.id("worker"),
         "--profile",
         "phone",
@@ -420,13 +414,13 @@ fn simulator_policy_capacity_reclamation_and_external_devices() {
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("worker"),
     ]);
     let unavailable = fixture.run(&[
         "acquire",
         "sim",
-        "--workspace",
+        "--space",
         &fixture.id("worker"),
         "--device",
         "Phone",
@@ -454,7 +448,7 @@ fn simulator_policy_capacity_reclamation_and_external_devices() {
         .unwrap();
         assert_eq!(
             fixture
-                .run(&["acquire", "sim", "--workspace", &fixture.id("worker")])
+                .run(&["acquire", "sim", "--space", &fixture.id("worker")])
                 .status
                 .code(),
             Some(2),
@@ -471,13 +465,13 @@ fn simulator_any_policy_pool_limit_and_interrupted_creation_cleanup() {
     let config = SIM_CONFIG.replace("max_devices = 2", "max_devices = 1\nallow_any = true");
     let fixture = Fixture::with_tools(Some(&config), true);
     fixture.add("worker");
-    let phone = fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("worker")]);
+    let phone = fixture.ok(&["acquire", "sim", "--space", &fixture.id("worker")]);
     fixture.ok(&[
         "release",
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("worker"),
     ]);
     assert!(
@@ -485,7 +479,7 @@ fn simulator_any_policy_pool_limit_and_interrupted_creation_cleanup() {
             .run(&[
                 "acquire",
                 "sim",
-                "--workspace",
+                "--space",
                 &fixture.id("worker"),
                 "--device",
                 "Watch",
@@ -498,7 +492,7 @@ fn simulator_any_policy_pool_limit_and_interrupted_creation_cleanup() {
     let watch = fixture.ok(&[
         "acquire",
         "sim",
-        "--workspace",
+        "--space",
         &fixture.id("worker"),
         "--device",
         "Watch",
@@ -520,17 +514,17 @@ fn simulator_any_policy_pool_limit_and_interrupted_creation_cleanup() {
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("worker"),
     ]);
     fs::write(fixture.root.path().join("sim-lost-create-response"), "1").unwrap();
     assert!(
         !fixture
-            .run(&["acquire", "sim", "--workspace", &fixture.id("worker")])
+            .run(&["acquire", "sim", "--space", &fixture.id("worker")])
             .status
             .success()
     );
-    let record = fixture.ok(&["leases", "sim", "--workspace", &fixture.id("worker")]);
+    let record = fixture.ok(&["leases", "sim", "--space", &fixture.id("worker")]);
     assert_eq!(record["simulators"][0]["state"], "failed");
     assert!(record["simulators"][0]["udid"].is_null());
     fixture.ok(&[
@@ -538,7 +532,7 @@ fn simulator_any_policy_pool_limit_and_interrupted_creation_cleanup() {
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("worker"),
     ]);
     assert_eq!(
@@ -557,25 +551,13 @@ fn simulators_allocate_concurrently_and_idle_expiry_keeps_active_leases() {
     fixture.add("second");
     let first = fixture
         .command()
-        .args([
-            "--json",
-            "acquire",
-            "sim",
-            "--workspace",
-            &fixture.id("first"),
-        ])
+        .args(["--json", "acquire", "sim", "--space", &fixture.id("first")])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
     let second = fixture
         .command()
-        .args([
-            "--json",
-            "acquire",
-            "sim",
-            "--workspace",
-            &fixture.id("second"),
-        ])
+        .args(["--json", "acquire", "sim", "--space", &fixture.id("second")])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
@@ -590,7 +572,7 @@ fn simulators_allocate_concurrently_and_idle_expiry_keeps_active_leases() {
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("first"),
     ]);
     let sims = wait_for("idle simulator deletion", || {
@@ -621,8 +603,8 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
     fixture.add("first");
     fixture.add("second");
     fixture.add("third");
-    let first = fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("first")]);
-    let second = fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("second")]);
+    let first = fixture.ok(&["acquire", "sim", "--space", &fixture.id("first")]);
+    let second = fixture.ok(&["acquire", "sim", "--space", &fixture.id("second")]);
     set_sim_apps(&fixture, &first["udid"], 5);
     set_sim_apps(&fixture, &second["udid"], 1);
     fixture.ok(&[
@@ -630,7 +612,7 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("first"),
     ]);
     fixture.ok(&[
@@ -638,18 +620,12 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("second"),
     ]);
     assert!(
         !fixture
-            .run(&[
-                "acquire",
-                "sim",
-                "--workspace",
-                &fixture.id("third"),
-                "--clean"
-            ])
+            .run(&["acquire", "sim", "--space", &fixture.id("third"), "--clean"])
             .status
             .success()
     );
@@ -691,7 +667,7 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
             .run(&[
                 "acquire",
                 "sim",
-                "--workspace",
+                "--space",
                 &fixture.id("third"),
                 "--clean",
                 "--reason",
@@ -745,14 +721,14 @@ fn clean_simulator_prefers_fresh_capacity_and_logs_invalid_reasons() {
     let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
     fixture.add("first");
     fixture.add("second");
-    let first = fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("first")]);
+    let first = fixture.ok(&["acquire", "sim", "--space", &fixture.id("first")]);
     set_sim_apps(&fixture, &first["udid"], 3);
     fixture.ok(&[
         "release",
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("first"),
     ]);
     assert!(
@@ -760,7 +736,7 @@ fn clean_simulator_prefers_fresh_capacity_and_logs_invalid_reasons() {
             .run(&[
                 "acquire",
                 "sim",
-                "--workspace",
+                "--space",
                 &fixture.id("second"),
                 "--clean",
                 "--reason",
@@ -772,7 +748,7 @@ fn clean_simulator_prefers_fresh_capacity_and_logs_invalid_reasons() {
     let second = fixture.ok(&[
         "acquire",
         "sim",
-        "--workspace",
+        "--space",
         &fixture.id("second"),
         "--clean",
         "--reason",
@@ -795,14 +771,14 @@ fn clean_simulator_wait_retries_share_one_audit_entry() {
     let fixture = Fixture::with_tools(Some(&config), true);
     fixture.add("first");
     fixture.add("second");
-    fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("first")]);
+    fixture.ok(&["acquire", "sim", "--space", &fixture.id("first")]);
     let waiting = fixture
         .command()
         .args([
             "--json",
             "acquire",
             "sim",
-            "--workspace",
+            "--space",
             &fixture.id("second"),
             "--clean",
             "--reason",
@@ -821,7 +797,7 @@ fn clean_simulator_wait_retries_share_one_audit_entry() {
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("first"),
     ]);
     let output = waiting.wait_with_output().unwrap();
@@ -840,11 +816,11 @@ fn clean_simulator_can_replace_an_empty_incompatible_device_to_preserve_apps() {
     fixture.add("phone");
     fixture.add("tablet");
     fixture.add("requester");
-    let phone = fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("phone")]);
+    let phone = fixture.ok(&["acquire", "sim", "--space", &fixture.id("phone")]);
     let tablet = fixture.ok(&[
         "acquire",
         "sim",
-        "--workspace",
+        "--space",
         &fixture.id("tablet"),
         "--profile",
         "tablet",
@@ -855,7 +831,7 @@ fn clean_simulator_can_replace_an_empty_incompatible_device_to_preserve_apps() {
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("phone"),
     ]);
     fixture.ok(&[
@@ -863,13 +839,13 @@ fn clean_simulator_can_replace_an_empty_incompatible_device_to_preserve_apps() {
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("tablet"),
     ]);
     let clean = fixture.ok(&[
         "acquire",
         "sim",
-        "--workspace",
+        "--space",
         &fixture.id("requester"),
         "--clean",
         "--reason",
@@ -903,13 +879,13 @@ fn clean_simulator_daemon_requires_reason_and_records_erase_failures() {
         "failed"
     );
     assert!(!fixture.root.path().join("sim-devices.json").exists());
-    fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("worker")]);
+    fixture.ok(&["acquire", "sim", "--space", &fixture.id("worker")]);
     fixture.ok(&[
         "release",
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("worker"),
     ]);
     fs::write(fixture.root.path().join("sim-fail"), "erase").unwrap();
@@ -918,7 +894,7 @@ fn clean_simulator_daemon_requires_reason_and_records_erase_failures() {
             .run(&[
                 "acquire",
                 "sim",
-                "--workspace",
+                "--space",
                 &fixture.id("worker"),
                 "--clean",
                 "--reason",
@@ -968,13 +944,13 @@ fn simulator_mutations_observe_persisted_audits_and_failure_retains_ownership(fa
     let previous = if failure == "create" {
         None
     } else {
-        let sim = fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("worker")]);
+        let sim = fixture.ok(&["acquire", "sim", "--space", &fixture.id("worker")]);
         fixture.ok(&[
             "release",
             "sim",
             "--name",
             "default",
-            "--workspace",
+            "--space",
             &fixture.id("worker"),
         ]);
         Some(sim)
@@ -989,7 +965,7 @@ fn simulator_mutations_observe_persisted_audits_and_failure_retains_ownership(fa
     let output = fixture.run(&[
         "acquire",
         "sim",
-        "--workspace",
+        "--space",
         &fixture.id("worker"),
         "--profile",
         profile,
@@ -1070,6 +1046,6 @@ fn local_repository_config_selects_simulator_preferences() {
     let input = fixture.root.path().join("local.toml");
     fs::write(&input, "[simulators]\npreferred=['tablet']\n").unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &input);
-    let sim = fixture.ok(&["acquire", "sim", "--workspace", &fixture.id("worker")]);
+    let sim = fixture.ok(&["acquire", "sim", "--space", &fixture.id("worker")]);
     assert_eq!(sim["device"], "type.Tablet");
 }

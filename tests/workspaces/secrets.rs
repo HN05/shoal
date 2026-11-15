@@ -384,7 +384,7 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
 
     fixture.ok(&[
         "release",
-        "--workspace",
+        "--space",
         &fixture.id("gated"),
         "secret",
         "TOOL_TOKEN",

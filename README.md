@@ -499,12 +499,12 @@ move import <file>` opens it on another machine or the same one, where `shoal re
 continues its agents' sessions from the transcripts the file carries;
 `--new-sessions` starts them over. A chat moves the same way: the export ends it,
 and the import starts it again, continuing its session.
-An app hosting an external session can hold its workspace while the session is open:
+An app hosting an external session can hold its space, a workspace or a chat, while the session is open:
 
 ```sh
-shoal acquire hold --workspace 3 --name quay-thread-42 --reason "Quay thread"
-shoal leases hold --workspace 3
-shoal release hold --workspace 3 --name quay-thread-42
+shoal acquire hold --space 3 --name quay-thread-42 --reason "Quay thread"
+shoal leases hold --space 3
+shoal release hold --space 3 --name quay-thread-42
 ```
 
 Configure idle cleanup in a repository's `.shoal.toml`, or for every repository in

@@ -404,7 +404,10 @@ fn status_shows_a_chat_without_the_parts_a_worktree_has() {
         assert_eq!(status.get(worktree), None, "{worktree}: {status}");
     }
     // Its running agent keeps it from cleanup, as it would a workspace.
-    assert_eq!(status["cleanup_reason"]["reason"], "agent_running", "{status}");
+    assert_eq!(
+        status["cleanup_reason"]["reason"], "agent_running",
+        "{status}"
+    );
 
     let status = fixture.ok(&["status", &fixture.id("own")]);
     assert_eq!(status["kind"], "workspace", "{status}");
@@ -573,6 +576,40 @@ fn completion_cleanup_removes_a_done_chat_with_the_workspaces_below_it() {
     assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
     // Its wrapper ends once it stopped the agent.
     agent.wait().unwrap();
+}
+
+/// A hold keeps a chat from cleanup, as it keeps a workspace, until it is
+/// released; what needs a worktree refuses a chat.
+#[test]
+fn a_hold_keeps_a_stopped_chat_until_it_is_released() {
+    let fixture = Fixture::new();
+    let (mut agent, chat) = start_test_chat(&fixture, "notes");
+    fixture.end_chat_agent(&chat);
+    agent.wait().unwrap();
+    let space = fixture.id("notes");
+    let held = fixture.ok(&["acquire", "hold", "--space", &space, "--name", "keep"]);
+    assert_eq!(held["space_id"], chat.as_str(), "{held}");
+    assert_eq!(
+        fixture.ok(&["leases", "hold", "--space", &space])[0]["name"],
+        "keep"
+    );
+    let status = fixture.ok(&["status", &space]);
+    assert_eq!(status["chat"]["holds"][0]["name"], "keep", "{status}");
+    assert_eq!(status["cleanup_reason"]["reason"], "held", "{status}");
+    let preview = fixture.ok(&["cleanup", "--dry-run"]);
+    assert_eq!(
+        preview["kept"],
+        serde_json::json!([{"space": "notes", "reason": {"reason": "held"}}]),
+        "{preview}"
+    );
+    let report = fixture.ok(&["cleanup", "spaces"]);
+    assert_eq!(report["removed"], serde_json::json!([]), "{report}");
+    let port = fixture.run(&["acquire", "port", "web", "--space", &space]);
+    assert!(!port.status.success(), "{}", printed(&port));
+
+    fixture.ok(&["release", "hold", "--space", &space, "--name", "keep"]);
+    let report = fixture.ok(&["cleanup", "spaces"]);
+    assert_eq!(report["removed"], serde_json::json!(["notes"]), "{report}");
 }
 
 /// A fake agent that records its directory and NUL-separated arguments.

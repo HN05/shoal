@@ -421,7 +421,7 @@ impl Typed {
             if need == Need::Session {
                 candidates.extend(session_chat_candidates(&paths).await?);
             } else if matches!(target, Target::Spaces(_)) {
-                candidates.extend(chat_candidates(&paths).await?);
+                candidates.extend(chat_candidates(&paths, need).await?);
             }
             return Ok(candidates);
         }
@@ -530,11 +530,13 @@ fn chat_candidate(chat: &Chat, kind: &str) -> CompletionCandidate {
     CompletionCandidate::new(chat.number.to_string()).help(Some(help.into()))
 }
 
-/// Every chat, a stopped one described as such.
-async fn chat_candidates(paths: &CommandPaths) -> Result<Vec<CompletionCandidate>> {
+/// Every chat, a stopped one described as such, or for a command that acts
+/// on holds, each chat that has one.
+async fn chat_candidates(paths: &CommandPaths, need: Need) -> Result<Vec<CompletionCandidate>> {
     Ok(crate::client::chats::recorded(paths)
         .await?
         .iter()
+        .filter(|chat| need != Need::Holds || !chat.holds.is_empty())
         .map(|chat| {
             let kind = match chat.running {
                 false => STOPPED_CHAT,

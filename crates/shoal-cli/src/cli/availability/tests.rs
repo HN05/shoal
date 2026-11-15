@@ -28,7 +28,7 @@ fn every_command_naming_a_workspace_states_its_need() {
     let mut command = crate::cli::Cli::command();
     command.build();
     workspace_commands(&command, &mut vec![], &mut found);
-    assert!(found.len() > 40, "{found:?}");
+    assert!(found.len() > 30, "{found:?}");
     for path in found {
         let path: Vec<_> = path.iter().map(String::as_str).collect();
         assert!(Need::of(&path).is_some(), "{path:?}");

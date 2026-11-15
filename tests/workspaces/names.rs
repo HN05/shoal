@@ -132,18 +132,12 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
         path,
         &["config", "branch.original.merge", "refs/heads/main"],
     );
-    fixture.ok(&[
-        "acquire",
-        "port",
-        "web",
-        "--workspace",
-        &fixture.id("original"),
-    ]);
+    fixture.ok(&["acquire", "port", "web", "--space", &fixture.id("original")]);
     fixture.ok(&[
         "acquire",
         "resource",
         "lock",
-        "--workspace",
+        "--space",
         &fixture.id("original"),
     ]);
     // A PR registration names no branch, so it stays through the rename.
@@ -287,18 +281,12 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
         let path = Path::new(workspace["path"].as_str().unwrap());
         let id = workspace["id"].as_str().unwrap();
         fs::write(path.join("dirty"), "preserve\n").unwrap();
-        let port = fixture.ok(&[
-            "acquire",
-            "port",
-            "web",
-            "--workspace",
-            &fixture.id("original"),
-        ]);
+        let port = fixture.ok(&["acquire", "port", "web", "--space", &fixture.id("original")]);
         let lease = fixture.ok(&[
             "acquire",
             "resource",
             "lock",
-            "--workspace",
+            "--space",
             &fixture.id("original"),
         ]);
         let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
@@ -424,18 +412,12 @@ fn deleted_worktree_with_interrupted_rename_can_be_removed() {
         "original",
         "work",
     );
-    fixture.ok(&[
-        "acquire",
-        "port",
-        "web",
-        "--workspace",
-        &fixture.id("original"),
-    ]);
+    fixture.ok(&["acquire", "port", "web", "--space", &fixture.id("original")]);
     fixture.ok(&[
         "acquire",
         "resource",
         "lock",
-        "--workspace",
+        "--space",
         &fixture.id("original"),
     ]);
     let id = workspace["id"].as_str().unwrap();

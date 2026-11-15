@@ -5,30 +5,30 @@ use clap::{Args, Subcommand, ValueEnum};
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum ResourcesCommand {
-    /// Acquire a port, simulator, resource permit, or related repository.
+    /// Acquire a hold, port, simulator, resource permit, or related repository.
     Acquire {
         #[command(subcommand)]
         kind: AcquireKind,
-        /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(short = 'w', long, global = true)]
-        workspace: Option<SpaceSelector>,
+        /// Space to use, a workspace or for a hold a chat; defaults to the current space or picker.
+        #[arg(short = 's', long, global = true)]
+        space: Option<SpaceSelector>,
     },
     /// Release every lease, every lease of one kind, or a selected lease.
     Release {
         #[command(subcommand)]
         kind: Option<ReleaseKind>,
-        /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(short = 'w', long, global = true)]
-        workspace: Option<SpaceSelector>,
+        /// Space to use, a workspace or for a hold a chat; defaults to the current space or picker.
+        #[arg(short = 's', long, global = true)]
+        space: Option<SpaceSelector>,
     },
     /// Show leases and usage for every kind, or one.
     Leases {
         kind: Option<LeaseKind>,
-        /// Workspace to show; defaults to the current workspace or picker.
-        #[arg(short = 'w', long)]
-        workspace: Option<SpaceSelector>,
-        /// Show every managed workspace.
-        #[arg(short = 'A', long, conflicts_with = "workspace")]
+        /// Space to show, a workspace or for holds a chat; defaults to the current space or picker.
+        #[arg(short = 's', long)]
+        space: Option<SpaceSelector>,
+        /// Show every space.
+        #[arg(short = 'A', long, conflicts_with = "space")]
         all: bool,
     },
     /// Show configuration and available inventory for every kind, or one.
@@ -104,7 +104,7 @@ pub struct LeaseOptions {
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum AcquireKind {
-    /// Keep a workspace against automatic cleanup until released.
+    /// Keep a space, a workspace or a chat, against automatic cleanup until released.
     Hold {
         #[arg(long)]
         name: String,
@@ -192,7 +192,7 @@ pub struct PoolSelection {
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum ReleaseKind {
-    /// Release a named workspace hold; omit its name to choose one.
+    /// Release a named hold; omit its name to choose one.
     Hold {
         #[arg(long)]
         name: Option<String>,

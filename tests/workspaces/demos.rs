@@ -250,14 +250,14 @@ fn web_demos_reserve_a_port_and_pass_it_as_port() {
         "acquire",
         "port",
         &fixture.id("other"),
-        "--workspace",
+        "--space",
         &fixture.id("tried"),
         "--env",
         "PORT",
     ]);
     let web = start_preset_demo(&fixture, "site", "web", "PORT");
     let port = web["environment"]["PORT"].as_str().unwrap().to_owned();
-    let leases = fixture.ok(&["leases", "port", "--workspace", &fixture.id("tried")]);
+    let leases = fixture.ok(&["leases", "port", "--space", &fixture.id("tried")]);
     assert!(
         leases.to_string().contains(&format!("\"port\":{port}")),
         "{leases}"
@@ -276,9 +276,8 @@ fn simulator_demos_share_the_workspace_simulator() {
         .as_str()
         .unwrap()
         .to_owned();
-    let leases = || {
-        fixture.ok(&["leases", "sim", "--workspace", &fixture.id("tried")])["simulators"].clone()
-    };
+    let leases =
+        || fixture.ok(&["leases", "sim", "--space", &fixture.id("tried")])["simulators"].clone();
     assert_eq!(leases()[0]["udid"], udid);
     // A second simulator demo runs on the same device.
     let widget = start_preset_demo(&fixture, "widget", "simulator", "SHOAL_SIM_UDID");

@@ -572,14 +572,14 @@ A merged workspace nobody has used for hours goes with merged cleanup whether
 or not `done` ran.
 
 ```sh
-shoal acquire hold --name <name> --reason <why> [--workspace <child>]
+shoal acquire hold --name <name> --reason <why> [--space <space>]
 shoal leases hold
 shoal release hold --name <name>
 ```
 
-A hold keeps a workspace from cleanup. A workspace process asking to hold its
-own workspace makes an approval request to its coordinator, or the user;
-holding a workspace below it needs none. Scoped callers release the holds
+A hold keeps a space, a workspace or a chat, from cleanup. An agent asking to
+hold its own space makes an approval request to its coordinator, or the user;
+holding a space below it needs none. Scoped callers release the holds
 agents placed, and the user's as their `user_holds` permission allows.
 
 ## Remove, restore and move

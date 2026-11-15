@@ -903,7 +903,9 @@ share a parent only in a chat without one. Every space has one row in
 row extends with what only its kind has; a conversion keeps it, and deleting it
 removes the space with what each table of spaces holds for it. A removal reserves the space first, in memory whatever its kind, and a
 workspace's worktree also through its `removing` state, which startup
-recovery reads. Every
+recovery reads. A hold keeps a space of either kind and stays through its
+conversion; a reserved space takes no new hold, so a removal that leaves the
+user's holds in place checks them once, when it reserves the space. Every
 reader takes one walk up or one walk down that link, with no branch on kind,
 and asks each space one question, whether it has an agent: a workspace's
 agent, a chat's running agent, or a queued restore of either. A scope reaches
@@ -1095,7 +1097,7 @@ merged cleanup walks a worktree again only once the newest change its last walk
 saw is older than the idle period. A sweep lists directory
 users with one scan of the processes' working directories, read from the kernel,
 shared by every workspace it checks; removal scans again.
-Status reports the first reason cleanup keeps a workspace from the checks the sweep
+Status reports the first reason cleanup keeps a space from the checks the sweep
 runs, so it cannot disagree with the sweep. A HEAD changed by removal
 hooks keeps its branch when only that branch has the new commits.
 Post-remove runs after ownership is released,

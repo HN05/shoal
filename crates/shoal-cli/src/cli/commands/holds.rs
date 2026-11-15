@@ -1,4 +1,4 @@
-//! CLI access to workspace holds.
+//! CLI access to the holds that keep spaces from cleanup.
 use anyhow::{Result, ensure};
 
 use super::acquisition::Finish;
@@ -12,18 +12,18 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    model::{HoldPlacer, SpaceHold},
+    model::{HoldPlacer, PresentSpace, SpaceHold},
 };
 
-/// Exit 2 means a pending or denied approval: a workspace process holding
-/// its own workspace asks its coordinator or the user first.
+/// Exit 2 means a pending or denied approval: a scoped process holding its
+/// own space asks its coordinator or the user first.
 pub(super) async fn acquire(
     ctx: &Context,
-    workspace: SpaceSelector,
+    space: SpaceSelector,
     name: String,
     reason: Option<String>,
 ) -> Result<i32> {
-    let outcome = leases::acquire_hold(&ctx.paths, workspace.clone(), name, reason).await?;
+    let outcome = leases::acquire_hold(&ctx.paths, space, name, reason).await?;
     outcome.finish(
         ctx,
         |hold| {
@@ -42,40 +42,46 @@ pub(super) async fn acquire(
 
 pub(super) async fn release(
     ctx: &Context,
-    workspace: SpaceSelector,
+    space: SpaceSelector,
     name: Option<String>,
 ) -> Result<i32> {
     let name = match name {
         Some(name) => name,
-        None => pick(ctx, &workspace).await?,
+        None => pick(ctx, &space).await?,
     };
-    leases::release_hold(&ctx.paths, workspace.clone(), name).await?;
+    leases::release_hold(&ctx.paths, space, name).await?;
     ctx.emit_styled(Style::Success, "Hold released", Released { released: true })?;
     Ok(0)
 }
 
+/// The holds of the space `scope` selects, or of every space, the
+/// workspaces then the chats.
 pub(super) async fn list(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
-    let Some(workspace) = ui::select_workspace_filter(ctx, scope).await? else {
-        let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-        ctx.show(&workspaces, |workspaces| {
-            for workspace in workspaces {
+    let Some(space) = ui::select_space_filter(ctx, scope).await? else {
+        let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+        let spaces: Vec<PresentSpace> = (spaces.workspaces.into_iter())
+            .map(PresentSpace::Workspace)
+            .chain(spaces.chats.into_iter().map(PresentSpace::Chat))
+            .collect();
+        ctx.show(&spaces, |spaces| {
+            for space in spaces {
                 outln!(
                     "{}",
-                    Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name)
+                    Palette::stdout(ctx.json).paint(Style::Heading, space.name())
                 );
-                render(&workspace.holds);
+                render(space.holds());
             }
         })?;
         return Ok(0);
     };
-    let holds = leases::holds(&ctx.paths, workspace.clone()).await?;
+    let holds = leases::holds(&ctx.paths, space).await?;
     ctx.show(&holds, |holds| render(holds))?;
     Ok(0)
 }
 
-async fn pick(ctx: &Context, workspace: &SpaceSelector) -> Result<String> {
-    let holds = leases::holds(&ctx.paths, workspace.clone()).await?;
-    ensure!(!holds.is_empty(), "no holds on this workspace");
+async fn pick(ctx: &Context, space: &SpaceSelector) -> Result<String> {
+    let holds = leases::holds(&ctx.paths, space.clone()).await?;
+    ensure!(!holds.is_empty(), "no holds on this space");
     let entries = holds
         .into_iter()
         .map(|hold| {

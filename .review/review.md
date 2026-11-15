@@ -244,7 +244,7 @@ instead of the PR delivery guidance below.
   requires preserved commits without a PR registration, honors existing merge
   checks, and rechecks its recorded HEAD; a completion without cleanup blocks idle
   and PR cleanup. Holds, open questions, pending PR proposals and push requests, and queued
-  agent launches block every unattended removal, rechecked after the removal reserves the workspace; a split needs a ready
+  agent launches block every unattended removal of a space of either kind, rechecked after the removal reserves the space; a split needs a ready
   parent, checked when the child is recorded; `done` closes the workspace's open
   questions for good. Children never keep their parent: every removal kind first
   removes the subtree, deepest first, through the shared path whatever keeps it,

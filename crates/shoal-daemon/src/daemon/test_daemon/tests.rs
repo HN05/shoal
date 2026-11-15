@@ -103,6 +103,34 @@ async fn a_scoped_app_reaches_only_its_workspace_tree() {
 }
 
 #[tokio::test]
+async fn a_chats_agent_asks_to_hold_its_own_chat() {
+    let daemon = TestDaemon::start().await;
+    let chat = (daemon.manager)
+        .start_chat(
+            daemon.repository.id.clone().into(),
+            "notes".into(),
+            "claude".into(),
+            None,
+        )
+        .await
+        .unwrap();
+    let token = daemon.manager.chat_scope(&chat.id).await.unwrap();
+    let agent = daemon.connector().scope(token);
+    let hold = HoldMethod::HoldAcquire {
+        space: SpaceSelector::id(&chat.id),
+        name: "review".into(),
+        reason: Some("open in Quay".into()),
+    };
+    let Body::ApprovalRequest(request) = connection::call(&agent, hold).await.unwrap() else {
+        panic!("expected an approval request");
+    };
+    assert_eq!(
+        (request.space_id, request.target),
+        (chat.id, Target::Hold("review".into()))
+    );
+}
+
+#[tokio::test]
 async fn removal_refuses_unsaved_work_unless_the_app_confirms_it() {
     let daemon = TestDaemon::start().await;
     let workspace = daemon.workspace("dirty").await;

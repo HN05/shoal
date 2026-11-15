@@ -16,7 +16,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
         "acquire",
         "resource",
         "lock",
-        "--workspace",
+        "--space",
         &fixture.id("holder"),
     ]);
     for _ in 0..2 {
@@ -24,25 +24,19 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
             "acquire",
             "resource",
             "lock",
-            "--workspace",
+            "--space",
             &fixture.id("waiter"),
         ]);
         assert_eq!(busy.status.code(), Some(2));
     }
-    let taken = fixture.ok(&[
-        "acquire",
-        "port",
-        "web",
-        "--workspace",
-        &fixture.id("holder"),
-    ])["port"]
+    let taken = fixture.ok(&["acquire", "port", "web", "--space", &fixture.id("holder")])["port"]
         .as_u64()
         .unwrap();
     let moved = fixture.ok(&[
         "acquire",
         "port",
         "web",
-        "--workspace",
+        "--space",
         &fixture.id("waiter"),
         "--port",
         &taken.to_string(),
@@ -164,7 +158,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
                 "acquire",
                 "resource",
                 "lock",
-                "--workspace",
+                "--space",
                 &fixture.id("waiter")
             ])
             .status

@@ -110,7 +110,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                 "acquire",
                 "port",
                 "web",
-                "--workspace",
+                "--space",
                 &fixture.id(&name),
                 "--reason",
                 "server",
@@ -184,7 +184,8 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
         assert!(!recorded.contains("scope=\n"), "{recorded}");
         assert!(recorded.contains("stdin=eof\nstdout=notty\n"), "{recorded}");
         if agent == "claude" {
-            let port = fixture.ok(&["leases", "port", "--workspace", &fixture.id(&name)])["reserved"][0]["port"]
+            let port = fixture.ok(&["leases", "port", "--space", &fixture.id(&name)])["reserved"]
+                [0]["port"]
                 .as_u64()
                 .unwrap();
             assert!(recorded.contains(&format!("port={port}\n")), "{recorded}");

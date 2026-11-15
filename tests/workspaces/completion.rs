@@ -309,7 +309,7 @@ fn post_done_hook_observes_persisted_completion_and_excludes_lifecycle_and_permi
             "acquire",
             "resource",
             "device",
-            "--workspace",
+            "--space",
             &fixture.id("hooked"),
         ],
     ] {
@@ -322,7 +322,7 @@ fn post_done_hook_observes_persisted_completion_and_excludes_lifecycle_and_permi
         "acquire",
         "resource",
         "device",
-        "--workspace",
+        "--space",
         &fixture.id("hooked"),
     ]);
 }
@@ -336,18 +336,12 @@ fn done_defaults_to_cleanup_and_releases_workspace_resources() {
         &fixture,
         &format!("hooks.post_done = '{}'\n", hook.display()),
     );
-    fixture.ok(&[
-        "acquire",
-        "port",
-        "web",
-        "--workspace",
-        &fixture.id("finished"),
-    ]);
+    fixture.ok(&["acquire", "port", "web", "--space", &fixture.id("finished")]);
     fixture.ok(&[
         "acquire",
         "resource",
         "device",
-        "--workspace",
+        "--space",
         &fixture.id("finished"),
     ]);
     let mut wrapper = fixture
@@ -602,7 +596,7 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
     fixture.ok(&[
         "acquire",
         "hold",
-        "--workspace",
+        "--space",
         &fixture.id("issue-work"),
         "--name",
         "review",
@@ -630,7 +624,7 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
     fixture.ok(&[
         "release",
         "hold",
-        "--workspace",
+        "--space",
         &fixture.id("issue-work"),
         "--name",
         "review",

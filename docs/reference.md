@@ -587,7 +587,7 @@ An idle agent keeps its memory while it waits for its next update. Each
 [cleanup sweep](#automatic-cleanup) stops the [idle](#agent-state) heavy agents
 of done spaces that something besides their work and PRs keeps from
 [completion cleanup](#assignment-completion), such as a
-[hold](#workspace-holds) or an open [question](#questions), and with
+[hold](#holds) or an open [question](#questions), and with
 [`[sleep] idle`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#sleep) enabled any idle heavy agent; a
 [light](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) one keeps running. Only an agent idle with no processes running
 outside its process group, with a restore command, and whose
@@ -929,11 +929,11 @@ in `sync` (`synced_at`, `failing_since` and `error`). It lists the files the
 last check of HEAD against the default target found
 [changed on both sides](#conflicts), from a watch or `shoal conflicts`, in
 `changed_on_both_sides` (`target`, `target_commit`, `head` and `files`). Status also
-names the first condition that keeps the workspace from automatic cleanup, holds,
+names the first condition that keeps the space from automatic cleanup, holds,
 open questions, a pending PR proposal or push request, a running chat in it, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
 when nothing does, in `cleanup_reason`. It lists the chats in the worktree, in
 `chats`. A chat's status leaves out what needs a worktree: its
-branch, changes, setup, executions, leases, sync and cleanup; it names the
+branch, changes, setup, executions, leases and sync; it names the
 workspace it runs in, as `shoal list --chats`, the inbox and the menu do with
 `in <workspace>`. `--json`
 returns the same data, with `kind` (`workspace` or `chat`) and the space's
@@ -1913,8 +1913,8 @@ HEAD and unsaved files, so it asks nothing; one whose unsaved files no
 checkpoint can keep is refused. The branch stays, as a [kept
 branch](#kept-branches), and `shoal restore` brings the files back in a new
 workspace. Demos stop, and ports, resources, simulators and secrets are
-released; agents' holds and pending PR proposals and pushes go with the
-worktree, and chats in it are removed. It is refused while a hold the user
+released; agents' holds stay with the space, pending PR proposals and pushes
+go with the worktree, and chats in it are removed. It is refused while a hold the user
 placed keeps the workspace, while another workspace builds on its branch
 (`shoal branch base`), and while no agent runs there to carry on. The chat runs
 in the registered checkout, in `--mode`'s mode, `chat` by default.
@@ -3999,7 +3999,7 @@ precedence. Scoped agents may mark only their own workspace or a child workspace
 not verify or assert a merge. Completion without cleanup keeps the workspace from
 idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal, except
 a disposable workspace's, is reversible with [`shoal restore`](#checkpoints-and-restore); to review in a workspace,
-[hold](#workspace-holds) it. `done` closes the workspace's open
+[hold](#holds) it. `done` closes the workspace's open
 [questions](#questions), so completion and PR cleanup wait only while a hold, a
 question asked afterwards or a [PR proposal](#approval-for-agent-issues-and-prs)
 remains.
@@ -4064,28 +4064,32 @@ Keeping persists across restarts and suppresses idle and PR cleanup until a new
 When cleanup removes the worktree, shell integration returns to the repository's
 `<root_dir>/<repo>` directory; keeping or retained work leaves the current directory.
 
-### Workspace holds
+### Holds
 
-Holds are caller-named claims of workspace use, independent of assignment completion.
-They persist across command exits and daemon restarts and block automatic removal
-while the worktree exists, as open questions, pending PR proposals and push requests, and queued agent launches do; releasing the last hold lets cleanup recheck its usual
-conditions. Idle cleanup restarts its
-timer after release. Removal releases holds, a parent's removal those below it too;
-a hold never keeps the workspace's parent.
+Holds are caller-named claims of a space's use, a workspace's or a chat's,
+independent of assignment completion; `--space` names the space, and the
+current one by default. They persist across command exits and daemon restarts
+and block every unattended removal, as open questions, pending PR proposals and
+push requests, and queued agent launches do; releasing the last hold lets
+cleanup recheck its usual conditions. Idle cleanup restarts its timer after
+release. Removal releases holds, a parent's removal those below it too; a hold
+never keeps the space's parent. A hold stays with its space when the space
+converts to the other kind.
 
-Reacquiring a name returns the original hold, including its reason. Acquisition
-requires a ready, verified worktree and is excluded while a resource hook runs.
-Release remains available while the workspace record exists. Each hold records
+Reacquiring a name returns the original hold, including its reason. A
+workspace takes one only while it is ready, with a verified worktree, and no
+resource hook runs; no space takes one while a removal is under way.
+Release remains available while the space exists. Each hold records
 in `placed_by` whether the user or an app hosting an external session placed it
-(`user`), or an agent (`agent`). Workspace processes hold and release the
-workspaces below their own directly. Holding their own workspace is an approval
+(`user`), or an agent (`agent`). Scoped processes hold and release the
+spaces below their own directly. Holding their own space is an approval
 request with the target `hold/<name>`, which needs `--reason` and goes to the
 nearest space above with an agent, as other [approval requests](#resource-approvals)
 do: a workspace or a chat, which needs no grant to decide it, else the user;
 approval places the hold,
 and acquiring again returns it.
-Workspace processes release the holds agents placed, on their own workspace
-or below it, and the user's as their space's [`user_holds` permission](#permitted-actions) allows. `status` and `list --json` show holds on the workspace record. `rm` lists holders before
+Scoped processes release the holds agents placed, on their own space
+or below it, and the user's as their space's [`user_holds` permission](#permitted-actions) allows. `status` and `list --json` show holds on the space's record. `rm` lists holders before
 confirmation and includes them in its JSON result; `--yes` skips confirmation.
 
 ### Forges
@@ -5800,12 +5804,12 @@ otherwise the current one or a picker); a kind shows only that kind.
 ### Port reservations
 
 ```sh
-shoal acquire port web --workspace 3 --reason "Frontend dev server"
+shoal acquire port web --space 3 --reason "Frontend dev server"
 shoal acquire port api --port 3001 --env API_PORT --reason "HTTP API"
 shoal catalog port --workspace 3 # Automatic range, named ports and conflict policy
-shoal leases port --workspace 3  # Current reservations
+shoal leases port --space 3  # Current reservations
 shoal leases port --all                 # Every workspace
-shoal release port web --workspace 3
+shoal release port web --space 3
 shoal run --workspace 3 -- sh -c 'my-server --port "$API_PORT"'
 ```
 

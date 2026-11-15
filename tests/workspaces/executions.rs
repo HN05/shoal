@@ -257,7 +257,7 @@ fn configured_environment_renders_for_tracked_commands() {
         "acquire",
         "port",
         "api",
-        "--workspace",
+        "--space",
         &fixture.id("env-values"),
         "--env",
         "API_PORT",

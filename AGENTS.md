@@ -239,7 +239,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   questions and queued agent launches suppress every unattended removal. Holds
   record who placed them; scoped callers release the user's holds, and remove
   the spaces the user holds, only as their `user_holds` permission allows, and
-  holding their own workspace is an approval request.
+  holding their own space is an approval request.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
   across command exits and failed removal; successful removal releases them with
   the workspace record. `[ports]` `start`/`end` set the automatic range.

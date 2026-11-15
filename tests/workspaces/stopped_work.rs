@@ -196,13 +196,7 @@ fn names_the_command(handoff: &str) -> bool {
 fn stop_saves_agents_and_commands_preserving_work_and_leases() {
     let fixture = Fixture::with_config(Some(AGENT));
     let workspace = Stopped::new(&fixture, "stopped");
-    fixture.ok(&[
-        "acquire",
-        "port",
-        "web",
-        "--workspace",
-        &fixture.id("stopped"),
-    ]);
+    fixture.ok(&["acquire", "port", "web", "--space", &fixture.id("stopped")]);
     fs::write(workspace.path.join("unfinished"), "work in progress").unwrap();
     let before = fixture.ok(&["status", &fixture.id("stopped")]);
     let agent = workspace.start_agent(&fixture);

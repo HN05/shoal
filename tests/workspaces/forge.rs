@@ -592,18 +592,12 @@ fn wait_pr_error(fixture: &Fixture, name: &str, message: &str) {
 fn merged_stops_agent_and_releases_resources_without_idle_delay() {
     let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n[resources.device]\n"));
     let workspace = fixture.add("merged");
-    fixture.ok(&[
-        "acquire",
-        "port",
-        "web",
-        "--workspace",
-        &fixture.id("merged"),
-    ]);
+    fixture.ok(&["acquire", "port", "web", "--space", &fixture.id("merged")]);
     fixture.ok(&[
         "acquire",
         "resource",
         "device",
-        "--workspace",
+        "--space",
         &fixture.id("merged"),
     ]);
     let mut wrapper = fixture
@@ -1612,7 +1606,7 @@ fn merged_rechecks_head_after_removal_hooks() {
                 "acquire",
                 "resource",
                 "signing",
-                "--workspace",
+                "--space",
                 &fixture.id("hook"),
             ]);
         }
@@ -1648,7 +1642,7 @@ fn manual_removal_keeps_a_branch_its_hooks_committed_to() {
                 "acquire",
                 "resource",
                 "signing",
-                "--workspace",
+                "--space",
                 &fixture.id("hook"),
             ]);
         }

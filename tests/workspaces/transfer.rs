@@ -635,7 +635,7 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     fixture.ok(&[
         "acquire",
         "hold",
-        "--workspace",
+        "--space",
         &fixture.id("second"),
         "--name",
         "review",

@@ -31,9 +31,10 @@ use crate::{
 pub(super) async fn acquire(
     ctx: &Context,
     kind: AcquireKind,
-    workspace: Option<SpaceSelector>,
+    space: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let holds = matches!(kind, AcquireKind::Hold { .. });
+    let workspace = select_target(ctx, holds, space).await?;
     match kind {
         AcquireKind::Hold { name, reason } => {
             super::holds::acquire(ctx, workspace, name, reason).await
@@ -130,13 +131,28 @@ fn resource_request(
     }
 }
 
+/// The space a lease goes to, which `explicit` names or the current space
+/// or a picker chooses: any space for a hold, `holds`, which a chat takes
+/// too, else a workspace, as a lease of its worktree.
+async fn select_target(
+    ctx: &Context,
+    holds: bool,
+    explicit: Option<SpaceSelector>,
+) -> Result<SpaceSelector> {
+    match holds {
+        true => ui::select_space(ctx, explicit, Fallback::CurrentDirectory).await,
+        false => ui::select_workspace(ctx, explicit, Fallback::CurrentDirectory).await,
+    }
+}
+
 /// Release the selected leases in order; a failure leaves the rest held.
 pub(super) async fn release(
     ctx: &Context,
     kind: Option<ReleaseKind>,
-    workspace: Option<SpaceSelector>,
+    space: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let holds = matches!(kind, Some(ReleaseKind::Hold { .. }));
+    let workspace = select_target(ctx, holds, space).await?;
     if let Some(ReleaseKind::Hold { name }) = kind {
         return super::holds::release(ctx, workspace, name).await;
     }

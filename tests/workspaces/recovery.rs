@@ -289,14 +289,14 @@ fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
         "acquire",
         "port",
         "web",
-        "--workspace",
+        "--space",
         &fixture.id("preparing"),
     ]);
     let resource = fixture.ok(&[
         "acquire",
         "resource",
         "lock",
-        "--workspace",
+        "--space",
         &fixture.id("preparing"),
     ]);
     let owner = workspaces[0]["id"].as_str().unwrap();
@@ -360,16 +360,11 @@ fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
             }
         }
         assert_eq!(
-            fixture.ok(&["leases", "port", "--workspace", &fixture.id("preparing")])["reserved"][0],
+            fixture.ok(&["leases", "port", "--space", &fixture.id("preparing")])["reserved"][0],
             port
         );
         assert_eq!(
-            fixture.ok(&[
-                "leases",
-                "resource",
-                "--workspace",
-                &fixture.id("preparing")
-            ])["leases"][0],
+            fixture.ok(&["leases", "resource", "--space", &fixture.id("preparing")])["leases"][0],
             resource
         );
         let saved: String = db
@@ -412,14 +407,14 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
         "acquire",
         "port",
         "web",
-        "--workspace",
+        "--space",
         &fixture.id("interrupted"),
     ]);
     let resource = fixture.ok(&[
         "acquire",
         "resource",
         "lock",
-        "--workspace",
+        "--space",
         &fixture.id("interrupted"),
     ]);
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
@@ -455,16 +450,11 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
         "preserve me"
     );
     assert_eq!(
-        fixture.ok(&["leases", "port", "--workspace", &fixture.id("interrupted")])["reserved"][0],
+        fixture.ok(&["leases", "port", "--space", &fixture.id("interrupted")])["reserved"][0],
         port
     );
     assert_eq!(
-        fixture.ok(&[
-            "leases",
-            "resource",
-            "--workspace",
-            &fixture.id("interrupted")
-        ])["leases"][0],
+        fixture.ok(&["leases", "resource", "--space", &fixture.id("interrupted")])["leases"][0],
         resource
     );
     assert!(
@@ -497,7 +487,7 @@ fn owner_marker_keeps_workspaces_verified_when_filesystem_identity_changes() {
         "acquire",
         "resource",
         "lock",
-        "--workspace",
+        "--space",
         &fixture.id("marked"),
     ]);
     // A reboot renumbering the device, or a restore from backup, changes the
@@ -516,7 +506,7 @@ fn owner_marker_keeps_workspaces_verified_when_filesystem_identity_changes() {
             .success()
     );
     assert_eq!(
-        fixture.ok(&["leases", "resource", "--workspace", &fixture.id("marked")])["leases"][0],
+        fixture.ok(&["leases", "resource", "--space", &fixture.id("marked")])["leases"][0],
         lease
     );
     // A marker naming another workspace is never accepted.
@@ -548,7 +538,7 @@ fn adopting_a_workspace_path_again_reclaims_its_unverifiable_worktree() {
         "acquire",
         "resource",
         "lock",
-        "--workspace",
+        "--space",
         &fixture.id("reclaimed"),
     ]);
     // An unmarked record whose filesystem identity changed cannot be verified.
@@ -599,12 +589,7 @@ fn adopting_a_workspace_path_again_reclaims_its_unverifiable_worktree() {
         "preserve me"
     );
     assert_eq!(
-        fixture.ok(&[
-            "leases",
-            "resource",
-            "--workspace",
-            &fixture.id("reclaimed")
-        ])["leases"][0],
+        fixture.ok(&["leases", "resource", "--space", &fixture.id("reclaimed")])["leases"][0],
         lease
     );
     assert!(
@@ -627,7 +612,7 @@ fn reconcile_reclaims_unverifiable_worktrees_only_on_explicit_request() {
         "acquire",
         "resource",
         "lock",
-        "--workspace",
+        "--space",
         &fixture.id("reclaimed"),
     ]);
     // An unmarked record whose filesystem identity changed cannot be verified.
@@ -671,12 +656,7 @@ fn reconcile_reclaims_unverifiable_worktrees_only_on_explicit_request() {
             .success()
     );
     assert_eq!(
-        fixture.ok(&[
-            "leases",
-            "resource",
-            "--workspace",
-            &fixture.id("reclaimed")
-        ])["leases"][0],
+        fixture.ok(&["leases", "resource", "--space", &fixture.id("reclaimed")])["leases"][0],
         lease
     );
     assert_eq!(
@@ -760,13 +740,7 @@ fn legacy_worktree_identity_upgrades_only_after_verification() {
             "preserve me",
         )
         .unwrap();
-        let lease = fixture.ok(&[
-            "acquire",
-            "resource",
-            "lock",
-            "--workspace",
-            &fixture.id(name),
-        ]);
+        let lease = fixture.ok(&["acquire", "resource", "lock", "--space", &fixture.id(name)]);
         db.execute(
             "UPDATE workspaces SET git_dir_id=?1,state=?2 WHERE id=?3",
             rusqlite::params![
@@ -825,7 +799,7 @@ fn legacy_worktree_identity_upgrades_only_after_verification() {
             assert!(repeated[0]["changes"].as_array().unwrap().is_empty());
         }
         assert_eq!(
-            fixture.ok(&["leases", "resource", "--workspace", &fixture.id(name)])["leases"][0],
+            fixture.ok(&["leases", "resource", "--space", &fixture.id(name)])["leases"][0],
             lease
         );
         assert_eq!(
@@ -939,14 +913,8 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
     for name in ["directory-only", "git-removed", "moved"] {
         let workspace = fixture.add(name);
         commit_file(Path::new(workspace["path"].as_str().unwrap()), name, name);
-        fixture.ok(&["acquire", "port", "web", "--workspace", &fixture.id(name)]);
-        fixture.ok(&[
-            "acquire",
-            "resource",
-            "lock",
-            "--workspace",
-            &fixture.id(name),
-        ]);
+        fixture.ok(&["acquire", "port", "web", "--space", &fixture.id(name)]);
+        fixture.ok(&["acquire", "resource", "lock", "--space", &fixture.id(name)]);
         paths.push(PathBuf::from(workspace["path"].as_str().unwrap()));
     }
     fs::remove_dir_all(&paths[0]).unwrap();
@@ -1029,14 +997,14 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
         "acquire",
         "port",
         "web",
-        "--workspace",
+        "--space",
         &fixture.id("missing-parent"),
     ]);
     fixture.ok(&[
         "acquire",
         "resource",
         "lock",
-        "--workspace",
+        "--space",
         &fixture.id("missing-parent"),
     ]);
     git(
@@ -1141,19 +1109,13 @@ pub(crate) fn crashed_execution(fixture: &mut Fixture, workspace: &str) -> Value
 fn reconcile_recovers_daemon_crash_and_requires_acknowledgement_without_launch_identity() {
     let mut fixture = Fixture::new();
     let workspace = fixture.add("crash");
-    let port = fixture.ok(&[
-        "acquire",
-        "port",
-        "web",
-        "--workspace",
-        &fixture.id("crash"),
-    ]);
+    let port = fixture.ok(&["acquire", "port", "web", "--space", &fixture.id("crash")]);
     let execution = crashed_execution(&mut fixture, "crash");
     let report = recovery_report(&fixture, &["crash"]);
     assert_eq!(report[0]["executions"][0]["state"], "unknown");
     repaired_workspaces(&fixture, &["crash", "--repair", "--acknowledge-stopped"]);
     assert_eq!(
-        fixture.ok(&["leases", "port", "--workspace", &fixture.id("crash")])["reserved"][0],
+        fixture.ok(&["leases", "port", "--space", &fixture.id("crash")])["reserved"][0],
         port
     );
     // A wrapper that died before launching its command recorded no child or
@@ -1212,7 +1174,7 @@ fn manual_removal_stops_recorded_orphans_before_releasing_resources() {
         "acquire",
         "resource",
         "lock",
-        "--workspace",
+        "--space",
         &fixture.id("orphan"),
     ]);
     let mut wrapper = fixture
@@ -1259,7 +1221,7 @@ fn reconcile_preserves_connected_commands_until_stop_is_explicit() {
         "acquire",
         "port",
         "web",
-        "--workspace",
+        "--space",
         &fixture.id("connected"),
     ]);
     let mut wrapper = fixture
@@ -1282,7 +1244,7 @@ fn reconcile_preserves_connected_commands_until_stop_is_explicit() {
         serde_json::json!([])
     );
     assert_eq!(
-        fixture.ok(&["leases", "port", "--workspace", &fixture.id("connected")])["reserved"][0],
+        fixture.ok(&["leases", "port", "--space", &fixture.id("connected")])["reserved"][0],
         port
     );
 }

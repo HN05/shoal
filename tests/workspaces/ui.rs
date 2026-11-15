@@ -42,18 +42,12 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
     let first = fixture.add("first");
     fixture.add("second");
-    fixture.ok(&[
-        "acquire",
-        "port",
-        "web",
-        "--workspace",
-        &fixture.id("first"),
-    ]);
+    fixture.ok(&["acquire", "port", "web", "--space", &fixture.id("first")]);
     fixture.ok(&[
         "acquire",
         "resource",
         "devices",
-        "--workspace",
+        "--space",
         &fixture.id("first"),
         "--name",
         "tests",
@@ -157,7 +151,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         vec!["stop", ""],
         vec!["done", "--undo", ""],
         vec!["ready", "--undo", "--space", ""],
-        vec!["release", "hold", "--workspace", ""],
+        vec!["release", "hold", "--space", ""],
         vec!["branch", "base", "clear", "--workspace", ""],
     ] {
         let choices = described(&args);
@@ -169,12 +163,12 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     fixture.ok(&[
         "acquire",
         "hold",
-        "--workspace",
+        "--space",
         &fixture.id("second"),
         "--name",
         "review",
     ]);
-    assert!(described(&["release", "hold", "--workspace", ""]).contains(&"2:second".into()));
+    assert!(described(&["release", "hold", "--space", ""]).contains(&"2:second".into()));
     // A workspace that is not ready shows its state.
     let failed = fixture
         .command()
@@ -200,7 +194,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     fixture.ok(&[
         "release",
         "hold",
-        "--workspace",
+        "--space",
         &fixture.id("second"),
         "--name",
         "review",
@@ -243,7 +237,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
                 "acquire",
                 "resource",
                 "devices",
-                "--workspace",
+                "--space",
                 &fixture.id("first"),
                 "--member",
                 "b"
@@ -258,7 +252,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
                 "release",
                 "resource",
                 "devices",
-                "--workspace",
+                "--space",
                 &fixture.id("first"),
                 "--name",
                 "t"
@@ -273,7 +267,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
                 "acquire",
                 "resource",
                 "devices",
-                "--workspace",
+                "--space",
                 // An ID no workspace has.
                 "0b9c3a52-6f4e-4d8a-9c1e-2f7b5d3a1e09",
                 "--member",
@@ -432,18 +426,12 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     fs::write(path.join("tracked"), "changed\nagain\n").unwrap();
     fs::write(path.join("added"), "new\n").unwrap();
     git(path, &["add", "added"]);
-    fixture.ok(&[
-        "acquire",
-        "port",
-        "web",
-        "--workspace",
-        &fixture.id("summary"),
-    ]);
+    fixture.ok(&["acquire", "port", "web", "--space", &fixture.id("summary")]);
     fixture.ok(&[
         "acquire",
         "resource",
         "devices",
-        "--workspace",
+        "--space",
         &fixture.id("summary"),
         "--name",
         "tests",
@@ -452,7 +440,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         "acquire",
         "resource",
         "signing",
-        "--workspace",
+        "--space",
         &fixture.id("summary"),
     ]);
     fixture.add("waiter");
@@ -462,7 +450,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
                 "acquire",
                 "resource",
                 "signing",
-                "--workspace",
+                "--space",
                 &fixture.id("waiter")
             ])
             .status
@@ -644,7 +632,7 @@ fn status_keeps_shared_state_when_the_worktree_is_missing() {
         "acquire",
         "port",
         "web",
-        "--workspace",
+        "--space",
         &fixture.id("missing-status"),
     ]);
     fs::remove_dir_all(workspace["path"].as_str().unwrap()).unwrap();
@@ -1003,10 +991,10 @@ _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 shoal start "$REPO" --branch held
 held=$(here)
-shoal acquire hold --workspace "$held" --name review
+shoal acquire hold --space "$held" --name review
 shoal done --cleanup
 test "${PWD##*/}" = held
-shoal release hold --workspace "$held" --name review
+shoal release hold --space "$held" --name review
 until ! shoal status "$held" >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
@@ -1899,12 +1887,12 @@ fn inbox_lists_what_needs_the_user_by_kind() {
 fn hold_release_picks_an_omitted_hold() {
     let fixture = Fixture::new();
     fixture.add("upper");
-    let none = fixture.run(&["release", "hold", "--workspace", &fixture.id("upper")]);
+    let none = fixture.run(&["release", "hold", "--space", &fixture.id("upper")]);
     assert!(!none.status.success());
     fixture.ok(&[
         "acquire",
         "hold",
-        "--workspace",
+        "--space",
         &fixture.id("upper"),
         "--name",
         "review",
@@ -1912,7 +1900,7 @@ fn hold_release_picks_an_omitted_hold() {
     fixture.ok(&[
         "acquire",
         "hold",
-        "--workspace",
+        "--space",
         &fixture.id("upper"),
         "--name",
         "demo",
@@ -1920,13 +1908,13 @@ fn hold_release_picks_an_omitted_hold() {
         "show",
     ]);
     let (output, rows) = fixture.pick(
-        &["release", "hold", "--workspace", &fixture.id("upper")],
+        &["release", "hold", "--space", &fixture.id("upper")],
         "demo",
         "",
     );
     assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.contains("demo\tdemo (show)") && rows.contains("review\t"));
-    let holds = fixture.ok(&["leases", "hold", "--workspace", &fixture.id("upper")]);
+    let holds = fixture.ok(&["leases", "hold", "--space", &fixture.id("upper")]);
     assert_eq!(holds.as_array().unwrap().len(), 1);
     assert_eq!(holds[0]["name"], "review");
 }

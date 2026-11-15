@@ -155,7 +155,7 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
         "acquire",
         "resource",
         "signing",
-        "--workspace",
+        "--space",
         &fixture.id("hooked"),
         "--reason",
         "test signing",
@@ -171,7 +171,7 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
                 "acquire",
                 "resource",
                 "signing",
-                "--workspace",
+                "--space",
                 &fixture.id("waiter")
             ])
             .status
@@ -185,7 +185,7 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
             "acquire",
             "resource",
             "signing",
-            "--workspace",
+            "--space",
             &fixture.id("hooked")
         ]),
         lease
@@ -202,7 +202,7 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
             "release",
             "resource",
             "signing",
-            "--workspace",
+            "--space",
             &fixture.id("hooked"),
             "--name",
             "default",
@@ -229,7 +229,7 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
         "release",
         "resource",
         "signing",
-        "--workspace",
+        "--space",
         &fixture.id("hooked"),
         "--name",
         "default",
@@ -238,7 +238,7 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
         "acquire",
         "resource",
         "signing",
-        "--workspace",
+        "--space",
         &fixture.id("waiter"),
     ]);
     fixture.ok(&["rm", "--wait", &fixture.id("waiter"), "--yes"]);
@@ -269,7 +269,7 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
             "acquire",
             "resource",
             "signing",
-            "--workspace",
+            "--space",
             &fixture.id("hooked"),
         ])
         .stdout(Stdio::piped())
@@ -287,14 +287,14 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
             "acquire",
             "resource",
             "signing",
-            "--workspace",
+            "--space",
             &fixture.id("hooked"),
         ],
         vec![
             "release",
             "resource",
             "signing",
-            "--workspace",
+            "--space",
             &fixture.id("hooked"),
             "--name",
             "default",
@@ -522,7 +522,7 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
         "acquire",
         "resource",
         "signing",
-        "--workspace",
+        "--space",
         &fixture.id("hooked"),
     ]);
     let config = path.join(".shoal.toml");
@@ -576,7 +576,7 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
         "acquire",
         "resource",
         "signing",
-        "--workspace",
+        "--space",
         &fixture.id("next"),
     ]);
     let missing = fixture.add("missing");
