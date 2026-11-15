@@ -9,13 +9,13 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
-use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::PermissionKey,
     forge::items::action::Action,
     protocol::{self, Body, ItemContext, ItemMethod, ViewPiece},
 };
+use shoal_ids::repository_ids::RepositoryId;
 
 #[cfg(test)]
 mod tests;

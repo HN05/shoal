@@ -1,5 +1,5 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 
 /// The IDs `texts` hold.
 fn ids<const N: usize>(texts: [&str; N]) -> [SpaceId; N] {

@@ -3,7 +3,6 @@ use anyhow::{Result, ensure};
 
 use super::removal::{ensure_batch_removable, leaving};
 use crate::client::output::workspaces::{BackgroundRemoval, Removals, Removed};
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::{self, SpaceName, SpaceSelector};
 use crate::{
     cli::{
@@ -16,6 +15,7 @@ use crate::{
     model::{Chat, PresentSpace, SpaceKind, SpaceRef, Spaces},
     removal::{RemovalCheck, RemovalResult, UnsavedWork},
 };
+use shoal_ids::space_ids::SpaceId;
 
 pub(in crate::cli::commands) async fn remove(ctx: &Context, args: RmArgs) -> Result<i32> {
     let RmArgs {

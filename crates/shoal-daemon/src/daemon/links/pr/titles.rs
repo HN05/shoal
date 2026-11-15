@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use anyhow::Result;
 use rusqlite::Connection;
 
-use crate::{client::space_ids::SpaceId, forge::items::reference::ItemRef};
+use crate::forge::items::reference::ItemRef;
+use shoal_ids::space_ids::SpaceId;
 
 /// Record `title` as the assigned PR `url`'s.
 pub(super) fn record(db: &Connection, id: &SpaceId, url: &str, title: &str) -> Result<()> {

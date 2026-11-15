@@ -6,7 +6,6 @@ use std::ffi::OsString;
 use anyhow::Result;
 
 use super::{AddOptions, target::AddTarget};
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -18,6 +17,7 @@ use crate::{
     start_plan::{AddPlan, Creation, ResolvedAddAgent},
     terminal::PlaceName,
 };
+use shoal_ids::space_ids::SpaceId;
 
 /// `creation` with its path resolved against the current directory.
 pub(super) fn absolute(ctx: &Context, mut creation: Creation) -> Result<Creation> {

@@ -1,5 +1,5 @@
 //! Arguments of commands Shoal, its agent hooks and integrations run.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Subcommand};
@@ -190,7 +190,7 @@ pub enum InternalCommand {
     /// Start an admitted agent queue entry; the daemon runs it.
     #[command(name = workers::QUEUE_START)]
     QueueStart {
-        entry: crate::client::queue::QueueEntryId,
+        entry: shoal_ids::queue_entry_ids::QueueEntryId,
     },
     /// Start the chat whose resolved start the daemon writes to standard
     /// input in a background place; the daemon runs it.

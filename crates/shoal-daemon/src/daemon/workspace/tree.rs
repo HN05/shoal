@@ -3,8 +3,8 @@
 //! works on it or coordinates its agent;
 //! `space_parents` records it. Every reader takes one walk up or one walk
 //! down that link, whatever each space's kind.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::path::PathBuf;
 
 use anyhow::{Result, bail, ensure};

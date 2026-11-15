@@ -1,5 +1,5 @@
-use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::SavedExt as _;
+use shoal_ids::execution_ids::ExecutionId;
 use std::fs;
 
 use super::transfer::{exporter, import, importer, packaged_workspace};

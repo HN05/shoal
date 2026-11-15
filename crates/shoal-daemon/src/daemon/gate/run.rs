@@ -21,7 +21,7 @@ use super::{
     verdict::{self, Invalid, Verdict},
 };
 use crate::{
-    agent::{Agent, AgentSessionId},
+    agent::Agent,
     daemon::{
         approvals::ApprovalRequest,
         log, oneshot,
@@ -33,6 +33,7 @@ use crate::{
     reviews::{FailureReason, output},
     shoal_dirs::{Contents, ShoalDir},
 };
+use shoal_ids::agent_session_ids::AgentSessionId;
 
 /// A run still running after this long is stopped; a decision that long
 /// has stopped making progress.

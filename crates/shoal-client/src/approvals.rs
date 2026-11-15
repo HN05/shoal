@@ -1,8 +1,8 @@
 //! Approval requests: what a workspace's agent asks the user, or a coordinating
 //! agent, to allow.
-use crate::repository_ids::RepositoryId;
-use crate::space_ids::SpaceId;
 use crate::space_names::SpaceName;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::{collections::BTreeMap, fmt, str::FromStr};
 
 use anyhow::{Result, bail, ensure};

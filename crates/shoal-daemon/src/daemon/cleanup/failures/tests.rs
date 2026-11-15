@@ -1,5 +1,5 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 
 #[test]
 fn steps_failing_in_workspaces_are_recorded_for_each_workspace() {

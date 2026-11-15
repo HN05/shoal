@@ -2,7 +2,7 @@
 //! each once a remote or the default branch has those commits too, the user
 //! deletes the rest on request, and a branch that moved, went away or belongs
 //! to a workspace again is forgotten.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};

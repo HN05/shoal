@@ -1,6 +1,6 @@
 //! What a repository's syncs found: when its remotes were last fetched, when
 //! its default branch last followed them, and the failure since then.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::time::Duration;
 
 use anyhow::Error;

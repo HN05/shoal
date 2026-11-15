@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::operations::OperationKind;
-use crate::space_ids::{SpaceId, SpaceNumber};
 use crate::space_names::SpaceName;
 use crate::state::WorkspaceState;
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
 /// Daemon administration, which must reach a daemon of any release.
 #[derive(Debug, Serialize, Deserialize)]

@@ -1,7 +1,7 @@
 //! Spaces: workspaces and chats, which share one namespace of IDs and names,
 //! so a request naming a space acts on whichever of them it names.
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
+use shoal_ids::space_ids::SpaceId;
 
 use super::{workspace::Manager, workspace_files::Attacher};
 use crate::{

@@ -1,6 +1,6 @@
 //! Copies of attached files the daemon keeps, so the files stay as they
 //! were when attached.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};

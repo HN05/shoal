@@ -4,9 +4,9 @@
 //! terminal host, and the daemon records that the interrupt ended the turn.
 //! Every target is resolved before Shoal types into any; a target Shoal then
 //! fails to type into does not keep it from the others.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use crate::client::output::agents::{Agent, Continued, Interrupted};
 use crate::client::space_names::{SpaceName, SpaceSelector};

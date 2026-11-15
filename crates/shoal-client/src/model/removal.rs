@@ -1,11 +1,11 @@
 //! Removed spaces and what removal leaves: kept branches and worktrees
 //! no workspace owns.
 use super::{Checkpoint, OpenedWorkspace, SpaceLinks, SpaceRef, StartingCommit};
-use crate::repository_ids::RepositoryId;
-use crate::space_ids::SpaceId;
 use crate::space_names::SpaceName;
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::{BranchName, CommitId};
 
 /// A Git worktree under a repository's Shoal directory that no workspace owns.
@@ -112,7 +112,7 @@ pub struct KeptChat {
     pub origin: Option<crate::sessions::Origin>,
     /// The agent session its hooks reported last.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session: Option<crate::agent::AgentSessionId>,
+    pub session: Option<shoal_ids::agent_session_ids::AgentSessionId>,
 }
 
 /// What a removal keeps of a workspace only.

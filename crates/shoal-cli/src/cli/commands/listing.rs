@@ -1,7 +1,7 @@
 //! Which workspaces, chats and queued agents `shoal list` shows.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     cli::{context::Context, list_status::ListStatus, ui},

@@ -1,8 +1,8 @@
 //! Routing a request to the space that decides it, passing it up, and
 //! recording that space's or the user's decision.
-use crate::client::{repository_ids::RepositoryId, space_ids::SpaceId};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, Transaction, params};
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
 use super::{
     ApprovalRequest, ApprovalRequestExt, DecisionStatus, Specification, Target, proposals,

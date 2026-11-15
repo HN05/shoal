@@ -2,9 +2,10 @@
 //! where its space's permission for the key is `direct`, once a decision
 //! approves it where it is `propose`, and not at all where it is `deny`.
 //! The user takes every one.
-use crate::client::{repository_ids::RepositoryId, scope_tokens::ScopeToken};
+use crate::client::scope_tokens::ScopeToken;
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::Result;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{
     collections::HashMap,
     sync::{Mutex, PoisonError},

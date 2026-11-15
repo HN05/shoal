@@ -7,16 +7,17 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, ensure};
 
 use super::{Prepared, ensure_exportable, packaged_record};
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::transfer::ManifestExt;
 use crate::{
     daemon::workspace::{Manager, StopRequest, kept_session_sources},
     execution::recovery,
-    model::{Chat, Checkpoint, CheckpointNumber, PresentSpace, Workspace},
+    model::{Chat, Checkpoint, PresentSpace, Workspace},
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
     transfer::{ExportedSpace, Manifest, Source},
 };
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_ids::space_ids::SpaceId;
 
 impl Manager {
     /// Stop the agents of the space `selector` names, saving their

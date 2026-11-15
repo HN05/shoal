@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
 use rusqlite::StatementStatus;
+use shoal_ids::space_ids::SpaceId;
 
 const INDEX_SCHEMA: &str = include_str!("../../../store/simulator_owner.sql");
 

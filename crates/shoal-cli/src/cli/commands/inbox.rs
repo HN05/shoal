@@ -4,8 +4,8 @@
 //! under Shoal's directories that no workspace owns, automatic cleanup
 //! failing other than in a workspace, and repositories whose default branch
 //! has stopped syncing.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::collections::HashSet;
 
 use anyhow::{Result, ensure};

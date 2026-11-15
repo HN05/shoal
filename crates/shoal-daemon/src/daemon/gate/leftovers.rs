@@ -4,11 +4,11 @@
 use anyhow::Result;
 
 use super::run::remove_run;
-use crate::client::repository_ids::RepositoryId;
 use crate::{
     daemon::{log, workspace::Manager},
     shoal_dirs::{Contents, ShoalDir},
 };
+use shoal_ids::repository_ids::RepositoryId;
 
 impl Manager {
     /// Refuse while a gate run is in the repository `id`'s directory, as one

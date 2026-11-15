@@ -1,7 +1,7 @@
 //! Indexed ownership lookup over the authoritative JSON records.
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
+use shoal_ids::space_ids::SpaceId;
 
 use super::Simulator;
 

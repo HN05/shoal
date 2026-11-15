@@ -1,7 +1,7 @@
 //! Registered repositories and changes to their registration.
 use super::Execution;
-use crate::repository_ids::RepositoryId;
 use serde::{Deserialize, Serialize};
+use shoal_ids::repository_ids::RepositoryId;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

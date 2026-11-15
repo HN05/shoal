@@ -1,9 +1,9 @@
 //! The forge assignees of the issues spaces link as assigned: the account
 //! that links an issue joins them, and leaves them once no space of that
 //! login links the issue, if Shoal added it.
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension};
+use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     daemon::{

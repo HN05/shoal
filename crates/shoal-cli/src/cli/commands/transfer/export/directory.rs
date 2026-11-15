@@ -5,11 +5,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, Result};
 
 use crate::client::output::transfer::{Exported, Exports};
-use crate::client::space_ids::SpaceId;
 use crate::{
     cli::{context::Context, ui},
     transfer::ExportedSpace,
 };
+use shoal_ids::space_ids::SpaceId;
 
 /// The directory an export of several spaces goes to, shown as the user
 /// named it.

@@ -1,8 +1,8 @@
 //! What removing a workspace would discard, whether the caller lets it, and
 //! what the removal did.
-use crate::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::{BranchName, CommitId};
 
 use crate::space_names::SpaceSelector;

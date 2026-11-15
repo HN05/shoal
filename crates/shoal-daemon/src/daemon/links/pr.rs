@@ -1,9 +1,9 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 
 pub(crate) use crate::client::links::pr::{Action, Registration, RegistrationKind};

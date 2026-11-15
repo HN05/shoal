@@ -1,9 +1,9 @@
 //! Removal records: every removal of a chat, and of an existing worktree
 //! with a checkpoint, records what `shoal restore` needs to reopen the
 //! space, until the record expires.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::{LastSession, LastSessionExt, StoppedAgent};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};

@@ -1,7 +1,6 @@
 //! Removal policy: who removes a space and what that removal checks at each
 //! stage, and what retains a space from every unattended removal.
 use super::super::{done::CompletedAncestor, executions::StopPolicy};
-use crate::client::space_ids::SpaceId;
 use crate::daemon::space_processes::WorktreeTies;
 use crate::refusal::{Reason, Refusal};
 use crate::{
@@ -13,6 +12,7 @@ use crate::{
     removal::{InspectionPolicy, NOTHING, RemovalCheck, UnsavedWork},
 };
 use anyhow::{Result, ensure};
+use shoal_ids::space_ids::SpaceId;
 
 /// What keeps a space from every unattended removal. Sweeps report it as a
 /// cleanup reason, and removal refuses with it at every stage. A space that

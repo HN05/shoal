@@ -1289,6 +1289,7 @@ dependencies = [
  "shoal-core",
  "shoal-forge",
  "shoal-forge-types",
+ "shoal-ids",
  "shoal-refs",
  "shoal-subprocess",
  "tempfile",
@@ -1310,6 +1311,7 @@ dependencies = [
  "serde_json",
  "shoal-config-derive",
  "shoal-forge-types",
+ "shoal-ids",
  "shoal-refs",
  "shoal-states",
  "shoal-time",
@@ -1351,6 +1353,7 @@ dependencies = [
  "shoal-config-derive",
  "shoal-forge",
  "shoal-forge-types",
+ "shoal-ids",
  "shoal-proxy",
  "shoal-refs",
  "shoal-states",
@@ -1379,6 +1382,7 @@ dependencies = [
  "shoal-core",
  "shoal-forge",
  "shoal-forge-types",
+ "shoal-ids",
  "shoal-refs",
  "shoal-subprocess",
  "socket2",
@@ -1430,6 +1434,15 @@ dependencies = [
  "shoal-refs",
  "shoal-states",
  "tempfile",
+]
+
+[[package]]
+name = "shoal-ids"
+version = "0.1.0"
+dependencies = [
+ "rusqlite",
+ "serde",
+ "uuid",
 ]
 
 [[package]]

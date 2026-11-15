@@ -1,10 +1,10 @@
 //! Restores a stopped agent's waiting wrapper carries out: queuing one,
 //! waiting for its admission, and keeping, returning or removing its entry.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use anyhow::{Context, Result, bail};
 use rusqlite::{OptionalExtension, params};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use super::{
     Grant,

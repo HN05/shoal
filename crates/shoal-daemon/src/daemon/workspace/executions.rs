@@ -7,9 +7,7 @@ mod reregistration;
 mod stopping;
 
 use super::{GuardMode, Manager, ResourceGuard, places::ExecutionPlace};
-use crate::client::execution_ids::ExecutionId;
 use crate::client::scope_tokens::ScopeToken;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::log;
 use crate::{
@@ -30,6 +28,8 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{BTreeMap, HashSet},
     path::{Path, PathBuf},

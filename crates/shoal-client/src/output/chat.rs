@@ -1,7 +1,7 @@
 //! What chat commands print.
-use crate::repository_ids::RepositoryId;
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
+use shoal_ids::repository_ids::RepositoryId;
 
 use crate::output::outputs;
 

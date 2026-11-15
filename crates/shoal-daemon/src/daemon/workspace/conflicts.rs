@@ -1,6 +1,6 @@
 //! Merge conflict checks for `shoal conflicts` and workspace watches.
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result};
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 
 use super::Manager;

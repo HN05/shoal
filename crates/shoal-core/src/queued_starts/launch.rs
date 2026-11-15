@@ -6,8 +6,8 @@ use std::process::Stdio;
 
 use anyhow::{Context as _, Result};
 
-use crate::client::queue::{self, QueueEntryId};
-use crate::client::{space_ids::SpaceId, space_names::SpaceSelector};
+use crate::client::queue;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     config::Effective,
     env,
@@ -17,6 +17,8 @@ use crate::{
     start_plan::AddPlan,
     workers::{Worker, internal_command},
 };
+use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_ids::space_ids::SpaceId;
 
 /// Start the admitted launch `entry`: a chat's in its place, else a new
 /// workspace's add worker.

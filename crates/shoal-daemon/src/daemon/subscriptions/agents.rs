@@ -1,7 +1,7 @@
 //! What the daemon knows of workspaces' agents: running, queued, or stopped
 //! with a session to restore.
-use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
+use shoal_ids::space_ids::SpaceId;
 use std::collections::HashMap;
 
 use anyhow::Result;

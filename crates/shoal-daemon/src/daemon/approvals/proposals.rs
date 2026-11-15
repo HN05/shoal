@@ -1,11 +1,11 @@
 //! Issues and PRs a scoped caller proposed instead of opening them. The user
 //! approves a proposal, with any edits, and the daemon opens it; a decided
 //! proposal is no longer stored.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::path::Path;
 
 use super::{

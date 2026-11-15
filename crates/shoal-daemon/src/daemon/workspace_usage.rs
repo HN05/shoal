@@ -1,6 +1,6 @@
 //! What each workspace's processes use, sampled on a fixed cadence from the
 //! processes carrying its identity.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,

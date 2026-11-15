@@ -10,7 +10,6 @@ use super::{
     items::polled_items,
 };
 use crate::{
-    client::space_ids::SpaceId,
     daemon::{
         links::space::{LinkSpace, require_ready_space},
         workspace::Manager,
@@ -19,6 +18,7 @@ use crate::{
     time::UnixTime,
 };
 use shoal_forge::updates::Snapshot;
+use shoal_ids::space_ids::SpaceId;
 
 /// How many spaces the background poll reads at once: a slow forge must not
 /// hold back every other space's poll.

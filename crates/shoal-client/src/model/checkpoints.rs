@@ -1,8 +1,9 @@
 //! Checkpoints of a workspace's HEAD and unsaved files.
 use super::Workspace;
-use crate::repository_ids::RepositoryId;
-use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::{BranchName, CommitId};
 
 shoal_states::states!(
@@ -20,12 +21,6 @@ shoal_states::states!(
         /// The state a refresh replaced with its source's files again.
         Refresh => "refresh",
     }
-);
-
-crate::ids::number!(
-    /// The number of one of a workspace's checkpoints, which counts them
-    /// from 1.
-    CheckpointNumber(u64)
 );
 
 /// A workspace's HEAD and unsaved files, kept until `expires_at`.

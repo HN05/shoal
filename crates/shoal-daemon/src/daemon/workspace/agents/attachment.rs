@@ -1,8 +1,8 @@
 //! Whether a terminal shows each tracked agent, as its wrapper reports, so
 //! protection stops the agents the user is not working with first.
-use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use anyhow::Result;
+use shoal_ids::execution_ids::ExecutionId;
 
 use super::Manager;
 

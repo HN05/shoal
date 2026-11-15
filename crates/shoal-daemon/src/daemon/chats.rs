@@ -4,10 +4,10 @@
 //! repository. A chat's agent runs under the execution wrapper as an
 //! execution of the chat, which runs while its execution is recorded; the
 //! chat lasts until it is removed.
-use crate::client::agent::AgentSessionId;
-use crate::client::repository_ids::RepositoryId;
 use crate::client::scope_tokens::ScopeToken;
-use crate::client::space_ids::{SpaceId, SpaceNumber};
+use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail, ensure};

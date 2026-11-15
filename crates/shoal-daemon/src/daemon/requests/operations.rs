@@ -15,11 +15,12 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::{Manager, NewWorkspace},
 };
-use crate::client::{queue::QueueEntryId, space_names::SpaceSelector};
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{
     Body, ErrorCode, OperationMethod, Response,
     operations::{Started, WorkspaceStart},
 };
+use shoal_ids::queue_entry_ids::QueueEntryId;
 
 /// Whether `method` starts a workspace or an operation, whose worker an
 /// exit would cut off, which an exit that waits for work in progress holds

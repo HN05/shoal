@@ -1,7 +1,7 @@
 //! Persist issue associations.
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
+use shoal_ids::space_ids::SpaceId;
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};

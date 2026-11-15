@@ -1,7 +1,7 @@
 //! Keep each repository's seed build at its default branch's tip and start
 //! new workspaces from it. Seed failures never fail the operation that met
 //! them: a workspace without a seed still builds, only from scratch.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{
     collections::BTreeMap, ffi::OsString, fs, io::Write as _, path::Path, process::Stdio,
     sync::Arc, time::Duration,

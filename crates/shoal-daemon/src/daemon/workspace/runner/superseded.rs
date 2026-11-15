@@ -5,8 +5,8 @@
 //! before it starts, and each waiting-jobs poll checks every queued one,
 //! reading each PR's head once, so a job admission holds back does not hold
 //! the PR's checks while it waits.
-use crate::client::queue::QueueEntryId;
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::collections::{BTreeMap, HashSet};
 
 use anyhow::Result;

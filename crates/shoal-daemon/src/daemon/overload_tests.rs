@@ -1,7 +1,6 @@
 use super::notifications::NotificationKind;
 use super::*;
 use crate::client::assignments::Done;
-use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::{
@@ -20,6 +19,7 @@ use crate::execution::recovery::SavedExt as _;
 use crate::model::PresentSpace;
 use crate::paths::CommandPaths;
 use crate::paths::StateFiles;
+use shoal_ids::execution_ids::ExecutionId;
 use std::{fs, future::Future, os::unix::fs::PermissionsExt};
 
 mod agent_restart;
@@ -1588,7 +1588,7 @@ static WORKER: crate::config::modes::ModeName = crate::config::modes::ModeName::
 /// `session` when given.
 fn restored<'a>(
     agent: &str,
-    session: Option<&'a crate::client::agent::AgentSessionId>,
+    session: Option<&'a shoal_ids::agent_session_ids::AgentSessionId>,
 ) -> crate::execution::recovery::Restored<'a> {
     let agent = Box::leak(Box::new(agent.into()));
     static OWN: crate::agent::ModelChoice = crate::agent::ModelChoice {

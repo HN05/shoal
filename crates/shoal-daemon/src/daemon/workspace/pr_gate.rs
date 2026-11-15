@@ -1,7 +1,7 @@
 //! Taking a workspace's PR gate by selector, and the gates a space's own
 //! change records on.
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
+use shoal_ids::space_ids::SpaceId;
 
 use super::{Manager, PrGuard};
 use crate::client::space_names::SpaceSelector;

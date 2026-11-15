@@ -3,7 +3,7 @@
 //! It is never a name, path or source, which a selector resolves to a
 //! repository.
 
-crate::ids::text_id!(
+crate::macros::text_id!(
     /// The ID of a registered repository, stored and serialized as its text.
     RepositoryId
 );

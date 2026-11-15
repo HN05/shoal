@@ -411,7 +411,7 @@ async fn no_agent_starts_in_a_workspace_that_becomes_a_chat() {
     // Its agent stopped, and the relocation has yet to make it the chat.
     let chat = crate::daemon::conversions::record::ConvertedChat {
         agent: "claude".into(),
-        execution: crate::client::execution_ids::ExecutionId::generate(),
+        execution: shoal_ids::execution_ids::ExecutionId::generate(),
         session: Some("s1".into()),
         origin: None,
         mode: crate::model::chat_mode(),

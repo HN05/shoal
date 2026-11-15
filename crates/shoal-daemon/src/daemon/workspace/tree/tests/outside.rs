@@ -1,6 +1,5 @@
 //! Trees below a chat without a repository, which takes children in every
 //! repository and whose scope reaches every space.
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::execution::recovery::LastSessionExt;
 use crate::{
@@ -16,6 +15,7 @@ use crate::{
     },
     state::AgentState,
 };
+use shoal_ids::space_ids::SpaceId;
 
 /// Register a repository for each of `names`.
 async fn repositories(

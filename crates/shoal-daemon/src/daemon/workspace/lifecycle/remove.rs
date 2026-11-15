@@ -4,7 +4,6 @@
 use super::super::{Manager, StopRequest, done::CompletedAncestor, space_removal::AgentState};
 use super::worktree::{WorktreeRemoval, WorktreeStage};
 use super::{Removal, Stage};
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     client::output::chat::RemovedChat,
@@ -14,6 +13,7 @@ use crate::{
     removal::{IdleRestore, Inspection, InspectionPolicy, RemovalResult, UnsavedWork},
 };
 use anyhow::{Context, Result, bail, ensure};
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 
 /// Refuse to remove any of `children`, those the removal of the space named

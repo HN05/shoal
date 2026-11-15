@@ -1,11 +1,9 @@
-use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::RecordExt;
 use crate::execution::recovery::SavedExt as _;
+use shoal_ids::execution_ids::ExecutionId;
 use shoal_refs::BranchName;
 use std::{fs, path::Path, sync::Arc};
 
-use crate::client::agent::AgentSessionId;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -17,6 +15,8 @@ use crate::{
     removal::{InspectionPolicy, UnsavedWork},
     transfer::*,
 };
+use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::space_ids::SpaceId;
 
 pub(super) async fn exporter() -> (
     tempfile::TempDir,

@@ -1,6 +1,6 @@
 use super::*;
-use crate::space_ids::SpaceId;
 use crate::space_names::SpaceSelector;
+use shoal_ids::space_ids::SpaceId;
 
 #[test]
 fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_or_id() {

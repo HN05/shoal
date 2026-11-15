@@ -4,7 +4,7 @@
 //! A new workspace clones the snapshot and takes the seed's modification time
 //! for each file its commit left unchanged, so mtime-based build tools rebuild
 //! only what the branch changed.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use shoal_refs::CommitId;
 use std::{
     collections::HashSet,

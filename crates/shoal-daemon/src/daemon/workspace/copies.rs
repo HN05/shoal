@@ -1,8 +1,8 @@
 //! Copies: workspaces that start from another workspace's current files or
 //! from one of its checkpoints, and record what they started with in a
 //! starting checkpoint of their own.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
@@ -12,7 +12,6 @@ use shoal_refs::{BranchName, CommitId};
 use super::{Manager, NewWorkspace, creation::Configured, restore::RestoredFiles};
 use crate::client::space_names::SpaceName;
 use crate::client::space_names::SpaceSelector;
-use crate::model::CheckpointNumber;
 use crate::{
     git,
     model::{
@@ -22,6 +21,7 @@ use crate::{
     protocol::CopySource,
     state::WorkspaceState,
 };
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 /// Where a copy goes.
 #[derive(Debug)]

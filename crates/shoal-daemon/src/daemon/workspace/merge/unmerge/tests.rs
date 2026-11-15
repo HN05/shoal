@@ -1,4 +1,4 @@
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{fs, path::PathBuf, sync::Arc};
 
 use crate::client::space_names::SpaceSelector;

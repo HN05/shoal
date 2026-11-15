@@ -1,10 +1,10 @@
 //! Shared outcomes of daemon-owned resource allocation.
-use crate::client::space_ids::SpaceId;
 use crate::{
     client::space_names::SpaceName,
     daemon::{approvals::ApprovalRequest, notifications::NotificationKind, workspace::Manager},
     protocol::Body,
 };
+use shoal_ids::space_ids::SpaceId;
 
 pub enum Allocation<T> {
     Granted(T),

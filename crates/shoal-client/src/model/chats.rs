@@ -3,11 +3,11 @@ use super::{
     AgentStatus, Completion, Repository, ReviewMark, SpaceHold, SpaceLinks, SpaceRef, Workspace,
     WorkspaceRef,
 };
-use crate::agent::AgentSessionId;
-use crate::repository_ids::RepositoryId;
-use crate::space_ids::{SpaceId, SpaceNumber};
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
+use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
 /// The mode of a chat recorded without one.
 pub fn chat_mode() -> crate::config::modes::ModeName {

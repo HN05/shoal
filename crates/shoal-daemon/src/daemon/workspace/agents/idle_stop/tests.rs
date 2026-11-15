@@ -1,8 +1,6 @@
 use super::*;
 use crate::client::assignments::Done;
-use crate::client::execution_ids::ExecutionId;
 use crate::client::priority::Priority;
-use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace::agents::ProtectionExt;
 use crate::execution::recovery::RecordExt;
@@ -17,6 +15,8 @@ use crate::{
     model::Workspace,
     state::{AgentState, Sleep},
 };
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::repository_ids::RepositoryId;
 
 /// How a test workspace keeps its agent.
 #[derive(Clone, Copy)]

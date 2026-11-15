@@ -1,10 +1,10 @@
 //! The journal of space, file and Shoal events, as `shoal internal events`
 //! replays it.
-use crate::execution_ids::ExecutionId;
 use crate::model::SpaceKind;
-use crate::repository_ids::RepositoryId;
-use crate::space_ids::SpaceId;
 use crate::space_names::SpaceName;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 use std::{fmt, path::PathBuf, str::FromStr};
 

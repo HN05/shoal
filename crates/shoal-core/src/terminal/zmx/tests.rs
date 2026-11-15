@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
 use crate::sessions::zmx::parse_list;
+use shoal_ids::space_ids::SpaceId;
 
 #[test]
 fn names_fit_the_socket_path_and_skip_taken_ones() {

@@ -22,9 +22,9 @@ mod takeover;
 mod terminal;
 mod wake;
 
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use anyhow::{Context as _, Result, ensure};
+use shoal_ids::space_ids::SpaceId;
 use std::{ffi::OsString, path::PathBuf};
 
 use crate::{env, paths::CommandPaths};

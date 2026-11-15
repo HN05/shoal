@@ -1,9 +1,9 @@
 //! Spaces of either kind: the spaces a caller sees and references to them.
 use super::{Chat, SpaceLinks, Workspace};
-use crate::repository_ids::RepositoryId;
-use crate::space_ids::{SpaceId, SpaceNumber};
 use crate::space_names::{SpaceName, SpaceSelector};
 use serde::{Deserialize, Serialize};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_refs::BranchName;
 
 /// Another space a record refers to, with its current name, and its branch

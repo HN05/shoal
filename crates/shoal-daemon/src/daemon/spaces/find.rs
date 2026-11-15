@@ -1,6 +1,6 @@
 //! Finding the spaces that link an issue, PR or CI run, or hold a resource.
-use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
+use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     daemon::{links::wait::linked_items, store, workspace::Manager},

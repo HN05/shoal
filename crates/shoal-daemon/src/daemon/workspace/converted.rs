@@ -42,7 +42,7 @@ impl Manager {
     async fn create_converted(
         &self,
         converting: Converting,
-        repository: crate::client::repository_ids::RepositoryId,
+        repository: shoal_ids::repository_ids::RepositoryId,
         branch: String,
         base: Option<String>,
         options: CreationOptions,
@@ -152,7 +152,7 @@ impl Manager {
     /// what of its worktree was made once it is proven the workspace's.
     /// Without that proof, or when a step fails, the workspace stays, failed,
     /// for the user to remove, and the failure is logged.
-    async fn give_chat_back(&self, repo: &Repository, chat: &crate::client::space_ids::SpaceId) {
+    async fn give_chat_back(&self, repo: &Repository, chat: &shoal_ids::space_ids::SpaceId) {
         let id = chat.clone();
         let pending = self
             .store

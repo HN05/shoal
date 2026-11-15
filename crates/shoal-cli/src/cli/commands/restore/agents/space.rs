@@ -4,7 +4,6 @@ use anyhow::{Context as _, Result, ensure};
 use std::path::PathBuf;
 
 use super::{commands, permission_change, picker, queue, reports, sessions, stale};
-use crate::client::execution_ids::ExecutionId;
 use crate::client::output::restore::StartedRestores;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::RecordExt;
@@ -18,6 +17,7 @@ use crate::{
     model::{PresentSpace, Workspace},
     protocol::ConfigTarget,
 };
+use shoal_ids::execution_ids::ExecutionId;
 
 /// Resume the stopped agent of the space `space` names, the `execution` one
 /// when given. The agent restores in this terminal when `here`, otherwise
@@ -286,7 +286,7 @@ async fn start_told(
     ctx: &Context,
     workspace: &Workspace,
     session: &LastSession,
-    fork: Option<crate::client::agent::AgentSessionId>,
+    fork: Option<shoal_ids::agent_session_ids::AgentSessionId>,
     message: String,
     records: Vec<PathBuf>,
 ) -> Result<i32> {

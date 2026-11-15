@@ -5,10 +5,10 @@ use anyhow::{Context, Result, ensure};
 
 use super::place::RunPlace;
 use crate::{
-    client::repository_ids::RepositoryId,
     daemon::{scope::Caller, workspace::Manager},
     git::{self, default_branch::DefaultBranchLookup},
 };
+use shoal_ids::repository_ids::RepositoryId;
 
 impl Manager {
     /// Refuse `caller` a run on `branch` in the repository of `place`,

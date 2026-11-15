@@ -8,10 +8,10 @@ use super::{
 };
 use crate::cli::list_status::ListStatus;
 use crate::cli::output::{Palette, Style};
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::{SpaceId, SpaceNumber};
 use crate::config::modes::ModeName;
 use crate::model::{Chat, QueueEntry, Workspace};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
 /// `workspace_rows` for workspaces, the running and stopped chats and the
 /// agents queued to start in a workspace without a row in one tree: the

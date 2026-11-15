@@ -1,5 +1,5 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 
 #[test]
 fn agents_default_to_json_unless_their_launcher_carries_a_setting() {

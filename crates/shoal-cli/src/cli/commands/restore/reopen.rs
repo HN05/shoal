@@ -1,6 +1,6 @@
 //! Opening removed spaces again from their removal records.
 use crate::cli::commands::restore::agents::reports::QueuedExt;
-use crate::client::execution_ids::ExecutionId;
+use shoal_ids::execution_ids::ExecutionId;
 use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result};

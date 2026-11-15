@@ -1,7 +1,7 @@
 //! The agent sessions hosts keep: finding them where the daemon recorded a
 //! workspace's or chat's agents, and attaching this terminal to one.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;

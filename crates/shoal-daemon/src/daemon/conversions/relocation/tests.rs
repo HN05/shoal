@@ -1,4 +1,4 @@
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::sync::Mutex;
 
 /// The workspaces whose last session a relocation continued.
@@ -225,7 +225,7 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
         .create_workspace(&repo.id, "fix-login".into(), None, None, None)
         .await
         .unwrap();
-    let execution = crate::client::execution_ids::ExecutionId::generate();
+    let execution = shoal_ids::execution_ids::ExecutionId::generate();
     // The agent exited on its own after the conversion was asked for,
     // keeping its session as a last session.
     let exited = LastSession {
@@ -263,7 +263,7 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
 }
 
 /// Whether a restore of the agent of the space `id` is queued.
-async fn restore_queued(manager: &Manager, id: &crate::client::space_ids::SpaceId) -> bool {
+async fn restore_queued(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) -> bool {
     let entries = manager.queue_entries().await.unwrap();
     entries
         .iter()
@@ -303,7 +303,7 @@ async fn a_stop_keeps_the_chat_a_workspace_becomes_down() {
         .unwrap();
     let chat = crate::daemon::conversions::record::ConvertedChat {
         agent: "claude".into(),
-        execution: crate::client::execution_ids::ExecutionId::generate(),
+        execution: shoal_ids::execution_ids::ExecutionId::generate(),
         session: Some("s1".into()),
         origin: None,
         mode: crate::model::chat_mode(),
@@ -339,7 +339,7 @@ async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
         .unwrap();
     let chat = crate::daemon::conversions::record::ConvertedChat {
         agent: "claude".into(),
-        execution: crate::client::execution_ids::ExecutionId::generate(),
+        execution: shoal_ids::execution_ids::ExecutionId::generate(),
         session: Some("s1".into()),
         origin: None,
         mode: crate::model::chat_mode(),
@@ -444,7 +444,7 @@ async fn a_relocation_hands_over_the_converting_agents_its_removal_reaches() {
         .unwrap();
     let chat = crate::daemon::conversions::record::ConvertedChat {
         agent: "claude".into(),
-        execution: crate::client::execution_ids::ExecutionId::generate(),
+        execution: shoal_ids::execution_ids::ExecutionId::generate(),
         session: Some("s1".into()),
         origin: None,
         mode: crate::model::chat_mode(),

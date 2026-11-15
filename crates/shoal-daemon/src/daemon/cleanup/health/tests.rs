@@ -1,7 +1,7 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::cleanup::SpaceFailures;
+use shoal_ids::space_ids::SpaceId;
 
 /// A pass whose `step` failed with `error`, in the workspace `id` named
 /// after it when one is given.

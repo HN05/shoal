@@ -95,7 +95,7 @@ pub(super) async fn hold(
     mut stream: UnixStream,
     request_id: u64,
     manager: Arc<Manager>,
-    entry: crate::client::queue::QueueEntryId,
+    entry: shoal_ids::queue_entry_ids::QueueEntryId,
     startup: tokio::sync::OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
     let mut changed = manager.store.watch_changes();

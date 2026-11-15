@@ -1,6 +1,5 @@
 use super::*;
 use crate::client::assignments::Done;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     links::proposals::tests as proposals,
@@ -9,6 +8,7 @@ use crate::daemon::{
     workspace_files::Attacher,
 };
 use crate::time::UnixTime;
+use shoal_ids::space_ids::SpaceId;
 use std::sync::Arc;
 
 /// A manager with a cloned repository and one workspace under the default

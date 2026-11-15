@@ -1,5 +1,5 @@
 //! Arguments of commands for agent sessions and demos.
-use crate::client::execution_ids::ExecutionId;
+use shoal_ids::execution_ids::ExecutionId;
 use std::ffi::OsString;
 
 use clap::Subcommand;
@@ -8,9 +8,9 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::args::{AgentParser, SpaceTargets, permission_assignment},
-    model::CheckpointNumber,
     sessions::HostName,
 };
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -73,7 +73,7 @@ pub enum SessionsCommand {
         /// The queue entry whose slot the restored agent takes, for the
         /// daemon's start of a queued restore.
         #[arg(long, hide = true, requires_all = ["execution", "focus"])]
-        queue_entry: Option<crate::client::queue::QueueEntryId>,
+        queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
         /// The host that opened this place in the background for this
         /// restore, which records it as the workspace's before restoring.
         #[arg(long, hide = true, requires_all = ["execution", "focus"])]

@@ -2,8 +2,8 @@
 //! workspace's agent works on and receives the activity of, or a workspace
 //! at a commit, with no branch of its own. Neither gets an agent of its own;
 //! `shoal start` starts one.
-use crate::client::repository_ids::RepositoryId;
 use anyhow::Result;
+use shoal_ids::repository_ids::RepositoryId;
 
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::client::{

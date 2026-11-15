@@ -1,5 +1,5 @@
-use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::SpaceId;
 
 use super::Lifetime;
 use crate::item_numbers::ItemNumber;

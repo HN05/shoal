@@ -4,7 +4,6 @@ use shoal_refs::BranchName;
 
 use crate::client::recovery;
 use crate::client::space_names::SpaceSelector;
-use crate::model::CheckpointNumber;
 use crate::{
     cli::{
         context::Context,
@@ -13,6 +12,7 @@ use crate::{
     },
     model::{Checkpoint, CheckpointCause, RestoredCheckpoint},
 };
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 /// `shoal checkpoint`: keep the workspace's current state.
 pub(in crate::cli::commands) async fn checkpoint(

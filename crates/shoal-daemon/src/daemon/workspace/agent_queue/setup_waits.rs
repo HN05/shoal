@@ -2,7 +2,8 @@
 //! returning a start whose preparation left none waiting to the queue,
 //! finding the one waiting for a workspace's, and changing the permissions
 //! its plan starts its agent with before a retried setup lets it start.
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId, space_names::SpaceName};
+use crate::client::space_names::SpaceName;
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::collections::HashSet;
 
 use anyhow::{Result, ensure};

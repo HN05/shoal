@@ -5,7 +5,7 @@ use std::{fmt, str::FromStr};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize, ser::SerializeStruct};
 
-use crate::space_ids::SpaceNumber;
+use shoal_ids::space_ids::SpaceNumber;
 
 /// A question or approval request by its space's number and its own. Both
 /// kinds share one sequence per space, so a number names one item.

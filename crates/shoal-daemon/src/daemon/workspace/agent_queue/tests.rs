@@ -1,4 +1,4 @@
-use crate::client::execution_ids::ExecutionId;
+use shoal_ids::execution_ids::ExecutionId;
 use std::{
     collections::{BTreeMap, HashSet},
     time::Duration,
@@ -638,9 +638,9 @@ async fn forget(manager: &Manager, workspace: &crate::model::Workspace, executio
     .unwrap();
 }
 
-use crate::client::queue::QueueEntryId;
 use QueueKind::{Launch, Restore};
 use QueueState::{Queued, Starting};
+use shoal_ids::queue_entry_ids::QueueEntryId;
 
 #[tokio::test]
 async fn stopped_agents_restore_in_queue_order_before_later_launches() {
@@ -1268,7 +1268,7 @@ async fn a_space_a_removal_holds_refuses_the_launches_it_queues() {
         .await
         .unwrap();
     let chat = crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
-    let queued_by = |space_id: &crate::client::space_ids::SpaceId| crate::daemon::scope::Caller {
+    let queued_by = |space_id: &shoal_ids::space_ids::SpaceId| crate::daemon::scope::Caller {
         space_id: space_id.clone(),
         execution: None,
         granted: None,
@@ -1543,7 +1543,7 @@ async fn a_oneshot_run_starts_beside_the_agents_without_a_slot() {
 }
 
 /// What a one-shot run of `space`'s work serves, queued after everything.
-pub(super) fn serving(space: &crate::client::space_ids::SpaceId) -> super::Serving {
+pub(super) fn serving(space: &shoal_ids::space_ids::SpaceId) -> super::Serving {
     super::Serving {
         space: space.clone(),
         queued_after: i64::MAX,
@@ -1872,7 +1872,7 @@ async fn an_entrys_wait_for_memory_lasts_while_passes_hold_it_for_memory() {
 /// queue the restore as `shoal restore` does.
 async fn queue_saved_restore(
     manager: &Manager,
-    id: &crate::client::space_ids::SpaceId,
+    id: &shoal_ids::space_ids::SpaceId,
     mode: &str,
 ) -> QueueEntry {
     let execution = ExecutionId::from(format!("stopped-{mode}"));

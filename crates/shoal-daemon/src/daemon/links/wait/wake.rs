@@ -6,11 +6,12 @@ use anyhow::Result;
 
 use super::{delivery::receiving, poll::POLL_INTERVAL};
 use crate::{
-    client::{execution_ids::ExecutionId, space_ids::SpaceId, space_names::SpaceSelector},
+    client::space_names::SpaceSelector,
     daemon::workspace::Manager,
     model::{AgentStatus, PresentSpace},
     time::UnixTime,
 };
+use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 
 /// How long no wait may run for an idle agent's updates before its wake hook
 /// counts as gone: longer than the hook waits between attempts of a wait

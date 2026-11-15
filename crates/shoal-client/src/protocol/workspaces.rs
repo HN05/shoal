@@ -5,8 +5,8 @@ use super::ConfigTarget;
 use super::Lifetime;
 use crate::config::hooks::HookKind;
 use crate::forge::numbers::PullNumber;
-use crate::model::CheckpointNumber;
 use crate::space_names::SpaceSelector;
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 /// Requests that create, find, inspect and change workspaces.
 #[derive(Debug, Serialize, Deserialize)]
@@ -233,7 +233,7 @@ pub enum WorkspaceMethod {
     /// daemon's record still names that workspace its owner. The workspace
     /// may already be removed, so the request names it by ID.
     CloseOwnedPlace {
-        workspace: crate::space_ids::SpaceId,
+        workspace: shoal_ids::space_ids::SpaceId,
         place: crate::sessions::Origin,
     },
     /// Whose `place` is, as the daemon knows it for `workspace`.

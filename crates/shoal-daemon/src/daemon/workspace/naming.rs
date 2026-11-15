@@ -1,8 +1,8 @@
 //! A workspace's name, the label its lists, tabs and notices show, which
 //! only `shoal rename` changes after its creation.
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{Connection, params};
+use shoal_ids::space_ids::SpaceId;
 
 use super::Manager;
 use crate::client::space_names::{SpaceName, SpaceSelector};

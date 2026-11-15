@@ -3,7 +3,7 @@
 //! the forge once the setting is off or the repository is removed. On a
 //! forge whose runners each take one job, registration only checks that the
 //! login may register them and keeps no runner.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};

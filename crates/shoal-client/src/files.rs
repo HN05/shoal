@@ -1,7 +1,7 @@
 //! Files attached to a workspace or chat: Shoal's copies and how they came.
-use crate::execution_ids::ExecutionId;
-use crate::space_ids::SpaceId;
 use crate::space_names::SpaceName;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
@@ -42,7 +42,7 @@ pub enum Attacher {
         /// The session the agent reported, which outlives a resume; none
         /// before its first report.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        session: Option<crate::agent::AgentSessionId>,
+        session: Option<shoal_ids::agent_session_ids::AgentSessionId>,
     },
     /// A request from a chat's agent, which runs outside any execution.
     Chat {

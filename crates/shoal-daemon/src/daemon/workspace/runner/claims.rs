@@ -7,9 +7,9 @@
 //! stays with the forge for other runners, as do the jobs of a repository
 //! whose runner was turned off. A job admitted as the
 //! system shuts down waits in the queue again.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::repository_ids::RepositoryId;
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::{
     ffi::OsString,
     io::Write as _,

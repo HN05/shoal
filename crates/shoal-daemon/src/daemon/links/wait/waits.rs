@@ -9,7 +9,7 @@ use std::{
 use anyhow::Result;
 use tokio::{sync::Notify, time::Instant};
 
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 
 /// The running wait of each workspace or chat, identified by its
 /// supersession signal. Waits share one cursor per item, so a newer wait

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use crate::forge::repo::remote_url::{RemoteUrl, source_name};
-use crate::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 
 /// What names a repository: the ID of a registered one, which selects it
 /// alone, or the caller's argument, kept alongside a path resolved in its

@@ -1,10 +1,10 @@
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     scope::{Caller, authorize},
     test_support::{manager, repository, workspace_below},
 };
 use crate::protocol::{AgentMethod, Operation, WorkspaceMethod};
+use shoal_ids::space_ids::SpaceId;
 
 fn caller(space: &SpaceId, read_only: bool) -> Caller {
     Caller {

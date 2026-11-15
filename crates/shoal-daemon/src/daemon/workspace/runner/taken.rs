@@ -8,7 +8,6 @@ use anyhow::{Context, Result};
 use rusqlite::params;
 
 use super::ends::ClaimedJob;
-use crate::client::queue::QueueEntryId;
 use crate::{
     daemon::workspace::Manager,
     forge::{
@@ -19,6 +18,7 @@ use crate::{
     model::QueuedJob,
 };
 use shoal_forge::ci::runner::{RunnerRequests, TookRun, answer_took_run, reported_run, took_run};
+use shoal_ids::queue_entry_ids::QueueEntryId;
 
 impl Manager {
     /// Follow each running job whose runner reported the run of the job it

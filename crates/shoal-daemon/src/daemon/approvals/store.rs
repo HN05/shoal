@@ -1,8 +1,8 @@
 //! The request store: recording, reading, withdrawing, releasing and retiring
 //! approval requests.
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};
+use shoal_ids::space_ids::SpaceId;
 use std::fmt;
 
 use super::{ApprovalRequest, DecisionStatus, Lifetime, MERGE, Target, proposals};

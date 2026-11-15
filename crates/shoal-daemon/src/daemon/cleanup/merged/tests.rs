@@ -1,7 +1,7 @@
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::RecordExt;
 use crate::paths::StateFiles;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::{fs, sync::Arc};
 
 use super::*;

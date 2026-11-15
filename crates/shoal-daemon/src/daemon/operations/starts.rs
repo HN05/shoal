@@ -1,10 +1,10 @@
 //! Opening a workspace and starting its preparation in one request, as
 //! `shoal start` and `shoal split` do: the checks before anything is created,
 //! the workspace and its issue, then the operation that prepares it.
-use crate::client::queue::QueueEntryId;
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use crate::daemon::links::issue::{Assigner, AssignerOf};
+use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context as _, Result, ensure};

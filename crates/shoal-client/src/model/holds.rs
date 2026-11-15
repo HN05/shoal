@@ -1,6 +1,6 @@
 //! Holds that keep a space from cleanup.
-use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::SpaceId;
 
 /// A caller-named claim that a space is still in use.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -9,7 +9,7 @@ use rusqlite::Transaction;
 
 use super::{Plan, stored, write};
 use crate::{
-    client::{events::BlockerEvent, repository_ids::RepositoryId, space_ids::SpaceId},
+    client::events::BlockerEvent,
     daemon::{
         blockers::{Lookup, Lookups, Target},
         workspace::Manager,
@@ -17,6 +17,7 @@ use crate::{
     state::BlockerKind,
     time::UnixTime,
 };
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
 /// What clearing changed of a space's blockers.
 pub(crate) struct Cleared {

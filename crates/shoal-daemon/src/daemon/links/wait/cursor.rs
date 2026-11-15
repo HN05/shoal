@@ -2,9 +2,9 @@
 //! watch last saw of the item, and the updates delivered from it that are
 //! not acknowledged yet, stored apart so reading them reads none of the
 //! item's history.
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
+use shoal_ids::space_ids::SpaceId;
 
 use crate::forge::updates::Update;
 use shoal_forge::updates::WatchRecord;

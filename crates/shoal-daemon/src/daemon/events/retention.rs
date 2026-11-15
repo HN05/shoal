@@ -3,17 +3,17 @@
 //! removal, as its checkpoints and attached files do. A removal record or
 //! a removed space's unexpired files keep them longer. Shoal's own events
 //! stay for the global retention.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{collections::HashMap, time::Duration};
 
 use anyhow::Result;
 use rusqlite::{Connection, Transaction};
 
 use crate::{
-    client::space_ids::SpaceId,
     daemon::{log, workspace::Manager},
     time::UnixTime,
 };
+use shoal_ids::space_ids::SpaceId;
 
 /// A space that is gone, with its repository and when it went.
 struct Gone {

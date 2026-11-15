@@ -3,9 +3,9 @@
 //! which has nothing to do until then, and for one stopped because its
 //! space is blocked, nothing blocking the space, unless `shoal restore`
 //! asked for it.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use crate::execution::recovery::RecordExt;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::collections::HashSet;
 
 use anyhow::Result;

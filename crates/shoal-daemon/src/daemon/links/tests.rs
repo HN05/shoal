@@ -1,11 +1,11 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     client::events::{EventItem, LinkEvent},
     daemon::test_support::{git, manager, repository},
     model::LinkedItem,
 };
+use shoal_ids::space_ids::SpaceId;
 
 async fn workspace_with_origin() -> (tempfile::TempDir, std::sync::Arc<Manager>, SpaceId) {
     let (root, manager) = manager().await;

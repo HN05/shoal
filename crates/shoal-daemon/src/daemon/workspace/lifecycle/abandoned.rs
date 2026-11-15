@@ -7,7 +7,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::client::space_ids::{SpaceId, SpaceNumber};
 use crate::{
     daemon::{
         events::{self, EventCause, EventKind},
@@ -16,6 +15,7 @@ use crate::{
     },
     state::WorkspaceState,
 };
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
 /// A removal under way from its reservation. Dropped before
 /// [`Self::finish`], as when its work panics or is dropped, it fails the

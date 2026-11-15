@@ -1,7 +1,7 @@
 //! How long attached files stay: a removed space's stay for
 //! `cleanup.restore.retention_days` after its removal, and every file goes
 //! with its repository.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{path::Path, time::Duration};
 
 use anyhow::{Result, ensure};

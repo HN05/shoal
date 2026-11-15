@@ -5,7 +5,7 @@ use clap::{Args, Subcommand};
 
 use crate::cli::args::ConfirmationArgs;
 use crate::client::space_names::SpaceSelector;
-use crate::model::CheckpointNumber;
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]

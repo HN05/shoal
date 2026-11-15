@@ -1,6 +1,5 @@
 use super::*;
 use crate::client::assignments::Done;
-use crate::client::space_ids::SpaceNumber;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -12,6 +11,7 @@ use crate::{
     protocol::QuestionMethod,
     removal::{InspectionPolicy, UnsavedWork},
 };
+use shoal_ids::space_ids::SpaceNumber;
 use std::sync::Arc;
 
 async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {

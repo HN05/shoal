@@ -1,8 +1,8 @@
 //! What commands that act on running agents print: `shoal stop`, `shoal
 //! restart` and the turn commands.
-use crate::execution_ids::ExecutionId;
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
+use shoal_ids::execution_ids::ExecutionId;
 
 use crate::{
     model::QueueEntry,

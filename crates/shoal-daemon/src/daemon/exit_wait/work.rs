@@ -2,10 +2,10 @@
 //! client that asked for the exit.
 use anyhow::Result;
 
-use crate::client::space_ids::SpaceId;
 use crate::daemon::workspace::Manager;
 use crate::protocol::{Work, WorkPlace};
 use crate::state::WorkspaceState;
+use shoal_ids::space_ids::SpaceId;
 
 impl Manager {
     /// Each workspace in a state an exit would interrupt, each operation

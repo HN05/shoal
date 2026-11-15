@@ -6,7 +6,8 @@
 use anyhow::Result;
 
 use super::{Manager, Turn};
-use crate::{client::space_ids::SpaceId, config::machine::Schedule, time::UnixTime};
+use crate::{config::machine::Schedule, time::UnixTime};
+use shoal_ids::space_ids::SpaceId;
 
 /// Why putting an idle agent to sleep costs nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

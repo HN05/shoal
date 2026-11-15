@@ -2,8 +2,8 @@
 //! and the turn's final message reaches the user's questions too, until the
 //! user answers there or replies in the conversation. A workspace's agent
 //! marks the turn of the execution it runs, and a chat's agent the chat's.
-use crate::client::execution_ids::ExecutionId;
 use anyhow::{Context, Result, ensure};
+use shoal_ids::execution_ids::ExecutionId;
 
 use super::Manager;
 use crate::client::space_names::SpaceSelector;

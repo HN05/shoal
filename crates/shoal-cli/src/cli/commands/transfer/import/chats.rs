@@ -3,7 +3,6 @@
 use anyhow::{Context as _, Result, bail};
 
 use crate::cli::commands::restore::reopen::{ReopenedExt, reopened_chat};
-use crate::client::agent::AgentSessionId;
 use crate::{
     cli::{
         agents::{self, Existing, SessionHome},
@@ -13,6 +12,7 @@ use crate::{
     model::{RemovedSpace, RestoredSpace},
     transfer::{CarriedChatExt, CarriedSessionFile, Manifest, ManifestExt},
 };
+use shoal_ids::agent_session_ids::AgentSessionId;
 
 /// A chat a package carries, as it opens here: the repository it goes to,
 /// none for a chat without one, and its removal record, with the sessions

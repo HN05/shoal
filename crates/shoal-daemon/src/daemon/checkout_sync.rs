@@ -4,7 +4,7 @@
 //! the checkout has; `shoal repo sync` and decisions that need the remote's
 //! state now sync through the same path. A sync that keeps failing shows in
 //! workspace status, then in the inbox with one notification.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use shoal_refs::BranchName;
 use std::{
     collections::{HashMap, HashSet},

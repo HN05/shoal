@@ -4,9 +4,9 @@ use std::collections::HashSet;
 
 use super::{Cell, status_cell, waiting_reasons};
 use crate::cli::list_status::ListStatus;
-use crate::client::space_ids::SpaceId;
 use crate::model::{QueueEntry, Workspace};
 use crate::state::{QueueKind, QueueState};
+use shoal_ids::space_ids::SpaceId;
 
 #[derive(Default)]
 pub struct Statuses {

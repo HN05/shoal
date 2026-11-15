@@ -1,8 +1,8 @@
 //! `Manager`, the daemon's shared state, with its configuration and the
 //! workspace records it reads.
-use crate::client::execution_ids::ExecutionId;
 use crate::config_file::ConfigExt;
 use crate::paths::StateFiles;
+use shoal_ids::execution_ids::ExecutionId;
 mod adoption;
 pub(crate) mod agent_queue;
 pub(crate) mod agent_state;
@@ -90,7 +90,6 @@ pub(crate) use tree::{
     set_parent, spaces_above,
 };
 
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use crate::{
@@ -101,6 +100,7 @@ use crate::{
 };
 use anyhow::Result;
 use rusqlite::OptionalExtension;
+use shoal_ids::space_ids::SpaceId;
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::OwnedMutexGuard;
 

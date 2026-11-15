@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
 use crate::daemon::test_support::{manager, repository};
+use shoal_ids::space_ids::SpaceId;
 
 #[tokio::test]
 async fn recheck_readies_only_workspaces_the_audit_failed_once_they_verify() {

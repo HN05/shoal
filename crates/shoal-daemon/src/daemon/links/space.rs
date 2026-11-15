@@ -2,8 +2,8 @@
 //! a running chat, which acts in its repository's registered checkout and
 //! links items the same way, without a branch or an assignment that
 //! completes.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 use std::path::Path;
 

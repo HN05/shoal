@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
 use crate::time::UnixTime;
+use shoal_ids::space_ids::SpaceId;
 
 // Reconstruct old schemas from a frozen pre-refactor snapshot, independently
 // of MIGRATIONS, so missing or misnumbered steps cannot fix their own fixture.

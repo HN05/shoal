@@ -1,9 +1,9 @@
 //! What a run tells the user: a numbered line for each selected agent as
 //! its restart ends or is skipped, whose turns it waits for, what goes on
 //! when it is interrupted, and with `--json` the object that lists them.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceNumber;
 use crate::client::space_names::{self, SpaceName};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceNumber;
 use std::collections::HashMap;
 
 use anyhow::Result;

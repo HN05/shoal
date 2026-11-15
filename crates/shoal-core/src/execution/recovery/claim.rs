@@ -3,8 +3,8 @@
 use super::{
     LastSession, LastSessionExt as _, Record, RecordExt as _, Saved, SavedSession, consume,
 };
-use crate::client::execution_ids::ExecutionId;
 use anyhow::{Context as _, Result, ensure};
+use shoal_ids::execution_ids::ExecutionId;
 
 pub struct RecoveryClaim(std::fs::File);
 

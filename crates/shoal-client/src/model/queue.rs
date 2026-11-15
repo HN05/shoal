@@ -1,10 +1,10 @@
 //! The agent launch queue and what blocks its entries.
-use crate::execution_ids::ExecutionId;
-use crate::repository_ids::RepositoryId;
-use crate::space_ids::SpaceId;
 use crate::space_names::{SpaceName, SpaceSelector};
 use crate::state::{QueueKind, QueueState};
 use serde::{Deserialize, Serialize};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 
 use crate::forge::items::{
     link::LinkKind,
@@ -15,7 +15,7 @@ use crate::forge::items::{
 /// slot, or a CI job waiting for the runner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueEntry {
-    pub id: crate::queue::QueueEntryId,
+    pub id: shoal_ids::queue_entry_ids::QueueEntryId,
     pub kind: QueueKind,
     /// The repository it starts in; none for a restore in a chat without
     /// one.

@@ -1,9 +1,9 @@
 //! Resolving the space a request names, by its number or ID, over
 //! workspaces and chats alike, and refusing the other kind where a request
 //! needs one.
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension as _, params};
+use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     client::space_names::SpaceSelector,

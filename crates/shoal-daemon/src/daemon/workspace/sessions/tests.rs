@@ -1,5 +1,4 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::sessions::PlaceOwnership;
 use crate::{
@@ -9,6 +8,7 @@ use crate::{
     sessions::{Host, HostName, Origin, Session},
 };
 use futures_util::future::BoxFuture;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     path::Path,
     sync::{

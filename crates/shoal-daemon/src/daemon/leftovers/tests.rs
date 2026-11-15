@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
 use crate::time::UnixTime;
+use shoal_ids::space_ids::SpaceId;
 
 fn found(pid: u32, birth: &str) -> (Identity, Leftover) {
     let identity = Identity {

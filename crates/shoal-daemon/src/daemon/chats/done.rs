@@ -1,8 +1,8 @@
 //! A chat's `shoal done`: it records the chat's work as finished, while its
 //! agent and session keep running until completion cleanup, when requested,
 //! removes the chat as it removes any space.
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, ensure};
+use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     client::assignments::Done,

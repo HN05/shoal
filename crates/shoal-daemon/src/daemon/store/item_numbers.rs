@@ -1,7 +1,7 @@
 //! Number the recorded questions and approval requests within their space,
 //! where both kinds now share one sequence, and name them that way in the
 //! notifications that told the user about them.
-use crate::client::space_ids::{SpaceId, SpaceNumber};
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use std::collections::HashMap;
 
 use anyhow::Result;

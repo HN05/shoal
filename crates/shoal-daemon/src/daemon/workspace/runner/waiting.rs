@@ -3,8 +3,8 @@
 //! the spaces that run links, drops the entries of jobs the forge no longer
 //! lists as waiting, which another runner took or a cancel ended, and passes
 //! over the jobs of PRs that moved on.
-use crate::client::queue::QueueEntryId;
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::collections::HashSet;
 
 use anyhow::Result;

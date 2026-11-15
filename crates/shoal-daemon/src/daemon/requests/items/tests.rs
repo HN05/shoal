@@ -82,7 +82,7 @@ fn reviewed_forge() -> shoal_forge::test_support::Server {
 }
 
 /// The `pr review --approve` of PR `number` from the chat `id`.
-fn approval(id: &crate::client::space_ids::SpaceId, number: &str) -> ItemMethod {
+fn approval(id: &shoal_ids::space_ids::SpaceId, number: &str) -> ItemMethod {
     use crate::forge::review::submit::{NewReview, ReviewVerdict};
     ItemMethod::ItemAction {
         context: ItemContext::Chat(SpaceSelector::id(id)),
@@ -121,7 +121,7 @@ async fn agents_approve_prs_as_the_review_account_as_pr_review_allows() {
     let reviewing = test_support::chat(&manager, "reviewing", "plan", Some(&repo), None).await;
     let proposing = test_support::chat(&manager, "proposing", "chat", Some(&repo), None).await;
     let denied = test_support::chat(&manager, "denied", "worker", Some(&repo), None).await;
-    let caller = |id: &crate::client::space_ids::SpaceId| Caller {
+    let caller = |id: &shoal_ids::space_ids::SpaceId| Caller {
         space_id: id.clone(),
         execution: None,
         granted: None,

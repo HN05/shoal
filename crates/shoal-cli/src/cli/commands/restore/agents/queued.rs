@@ -3,13 +3,13 @@
 //! agent there, taking over the entry's slot.
 use anyhow::{Result, ensure};
 
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use crate::{
     cli::{args::SpaceTargets, commands::queued_agents, context::Context, terminal},
     sessions::HostName,
     state::QueueState,
 };
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 /// Restore the stopped agent `execution` of the one space `targets` names
 /// for the daemon's start of the queued restore `entry`, whose slot the
@@ -18,7 +18,7 @@ pub async fn start_entry(
     ctx: &Context,
     targets: SpaceTargets,
     execution: Option<ExecutionId>,
-    entry: crate::client::queue::QueueEntryId,
+    entry: shoal_ids::queue_entry_ids::QueueEntryId,
 ) -> Result<i32> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),

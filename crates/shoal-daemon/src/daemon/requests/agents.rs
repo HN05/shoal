@@ -1,5 +1,5 @@
 //! The daemon's answers to [`AgentMethod`] requests, and who may send them.
-use crate::client::execution_ids::ExecutionId;
+use shoal_ids::execution_ids::ExecutionId;
 use std::sync::Arc;
 
 use anyhow::{Result, bail, ensure};

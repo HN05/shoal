@@ -3,7 +3,6 @@
 use anyhow::Result;
 use tokio::time::Instant;
 
-use crate::repository_ids::RepositoryId;
 use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, await_reply, request},
@@ -18,6 +17,7 @@ use crate::{
     model::Relation,
     protocol::{Body, ItemContext, ItemMethod},
 };
+use shoal_ids::repository_ids::RepositoryId;
 
 /// Link the `kind` item `item` names to `space` as `relation`, with the
 /// title lists show when the caller knows it.

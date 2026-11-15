@@ -1,9 +1,9 @@
 //! Giving a workspace the space it is opened below: the chat or workspace
 //! whose agent opened it, or the user when one opened it outside any.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use rusqlite::params;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 
 use super::super::{Manager, NewWorkspace};
 use crate::client::space_names::SpaceSelector;

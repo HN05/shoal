@@ -19,7 +19,7 @@ async fn a_workspace_becoming_a_chat_keeps_its_questions_and_requests_to_take_ac
     let (_root, manager) = crate::daemon::test_support::manager().await;
     let chat = super::ConvertedChat {
         agent: "claude".into(),
-        execution: crate::client::execution_ids::ExecutionId::generate(),
+        execution: shoal_ids::execution_ids::ExecutionId::generate(),
         session: None,
         origin: None,
         mode: crate::model::chat_mode(),

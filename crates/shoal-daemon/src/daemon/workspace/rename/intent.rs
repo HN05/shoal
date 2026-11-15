@@ -1,7 +1,7 @@
 //! Durable rename intent: the reserved branch a workspace is moving to.
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 
 use super::Manager;

@@ -1,7 +1,7 @@
 //! Admission limits: the machine's and each repository's limits on agents
 //! and CI jobs, as configured and as measured memory and disk allow, and
 //! which waiting entries fit them beside the slots in use.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
@@ -11,7 +11,6 @@ use std::{
 use anyhow::Result;
 
 use super::{Grant, slots::Slot};
-use crate::client::queue::QueueEntryId;
 use crate::{
     config::{RunLimit, overload::Overload},
     daemon::workspace::{
@@ -21,6 +20,7 @@ use crate::{
     model::HeldBy,
     protocol::ConfigTarget,
 };
+use shoal_ids::queue_entry_ids::QueueEntryId;
 
 /// The machine's agent limits and each repository's.
 #[derive(Debug, Default)]

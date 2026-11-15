@@ -1,9 +1,9 @@
 //! The protection stops Shoal decides for agents, which the store keeps by
 //! the execution that runs each, beside the turn state the agent reports;
 //! the tracked agent only carries a stop to its wrapper.
-use crate::client::execution_ids::ExecutionId;
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
+use shoal_ids::execution_ids::ExecutionId;
 use std::collections::HashMap;
 
 use super::{Agent, Manager, Protection, ProtectionExt, restart};

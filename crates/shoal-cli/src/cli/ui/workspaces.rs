@@ -1,6 +1,6 @@
 //! Choosing the workspace a command acts on: the named one, the current
 //! one, or one from a picker.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, ensure};

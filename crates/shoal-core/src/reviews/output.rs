@@ -148,7 +148,7 @@ pub fn session(
     format: &ResultFormat,
     result: Option<&[u8]>,
     stderr_head: &[u8],
-) -> Option<crate::agent::AgentSessionId> {
+) -> Option<shoal_ids::agent_session_ids::AgentSessionId> {
     let raw = result.and_then(|result| serde_json::from_slice::<Value>(result).ok());
     let session = (format.session)(raw.as_ref(), &String::from_utf8_lossy(stderr_head))?;
     Some(session.into())

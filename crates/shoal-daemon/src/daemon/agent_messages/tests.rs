@@ -1,6 +1,4 @@
 use super::Delivery;
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::paths::StateFiles;
@@ -13,6 +11,8 @@ use crate::{
     },
     protocol::AgentMethod,
 };
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 
 async fn workspace(
     temp: &tempfile::TempDir,

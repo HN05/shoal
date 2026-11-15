@@ -3,9 +3,9 @@
 //! live in the `.proposals` directory of the repository the proposal is
 //! for. Earlier versions kept them in the state directory, where the
 //! proposals made then still find them until they are decided.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::BTreeSet,
     ffi::OsString,

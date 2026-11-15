@@ -3,7 +3,7 @@
 //! `.caches/shared`,
 //! and `[env]` names it with `{cache.NAME}`. Only caches whose tools lock or
 //! address entries by content are safe to share between live workspaces.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{
     collections::BTreeMap,
     fs,

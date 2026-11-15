@@ -1,8 +1,8 @@
 //! The environment Shoal gives the processes it starts, and what it reads of
 //! its own; [`crate::client::env`] names every variable.
 use crate::client::scope_tokens::ScopeToken;
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use anyhow::{Result, bail};
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_refs::BranchName;
 use std::{
     collections::BTreeMap,

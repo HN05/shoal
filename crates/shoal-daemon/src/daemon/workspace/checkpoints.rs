@@ -1,8 +1,8 @@
 //! Checkpoints: a workspace's HEAD and unsaved files, kept under private refs
 //! until they expire, which `shoal restore` returns the workspace to.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::collections::HashSet;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -11,7 +11,6 @@ use shoal_refs::BranchName;
 
 use super::Manager;
 use crate::client::space_names::SpaceSelector;
-use crate::model::CheckpointNumber;
 use crate::{
     daemon::{log, scope::Caller},
     git,
@@ -19,6 +18,7 @@ use crate::{
     state::WorkspaceState,
     time::UnixTime,
 };
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 impl Manager {
     /// `shoal checkpoint`: keep the workspace's current state.

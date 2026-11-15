@@ -21,7 +21,7 @@ async fn with_workspace() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
 }
 
 /// Restore the removed space `id`, which must be a chat.
-async fn restore_chat(manager: &Manager, id: &crate::client::space_ids::SpaceId) -> RestoredChat {
+async fn restore_chat(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) -> RestoredChat {
     match manager.restore_space(&SpaceSelector::id(id), None).await {
         Ok(RestoredSpace::Chat(restored)) => *restored,
         other => panic!("{other:?}"),

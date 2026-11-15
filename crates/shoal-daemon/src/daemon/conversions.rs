@@ -2,9 +2,9 @@
 //! keeps its ID, number, name, place in the tree, links, questions, files
 //! and progress, and its agent carries on with its conversation in the new
 //! place once its current turn ends.
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::Transaction;
+use shoal_ids::space_ids::SpaceId;
 
 use crate::{config::modes::ModeName, model::Workspace};
 
@@ -48,7 +48,7 @@ impl Converting {
         let pending = Pending::Workspace {
             mode: self.mode.clone(),
             chat,
-            execution: crate::client::execution_ids::ExecutionId::generate(),
+            execution: shoal_ids::execution_ids::ExecutionId::generate(),
             preparation: None,
             prepared: false,
             hook_failure: None,

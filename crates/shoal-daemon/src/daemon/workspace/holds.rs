@@ -1,9 +1,9 @@
 //! Caller-named claims of a space's use, a workspace's or a chat's,
 //! independent of assignment completion.
-use crate::client::space_ids::SpaceId;
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Result, anyhow, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
+use shoal_ids::space_ids::SpaceId;
 
 use super::{GuardMode, Manager, ResourceGuard};
 use crate::client::space_names::SpaceSelector;

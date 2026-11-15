@@ -1,9 +1,9 @@
 use super::*;
 use crate::client::assignments::Done;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{notifications::NotificationKind, workspace_files::Attacher};
 use crate::model::PresentSpace;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 
 #[test]
@@ -1349,7 +1349,7 @@ async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup()
 
 /// Save a stopped agent for `shoal restore` in the space `id`, returning
 /// its record.
-fn save_agent(manager: &Manager, id: &crate::client::space_ids::SpaceId) -> std::path::PathBuf {
+fn save_agent(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) -> std::path::PathBuf {
     use crate::paths::StateFiles;
     let directory = manager.paths.space_state(id);
     std::fs::create_dir_all(&directory).unwrap();

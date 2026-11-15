@@ -1,7 +1,7 @@
 //! Chats: starting, restoring and handing over their agents, their names,
 //! parents and scope, listing them and removing them.
-use crate::space_ids::SpaceId;
 use anyhow::Result;
+use shoal_ids::space_ids::SpaceId;
 
 use crate::space_names::SpaceName;
 use crate::space_names::SpaceSelector;
@@ -40,7 +40,7 @@ pub struct NewChat<'a> {
     /// The priority set on it.
     pub priority: Option<crate::priority::Priority>,
     /// The queued launch whose start records it, if any.
-    pub queue_entry: Option<&'a crate::queue::QueueEntryId>,
+    pub queue_entry: Option<&'a shoal_ids::queue_entry_ids::QueueEntryId>,
 }
 
 /// Record the `chat` at `home`, running at `origin` in a terminal host when

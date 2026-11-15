@@ -1,12 +1,12 @@
 //! SQLite persistence: schema migrations, row mappers, and the small
 //! guards every mutation shares.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Row, Transaction, TransactionBehavior};
 use serde::{Serialize, de::DeserializeOwned};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
@@ -235,7 +235,7 @@ pub fn ensure_branch_available(
     let Some(branch) = branch else {
         return Ok(());
     };
-    let owner: Option<(crate::client::space_ids::SpaceNumber, SpaceName)> = db
+    let owner: Option<(shoal_ids::space_ids::SpaceNumber, SpaceName)> = db
         .query_row(
             "SELECT number,name FROM spaces JOIN workspaces USING(id)
                 WHERE repository_id=?1 AND branch=?2 AND (?3 IS NULL OR id!=?3)",

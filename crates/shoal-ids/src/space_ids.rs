@@ -4,12 +4,12 @@
 //! space only until the daemon resolves them. The number is the short one
 //! commands select a space by while it exists.
 
-crate::ids::text_id!(
+crate::macros::text_id!(
     /// The ID of a workspace or chat, stored and serialized as its text.
     SpaceId
 );
 
-crate::ids::number!(
+crate::macros::number!(
     /// The number of a workspace or chat, unique among the spaces that
     /// exist and freed when one goes; 0 for none.
     SpaceNumber(u32)

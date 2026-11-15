@@ -1,4 +1,4 @@
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{
     fs,
     path::{Path, PathBuf},

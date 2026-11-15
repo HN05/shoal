@@ -18,11 +18,11 @@ use crate::{
             QueuedLaunch, StartedWorkspace, WorkspaceStart,
         },
     },
-    queue::QueueEntryId,
     repository::Selector,
     space_names::SpaceSelector,
     state::WorkspaceState,
 };
+use shoal_ids::queue_entry_ids::QueueEntryId;
 
 /// A workspace for the daemon to open and prepare in an operation.
 pub struct NewWorkspace {

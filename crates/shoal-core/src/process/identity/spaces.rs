@@ -10,9 +10,9 @@ use super::{
     owners,
     platform::{executable, working_directory},
 };
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},

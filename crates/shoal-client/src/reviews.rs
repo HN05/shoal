@@ -1,7 +1,7 @@
 //! Local reviews: a one-shot, read-only reviewer's findings on a workspace's
 //! committed HEAD or a PR, which the daemon stores and the workspace's agent
 //! answers with typed outcomes.
-use crate::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{fmt, str::FromStr};
 
 use anyhow::{Context, Result, bail};

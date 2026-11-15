@@ -6,11 +6,10 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::super::{scope::Caller, workspace::Manager};
 use crate::client::{
     priority::{Prioritized, Priority},
-    repository_ids::RepositoryId,
-    space_ids::SpaceId,
     space_names::SpaceSelector,
 };
 use crate::model::QueueRequest;
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
 /// The priority of the space `id`: the one set on it, else the default.
 pub(crate) fn current(db: &Connection, id: &SpaceId) -> Result<Priority> {

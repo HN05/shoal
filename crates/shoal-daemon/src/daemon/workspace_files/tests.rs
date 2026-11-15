@@ -1,5 +1,5 @@
 use crate::client::assignments::Done;
-use crate::client::execution_ids::ExecutionId;
+use shoal_ids::execution_ids::ExecutionId;
 use std::time::Duration;
 
 use super::{Attacher, FileSource};

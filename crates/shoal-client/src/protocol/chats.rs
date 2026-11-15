@@ -1,5 +1,5 @@
-use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::SpaceId;
 
 use super::Lifetime;
 use crate::space_names::SpaceName;
@@ -50,7 +50,7 @@ pub enum ChatMethod {
         /// process may have queued: the chat is then confined as that
         /// process's start would be.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        queue_entry: Option<crate::queue::QueueEntryId>,
+        queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
     },
     ListChats,
     /// Remove the chat `chat`, by ID or name, stopping its agent: first

@@ -543,7 +543,7 @@ pub(super) fn rekey_converted_records(db: &Connection) -> Result<()> {
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     for id in converted {
-        let own = crate::client::space_ids::SpaceId::generate();
+        let own = shoal_ids::space_ids::SpaceId::generate();
         db.execute(
             "UPDATE checkpoints SET workspace_id=?2, record=json_set(record,'$.workspace_id',?2)
                 WHERE workspace_id=?1",

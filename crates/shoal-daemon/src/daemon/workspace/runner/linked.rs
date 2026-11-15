@@ -3,8 +3,8 @@
 //! lists it in their status; it places none of them above the job's own
 //! workspace. Links change after a job is queued, so whatever reads the
 //! spaces a job is for links it again first.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_refs::BranchName;
 use std::collections::HashMap;
 

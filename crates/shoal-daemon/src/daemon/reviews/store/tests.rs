@@ -1,10 +1,10 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
 use crate::time::UnixTime;
 use crate::{
     daemon::store::Store,
     reviews::{FixCheck, OutcomeKind, Severity, Verdict, output::NewFinding},
 };
+use shoal_ids::space_ids::SpaceId;
 
 /// A migrated store with one workspace, `work`.
 async fn store(directory: &tempfile::TempDir) -> Store {

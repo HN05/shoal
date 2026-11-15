@@ -1,7 +1,6 @@
 //! The configuration layers of a repository's workspaces, and where its
 //! local config file lives.
 use super::Manager;
-use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::config::hooks::HookCommand;
 use crate::{
@@ -15,6 +14,7 @@ use crate::{
     protocol::ConfigTarget,
 };
 use anyhow::{Context, Result};
+use shoal_ids::repository_ids::RepositoryId;
 use std::{collections::BTreeMap, path::PathBuf};
 
 mod rejected;

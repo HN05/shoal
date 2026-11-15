@@ -1,5 +1,5 @@
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::time::Duration;
 
 use crate::client::space_names::SpaceSelector;

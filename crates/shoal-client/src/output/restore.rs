@@ -1,7 +1,7 @@
 //! What `shoal restore` prints.
-use crate::execution_ids::ExecutionId;
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
+use shoal_ids::execution_ids::ExecutionId;
 
 use crate::{
     model::{Chat, PresentSpace, QueueEntry, RemovedSpace, Workspace},

@@ -1,9 +1,9 @@
 //! Running agents, their reported state and sessions.
-use crate::agent::AgentSessionId;
-use crate::execution_ids::ExecutionId;
-use crate::space_ids::SpaceId;
 use crate::state::AgentState;
 use serde::{Deserialize, Serialize};
+use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 /// The turn state a space's agent last reported, and since when.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

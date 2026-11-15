@@ -3,7 +3,6 @@
 //! configuration; they queue unless asked to start now, a chat's starting
 //! at once, a workspace whose setup failed retries it before the agent
 //! waiting for it starts, and `--forget` forgets the stopped work instead.
-use crate::client::execution_ids::ExecutionId;
 use crate::client::output::{
     batch::Failure,
     restore::{Queued, Reopened, StartedRestores},
@@ -17,6 +16,7 @@ use crate::{
     model::PresentSpace,
 };
 use anyhow::{Context as _, Result, ensure};
+use shoal_ids::execution_ids::ExecutionId;
 
 use super::targets::Selected;
 

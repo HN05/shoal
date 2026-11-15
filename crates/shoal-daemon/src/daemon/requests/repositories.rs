@@ -9,13 +9,13 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
-use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::PermissionKey,
     daemon::workspace::spotlight::Layout,
     protocol::{Body, RepositoryMethod},
 };
+use shoal_ids::repository_ids::RepositoryId;
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,

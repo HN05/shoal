@@ -1,7 +1,7 @@
 //! Stopping tracked work before the system or the daemon shuts down, as
 //! `shoal stop --all` does, while the daemon and wrappers still run to save it.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::collections::HashSet;
 
 use anyhow::Result;

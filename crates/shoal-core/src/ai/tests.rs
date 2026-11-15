@@ -492,7 +492,7 @@ fn gate_runs_reach_shoal_and_stay_read_only() {
         schema_json: "{}",
         output: Path::new("/tmp/verdict.json"),
     };
-    let session = crate::agent::AgentSessionId::from("0199a2".to_owned());
+    let session = shoal_ids::agent_session_ids::AgentSessionId::from("0199a2".to_owned());
     let (codex, claude) = (arguments(&agents, "codex"), arguments(&agents, "claude"));
     let codex_runs = [
         codex.gate_args(&fields).unwrap(),
@@ -555,7 +555,7 @@ fn a_resumed_review_names_its_session_and_stays_read_only() {
         schema_json: "{}",
         output: Path::new("/tmp/review.json"),
     };
-    let session = crate::agent::AgentSessionId::from("0199a2".to_owned());
+    let session = shoal_ids::agent_session_ids::AgentSessionId::from("0199a2".to_owned());
     let (codex, claude) = (arguments(&agents, "codex"), arguments(&agents, "claude"));
     let resumed = codex.review_resume_args(&fields, &session).unwrap();
     assert_eq!(resumed[..2], ["exec", "resume"].map(OsString::from));

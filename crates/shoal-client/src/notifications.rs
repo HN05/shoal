@@ -1,8 +1,8 @@
 //! The user's notifications: what the daemon recorded for the user to read.
-use crate::space_ids::SpaceId;
 use crate::space_names::SpaceName;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::SpaceId;
 use shoal_states::states;
 use tokio::{io::BufReader, net::UnixStream};
 
@@ -111,7 +111,7 @@ pub struct Notification {
     pub workspace: Option<SpaceName>,
     /// The ID of that space, which selects it while it exists.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub space_id: Option<crate::space_ids::SpaceId>,
+    pub space_id: Option<shoal_ids::space_ids::SpaceId>,
     pub kind: NotificationKind,
     pub message: String,
     pub read: bool,

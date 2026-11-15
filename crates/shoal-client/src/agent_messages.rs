@@ -1,5 +1,5 @@
 //! Messages for the agents working in a workspace, from the user or the daemon.
-use crate::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::path::PathBuf;
 
 use anyhow::Result;

@@ -1,6 +1,6 @@
-use crate::space_ids::SpaceId;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::SpaceId;
 
 /// Requests about the files attached to spaces: workspaces and chats.
 #[derive(Debug, Serialize, Deserialize)]

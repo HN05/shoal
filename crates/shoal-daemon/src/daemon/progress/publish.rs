@@ -3,8 +3,8 @@
 //! draft: at most one edit per space each [`INTERVAL`], the latest progress
 //! written in the end. A failed edit is logged and retried with the next
 //! change, without a notification.
-use crate::client::space_ids::SpaceId;
 use crate::forge::items::reference::ItemRef;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex, PoisonError},

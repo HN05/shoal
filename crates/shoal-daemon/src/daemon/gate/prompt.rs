@@ -3,8 +3,8 @@
 //! of which a resumed session is given only what is new.
 use std::fmt::Write as _;
 
-use crate::client::space_ids::SpaceNumber;
 use crate::config::gate::GateRules;
+use shoal_ids::space_ids::SpaceNumber;
 
 /// What the gate is told before anything else.
 const INSTRUCTIONS: &str = include_str!("instructions.md");

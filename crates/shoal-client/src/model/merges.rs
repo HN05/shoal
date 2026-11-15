@@ -1,8 +1,8 @@
 //! Local merges and unmerges of workspace branches into the default branch.
 use super::{MergeWarning, Repository, Workspace};
-use crate::repository_ids::RepositoryId;
-use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::{BranchName, CommitId};
 use std::path::PathBuf;
 

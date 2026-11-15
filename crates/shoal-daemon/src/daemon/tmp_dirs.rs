@@ -1,7 +1,7 @@
 //! Where the temporary directories of spaces are, and deleting them once
 //! their spaces are gone.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::{collections::BTreeSet, path::Path};
 
 use anyhow::{Result, ensure};

@@ -3,7 +3,6 @@ use anyhow::{Context, Result, bail, ensure};
 use shoal_refs::CommitId;
 
 use super::super::{Manager, copies::Source};
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::scope::Caller,
@@ -12,6 +11,7 @@ use crate::{
     model::{CopiedFrom, MadeFor, Repository, Workspace},
     protocol::{ItemContext, PullHead},
 };
+use shoal_ids::space_ids::SpaceId;
 
 /// What a workspace was made from, which a refresh brings it up to date
 /// with.

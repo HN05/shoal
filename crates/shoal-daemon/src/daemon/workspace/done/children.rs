@@ -1,8 +1,8 @@
 //! The spaces below a completed space: an ancestor's completion with
 //! cleanup takes them whatever their own work, while it stands.
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
 use anyhow::Result;
+use shoal_ids::space_ids::SpaceId;
 
 use super::super::Manager;
 use crate::model::PresentSpace;

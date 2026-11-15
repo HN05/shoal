@@ -1,9 +1,9 @@
 //! `shoal pr revert`: open a PR that undoes a merged one for a workspace or
 //! chat, through the forge where it reverts PRs, and otherwise from a new
 //! workspace whose branch reverts the merge with `git revert`.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 
 use super::{
     content::read_content,

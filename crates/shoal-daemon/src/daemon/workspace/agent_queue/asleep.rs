@@ -6,7 +6,8 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::stopped::{UNKNOWN_STOP, WAKES_IN_QUEUE};
-use crate::{client::space_ids::SpaceId, model::Asleep, state::QueueKind};
+use crate::{model::Asleep, state::QueueKind};
+use shoal_ids::space_ids::SpaceId;
 
 /// Why the agent of the space `id` is asleep and what wakes it, while a
 /// restore Shoal queued on its own waits for it.

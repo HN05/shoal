@@ -2,8 +2,6 @@
 //! that stop a workspace's executions, connected or disconnected.
 use super::super::Manager;
 use super::Connections;
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -17,6 +15,8 @@ use crate::{
     state::{ExecutionState, WorkspaceState},
 };
 use anyhow::{Result, ensure};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::collections::HashSet;
 use tokio::time::{Instant, sleep};
 

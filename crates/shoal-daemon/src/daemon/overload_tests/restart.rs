@@ -1,7 +1,6 @@
 //! Daemon interruptions of stopped agents: a restart quarantines their
 //! executions, and startup reconciles them from their recovery records.
 use super::*;
-use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
@@ -12,6 +11,7 @@ use crate::{
     process::identity::{self as process, Identity},
     state::ExecutionState,
 };
+use shoal_ids::execution_ids::ExecutionId;
 
 /// Open the state as a restarted daemon does before it serves.
 async fn restart(manager: &Manager) -> Arc<Manager> {

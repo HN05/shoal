@@ -2,7 +2,7 @@
 //! `keep_awake` opts in, so an idle timeout or a closed laptop lid does not
 //! suspend it. The inhibitor lasts only as long as a pipe the daemon holds
 //! open, so it ends with the daemon however that stops.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{process::Stdio, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result, anyhow};

@@ -41,7 +41,7 @@ impl<'a> AddSettings<'a> {
     }
 
     /// The settings of the existing workspace `id`.
-    pub(super) fn workspace(ctx: &'a Context, id: &crate::client::space_ids::SpaceId) -> Self {
+    pub(super) fn workspace(ctx: &'a Context, id: &shoal_ids::space_ids::SpaceId) -> Self {
         Self::of(ctx, ConfigTarget::Space(id.into()))
     }
 
@@ -177,7 +177,7 @@ pub(super) struct Launch {
     pub opening: agents::Opening,
     pub narrowing: crate::config::permissions::PermissionsConfig,
     pub args: Vec<OsString>,
-    pub fork: Option<crate::client::agent::AgentSessionId>,
+    pub fork: Option<shoal_ids::agent_session_ids::AgentSessionId>,
 }
 
 /// Start `resolved`'s agent in `workspace` as `launch` says, else open a

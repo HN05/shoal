@@ -1,6 +1,6 @@
 //! `shoal internal agent-state` and `turn-failed`: the turn state, and the
 //! failure that ended a turn, that an agent's hooks report for its space.
-use crate::client::execution_ids::ExecutionId;
+use shoal_ids::execution_ids::ExecutionId;
 use std::{
     io::{IsTerminal, Read},
     os::fd::{AsFd, AsRawFd, BorrowedFd},
@@ -201,7 +201,7 @@ fn final_message(event: &serde_json::Value) -> Option<String> {
 }
 
 /// The agent session a hook event names.
-fn session_of(event: &serde_json::Value) -> Option<crate::client::agent::AgentSessionId> {
+fn session_of(event: &serde_json::Value) -> Option<shoal_ids::agent_session_ids::AgentSessionId> {
     event["session_id"]
         .as_str()
         .filter(|session| recovery::valid_session(session))

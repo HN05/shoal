@@ -1,12 +1,11 @@
 //! Workspace records and the commit, copy or branch they start from.
-use super::{
-    AgentStatus, CheckpointNumber, QueuedJob, ReviewMark, SpaceHold, SpaceLinks, SpaceRef,
-};
-use crate::repository_ids::RepositoryId;
-use crate::space_ids::{SpaceId, SpaceNumber};
+use super::{AgentStatus, QueuedJob, ReviewMark, SpaceHold, SpaceLinks, SpaceRef};
 use crate::space_names::SpaceName;
 use crate::state::{AgentState, WorkspaceState};
 use serde::{Deserialize, Serialize};
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_refs::{BranchName, CommitId};
 use std::path::{Path, PathBuf};
 

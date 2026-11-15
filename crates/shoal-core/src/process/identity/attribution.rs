@@ -6,10 +6,11 @@ use super::{
     marks::{Evidence, Marker, Marks, Observed, observe, observe_elevated},
     owners, platform,
 };
-use crate::client::execution_ids::ExecutionId;
-use crate::{client::space_ids::SpaceId, protocol::timing};
+use crate::protocol::timing;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet},
     time::Duration,

@@ -1,5 +1,5 @@
 use super::*;
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 
 const GIB: u64 = 1 << 30;
 

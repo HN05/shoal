@@ -1,7 +1,5 @@
 //! Trees that mix workspaces and chats: every walk passes spaces of either
 //! kind alike.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::{
@@ -15,6 +13,8 @@ use crate::{
     removal::{InspectionPolicy, UnsavedWork},
     state::AgentState,
 };
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 
 /// A workspace `root` with an agent, a chat below it running as the
 /// returned process, and a workspace `worker` with an agent below the chat.

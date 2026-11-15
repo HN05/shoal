@@ -9,7 +9,6 @@ use std::{
 use anyhow::{Context as _, Result};
 
 use super::{agent_integration, args, delivery, hook_args};
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
@@ -17,6 +16,7 @@ use crate::{
     model::{Chat, ChatHome, PresentSpace, Repository, SpaceLinks, Workspace},
     paths::CommandPaths,
 };
+use shoal_ids::space_ids::SpaceId;
 
 /// The space an agent runs in.
 #[derive(Clone, Copy)]

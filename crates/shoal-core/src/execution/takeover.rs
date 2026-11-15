@@ -4,8 +4,8 @@
 //! connection, and the installed release registers again and starts the
 //! agent. The daemon sends nothing between its resume and the restored
 //! child's start, so the handover loses no control.
-use crate::client::space_ids::SpaceId;
 use crate::paths::StateFiles;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     os::{
         fd::{FromRawFd as _, RawFd},

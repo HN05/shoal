@@ -1,8 +1,8 @@
-use crate::agent::AgentSessionId;
-use crate::execution_ids::ExecutionId;
-use crate::space_ids::SpaceId;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
+use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use super::Lifetime;
 

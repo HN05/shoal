@@ -1,10 +1,10 @@
 //! Workspaces at a commit: worktrees at a detached HEAD with no branch of
 //! their own, created from a revision or a PR's head. Removal goes the way
 //! of any workspace's.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use crate::forge::numbers::PullNumber;
 use anyhow::{Context, Result};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 
 use super::{Manager, creation::Configured, restore::RestoredFiles};

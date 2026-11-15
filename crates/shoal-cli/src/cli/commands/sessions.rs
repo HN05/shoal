@@ -1,9 +1,9 @@
 //! Persistent agent sessions run in terminal hosts; attaching hands this
 //! terminal to one of a workspace's or a chat's, first waking at once an
 //! agent that sleeps or is stopped there.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, bail, ensure};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -310,7 +310,7 @@ impl Target {
         }
     }
 
-    fn number(&self) -> crate::client::space_ids::SpaceNumber {
+    fn number(&self) -> shoal_ids::space_ids::SpaceNumber {
         match self {
             Self::Workspace(inspection) => inspection.workspace.number,
             Self::Chat(chat) => chat.number,

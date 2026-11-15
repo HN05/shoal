@@ -1,4 +1,4 @@
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::os::unix::fs::PermissionsExt;
 
 use crate::client::space_names::SpaceSelector;

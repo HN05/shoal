@@ -1,7 +1,7 @@
-use crate::execution_ids::ExecutionId;
-use crate::space_ids::SpaceId;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 /// Requests about a space's assignment: completion, ready marks and a
 /// workspace's stopped work.

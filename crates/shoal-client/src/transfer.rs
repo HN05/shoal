@@ -5,16 +5,17 @@ use std::path::PathBuf;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::agent::AgentSessionId;
 use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, request},
     executions::{Copied, LastSession, StoppedAgent},
-    model::{CheckpointNumber, RemovedSpace, RestoredSpace, RestoredWorkspace},
+    model::{RemovedSpace, RestoredSpace, RestoredWorkspace},
     protocol::{RemovalMethod, WorkspaceMethod},
     removal::{RemovalResult, UnsavedWork},
     repository::Selector,
 };
+use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 /// What a package holds besides its session files and bundle.
 #[derive(Debug, Clone, Serialize, Deserialize)]

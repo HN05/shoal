@@ -1,5 +1,5 @@
-use crate::client::execution_ids::ExecutionId;
 use crate::client::scope_tokens::ScopeToken;
+use shoal_ids::execution_ids::ExecutionId;
 use std::time::Duration;
 
 use super::{Entry, RETAIN, fake};

@@ -1,7 +1,7 @@
 //! Questions agents ask the user.
-use crate::space_ids::SpaceId;
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::SpaceId;
 
 use crate::space_names::{SpaceName, SpaceSelector};
 use crate::{

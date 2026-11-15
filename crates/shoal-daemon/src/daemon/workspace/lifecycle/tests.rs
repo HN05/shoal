@@ -3,7 +3,6 @@ use super::worktree::removal_options;
 use super::*;
 use crate::client::assignments::Done;
 use crate::client::log::{LogEntry, LogFilter};
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::paths::StateFiles;
 use crate::{
@@ -23,6 +22,7 @@ use crate::{
     removal::{InspectionPolicy, NOTHING, UnsavedWork},
     state::WorkspaceState,
 };
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 use std::{fs, sync::Arc};
 

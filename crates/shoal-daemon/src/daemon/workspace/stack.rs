@@ -1,6 +1,6 @@
 //! Base workspaces: the workspace whose branch a stacked workspace builds on.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 use std::path::Path;
 

@@ -1,5 +1,5 @@
-use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::SavedExt as _;
+use shoal_ids::execution_ids::ExecutionId;
 use std::{sync::Arc, time::Duration};
 
 use tokio::{io::BufReader, net::UnixStream, task::JoinHandle};

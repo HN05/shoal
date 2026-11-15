@@ -260,7 +260,7 @@ async fn run_chat(start: &Start<'_>) -> Result<String> {
     // A chat's name is a label nothing is built from, and the chat records
     // itself only once its session runs, so the session takes an opaque
     // name, which `shoal attach` finds the chat by.
-    let id = crate::client::space_ids::SpaceId::generate();
+    let id = shoal_ids::space_ids::SpaceId::generate();
     let name = unused_name(&format!("chat-{}", &id.as_str()[..8])).await?;
     let mut zmx = Command::new(Tool::Zmx.program());
     zmx.args(["attach", "--labels", CREATED]);

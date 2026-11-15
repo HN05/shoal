@@ -18,8 +18,6 @@ use super::{
     *,
 };
 use crate::client::assignments::Done;
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::time::UnixTime;
 use crate::{
@@ -39,6 +37,8 @@ use crate::{
     model::Workspace,
 };
 use shoal_forge::updates::{Edited, Snapshot};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 impl Manager {
     async fn wait_prs(&self, selector: &str, seconds: Option<u64>) -> Result<Updates> {

@@ -1,19 +1,20 @@
 //! Review rows: queueing, the state changes of a run, and the answers to
 //! findings, each in the caller's connection or transaction.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Row, params};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 
 use crate::{
-    agent::{Agent, AgentSessionId, ModelChoice},
+    agent::{Agent, ModelChoice},
     reviews::{
         Check, FailureReason, Finding, FindingId, Outcome, OutcomeKind, Posted, Reply, Review,
         ReviewId, ReviewState, ReviewStatus, ReviewTarget,
         output::{Checked, ReviewerOutput},
     },
 };
+use shoal_ids::agent_session_ids::AgentSessionId;
 
 /// What queueing a review found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

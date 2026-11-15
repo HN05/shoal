@@ -26,11 +26,11 @@ pub mod wait;
 
 pub(crate) use memories::ForgeMemories;
 
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
+use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     client::links::{Linked, Unlinked},

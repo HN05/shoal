@@ -6,8 +6,8 @@
 //! such as a tab opened before Shoal recorded its places. A marker the
 //! watcher keeps tells commands run in the place that it closes with the
 //! workspace.
-use crate::client::space_ids::SpaceId;
 use crate::paths::StateFiles;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     cell::{Cell, RefCell},
     future::Future,

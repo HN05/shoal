@@ -1,6 +1,6 @@
-use crate::space_ids::SpaceId;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::SpaceId;
 
 use super::Lifetime;
 

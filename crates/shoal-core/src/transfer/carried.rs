@@ -1,8 +1,8 @@
 //! The chats a package carries with its space: those in the worktree of the
 //! workspace it holds and those below its space, or below one of them, which
 //! go where it goes and open again after it.
-use crate::client::space_ids::SpaceId;
 use crate::model::{Chat, RemovedKind, RemovedSpace};
+use shoal_ids::space_ids::SpaceId;
 
 use super::{CarriedChat, Sessions};
 

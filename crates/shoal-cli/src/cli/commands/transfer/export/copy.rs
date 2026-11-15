@@ -9,7 +9,6 @@ use super::{
     selected_spaces, warn,
 };
 use crate::client::space_names::SpaceSelector;
-use crate::model::CheckpointNumber;
 use crate::{
     cli::{
         context::Context,
@@ -18,6 +17,7 @@ use crate::{
     model::PresentSpace,
     transfer::ExportedSpace,
 };
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 /// `shoal move export --keep`: write a copy of the space `names` names, or
 /// the current one or one a picker selects, to `file`, leaving it running: a

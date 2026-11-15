@@ -4,7 +4,7 @@
 //! agent hooks, and a delivered message is deleted. Files attached to a
 //! message outlive it, until their space is removed (see
 //! [`crate::daemon::workspace_files`]).
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::path::PathBuf;
 
 use anyhow::Result;

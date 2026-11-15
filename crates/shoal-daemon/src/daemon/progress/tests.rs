@@ -1,6 +1,5 @@
 use super::*;
 use crate::{
-    client::space_ids::SpaceId,
     daemon::{
         events::{EventItem, EventKind},
         scope::{self, Caller},
@@ -9,6 +8,7 @@ use crate::{
     model::{SpaceKind, Workspace},
     protocol::AgentMethod,
 };
+use shoal_ids::space_ids::SpaceId;
 
 fn step(name: &str, state: StepState, key: Option<&str>) -> PlanStep {
     PlanStep {

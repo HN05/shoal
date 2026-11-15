@@ -118,7 +118,7 @@ pub enum RemovalMethod {
         space: SpaceSelector,
         unsaved: UnsavedWork,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        checkpoint: Option<crate::model::CheckpointNumber>,
+        checkpoint: Option<shoal_ids::checkpoint_numbers::CheckpointNumber>,
     },
     /// Record a workspace another Shoal exported as removed here, with its
     /// checkpoint fetched from `bundle`, and open it again; a `copy` as a

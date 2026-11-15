@@ -1,7 +1,7 @@
 //! Durable terminal cleanup requests, committed before a demo record disappears.
-use crate::client::execution_ids::ExecutionId;
 use anyhow::{Context, Result};
 use rusqlite::{Connection, Transaction, params};
+use shoal_ids::execution_ids::ExecutionId;
 
 use crate::sessions::{Origin, Owner};
 

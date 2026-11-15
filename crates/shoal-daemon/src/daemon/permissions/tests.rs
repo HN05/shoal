@@ -1,7 +1,6 @@
 //! Effective permissions in a tree of chats and workspaces.
-use crate::client::repository_ids::RepositoryId;
 use crate::{
-    client::{space_ids::SpaceId, space_names::SpaceSelector},
+    client::space_names::SpaceSelector,
     config::permissions::{Opening, OtherRepositories, PermissionSource, Pushes},
     daemon::{
         test_support::{chat, manager, repository, workspace_below as workspace},
@@ -9,6 +8,8 @@ use crate::{
     },
     model::Repository,
 };
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 
 async fn register(temp: &tempfile::TempDir, manager: &Manager, name: &str) -> Repository {
     let checkout = repository(temp.path(), name);

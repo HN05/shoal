@@ -1,10 +1,11 @@
 use crate::{
-    client::{agents::GitCredential, space_ids::SpaceId},
+    client::agents::GitCredential,
     daemon::{
         scope::Caller,
         test_support::{configure, manager},
     },
 };
+use shoal_ids::space_ids::SpaceId;
 
 #[tokio::test]
 async fn only_scoped_callers_get_the_agent_token_of_a_host_with_one() {

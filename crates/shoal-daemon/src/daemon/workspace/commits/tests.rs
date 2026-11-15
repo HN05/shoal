@@ -1,7 +1,7 @@
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use crate::forge::numbers::PullNumber;
 use crate::time::UnixTime;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 use std::path::Path;
 

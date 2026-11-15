@@ -5,10 +5,11 @@
 //! its wrapper's reattachment, acts for it only while the wrapper is
 //! connected.
 use super::Caller;
-use crate::client::{scope_tokens::ScopeToken, space_ids::SpaceId};
+use crate::client::scope_tokens::ScopeToken;
 use crate::daemon::workspace::Manager;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
+use shoal_ids::space_ids::SpaceId;
 
 impl Manager {
     /// The caller `token` acts for: a connected execution, an operation, a

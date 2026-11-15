@@ -1,7 +1,7 @@
 //! zmx session discovery and termination, shared by launchers and cleanup.
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, bail, ensure};
 use sha2::{Digest, Sha256};
+use shoal_ids::space_ids::SpaceId;
 use std::{path::Path, time::Duration};
 use tokio::process::Command;
 

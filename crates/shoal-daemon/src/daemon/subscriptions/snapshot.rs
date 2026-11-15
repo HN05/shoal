@@ -1,7 +1,7 @@
 //! The records a subscription covers, as they are now: those of the topics
 //! it asked for that its caller may read.
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
+use shoal_ids::space_ids::SpaceId;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use anyhow::Result;

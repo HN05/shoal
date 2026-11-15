@@ -1,6 +1,6 @@
 //! Importing a workspace another Shoal exported: recording it as removed
 //! here, then restoring it.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 use std::path::Path;
 

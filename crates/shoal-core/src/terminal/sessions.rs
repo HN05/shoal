@@ -1,9 +1,9 @@
 //! The agent sessions hosts keep, whom each runs for, and whether a
 //! terminal shows one.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use serde::Serialize;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use super::{Host, Sessions, enabled_host};
 use crate::{

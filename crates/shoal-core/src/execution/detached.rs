@@ -1,6 +1,6 @@
 //! Tracked executions that outlive the process starting them, with their
 //! output in a log.
-use crate::client::execution_ids::ExecutionId;
+use shoal_ids::execution_ids::ExecutionId;
 use std::{
     ffi::OsString,
     io::Write,

@@ -1,7 +1,7 @@
-use crate::model::CheckpointNumber;
 use crate::recovery::ReconcileOptions;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 /// A piece of the JSON of a workspace's saved work, which the client joins:
 /// a saved command's arguments alone may outgrow a frame.

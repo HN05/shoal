@@ -1,6 +1,6 @@
 //! CLI simulator requests, retry policy, and audit rendering.
-use crate::client::execution_ids::ExecutionId;
 use anyhow::Result;
+use shoal_ids::execution_ids::ExecutionId;
 
 use super::acquisition::{Finish, obtain};
 use crate::client::leases;

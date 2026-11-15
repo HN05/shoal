@@ -7,7 +7,7 @@ pub(crate) mod starts;
 mod worker;
 
 use crate::client::scope_tokens::ScopeToken;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
     sync::{Arc, Mutex, PoisonError},

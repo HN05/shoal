@@ -1,8 +1,8 @@
 //! The forge and the accounts item actions go out with: the user's own
 //! logins for reads and the user's decisions, the review account for a
 //! scoped caller's verdicts, the agent account for the rest.
-use crate::client::{repository_ids::RepositoryId, space_ids::SpaceId};
 use anyhow::{Context, Result};
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
 use crate::{
     config::{

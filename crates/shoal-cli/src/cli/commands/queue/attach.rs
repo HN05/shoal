@@ -1,8 +1,8 @@
 //! `shoal queue start --attach`, and `shoal attach` of an agent Shoal
 //! stopped: wait until the started entry's agent runs in a session, then
 //! attach this terminal to that session.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::time::Duration;
 
 use anyhow::{Result, bail, ensure};

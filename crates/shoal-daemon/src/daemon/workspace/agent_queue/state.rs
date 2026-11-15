@@ -2,8 +2,8 @@
 //! entries, which stopped agents wait for their restore, which one-shot runs
 //! wait for or hold their admission, what held back waiting entries at the last
 //! admission pass, and what wakes the dispatcher.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     sync::{
@@ -16,8 +16,9 @@ use std::{
 use tokio::sync::{Mutex, MutexGuard, Notify, futures::Notified, watch};
 
 use super::Grant;
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId, time::UnixTime};
+use crate::client::time::UnixTime;
 use crate::model::HeldBy;
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 
 /// How long a waiting chat launch stays out of admission for the caller
 /// that records its chat, should the caller never attach it.

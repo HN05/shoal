@@ -1,5 +1,5 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 
 const SECOND: u64 = 1_000_000_000;
 

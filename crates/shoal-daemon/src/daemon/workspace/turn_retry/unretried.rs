@@ -1,10 +1,10 @@
 //! Telling of a failed turn Shoal does not retry: once per execution until
 //! its agent ends a turn normally, so a run of failed turns adds one
 //! notification rather than one each.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::Connection;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use super::{Manager, cancel};
 use crate::{

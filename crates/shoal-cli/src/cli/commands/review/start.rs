@@ -1,6 +1,6 @@
 //! `shoal review run`: queue a review of a workspace's changes or a PR, or
 //! run the configured `review` command.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 use std::{ffi::OsString, path::Path};
 

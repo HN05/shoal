@@ -7,8 +7,6 @@ use anyhow::Result;
 use crate::{
     client::{
         output::messages::{Reached, ReachedSpaces, Recipient, Refused, RefusedSpace},
-        repository_ids::RepositoryId,
-        space_ids::SpaceId,
         space_names::SpaceSelector,
     },
     daemon::{
@@ -19,6 +17,7 @@ use crate::{
     repository::Selector,
     state::WorkspaceState,
 };
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
 impl Manager {
     /// [`Self::send_to`] to the space `selector` names; the

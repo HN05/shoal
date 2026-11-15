@@ -1,10 +1,10 @@
 //! What a stop saved for `shoal restore`: keeping stopped agents as last
 //! sessions after `shoal stop`, and forgetting them, which the daemon does so
 //! it can confine coordinating agents to the workspaces below theirs.
-use crate::client::execution_ids::ExecutionId;
 pub use crate::client::executions::Forgotten;
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result, ensure};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use super::Manager;
 use crate::client::saved::SavedSummary;

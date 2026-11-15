@@ -2,10 +2,10 @@
 //! its agent, reserving it for removal, and its record. Cleanup and removal
 //! call only these, and ask nothing else of a space's kind than whether it
 //! has a worktree.
-use crate::client::{execution_ids::ExecutionId, space_ids::SpaceId};
 use crate::paths::StateFiles;
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::params;
+use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use std::borrow::Cow;
 
 use super::{
@@ -303,7 +303,7 @@ impl Manager {
 
     /// Recovery records and session logs are run data owned by the record
     /// just deleted.
-    fn delete_session_logs(&self, id: &crate::client::space_ids::SpaceId) {
+    fn delete_session_logs(&self, id: &shoal_ids::space_ids::SpaceId) {
         let _ = std::fs::remove_dir_all(self.paths.space_state(id));
     }
 }

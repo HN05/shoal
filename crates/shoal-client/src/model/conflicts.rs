@@ -1,7 +1,7 @@
 //! A workspace's committed HEAD against a target: the diff base and
 //! conflict checks.
-use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 use std::path::PathBuf;
 

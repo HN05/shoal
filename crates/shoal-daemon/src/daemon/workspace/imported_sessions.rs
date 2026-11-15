@@ -5,7 +5,7 @@
 //! holding each file under its place in the list beside them. Files a
 //! restore hands over but its caller does not put in place stay listed
 //! there for the workspace's next removal record.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{
     collections::HashSet,
     io::ErrorKind,
@@ -16,13 +16,13 @@ use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 use super::Manager;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     model::{RemovedSpace, Repository, Workspace},
     shoal_dirs::{Contents, ShoalDir, remove_dir},
     transfer::{CarriedSessionFile, SessionFile, SessionSource},
 };
+use shoal_ids::space_ids::SpaceId;
 
 impl Manager {
     /// Keep `files` for `removed`, imported into `repo`, replacing what an

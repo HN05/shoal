@@ -3,10 +3,10 @@
 //! state it leaves it in.
 
 use super::{GuardMode, Manager};
-use crate::client::space_ids::SpaceId;
 use crate::{daemon::store, state::WorkspaceState};
 use anyhow::{Result, bail};
 use rusqlite::{OptionalExtension, params};
+use shoal_ids::space_ids::SpaceId;
 
 impl Manager {
     pub(crate) async fn set_state(

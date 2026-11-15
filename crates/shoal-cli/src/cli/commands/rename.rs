@@ -1,7 +1,7 @@
 //! `shoal rename`: rename a workspace or a chat, a picked one with what the
 //! user types, or ask its agent to choose.
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
+use shoal_ids::space_ids::SpaceId;
 
 use super::{chat, workspaces};
 use crate::client::space_names::SpaceSelector;

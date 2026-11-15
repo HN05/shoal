@@ -2,8 +2,8 @@
 //! unmerge` undoes. The daemon updates them when a merge or unmerge
 //! execution ends, from what the default branch holds then rather than what
 //! the worker reports, and drops the ones that can no longer be undone.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::collections::HashMap;
 
 use anyhow::Result;

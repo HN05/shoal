@@ -4,7 +4,6 @@ use anyhow::Result;
 use std::fmt::Display;
 
 use crate::cli::commands::restore::reopen::ReopenedExt;
-use crate::client::execution_ids::ExecutionId;
 use crate::client::output::restore::{
     ForgottenWork, Queued, Reopened, SetUp, StartedRestores, StoppedCommands,
 };
@@ -12,6 +11,7 @@ use crate::{
     cli::context::Context, execution::recovery::SavedCommand, model::PresentSpace,
     state::QueueState,
 };
+use shoal_ids::execution_ids::ExecutionId;
 
 /// Report that no space has anything to restore but what `first` reports,
 /// the workspaces reopened and the turns continued, as a restore that

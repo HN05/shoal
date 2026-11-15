@@ -1,7 +1,7 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
 use crate::daemon::resources;
 use rusqlite::StatementStatus;
+use shoal_ids::space_ids::SpaceId;
 
 fn populated_database() -> Result<Connection> {
     let db = Connection::open_in_memory()?;

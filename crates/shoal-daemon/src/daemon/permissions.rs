@@ -3,11 +3,11 @@
 //! space, with each key the `--permission` given to its agent sets as given.
 //! They are computed at each check from current config, the recorded modes
 //! and the tree, so a config change reaches running agents.
-use crate::client::repository_ids::RepositoryId;
 use anyhow::{Context, Result};
+use shoal_ids::repository_ids::RepositoryId;
 
 use crate::{
-    client::{space_ids::SpaceId, space_names::SpaceSelector},
+    client::space_names::SpaceSelector,
     config::{
         Config,
         permissions::{self, PermissionChange, Permissions, PermissionsConfig, SpaceMode},
@@ -15,6 +15,7 @@ use crate::{
     daemon::{scope::Caller, workspace::Manager},
     model::{Chat, PresentSpace, SpaceKind, Workspace},
 };
+use shoal_ids::space_ids::SpaceId;
 
 impl Manager {
     /// The permissions `caller` acts under in the registered repository

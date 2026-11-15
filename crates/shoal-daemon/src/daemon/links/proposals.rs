@@ -1,9 +1,9 @@
 //! Issues and PRs a space's permissions make scoped callers propose
 //! instead of opening: recording them, and opening, denying or merging them
 //! as duplicates once the user decides.
-use crate::client::space_ids::SpaceId;
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Context, Result, bail, ensure};
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::{BranchName, CommitId};
 use std::path::PathBuf;
 

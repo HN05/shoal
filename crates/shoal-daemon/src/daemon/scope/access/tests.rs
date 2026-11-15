@@ -3,13 +3,13 @@ use std::collections::BTreeMap;
 use rusqlite::params;
 use serde_json::json;
 
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use crate::daemon::{
     scope::Caller,
     test_support::{chat, manager, repository, workspace_below},
     workspace::Manager,
 };
 use crate::model::{Blocker, QueueRequest, Repository};
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 
 fn caller(space: &SpaceId) -> Caller {
     Caller {

@@ -6,7 +6,6 @@ use anyhow::Result;
 use serde::Serialize;
 use shoal_refs::CommitId;
 
-use crate::client::repository_ids::RepositoryId;
 use crate::{
     config::permissions::PermissionKey,
     daemon::{permissions, workspace::Manager},
@@ -17,6 +16,7 @@ use crate::{
     protocol::ItemContext,
 };
 use shoal_forge::review::submit::{OwnPull, SubmitRequests};
+use shoal_ids::repository_ids::RepositoryId;
 
 /// What approving a review with a verdict binds.
 #[derive(Serialize)]

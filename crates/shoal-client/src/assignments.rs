@@ -1,9 +1,9 @@
 //! A space's assignment: marking it done or ready for review, and
 //! forgetting the stopped work it leaves.
-use crate::execution_ids::ExecutionId;
-use crate::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use crate::space_names::SpaceSelector;
 use crate::{

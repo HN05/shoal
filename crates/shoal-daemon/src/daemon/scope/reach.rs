@@ -1,8 +1,8 @@
 //! The spaces a scope reaches: the caller's own space and those below it,
 //! or, for a chat without a repository, which manages the spaces of every
 //! repository, every space.
-use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
+use shoal_ids::space_ids::SpaceId;
 
 use super::Caller;
 use crate::{

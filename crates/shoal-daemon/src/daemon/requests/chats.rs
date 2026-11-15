@@ -106,7 +106,7 @@ pub(super) async fn handle(
 async fn queued_scope(
     manager: &Manager,
     caller: Option<&Caller>,
-    entry: Option<&crate::client::queue::QueueEntryId>,
+    entry: Option<&shoal_ids::queue_entry_ids::QueueEntryId>,
     parent: &mut Option<SpaceSelector>,
 ) -> Result<Option<Caller>> {
     let (None, Some(entry)) = (caller, entry) else {

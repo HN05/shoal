@@ -6,8 +6,9 @@
 //! workspace it opens, if its setup had failed, has passed a post-setup hook
 //! since. It builds on the branch of the done blocker that contains the
 //! others.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId, space_names::SpaceSelector};
+use crate::client::space_names::SpaceSelector;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_refs::{BranchName, CommitId};
 use std::collections::{HashMap, HashSet};
 

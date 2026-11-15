@@ -3,8 +3,8 @@
 //! workspaces, in a directory its agents are given as a working directory,
 //! and the store records each copy with how it came, so `shoal files` lists
 //! them.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};

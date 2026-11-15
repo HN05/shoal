@@ -1,5 +1,4 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::sessions::PlaceOwnership;
 use crate::{
@@ -10,6 +9,7 @@ use crate::{
     sessions::HostName,
 };
 use anyhow::Context as _;
+use shoal_ids::space_ids::SpaceId;
 
 #[tokio::test]
 async fn an_execution_reports_where_it_runs() -> Result<()> {

@@ -5,7 +5,6 @@ use rusqlite::{OptionalExtension, params};
 
 use super::cursor::cursor_record;
 use crate::{
-    client::{repository_ids::RepositoryId, space_ids::SpaceId},
     daemon::{
         links::{
             pr::{Registration, RegistrationKind},
@@ -21,6 +20,7 @@ use crate::{
     repository,
 };
 use shoal_forge::updates::Snapshot;
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
 pub(super) const NO_LINKED_ITEMS: &str =
     "no linked items of the selected kind; register one with shoal link";

@@ -4,7 +4,6 @@ use std::{ffi::OsString, path::PathBuf};
 use clap::{Args, Subcommand};
 
 use crate::client::space_names::SpaceSelector;
-use crate::model::CheckpointNumber;
 use crate::{
     agent::Agent,
     cli::args::{
@@ -14,6 +13,7 @@ use crate::{
         target::{StartTarget, start_target},
     },
 };
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -242,7 +242,7 @@ pub struct StartArgs {
     /// Agent session the chat continues, which shoal move import passes; it
     /// starts a chat whatever the mode's kind.
     #[arg(long, hide = true, conflicts_with_all = ["branch", "path", "base", "git_profile", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
-    pub session: Option<crate::client::agent::AgentSessionId>,
+    pub session: Option<shoal_ids::agent_session_ids::AgentSessionId>,
     /// Start from a fork of --session instead of continuing it, which shoal
     /// move import passes for a copy.
     #[arg(long, hide = true, requires = "session")]

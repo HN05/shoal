@@ -2,10 +2,10 @@
 use super::*;
 use crate::{
     daemon::workspace::{CopyPlace, NewWorkspace},
-    model::CheckpointNumber,
     protocol::{CopySource, CreationOptions},
     removal::{InspectionPolicy, UnsavedWork},
 };
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 const STATUS: &[&str] = &["status", "--porcelain", "--untracked-files=all"];
 

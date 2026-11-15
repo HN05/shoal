@@ -1,9 +1,9 @@
 //! Issue and PR actions the daemon carries out for a workspace, so its
 //! scope rules apply and each change reaches the event journal.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use crate::daemon::links::proposals::OpenOutcomeExt;
 use anyhow::{Context, Result, bail};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 
 use super::{

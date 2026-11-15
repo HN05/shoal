@@ -1,7 +1,7 @@
 //! `shoal move export`: end spaces here, removing workspaces and stopping
 //! chats' agents, and write each to a file, or to standard output.
-use crate::client::space_ids::SpaceId;
 use crate::transfer::ManifestExt;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     io::Write,
     path::{Path, PathBuf},
@@ -319,7 +319,7 @@ impl PlannedExport {
     }
 
     /// The space's ID, which selects the workspace once it is removed.
-    pub(super) fn id(&self) -> &crate::client::space_ids::SpaceId {
+    pub(super) fn id(&self) -> &shoal_ids::space_ids::SpaceId {
         self.check.id()
     }
 

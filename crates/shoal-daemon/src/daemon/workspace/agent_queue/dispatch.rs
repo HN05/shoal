@@ -1,8 +1,8 @@
 //! Dispatch: each pass ends abandoned starts and restores, queues the
 //! restores stopped agents request, then admits the waiting entries that fit
 //! and starts what the daemon starts itself.
-use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceName;
+use shoal_ids::execution_ids::ExecutionId;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     time::Duration,
@@ -18,12 +18,13 @@ use super::{
     wake::DueReading,
     weight::Light,
 };
-use crate::client::{queue::QueueEntryId, time::UnixTime};
+use crate::client::time::UnixTime;
 use crate::{
     daemon::{notifications::NotificationKind, workspace::Manager},
     model::HeldBy,
     state::{QueueKind, QueueState},
 };
+use shoal_ids::queue_entry_ids::QueueEntryId;
 
 /// How long a starting entry keeps its slot without a holder: long enough for
 /// a launch to hand over to the place a host opens or reconnect after a

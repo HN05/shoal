@@ -1,6 +1,6 @@
 //! Delivering requests and decisions: messages to the spaces that decide or
 //! made a request, and notifications for the user.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 
 use super::{ApprovalRequest, DecisionStatus, store::give_back, text::RequestText};
 use crate::daemon::{

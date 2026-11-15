@@ -11,15 +11,13 @@ use super::{
     Settings,
     labels::{self, Labelled},
 };
-use crate::client::{
-    events::EventKind, priority::Priority, repository_ids::RepositoryId, space_ids::SpaceId,
-    time::UnixTime,
-};
+use crate::client::{events::EventKind, priority::Priority, time::UnixTime};
 use crate::{
     daemon::{progress, store},
     forge::{items::link::LinkKind, updates::SnapshotState},
     model::Tier,
 };
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
 /// A space as the store records it.
 struct Row {

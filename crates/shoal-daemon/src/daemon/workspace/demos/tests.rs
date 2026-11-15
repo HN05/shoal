@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 
 use super::*;
 use crate::client::assignments::Done;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -15,6 +14,7 @@ use crate::{
     model::Workspace,
     protocol::DemoMethod,
 };
+use shoal_ids::space_ids::SpaceId;
 
 fn launch(name: &str) -> Launch {
     Launch {

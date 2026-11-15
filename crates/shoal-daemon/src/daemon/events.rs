@@ -1,10 +1,10 @@
 //! Durable lifecycle records, independent of notification delivery and read state.
 
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use super::{log, workspace::Manager};
 pub(crate) use crate::client::events::{

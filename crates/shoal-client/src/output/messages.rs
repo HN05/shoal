@@ -1,7 +1,7 @@
 //! What `shoal messages` prints.
-use crate::space_ids::{SpaceId, SpaceNumber};
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
 use crate::output::outputs;
 

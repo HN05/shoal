@@ -6,7 +6,8 @@ use std::{
     path::Path,
 };
 
-use crate::agent::{AgentSessionId, ModelChoice};
+use crate::agent::ModelChoice;
+use shoal_ids::agent_session_ids::AgentSessionId;
 
 /// What an AI tool's tracked launches change in the environment they would
 /// otherwise run with: values as written, and the variables they remove.

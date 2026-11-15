@@ -1,10 +1,11 @@
 //! Daemon test fixtures: a [`Manager`] in a temporary state directory,
 //! beside the crate's own fixtures, which this module re-exports.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{fs, path::Path, sync::Arc};
 
 pub(crate) use crate::test_support::*;
-use crate::{client::space_ids::SpaceId, daemon::workspace::Manager, paths::Paths};
+use crate::{daemon::workspace::Manager, paths::Paths};
+use shoal_ids::space_ids::SpaceId;
 
 pub(crate) mod overload;
 

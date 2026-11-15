@@ -10,7 +10,7 @@ use crate::{
     },
 };
 
-fn caller(space: &crate::client::space_ids::SpaceId) -> Caller {
+fn caller(space: &shoal_ids::space_ids::SpaceId) -> Caller {
     Caller {
         space_id: space.clone(),
         execution: None,

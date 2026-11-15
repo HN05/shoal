@@ -1,7 +1,7 @@
 //! A repository's false positives: claims its reviews raised that were
 //! resolved as wrong, kept in a file beside its local config so that every
 //! later review of the repository receives them and the user can edit them.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};

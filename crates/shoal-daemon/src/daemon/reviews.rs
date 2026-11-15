@@ -1,8 +1,8 @@
 //! Local reviews of workspaces and PRs: queueing them, running each once in
 //! a detached checkout, and recording what the reviewer found and how the
 //! workspace's agent answered it.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},

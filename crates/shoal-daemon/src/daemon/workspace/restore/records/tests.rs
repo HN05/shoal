@@ -61,7 +61,7 @@ async fn a_converted_workspace_keeps_its_record_beside_the_chat_it_became() {
         .unwrap();
     let converted = crate::daemon::conversions::record::ConvertedChat {
         agent: "claude".into(),
-        execution: crate::client::execution_ids::ExecutionId::generate(),
+        execution: shoal_ids::execution_ids::ExecutionId::generate(),
         session: None,
         origin: None,
         mode: crate::model::chat_mode(),
@@ -139,7 +139,7 @@ async fn a_chat_a_conversion_removed_restores_in_the_workspace_restored_beside()
         .unwrap();
     let converted = crate::daemon::conversions::record::ConvertedChat {
         agent: "claude".into(),
-        execution: crate::client::execution_ids::ExecutionId::generate(),
+        execution: shoal_ids::execution_ids::ExecutionId::generate(),
         session: None,
         origin: None,
         mode: crate::model::chat_mode(),

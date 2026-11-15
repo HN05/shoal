@@ -1,7 +1,7 @@
 //! What a workspace saved for `shoal restore` when its agents and commands
 //! stopped, which the daemon reads from its state, and how a resume
 //! restores it.
-use crate::execution_ids::ExecutionId;
+use shoal_ids::execution_ids::ExecutionId;
 use std::path::PathBuf;
 
 use anyhow::{Context as _, Result};
@@ -12,10 +12,10 @@ use crate::{
     connection::{Daemon, pages},
     protocol::{RecoveryMethod, SavedPiece},
     sessions::Origin,
-    space_ids::SpaceId,
     space_names::SpaceSelector,
     time::UnixTime,
 };
+use shoal_ids::space_ids::SpaceId;
 
 /// What the existing space `space` saved, reassembled from the pieces of
 /// JSON the daemon sends it in.

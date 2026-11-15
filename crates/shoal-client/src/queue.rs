@@ -1,6 +1,7 @@
 //! The agent queue: admitting launches under `max_agents`, the entries
 //! waiting, and the hold that keeps a starting entry's slot.
-use crate::execution_ids::ExecutionId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::queue_entry_ids::QueueEntryId;
 use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::Result;
@@ -12,11 +13,6 @@ use crate::{
     model::{ChatQueueRequest, QueueAdmission, QueueEntry, QueueRequest, QueuedPlan},
     protocol::QueueMethod,
 };
-
-crate::ids::text_id!(
-    /// The ID of an agent queue entry, stored and serialized as its text.
-    QueueEntryId
-);
 
 /// Reconnect a hold this soon after the daemon restarts.
 const HOLD_RETRY: Duration = Duration::from_secs(1);
@@ -91,7 +87,7 @@ pub async fn start_here(daemon: &impl Daemon, entry: &QueueEntryId) -> Result<Qu
 pub async fn started_workspace(
     daemon: &impl Daemon,
     entry: QueueEntryId,
-) -> Result<Option<crate::space_ids::SpaceId>> {
+) -> Result<Option<shoal_ids::space_ids::SpaceId>> {
     request(daemon, QueueMethod::StartedLaunch { entry }).await
 }
 

@@ -3,7 +3,7 @@
 //! that reads the workspace's settings meets the same one.
 use std::{collections::HashMap, sync::Mutex};
 
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 
 use crate::daemon::{
     log,

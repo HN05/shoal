@@ -1,7 +1,7 @@
 //! Branch allocation, existing-branch workspaces and default-branch refreshes
 //! against workspace records. Adoption is explicit.
-use crate::client::repository_ids::RepositoryId;
 use crate::git::existing_branch::BranchExt;
+use shoal_ids::repository_ids::RepositoryId;
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};

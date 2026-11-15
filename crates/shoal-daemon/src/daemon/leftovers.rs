@@ -2,7 +2,7 @@
 //! them exited, which the cleanup sweep finds. The daemon keeps them in
 //! memory, so the first sweep after a restart finds them again, and tells a
 //! space's agent about each one once.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Mutex, PoisonError},

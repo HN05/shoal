@@ -3,12 +3,12 @@
 //! agents with their sessions and the sessions' files; a workspace's also
 //! holds its removal record and a Git bundle of its checkpoint, and a chat's
 //! its name, from the live chat or its removal record.
-use crate::client::agent::AgentSessionId;
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
+use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::BTreeSet,
     io::{BufRead, Read, Write},

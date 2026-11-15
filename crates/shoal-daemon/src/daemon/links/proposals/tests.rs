@@ -1,5 +1,4 @@
 use super::*;
-use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     approvals::proposals::PR,
@@ -7,6 +6,7 @@ use crate::daemon::{
 };
 use crate::forge::items::attach::Attachment;
 use crate::model::Repository;
+use shoal_ids::repository_ids::RepositoryId;
 use std::sync::Arc;
 
 /// A manager with a registered repository and one of its workspaces.

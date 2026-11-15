@@ -4,7 +4,7 @@
 //! calls live in [`crate::client::queue`] and the daemon's runner in
 //! `daemon::queued_starts`. Entries queued by an earlier version still
 //! start, so the format only gains fields with defaults.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::Result;
@@ -143,10 +143,10 @@ pub struct AddPlan {
     pub narrowing: crate::config::permissions::PermissionsConfig,
     /// The session the agent starts from a fork of.
     #[serde(default)]
-    pub fork: Option<crate::client::agent::AgentSessionId>,
+    pub fork: Option<shoal_ids::agent_session_ids::AgentSessionId>,
     /// The agent queue entry whose slot this launch uses.
     #[serde(default)]
-    pub queue_entry: Option<crate::client::queue::QueueEntryId>,
+    pub queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
     /// The chat that planned the addition, which the workspace belongs to
     /// unless `parent` names another space.
     #[serde(default)]

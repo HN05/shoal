@@ -2,9 +2,9 @@
 //! Once [`registration`] registers the execution, the wrapper reports its
 //! child and completion; the daemon relays stop and recovery controls and
 //! records the outcome.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use crate::daemon::workspace::agents::ProtectionExt;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, ensure};
@@ -40,7 +40,7 @@ pub(super) struct ExecutionContext {
     pub recover: bool,
     pub reattach: bool,
     /// The starting queue entry whose slot this agent takes over.
-    pub queue_entry: Option<crate::client::queue::QueueEntryId>,
+    pub queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
     /// The demo the command runs.
     pub demo: Option<crate::demos::Launch>,
     /// Where the wrapper runs in a terminal host.

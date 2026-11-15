@@ -10,8 +10,8 @@ use super::{
     Settings,
     labels::{self, Labelled},
 };
-use crate::client::{queue::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use crate::state::{QueueKind, QueueState};
+use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 
 /// The labels areas come from.
 pub(super) struct Labels {

@@ -3,9 +3,9 @@
 //! directory was deleted outside Shoal; the user can remove the idle
 //! candidates on request. A space without a worktree meets every condition
 //! on one, and goes once its agent stopped and nothing keeps it.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{HashMap, hash_map::DefaultHasher},
     fs,

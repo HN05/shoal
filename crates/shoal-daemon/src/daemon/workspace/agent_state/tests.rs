@@ -1,6 +1,4 @@
 use super::*;
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::RecordExt;
 use crate::time::UnixTime;
@@ -12,6 +10,8 @@ use crate::{
     },
     protocol::AgentMethod,
 };
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 async fn state_events(manager: &Manager) -> Vec<Option<AgentState>> {
     manager

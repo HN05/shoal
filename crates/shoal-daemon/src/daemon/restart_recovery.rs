@@ -6,8 +6,8 @@
 //! execution, are checked again, and only they notify the user. Executions
 //! of an earlier boot need no evidence, and those that never started their
 //! command need only their wrapper gone.
-use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::RecordExt;
+use shoal_ids::execution_ids::ExecutionId;
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use anyhow::Result;

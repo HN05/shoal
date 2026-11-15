@@ -1,6 +1,6 @@
 //! A space's status: the workspace's worktree status or the chat, with the
 //! state of the items it links and what awaits the user.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;

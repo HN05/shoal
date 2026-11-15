@@ -1,9 +1,9 @@
 //! `shoal start`: start an agent in a mode, which decides what the agent is
 //! told, whether it starts in a repository and, unless the command says
 //! otherwise, whether it starts in a workspace or a chat.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::{agent::AgentSessionId, space_ids::SpaceId};
 use anyhow::{Context as _, Result, ensure};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::{agent_session_ids::AgentSessionId, space_ids::SpaceId};
 
 use super::{
     chat,

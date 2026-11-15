@@ -1,6 +1,6 @@
-use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceName;
 use crate::git::existing_branch::BranchExt;
+use shoal_ids::repository_ids::RepositoryId;
 use shoal_refs::{BranchName, CommitId};
 use std::{fs, path::PathBuf, sync::Arc};
 

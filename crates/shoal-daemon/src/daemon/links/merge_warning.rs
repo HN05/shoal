@@ -2,8 +2,8 @@
 //! that the last conflict check of the merged head found changed on both
 //! sides. It reads that record and checks nothing again, so merging stays as
 //! fast without one.
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, ensure};
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 
 use crate::client::space_names::SpaceSelector;

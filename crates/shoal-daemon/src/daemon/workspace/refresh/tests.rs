@@ -1,7 +1,6 @@
 use std::{fs, path::Path, sync::Arc};
 
 use super::*;
-use crate::client::space_ids::SpaceId;
 use crate::{
     daemon::{
         scope::ScopedExecution,
@@ -9,6 +8,7 @@ use crate::{
     },
     protocol::{CommitStart, WorkspaceMethod},
 };
+use shoal_ids::space_ids::SpaceId;
 
 struct Fixture {
     _root: tempfile::TempDir,

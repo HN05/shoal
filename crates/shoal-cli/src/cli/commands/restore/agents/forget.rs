@@ -4,7 +4,6 @@ use anyhow::Result;
 
 use super::reports;
 use crate::client::assignments;
-use crate::client::execution_ids::ExecutionId;
 use crate::client::output::restore::{ForgottenWork, Reopened};
 use crate::client::space_names::SpaceSelector;
 use crate::{
@@ -12,6 +11,7 @@ use crate::{
     execution::recovery::Saved,
     model::PresentSpace,
 };
+use shoal_ids::execution_ids::ExecutionId;
 
 /// Forget the space's stopped work and last sessions, only `execution`'s
 /// when given.

@@ -1,5 +1,5 @@
 use super::*;
-use crate::client::agent::AgentSessionId;
+use shoal_ids::agent_session_ids::AgentSessionId;
 
 #[test]
 fn hook_events_name_their_session() {

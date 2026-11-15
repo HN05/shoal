@@ -6,13 +6,13 @@ use anyhow::{Context, Result};
 use tokio::sync::watch;
 
 use crate::{
-    agent::AgentSessionId,
     daemon::oneshot::{self, AgentCommand},
     reviews::{
         FailureReason, ReviewId,
         output::{self, ResultFormat, ReviewerOutput},
     },
 };
+use shoal_ids::agent_session_ids::AgentSessionId;
 
 /// A reviewer still running after this long is stopped. Fixed, since a
 /// review that long has stopped making progress.

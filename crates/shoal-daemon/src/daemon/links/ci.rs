@@ -1,7 +1,7 @@
 //! Rerunning failed and cancelling running CI jobs on a PR's current head,
 //! as the agent account of the workspace or registered checkout.
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result};
+use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     daemon::{events, workspace::Manager},

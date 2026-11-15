@@ -1,8 +1,8 @@
 //! The execution wrapper's messages: reattachment, execution events and
 //! the daemon's controls.
-use crate::execution_ids::ExecutionId;
 use crate::processes::Identity;
 use serde::{Deserialize, Serialize};
+use shoal_ids::execution_ids::ExecutionId;
 
 /// The first protocol whose wrappers read [`Control::RestoreWaits`].
 pub const RESTORE_WAITS: u32 = 174;

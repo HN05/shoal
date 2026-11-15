@@ -7,7 +7,6 @@ use anyhow::{Context as _, Result};
 use tokio::sync::oneshot;
 
 use super::Removal;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -19,6 +18,7 @@ use crate::{
     model::Workspace,
     removal::{InspectionPolicy, UnsavedWork},
 };
+use shoal_ids::space_ids::SpaceId;
 
 impl Manager {
     /// Start removing the workspace `selector` names at `caller`'s request,

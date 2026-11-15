@@ -2,7 +2,7 @@
 //! bases and places, their status, environment and settings, and the Git
 //! state the daemon reads in their worktrees; and the spaces, workspaces and
 //! chats together.
-use crate::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::Result;

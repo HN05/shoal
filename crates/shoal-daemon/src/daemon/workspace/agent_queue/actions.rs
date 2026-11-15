@@ -1,9 +1,9 @@
 //! What `shoal queue` does to a waiting entry: start it now or cancel it,
 //! and the cancelling of the launches a stopped workspace waits for. Each holds the queue gate, so dispatch cannot start
 //! the entry meanwhile.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::repository_ids::RepositoryId;
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context as _, Result, bail, ensure};

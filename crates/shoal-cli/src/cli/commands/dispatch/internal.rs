@@ -1,5 +1,5 @@
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
+use shoal_ids::space_ids::SpaceId;
 
 use crate::client::space_names::SpaceSelector;
 use crate::{

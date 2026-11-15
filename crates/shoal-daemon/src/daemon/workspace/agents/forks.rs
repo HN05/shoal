@@ -3,12 +3,12 @@
 use anyhow::{Context as _, Result, bail};
 
 use super::super::Manager;
-use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     execution::recovery,
     model::{AgentSession, Workspace},
 };
+use shoal_ids::execution_ids::ExecutionId;
 
 impl Manager {
     /// The session of the agent in `selector` that a fork starts from: that

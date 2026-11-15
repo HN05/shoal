@@ -1,7 +1,8 @@
 //! Human decisions authorize cooperative allocations; they never reserve capacity.
 //! This module extends the client's request and target types for the daemon;
 //! its submodules store, route, word and deliver requests.
-use crate::{client::space_ids::SpaceId, daemon::item_numbers::ItemNumber};
+use crate::daemon::item_numbers::ItemNumber;
+use shoal_ids::space_ids::SpaceId;
 
 mod delivery;
 pub(crate) mod gated;

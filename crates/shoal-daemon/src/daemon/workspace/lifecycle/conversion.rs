@@ -3,12 +3,12 @@
 //! the workspace's record instead of deleting it.
 use super::super::Manager;
 use super::Removal;
-use crate::client::space_ids::SpaceId;
 use crate::{
     daemon::{approvals::ApprovalRequest, conversions::record::ConvertedChat},
     removal::RemovalResult,
 };
 use anyhow::Result;
+use shoal_ids::space_ids::SpaceId;
 
 impl Manager {
     /// Remove the worktree of the workspace `id` as `shoal rm` does, once a

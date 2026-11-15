@@ -2,9 +2,9 @@ use super::*;
 use crate::executions::ExecutionKind;
 use crate::model::{ExecutionPlan, Workspace};
 use crate::notifications::Notification;
-use crate::space_ids::SpaceId;
 use serde::Deserialize;
 use serde_json::json;
+use shoal_ids::space_ids::SpaceId;
 
 #[test]
 fn method_names_are_their_protocol_tags() {

@@ -46,7 +46,6 @@ fn changes_name_each_new_changed_and_removed_record() {
 }
 
 mod streams {
-    use crate::client::space_ids::SpaceId;
     use crate::client::space_names::SpaceSelector;
     use crate::daemon::approvals::ApprovalRequestExt;
     use crate::execution::recovery::LastSessionExt;
@@ -69,6 +68,7 @@ mod streams {
         protocol::{self, Body, ErrorCode, RemoteError, Request, SubscriptionMethod},
         removal::{InspectionPolicy, UnsavedWork},
     };
+    use shoal_ids::space_ids::SpaceId;
 
     type Subscribed = Subscription<Connector>;
 
@@ -648,7 +648,7 @@ mod streams {
             &daemon.manager.paths,
             &workspace.id,
             &crate::execution::TrackedAgent::named("claude"),
-            &crate::client::execution_ids::ExecutionId::from("execution"),
+            &shoal_ids::execution_ids::ExecutionId::from("execution"),
         )
         .unwrap();
         let mut subscription = subscribe(daemon.connector(), &[Topic::Workspaces]).await;

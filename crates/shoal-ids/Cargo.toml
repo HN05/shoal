@@ -1,0 +1,19 @@
+[package]
+name = "shoal-ids"
+version = "0.1.0"
+description = "The record ID and number types the Shoal crates share"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+# Store IDs and numbers in SQLite columns.
+rusqlite = ["dep:rusqlite"]
+# Conversions from literals for the tests of crates that use this one.
+test-support = []
+
+[dependencies]
+rusqlite = { workspace = true, optional = true }
+serde.workspace = true
+uuid = { workspace = true, features = ["v4"] }

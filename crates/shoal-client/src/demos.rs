@@ -2,9 +2,9 @@
 //! try a change, usually from another machine over SSH. A repository names
 //! them in `[demos.NAME]`; a preset says how a demo reaches the user, and the
 //! repository always supplies the command.
-use crate::execution_ids::ExecutionId;
-use crate::space_ids::SpaceId;
 use crate::space_names::SpaceName;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, ensure};

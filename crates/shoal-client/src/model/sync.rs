@@ -1,7 +1,7 @@
 //! The default branch's sync with its remote.
 use super::PulledBranch;
-use crate::repository_ids::RepositoryId;
 use serde::{Deserialize, Serialize};
+use shoal_ids::repository_ids::RepositoryId;
 
 /// How the background sync of a repository's default branch went.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

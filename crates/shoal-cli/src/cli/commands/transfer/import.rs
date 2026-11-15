@@ -12,7 +12,6 @@ use std::{
 
 use anyhow::{Context as _, Result, ensure};
 
-use crate::client::agent::AgentSessionId;
 use crate::client::output::chat::BackgroundChat;
 use crate::client::output::{
     restore::Reopened,
@@ -33,6 +32,7 @@ use crate::{
         Sessions, Space,
     },
 };
+use shoal_ids::agent_session_ids::AgentSessionId;
 
 use super::{
     super::chat::{self, ChatPlace, Started},

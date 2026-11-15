@@ -113,12 +113,12 @@ for delivering a PR, under Committing near the end, decide when work is done.
   itself. What the CLI alone needs, such as parsing, prompting and printing,
   stays in `shoal-cli`, and parsing and resolving config, which the protocol
   carries without reading, lives in `shoal-core`. `shoal-client` depends on
-  no Shoal crate but `shoal-forge-types`, `shoal-refs`, `shoal-states`,
-  `shoal-time` and `shoal-config-derive`.
+  no Shoal crate but `shoal-forge-types`, `shoal-ids`, `shoal-refs`,
+  `shoal-states`, `shoal-time` and `shoal-config-derive`.
 - `crates/shoal-time` holds the wall-clock timestamp type,
-  `crates/shoal-refs` the commit and branch name types, and
-  `crates/shoal-states` the macros that define typed names, that every crate
-  shares; none depends on a Shoal crate.
+  `crates/shoal-refs` the commit and branch name types, `crates/shoal-ids`
+  the record IDs and numbers, and `crates/shoal-states` the macros that
+  define typed names, that every crate shares; none depends on a Shoal crate.
 - The CLI lives in `crates/shoal-cli` and the daemon in `crates/shoal-daemon`,
   neither of which depends on the other, so an edit in one rebuilds neither
   the other nor its tests. The `shoal` package is only `main`, which runs the
@@ -126,8 +126,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   or through code they call, lives in `crates/shoal-core`, in a top-level
   module named for what it does; it names neither the CLI nor the daemon and
   depends on no Shoal crate but `shoal-client`, `shoal-config-derive`,
-  `shoal-forge`, `shoal-forge-types`, `shoal-proxy`, `shoal-refs`,
-  `shoal-states` and `shoal-subprocess`. Its items are `pub`
+  `shoal-forge`, `shoal-forge-types`, `shoal-ids`, `shoal-proxy`,
+  `shoal-refs`, `shoal-states` and `shoal-subprocess`. Its items are `pub`
   only where another Shoal crate uses them, and fixtures the other crates'
   tests share sit behind its `test-support` feature.
 - `crates/shoal-cli` serves only the CLI. Code that the daemon, the execution

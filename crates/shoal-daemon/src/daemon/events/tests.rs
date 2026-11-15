@@ -1,6 +1,5 @@
 use super::*;
 use crate::client::assignments::Done;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -11,6 +10,7 @@ use crate::{
     },
     protocol::{self, Body, Response, WorkspaceMethod},
 };
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 use std::{sync::Arc, time::Duration};
 use tokio::{io::BufReader, net::UnixStream, task::JoinHandle};

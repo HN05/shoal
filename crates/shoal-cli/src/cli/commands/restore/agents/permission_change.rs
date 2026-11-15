@@ -7,12 +7,12 @@ use anyhow::{Context as _, Result};
 
 use super::super::targets::Selected;
 use super::setups::FailedSetup;
-use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::context::Context, config::permissions::PermissionChange, execution::recovery::Saved,
     model::PresentSpace, protocol::SavedAgent,
 };
+use shoal_ids::execution_ids::ExecutionId;
 
 /// Refuse `change` for the stopped agents and last sessions of the
 /// `selected` workspaces, the selected chats and the agents waiting for the

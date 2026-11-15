@@ -1,9 +1,9 @@
 //! Cooperative TCP port reservations owned by a worktree.
-use crate::client::space_ids::SpaceId;
 use crate::daemon::approvals::ApprovalRequestExt;
 pub(crate) use crate::model::PortRequest;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Transaction, params};
+use shoal_ids::space_ids::SpaceId;
 use std::{
     io,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},

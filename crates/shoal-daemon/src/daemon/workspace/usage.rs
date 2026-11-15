@@ -1,7 +1,7 @@
 //! What the daemon measures about workspaces: activity that restarts idle
 //! timers and each workspace's process usage.
 //! Each is locked only inside an operation, never across an await.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::HashMap,
     sync::{Mutex, MutexGuard, PoisonError},

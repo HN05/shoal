@@ -1,5 +1,5 @@
 //! What a terminal host does, and the work generic code hands it.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{ffi::OsString, path::Path};
 
 use anyhow::Result;

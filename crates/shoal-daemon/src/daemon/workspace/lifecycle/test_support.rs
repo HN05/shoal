@@ -2,7 +2,6 @@
 //! them.
 use super::super::Manager;
 use super::Removal;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -14,6 +13,7 @@ use crate::{
     removal::RemovalResult,
 };
 use anyhow::{Context as _, Result};
+use shoal_ids::space_ids::SpaceId;
 
 impl Manager {
     async fn present(&self, id: &SpaceId) -> Result<PresentSpace> {

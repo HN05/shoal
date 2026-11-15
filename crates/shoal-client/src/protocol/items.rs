@@ -1,7 +1,7 @@
-use crate::repository_ids::RepositoryId;
 use anyhow::{Context, Result};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde::{Deserialize, Serialize};
+use shoal_ids::repository_ids::RepositoryId;
 
 use super::Lifetime;
 use crate::forge::download::Download;

@@ -1,5 +1,5 @@
 //! Opening a planned workspace, setting it up and launching its agent.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};
@@ -13,7 +13,6 @@ use super::{
 };
 use crate::client::preparation::{self, NewWorkspace, Preparing, Unprepared};
 use crate::client::space_names::SpaceSelector;
-use crate::client::{agent::AgentSessionId, queue::QueueEntryId};
 use crate::{
     cli::{
         agents,
@@ -35,6 +34,7 @@ use crate::{
     start_plan::{AddPlan, Creation, ResolvedAddAgent},
     state::QueueState,
 };
+use shoal_ids::{agent_session_ids::AgentSessionId, queue_entry_ids::QueueEntryId};
 
 pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<i32> {
     let target = AddTarget {

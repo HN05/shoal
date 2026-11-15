@@ -7,9 +7,9 @@ mod planning;
 pub(crate) mod records;
 mod simctl;
 
-use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use rusqlite::params;
+use shoal_ids::space_ids::SpaceId;
 use uuid::Uuid;
 
 pub(crate) use crate::client::sim::{

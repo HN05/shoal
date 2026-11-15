@@ -1,7 +1,7 @@
 //! `shoal run <name>`: configured commands use the same workspace selection
 //! and wrapper as arbitrary commands. Agents are not commands; `shoal start`
 //! starts them.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::ffi::{OsStr, OsString};
 
 use anyhow::Result;

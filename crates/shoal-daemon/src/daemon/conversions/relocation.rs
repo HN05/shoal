@@ -2,9 +2,9 @@
 //! ends, Shoal stops it where the space was and starts it again from a fork
 //! of its session, in the new workspace's worktree or the chat's checkout,
 //! told what the space is now.
-use crate::client::agent::AgentSessionId;
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;

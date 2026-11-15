@@ -6,7 +6,6 @@ use super::super::{
     space_removal::{AgentState, SpaceAgent},
 };
 use super::Retention;
-use crate::client::space_ids::SpaceId;
 use crate::{
     daemon::cleanup::{Rule, Snapshot, Tree, signals},
     model::{CleanupReason, PresentSpace},
@@ -14,6 +13,7 @@ use crate::{
     removal::IdleRestore,
 };
 use anyhow::Result;
+use shoal_ids::space_ids::SpaceId;
 
 impl Manager {
     /// What keeps the space `id` from every unattended removal, completion

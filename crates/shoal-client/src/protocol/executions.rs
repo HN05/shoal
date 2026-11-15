@@ -1,5 +1,5 @@
-use crate::execution_ids::ExecutionId;
 use serde::{Deserialize, Serialize};
+use shoal_ids::execution_ids::ExecutionId;
 
 use super::Lifetime;
 use crate::space_names::SpaceSelector;
@@ -38,7 +38,7 @@ pub enum ExecutionMethod {
         reattach: bool,
         /// The agent queue entry whose slot this agent takes over.
         #[serde(default)]
-        queue_entry: Option<crate::queue::QueueEntryId>,
+        queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
         /// The demo this command runs, recorded with its execution.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         demo: Option<Box<crate::demos::Launch>>,

@@ -1,6 +1,6 @@
 //! First-come order for queued acquisitions; each allocator keeps its own
 //! capacity rules and consults the queue only before claiming capacity.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{HashMap, VecDeque},
     sync::Mutex,

@@ -1,6 +1,6 @@
 //! A tracked execution from its daemon record to its reported completion: the
 //! launch it prepares, the runs of its command, and what follows each run.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},

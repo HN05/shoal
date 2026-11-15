@@ -1,4 +1,3 @@
-use crate::client::execution_ids::ExecutionId;
 use crate::client::progress::ProgressChange;
 use crate::client::scope_tokens::ScopeToken;
 use crate::client::space_names::SpaceSelector;
@@ -11,6 +10,7 @@ use crate::{
     },
     model::{HoldPlacer, Repository},
 };
+use shoal_ids::execution_ids::ExecutionId;
 use shoal_refs::BranchName;
 
 async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
@@ -22,7 +22,7 @@ async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
 }
 
 /// The refusal of converting the workspace `id` into a chat.
-async fn refusal(manager: &Manager, id: &crate::client::space_ids::SpaceId) -> String {
+async fn refusal(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) -> String {
     let refused = manager
         .convert_to_chat(&SpaceSelector::id(id), crate::model::chat_mode())
         .await

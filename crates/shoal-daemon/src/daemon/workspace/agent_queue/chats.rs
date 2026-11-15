@@ -7,12 +7,12 @@ use super::{
     blockers,
     store::{self, Launch, insert_launch},
 };
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
     model::{ChatQueueRequest, QueueAdmission},
     state::{QueueKind, QueueState},
 };
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 
 impl Manager {
     /// Admit the launch of the new chat `request` describes for `caller`, or

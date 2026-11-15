@@ -9,12 +9,12 @@ use crate::time::UnixTime;
 use crate::{
     client::{
         log::{LogEntry, LogFilter, LogTopic},
-        space_ids::SpaceId,
         space_names::SpaceSelector,
     },
     config::permissions::PermissionKey,
     daemon::{permissions::Action, scope::Caller, workspace::Manager},
 };
+use shoal_ids::space_ids::SpaceId;
 
 /// How far a removed space's log looks up for a space that still exists,
 /// through the spaces removed above it.

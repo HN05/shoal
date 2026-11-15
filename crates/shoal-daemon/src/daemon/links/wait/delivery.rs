@@ -10,7 +10,7 @@ use super::{
     wake_log::WakeWaitLog,
 };
 use crate::{
-    client::{repository_ids::RepositoryId, space_ids::SpaceId, space_names::SpaceSelector},
+    client::space_names::SpaceSelector,
     daemon::{agent_messages::AgentMessage, workspace::Manager},
     forge::{
         items::link::{LinkKind, Selection},
@@ -18,6 +18,7 @@ use crate::{
     },
     model::{PresentSpace, SpaceRef},
 };
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
 impl Manager {
     /// The next messages or activity of the items `selection` names of the

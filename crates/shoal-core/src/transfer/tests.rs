@@ -3,8 +3,8 @@ use crate::time::UnixTime;
 use std::{fs, path::PathBuf};
 
 use super::*;
-use crate::client::agent::AgentSessionId;
 use crate::execution::recovery::{LastSession, Record};
+use shoal_ids::agent_session_ids::AgentSessionId;
 
 /// A registered repository pushed to a bare `origin`.
 #[test]

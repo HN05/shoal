@@ -1,8 +1,8 @@
 //! Manual cleanup: what a request covers and what it removed, kept or emptied.
-use crate::repository_ids::RepositoryId;
-use crate::space_ids::SpaceId;
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 
 use crate::model::CleanupReason;
 

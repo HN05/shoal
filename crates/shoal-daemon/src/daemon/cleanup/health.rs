@@ -1,8 +1,8 @@
 //! How automatic cleanup is doing: whether its passes fail, in which
 //! workspaces, or have stalled, and telling the user once when they start
 //! failing.
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
+use shoal_ids::space_ids::SpaceId;
 use std::{collections::HashMap, sync::PoisonError, time::Duration};
 use tokio::time::Instant;
 

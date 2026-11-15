@@ -1,9 +1,9 @@
 //! Cooperative semaphores and reader/writer locks; only Shoal bookkeeping is enforced.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use uuid::Uuid;
 

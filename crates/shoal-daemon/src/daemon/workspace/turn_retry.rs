@@ -5,8 +5,8 @@
 //! persisted, so it outlasts a daemon restart, and knows no agent: any
 //! report of a failed turn schedules one, or tells of a turn Shoal does not
 //! retry.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;

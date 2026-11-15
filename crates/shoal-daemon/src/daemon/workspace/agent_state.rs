@@ -1,7 +1,7 @@
 //! The turn state agents report from their hooks: a status signal for
 //! integrations that never notifies, completes, or changes cleanup.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::{agent::AgentSessionId, space_ids::SpaceId};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::{agent_session_ids::AgentSessionId, space_ids::SpaceId};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 

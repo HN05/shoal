@@ -3,7 +3,7 @@
 //! repository in `root_dir`, marked with the state directory of the daemon
 //! that keeps it, so a daemon sharing `root_dir` neither uses nor sweeps
 //! another's.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{
     io::{self, ErrorKind},
     path::{Path, PathBuf},

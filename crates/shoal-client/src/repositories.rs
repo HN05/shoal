@@ -1,7 +1,7 @@
 //! Registered repositories: registering, renaming, moving and removing
 //! them, their checkouts' sync, branches and local configuration, and the
 //! agent configs Shoal keeps for them.
-use crate::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::Result;

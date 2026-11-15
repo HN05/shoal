@@ -7,8 +7,6 @@ use super::{
     registry,
     spotlight::{self, Layout},
 };
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use crate::{
     daemon::{log, store},
     fsutil::{self, off_runtime},
@@ -19,6 +17,8 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::BTreeMap,
     fs,

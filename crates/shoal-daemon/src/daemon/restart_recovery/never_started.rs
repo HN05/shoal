@@ -6,7 +6,6 @@
 use anyhow::Result;
 
 use super::{Manager, Pending, Waiting};
-use crate::client::execution_ids::ExecutionId;
 use crate::{
     daemon::log,
     model::{Execution, PresentSpace},
@@ -15,6 +14,7 @@ use crate::{
         identity::{self as process, Identity},
     },
 };
+use shoal_ids::execution_ids::ExecutionId;
 
 /// An unknown execution of `space` that never started its command, whose
 /// recorded `wrapper` decides it.

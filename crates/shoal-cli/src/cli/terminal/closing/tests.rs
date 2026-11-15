@@ -1,5 +1,4 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
 use crate::terminal::Closes;
 use crate::time::UnixTime;
 use crate::{
@@ -8,6 +7,7 @@ use crate::{
     protocol::{self, Body, Method, Operation, RecoveryMethod, Request, Response, WorkspaceMethod},
     state::{ExecutionState, WorkspaceState},
 };
+use shoal_ids::space_ids::SpaceId;
 use tokio::{io::BufReader, net::UnixListener};
 
 #[tokio::test]

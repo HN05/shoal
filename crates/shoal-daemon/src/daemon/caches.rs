@@ -1,7 +1,7 @@
 //! Emptying a repository's shared tool caches, which only happens while
 //! nothing Shoal started can be using them.
-use crate::client::repository_ids::RepositoryId;
 use anyhow::Result;
+use shoal_ids::repository_ids::RepositoryId;
 
 pub(crate) use crate::client::cleanup::Emptying;
 use crate::{

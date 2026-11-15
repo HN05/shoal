@@ -1,8 +1,8 @@
 //! Port reservations, requests and catalogs.
 use super::Workspace;
 use crate::config::repo::{ConflictPolicy, PortDefinition};
-use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::SpaceId;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PortReservation {

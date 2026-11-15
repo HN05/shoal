@@ -1,7 +1,7 @@
 //! The place this process runs in: recording it as a workspace's, and
 //! closing it with the workspace.
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
+use shoal_ids::space_ids::SpaceId;
 
 use super::closing;
 use crate::{

@@ -2,12 +2,12 @@
 //! by kind: a workspace's verified worktree, ports, caches and configured
 //! environment, or a chat's home, its own scope token and its temporary
 //! directory. Registration asks nothing else of a space's kind.
-use crate::client::execution_ids::ExecutionId;
 use crate::client::scope_tokens::ScopeToken;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::Transaction;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
 
 use super::{ExecutionKind, ExecutionKindExt, ProcessDirectories};

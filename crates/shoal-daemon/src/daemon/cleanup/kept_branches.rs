@@ -1,6 +1,6 @@
 //! Deletion of branches that removal kept once a remote or the default branch
 //! has their commits too. Nothing is lost, so nobody is told.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{collections::HashMap, time::Duration};
 
 use anyhow::{Result, ensure};

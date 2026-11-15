@@ -1,6 +1,5 @@
 //! Repository registration and lookup; independent of worktree lifecycle.
 use super::{Manager, spotlight};
-use crate::client::repository_ids::RepositoryId;
 use crate::{
     daemon::store,
     git,
@@ -10,6 +9,7 @@ use crate::{
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
 use shoal_forge::repo::fork::ForkRequests;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{
     fs,
     path::{Path, PathBuf},

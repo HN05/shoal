@@ -7,12 +7,12 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 
 use super::super::rank::{Carries, Edge, Node};
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use crate::{
     daemon::{approvals::Target, progress, questions, store},
     model::{Dependency, QueuedJob},
     state::{BlockerKind, QueueKind, QueueState},
 };
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 
 /// Every edge, with the spaces queued for `leases`.
 pub(super) fn waits(db: &Connection, leases: &[(Target, SpaceId)]) -> Result<Vec<Edge>> {

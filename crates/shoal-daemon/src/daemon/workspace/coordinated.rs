@@ -5,9 +5,9 @@
 //! its agent, reporting under its scope from its directory, so Shoal cannot
 //! tell which such workspace a subagent works in; each counts as its
 //! coordinator's work, and a stopped chat's work is left to it.
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::Connection;
+use shoal_ids::space_ids::SpaceId;
 
 use super::{Manager, TrackedAgents, agent_state, tree};
 use crate::{daemon::store, model::Workspace, state::AgentState};

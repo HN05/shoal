@@ -448,7 +448,7 @@ async fn removed_chat(
 /// Export the removed space `id` to `file`.
 async fn export_removed(
     manager: &Manager,
-    id: &crate::client::space_ids::SpaceId,
+    id: &shoal_ids::space_ids::SpaceId,
     file: &Path,
 ) -> anyhow::Result<ExportedSpace> {
     manager

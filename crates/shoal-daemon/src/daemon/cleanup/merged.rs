@@ -4,7 +4,7 @@
 //! agent's last stop and a worktree's file change times, so it survives
 //! daemon restarts. A space without a worktree has no branch, so it goes
 //! once nothing has used it for that period.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::HashMap,
     fs,

@@ -1,13 +1,12 @@
 //! Queuing the restores of stopped agents, which the daemon starts as the
 //! agent limits allow, or at once with `--now`.
-use crate::client::execution_ids::ExecutionId;
 use anyhow::{Context as _, Result, ensure};
+use shoal_ids::execution_ids::ExecutionId;
 
 use super::super::targets::Selected;
 use super::{commands, permission_change, reports, stale};
 use crate::client::output::restore::Queued;
 use crate::client::saved::{Queuing, Restore};
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, ui},
@@ -17,6 +16,7 @@ use crate::{
     protocol::ConfigTarget,
     terminal,
 };
+use shoal_ids::space_ids::SpaceId;
 
 /// Queue the restores of the stopped agents and last sessions of the
 /// `selected` spaces this process's scope reaches, or of every such space

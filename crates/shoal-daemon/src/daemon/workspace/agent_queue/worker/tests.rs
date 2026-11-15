@@ -1,4 +1,3 @@
-use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
@@ -10,6 +9,7 @@ use crate::{
     },
     model::{QueueRequest, Repository, Workspace},
 };
+use shoal_ids::execution_ids::ExecutionId;
 
 /// Queue a launch of the agent in `workspace`, as a worker start does.
 async fn launch_in(

@@ -344,10 +344,7 @@ fn render_sleep(sleep: Option<crate::state::Sleep>) {
 
 /// Why Shoal put the agent of the space numbered `number` to sleep, what
 /// wakes it, and the commands that wake it now, while it is asleep.
-fn render_asleep(
-    asleep: Option<&crate::model::Asleep>,
-    number: crate::client::space_ids::SpaceNumber,
-) {
+fn render_asleep(asleep: Option<&crate::model::Asleep>, number: shoal_ids::space_ids::SpaceNumber) {
     if let Some(asleep) = asleep {
         let (label, wake) = (ui::asleep_label(asleep), ui::wake_now(number));
         outln!("Asleep:        {label}; {wake}");

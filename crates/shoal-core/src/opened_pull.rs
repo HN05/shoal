@@ -2,11 +2,12 @@
 use anyhow::Result;
 
 use crate::{
-    client::{space_ids::SpaceId, space_names::SpaceSelector},
+    client::space_names::SpaceSelector,
     forge::items::{link::LinkKind, reference::ItemInput},
     model::{LinkedItem, Relation, Workspace},
     paths::CommandPaths,
 };
+use shoal_ids::space_ids::SpaceId;
 
 /// Link the PR a workspace was opened on, with its title when known, and
 /// return the workspace with that link. The workspace already exists, so a

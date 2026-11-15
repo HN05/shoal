@@ -1,8 +1,8 @@
-use crate::client::space_ids::SpaceId;
 use crate::forge::{
     ci::runner::{JobRun, Trigger},
     numbers::PullNumber,
 };
+use shoal_ids::space_ids::SpaceId;
 use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};

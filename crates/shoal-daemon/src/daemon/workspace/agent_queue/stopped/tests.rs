@@ -1,7 +1,5 @@
 use super::*;
 use crate::client::assignments::Done;
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::{
@@ -24,6 +22,8 @@ use crate::{
         QueueState::{Queued, Starting},
     },
 };
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 /// The variables the restores of these tests start with.
 fn herdr() -> BTreeMap<String, String> {

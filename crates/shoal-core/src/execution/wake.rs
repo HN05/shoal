@@ -4,8 +4,8 @@
 //! hook has stopped waiting. While it is idle so with undelivered updates,
 //! the wrapper types a fixed prompt into the terminal session it runs in,
 //! and the prompt's `UserPromptSubmit` hook delivers them.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::time::Duration;
 
 use anyhow::Result;

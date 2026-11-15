@@ -1,5 +1,4 @@
 use crate::client::questions::QuestionStatus;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::execution::recovery::LastSessionExt;
@@ -17,6 +16,7 @@ use crate::{
     },
     removal::{InspectionPolicy, UnsavedWork},
 };
+use shoal_ids::space_ids::SpaceId;
 
 fn space(workspace: &Workspace) -> SpaceRef {
     SpaceRef {

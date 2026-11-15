@@ -1,7 +1,7 @@
 //! The workspace `--copy` and `--checkpoint` start a new one from.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 
 use crate::client::space_names::SpaceSelector;
 use crate::{

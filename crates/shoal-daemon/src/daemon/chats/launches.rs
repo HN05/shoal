@@ -6,10 +6,7 @@
 //! whose agent waits is recorded at once, and the answer names its entry.
 use anyhow::{Context as _, Result, ensure};
 
-use crate::client::{
-    repository_ids::RepositoryId, scope_tokens::ScopeToken, space_ids::SpaceId,
-    space_names::SpaceName,
-};
+use crate::client::{scope_tokens::ScopeToken, space_names::SpaceName};
 use crate::{
     agents::{NO_AGENT, checked_agent},
     client::output::chat::{QueuedChat, StartedChat},
@@ -19,6 +16,7 @@ use crate::{
     protocol::ChatStart,
 };
 use shoal_core::queued_starts::{ChatPlan, ChatPlanStart};
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
 impl Manager {
     /// Start the chat `start` describes for `caller` in a background place,
@@ -52,7 +50,7 @@ impl Manager {
     /// start with `error`, rather than hold it until its grace ends.
     async fn free_failed_start(
         &self,
-        entry: &crate::client::queue::QueueEntryId,
+        entry: &shoal_ids::queue_entry_ids::QueueEntryId,
         error: &anyhow::Error,
     ) {
         if let Err(kept) = self.fail_queue_entry(entry, &format!("{error:#}")).await {
@@ -149,7 +147,7 @@ impl Manager {
     async fn record_chat_for_queue(
         &self,
         start: &ChatStart,
-        entry: &crate::client::queue::QueueEntryId,
+        entry: &shoal_ids::queue_entry_ids::QueueEntryId,
         caller: Option<&Caller>,
     ) -> Result<crate::model::Chat> {
         let new = super::NewChat {
@@ -260,7 +258,7 @@ async fn run_worker(
     paths: &crate::paths::Paths,
     start: &ChatStart,
     token: Option<&ScopeToken>,
-    entry: Option<&crate::client::queue::QueueEntryId>,
+    entry: Option<&shoal_ids::queue_entry_ids::QueueEntryId>,
 ) -> Result<StartedChat> {
     use crate::workers::{Worker, detached_command, internal_command};
     use std::process::Stdio;
@@ -308,7 +306,7 @@ async fn run_worker(
     _paths: &crate::paths::Paths,
     start: &ChatStart,
     token: Option<&ScopeToken>,
-    _entry: Option<&crate::client::queue::QueueEntryId>,
+    _entry: Option<&shoal_ids::queue_entry_ids::QueueEntryId>,
 ) -> Result<StartedChat> {
     let scoped = token.is_some();
     tests::STARTED.lock().unwrap().push((start.clone(), scoped));

@@ -6,9 +6,9 @@
 //! closed from the daemon's records of the places Shoal created.
 pub(super) mod pending;
 
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
 use anyhow::{Context as _, Result};
+use shoal_ids::space_ids::SpaceId;
 
 use super::Manager;
 use crate::{

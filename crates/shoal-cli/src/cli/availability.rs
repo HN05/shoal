@@ -3,7 +3,7 @@
 //! would work, and the facts the CLI judges its workspaces against.
 use std::collections::{HashMap, HashSet};
 
-use crate::client::{execution_ids::ExecutionId, space_ids::SpaceId, space_names::SpaceSelector};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{list_status::ListStatus, terminal},
     client::connection::Daemon,
@@ -12,6 +12,7 @@ use crate::{
     sessions::Origin,
     state::WorkspaceState,
 };
+use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 
 /// The condition a command's workspace must meet.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

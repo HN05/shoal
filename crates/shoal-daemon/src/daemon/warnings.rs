@@ -1,6 +1,6 @@
 //! Message running agents when machine load nears a protection's stop
 //! threshold, so they know of it before Shoal stops or cleans anything.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{collections::HashMap, time::Duration};
 use tokio::time::Instant;
 

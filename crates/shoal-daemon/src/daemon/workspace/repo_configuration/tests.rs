@@ -268,7 +268,7 @@ async fn a_chats_layers_are_its_repositorys() {
         .await
         .unwrap();
 
-    let read = |id: &crate::client::space_ids::SpaceId| {
+    let read = |id: &shoal_ids::space_ids::SpaceId| {
         let target = crate::protocol::ConfigTarget::Space(SpaceSelector::id(id));
         manager.config_layers_for(target)
     };

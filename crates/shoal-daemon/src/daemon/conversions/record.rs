@@ -1,15 +1,15 @@
 //! The store side of a conversion: changing a space's kind and swapping its
 //! kind's row, with what belongs to only one kind, and the record of a
 //! conversion whose agent has yet to start in the new place.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context as _, Result};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     agent::Agent,
-    client::{agent::AgentSessionId, scope_tokens::ScopeToken},
+    client::scope_tokens::ScopeToken,
     config::{modes::ModeName, permissions::PermissionsConfig},
     daemon::{
         approvals::{ApprovalRequest, release_decided_by},
@@ -19,6 +19,7 @@ use crate::{
     model::SpaceKind,
     sessions::Origin,
 };
+use shoal_ids::agent_session_ids::AgentSessionId;
 
 /// A conversion whose agent still runs where the space was, until its turn
 /// ends.

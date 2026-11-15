@@ -4,7 +4,7 @@
 //! it found.
 use std::{collections::HashSet, path::Path, sync::Arc};
 
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 
 use anyhow::{Context, Result, anyhow};
 use shoal_refs::{BranchName, CommitId};
@@ -17,7 +17,7 @@ use super::{
 };
 use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use crate::{
-    agent::{Agent, AgentSessionId, ModelChoice},
+    agent::{Agent, ModelChoice},
     config::{Effective, templates},
     daemon::{
         log, oneshot,
@@ -31,6 +31,7 @@ use crate::{
     shoal_dirs::{Contents, ShoalDir, remove_if_empty},
 };
 use shoal_forge::review::view::ViewRequests;
+use shoal_ids::agent_session_ids::AgentSessionId;
 
 /// Where earlier versions kept the runs, in the state directory.
 const OLD_RUNS: &str = "reviews";

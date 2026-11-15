@@ -1,6 +1,6 @@
 //! Inspecting what removing a workspace would discard.
-use crate::client::execution_ids::ExecutionId;
 use anyhow::Result;
+use shoal_ids::execution_ids::ExecutionId;
 use shoal_refs::BranchName;
 
 pub use crate::client::removal::{

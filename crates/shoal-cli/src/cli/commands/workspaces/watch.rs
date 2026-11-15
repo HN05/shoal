@@ -12,7 +12,7 @@ pub(in crate::cli::commands) async fn watch_items(
     ctx: &Context,
     workspace: SpaceSelector,
     selection: crate::forge::items::link::Selection,
-    repository: Option<crate::client::repository_ids::RepositoryId>,
+    repository: Option<shoal_ids::repository_ids::RepositoryId>,
     timeout: Option<u64>,
     resumed: bool,
 ) -> Result<i32> {

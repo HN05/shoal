@@ -1,7 +1,7 @@
-use crate::execution_ids::ExecutionId;
-use crate::queue::QueueEntryId;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::queue_entry_ids::QueueEntryId;
 
 use super::Lifetime;
 

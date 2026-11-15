@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
 use crate::time::UnixTime;
+use shoal_ids::space_ids::SpaceId;
 
 #[test]
 fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {

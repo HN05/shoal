@@ -42,7 +42,7 @@ fn an_action_held_for_approval_reaches_the_client_as_its_request() {
         ApprovalRequest, ApprovalRequestExt, HoldSpecification, Lifetime, Specification, Target,
     };
 
-    let space = crate::client::space_ids::SpaceId::from("space");
+    let space = shoal_ids::space_ids::SpaceId::from("space");
     let request = ApprovalRequest::new(
         &space,
         Target::Hold("review".into()),

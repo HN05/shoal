@@ -1,6 +1,6 @@
 //! Explicit recovery: inspect first, mutate only requested and verified records.
-use crate::client::execution_ids::ExecutionId;
 use anyhow::{Result, ensure};
+use shoal_ids::execution_ids::ExecutionId;
 use std::collections::HashSet;
 
 use crate::client::space_names::SpaceSelector;

@@ -1,8 +1,8 @@
 //! Persist verified execution completion and setup readiness in one transaction.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{OptionalExtension, Transaction, params};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use super::{ExecutionKind, Manager};
 use crate::{

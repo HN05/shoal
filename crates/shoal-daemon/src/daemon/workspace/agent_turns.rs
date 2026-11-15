@@ -2,7 +2,7 @@
 //! its hooks last reported, where an idle agent that still runs work outside
 //! its process group counts as working, since that work may start its next
 //! turn.
-use crate::client::execution_ids::ExecutionId;
+use shoal_ids::execution_ids::ExecutionId;
 use std::collections::HashMap;
 
 use anyhow::Result;

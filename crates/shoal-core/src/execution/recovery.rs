@@ -1,8 +1,8 @@
 //! Restore commands omit the original task and remain available after wrapper exit.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::{agent::AgentSessionId, space_ids::SpaceId};
 use crate::config::permissions::PermissionChange;
 use crate::paths::StateFiles;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::{agent_session_ids::AgentSessionId, space_ids::SpaceId};
 use shoal_refs::BranchName;
 use std::{
     collections::BTreeMap,

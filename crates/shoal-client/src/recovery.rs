@@ -1,5 +1,5 @@
 //! Explicit recovery: what to repair, and what an inspection found.
-use crate::execution_ids::ExecutionId;
+use shoal_ids::execution_ids::ExecutionId;
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -9,11 +9,12 @@ use shoal_states::states;
 use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, request},
-    model::{Checkpoint, CheckpointNumber, RestoredCheckpoint, Workspace},
+    model::{Checkpoint, RestoredCheckpoint, Workspace},
     processes::Identity,
     protocol::RecoveryMethod,
     state::ExecutionState,
 };
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 pub struct ReconcileOptions {

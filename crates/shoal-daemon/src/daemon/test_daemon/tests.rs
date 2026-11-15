@@ -1,6 +1,5 @@
 //! An app's calls through `shoal_client`, as the user and as a
 //! workspace's agent, against a daemon on an isolated state directory.
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::{
@@ -34,6 +33,7 @@ use crate::{
     },
     state::WorkspaceState,
 };
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 
 use super::{HANG, TestDaemon};

@@ -1,7 +1,7 @@
 //! The processes of a space that Shoal does not track, as
 //! [`spaces`](crate::process::identity::spaces) finds them, and the one path
 //! that stops them, for `shoal stop` and removal alike.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::path::PathBuf;
 
 use anyhow::{Result, ensure};

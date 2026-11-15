@@ -2,8 +2,8 @@
 //! registered checkout it comes from as its agent account, or another
 //! repository a run or workflow URL names as the user's own logins, which
 //! workspace processes may not use, and the branch a run starts on there.
-use crate::client::{repository_ids::RepositoryId, space_ids::SpaceId};
 use anyhow::{Context, Result, ensure};
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
 use crate::client::space_names::SpaceSelector;
 use crate::{

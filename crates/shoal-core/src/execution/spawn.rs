@@ -1,7 +1,7 @@
 //! Spawning a tracked command in its workspace, with the environment, agent
 //! Git profile and output streams its mode gives it.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::BTreeMap,
     ffi::OsString,

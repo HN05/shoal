@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Result, ensure};
 
 use super::super::{Options, Topic};
-use crate::client::{agent::AgentSessionId, space_names::SpaceName};
+use crate::client::space_names::SpaceName;
 use crate::{
     agent::Agent,
     cli::{
@@ -18,6 +18,7 @@ use crate::{
     config::{Effective, templates},
     repository,
 };
+use shoal_ids::agent_session_ids::AgentSessionId;
 
 /// What the chat about `topic` in `repo`, named `name`, passes on to
 /// `agent` under `settings`, as `options` ask.

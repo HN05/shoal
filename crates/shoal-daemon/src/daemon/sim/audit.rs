@@ -1,9 +1,9 @@
 //! Audit trail for clean-device requests. Persisted before any destructive
 //! simctl action and retained after the workspace is gone.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, params};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use super::{SimRequest, Simulator};
 pub(crate) use crate::client::sim::{

@@ -1,5 +1,5 @@
-use crate::repository_ids::RepositoryId;
 use serde::{Deserialize, Serialize};
+use shoal_ids::repository_ids::RepositoryId;
 
 /// Requests about registered repositories, their configuration and their branches.
 #[derive(Debug, Serialize, Deserialize)]

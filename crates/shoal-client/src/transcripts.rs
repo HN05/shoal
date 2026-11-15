@@ -6,7 +6,7 @@
 mod claude;
 mod codex;
 
-use crate::execution_ids::ExecutionId;
+use shoal_ids::execution_ids::ExecutionId;
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -16,13 +16,13 @@ use std::{
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::agent::AgentSessionId;
 use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, request},
     integrations::IntegrationKind,
     protocol::WorkspaceMethod,
 };
+use shoal_ids::agent_session_ids::AgentSessionId;
 
 /// A session an agent of a space reported. Sessions its hooks never
 /// reported, such as those before a `/clear`, stay unknown.

@@ -1,7 +1,7 @@
 //! The agent sessions a space's agents reported, which clients find the
 //! files of; the daemon never reads them.
-use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
+use shoal_ids::space_ids::SpaceId;
 use std::collections::BTreeSet;
 
 use anyhow::Result;

@@ -2,12 +2,13 @@ use super::*;
 use crate::paths::StateFiles;
 use crate::{
     agents::hook_reports::Sending,
-    client::{notifications::NotificationKind, space_ids::SpaceId},
+    client::notifications::NotificationKind,
     daemon::test_support::{manager, repository},
     model::{AgentStatus, Workspace},
     protocol::TurnEnd,
     state::ExecutionState,
 };
+use shoal_ids::space_ids::SpaceId;
 
 /// A workspace whose agent runs in the execution `agent`, in `state`.
 async fn workspace_in(

@@ -1,8 +1,8 @@
 //! Assignment completion is a signal; the cleanup sweep owns removal.
-use crate::client::space_ids::SpaceId;
 use crate::config::hooks::HookCommand;
 use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;
+use shoal_ids::space_ids::SpaceId;
 use std::path::{Path, PathBuf};
 
 use super::{GuardMode, Manager, ResourceGuard};

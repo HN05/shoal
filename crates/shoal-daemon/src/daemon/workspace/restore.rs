@@ -1,9 +1,9 @@
 //! Restoring a removed space from its removal record: a workspace opens
 //! again here, a chat in the module below.
-use crate::client::agent::AgentSessionId;
-use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::{Copied, LastSession, StoppedAgent};
+use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::{BranchName, CommitId};
 use std::collections::HashMap;
 use std::path::Path;

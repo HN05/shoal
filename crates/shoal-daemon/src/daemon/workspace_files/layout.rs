@@ -2,7 +2,7 @@
 //! beside the workspaces, in a directory its agents are given as a working
 //! directory, so they read the files where any sandbox lets them. The chats
 //! without a repository keep theirs in `root_dir`, where they run.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     io::ErrorKind,
     path::{Path, PathBuf},

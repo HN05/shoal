@@ -1,17 +1,17 @@
 //! The queue's rows: reading the waiting ones and entries, and recording
 //! launches and the restores waiting wrappers carry out.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::repository_ids::RepositoryId;
 use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::repository_ids::RepositoryId;
 
 use super::blockers;
 use crate::client::time::UnixTime;
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use crate::{
     model::{ChatQueueRequest, QueueEntry, QueueRequest},
     state::{QueueKind, QueueState},
 };
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 
 /// A waiting row of the queue.
 pub(super) struct QueuedRow {

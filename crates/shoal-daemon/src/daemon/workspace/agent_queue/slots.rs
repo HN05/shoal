@@ -1,20 +1,20 @@
 //! The slots in use, counted from what the daemon already tracks, so a limit
 //! applies however an agent started.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 use rusqlite::params;
 
 use super::weight::Light;
-use crate::client::space_ids::SpaceId;
 use crate::client::time::UnixTime;
 use crate::{
     config::modes::ModeName,
     daemon::workspace::{Manager, capacity::Activity},
     state::{ExecutionState, QueueKind, QueueState},
 };
+use shoal_ids::space_ids::SpaceId;
 
 /// One used slot.
 pub(crate) struct Slot {

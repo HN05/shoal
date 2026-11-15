@@ -2,8 +2,8 @@
 //! it runs in, which ends its turn without the hook that ends its other
 //! turns, so the daemon records that turn's end and whether the agent still
 //! idles after it.
-use crate::client::execution_ids::ExecutionId;
 use anyhow::{Result, ensure};
+use shoal_ids::execution_ids::ExecutionId;
 
 use super::super::Manager;
 use crate::client::space_names::SpaceSelector;

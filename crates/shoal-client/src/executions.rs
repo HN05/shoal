@@ -1,21 +1,22 @@
 //! Tracked executions: what they run, where their executable came from, the
 //! agents Shoal stopped or that exited with a session to resume, and the
 //! retries of their failed turns.
-use crate::execution_ids::ExecutionId;
 use crate::space_names::SpaceName;
+use shoal_ids::execution_ids::ExecutionId;
 use std::{collections::BTreeMap, fs, io, path::Path, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use shoal_states::states;
 
 use crate::{
-    agent::{AgentSessionId, ModelChoice},
+    agent::ModelChoice,
     connection::{Daemon, request},
     processes::Identity,
     protocol::{ExecutionMethod, timing},
     sessions::{HostName, Origin},
     state::{AgentState, TurnFailure},
 };
+use shoal_ids::agent_session_ids::AgentSessionId;
 
 states!(
     /// What a tracked execution runs, which decides its lifecycle rules.

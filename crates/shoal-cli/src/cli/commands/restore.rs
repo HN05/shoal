@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 use crate::cli::{args::SpaceTargets, context::Context};
-use crate::model::CheckpointNumber;
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 /// `shoal restore`: return the workspace `targets` names to `checkpoint`,
 /// or choose one when it names none; otherwise restore the spaces `targets`

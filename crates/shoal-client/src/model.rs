@@ -21,7 +21,7 @@ mod workspaces;
 
 pub use agents::{AgentSession, AgentStatus, Asleep, PendingRestart, RunningAgent};
 pub use chats::{Chat, ChatHome, RenamedChat, chat_mode};
-pub use checkpoints::{Checkpoint, CheckpointCause, CheckpointNumber, RestoredCheckpoint};
+pub use checkpoints::{Checkpoint, CheckpointCause, RestoredCheckpoint};
 pub use cleanup::CleanupReason;
 pub use completion::{Completion, HandedBack};
 pub use conflicts::{ChangedOnBothSides, ConfirmedWarning, ConflictCheck, DiffBase, MergeWarning};

@@ -1,5 +1,5 @@
 //! The daemon's answers to [`WorkspaceMethod`] requests, and who may send them.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result, ensure};

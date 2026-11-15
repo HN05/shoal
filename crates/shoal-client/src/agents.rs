@@ -1,10 +1,9 @@
 //! The agents running in a space: the state and turns their hooks report,
 //! the user's interrupts, and the sessions they run.
-use crate::execution_ids::ExecutionId;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use shoal_ids::execution_ids::ExecutionId;
 
-use crate::agent::AgentSessionId;
 use crate::space_names::SpaceSelector;
 use crate::{
     config::permissions::PermissionChange,
@@ -14,6 +13,7 @@ use crate::{
     sessions::Origin,
     state::{AgentState, TurnFailure},
 };
+use shoal_ids::agent_session_ids::AgentSessionId;
 
 /// Record `state` for the agent of `workspace`, running `session`, as a
 /// hook `made` it; `turn_end` reports the turn that ended with it.

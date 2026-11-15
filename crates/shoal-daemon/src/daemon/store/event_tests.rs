@@ -1,6 +1,6 @@
 //! Lifecycle events must share the mutation's transaction and survive removal.
 use super::*;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 
 #[test]
 fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {

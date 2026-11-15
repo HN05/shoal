@@ -24,7 +24,7 @@ pub(super) struct HereLaunch {
     /// The permissions `--permission` gives the agent, whatever the mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
     pub args: Vec<OsString>,
-    pub fork: Option<crate::client::agent::AgentSessionId>,
+    pub fork: Option<shoal_ids::agent_session_ids::AgentSessionId>,
 }
 
 impl HereLaunch {
@@ -80,7 +80,7 @@ enum Placement {
     /// starts it in the background once admitted.
     Waiting(Box<QueueEntry>, usize),
     /// Here, holding the queue entry that tracks its slot, if any.
-    Here(Option<crate::client::queue::QueueEntryId>),
+    Here(Option<shoal_ids::queue_entry_ids::QueueEntryId>),
 }
 
 /// Place `launch` in the set-up `workspace`.

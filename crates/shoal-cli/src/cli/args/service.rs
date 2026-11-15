@@ -90,7 +90,7 @@ pub struct ConfigSetupArgs {
     pub name: Option<crate::client::space_names::SpaceName>,
     /// Agent session the chat continues, which shoal restore passes.
     #[arg(long, hide = true)]
-    pub session: Option<crate::client::agent::AgentSessionId>,
+    pub session: Option<shoal_ids::agent_session_ids::AgentSessionId>,
     /// Handoff of the starter that waits on this background place.
     #[arg(long, hide = true, requires = "here")]
     pub handoff: Option<PathBuf>,

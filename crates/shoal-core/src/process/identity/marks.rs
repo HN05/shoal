@@ -1,9 +1,9 @@
 //! What a process's own environment says about its owner: the markers of
 //! Shoal's identity it carries, read once the environment has settled.
 use super::{Identity, Image, Lineage, alive, lineage, platform};
-use crate::client::execution_ids::ExecutionId;
 use crate::protocol::timing;
 use anyhow::Result;
+use shoal_ids::execution_ids::ExecutionId;
 use std::time::Duration;
 
 /// One live process and what its own environment says about its owner.

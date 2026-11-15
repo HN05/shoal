@@ -1,8 +1,8 @@
 //! The last check of each workspace against its default conflict target,
 //! which merging reads instead of checking again.
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 
 use crate::model::{ChangedOnBothSides, ConflictCheck};

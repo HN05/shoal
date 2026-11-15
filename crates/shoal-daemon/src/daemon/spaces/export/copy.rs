@@ -6,7 +6,6 @@ use anyhow::{Result, ensure};
 
 use super::Prepared;
 use crate::client::space_names::SpaceSelector;
-use crate::model::CheckpointNumber;
 use crate::{
     daemon::workspace::Manager,
     execution::recovery::{self, Copied, Record, StoppedAgent},
@@ -14,6 +13,7 @@ use crate::{
     time::UnixTime,
     transfer::{Manifest, Source},
 };
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 impl Manager {
     /// The workspace or running chat `selector` names, refusing a removed
@@ -125,7 +125,7 @@ impl Manager {
 /// it reported; `None` for an execution without an agent.
 fn running_record(
     execution: &Execution,
-    session: Option<crate::client::agent::AgentSessionId>,
+    session: Option<shoal_ids::agent_session_ids::AgentSessionId>,
 ) -> Option<Record> {
     Some(Record {
         narrowing: execution.narrowing,

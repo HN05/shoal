@@ -5,7 +5,6 @@ use anyhow::{Result, bail, ensure};
 use super::workspaces;
 use crate::client::assignments;
 use crate::client::output::workspaces::Registered;
-use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
@@ -22,6 +21,7 @@ use crate::{
     model::{ReadyMarks, Relation, ReviewMark},
     protocol::ItemContext,
 };
+use shoal_ids::repository_ids::RepositoryId;
 
 /// The space and the items selected in it, with the kind of a bare number
 /// resolved.

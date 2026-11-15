@@ -8,15 +8,16 @@ use super::{
     ImportFailure, Remote, arrived, summary,
 };
 use crate::cli::commands::restore::agents::queue::{Stopped, restore_stopped, saved_executions};
-use crate::client::execution_ids::ExecutionId;
 use crate::client::output::transfer::{Imported, Moves};
 use crate::client::space_names::SpaceSelector;
 use crate::transfer::{ExportedSpace, Space};
 use crate::{
     cli::{context::Context, ui},
-    model::{CheckpointNumber, PresentSpace},
+    model::PresentSpace,
     removal::UnsavedWork,
 };
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_ids::execution_ids::ExecutionId;
 use std::collections::BTreeSet;
 
 /// Move `spaces` to `remote` once each one can end here, asking once where

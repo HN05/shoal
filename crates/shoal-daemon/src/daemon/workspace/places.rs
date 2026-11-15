@@ -1,11 +1,11 @@
 //! Where executions run in terminal hosts, as their wrappers report it, and
 //! the places Shoal created for spaces, workspaces and chats alike, which it
 //! closes with them.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
 use crate::sessions::OriginExt;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use super::Manager;
 use crate::client::space_names::SpaceSelector;

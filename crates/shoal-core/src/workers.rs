@@ -1,8 +1,8 @@
 //! The command lines that start Shoal's workers: the hidden `internal`
 //! commands the daemon, the execution wrapper and the CLI run in their own
 //! processes.
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},

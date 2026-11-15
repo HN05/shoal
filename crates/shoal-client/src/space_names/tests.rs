@@ -1,5 +1,5 @@
 use super::*;
-use crate::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 
 #[test]
 fn a_set_name_is_one_line_of_at_most_forty_characters() {

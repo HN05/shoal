@@ -75,7 +75,7 @@ pub enum OperationMethod {
         /// The starting queue entry whose launch opens the workspace. One a
         /// scoped process queued opens it in that process's scope.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        queue_entry: Option<crate::queue::QueueEntryId>,
+        queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
     },
     /// Split a child from `workspace` and start preparing it, as `shoal
     /// split` does, with the checks of [`Self::StartWorkspace`]: on the new
@@ -263,7 +263,7 @@ pub struct QueuedLaunch<A = crate::agent::Agent> {
     pub args: Vec<String>,
     /// The session the agent starts from a fork of.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fork: Option<crate::agent::AgentSessionId>,
+    pub fork: Option<shoal_ids::agent_session_ids::AgentSessionId>,
     /// The issue the agent works on, which prompts it instead of `prompt`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue: Option<LaunchIssue>,

@@ -6,15 +6,13 @@ use std::collections::{HashMap, HashSet};
 use anyhow::Result;
 use rusqlite::Connection;
 
-use crate::client::{
-    execution_ids::ExecutionId, executions::Record, repository_ids::RepositoryId,
-    space_ids::SpaceId,
-};
+use crate::client::executions::Record;
 use crate::{
     config::modes::{ModeName, Weight},
     daemon::workspace::Manager,
     execution::recovery::{self, RecordExt},
 };
+use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};
 
 /// The light modes of the repositories asked about, under `None` those of
 /// the global config, where a chat without a repository resolves its mode,

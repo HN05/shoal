@@ -1,7 +1,7 @@
 //! Grace periods of unattended removals, persisted so restarts keep them.
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::OptionalExtension;
+use shoal_ids::space_ids::SpaceId;
 use std::time::Duration;
 
 use crate::{daemon::workspace::Manager, time::UnixTime};

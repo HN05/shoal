@@ -5,7 +5,7 @@
 //! ended give up their workspaces, admitted jobs are claimed, and the
 //! forge's waiting jobs are read while one could start, and every
 //! [`INTERVAL`] while none can.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex, MutexGuard, PoisonError},
@@ -14,8 +14,8 @@ use std::{
 
 use tokio::{sync::Notify, time::Instant};
 
-use crate::client::queue::QueueEntryId;
 use crate::daemon::{log, workspace::Manager};
+use shoal_ids::queue_entry_ids::QueueEntryId;
 
 /// How often the runners are checked against the repositories' settings,
 /// and the forge's waiting jobs read while none could start.
@@ -71,7 +71,7 @@ pub(crate) struct Runners {
     #[cfg(test)]
     pub(crate) stops: Mutex<
         Vec<(
-            crate::client::space_ids::SpaceId,
+            shoal_ids::space_ids::SpaceId,
             super::workspace::runner::JobStop,
         )>,
     >,

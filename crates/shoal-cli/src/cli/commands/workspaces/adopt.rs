@@ -1,5 +1,5 @@
 //! Adopting a worktree, or reclaiming a recorded one whose ownership is unverified.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, ensure};

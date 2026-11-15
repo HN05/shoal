@@ -3,7 +3,7 @@
 //! agent, opens a space below it or records its agent's new question, so a
 //! removal that took the spaces below is not left with a space something
 //! keeps.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::HashSet,
     sync::{Arc, Mutex, PoisonError},

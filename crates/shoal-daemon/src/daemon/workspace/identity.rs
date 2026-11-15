@@ -1,7 +1,7 @@
 //! Persistent identity for directories Shoal owns: Git administrative
 //! directories and repository checkouts.
-use crate::client::space_ids::SpaceId;
 use anyhow::{Context, Result, ensure};
+use shoal_ids::space_ids::SpaceId;
 use std::{
     fs,
     io::ErrorKind,

@@ -4,9 +4,9 @@
 //! run of a job counts at in admission: the peak memory of its recent runs,
 //! none before it has run, and how long the jobs a space waits for have
 //! left.
-use crate::client::{repository_ids::RepositoryId, space_ids::SpaceId};
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use std::time::Duration;
 
 use super::ends::ClaimedJob;

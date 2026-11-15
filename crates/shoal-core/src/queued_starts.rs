@@ -8,8 +8,9 @@ mod restore;
 
 use anyhow::Result;
 
-use crate::client::queue::{self, QueueEntryId};
+use crate::client::queue;
 use crate::{paths::CommandPaths, state::QueueKind};
+use shoal_ids::queue_entry_ids::QueueEntryId;
 
 pub use chat::{ChatPlan, ChatPlanStart};
 pub use launch::{plan as launch_plan, start_admitted as start_admitted_launch};

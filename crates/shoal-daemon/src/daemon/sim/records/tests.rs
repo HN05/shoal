@@ -1,8 +1,8 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
 use crate::daemon::store::Store;
 use rusqlite::params;
 use serde_json::{Value, json};
+use shoal_ids::space_ids::SpaceId;
 
 fn record(id: &str, current: Option<&str>, last: Option<&str>) -> Value {
     json!({

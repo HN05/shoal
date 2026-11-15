@@ -189,7 +189,7 @@ response_bodies! {
     PlaceClose(crate::sessions::PlaceClose),
     PlaceOwnership(crate::sessions::PlaceOwnership),
     QueueEntry(crate::model::QueueEntry),
-    StartedLaunch(Option<crate::space_ids::SpaceId>),
+    StartedLaunch(Option<shoal_ids::space_ids::SpaceId>),
     QueuedPlan(crate::model::QueuedPlan),
     Holds(Vec<crate::model::SpaceHold>),
     AttachedFiles(Vec<crate::files::AttachedFile>),

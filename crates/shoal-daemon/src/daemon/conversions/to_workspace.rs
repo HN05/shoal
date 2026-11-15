@@ -1,9 +1,9 @@
 //! A chat becoming a workspace: the refusals, the issue it takes, the
 //! worktree and its setup, after which its agent restarts there when its
 //! turn ends.
-use crate::client::space_ids::SpaceId;
 use crate::daemon::links::issue::{Assigner, AssignerOf};
 use crate::forge::items::reference::ItemInput;
+use shoal_ids::space_ids::SpaceId;
 use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context as _, Result, bail, ensure};

@@ -1,5 +1,5 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 
 fn spaces(db: &Connection) -> Result<()> {
     db.execute_batch(

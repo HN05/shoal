@@ -2,8 +2,8 @@
 //! finishes with the agent's record, which the agent queue restores at once,
 //! in the slot the agent kept, and the restart follows the agent to the
 //! execution the new wrapper registers, which answers it once the agent runs.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, anyhow};

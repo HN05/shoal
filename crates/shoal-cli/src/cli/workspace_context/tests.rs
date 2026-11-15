@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::space_ids::SpaceId;
 use crate::state::WorkspaceState;
+use shoal_ids::space_ids::SpaceId;
 
 fn workspace(name: &str, path: &Path) -> Workspace {
     Workspace {

@@ -1,5 +1,5 @@
 //! What the daemon keeps in memory about each repository's seed builds.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},

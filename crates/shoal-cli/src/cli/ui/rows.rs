@@ -1,7 +1,7 @@
 //! The labels pickers and lists show: aligned rows of workspaces, agent
 //! launches and repositories, with their status cells.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceNumber;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceNumber;
 use std::{collections::HashSet, path::Path, time::Duration};
 
 use super::Entries;

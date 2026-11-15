@@ -1,6 +1,6 @@
 //! Recording a space's work as done, and withdrawing that.
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
+use shoal_ids::space_ids::SpaceId;
 
 use crate::client::assignments;
 use crate::client::output::workspaces::Withdrawn;

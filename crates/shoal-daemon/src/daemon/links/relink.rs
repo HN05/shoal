@@ -2,8 +2,8 @@
 //! moved chat brings them: its assigned issues as the account each was
 //! assigned as, with the assignments Shoal had added, and its opened and
 //! related items. The caller links its PRs.
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
+use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     daemon::{

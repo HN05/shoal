@@ -9,15 +9,13 @@ use super::super::{
     rank::{Entry, Work},
     state::WaitingOneShot,
 };
-use crate::client::{
-    priority::Priority, queue::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId,
-    time::UnixTime,
-};
+use crate::client::{priority::Priority, time::UnixTime};
 use crate::{
     forge::ci::runner::Trigger,
     model::{QueuedJob, Tier},
     state::{QueueKind, QueueState},
 };
+use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 
 /// The waiting entries, the queue's and `oneshots`, numbered in the order
 /// they arrived; `jobs` holds the spaces each waiting job serves now.

@@ -1,7 +1,7 @@
 //! An agent the daemon paused: why it stopped, its saved recovery record, and
 //! the wait for the daemon to restore it.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::{ffi::OsString, io::Write, path::PathBuf};
 
 use anyhow::Result;

@@ -16,12 +16,13 @@ use anyhow::Result;
 use super::{Manager, agent_state::TurnEnding};
 use crate::{
     agents::hook_reports::{self, Kept, Left, Report},
-    client::{space_ids::SpaceId, space_names::SpaceSelector},
+    client::space_names::SpaceSelector,
     daemon::{log, store},
     model::AgentStatus,
     state::{AgentState, ExecutionState},
     time::UnixTime,
 };
+use shoal_ids::space_ids::SpaceId;
 
 /// How often the daemon looks for the reports hooks left.
 const SWEEP_INTERVAL: Duration = Duration::from_secs(15);

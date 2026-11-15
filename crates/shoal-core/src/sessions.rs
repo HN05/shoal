@@ -9,10 +9,10 @@ pub(crate) mod zmx;
 
 pub use crate::client::sessions::{HostName, Origin, PlaceClose, PlaceOwnership};
 
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
 use futures_util::future::BoxFuture;
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::SpaceId;
 use std::{collections::BTreeMap, path::Path, sync::Arc};
 
 /// A terminal session labelled with the space, a workspace or a chat, that

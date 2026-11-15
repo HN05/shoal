@@ -105,7 +105,7 @@ async fn chat_fixture() -> (tempfile::TempDir, Arc<Manager>, crate::model::Chat)
 
 /// What a wrapper in this process asks to run `agent`, or a plain command,
 /// in the space `space`.
-fn context(space: &crate::client::space_ids::SpaceId, agent: Option<&str>) -> ExecutionContext {
+fn context(space: &shoal_ids::space_ids::SpaceId, agent: Option<&str>) -> ExecutionContext {
     ExecutionContext {
         space: SpaceSelector::id(space),
         wrapper: crate::process::identity::capture(std::process::id())

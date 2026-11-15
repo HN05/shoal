@@ -3,8 +3,8 @@
 //! the sessions each space's agents reported, open questions, pending
 //! approval requests, messages and notifications, each named by a
 //! [`RecordKey`].
-use crate::space_ids::SpaceId;
 use crate::space_names::SpaceName;
+use shoal_ids::space_ids::SpaceId;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};

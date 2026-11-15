@@ -7,10 +7,10 @@ use super::{
     cursor::{all_pending, save_pending},
 };
 use crate::{
-    client::space_ids::SpaceId,
     daemon::{agent_messages::AgentMessage, workspace::Manager},
     forge::updates::Update,
 };
+use shoal_ids::space_ids::SpaceId;
 
 /// The bytes a response's updates and messages may take, leaving room for
 /// its other fields.

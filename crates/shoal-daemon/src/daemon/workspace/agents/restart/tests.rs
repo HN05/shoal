@@ -1,6 +1,6 @@
-use crate::client::execution_ids::ExecutionId;
 use crate::execution::recovery::RecordExt;
 use crate::model::PresentSpace;
+use shoal_ids::execution_ids::ExecutionId;
 use std::time::Duration;
 
 use crate::client::space_names::SpaceSelector;

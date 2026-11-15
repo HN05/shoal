@@ -1,8 +1,8 @@
 //! Operations on one entry: adding a launch, listing entries, and a starting
 //! entry's way from its reservation to the agent that takes its slot or its
 //! failure.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result, bail, ensure};
@@ -15,7 +15,6 @@ use super::{
     store::{self, ENTRY_COLUMNS, Launch, entry, insert_launch, opens_existing_branch},
 };
 use crate::client::{
-    queue::QueueEntryId,
     space_names::{SpaceName, SpaceSelector},
     time::UnixTime,
 };
@@ -26,6 +25,7 @@ use crate::{
     },
     state::{QueueKind, QueueState},
 };
+use shoal_ids::queue_entry_ids::QueueEntryId;
 
 impl Manager {
     /// Admit `request` to a free slot or queue it. A launch that no limit

@@ -4,10 +4,10 @@ use std::collections::HashSet;
 use anyhow::Result;
 use rusqlite::params;
 
-use crate::client::queue::QueueEntryId;
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceName;
 use crate::state::{QueueKind, QueueState};
+use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_ids::space_ids::SpaceId;
 
 /// A start that expired without completing its handoff: a launch that
 /// opened no workspace, by its name alone, or a restore with its

@@ -4,7 +4,7 @@
 mod place;
 mod reach;
 
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, bail, ensure};

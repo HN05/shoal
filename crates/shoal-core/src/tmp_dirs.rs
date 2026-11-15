@@ -3,8 +3,8 @@
 //! repository in `root_dir`'s, named by its ID, which its processes receive
 //! as `TMPDIR`. The directory goes with its workspace or chat, so nothing in
 //! it is ever kept.
-use crate::client::repository_ids::RepositoryId;
-use crate::client::space_ids::SpaceId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     fs,
     io::ErrorKind,

@@ -5,11 +5,11 @@
 //! agent registers, or while waiting once what it restores is gone, as after
 //! `shoal restore --now` or `--forget`. A restart's restore starts at once, in
 //! the slot its agent kept.
-use crate::client::execution_ids::ExecutionId;
-use crate::client::repository_ids::RepositoryId;
-use crate::client::{queue::QueueEntryId, space_ids::SpaceId};
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::{
     collections::{BTreeMap, HashSet},
     path::PathBuf,

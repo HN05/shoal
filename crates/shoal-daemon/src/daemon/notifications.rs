@@ -1,7 +1,7 @@
 //! Events the daemon records for the user: conflicts it saw, agents that
 //! finished, workspaces it removed. Recording never fails the operation that
 //! caused the event; the CLI shows them and marks them read.
-use crate::client::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceId;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};

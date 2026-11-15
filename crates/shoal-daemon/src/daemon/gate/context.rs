@@ -8,7 +8,7 @@ use super::{
     prompt,
     subject::{self, Subject},
 };
-use crate::client::{space_ids::SpaceId, space_names::SpaceSelector};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     config::{Effective, gate::GateRules},
@@ -22,6 +22,7 @@ use crate::{
     protocol::ItemContext,
 };
 use shoal_forge::conventions;
+use shoal_ids::space_ids::SpaceId;
 
 /// The configuration gives the gate no agent it can run, which only the
 /// user fixes.

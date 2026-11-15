@@ -3,12 +3,12 @@
 //! and dies with the wrapper, which reports them again.
 use std::{collections::HashMap, time::Duration};
 
-use crate::client::execution_ids::ExecutionId;
 use crate::client::space_names::SpaceSelector;
 use crate::client::{agent::Agent, executions::ServiceLimit};
 use crate::time::UnixTime;
 use anyhow::Result;
 use rusqlite::OptionalExtension;
+use shoal_ids::execution_ids::ExecutionId;
 
 use super::Manager;
 pub(crate) use crate::client::executions::UpstreamLimit;

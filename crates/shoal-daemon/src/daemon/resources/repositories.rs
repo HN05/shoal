@@ -1,7 +1,7 @@
 //! Borrow registered checkouts without creating or deleting filesystem views.
-use crate::client::repository_ids::RepositoryId;
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, params};
+use shoal_ids::repository_ids::RepositoryId;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,

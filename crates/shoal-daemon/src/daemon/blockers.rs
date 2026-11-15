@@ -9,10 +9,11 @@ use std::collections::{HashMap, HashSet};
 use anyhow::Result;
 
 use crate::{
-    client::{files::Attacher, progress::Progress, space_ids::SpaceId, space_names::SpaceSelector},
+    client::{files::Attacher, progress::Progress, space_names::SpaceSelector},
     daemon::{log, progress::Cleared, workspace::Manager},
     state::BlockerKind,
 };
+use shoal_ids::space_ids::SpaceId;
 
 mod forge;
 

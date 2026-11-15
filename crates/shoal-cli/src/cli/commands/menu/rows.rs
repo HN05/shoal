@@ -1,6 +1,6 @@
 //! The rows each view lists, and the picker ids that tell what a chosen row
 //! stands for.
-use crate::client::repository_ids::RepositoryId;
+use shoal_ids::repository_ids::RepositoryId;
 use std::{
     os::unix::ffi::{OsStrExt, OsStringExt},
     path::{Path, PathBuf},
@@ -10,7 +10,6 @@ use anyhow::{Context as _, Result};
 
 use super::View;
 use crate::cli::commands::{inbox::Inbox, listing::ListFilter, queued_agents};
-use crate::client::space_ids::SpaceId;
 use crate::client::space_names::SpaceSelector;
 use crate::client::{item_numbers::ItemNumber, output::inbox::Item};
 use crate::{
@@ -23,6 +22,7 @@ use crate::{
     client::notifications::{self, Notification},
     forge::items::reference::ItemRef,
 };
+use shoal_ids::space_ids::SpaceId;
 
 const ADD_ENTRY: &str = "add-workspace";
 

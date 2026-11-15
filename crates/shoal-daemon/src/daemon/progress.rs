@@ -3,10 +3,10 @@
 //! them, and what blocks the space or its steps. The record outlives the
 //! agent until the space goes; each change is a `progress_changed` event,
 //! and each blocker added or removed an event of its own.
-use crate::client::space_ids::SpaceId;
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::SpaceId;
 
 use super::{notifications::NotificationKind, workspace::Manager};
 use crate::client::{

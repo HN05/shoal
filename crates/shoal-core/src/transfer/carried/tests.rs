@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::agent::AgentSessionId;
 use crate::transfer::ManifestExt;
+use shoal_ids::agent_session_ids::AgentSessionId;
 
 /// The chat `id` of repository `r1`, below `parent` when given and in the
 /// worktree of `workspace` when given, whose agent reported `s-<id>`.

@@ -1,8 +1,8 @@
 //! What lists and status show of the runner's jobs: each claimed job's
 //! workspace names its job, and the spaces its run is for now list the jobs
 //! that run or wait for it.
-use crate::client::space_ids::SpaceId;
 use anyhow::Result;
+use shoal_ids::space_ids::SpaceId;
 
 use super::ends::ClaimedJob;
 use crate::{

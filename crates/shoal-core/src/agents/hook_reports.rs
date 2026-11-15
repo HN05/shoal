@@ -15,11 +15,13 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    client::{agent::AgentSessionId, execution_ids::ExecutionId, space_ids::SpaceId},
     fsutil::atomic::{Permissions, ReplaceOptions},
     paths::Paths,
     protocol::TurnEnd,
     state::{AgentState, TurnFailure},
+};
+use shoal_ids::{
+    agent_session_ids::AgentSessionId, execution_ids::ExecutionId, space_ids::SpaceId,
 };
 
 /// What a hook reports for its space's agent.

@@ -7,7 +7,6 @@ use super::{
         real_directory_identity,
     },
 };
-use crate::client::repository_ids::RepositoryId;
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{resources::Scope, store},
@@ -20,6 +19,7 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
+use shoal_ids::repository_ids::RepositoryId;
 use std::{collections::BTreeMap, fs, path::Path};
 
 /// Persisted progress of an interrupted removal.

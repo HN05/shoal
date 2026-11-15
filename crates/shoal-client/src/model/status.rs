@@ -5,8 +5,8 @@ use super::{
 };
 use crate::resources::ResourceLease;
 use crate::sim::Simulator;
-use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::SpaceId;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Inspection {

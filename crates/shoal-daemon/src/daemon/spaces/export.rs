@@ -2,13 +2,12 @@
 //! stopping a chat's agent first, copies one that keeps running, or stops
 //! one's agents for a move that ends it once imported, and writes what
 //! continues it on another machine.
-use crate::client::space_ids::SpaceId;
 use crate::execution::recovery::LastSessionExt;
 use crate::transfer::ManifestExt;
 use anyhow::{Context, Result, ensure};
+use shoal_ids::space_ids::SpaceId;
 
 use crate::client::space_names::SpaceSelector;
-use crate::model::CheckpointNumber;
 use crate::{
     client::transcripts::Environments,
     config::Effective,
@@ -26,6 +25,7 @@ use crate::{
     time::UnixTime,
     transfer::{ExportedSpace, Manifest, SessionSource, Source},
 };
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 mod carried;
 mod copy;

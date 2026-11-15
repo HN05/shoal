@@ -1,6 +1,6 @@
-use crate::client::space_ids::SpaceId;
 use crate::shoal_dirs::{Contents, ShoalDir};
 use crate::time::UnixTime;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 use std::sync::Arc;
 

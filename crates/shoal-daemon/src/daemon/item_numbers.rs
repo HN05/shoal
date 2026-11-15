@@ -2,9 +2,9 @@
 //! Both kinds share one sequence per space, so `3.2` names one item: a new
 //! one takes the smallest number no item of its space holds, and a number
 //! names the other kind's item only as a refusal that says so.
-use crate::client::space_ids::{SpaceId, SpaceNumber};
 use anyhow::Result;
 use rusqlite::{Connection, params};
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
 pub(crate) use crate::client::item_numbers::{ItemKind, ItemNumber};
 use crate::refusal::{Reason, Refusal};

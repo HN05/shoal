@@ -1,7 +1,7 @@
 //! Admitting an addition's agent to the agent queue, with what blocks it.
 use anyhow::Result;
 
-use crate::client::queue::QueueEntryId;
+use shoal_ids::queue_entry_ids::QueueEntryId;
 
 use super::{
     AddOptions,

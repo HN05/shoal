@@ -13,7 +13,6 @@ use anyhow::{Context as _, Result};
 use clap::{Command, CommandFactory};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
-use crate::client::space_ids::SpaceNumber;
 use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     agent::Agent,
@@ -37,6 +36,7 @@ use crate::{
     paths::{CommandPaths, Paths},
     protocol::ConfigTarget,
 };
+use shoal_ids::space_ids::SpaceNumber;
 
 /// What was already typed on the command line when completion was requested.
 #[derive(Default)]

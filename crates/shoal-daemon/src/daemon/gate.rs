@@ -11,12 +11,12 @@ use std::{
 use anyhow::{Result, bail};
 use tokio::task::{Id, JoinError, JoinSet};
 
-use crate::client::space_ids::SpaceId;
 use crate::daemon::{
     approvals::{ApprovalRequest, DecisionStatus, GateStep},
     log,
     workspace::Manager,
 };
+use shoal_ids::space_ids::SpaceId;
 
 mod context;
 mod leftovers;

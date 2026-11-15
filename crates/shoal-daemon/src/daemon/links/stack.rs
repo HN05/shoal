@@ -1,8 +1,8 @@
 //! Move stacked workspaces down when their base workspace's PRs merge.
-use crate::client::space_ids::SpaceId;
 use crate::forge::items::reference::ItemRef;
 use anyhow::Result;
 use rusqlite::params;
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::{BranchName, CommitId};
 
 use super::{

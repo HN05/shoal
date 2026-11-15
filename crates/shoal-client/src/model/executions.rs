@@ -1,10 +1,10 @@
 //! Executions and the plans and places they run with.
 use super::{MergePlan, PortReservation, UnmergePlan, Workspace};
-use crate::execution_ids::ExecutionId;
 use crate::processes::Identity;
-use crate::space_ids::{SpaceId, SpaceNumber};
 use crate::state::ExecutionState;
 use serde::{Deserialize, Serialize};
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize)]
