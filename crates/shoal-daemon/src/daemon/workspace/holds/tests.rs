@@ -495,3 +495,31 @@ async fn a_chats_agent_holds_its_own_chat_once_approved() {
         ("review", HoldPlacer::Agent)
     );
 }
+
+#[tokio::test]
+async fn an_approval_decided_during_a_removal_places_no_hold() {
+    let (temp, manager) = manager().await;
+    let chat = chat(&manager, temp.path()).await;
+    let Ok(crate::daemon::allocation::Allocation::Approval(requested)) = (manager.request_hold(
+        &SpaceSelector::id(&chat.id),
+        "review".into(),
+        Some("Keep it".into()),
+    ))
+    .await
+    else {
+        panic!("holding its own chat needs approval");
+    };
+    let removal = manager.space_removals.reserve(&chat.id).unwrap();
+    manager
+        .decide_approval(requested.number, true, None, Default::default(), None)
+        .await
+        .unwrap_err();
+    assert!(!manager.has_holds(&chat.id).await.unwrap());
+    // The request stays undecided, so the decision can be made again.
+    drop(removal);
+    manager
+        .decide_approval(requested.number, true, None, Default::default(), None)
+        .await
+        .unwrap();
+    assert!(manager.has_holds(&chat.id).await.unwrap());
+}

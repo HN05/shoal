@@ -315,15 +315,18 @@ fn release(
     Ok(())
 }
 
-/// Place, in the transaction that approved it, the hold `request` asks for:
-/// a decision never stands without its hold.
+/// Place, in the transaction that approved it, the hold `request` asks for,
+/// refusing it where [`ensure_holdable`] does: a decision never stands
+/// without its hold.
 pub(crate) fn place_approved(
     tx: &rusqlite::Transaction<'_>,
     request: &ApprovalRequest,
+    removing: &crate::daemon::spaces::Removing,
 ) -> Result<()> {
     let Target::Hold(name) = &request.target else {
         return Ok(());
     };
+    ensure_holdable(tx, &request.space_id, removing)?;
     let reason = Some(request.reason.as_str()).filter(|reason| !reason.is_empty());
     insert(tx, &request.space_id, name, reason, HoldPlacer::Agent)
 }

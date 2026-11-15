@@ -165,11 +165,16 @@ pub fn decide(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision
 }
 
 /// [`decide`], placing the hold an approved hold request asks for in the
-/// same transaction.
-fn decide_and_place(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision> {
+/// same transaction unless `removing` reserves its space.
+fn decide_and_place(
+    tx: &Transaction<'_>,
+    key: &str,
+    approve: bool,
+    removing: &crate::daemon::spaces::Removing,
+) -> Result<Decision> {
     let decision = decide(tx, key, approve)?;
     if decision.new && decision.request.status == DecisionStatus::Approved {
-        crate::daemon::workspace::place_approved_hold(tx, &decision.request)?;
+        crate::daemon::workspace::place_approved_hold(tx, &decision.request, removing)?;
     }
     Ok(decision)
 }
@@ -380,6 +385,7 @@ impl Manager {
         let (coordinator, key, id) = (coordinator.to_owned(), request.key.clone(), request.number);
         let _hold = self.hold_decision_guard(&request, approve).await?;
         let _guard = self.gates.lock_simulators().await;
+        let removing = self.space_removals.clone();
         self.store
             .write(move |tx| {
                 let stored = by_key(tx, &key)?.context("the approval request no longer exists")?;
@@ -396,7 +402,7 @@ impl Manager {
                     "approval {id}: this space holds no grant for {}; deny it or pass it up with shoal approvals --escalate {id}",
                     stored.subject()
                 );
-                let decision = decide_and_place(tx, &key, approve)?;
+                let decision = decide_and_place(tx, &key, approve, &removing)?;
                 Ok(decision)
             })
             .await
@@ -411,8 +417,9 @@ impl Manager {
         // Simulator allocation checks approval and mutates devices in separate
         // transactions under this gate; a decision must not land between them.
         let _guard = self.gates.lock_simulators().await;
+        let removing = self.space_removals.clone();
         self.store
-            .write(move |tx| decide_and_place(tx, &key, approve))
+            .write(move |tx| decide_and_place(tx, &key, approve, &removing))
             .await
     }
 
