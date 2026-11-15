@@ -93,7 +93,7 @@ pub fn queued_agent_request(
         (launch.env.take()).unwrap_or_else(|| crate::terminal::detached_start_environment(None));
     let issue_title = launch.issue.as_ref().map(|issue| issue.title.clone());
     let issue_labels = (launch.issue.as_ref()).map_or_else(Vec::new, |issue| issue.labels.clone());
-    let (agent, now) = (launch.agent.clone(), launch.now);
+    let (agent, now, source) = (launch.agent.clone(), launch.now, launch.source.take());
     let mut plan = AddPlan::agent_in(workspace, launch)?;
     plan.creation.pr = pr;
     Ok(QueueRequest {
@@ -111,6 +111,7 @@ pub fn queued_agent_request(
         workspace: Some(SpaceSelector::id(&workspace.id)),
         starts_in_caller: false,
         blockers: Vec::new(),
+        source,
     })
 }
 
@@ -174,6 +175,7 @@ impl AddPlan {
             issue,
             env: _,
             now: _,
+            source: _,
         } = launch;
         Ok(Self {
             repository: (&workspace.repository_id).into(),

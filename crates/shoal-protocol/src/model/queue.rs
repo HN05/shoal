@@ -243,6 +243,9 @@ pub struct QueueRequest {
     /// `[priority.labels]` priority ranks it when it is given none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub issue_labels: Vec<String>,
+    /// What made the launch, which its agent's start records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<crate::launches::LaunchSource>,
 }
 
 /// The launch of a new chat's agent to admit under the agent slots, which
@@ -281,6 +284,9 @@ pub struct ChatQueueRequest {
     /// it has, or after a minute without it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub records_when_waiting: bool,
+    /// What made the launch, which its agent's start records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<crate::launches::LaunchSource>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

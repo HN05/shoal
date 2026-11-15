@@ -275,6 +275,9 @@ pub struct QueuedLaunch<A = crate::agent::Agent> {
     /// its `limits` permission allows.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub now: bool,
+    /// What made the launch, which its agent's start records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<crate::launches::LaunchSource>,
 }
 
 impl<A> QueuedLaunch<A> {
@@ -291,6 +294,7 @@ impl<A> QueuedLaunch<A> {
             issue: None,
             env: None,
             now: false,
+            source: None,
         }
     }
 }
@@ -317,6 +321,7 @@ impl<A> QueuedLaunch<A> {
             issue,
             env,
             now,
+            source,
         } = self;
         QueuedLaunch {
             agent: agent(own),
@@ -329,6 +334,7 @@ impl<A> QueuedLaunch<A> {
             issue,
             env,
             now,
+            source,
         }
     }
 }

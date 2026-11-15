@@ -30,6 +30,7 @@ async fn full_machine(manager: &Manager, repo: &Repository) {
 /// The launch of a chat's agent in `mode`, of `repository` or of none.
 fn chat_launch(repository: Option<&Repository>, mode: &str) -> ChatQueueRequest {
     ChatQueueRequest {
+        source: None,
         repository: repository.map(|repository| (&repository.id).into()),
         name: "talk".into(),
         agent: "claude".into(),
@@ -126,7 +127,10 @@ async fn a_clients_chat_whose_agent_waits_is_recorded_with_its_entry() {
         ..Default::default()
     };
 
-    let started = manager.launch_chat(start, None).await.unwrap();
+    let started = manager
+        .launch_chat(start, shoal_protocol::launches::LaunchSource::Manual, None)
+        .await
+        .unwrap();
 
     let StartedChat::Queued(queued) = started else {
         panic!("expected a queued chat: {started:?}");
@@ -158,7 +162,10 @@ async fn a_clients_chat_started_now_runs_past_the_limits() {
         ..Default::default()
     };
 
-    let started = manager.launch_chat(start, None).await.unwrap();
+    let started = manager
+        .launch_chat(start, shoal_protocol::launches::LaunchSource::Manual, None)
+        .await
+        .unwrap();
 
     assert!(!matches!(started, StartedChat::Queued(_)), "{started:?}");
     let entries = manager.queue_entries().await.unwrap();

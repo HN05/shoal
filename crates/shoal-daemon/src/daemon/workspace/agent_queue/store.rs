@@ -11,6 +11,7 @@ use crate::{
     state::{QueueKind, QueueState},
 };
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
+use shoal_protocol::launches::LaunchSource;
 use shoal_protocol::time::UnixTime;
 
 /// A waiting row of the queue.
@@ -87,6 +88,7 @@ pub(super) struct LaunchRequest {
     pub now: bool,
     pub blockers: Vec<crate::model::Blocker>,
     pub priority: Option<shoal_schedule::priority::Priority>,
+    pub source: Option<LaunchSource>,
 }
 
 impl From<QueueRequest> for LaunchRequest {
@@ -103,6 +105,7 @@ impl From<QueueRequest> for LaunchRequest {
             now: request.now,
             blockers: request.blockers,
             priority: request.priority,
+            source: request.source,
         }
     }
 }
@@ -121,6 +124,7 @@ impl From<ChatQueueRequest> for LaunchRequest {
             now: request.now,
             blockers: Vec::new(),
             priority: request.priority,
+            source: request.source,
         }
     }
 }
@@ -283,8 +287,8 @@ pub(super) fn insert_launch(
     );
     let now = UnixTime::now();
     tx.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing,scope_space_id,priority,issue_labels)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing,scope_space_id,priority,issue_labels,source)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
         params![
             launch.id,
             QueueKind::Launch,
@@ -303,6 +307,7 @@ pub(super) fn insert_launch(
             launch.scope,
             request.priority,
             serde_json::to_string(&request.issue_labels)?,
+            (request.source.as_ref()).map(serde_json::to_string).transpose()?,
         ],
     )?;
     if let Some(repository) = &launch.repository {
@@ -326,8 +331,8 @@ pub(super) fn copy_launch_waiting(
     workspace: &SpaceId,
 ) -> Result<()> {
     tx.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,opens_workspace_id,mode,narrowing,scope_space_id,priority,issue_labels)
-         SELECT ?2,kind,repository_id,name,agent,issue_title,?3,env,?4,created_at,?5,mode,narrowing,scope_space_id,priority,issue_labels
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,opens_workspace_id,mode,narrowing,scope_space_id,priority,issue_labels,source)
+         SELECT ?2,kind,repository_id,name,agent,issue_title,?3,env,?4,created_at,?5,mode,narrowing,scope_space_id,priority,issue_labels,source
          FROM agent_queue WHERE id=?1",
         params![from, id, plan, QueueState::Queued, workspace],
     )?;

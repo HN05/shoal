@@ -16,21 +16,23 @@ use crate::{
 use shoal_core::queued_starts::{ChatPlan, ChatPlanStart};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::chats::{QueuedChat, StartedChat};
+use shoal_protocol::launches::LaunchSource;
 use shoal_protocol::{scope_tokens::ScopeToken, space_names::SpaceName};
 
 impl Manager {
-    /// Start the chat `start` describes for `caller` in a background place,
-    /// with its agent, mode and repository resolved, once the agent queue
-    /// admits its agent; one that waits is recorded below where it goes
-    /// and starts from the queue. The worker acts with `caller`'s scope, so
+    /// Start the chat `start` describes, which `source` made, for `caller`
+    /// in a background place, with its agent, mode and repository
+    /// resolved, once the agent queue admits its agent; one that waits is
+    /// recorded below where it goes and starts from the queue. The worker acts with `caller`'s scope, so
     /// a scoped caller's chat goes where its own start would put it.
     pub(crate) async fn launch_chat(
         &self,
         start: ChatStart,
+        source: LaunchSource,
         caller: Option<&Caller>,
     ) -> Result<StartedChat> {
         let start = self.resolve_chat_start(start, caller).await?;
-        let admission = self.queue_chat_add(launch_request(&start)?, caller).await?;
+        let admission = (self.queue_chat_add(launch_request(&start, source)?, caller)).await?;
         if !admission.start {
             return self.record_queued_chat(start, admission, caller).await;
         }
@@ -229,7 +231,7 @@ impl Manager {
 
 /// The launch of the resolved `start`'s agent to admit, whose plan, once
 /// it waited, starts the chat the daemon recorded meanwhile.
-fn launch_request(start: &ChatStart) -> Result<ChatQueueRequest> {
+fn launch_request(start: &ChatStart, source: LaunchSource) -> Result<ChatQueueRequest> {
     let plan = ChatPlan {
         parent: start.parent.clone(),
         chat_start: ChatPlanStart::Resolved(Box::new(start.clone())),
@@ -246,6 +248,7 @@ fn launch_request(start: &ChatStart) -> Result<ChatQueueRequest> {
         now: start.now,
         priority: start.priority,
         records_when_waiting: true,
+        source: Some(source),
     })
 }
 

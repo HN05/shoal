@@ -274,6 +274,7 @@ impl Manager {
             && let Some(name) = execution.agent.clone()
         {
             let ended = crate::daemon::events::AgentEvent {
+                source: None,
                 name,
                 execution_id: Some(id.clone()),
                 exit_code: Some(0),

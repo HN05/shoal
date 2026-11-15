@@ -33,6 +33,7 @@ async fn a_chat_recorded_for_a_scoped_launch_goes_below_its_queuer() {
         read_only: false,
     };
     let launch = ChatQueueRequest {
+        source: None,
         repository: Some((&repo.id).into()),
         name: "talk".into(),
         agent: "claude".into(),
@@ -94,6 +95,7 @@ async fn a_scoped_chat_start_now_asks_the_limits_permission() {
     assert_eq!(limits(launched), Target::Action(PermissionKey::Limits));
 
     let mut queued = ChatQueueRequest {
+        source: None,
         repository: Some((&repo.id).into()),
         name: "talk".into(),
         agent: "claude".into(),

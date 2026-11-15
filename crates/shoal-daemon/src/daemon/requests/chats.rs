@@ -25,7 +25,8 @@ pub(super) async fn handle(
             }
             let held = (start.repository.as_ref(), start.workspace.as_ref());
             ensure_caller_holds(manager, caller, &start.narrowing, held).await?;
-            Body::StartedChat(manager.launch_chat(*start, caller).await?)
+            let source = shoal_protocol::launches::LaunchSource::Manual;
+            Body::StartedChat(manager.launch_chat(*start, source, caller).await?)
         }
         ChatMethod::StartChat {
             repository,

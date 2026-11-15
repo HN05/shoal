@@ -19,6 +19,7 @@ use crate::{
     state::{QueueKind, QueueState},
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_protocol::launches::LaunchSource;
 use shoal_protocol::{
     space_names::{SpaceName, SpaceSelector},
     time::UnixTime,
@@ -518,29 +519,40 @@ impl Manager {
         Ok(())
     }
 
-    /// The agent a queued launch started takes over the slot its entry kept.
-    /// Only that launch's agent names the entry, so another agent registering
-    /// in the same workspace leaves it starting. The workspace is recorded
-    /// as the one the launch started in as the entry goes, so a client that
-    /// no longer finds the entry finds it.
-    pub(crate) async fn consume_queue_entry(&self, id: &QueueEntryId, workspace_id: &SpaceId) {
+    /// The agent a queued launch started takes over the slot its entry kept,
+    /// and what made the launch. Only that launch's agent names the entry,
+    /// so another agent registering in the same workspace leaves it
+    /// starting. The workspace is recorded as the one the launch started in
+    /// as the entry goes, so a client that no longer finds the entry finds
+    /// it.
+    pub(crate) async fn consume_queue_entry(
+        &self,
+        id: &QueueEntryId,
+        workspace_id: &SpaceId,
+    ) -> Option<LaunchSource> {
         let (entry, workspace) = (id.to_owned(), workspace_id.to_owned());
         let consumed = self
             .store
             .write(move |tx| {
-                let consumed = tx.execute(
-                    "DELETE FROM agent_queue WHERE id=?1 AND space_id=?2 AND state=?3",
-                    params![entry, workspace, QueueState::Starting],
-                )?;
-                if consumed == 1 {
-                    record_started(tx, &entry, &workspace)?;
-                }
-                Ok(())
+                let source: Option<Option<String>> = tx
+                    .query_row(
+                        "DELETE FROM agent_queue WHERE id=?1 AND space_id=?2 AND state=?3
+                         RETURNING source",
+                        params![entry, workspace, QueueState::Starting],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                let Some(source) = source else {
+                    return Ok(None);
+                };
+                record_started(tx, &entry, &workspace)?;
+                Ok(source.as_deref().map(serde_json::from_str).transpose()?)
             })
             .await;
-        if let Err(error) = consumed {
+        consumed.unwrap_or_else(|error| {
             crate::daemon::log!("agent queue: {error:#}");
-        }
+            None
+        })
     }
 
     /// The workspace the launch `entry`, which left the queue, started its

@@ -100,6 +100,25 @@ pub struct Launch {
     pub task: Vec<String>,
 }
 
+/// What made a launch, which the journal records with its agent's start.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum LaunchSource {
+    /// A start someone made, such as with `shoal start`.
+    Manual,
+    /// The firing of the trigger `name`.
+    Trigger { name: String },
+}
+
+impl std::fmt::Display for LaunchSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Manual => f.write_str("manual"),
+            Self::Trigger { name } => write!(f, "trigger {name}"),
+        }
+    }
+}
+
 /// The issue a start names.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

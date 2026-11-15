@@ -140,6 +140,7 @@ pub(super) async fn register(
     if !reattach {
         (manager.executions).mark_unattachable(&plan.id, &plan.space.id);
     }
+    let mut source = None;
     if kind == ExecutionKind::Command
         && let Some(agent) = &agent
     {
@@ -155,7 +156,7 @@ pub(super) async fn register(
             .await;
         if let Some(entry) = takes_entry {
             manager.continue_restart(entry, &plan.id).await;
-            manager.consume_queue_entry(entry, space.id()).await;
+            source = manager.consume_queue_entry(entry, space.id()).await;
         }
     }
     drop(reserved);
@@ -177,6 +178,7 @@ pub(super) async fn register(
         stopped: false,
         stop,
         records: RecordChange::of(&plan),
+        source,
     };
     Ok(Registered {
         execution,

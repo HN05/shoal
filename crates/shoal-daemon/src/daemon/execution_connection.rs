@@ -5,6 +5,7 @@
 use crate::daemon::workspace::agents::ProtectionExt;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::launches::LaunchSource;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, ensure};
@@ -81,6 +82,9 @@ struct Connected {
     stop: watch::Receiver<bool>,
     /// What the execution changes in the merge records once it ends.
     records: Option<RecordChange>,
+    /// What made the launch whose queue entry the agent took over, which
+    /// its start records.
+    source: Option<LaunchSource>,
 }
 
 /// How the wrapper's connection ended.
@@ -169,6 +173,7 @@ pub(super) async fn reattach(
         stopped: false,
         stop,
         records: None,
+        source: None,
     };
     serve(
         stream,
@@ -295,6 +300,7 @@ async fn relay(
         takes_narrowing,
         stopped,
         stop,
+        source,
         ..
     } = execution;
     let reattach = *reattach;
@@ -376,7 +382,10 @@ async fn relay(
                         manager.reopen_for_resume(space.id()).await;
                     }
                     manager.agent_started(execution_id).await;
-                    let started = agent_event(tracked, execution_id, None);
+                    let started = AgentEvent {
+                        source: source.take(),
+                        ..agent_event(tracked, execution_id, None)
+                    };
                     (manager.record_agent(space.id(), EventKind::AgentStarted, started)).await;
                 }
                 protocol::write(writer, &Control::Started).await?;
@@ -757,6 +766,7 @@ fn agent_event(agent: &TrackedAgent, id: &ExecutionId, exit_code: Option<i32>) -
         name: agent.name.clone(),
         execution_id: Some(id.to_owned()),
         exit_code,
+        source: None,
     }
 }
 

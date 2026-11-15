@@ -23,6 +23,7 @@ use crate::{
     state::{ExecutionState, QueueKind, QueueState, WorkspaceState},
 };
 use shoal_protocol::assignments::Done;
+use shoal_protocol::launches::LaunchSource;
 use shoal_protocol::space_names::SpaceSelector;
 use std::sync::Arc;
 
@@ -47,6 +48,7 @@ pub(super) fn limit_globally(manager: &Manager, limit: u32) {
 
 pub(crate) fn request(repository: &Repository, name: &str, now: bool) -> QueueRequest {
     QueueRequest {
+        source: None,
         issue_labels: Vec::new(),
         priority: None,
         narrowing: Default::default(),
@@ -1504,6 +1506,35 @@ async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     manager.config_state.publish_disk_reading(Some(generation));
     manager.dispatch_queue().await.unwrap();
     assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Update);
+}
+
+#[tokio::test]
+async fn the_agent_that_takes_a_launchs_entry_learns_what_made_the_launch() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let source = LaunchSource::Trigger {
+        name: "nightly".into(),
+    };
+    let launch = QueueRequest {
+        source: Some(source.clone()),
+        ..request(&repo, "launch", false)
+    };
+    let entry = manager.queue_add(launch).await.unwrap().entry.unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "launch".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .queue_attach(&entry.id, &SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+    let consumed = manager.consume_queue_entry(&entry.id, &workspace.id).await;
+    assert_eq!(consumed, Some(source));
+    // The entry is gone, so taking it again learns nothing.
+    assert_eq!(
+        manager.consume_queue_entry(&entry.id, &workspace.id).await,
+        None
+    );
 }
 
 #[tokio::test]

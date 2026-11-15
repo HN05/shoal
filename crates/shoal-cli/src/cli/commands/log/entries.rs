@@ -78,7 +78,7 @@ fn event_line(event: &EventDetails) -> (String, String) {
         EventKind::Removed => fixed("Removed", event.cause.map(cause).unwrap_or_default()),
         EventKind::Restored => fixed("Restored", String::new()),
         EventKind::Converted => fixed("Converted", converted(event)),
-        EventKind::AgentStarted => fixed("Agent started", agent(event)),
+        EventKind::AgentStarted => fixed("Agent started", started(event)),
         EventKind::AgentStopped => fixed("Agent stopped", agent(event)),
         EventKind::AgentExited => fixed("Agent exited", exit(event)),
         EventKind::ReviewReady => fixed("Marked ready", review(event)),
@@ -219,6 +219,14 @@ fn cause(cause: EventCause) -> String {
 
 fn agent(event: &EventDetails) -> String {
     (event.agent.as_ref()).map_or_else(String::new, |agent| agent.name.to_string())
+}
+
+/// The started agent, with what made the launch its start carries out.
+fn started(event: &EventDetails) -> String {
+    match event.agent.as_ref().and_then(|agent| agent.source.as_ref()) {
+        Some(source) => format!("{}, {source}", agent(event)),
+        None => agent(event),
+    }
 }
 
 fn exit(event: &EventDetails) -> String {

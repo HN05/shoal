@@ -927,6 +927,7 @@ async fn a_launch_a_chat_queued_opens_its_workspace_in_the_chats_scope() {
     let agent = daemon.connector().scope(token);
     let queue = QueueMethod::QueueAdd {
         request: Box::new(crate::model::QueueRequest {
+            source: None,
             issue_labels: Vec::new(),
             priority: None,
             repository: daemon.repository.id.clone().into(),
@@ -1037,6 +1038,7 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
     // The child's start holds a slot it has yet to open a workspace for,
     // which the parent's scope reaches.
     let request = crate::model::QueueRequest {
+        source: None,
         issue_labels: Vec::new(),
         priority: None,
         narrowing: Default::default(),
@@ -1097,6 +1099,7 @@ async fn a_scoped_start_takes_the_queue_entry_of_the_launch_it_starts_itself() {
     let token = daemon.manager.chat_scope(&chat.id).await.unwrap();
     let agent = daemon.connector().scope(token);
     let request = crate::model::QueueRequest {
+        source: None,
         issue_labels: Vec::new(),
         priority: None,
         narrowing: Default::default(),

@@ -380,6 +380,10 @@ pub struct AgentEvent {
     /// The code an agent exited with; null when its wrapper disconnected
     /// without reporting one, and for a start or stop.
     pub exit_code: Option<i32>,
+    /// What made the launch a start carries out; absent for a stop, an
+    /// exit, and a start that restores an agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<crate::launches::LaunchSource>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -375,6 +375,7 @@ async fn boundary_future_and_empty_cursors_have_explicit_gap_semantics() {
 async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
     let (_temp, manager) = manager().await;
     let agent = |execution: &str, exit_code| AgentEvent {
+        source: None,
         name: "claude".into(),
         execution_id: Some(execution.into()),
         exit_code,

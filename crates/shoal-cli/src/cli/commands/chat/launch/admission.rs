@@ -10,6 +10,7 @@ use crate::{
     model::{Chat, ChatQueueRequest, QueueEntry},
     queued_starts::{ChatPlan, ChatPlanStart},
 };
+use shoal_protocol::launches::LaunchSource;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Launch {
@@ -64,6 +65,9 @@ impl Launch {
             now: self.options.now,
             priority: chat.priority,
             records_when_waiting: self.records_when_waiting(),
+            // A chat that continues a session restores it rather than
+            // launching anything.
+            source: (self.options.session.is_none()).then_some(LaunchSource::Manual),
         })
     }
 

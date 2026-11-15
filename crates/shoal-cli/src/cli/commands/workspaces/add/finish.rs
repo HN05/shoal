@@ -34,6 +34,7 @@ use crate::{
     state::QueueState,
 };
 use shoal_ids::{agent_session_ids::AgentSessionId, queue_entry_ids::QueueEntryId};
+use shoal_protocol::launches::LaunchSource;
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<i32> {
@@ -237,6 +238,7 @@ pub(super) fn queued_launch(
         issue: issue.map(issues::Issue::launch_issue),
         env: Some(crate::terminal::start_environment()),
         now,
+        source: Some(LaunchSource::Manual),
     })))
 }
 

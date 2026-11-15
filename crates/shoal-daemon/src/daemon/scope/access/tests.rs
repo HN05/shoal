@@ -34,6 +34,7 @@ async fn launch(
         None => json!({}),
     };
     let request = QueueRequest {
+        source: None,
         issue_labels: Vec::new(),
         priority: None,
         narrowing: Default::default(),

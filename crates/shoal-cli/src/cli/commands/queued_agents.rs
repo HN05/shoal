@@ -14,6 +14,7 @@ use crate::{
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::launches::LaunchSource;
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -62,6 +63,7 @@ pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Resu
         starts_in_caller: launch.caller_starts,
         blockers: launch.blockers,
         priority: plan.creation.options.priority,
+        source: Some(LaunchSource::Manual),
     };
     let admission = queue::add(&ctx.paths, request).await?;
     Ok(match (admission.start, admission.entry) {
