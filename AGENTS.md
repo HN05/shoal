@@ -114,7 +114,13 @@ for delivering a PR, under Committing near the end, decide when work is done.
   stays in `shoal-cli`, and parsing and resolving config, which the protocol
   carries without reading, lives in `shoal-core`. `shoal-client` depends on
   no Shoal crate but `shoal-forge-types`, `shoal-ids`, `shoal-refs`,
-  `shoal-states`, `shoal-time` and `shoal-config-derive`.
+  `shoal-schedule`, `shoal-states`, `shoal-time` and `shoal-config-derive`.
+- `crates/shoal-schedule` holds the agent queue's order: priorities, the
+  rank types that explain an entry's place, the snapshot a policy reads, the
+  `Scheduler` trait and the built-in policies. A policy reads only that
+  snapshot, which the daemon builds from its state, and never the state
+  itself; admission stays in the daemon. It depends on no Shoal crate but
+  `shoal-ids`, `shoal-time` and `shoal-states`.
 - `crates/shoal-time` holds the wall-clock timestamp type,
   `crates/shoal-refs` the commit and branch name types, `crates/shoal-ids`
   the record IDs and numbers, and `crates/shoal-states` the macros that
@@ -127,9 +133,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   module named for what it does; it names neither the CLI nor the daemon and
   depends on no Shoal crate but `shoal-client`, `shoal-config-derive`,
   `shoal-forge`, `shoal-forge-types`, `shoal-ids`, `shoal-proxy`,
-  `shoal-refs`, `shoal-states` and `shoal-subprocess`. Its items are `pub`
-  only where another Shoal crate uses them, and fixtures the other crates'
-  tests share sit behind its `test-support` feature.
+  `shoal-refs`, `shoal-schedule`, `shoal-states` and `shoal-subprocess`. Its
+  items are `pub` only where another Shoal crate uses them, and fixtures the
+  other crates' tests share sit behind its `test-support` feature.
 - `crates/shoal-cli` serves only the CLI. Code that the daemon, the execution
   wrapper, the proxy or the workers use lives outside it.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both

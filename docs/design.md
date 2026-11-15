@@ -16,8 +16,10 @@ direct resource access; filesystem restrictions are future work.
 
 Caller-specific integration stays outside the daemon core: Superlogical owns terminals;
 Macraft owns VM/container provisioning. Shoal does not provision tools, manage
-browsers, schedule work beyond the agent queue, which also admits registered
-repositories' CI jobs, or store conversations. `shoal start` and `shoal open`
+browsers, store conversations, or schedule work beyond its own machine's agent
+queue, which also admits registered repositories' CI jobs: which machine a
+space starts on or moves to is placement, an app's to build on `shoal move`
+and the protocol. `shoal start` and `shoal open`
 are thin launchers around the generic execution path; CLI launcher argument arrays are configurable defaults; session and desktop
 adapters retain their tool-specific setup. Shoal does not switch the user's or
 daemon's login. `[secrets]` names
@@ -1728,14 +1730,17 @@ there is no hand-placed order, which would fight the rank, and positions count
 waiting entries machine-wide, as admission does.
 The queue starts the work that gets the most done with the fewest agents
 running: work close to finished before new work, and work that other work
-waits on before the work waiting. One pure rank operation over a snapshot of
-the entries, spaces and what waits on what orders admission and the listing
-alike. A space's priority, 0 to 100 and 50 unless set or mapped from its
+waits on before the work waiting. One ordering policy, a `Scheduler`
+over a snapshot of the entries, spaces and what waits on what that reads
+nothing else, orders admission and the listing alike, and owns the whole
+order, so a policy is replaced without touching admission; a policy is code
+in `shoal-schedule`, never a script or a loaded plugin. A space's priority, 0 to 100 and 50 unless set or mapped from its
 issues' labels, goes first, so the user decides what matters. A space's agent
 sets at most its own, as it gives permissions, but a label's priority is the
 repository config's, so the labels an agent edits on its issues are not capped. A queued launch
 carries its own until its space exists.
-Within a priority, `machine.schedule` picks what goes first: `balanced` the
+`machine.schedule` picks the policy. The built-in ones share one ranking and
+differ only in what goes first within a priority: `balanced` the
 tiers below, `speed` the work with the longest chain of work waiting on it, the
 critical path, so a machine with room finishes sooner, and `cache` restores
 whose prompt cache is still warm, so an agent continues before its cached
@@ -1743,9 +1748,10 @@ context costs a full read again, the one stopped last first, since its cache
 is surest to be warm when its agent starts; the others then follow
 `balanced`. An entry that has waited an hour ranks as if it led as well as
 any other, so no schedule passes it over or starves work within its
-priority, and its tier orders it among them as under `balanced`. Limits and
-admission stay with `max_agents`, `max_jobs` and `load`, so a schedule changes
-only the order. Within a priority, its tiers are `finishing` (a space with an open PR or a ready mark, CI
+priority, and its tier orders it among them as under `balanced`. Admission,
+with `max_agents`, `max_jobs`, `load` and the rest of what measures the
+machine, stays with each machine's daemon, the only one that measures it, and
+no policy replaces it, so a schedule changes only the order. Within a priority, its tiers are `finishing` (a space with an open PR or a ready mark, CI
 jobs on PRs and the default branch), `started` (restores of agents that have
 worked) and `new`; an hour's wait raises an entry a tier, so nothing starves
 within its priority, but never a priority: lower-priority work waits while

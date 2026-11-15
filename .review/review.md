@@ -25,13 +25,19 @@ instead of the PR delivery guidance below.
   Parsing and resolving config live in `shoal-core`; the protocol carries a
   target's repository layers without reading them. `shoal-client` depends on
   no Shoal crate but `shoal-forge-types`, `shoal-ids`, `shoal-refs`,
-  `shoal-states`, `shoal-time` and `shoal-config-derive`.
+  `shoal-schedule`, `shoal-states`, `shoal-time` and `shoal-config-derive`.
+- `crates/shoal-schedule` holds the agent queue's order: priorities, the rank
+  types, the snapshot a policy reads, the `Scheduler` trait and the built-in
+  policies, and depends on no Shoal crate but `shoal-ids`, `shoal-time` and
+  `shoal-states`. Flag a policy that reads the daemon's state rather than its
+  snapshot, a `match` on `machine.schedule` inside the ranking, and admission
+  outside the daemon.
 - The CLI (`crates/shoal-cli`) and the daemon (`crates/shoal-daemon`) depend
   on neither each other; the `shoal` package's `main` joins them. Code they
   share lives in `crates/shoal-core`, which names neither and depends on no
   Shoal crate but `shoal-client`, `shoal-config-derive`, `shoal-forge`,
   `shoal-forge-types`, `shoal-ids`, `shoal-proxy`, `shoal-refs`,
-  `shoal-states` and `shoal-subprocess`. Flag an item there made `pub` that no
+  `shoal-schedule`, `shoal-states` and `shoal-subprocess`. Flag an item there made `pub` that no
   other Shoal crate uses, and test fixtures outside its `test-support` feature that other
   crates' tests need.
 - `crates/shoal-cli` serves only the CLI: flag code there that the daemon, the
