@@ -4,12 +4,23 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
+import sys
 import tempfile
 import unittest
 
 
 SCRIPTS = Path(__file__).resolve().parents[1] / ".forgejo" / "scripts"
+
+
+def write_python_tool(path, source):
+    """Writes an executable that runs source with this interpreter.
+
+    macOS's /usr/bin/python3 shim sets SDKROOT again, so a fake tool must not
+    start through `env python3`."""
+    path.write_text(f'#!/bin/sh\nexec {shlex.quote(sys.executable)} -c {shlex.quote(source)} "$@"\n')
+    path.chmod(0o755)
 
 
 def release_targets():
@@ -81,12 +92,8 @@ class CrossBuildTests(unittest.TestCase):
     def test_zig_wrapper_preserves_arguments_output_and_exit_status(self):
         with tempfile.TemporaryDirectory() as root:
             zig = Path(root) / "zig"
-            zig.write_text(
-                "#!/usr/bin/env python3\nimport json, sys\n"
-                "print(json.dumps(sys.argv[1:]))\n"
-                "print('tool warning', file=sys.stderr)\nsys.exit(7)\n"
-            )
-            zig.chmod(0o755)
+            write_python_tool(zig, "import json, sys\nprint(json.dumps(sys.argv[1:]))\n"
+                                   "print('tool warning', file=sys.stderr)\nsys.exit(7)\n")
             env = {**os.environ, "CI_ZIG_BINARY": str(zig), "SDKROOT": "/test sdk"}
             for tool in ("cc", "c++", "ar", "version"):
                 with self.subTest(tool=tool):
@@ -94,7 +101,7 @@ class CrossBuildTests(unittest.TestCase):
                             "-L/test sdk/usr/lib", "-F/test sdk/System/Library/Frameworks",
                             "-L/another library"]
                     result = subprocess.run(
-                        [str(SCRIPTS / "zig-wrapper.py"), *args], env=env,
+                        [sys.executable, str(SCRIPTS / "zig-wrapper.py"), *args], env=env,
                         capture_output=True, text=True, check=False,
                     )
                     expected = args if tool not in ("cc", "c++") else [
@@ -129,13 +136,10 @@ class CrossBuildTests(unittest.TestCase):
             uname.write_text("#!/bin/sh\necho Linux\n")
             uname.chmod(0o755)
             cargo = bin_dir / "cargo"
-            cargo.write_text(
-                "#!/usr/bin/env python3\nimport json, os, sys\n"
-                "print(json.dumps({'args': sys.argv[1:], 'sdk': os.environ.get('SDKROOT'), "
-                "'rustflags': os.environ.get('RUSTFLAGS'), "
-                "'wrapper': os.environ['CARGO_ZIGBUILD_ZIG_PATH']}))\n"
-            )
-            cargo.chmod(0o755)
+            write_python_tool(cargo, "import json, os, sys\n"
+                                     "print(json.dumps({'args': sys.argv[1:], 'sdk': os.environ.get('SDKROOT'), "
+                                     "'rustflags': os.environ.get('RUSTFLAGS'), "
+                                     "'wrapper': os.environ['CARGO_ZIGBUILD_ZIG_PATH']}))\n")
             env = {key: value for key, value in os.environ.items() if key not in ("SDKROOT", "RUSTFLAGS")}
             env.update(PATH=f"{bin_dir}{os.pathsep}{env['PATH']}", CARGO_TARGET_DIR=str(root / "target"))
             # The release sets no RUSTFLAGS; cross-build.yml sets some.
