@@ -14,7 +14,7 @@ use crate::{
     model::Workspace,
     process::identity,
     removal::UnsavedWork,
-    transfer::{ExportedSpace, Import, Space, SpaceImport},
+    transfer::{ExportedSpace, Import, SpaceImport},
 };
 
 /// Export `space` for a move into a new file in `directory` and read it
@@ -64,19 +64,14 @@ async fn a_moving_workspace_stays_until_its_import_ends_it() {
     assert!(exported.removal.is_none());
     assert!(workspace.path.join("work").exists());
     let packaged = packaged_workspace(&exported.manifest);
-    assert_eq!(packaged.workspace.agents.len(), 1);
+    assert_eq!(packaged.record.agents.len(), 1);
     let restored = import(&importing, &target_repo, &file).await;
     assert_eq!(
         fs::read_to_string(restored.opened.workspace.path.join("work")).unwrap(),
         "work\n"
     );
 
-    let checkpoint = packaged
-        .workspace
-        .kept_workspace()
-        .unwrap()
-        .checkpoint
-        .number;
+    let checkpoint = packaged.record.kept_workspace().unwrap().checkpoint.number;
     let ended = exporting
         .end_moved_space(&selector, UnsavedWork::default(), Some(checkpoint))
         .await
@@ -97,7 +92,7 @@ async fn files_written_before_the_export_end_with_the_workspace_the_caller_saw_c
     fs::write(workspace.path.join("notes"), "notes\n").unwrap();
     let (exported, _) = export_moving(&exporting, &selector, source.path()).await;
     let checkpoint = packaged_workspace(&exported.manifest)
-        .workspace
+        .record
         .kept_workspace()
         .unwrap()
         .checkpoint
@@ -118,7 +113,7 @@ async fn a_workspace_that_changed_after_its_export_stays() {
     let selector = SpaceSelector::id(&workspace.id);
     let (exported, _) = export_moving(&exporting, &selector, source.path()).await;
     let checkpoint = packaged_workspace(&exported.manifest)
-        .workspace
+        .record
         .kept_workspace()
         .unwrap()
         .checkpoint
@@ -148,7 +143,7 @@ async fn a_moving_chat_stops_its_agent_and_stays_until_its_end() {
     assert_eq!(identity::capture(pid).unwrap(), None);
     assert_eq!(manager.chats().await.unwrap()[0].id, chat.id);
     let import = Import::read(&mut &file[..]).unwrap();
-    assert!(matches!(import.manifest.space, Space::Chat(_)));
+    assert!(import.manifest.space.record.chat().is_some());
 
     let ended = manager
         .end_moved_space(&selector, UnsavedWork::default(), None)
@@ -218,7 +213,7 @@ async fn an_import_that_records_nothing_says_so() {
         repository: Some(crate::repository::Selector::from("no-such-repository")),
         bundle: None,
         prerequisite: None,
-        space: packaged.workspace.clone(),
+        space: packaged.record.clone(),
         copy: false,
         session_files: Vec::new(),
     };

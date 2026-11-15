@@ -53,15 +53,17 @@ fn a_carried_chat_keeps_its_session_only_where_its_agent_continues_it() {
     assert_eq!((&kept.session, &kept.origin), (&None, &None));
     let manifest = crate::transfer::Manifest {
         remote_url: None,
-        space: crate::transfer::Space::Chat(crate::transfer::PackagedChat {
-            name: "lead".into(),
-            agent: "claude".into(),
-            links: Default::default(),
-            mode: "chat".into(),
-            narrowing: Default::default(),
-            outside_repositories: false,
-            workspace: None,
-        }),
+        space: crate::transfer::PackagedSpace {
+            prerequisite: None,
+            bundle: false,
+            record: serde_json::from_value(serde_json::json!({
+                "workspace_id": "lead", "repository_id": null, "name": "lead",
+                "links": {"issues": [], "prs": []},
+                "cause": "manual", "removed_at": 1, "expires_at": 2,
+                "chat": {"agent": "claude", "mode": "chat"},
+            }))
+            .unwrap(),
+        },
         sessions: None,
         session_files: Vec::new(),
         copy: None,

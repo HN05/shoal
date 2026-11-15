@@ -5,7 +5,7 @@ use anyhow::Result;
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
 use super::{super::export, Remote, arrived, summary};
-use crate::client::output::transfer::{Copies, Imported};
+use crate::client::output::{restore::Reopened, transfer::Copies};
 use crate::{
     cli::{context::Context, ui},
     model::PresentSpace,
@@ -28,7 +28,8 @@ pub(super) async fn copy_spaces(
         let name = space.name();
         match copy_one(ctx, remote, &directory, space, checkpoint).await {
             Ok(imported) => {
-                let message = copied_message(name, &remote.host, &imported);
+                let copy = imported.space.name().as_str();
+                let message = copied_message(name, copy, &arrived(&remote.host, &imported));
                 report.done(ctx, &message, imported)
             }
             Err(error) => report.failed(ctx, name, &error),
@@ -39,30 +40,25 @@ pub(super) async fn copy_spaces(
 }
 
 /// Write a copy of `space` to its file in `directory`, then import it on
-/// `remote`, queueing its agents' restores or starting its chat there when
-/// it resumes them.
+/// `remote`, queueing its agents' restores there when it resumes them.
 async fn copy_one(
     ctx: &Context,
     remote: &Remote,
     directory: &export::ExportDirectory,
     space: &PresentSpace,
     checkpoint: Option<CheckpointNumber>,
-) -> Result<Imported> {
+) -> Result<Reopened> {
     let file = directory.file(space.id());
     export::copy::copy(ctx, SpaceSelector::id(space.id()), checkpoint, file.clone()).await?;
     Ok(remote.import(&file).await?)
 }
 
-/// The report of copying `name` to `host`, naming the copy when the import
-/// there gave it another name.
-fn copied_message(name: &str, host: &str, imported: &Imported) -> String {
-    let copy = match imported {
-        Imported::Workspace(reopened) => reopened.space.name().as_str(),
-        Imported::Chat(chat) => chat.chat.as_str(),
-    };
+/// The report of copying `name` as `copy` to where it `arrived`, naming the
+/// copy when the import there gave it another name.
+fn copied_message(name: &str, copy: &str, arrived: &str) -> String {
     match copy == name {
-        true => format!("Copied {name} to {}", arrived(host, imported)),
-        false => format!("Copied {name} as {copy} to {}", arrived(host, imported)),
+        true => format!("Copied {name} to {arrived}"),
+        false => format!("Copied {name} as {copy} to {arrived}"),
     }
 }
 

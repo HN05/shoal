@@ -145,54 +145,6 @@ fn a_chat_in_a_workspace_reopens_there() {
 }
 
 #[test]
-fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
-    let repo = ChatRepository::Registered(repository());
-    let url = "https://forge.example/team/repo/issues/7";
-    let links: SpaceLinks = serde_json::from_value(serde_json::json!({
-        "issues": [{"kind": "issue", "url": url, "title": "Decide"}], "prs": [],
-    }))
-    .unwrap();
-    let agent: Agent = "claude".parse().unwrap();
-    let topic = Topic::imported(&repo, None, &"plan".into(), &links);
-    let options = Options {
-        now: false,
-        priority: None,
-        agent: None,
-        place: ChatPlace::Beside,
-        name: None,
-        model: ModelChoice::default(),
-        args: Vec::new(),
-        session: Some("s1".into()),
-        fork: false,
-        handoff: None,
-        parent: None,
-        narrowing: Narrowing::Recorded(Default::default()),
-    };
-    let named = options.in_new_place(&agent, &"shoal-plan-7".into(), None);
-    // The process the import starts in a new tab takes the issue as given.
-    let start = parsed_start(topic.relaunch.command_line(named));
-    assert_eq!(start.issue, None);
-    let issue = templates::IssueFields::at(&start.linked_issue.unwrap(), start.linked_issue_title);
-    assert_eq!((issue.number, issue.title.as_str()), (7, "Decide"));
-    let Relaunch::Start(unlinked) =
-        Topic::imported(&repo, None, &"plan".into(), &SpaceLinks::default()).relaunch
-    else {
-        panic!("expected a start");
-    };
-    assert_eq!(unlinked.linked_issue, None);
-    // One without a repository reopens in root_dir, naming none.
-    let outside = ChatRepository::Outside("/shoal".into());
-    let Relaunch::Start(outside) = Topic::imported(&outside, None, &"plan".into(), &links).relaunch
-    else {
-        panic!("expected a start");
-    };
-    assert_eq!(
-        (outside.repository, outside.linked_issue.as_ref()),
-        (None, Some(&url.parse().unwrap()))
-    );
-}
-
-#[test]
 fn the_setup_chat_starts_again_with_config_setup_and_its_options() {
     let topic = crate::cli::commands::config_setup::topic(Path::new("/config/config.toml"));
     let agent: Agent = "claude".parse().unwrap();

@@ -175,19 +175,22 @@ fn a_master_session_moves_and_continues_its_session_in_root_dir() {
     let file = home.join("master.shoal");
     let file = file.to_str().unwrap();
 
-    let exported = fixture.ok(&["move", "export", &fixture.id("master"), "-o", file, "--yes"]);
+    let id = fixture.id("master");
+    let exported = fixture.ok(&["move", "export", &id, "-o", file, "--yes"]);
     assert_eq!(
-        exported["manifest"]["outside_repositories"], true,
+        exported["manifest"]["workspace"]["repository_id"],
+        Value::Null,
         "{exported}"
     );
     assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
-    let imported = run_agent(&fixture, &["move", "import", file]);
+    fixture.ok(&["move", "import", file]);
+    let imported = run_agent(&fixture, &["restore", &id, "--focus"]);
     assert_eq!(
         (
-            &imported.chats[0]["name"],
+            &imported.chats[0]["id"],
             &imported.chats[0]["repository_id"]
         ),
-        (&Value::from("master"), &Value::Null),
+        (&Value::from(id.as_str()), &Value::Null),
         "{}",
         imported.chats
     );
@@ -196,7 +199,12 @@ fn a_master_session_moves_and_continues_its_session_in_root_dir() {
         fs::canonicalize(home.join("shoal")).unwrap()
     );
     let args = fs::read_to_string(home.join("chat-args")).unwrap();
-    assert!(args.contains("\n--resume\nmaster-session\n"), "{args}");
+    let args: Vec<&str> = args.lines().collect();
+    assert!(
+        args.windows(2)
+            .any(|pair| pair == ["--resume", "master-session"]),
+        "{args:?}"
+    );
 }
 
 #[test]

@@ -8,9 +8,9 @@ use super::{
     ImportFailure, Remote, arrived, summary,
 };
 use crate::cli::commands::restore::agents::queue::{Stopped, restore_stopped, saved_executions};
-use crate::client::output::transfer::{Imported, Moves};
+use crate::client::output::{restore::Reopened, transfer::Moves};
 use crate::client::space_names::SpaceSelector;
-use crate::transfer::{ExportedSpace, Space};
+use crate::transfer::ExportedSpace;
 use crate::{
     cli::{context::Context, ui},
     model::PresentSpace,
@@ -54,12 +54,12 @@ pub(super) async fn move_spaces(
 }
 
 /// Export the planned space, which stops its agents, and import it on
-/// `remote`, queueing its agents' restores or starting its chat there when
-/// it resumes them, then end it here. When the export fails or the other
+/// `remote`, queueing its agents' restores there when it resumes them, then
+/// end it here. When the export fails or the other
 /// machine refuses the import, the space stays here and the agents its
 /// export stopped restore here; when how the import ended is unknown, they
 /// stay stopped, since the space may continue there.
-async fn move_one(ctx: &Context, remote: &Remote, planned: &PlannedExport) -> Result<Imported> {
+async fn move_one(ctx: &Context, remote: &Remote, planned: &PlannedExport) -> Result<Reopened> {
     let saved = saved_now(ctx, planned).await?;
     let checkpoint = match export_moving(ctx, planned).await {
         Ok(checkpoint) => checkpoint,
@@ -114,12 +114,7 @@ async fn export_moving(ctx: &Context, planned: &PlannedExport) -> Result<Option<
 
 /// The number of the checkpoint the package of a workspace holds.
 fn exported_checkpoint(exported: &ExportedSpace) -> Option<CheckpointNumber> {
-    match &exported.manifest.space {
-        Space::Workspace(packaged) => {
-            (packaged.workspace.workspace()).map(|kept| kept.checkpoint.number)
-        }
-        Space::Chat(_) => None,
-    }
+    (exported.manifest.space.record.workspace()).map(|kept| kept.checkpoint.number)
 }
 
 /// End the space `checked` describes, which the other machine imported

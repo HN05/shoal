@@ -1204,29 +1204,50 @@ fn talk_until(fixture: &Fixture, ending: impl FnOnce(&Path, &Value)) {
     assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
 }
 
-/// Import the chat `file` holds on a machine without its transcript, which
-/// the import puts back, and check that the chat continues its session.
-fn import_continues_the_chat(fixture: &Fixture, file: &str) {
+/// Import the chat `id` that `file` holds on a machine without its
+/// transcript, which the import puts back, and check that it opens again
+/// under its ID, stopped, and that its restore continues its session.
+fn import_continues_the_chat(fixture: &Fixture, file: &str, id: &str) {
     let project = chat_project(fixture);
     fs::remove_dir_all(project.parent().unwrap()).unwrap();
     let repo = fixture.repo.to_str().unwrap();
-    let (output, transcript) = fixture.interactive_command(
-        fixture
-            .command()
-            .env("SHOAL_DEV_USER_FILES", "1")
-            .args(["move", "import", file, "--repo", repo]),
-        "",
+    let output = fixture
+        .command()
+        .env("SHOAL_DEV_USER_FILES", "1")
+        .args(["move", "import", file, "--repo", repo])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", printed(&output));
+    assert_eq!(
+        fs::read_to_string(project.join("chat-session.jsonl")).unwrap(),
+        "{\"turn\":1}\n"
     );
+    let chats = fixture.ok(&["list", "--chats"]);
+    assert_eq!(
+        (&chats[0]["id"], &chats[0]["running"]),
+        (&Value::from(id), &Value::from(false)),
+        "{chats}"
+    );
+    restore_here(fixture, id);
+    let args = fs::read_to_string(fixture.root.path().join("chat-args")).unwrap();
+    assert!(resumes(&args, "chat-session"), "{args}");
+}
+
+/// Whether the agent's arguments `args`, one a line, resume `session`.
+fn resumes(args: &str, session: &str) -> bool {
+    let args: Vec<&str> = args.lines().collect();
+    args.windows(2).any(|pair| pair == ["--resume", session])
+}
+
+/// Restore the agent of the space `id` in this terminal until it exits.
+fn restore_here(fixture: &Fixture, id: &str) {
+    let (output, transcript) =
+        fixture.interactive_command(fixture.command().args(["restore", id, "--focus"]), "");
     assert!(
         output.status.success(),
         "{}\n{transcript}",
         printed(&output)
-    );
-    let args = fs::read_to_string(fixture.root.path().join("chat-args")).unwrap();
-    assert!(args.contains("\n--resume\nchat-session\n"), "{args}");
-    assert_eq!(
-        fs::read_to_string(project.join("chat-session.jsonl")).unwrap(),
-        "{\"turn\":1}\n"
     );
 }
 
@@ -1235,7 +1256,9 @@ fn a_chat_moves_with_its_session_and_continues_it() {
     let fixture = chat_moving_fixture();
     let file = fixture.root.path().join("talk.shoal");
     let file = file.to_str().unwrap();
+    let mut id = String::new();
     talk_until(&fixture, |transcript, chats| {
+        id = chats[0]["id"].as_str().unwrap().to_owned();
         let status = fixture.ok(&["status", &fixture.id("talk")]);
         assert_eq!(
             (
@@ -1263,14 +1286,15 @@ fn a_chat_moves_with_its_session_and_continues_it() {
         assert!(!unconfirmed.status.success(), "{}", printed(&unconfirmed));
         assert_eq!(fixture.ok(&["list", "--chats"])[0]["name"], "talk");
         let exported = fixture.ok(&["move", "export", &fixture.id("talk"), "-o", file, "--yes"]);
-        assert_eq!(exported["manifest"]["kind"], "chat", "{exported}");
-        assert_eq!(exported["manifest"]["name"], "talk", "{exported}");
+        let manifest = &exported["manifest"];
+        assert_eq!(manifest["kind"], "chat", "{exported}");
+        assert_eq!(manifest["workspace"]["name"], "talk", "{exported}");
         assert_eq!(
-            exported["manifest"]["session_files"][0]["path"], "-repo/chat-session.jsonl",
+            manifest["session_files"][0]["path"], "-repo/chat-session.jsonl",
             "{exported}"
         );
     });
-    import_continues_the_chat(&fixture, file);
+    import_continues_the_chat(&fixture, file, &id);
 }
 
 #[test]
@@ -1286,10 +1310,16 @@ fn a_removed_chat_moves_from_its_removal_record() {
 
     let exported = fixture.ok(&["move", "export", &id, "-o", file]);
     assert_eq!(exported["manifest"]["kind"], "chat", "{exported}");
-    assert_eq!(exported["manifest"]["name"], "talk", "{exported}");
+    assert_eq!(
+        exported["manifest"]["workspace"]["name"], "talk",
+        "{exported}"
+    );
     let removed = fixture.ok(&["restore"])["removed"].clone();
     assert_eq!(removed[0]["workspace_id"], id.as_str(), "{removed}");
-    import_continues_the_chat(&fixture, file);
+    // The record stays here, so the import elsewhere opens the chat again.
+    fixture.ok(&["restore", &id, "--forget"]);
+    fixture.ok(&["rm", &id, "--yes"]);
+    import_continues_the_chat(&fixture, file, &id);
 }
 
 #[test]
@@ -1335,36 +1365,23 @@ fn a_chat_from_a_worktree_moves_back_into_it() {
     let file = file.to_str().unwrap();
     // Its agent says where it ran: the worktree's copy marks it.
     let marked = format!("touch \"$HOME/in-worktree\"\n{}", chat_agent());
+    let mut id = String::new();
     let workspace = chat_in_worktree(&fixture, &marked, || {
-        let exported = fixture.ok(&[
-            "move",
-            "export",
-            &fixture.id("reading"),
-            "-o",
-            file,
-            "--yes",
-        ]);
-        let ran_in = &exported["manifest"]["workspace"]["id"];
+        id = fixture.id("reading");
+        let exported = fixture.ok(&["move", "export", &id, "-o", file, "--yes"]);
+        let ran_in = &exported["manifest"]["workspace"]["chat"]["workspace"]["id"];
         assert_eq!(ran_in, &fixture.ok(&["list"])[0]["id"], "{exported}");
     });
     assert_eq!(fixture.ok(&["list"])[0]["id"], workspace["id"]);
     fs::remove_file(home.join("in-worktree")).unwrap();
 
     let repo = fixture.repo.to_str().unwrap();
-    let (output, transcript) = fixture.interactive_command(
-        fixture
-            .command()
-            .args(["move", "import", file, "--repo", repo]),
-        "",
-    );
-    assert!(
-        output.status.success(),
-        "{}\n{transcript}",
-        printed(&output)
-    );
+    let imported = fixture.run(&["move", "import", file, "--repo", repo]);
+    assert!(imported.status.success(), "{}", printed(&imported));
+    restore_here(&fixture, &id);
     assert!(home.join("in-worktree").exists());
     let args = fs::read_to_string(home.join("chat-args")).unwrap();
-    assert!(args.contains("\n--resume\nchat-session\n"), "{args}");
+    assert!(resumes(&args, "chat-session"), "{args}");
 }
 
 #[test]

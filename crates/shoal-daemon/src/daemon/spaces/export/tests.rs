@@ -9,7 +9,7 @@ use crate::{
     model::RemovedSpace,
     process::identity,
     removal::{InspectionPolicy, UnsavedWork},
-    transfer::{CarriedChatExt, ExportedSpace, Import, ManifestExt, Space, SpaceImport},
+    transfer::{CarriedChatExt, ExportedSpace, Import, ManifestExt, SpaceImport},
 };
 
 mod moving;
@@ -121,11 +121,11 @@ async fn a_chat_ends_into_a_package_that_continues_its_session() {
     assert!(manager.chats().await.unwrap().is_empty());
     assert_eq!(identity::capture(pid).unwrap(), None);
     let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
-    let Space::Chat(packaged) = &import.manifest.space else {
-        panic!("not a chat: {:?}", import.manifest);
-    };
+    let packaged = &import.manifest.space.record;
+    assert_eq!(packaged.space_id, chat.id);
+    let kept = packaged.chat().expect("a chat's record");
     assert_eq!(
-        (packaged.name.as_str(), packaged.agent.name()),
+        (packaged.name.as_str(), kept.agent.name()),
         ("plan-cache", "claude")
     );
     assert!(import.bundle.is_none());
@@ -193,7 +193,8 @@ async fn a_chat_whose_package_cannot_be_written_names_how_it_continues() {
 
     let error = export(&manager, "unwritten", &file).await.unwrap_err();
     let error = format!("{error:#}");
-    assert!(error.contains("--session s1"), "{error}");
+    let restore = format!("shoal restore {}", chat.id);
+    assert!(error.contains(&restore), "{error}");
     assert!(manager.chats().await.unwrap().is_empty());
     assert_eq!(identity::capture(pid).unwrap(), None);
     assert_eq!(fs::read_to_string(&file).unwrap(), "kept");
@@ -257,10 +258,13 @@ async fn a_chat_in_a_workspace_moves_naming_the_workspace() {
 
     export(&manager, &chat.name, &file).await.unwrap();
     let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
-    let Space::Chat(packaged) = &import.manifest.space else {
-        panic!("not a chat: {:?}", import.manifest);
-    };
-    let ran_in = packaged.workspace.as_ref().map(|workspace| &workspace.id);
+    let kept = import
+        .manifest
+        .space
+        .record
+        .chat()
+        .expect("a chat's record");
+    let ran_in = kept.workspace.as_ref().map(|workspace| &workspace.id);
     assert_eq!(ran_in, Some(&workspace.id));
     assert!(manager.chat_by_id(&chat.id).await.unwrap().is_none());
     assert!(workspace.path.exists());
@@ -404,7 +408,7 @@ async fn a_chat_copy_keeps_the_chat_running() {
     assert_eq!(manager.chats().await.unwrap().len(), 1);
     assert!(identity::capture(pid).unwrap().is_some());
     let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
-    assert!(matches!(import.manifest.space, Space::Chat(_)));
+    assert!(import.manifest.space.record.chat().is_some());
     let sessions = import.manifest.sessions.as_ref().unwrap();
     assert_eq!(
         sessions.reported().collect::<Vec<_>>(),
@@ -480,11 +484,10 @@ async fn a_removed_chat_exports_from_its_record_which_stays() {
     let exported = export_removed(&manager, &chat.id, &file).await.unwrap();
     assert!(exported.removal.is_none());
     let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
-    let Space::Chat(packaged) = &import.manifest.space else {
-        panic!("not a chat: {:?}", import.manifest);
-    };
+    let packaged = &import.manifest.space.record;
+    let kept = packaged.chat().expect("a chat's record");
     assert_eq!(
-        (packaged.name.as_str(), packaged.mode.as_str()),
+        (packaged.name.as_str(), kept.mode.as_str()),
         ("notes", "plan")
     );
     let sessions = import.manifest.sessions.as_ref().unwrap();
@@ -546,10 +549,9 @@ async fn a_chat_without_a_repository_moves_and_copies_for_root_dir() {
     assert!(manager.chats().await.unwrap().is_empty());
     for file in [&copy, &moved] {
         let import = Import::read(&mut &fs::read(file).unwrap()[..]).unwrap();
-        let Space::Chat(packaged) = &import.manifest.space else {
-            panic!("not a chat: {:?}", import.manifest);
-        };
-        assert!(packaged.outside_repositories);
+        let packaged = &import.manifest.space.record;
+        assert!(packaged.chat().is_some());
+        assert_eq!(packaged.repository_id, None);
         assert_eq!(import.manifest.remote_url, None);
     }
 }
@@ -661,4 +663,49 @@ async fn an_imported_chat_keeps_its_id_and_a_copy_takes_its_own() {
     };
     assert_eq!(id(moved), reading.id);
     assert_ne!(id(copied), reading.id);
+}
+
+#[tokio::test]
+async fn a_moved_chat_keeps_its_id_with_the_chats_it_carried_below_it() {
+    let (source, exporting, source_repo, origin) = transfer::exporter().await;
+    let (_target, importing, target_repo) = transfer::importer(&origin).await;
+    let start = |name, parent| {
+        crate::daemon::test_support::chat(&exporting, name, "chat", Some(&source_repo), parent)
+    };
+    let lead = start("lead", None).await;
+    let helper = start("helper", Some(&lead.id)).await;
+    for chat in [&lead, &helper] {
+        let session = format!("s-{}", chat.name).into();
+        exporting
+            .record_chat_session(&chat.id, session)
+            .await
+            .unwrap();
+    }
+    let file = source.path().join("lead.shoal");
+    let selector = SpaceSelector::id(&lead.id);
+    (exporting.export_space(
+        &selector,
+        UnsavedWork::All,
+        InspectionPolicy::GitOnly,
+        file.clone(),
+    ))
+    .await
+    .unwrap();
+
+    let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
+    let sessions = (import.manifest).sessions_on(Some("elsewhere"), None);
+    let record = crate::transfer::PackagedSpaceExt::record_with(&import.manifest.space, sessions);
+    (importing.import_space(chat_import(Some(&target_repo), record)))
+        .await
+        .unwrap();
+    for carried in &import.manifest.chats {
+        let sessions = (import.manifest).chat_sessions_on(carried, Some("elsewhere"), None);
+        let chat = chat_import(Some(&target_repo), carried.chat_with(sessions));
+        importing.import_space(chat).await.unwrap();
+    }
+
+    let imported = importing.chat_by_id(&lead.id).await.unwrap().unwrap();
+    assert!(!imported.running);
+    let below = importing.chat_by_id(&helper.id).await.unwrap().unwrap();
+    assert_eq!(below.parent.map(|parent| parent.id), Some(lead.id));
 }

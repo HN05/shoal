@@ -57,14 +57,18 @@ impl Manager {
     /// What a package holds of the chats `ids` that went with its space,
     /// from the removal records their removal saved.
     pub(super) async fn carried_records(&self, ids: &[SpaceId]) -> Result<Vec<CarriedChat>> {
-        let removed = self.removed_spaces().await?;
         let mut carried = Vec::new();
         for id in ids {
-            let record = (removed.iter().find(|removed| &removed.space_id == id))
-                .with_context(|| format!("the removal of chat {id} kept no record"))?;
-            carried.push(self.carried(record.clone()).await?);
+            carried.push(self.carried(self.removal_record(id).await?).await?);
         }
         Ok(carried)
+    }
+
+    /// The record the removal of the chat `id` saved.
+    pub(super) async fn removal_record(&self, id: &SpaceId) -> Result<RemovedSpace> {
+        (self.removed_spaces().await?.into_iter())
+            .find(|removed| &removed.space_id == id)
+            .with_context(|| format!("the removal of chat {id} kept no record"))
     }
 
     /// Stop the agents of the chats `ids`, saving their sessions, and say
@@ -73,11 +77,16 @@ impl Manager {
     pub(super) async fn stopped_records(&self, ids: &[SpaceId]) -> Result<Vec<CarriedChat>> {
         let mut carried = Vec::new();
         for id in ids {
-            (self.stop_space(&SpaceSelector::id(id), StopRequest::moving())).await?;
-            let record = self.chat_removal_record(id, EventCause::Manual).await?;
-            carried.push(self.carried(record).await?);
+            carried.push(self.carried(self.stopped_record(id).await?).await?);
         }
         Ok(carried)
+    }
+
+    /// Stop the agents of the chat `id`, saving their sessions, and say
+    /// what its removal would record of it.
+    pub(super) async fn stopped_record(&self, id: &SpaceId) -> Result<RemovedSpace> {
+        (self.stop_space(&SpaceSelector::id(id), StopRequest::moving())).await?;
+        self.chat_removal_record(id, EventCause::Manual).await
     }
 
     /// What a package holds of the chat `record` records.

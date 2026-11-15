@@ -6,12 +6,20 @@ fn chat_copy(directory: &Path, earlier_files: bool) -> PathBuf {
     let manifest = serde_json::json!({
         "remote_url": "https://forge.test/o/r",
         "kind": "chat",
-        "name": "plan",
-        "agent": "claude",
+        "workspace": {
+            "workspace_id": "c1",
+            "repository_id": "r1",
+            "name": "plan",
+            "links": {"issues": [], "prs": [], "opened": [], "related": []},
+            "cause": "manual",
+            "removed_at": 1,
+            "expires_at": 2,
+            "chat": {"agent": "claude", "mode": "chat"},
+        },
         "copy": {"earlier_files": earlier_files},
     });
     let file = directory.join("plan.shoal");
-    std::fs::write(&file, format!("shoal workspace 5\n{manifest}\n")).unwrap();
+    std::fs::write(&file, format!("shoal workspace 7\n{manifest}\n")).unwrap();
     file
 }
 
@@ -35,6 +43,6 @@ fn a_copy_never_continues_the_original_sessions() {
         "{refused:#}"
     );
     let package = Package::read(&file, &options(None)).unwrap();
-    assert_eq!(package.copy, Some(Copied::default()));
+    assert!(package.copy);
     assert!(Package::read(&file, &options(Some(false))).is_ok());
 }

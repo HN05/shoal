@@ -1,5 +1,4 @@
 //! Packages of spaces `shoal move` carries between machines: what one holds.
-use crate::space_names::SpaceName;
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -23,9 +22,8 @@ pub struct Manifest {
     /// The exporting repository's origin, which selects the repository to
     /// import into.
     pub remote_url: Option<String>,
-    /// The space, by its kind.
     #[serde(flatten)]
-    pub space: Space,
+    pub space: PackagedSpace,
     /// The agents with their sessions, for an import on the exporting
     /// machine, where the sessions remain, or one told to keep them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -62,60 +60,52 @@ pub struct CarriedChat {
     pub sessions: Sessions,
 }
 
-/// The space a package holds, named by its `kind`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-#[allow(
-    clippy::large_enum_variant,
-    reason = "a package holds one space, read once"
-)]
-pub enum Space {
-    Workspace(PackagedWorkspace),
-    Chat(PackagedChat),
-}
-
-/// A removed workspace, which the import restores from its checkpoint.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PackagedWorkspace {
+/// The space a package holds: its removal record, whose kind it is, with
+/// agents that start new sessions, and for a workspace how its checkpoint's
+/// commits arrive. It writes its kind beside them, as packages have always
+/// named it.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PackagedSpace {
     /// A commit of the default branch the bundle leaves out, which the
     /// importing repository fetches when it lacks it.
+    #[serde(default)]
     pub prerequisite: Option<String>,
-    /// Whether a Git bundle of the checkpoint follows; the default branch
-    /// already has a checkpoint without one.
+    /// Whether a Git bundle of a workspace's checkpoint follows; the
+    /// default branch already has a checkpoint without one.
+    #[serde(default)]
     pub bundle: bool,
-    /// The removal record, with agents that start new sessions.
-    pub workspace: RemovedSpace,
+    /// Named as packages of workspaces have always named it.
+    #[serde(rename = "workspace")]
+    pub record: RemovedSpace,
 }
 
-/// A chat, which the import starts again in the repository's checkout, or
-/// in `root_dir` without one, continuing its agent's session, linked to
-/// what it was linked to.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PackagedChat {
-    pub name: SpaceName,
-    pub agent: crate::agent::Agent,
-    /// Read as none from a package an earlier release wrote.
-    #[serde(default)]
-    pub links: crate::model::SpaceLinks,
-    /// The mode it ran in; a package an earlier release wrote ran in the
-    /// chat mode.
-    #[serde(default = "crate::model::chat_mode")]
-    pub mode: crate::config::modes::ModeName,
-    /// The `--permission` narrowing it ran with; none from a package an
-    /// earlier release wrote.
-    #[serde(
-        default,
-        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
-    )]
-    pub narrowing: crate::config::permissions::PermissionsConfig,
-    /// Set for a chat without a repository, which the import starts in
-    /// `root_dir`.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub outside_repositories: bool,
-    /// The workspace in whose worktree it ran, where the import starts it
-    /// when the importing machine has that workspace ready.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workspace: Option<crate::model::WorkspaceRef>,
+impl Serialize for PackagedSpace {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "snake_case")]
+        enum Kind {
+            Workspace,
+            Chat,
+        }
+        #[derive(Serialize)]
+        struct Written<'a> {
+            kind: Kind,
+            prerequisite: &'a Option<String>,
+            bundle: bool,
+            workspace: &'a RemovedSpace,
+        }
+        let kind = match self.record.workspace() {
+            Some(_) => Kind::Workspace,
+            None => Kind::Chat,
+        };
+        let written = Written {
+            kind,
+            prerequisite: &self.prerequisite,
+            bundle: self.bundle,
+            workspace: &self.record,
+        };
+        written.serialize(serializer)
+    }
 }
 
 /// A file of an agent's session, copied unread.

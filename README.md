@@ -497,8 +497,8 @@ to one of its checkpoints. `shoal move export <workspace> -o <file>`
 removes a workspace and writes its removal checkpoint and record to a file, and `shoal
 move import <file>` opens it on another machine or the same one, where `shoal restore`
 continues its agents' sessions from the transcripts the file carries;
-`--new-sessions` starts them over. A chat moves the same way: the export ends it,
-and the import starts it again, continuing its session.
+`--new-sessions` starts them over. A chat moves the same way, with the chats
+below it: the export ends it, and the import opens it again under its ID.
 An app hosting an external session can hold its space, a workspace or a chat, while the session is open:
 
 ```sh

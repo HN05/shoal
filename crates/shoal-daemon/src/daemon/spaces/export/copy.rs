@@ -7,11 +7,11 @@ use anyhow::{Result, ensure};
 use super::Prepared;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{events::EventCause, workspace::Manager},
     execution::recovery::{self, Copied, Record, StoppedAgent},
     model::{Chat, Execution, PresentSpace, Workspace},
     time::UnixTime,
-    transfer::{Manifest, Source},
+    transfer::Manifest,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
@@ -63,7 +63,7 @@ impl Manager {
         let agents = self.copied_agents(&workspace).await?;
         let copied = super::packaged_record(&self.paths, &workspace, checkpoint, agents);
         let repo = self.repository(&workspace.repository_id).await?;
-        let mut manifest = Manifest::of(Some(&repo), Source::Workspace(copied)).await?;
+        let mut manifest = Manifest::of(Some(&repo), copied).await?;
         manifest.copy = Some(Copied {
             earlier_files: number.is_some(),
             held_elsewhere: false,
@@ -74,7 +74,6 @@ impl Manager {
             manifest,
             removal: None,
             kept_sessions: Vec::new(),
-            continues: None,
         })
     }
 
@@ -100,7 +99,8 @@ impl Manager {
         Ok(agents)
     }
 
-    /// A copy of `chat`, whose agent starts from a fork of its session.
+    /// A copy of `chat`, as its removal would record it now, whose agent
+    /// starts from a fork of its session.
     pub(super) async fn copy_chat(&self, chat: Chat) -> Result<Prepared> {
         ensure!(
             chat.session.is_some(),
@@ -108,7 +108,8 @@ impl Manager {
             chat.name
         );
         let repo = self.chat_repository(&chat).await?;
-        let mut manifest = Manifest::of(repo.as_ref(), Source::Chat(chat)).await?;
+        let record = (self.chat_removal_record(&chat.id, EventCause::Manual)).await?;
+        let mut manifest = Manifest::of(repo.as_ref(), record).await?;
         manifest.copy = Some(Copied::default());
         Ok(Prepared {
             repo,
@@ -116,7 +117,6 @@ impl Manager {
             removal: None,
             settings: None,
             kept_sessions: Vec::new(),
-            continues: None,
         })
     }
 }

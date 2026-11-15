@@ -10,7 +10,7 @@ use shoal_ids::agent_session_ids::AgentSessionId;
 #[test]
 fn import_refuses_other_files_and_newer_formats() {
     assert!(Import::read(&mut &b"not an export\n"[..]).is_err());
-    assert!(Import::read(&mut &b"shoal workspace 7\n{}\n"[..]).is_err());
+    assert!(Import::read(&mut &b"shoal workspace 8\n{}\n"[..]).is_err());
 }
 
 /// The header of format version `version`.
@@ -27,12 +27,10 @@ fn a_workspace_package_keeps_the_version_earlier_shoals_read() {
     // A workspace at a commit needs an importer that opens it without a
     // branch; one before it refuses the package.
     let mut at_commit = manifest.clone();
-    if let Space::Workspace(packaged) = &mut at_commit.space {
-        packaged.workspace.kept_workspace_mut().unwrap().at = Some(crate::model::StartingCommit {
-            commit: "abc".into(),
-            made_for: None,
-        });
-    }
+    at_commit.space.record.kept_workspace_mut().unwrap().at = Some(crate::model::StartingCommit {
+        commit: "abc".into(),
+        made_for: None,
+    });
     assert_eq!(version(&at_commit), 4);
     // A copy needs an importer that opens it as a new space; one before it
     // would open the space it copies.
@@ -47,10 +45,7 @@ fn a_workspace_package_keeps_the_version_earlier_shoals_read() {
     value.as_object_mut().unwrap().remove("kind");
     let bytes = format!("{}\n{value}\nx", header(2)).into_bytes();
     let import = Import::read(&mut &bytes[..]).unwrap();
-    let Space::Workspace(packaged) = &import.manifest.space else {
-        panic!("a chat package: {:?}", import.manifest);
-    };
-    assert_eq!(packaged.workspace.name, "topic");
+    assert_eq!(import.manifest.space.record.name, "topic");
     assert_eq!(import.sessions.len(), 1);
 }
 
@@ -63,135 +58,77 @@ fn an_earlier_package_imports_under_the_name_it_holds() {
         value["workspace"]["name"] = name.into();
         let bytes = format!("{}\n{value}\n", header(2)).into_bytes();
         let import = Import::read(&mut &bytes[..]).unwrap();
-        let Space::Workspace(packaged) = &import.manifest.space else {
-            panic!("a chat package: {:?}", import.manifest);
-        };
-        assert_eq!(packaged.workspace.name, name);
+        assert_eq!(import.manifest.space.record.name, name);
     }
 }
 
 #[test]
-fn a_chat_package_names_its_kind_and_continues_its_session() {
-    let chat = Chat {
-        narrowing: Default::default(),
-        mode: "plan".into(),
-        number: 1.into(),
-        id: "c1".into(),
-        repository_id: Some("r1".into()),
-        name: "plan-cache".into(),
-        agent: "claude".into(),
-        workspace: None,
-        running: true,
-        started_at: UnixTime::from_seconds(0),
-        origin: None,
-        tmp_dir: None,
-        root_dir: None,
-        session: Some("s1".into()),
-        links: crate::model::SpaceLinks {
-            issues: vec![crate::model::LinkedItem {
-                url: "https://forge.example/team/repo/issues/12".parse().unwrap(),
-                title: Some("Plan the cache".into()),
-            }],
-            prs: vec![crate::model::LinkedItem {
-                url: "https://forge.example/team/repo/pulls/14".parse().unwrap(),
-                title: Some("Fix it".into()),
-            }],
-            opened: Vec::new(),
-            related: vec![crate::model::LinkedItem {
-                url: "https://forge.example/team/repo/issues/9".parse().unwrap(),
-                title: None,
-            }],
-            assignees: Vec::new(),
+fn a_chat_package_holds_its_removal_record_and_continues_its_session() {
+    let record: RemovedSpace = serde_json::from_value(serde_json::json!({
+        "workspace_id": "c1",
+        "repository_id": "r1",
+        "name": "plan-cache",
+        "parent": {"id": "lead", "name": "lead", "kind": "chat"},
+        "links": {
+            "issues": [{"kind": "issue", "url": "https://forge.example/team/repo/issues/12", "title": "Plan the cache"}],
+            "prs": [{"kind": "pr", "url": "https://forge.example/team/repo/pulls/14", "title": "Fix it"}],
+            "related": [{"kind": "issue", "url": "https://forge.example/team/repo/issues/9", "title": null}],
         },
-        review: Vec::new(),
-        holds: Vec::new(),
-        completion: None,
-        agent_state: None,
-        progress: None,
-        sleep: None,
-        asleep: None,
-        parent: None,
-        children: Vec::new(),
-        converted: false,
-    };
-    let packaged = PackagedChat {
-        name: chat.name.clone(),
-        agent: chat.agent.clone(),
-        links: chat.links.clone(),
-        mode: chat.mode.clone(),
-        narrowing: chat.narrowing,
-        outside_repositories: false,
-        workspace: None,
-    };
-    let (space, sessions) =
-        chat_package(Some("m1".into()), &chat.id, packaged, chat.session.clone());
+        "cause": "manual",
+        "removed_at": 1,
+        "expires_at": 2,
+        "chat": {"agent": "claude", "mode": "plan", "session": "s1"},
+    }))
+    .unwrap();
     let mut manifest = Manifest {
         remote_url: None,
-        space,
-        sessions: Some(sessions),
+        sessions: Some(recorded_sessions(Some("m1".into()), &record)),
+        space: PackagedSpace {
+            prerequisite: None,
+            bundle: false,
+            record: moved(record.clone()),
+        },
         session_files: vec![session_file("p/s1.jsonl", 3)],
         copy: None,
         chats: Vec::new(),
     };
-    assert_eq!(version(&manifest), 3);
-    // A chat without a repository needs an importer that starts it in
-    // root_dir; one before it would start it in a repository.
-    let mut outside = manifest.clone();
-    if let Space::Chat(packaged) = &mut outside.space {
-        packaged.outside_repositories = true;
-    }
-    assert_eq!(version(&outside), 6);
-    let bytes = export_bytes(&header(3), &manifest, &["abc"]);
+    assert_eq!(version(&manifest), 7);
+    assert_eq!(serde_json::to_value(&manifest).unwrap()["kind"], "chat");
+    let bytes = export_bytes(&header(7), &manifest, &["abc"]);
     let import = Import::read(&mut &bytes[..]).unwrap();
     assert!(import.bundle.is_none());
-    assert_eq!(import.manifest.name(), "plan-cache");
-    let Space::Chat(packaged) = &import.manifest.space else {
-        panic!("expected a chat");
-    };
-    assert_eq!(packaged.agent, "claude");
-    assert_eq!(packaged.mode, "plan");
-    // Its links come back with their relations, for the import to restore.
-    let relations: Vec<_> = (packaged.links.relations().into_iter())
-        .map(|(relation, item)| (relation, item.url))
-        .collect();
+    // The record comes back whole, under its ID and below its parent, with
+    // its links' relations, for the import to restore.
+    let packaged = &import.manifest.space.record;
     assert_eq!(
-        relations,
-        [
-            (
-                crate::model::Relation::Assigned,
-                chat.links.issues[0].url.clone()
-            ),
-            (
-                crate::model::Relation::Assigned,
-                chat.links.prs[0].url.clone()
-            ),
-            (
-                crate::model::Relation::Related,
-                chat.links.related[0].url.clone()
-            ),
-        ]
+        (packaged.space_id.as_str(), packaged.name.as_str()),
+        ("c1", "plan-cache")
     );
-    // A package an earlier release wrote names no links, and its chat ran
-    // in the chat mode, whatever its session's record defaults to.
-    let mut value = serde_json::to_value(&manifest).unwrap();
-    value.as_object_mut().unwrap().remove("links");
-    value.as_object_mut().unwrap().remove("mode");
-    let earlier = format!("{}\n{value}\nabc", header(VERSION)).into_bytes();
-    let earlier = Import::read(&mut &earlier[..]).unwrap();
-    assert!(
-        matches!(&earlier.manifest.space, Space::Chat(chat) if chat.links.relations().is_empty() && chat.mode == "chat")
-    );
-    let reported: Vec<_> = import
-        .manifest
-        .sessions_on(Some("m2"), None)
-        .reported()
-        .map(|(agent, session)| (agent.to_string(), session.to_string()))
-        .collect();
-    assert_eq!(reported, [("claude".to_owned(), "s1".to_owned())]);
+    assert_eq!(packaged.parent, record.parent);
+    assert_eq!(packaged.links, record.links);
+    let kept = packaged.chat().unwrap();
+    assert_eq!((kept.agent.name(), kept.mode.as_str()), ("claude", "plan"));
+    // Another machine continues the session its files carry, in the
+    // record it imports.
+    let sessions = import.manifest.sessions_on(Some("m2"), None);
+    let imported = import.manifest.space.record_with(sessions);
+    let session = imported.chat().unwrap().session.as_ref();
+    assert_eq!(session.map(AgentSessionId::as_str), Some("s1"));
     // Without its files, another machine starts a new session.
     manifest.session_files.clear();
     assert_eq!(manifest.sessions_on(Some("m2"), None).reported().count(), 0);
     assert_eq!(manifest.sessions_on(Some("m1"), None).reported().count(), 1);
+}
+
+#[test]
+fn a_chat_package_an_earlier_shoal_wrote_is_refused() {
+    let earlier = serde_json::json!({"kind": "chat", "name": "plan", "agent": "claude"});
+    let bytes = format!("{}\n{earlier}\n", header(6)).into_bytes();
+    let refused = Import::read(&mut &bytes[..]).err().expect("refused");
+    assert!(
+        format!("{refused:#}").contains("earlier Shoal"),
+        "{refused:#}"
+    );
 }
 
 /// The bytes of an export of `manifest`'s format carrying `contents` for its
@@ -310,11 +247,11 @@ fn manifest_with_sessions() -> Manifest {
             agents: workspace.agents.clone(),
             last_sessions: workspace.last_sessions.clone(),
         }),
-        space: Space::Workspace(PackagedWorkspace {
+        space: PackagedSpace {
             prerequisite: None,
             bundle: false,
-            workspace: moved(workspace),
-        }),
+            record: moved(workspace),
+        },
         session_files: Vec::new(),
         copy: None,
         chats: Vec::new(),
@@ -469,40 +406,4 @@ fn a_copy_forks_its_agents_sessions_in_no_place_of_the_original() {
             original.last_sessions[0].execution
         );
     }
-}
-
-#[test]
-fn a_chat_continues_by_a_command_that_quotes_its_name() {
-    let chat: Chat = serde_json::from_value(serde_json::json!({
-        "id": "chat", "repository_id": "repo", "name": "shoal chat's $HOME", "agent": "claude",
-        "started_at": 0, "session": "session",
-    }))
-    .unwrap();
-
-    let line = continue_chat(&chat, Some("my repo")).unwrap();
-
-    assert!(
-        line.contains(
-            "shoal start --mode chat 'my repo' --name 'shoal chat'\\''s $HOME' --agent claude --session session"
-        ),
-        "{line}"
-    );
-}
-
-#[test]
-fn a_chat_without_a_repository_continues_without_naming_one() {
-    let chat: Chat = serde_json::from_value(serde_json::json!({
-        "id": "chat", "name": "lead", "agent": "claude", "mode": "orchestrate",
-        "started_at": 0, "session": "session",
-    }))
-    .unwrap();
-
-    let line = continue_chat(&chat, None).unwrap();
-
-    assert!(
-        line.contains(
-            "shoal start --mode orchestrate --name lead --agent claude --session session"
-        ),
-        "{line}"
-    );
 }

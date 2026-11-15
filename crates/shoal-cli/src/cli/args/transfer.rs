@@ -26,14 +26,13 @@ pub enum MoveCommand {
     ///
     /// It puts the agents' session files where the agents look for them; a session the file
     /// lacks continues only on the machine that exported it. --keep-sessions and --new-sessions
-    /// override that. A workspace opens again, fetching the default branch when the file builds
-    /// on commits the repository lacks, and shoal restore restores its agents. A chat starts in
-    /// the worktree it ran in when that workspace is here, else in the repository's checkout, or
-    /// in root_dir without a repository, resuming its session: beside this terminal, or in the
-    /// background with --restore or without a terminal. The chats a file carries open again
-    /// stopped, as shoal restore opens removed chats. Without a file, or with `-`, it reads
-    /// from standard input, which must not be a terminal. A directory imports each .shoal file
-    /// in it.
+    /// override that. Each space opens again under its ID, as shoal restore opens a removed
+    /// one: a workspace fetching the default branch when the file builds on commits the
+    /// repository lacks, a chat in the worktree it ran in when that workspace is here, else in
+    /// the repository's checkout, or in root_dir without a repository. The chats a file carries
+    /// open after it, below it. shoal restore restores their agents. Without a file, or with
+    /// `-`, it reads from standard input, which must not be a terminal. A directory imports
+    /// each .shoal file in it.
     Import(ImportArgs),
     /// Move workspaces and chats to another machine's Shoal over SSH, where their agents continue.
     ///
@@ -64,8 +63,8 @@ pub struct ExportArgs {
     #[arg(short, long, required_if_eq("all", "true"))]
     pub output: Option<PathBuf>,
     /// Leave the spaces running and export copies of them, which shoal move import opens as new
-    /// spaces: a workspace at a new checkpoint on a branch of its own, or a chat from a fork of
-    /// its session.
+    /// spaces: a workspace at a new checkpoint on a branch of its own, or a chat whose agent
+    /// starts from a fork of its session.
     #[arg(long)]
     pub keep: bool,
     /// Export a copy of the workspace at this earlier checkpoint, numbered as shoal restore
@@ -91,8 +90,7 @@ pub struct ImportArgs {
     /// Start new sessions even on the machine that exported the space.
     #[arg(long, conflicts_with = "keep_sessions")]
     pub new_sessions: bool,
-    /// Queue the restores of the agents the export stopped, as shoal restore does, and start
-    /// chats in the background.
+    /// Queue the restores of the agents the export stopped, as shoal restore does.
     #[arg(long)]
     pub restore: bool,
 }
@@ -118,8 +116,7 @@ pub struct SshArgs {
     /// Copy the workspace at this earlier checkpoint, numbered as shoal restore --checkpoint lists them.
     #[arg(long, requires = "keep", conflicts_with = "all", value_name = "N")]
     pub checkpoint: Option<CheckpointNumber>,
-    /// Leave the agents stopped on the other machine instead of queueing their restores; chats
-    /// still start there, in the background.
+    /// Leave the agents stopped on the other machine instead of queueing their restores.
     #[arg(long)]
     pub no_restore: bool,
     /// The shoal program on the other machine, when SSH's PATH does not find it.

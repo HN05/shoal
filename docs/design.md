@@ -3378,11 +3378,15 @@ only below its recorded parent, which must exist within its scope, as it
 creates children only there; the daemon decides, and lists a scoped caller
 only what it may restore.
 Moving a space to another machine ends it there and continues it here, through
-one package whose manifest names its kind and one path for both kinds: the
-package carries the agents' sessions and their files the same way, and only
-ending and continuing the space differ. Each package uses the lowest format
-version that reads it, so older importers still read workspace packages and
-refuse a chat's as newer.
+one path for both kinds: the package holds the space's removal record, whose
+kind it names, with the agents' sessions and their files, and the import
+records it as removed here and restores it as `shoal restore` does, under its
+ID and below its parent where that is here, as it does each chat the package
+carries; only recording it differs by kind. An imported space's agents, a
+chat's as a workspace's, stay stopped unless the import queues their restores.
+Each package uses the lowest format version that reads it, so older importers
+still read workspace packages and refuse a chat's as newer; a chat package
+from before chats moved as their removal records is refused.
 Moving a workspace is a removal there and a restore here:
 export writes the removal record and a Git bundle of its checkpoint from the
 daemon, which outlives a terminal closing with the workspace and checks the
@@ -3392,7 +3396,7 @@ branch, so two agents never push it or watch its PRs, and the source's removal
 stays restorable when the transfer fails. A space already removed, a
 chat as a workspace, exports from its removal record, which stays, so it
 remains restorable here. A copy, which leaves the space
-running, keeps that rule by becoming new work: a workspace's copy is one of its
+running, keeps that rule by becoming new work under an ID of its own: a workspace's copy is one of its
 checkpoints, which the import opens as a new workspace on a branch of its own
 with its issue links but not its PRs or CI runs, and every copied agent, a
 chat's included, starts from a fork of its session under a new ID, so the

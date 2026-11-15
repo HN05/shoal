@@ -26,10 +26,6 @@ pub(in crate::cli) enum SessionHome<'a> {
     Workspace(&'a Workspace),
     /// The chat the import or restore opened.
     Chat(&'a Chat),
-    /// The repository whose checkout an imported chat starts in.
-    Repository(crate::repository::Selector),
-    /// The `root_dir` an imported chat without a repository starts in.
-    Root,
 }
 
 /// What an import does with a session file already where it goes.
@@ -76,8 +72,6 @@ pub(in crate::cli) async fn install_session_files(
             Some(workspace),
         ),
         SessionHome::Chat(chat) => (ConfigTarget::chat(chat), None),
-        SessionHome::Repository(selector) => (ConfigTarget::Repository(selector), None),
-        SessionHome::Root => (ConfigTarget::Global, None),
     };
     let settings = match crate::config::settings(&ctx.paths, target).await {
         Ok(settings) => settings,
@@ -131,7 +125,6 @@ pub(in crate::cli) async fn install_kept_session_files(
     let selector = match &space {
         SessionHome::Workspace(workspace) => SpaceSelector::id(&workspace.id),
         SessionHome::Chat(chat) => SpaceSelector::id(&chat.id),
-        SessionHome::Repository(_) | SessionHome::Root => return,
     };
     let existing = Existing::of_copy(restored.is_copy());
     // Left behind, the space's next removal record lists them again.

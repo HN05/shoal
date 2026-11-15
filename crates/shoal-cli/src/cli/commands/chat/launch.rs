@@ -49,7 +49,7 @@ pub(in crate::cli::commands) async fn begin(
 }
 
 /// How a chat started.
-pub(in crate::cli::commands) enum Started {
+enum Started {
     /// It ran here, or beside this terminal, or an app that runs it detached
     /// reported it; the exit code.
     Exited(i32),
@@ -59,7 +59,7 @@ pub(in crate::cli::commands) enum Started {
 
 /// Start a chat as [`begin`] does, reporting one started in the background
 /// to the caller.
-pub(in crate::cli::commands) async fn launch(
+async fn launch(
     ctx: &Context,
     repo: ChatRepository,
     settings: Effective,

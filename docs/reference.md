@@ -3860,7 +3860,7 @@ workspace. The checkpoint
 travels as a Git bundle without the commits of the default remote's default
 branch; a checkpoint that branch already has travels without one. Ignored files,
 leases, permits, approvals, grants and holds stay behind; setup rebuilds what the
-workspace needs. A chat's file holds its name, agent and session, and the chats below it, or
+workspace needs. A chat's file holds its removal record with its agent's session, and the chats below it, or
 below one of them: the export refuses a chat whose agent reported no session,
 the one it runs in and one with a workspace below it that is not exported with
 it, and asks before stopping the agents unless given `--yes`; the chat is then
@@ -3893,8 +3893,9 @@ more than one space, since its number names a checkpoint of one workspace. The i
 opens a workspace copy as a new workspace on the nearest free `-2`, `-3`, ...
 variant of its branch, linked to its issues but not its PRs or CI runs, where
 `shoal restore` starts its agents from forks of their sessions, as `shoal start
---fork` does, or as new agents told the workspace is a copy; a chat copy starts
-as a new chat from a fork of its session. Forks get session IDs of their own, so
+--fork` does, or as new agents told the workspace is a copy; a chat copy opens
+as a new chat whose agent `shoal restore` starts from a fork of its session.
+A copy of either kind opens under an ID of its own. Forks get session IDs of their own, so
 the original conversations never change. A copy of an earlier checkpoint warns at
 export and import that the agents' conversations describe work its files lack,
 and tells the agents so. Import refuses `--keep-sessions` for a copy.
@@ -3913,35 +3914,31 @@ whose files the export could not read is left out with a warning, and continues
 only on the machine that exported it. `--keep-sessions` keeps every session,
 such as one whose files were copied by hand, and `--new-sessions` none.
 
-An imported workspace fetches the default branch when the repository lacks the
-commit the bundle builds on, is recorded as removed with its checkpoint, then
-restored as `shoal restore` does; when that restore fails, `shoal
-restore <workspace>` retries it. The agents' session files stay with the removal
-record, in the repository directory's `.sessions`, until the restore that opens
-the workspace puts them in place, as its own
+An imported space is recorded as removed, a workspace with its checkpoint once
+the repository fetched the default branch when it lacks the commit the bundle
+builds on, then restored as `shoal restore` does, under its ID; when that
+restore fails, `shoal restore <id>` retries it. The agents' session files stay
+with the removal record, in the repository directory's `.sessions`, or in
+`root_dir`'s for a chat without a repository, until the restore that opens the
+space puts them in place, as its own
 configuration describes the agents, and an export of that record carries them
 again. Files that restore cannot put in place, as in a development build
-without `SHOAL_DEV_USER_FILES`, stay for the workspace's next removal record.
+without `SHOAL_DEV_USER_FILES`, stay for the space's next removal record.
 `shoal restore` continues its agents' sessions,
 and `--restore` queues the restores of the agents the export stopped, as `shoal
 restore` does, under the importing machine's agent limits. Every reopen, by import or
 `shoal restore`, trusts the workspace's path for the agents that resume there. An agent
 without a kept session `shoal restore` starts as `shoal start --in` starts a new
 one, telling it the workspace moved, instead of running
-its `resume_command`. The chats a file carries open again after its space as `shoal restore` reopens a
-removed chat, under their IDs, stopped, below their parents where those are
-there and in the worktrees they ran in where those workspaces are ready there,
-otherwise in the checkout with a warning, and `--restore` queues their agents'
-restores; an imported chat's own chat starts under a new ID, so the chats it
-carries open at the top level. An imported chat starts as a chat starts: in the
-worktree of the workspace it ran in where the importing machine has that
-workspace ready, such as one that moved there before, otherwise in the
-repository's checkout, with a warning for one that ran in a worktree, or in
-`root_dir` without a repository, in the mode it ran in, under its name, with its agent's `resume` arguments for its session, or as a new
-session for an agent without them or a session not kept. A single chat imported
-on a terminal opens beside it; with `--restore`, without a terminal, or among
-several files, it starts in a background place of the host that starts queued
-agents, which the report names. An import that fails before it records
+its `resume_command`. An imported chat opens as `shoal restore` reopens a
+removed chat, stopped, in the worktree it ran in where the importing machine
+has that workspace ready, such as one that moved there before, otherwise in
+the repository's checkout with a warning, or in `root_dir` without a
+repository. The chats a file carries open again after its space the same way,
+parents first, below their parents where those are there, so a chat's own
+chats open below it. Without `--restore`, the agents of every imported space
+stay stopped and the report names the `shoal restore` that restores them.
+An import that fails before it records
 anything of the space reports the error code `not_imported`. Workspace
 processes can neither export nor import.
 
@@ -3949,8 +3946,8 @@ processes can neither export nor import.
 space with `ssh <host> shoal --json move import --restore`, after
 `ssh <host> shoal repo ls` shows Shoal answers there; when it does not, nothing
 ends. `--shoal <path>` names the program there when the remote shell's `PATH`
-lacks it, and `--no-restore` leaves the workspaces' agents stopped; chats still
-start in the background there. It checks the spaces as a batch export does and
+lacks it, and `--no-restore` leaves the agents stopped there, a chat's as a
+workspace's. It checks the spaces as a batch export does and
 asks once before ending them. Each space then moves on its own, after the
 spaces below it: Shoal stops its agents and those of the chats that go with it,
 saving their sessions, exports it while they stay here, and imports it there, and only once that import succeeds

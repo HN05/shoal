@@ -1,7 +1,7 @@
 //! The chats a package carries with its space: those in the worktree of the
 //! workspace it holds and those below its space, or below one of them, which
 //! go where it goes and open again after it.
-use crate::model::{Chat, RemovedKind, RemovedSpace};
+use crate::model::{Chat, RemovedSpace};
 use shoal_ids::space_ids::SpaceId;
 
 use super::{CarriedChat, Sessions};
@@ -51,32 +51,15 @@ pub trait CarriedChatExt: Sized {
 
 impl CarriedChatExt for CarriedChat {
     fn of(remote_url: Option<String>, machine: Option<String>, removed: RemovedSpace) -> Self {
-        let sessions = Sessions {
-            machine,
-            agents: removed.agents.clone(),
-            last_sessions: removed.last_sessions.clone(),
-        };
         Self {
             remote_url,
+            sessions: super::recorded_sessions(machine, &removed),
             chat: super::moved(removed),
-            sessions,
         }
     }
 
     fn chat_with(&self, sessions: Sessions) -> RemovedSpace {
-        let session = sessions
-            .reported()
-            .next()
-            .map(|(_, session)| session.clone());
-        let mut chat = RemovedSpace {
-            agents: sessions.agents,
-            last_sessions: sessions.last_sessions,
-            ..self.chat.clone()
-        };
-        if let RemovedKind::Chat { chat } = &mut chat.kind {
-            chat.session = session;
-        }
-        chat
+        super::with_sessions(&self.chat, sessions)
     }
 }
 

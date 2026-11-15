@@ -14,7 +14,7 @@ use crate::{
     execution::recovery,
     model::{Chat, Checkpoint, PresentSpace, Workspace},
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
-    transfer::{ExportedSpace, Manifest, Source},
+    transfer::{ExportedSpace, Manifest},
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::space_ids::SpaceId;
@@ -98,7 +98,7 @@ impl Manager {
         let present = PresentSpace::Workspace(workspace.clone());
         record.session_files = self.unplaced_sessions(&present).await;
         let kept_sessions = self.kept_session_sources(&record).await;
-        let mut manifest = Manifest::of(Some(&repo), Source::Workspace(record)).await?;
+        let mut manifest = Manifest::of(Some(&repo), record).await?;
         manifest.chats = chats;
         Ok(Prepared {
             kept_sessions,
@@ -107,28 +107,27 @@ impl Manager {
             settings: Some(self.workspace_settings(&workspace).await),
             repo: Some(repo),
             removal: None,
-            continues: None,
         })
     }
 
     /// Stop the agents of `chat` and of the chats that go with it and
-    /// prepare its package, which continues the session the agent reported.
+    /// prepare its package, which continues the session the agent reported,
+    /// from the record its removal would keep.
     async fn prepare_moving_chat(&self, chat: Chat) -> Result<Prepared> {
-        let (repo, _) = self.movable_chat(&chat).await?;
+        self.ensure_movable_chat(&chat).await?;
+        let repo = self.chat_repository(&chat).await?;
         let carried = self.chats_carried_by(&chat.id).await?;
-        let selector = SpaceSelector::id(&chat.id);
-        self.stop_space(&selector, StopRequest::moving()).await?;
+        let record = self.stopped_record(&chat.id).await?;
         let chats = self.stopped_records(&carried).await?;
-        let chat = self.chat(&selector).await?;
-        let mut manifest = Manifest::of(repo.as_ref(), Source::Chat(chat)).await?;
+        let kept_sessions = self.kept_session_sources(&record).await;
+        let mut manifest = Manifest::of(repo.as_ref(), record).await?;
         manifest.chats = chats;
         Ok(Prepared {
             manifest,
             repo,
             removal: None,
             settings: None,
-            kept_sessions: Vec::new(),
-            continues: None,
+            kept_sessions,
         })
     }
 

@@ -1,14 +1,12 @@
 //! Moving a space to another Shoal: a package with what continues the space
 //! there, which `shoal move import` opens. Every package holds the space's
-//! agents with their sessions and the sessions' files; a workspace's also
-//! holds its removal record and a Git bundle of its checkpoint, and a chat's
-//! its name, from the live chat or its removal record.
+//! removal record, its agents with their sessions and the sessions' files;
+//! a workspace's also holds a Git bundle of its checkpoint.
 use crate::client::space_names::SpaceName;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::BTreeSet,
     io::{BufRead, Read, Write},
@@ -18,8 +16,8 @@ use std::{
 use anyhow::{Context, Result, ensure};
 
 pub use crate::client::transfer::{
-    CarriedChat, CarriedSessionFile, ExportedSpace, Manifest, PackagedChat, PackagedWorkspace,
-    SessionFile, Sessions, Space, SpaceImport,
+    CarriedChat, CarriedSessionFile, ExportedSpace, Manifest, PackagedSpace, SessionFile, Sessions,
+    SpaceImport,
 };
 pub use carried::{CarriedChatExt, carried_chats};
 
@@ -29,51 +27,35 @@ use crate::{
     config::Effective,
     execution::recovery::{Copied, LastSession, Record, StoppedAgent},
     git::{self, default_branch::DefaultBranchLookup},
-    model::{Chat, RemovedKind, RemovedSpace, Repository},
+    model::{RemovedKind, RemovedSpace, Repository},
 };
 
 /// The first line of a package names its format and the version of it,
 /// the lowest that reads the package, so an older Shoal imports what it
 /// can: 1 holds a workspace, 2 a workspace with session files, which
-/// version 1 importers would read as part of the bundle, 3 any space,
-/// naming its kind, 4 a workspace at a commit, which earlier importers
-/// would open on a branch, 5 a copy, which earlier importers would open as
-/// the space it copies, and 6 a chat without a repository, which earlier
-/// importers would open in one, one in a workspace's worktree, which they
-/// would open in the checkout, or the chats that go with the space, which
-/// they would leave out.
+/// version 1 importers would read as part of the bundle, 4 a workspace at
+/// a commit, which earlier importers would open on a branch, 5 a copy,
+/// which earlier importers would open as the space it copies, 6 the chats
+/// that go with the space, which earlier importers would leave out, and 7
+/// a chat as its removal record, which earlier importers would not read.
 pub const FORMAT: &str = "shoal workspace";
-const VERSION: u32 = 6;
+const VERSION: u32 = 7;
+
+/// The lowest version whose chat packages this Shoal reads.
+const CHAT_VERSION: u32 = 7;
 
 /// The version of the format that reads the package `manifest` describes.
 fn version(manifest: &Manifest) -> u32 {
-    match (&manifest.space, manifest.session_files.is_empty()) {
-        (Space::Chat(packaged), _) if packaged.outside_repositories => 6,
-        (Space::Chat(packaged), _) if packaged.workspace.is_some() => 6,
+    let Some(kept) = manifest.space.record.workspace() else {
+        return CHAT_VERSION;
+    };
+    match () {
         _ if !manifest.chats.is_empty() => 6,
         _ if manifest.copy.is_some() => 5,
-        (Space::Workspace(packaged), _)
-            if (packaged.workspace.workspace()).is_some_and(|kept| kept.at.is_some()) =>
-        {
-            4
-        }
-        (Space::Chat(_), _) => 3,
-        (Space::Workspace(_), false) => 2,
-        (Space::Workspace(_), true) => 1,
+        _ if kept.at.is_some() => 4,
+        _ if !manifest.session_files.is_empty() => 2,
+        _ => 1,
     }
-}
-
-/// What a package is made from: a removed workspace, a chat whose agent
-/// ended, or a removed chat's removal record.
-#[derive(Debug, Clone)]
-#[allow(
-    clippy::large_enum_variant,
-    reason = "a package is made from one space, moved into it"
-)]
-pub enum Source {
-    Workspace(RemovedSpace),
-    Chat(Chat),
-    RemovedChat(RemovedSpace),
 }
 
 /// A session file to export: where it is, and the path it keeps in the
@@ -143,12 +125,12 @@ pub async fn export(
         .await
         .context("read the session files")?;
     manifest.session_files = sessions.iter().map(|(file, _)| file.clone()).collect();
-    let bundle = match &manifest.space {
-        Space::Workspace(packaged) if packaged.bundle => {
+    let bundle = match manifest.space.bundle {
+        true => {
             let repo = repo.context("a workspace belongs to a repository")?;
-            Some(Bundle::create(&repo.path, packaged).await?)
+            Some(Bundle::create(&repo.path, &manifest.space).await?)
         }
-        _ => None,
+        false => None,
     };
     let written = manifest.clone();
     tokio::task::spawn_blocking(move || write_new(&path, &written, &sessions, bundle.as_ref()))
@@ -207,9 +189,9 @@ fn open_session_file(source: &SessionSource) -> Result<(std::fs::File, u64)> {
 // Only Shoal's own crates implement and await it.
 #[allow(async_fn_in_trait)]
 pub trait ManifestExt: Sized {
-    /// The package of `source`, a space of `repo`, or of none, without its
-    /// session files.
-    async fn of(repo: Option<&Repository>, source: Source) -> Result<Self>;
+    /// The package of the space `removed` records, of `repo` or of none,
+    /// without its session files.
+    async fn of(repo: Option<&Repository>, removed: RemovedSpace) -> Result<Self>;
 
     /// The space's name.
     fn name(&self) -> &SpaceName;
@@ -240,54 +222,15 @@ pub trait ManifestExt: Sized {
 }
 
 impl ManifestExt for Manifest {
-    async fn of(repo: Option<&Repository>, source: Source) -> Result<Self> {
+    async fn of(repo: Option<&Repository>, removed: RemovedSpace) -> Result<Self> {
         let remote_url = match repo {
             Some(repo) => crate::repository::remote_url_from_source(&repo.source).await?,
             None => None,
         };
-        let machine = crate::process::machine::id();
-        let (space, sessions) = match source {
-            Source::Workspace(removed) => {
-                let repo = repo.context("a workspace belongs to a repository")?;
-                let sessions = Sessions {
-                    machine,
-                    agents: removed.agents.clone(),
-                    last_sessions: removed.last_sessions.clone(),
-                };
-                let packaged = PackagedWorkspace::of(&repo.path, removed).await?;
-                (Space::Workspace(packaged), sessions)
-            }
-            Source::Chat(chat) => {
-                let packaged = PackagedChat {
-                    name: chat.name,
-                    agent: chat.agent,
-                    links: chat.links,
-                    mode: chat.mode,
-                    narrowing: chat.narrowing,
-                    outside_repositories: chat.repository_id.is_none(),
-                    workspace: chat.workspace,
-                };
-                chat_package(machine, &chat.id, packaged, chat.session)
-            }
-            Source::RemovedChat(removed) => {
-                let RemovedKind::Chat { chat: kept } = removed.kind else {
-                    anyhow::bail!("{} was not a chat", removed.space_id);
-                };
-                let packaged = PackagedChat {
-                    name: removed.name,
-                    agent: kept.agent,
-                    links: removed.links,
-                    mode: kept.mode,
-                    narrowing: kept.narrowing,
-                    outside_repositories: removed.repository_id.is_none(),
-                    workspace: kept.workspace,
-                };
-                chat_package(machine, &removed.space_id, packaged, kept.session)
-            }
-        };
+        let sessions = recorded_sessions(crate::process::machine::id(), &removed);
         Ok(Self {
             remote_url,
-            space,
+            space: PackagedSpace::of(repo, removed).await?,
             sessions: Some(sessions),
             session_files: Vec::new(),
             copy: None,
@@ -296,26 +239,12 @@ impl ManifestExt for Manifest {
     }
 
     fn name(&self) -> &SpaceName {
-        match &self.space {
-            Space::Workspace(packaged) => &packaged.workspace.name,
-            Space::Chat(packaged) => &packaged.name,
-        }
+        &self.space.record.name
     }
 
     fn sessions_on(&self, machine: Option<&str>, keep_sessions: Option<bool>) -> Sessions {
         let Some(sessions) = &self.sessions else {
-            return match &self.space {
-                Space::Workspace(packaged) => Sessions {
-                    machine: None,
-                    agents: packaged.workspace.agents.clone(),
-                    last_sessions: packaged.workspace.last_sessions.clone(),
-                },
-                Space::Chat(_) => Sessions {
-                    machine: None,
-                    agents: Vec::new(),
-                    last_sessions: Vec::new(),
-                },
-            };
+            return recorded_sessions(None, &self.space.record);
         };
         let sessions = kept_on(self, sessions, machine, keep_sessions);
         match self.copy {
@@ -349,92 +278,105 @@ impl ManifestExt for Manifest {
     }
 }
 
-/// Operations on the client type [`PackagedWorkspace`] that only the `shoal` command uses.
+/// Operations on the client type [`PackagedSpace`] that only the `shoal` command uses.
 // Only Shoal's own crates implement and await it.
 #[allow(async_fn_in_trait)]
-pub trait PackagedWorkspaceExt: Sized {
-    /// The package of `removed`, a workspace of the repository at `repo`:
-    /// a bundle unless the default branch the importer fetches already has
-    /// the checkpoint.
-    async fn of(repo: &Path, removed: RemovedSpace) -> Result<Self>;
+pub trait PackagedSpaceExt: Sized {
+    /// The package of the space `removed` records, of the repository `repo`
+    /// or of none, for another machine: a workspace's with a bundle unless
+    /// the default branch the importer fetches already has the checkpoint.
+    async fn of(repo: Option<&Repository>, removed: RemovedSpace) -> Result<Self>;
 
     /// The removal record to import, whose agents have `sessions`.
-    fn workspace_with(&self, sessions: Sessions) -> RemovedSpace;
+    fn record_with(&self, sessions: Sessions) -> RemovedSpace;
 }
 
-impl PackagedWorkspaceExt for PackagedWorkspace {
-    async fn of(repo: &Path, removed: RemovedSpace) -> Result<Self> {
-        let commit = removed.kept_workspace()?.checkpoint.commit.clone();
-        let shared = shared_commit(repo).await?;
-        let bundle = match &shared {
-            Some(shared) => {
-                !git::is_ancestor(repo, commit.as_str(), shared, git::isolated_command).await?
+impl PackagedSpaceExt for PackagedSpace {
+    async fn of(repo: Option<&Repository>, removed: RemovedSpace) -> Result<Self> {
+        let (prerequisite, bundle) = match removed.workspace() {
+            Some(kept) => {
+                let repo = repo.context("a workspace belongs to a repository")?;
+                checkpoint_delivery(&repo.path, &kept.checkpoint.commit).await?
             }
-            None => true,
+            None => (None, false),
         };
         Ok(Self {
-            prerequisite: if bundle { shared } else { Some(commit.into()) },
+            prerequisite,
             bundle,
-            workspace: moved(removed),
+            record: moved(removed),
         })
     }
 
-    fn workspace_with(&self, sessions: Sessions) -> RemovedSpace {
-        RemovedSpace {
-            agents: sessions.agents,
-            last_sessions: sessions.last_sessions,
-            ..self.workspace.clone()
-        }
+    fn record_with(&self, sessions: Sessions) -> RemovedSpace {
+        with_sessions(&self.record, sessions)
     }
 }
 
-/// How the user continues `chat`, about the repository called
-/// `repository`, or without one, here once it ended: the `shoal start`
-/// command that resumes its agent's session in its mode; `None` for a chat
-/// whose agent reported none.
-pub fn continue_chat(chat: &Chat, repository: Option<&str>) -> Option<String> {
-    let session = chat.session.as_ref().map(AgentSessionId::as_str)?;
-    let (mode, agent) = (chat.mode.to_string(), chat.agent.to_string());
-    let mut words = vec!["shoal", "start", "--mode", &mode];
-    words.extend(repository);
-    words.extend(["--name", chat.name.as_str(), "--agent", &agent]);
-    words.extend(["--session", session]);
-    // A name is free text, so the command quotes what a shell would split.
-    let command = crate::shell::quote(&words);
-    Some(format!(
-        "chat {} ended here; {command} continues it",
-        chat.name
-    ))
+/// How the checkpoint `commit` of a workspace of the repository at `repo`
+/// reaches the importer: the commit of the default branch a bundle of it
+/// leaves out, or the commit itself without a bundle when the default
+/// branch the importer fetches already has it.
+async fn checkpoint_delivery(
+    repo: &Path,
+    commit: &shoal_refs::CommitId,
+) -> Result<(Option<String>, bool)> {
+    let shared = shared_commit(repo).await?;
+    let bundle = match &shared {
+        Some(shared) => {
+            !git::is_ancestor(repo, commit.as_str(), shared, git::isolated_command).await?
+        }
+        None => true,
+    };
+    Ok(match bundle {
+        true => (shared, true),
+        false => (Some(commit.to_string()), false),
+    })
 }
 
-/// The package of the chat `id`, `packaged`, on `machine`, whose agent
-/// continues `session` as the package's one last session.
-fn chat_package(
-    machine: Option<String>,
-    id: &SpaceId,
-    packaged: PackagedChat,
-    session: Option<AgentSessionId>,
-) -> (Space, Sessions) {
-    let last = LastSession {
-        narrowing: packaged.narrowing,
-        // A chat's agent runs in no execution; its chat's ID keys it.
-        execution: ExecutionId::from(id.to_string()),
-        agent: packaged.agent.clone(),
-        session,
-        moved: false,
-        copied: None,
-        converted: false,
-        origin: None,
-        stop: None,
-        model: Default::default(),
-        mode: packaged.mode.clone(),
+/// `record` with agents that have `sessions`, a chat's continuing the
+/// first session they report.
+fn with_sessions(record: &RemovedSpace, sessions: Sessions) -> RemovedSpace {
+    let session = (sessions.reported().next()).map(|(_, session)| session.clone());
+    let mut record = RemovedSpace {
+        agents: sessions.agents,
+        last_sessions: sessions.last_sessions,
+        ..record.clone()
     };
-    let sessions = Sessions {
+    if let RemovedKind::Chat { chat } = &mut record.kind {
+        chat.session = session;
+    }
+    record
+}
+
+/// The agents of the space `removed` records, with their sessions, as
+/// `machine` recorded them: a chat's agent, when none of them reports a
+/// session, as the last session of the one its chat continues.
+fn recorded_sessions(machine: Option<String>, removed: &RemovedSpace) -> Sessions {
+    let mut sessions = Sessions {
         machine,
-        agents: Vec::new(),
-        last_sessions: vec![last],
+        agents: removed.agents.clone(),
+        last_sessions: removed.last_sessions.clone(),
     };
-    (Space::Chat(packaged), sessions)
+    if let Some(kept) = removed.chat()
+        && sessions.reported().next().is_none()
+        && kept.session.is_some()
+    {
+        sessions.last_sessions.push(LastSession {
+            narrowing: kept.narrowing,
+            // A chat's agent runs in no execution; its chat's ID keys it.
+            execution: ExecutionId::from(removed.space_id.to_string()),
+            agent: kept.agent.clone(),
+            session: kept.session.clone(),
+            moved: false,
+            copied: None,
+            converted: false,
+            origin: None,
+            stop: None,
+            model: Default::default(),
+            mode: kept.mode.clone(),
+        });
+    }
+    sessions
 }
 
 /// A Git bundle of a package's checkpoint, in a directory of its own because
@@ -447,11 +389,11 @@ impl Bundle {
     const NAME: &str = "checkpoint.bundle";
 
     /// Bundle the checkpoint without the prerequisite the importer fetches.
-    async fn create(repo: &Path, packaged: &PackagedWorkspace) -> Result<Self> {
+    async fn create(repo: &Path, packaged: &PackagedSpace) -> Result<Self> {
         let bundle = Self {
             directory: tempfile::tempdir()?,
         };
-        let checkpoint = &packaged.workspace.kept_workspace()?.checkpoint;
+        let checkpoint = &packaged.record.kept_workspace()?.checkpoint;
         let reference = git::checkpoint::reference(&checkpoint.commit);
         let exclude = packaged.prerequisite.as_deref();
         git::bundle::create(repo, &bundle.path(), &reference, exclude).await?;
@@ -546,14 +488,12 @@ impl Import {
             })?;
         let mut line = String::new();
         input.read_line(&mut line)?;
-        let mut manifest: serde_json::Value =
+        let manifest: serde_json::Value =
             serde_json::from_str(&line).context("read the export's manifest")?;
-        // Versions before 3 hold a workspace without naming the kind.
-        if version < 3
-            && let Some(manifest) = manifest.as_object_mut()
-        {
-            manifest.insert("kind".into(), "workspace".into());
-        }
+        ensure!(
+            version >= CHAT_VERSION || manifest.get("kind").is_none_or(|kind| kind != "chat"),
+            "the export holds a chat an earlier Shoal packaged, which this one cannot import; export it again with this Shoal"
+        );
         let mut manifest: Manifest =
             serde_json::from_value(manifest).context("read the export's manifest")?;
         if version == 1 {
@@ -564,7 +504,7 @@ impl Import {
             .iter()
             .map(|file| ImportedSessionFile::read(input, file.clone()))
             .collect::<Result<_>>()?;
-        let bundle = if matches!(&manifest.space, Space::Workspace(packaged) if packaged.bundle) {
+        let bundle = if manifest.space.bundle {
             let mut bundle = tempfile::NamedTempFile::new()?;
             std::io::copy(input, &mut bundle)?;
             bundle.flush()?;

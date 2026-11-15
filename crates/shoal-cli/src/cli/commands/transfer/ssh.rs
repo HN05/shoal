@@ -11,7 +11,7 @@ mod moving;
 use super::export;
 use crate::client::output::{
     error::{CommandError, ErrorDetail},
-    transfer::Imported,
+    restore::Reopened,
 };
 use crate::protocol::ErrorCode;
 use crate::{
@@ -61,24 +61,13 @@ fn summary(verb: &str, host: &str, (done, failed): (usize, usize)) -> String {
 }
 
 /// Where a space went on `host`, whose import reported `imported`: a
-/// workspace, or a chat started in the background there.
-fn arrived(host: &str, imported: &Imported) -> String {
+/// workspace's path there, and whether its agents continue there.
+fn arrived(host: &str, imported: &Reopened) -> String {
     let mut message = host.to_owned();
-    let queued = match imported {
-        Imported::Workspace(reopened) => {
-            if let Some(workspace) = reopened.space.worktree() {
-                message.push_str(&format!(" at {}", workspace.path.display()));
-            }
-            reopened
-                .queued
-                .as_ref()
-                .map_or(0, |queued| queued.queued.len())
-        }
-        Imported::Chat(chat) => {
-            message.push_str(&format!(". On {host}: {}", chat.place));
-            0
-        }
-    };
+    if let Some(workspace) = imported.space.worktree() {
+        message.push_str(&format!(" at {}", workspace.path.display()));
+    }
+    let queued = (imported.queued.as_ref()).map_or(0, |queued| queued.queued.len());
     match queued {
         0 => {}
         1 => message.push_str("; its agent continues there"),
@@ -92,8 +81,7 @@ struct Remote {
     host: String,
     /// The shoal program there.
     shoal: String,
-    /// Whether imports there queue the agents' restores and start the
-    /// chats they bring.
+    /// Whether imports there queue the agents' restores.
     restore: bool,
 }
 
@@ -119,7 +107,7 @@ impl Remote {
 
     /// Import the export in `file` there, queueing its agents' restores when
     /// it resumes them, and return what the import reported.
-    async fn import(&self, file: &Path) -> Result<Imported, ImportFailure> {
+    async fn import(&self, file: &Path) -> Result<Reopened, ImportFailure> {
         let mut args = vec!["move", "import"];
         if self.restore {
             args.push("--restore");

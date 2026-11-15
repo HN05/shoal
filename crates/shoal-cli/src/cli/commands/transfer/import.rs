@@ -1,9 +1,9 @@
 //! `shoal move import`: continue spaces from the packages `shoal move
-//! export` wrote: open workspaces again and start chats that resume their
-//! sessions.
+//! export` wrote: record each space as removed here and open it again as
+//! `shoal restore` does, then the chats that go with it.
 use crate::cli::commands::restore::reopen::ReopenedExt;
 use crate::transfer::ManifestExt;
-use crate::transfer::PackagedWorkspaceExt;
+use crate::transfer::PackagedSpaceExt;
 use std::{
     collections::BTreeSet,
     io::BufReader,
@@ -12,32 +12,27 @@ use std::{
 
 use anyhow::{Context as _, Result, ensure};
 
-use crate::client::output::chat::BackgroundChat;
 use crate::client::output::{
     restore::Reopened,
-    transfer::{ImportFailure, Imported, Imports},
+    transfer::{ImportFailure, Imports},
 };
 use crate::{
     cli::{
-        agents::{self, ChatRepository, SessionHome},
+        commands::restore::reopen,
         context::Context,
         output::{Palette, Style},
         ui,
     },
-    execution::recovery::Copied,
-    model::{RestoredSpace, RestoredWorkspace},
+    model::RestoredSpace,
     refusal::{Reason, Refusal},
     transfer::{
-        CarriedSessionFile, Import, ImportedSessionFile, Manifest, PackagedChat, PackagedWorkspace,
-        Sessions, Space, SpaceImport,
+        CarriedSessionFile, Import, ImportedSessionFile, Manifest, PackagedSpace, Sessions,
+        SpaceImport,
     },
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
 
-use super::{
-    super::chat::{self, ChatPlace, Started},
-    STANDARD_STREAM,
-};
+use super::STANDARD_STREAM;
 
 mod chats;
 
@@ -51,8 +46,7 @@ pub(super) struct ImportOptions {
     /// Whether the agents keep their sessions; `None` keeps those on the
     /// machine that exported the space or whose files it carries.
     pub sessions: Option<bool>,
-    /// Whether to queue the restores of the agents the export stopped, and
-    /// start chats in the background.
+    /// Whether to queue the restores of the agents the export stopped.
     pub restore: bool,
 }
 
@@ -71,58 +65,22 @@ pub(super) async fn import(
         // it is not here.
         let package = Package::read(file, &options)
             .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
-        return match package.space {
-            Space::Workspace(_) => {
-                let restored = package.open_workspace(ctx).await?;
-                let reopened = super::super::restore::reopen::finish_reopen(
-                    ctx,
-                    restored,
-                    "Imported",
-                    options.restore,
-                )
-                .await;
-                package.open_chats(ctx, options.restore).await;
-                reopened
-            }
-            // A chat starts on this terminal, unless it is to start in the
-            // background or there is none to start it on.
-            Space::Chat(_) => {
-                let place = chat_place(ctx, &options);
-                match package.start_chat(ctx, place, options.restore).await? {
-                    Started::Exited(code) => Ok(code),
-                    Started::Background(chat) => {
-                        ctx.emit(&chat_message(&chat), &chat)?;
-                        Ok(0)
-                    }
-                }
-            }
-        };
+        let restored = package.open(ctx).await?;
+        let reopened = reopen::finish_reopen(ctx, restored, "Imported", options.restore).await;
+        package.open_chats(ctx, options.restore).await;
+        return reopened;
     }
     let files = import_files(files)?;
     import_each(ctx, &files, &options).await.report(ctx)
-}
-
-/// Where a chat imported on its own starts: beside this terminal, unless
-/// `--restore` starts it in the background, as it must without a terminal.
-fn chat_place(ctx: &Context, options: &ImportOptions) -> ChatPlace {
-    match options.restore || !ctx.on_terminal() {
-        true => ChatPlace::Background,
-        false => ChatPlace::Beside,
-    }
-}
-
-/// The report of an imported chat started in the background.
-fn chat_message(chat: &BackgroundChat) -> String {
-    format!("Imported chat {}. {}", chat.chat, chat.place)
 }
 
 /// A package read for its import: the space, the repository it goes to,
 /// its agents as they continue here, the chats that go with it and the
 /// session files they keep.
 struct Package {
-    space: Space,
+    space: PackagedSpace,
     /// Set for a copy, which opens as a new space.
-    copy: Option<Copied>,
+    copy: bool,
     /// None for a chat without a repository.
     repository: Option<crate::repository::Selector>,
     sessions: Sessions,
@@ -154,9 +112,9 @@ impl Package {
                 );
             }
         }
-        let repository = match &manifest.space {
-            Space::Chat(chat) if chat.outside_repositories => None,
-            _ => Some(destination(&manifest, options)?),
+        let repository = match manifest.space.record.repository_id {
+            Some(_) => Some(destination(&manifest, options)?),
+            None => None,
         };
         let sessions = sessions_here(&manifest, options.sessions);
         let chats = chats::chats_here(&manifest, repository.as_ref(), options.sessions);
@@ -170,7 +128,7 @@ impl Package {
             .collect();
         Ok(Self {
             space: manifest.space,
-            copy: manifest.copy,
+            copy: manifest.copy.is_some(),
             repository,
             sessions,
             chats,
@@ -179,151 +137,38 @@ impl Package {
         })
     }
 
-    /// Open again the chats that went with the space, queueing the restores
-    /// of their agents when `restore`.
-    async fn open_chats(&self, ctx: &Context, restore: bool) {
-        chats::open(ctx, &self.chats, &self.carried(), restore).await;
-    }
-
-    /// Record the packaged workspace as removed in its repository, keeping
-    /// its agents' session files with the record for the restore that opens
-    /// it, and open it again.
-    async fn open_workspace(&self, ctx: &Context) -> Result<RestoredWorkspace> {
-        let Space::Workspace(packaged) = &self.space else {
-            anyhow::bail!("the package holds a chat, not a workspace");
-        };
-        ctx.progress("Importing workspace", self.import(ctx, packaged))
-            .await
-            .map(|restored| *restored)
-    }
-
-    /// Record `packaged` as removed with its session files and open it
-    /// again.
-    async fn import(
-        &self,
-        ctx: &Context,
-        packaged: &PackagedWorkspace,
-    ) -> Result<Box<RestoredWorkspace>> {
+    /// Record the packaged space as removed in its repository, or in none,
+    /// keeping its agents' session files with the record for the restore
+    /// that opens it, and open it again.
+    async fn open(&self, ctx: &Context) -> Result<RestoredSpace> {
+        let own: Vec<&AgentSessionId> = (self.sessions.reported())
+            .map(|(_, session)| session)
+            .collect();
         let import = SpaceImport {
             repository: self.repository.clone(),
             bundle: self.bundle.as_ref().map(|bundle| bundle.path().to_owned()),
-            prerequisite: packaged.prerequisite.clone(),
-            space: packaged.workspace_with(self.sessions.clone()),
-            copy: self.copy.is_some(),
-            session_files: self.carried(),
+            prerequisite: self.space.prerequisite.clone(),
+            space: self.space.record_with(self.sessions.clone()),
+            copy: self.copy,
+            session_files: self.carried_for(&own),
         };
-        match crate::client::transfer::import(&ctx.paths, import).await? {
-            RestoredSpace::Workspace(restored) => Ok(restored),
-            RestoredSpace::Chat(_) => anyhow::bail!("the import opened a chat"),
-        }
+        let importing = crate::client::transfer::import(&ctx.paths, import);
+        ctx.progress("Importing", importing).await
     }
 
-    /// The session files the package carries for the agents kept here.
-    fn carried(&self) -> Vec<CarriedSessionFile> {
-        self.carried
-            .iter()
+    /// Open again the chats that went with the space, queueing the restores
+    /// of their agents when `restore`.
+    async fn open_chats(&self, ctx: &Context, restore: bool) {
+        chats::open(ctx, &self.chats, self, restore).await;
+    }
+
+    /// The session files the package carries for `sessions`.
+    fn carried_for(&self, sessions: &[&AgentSessionId]) -> Vec<CarriedSessionFile> {
+        (self.carried.iter())
+            .filter(|imported| sessions.contains(&&imported.file.session))
             .map(ImportedSessionFile::carried)
             .collect()
     }
-
-    /// Start the packaged chat at `place`, as [`Self::chat_start`] says,
-    /// under its name, resuming the session its agent keeps here, once its
-    /// session files are in place and the chats that go with it opened,
-    /// queueing their agents' restores when `restore`.
-    async fn start_chat(self, ctx: &Context, place: ChatPlace, restore: bool) -> Result<Started> {
-        // Nothing is recorded yet, so a program that moves the chat knows it
-        // is not here.
-        let start = self
-            .chat_start(ctx, place)
-            .await
-            .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
-        // The chat may run in this terminal until it ends, so the chats that
-        // go with it open first.
-        self.open_chats(ctx, restore).await;
-        self.place_chat_sessions(ctx).await;
-        let ChatStart {
-            repo,
-            settings,
-            topic,
-            options,
-        } = start;
-        chat::launch(ctx, repo, settings, topic, options).await
-    }
-
-    /// Put the session files of the packaged chat's agent where it looks for
-    /// them.
-    async fn place_chat_sessions(&self, ctx: &Context) {
-        let home = match &self.repository {
-            Some(selector) => SessionHome::Repository(selector.clone()),
-            None => SessionHome::Root,
-        };
-        let existing = agents::Existing::of_copy(self.copy.is_some());
-        agents::install_session_files(ctx, home, &self.carried(), existing).await;
-    }
-
-    /// How the packaged chat starts at `place`, in the repository the
-    /// package goes to, which this machine registers, or in `root_dir`.
-    async fn chat_start(&self, ctx: &Context, place: ChatPlace) -> Result<ChatStart> {
-        let Space::Chat(packaged) = &self.space else {
-            anyhow::bail!("the package holds a workspace, not a chat");
-        };
-        let repo = self.chat_repository(ctx).await?;
-        let workspace = hosting_workspace(ctx, packaged, &repo).await;
-        let (mode, links) = (&packaged.mode, &packaged.links);
-        Ok(ChatStart {
-            settings: crate::config::settings(&ctx.paths, repo.config()).await?,
-            topic: chat::Topic::imported(&repo, workspace, mode, links),
-            options: self.chat_options(packaged, place)?,
-            repo,
-        })
-    }
-
-    /// Where the packaged chat starts: the checkout of the registered
-    /// repository the package goes to, or `root_dir`.
-    async fn chat_repository(&self, ctx: &Context) -> Result<ChatRepository> {
-        let Some(selector) = &self.repository else {
-            return Ok(ChatRepository::Outside(chat::root_dir(ctx).await?));
-        };
-        let repositories = crate::client::repositories::list(&ctx.paths).await?;
-        let repo = crate::repository::select(&repositories, selector.clone()).await?;
-        Ok(ChatRepository::Registered(repo.clone()))
-    }
-
-    /// How the packaged chat starts at `place`.
-    fn chat_options(&self, packaged: &PackagedChat, place: ChatPlace) -> Result<chat::Options> {
-        let session = self
-            .sessions
-            .last_sessions
-            .iter()
-            .find_map(|last| last.session.clone());
-        Ok(chat::Options {
-            now: false,
-            priority: None,
-            narrowing: chat::Narrowing::Recorded(packaged.narrowing),
-            agent: Some(packaged.agent.name().parse()?),
-            place,
-            // An older Shoal's export may hold a longer name than one set
-            // now allows.
-            name: Some(crate::client::space_names::SpaceName::derive(
-                packaged.name.as_str(),
-                "chat",
-            )),
-            model: Default::default(),
-            args: Vec::new(),
-            session,
-            fork: self.copy.is_some(),
-            handoff: None,
-            parent: None,
-        })
-    }
-}
-
-/// What an imported chat starts with.
-struct ChatStart {
-    repo: ChatRepository,
-    settings: crate::config::Effective,
-    topic: chat::Topic,
-    options: chat::Options,
 }
 
 /// The export files `files` names, with each directory among them replaced
@@ -361,8 +206,8 @@ fn import_files(files: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
     Ok(found)
 }
 
-/// Import each of `files`, going on after one fails; chats start in the
-/// background.
+/// Import each of `files`, going on after one fails, then the chats that
+/// go with the space of each.
 async fn import_each(ctx: &Context, files: &[PathBuf], options: &ImportOptions) -> ImportReport {
     let mut report = ImportReport::default();
     for file in files {
@@ -373,93 +218,65 @@ async fn import_each(ctx: &Context, files: &[PathBuf], options: &ImportOptions) 
                 continue;
             }
         };
-        match package.space {
-            Space::Workspace(_) => {
-                if import_workspace(ctx, file, &package, options, &mut report).await {
-                    package.open_chats(ctx, options.restore).await;
-                }
-            }
-            Space::Chat(_) => {
-                let started = package.start_chat(ctx, ChatPlace::Background, options.restore);
-                match started.await {
-                    Ok(Started::Background(chat)) => {
-                        report.imported(ctx, chat_message(&chat), Imported::Chat(chat))
-                    }
-                    Ok(Started::Exited(_)) => report.imported_quietly(),
-                    Err(error) => report.failed(ctx, file, &error),
-                }
-            }
+        if import_one(ctx, file, &package, options, &mut report).await {
+            package.open_chats(ctx, options.restore).await;
         }
     }
     report
 }
 
-/// Open the workspace `package` holds, from `file`, and set it up, queueing
-/// its agents' restores once its post-setup hook succeeded when `options`
-/// says; whether it opened.
-async fn import_workspace(
+/// Open the space `package` holds, from `file`, and set a workspace up,
+/// queueing its agents' restores once its post-setup hook succeeded when
+/// `options` says; whether it opened.
+async fn import_one(
     ctx: &Context,
     file: &Path,
     package: &Package,
     options: &ImportOptions,
     report: &mut ImportReport,
 ) -> bool {
-    let mut reopened = match open_and_prepare(ctx, package).await {
+    let restored = match package.open(ctx).await {
+        Ok(restored) => restored,
+        Err(error) => {
+            report.failed(ctx, file, &error);
+            return false;
+        }
+    };
+    let mut reopened = match reopen::prepare_set_up(ctx, restored).await {
         Ok(reopened) => reopened,
         Err(error) => {
             report.failed(ctx, file, &error);
             return false;
         }
     };
-    let Some(workspace) = reopened.space.worktree().cloned() else {
-        let error = anyhow::anyhow!("the import opened no workspace");
-        report.failed(ctx, file, &error);
-        return false;
-    };
-    let post_setup = super::super::workspaces::run_post_setup(ctx, &workspace).await;
+    let post_setup = reopen::run_post_setup(ctx, &reopened).await;
     if post_setup.is_ok() && options.restore {
         reopened.queue_agents(ctx).await;
     }
     let message = reopened.message(ctx, "Imported");
-    report.imported(ctx, message, Imported::Workspace(Box::new(reopened)));
+    let name = reopened.space.name().clone();
+    report.imported(ctx, message, reopened);
     if let Err(error) = post_setup {
-        let error = error.context(format!(
-            "imported {}, but its hooks.post_setup failed",
-            workspace.name
-        ));
+        let error = error.context(format!("imported {name}, but its hooks.post_setup failed"));
         report.failed(ctx, file, &error);
     }
     true
-}
-
-/// Open the workspace `package` holds and set it up.
-async fn open_and_prepare(ctx: &Context, package: &Package) -> Result<Reopened> {
-    let restored = package.open_workspace(ctx).await?;
-    super::super::restore::reopen::prepare_reopened(ctx, restored)
-        .await?
-        .context("its setup did not finish")
 }
 
 /// The spaces an import of several files continued, and the files it could
 /// not import.
 #[derive(Default)]
 struct ImportReport {
-    imported: Vec<Imported>,
-    /// Spaces that reported themselves, such as a chat an app started.
-    reported: usize,
+    imported: Vec<Reopened>,
     failed: Vec<ImportFailure>,
 }
 
 impl ImportReport {
-    fn imported(&mut self, ctx: &Context, message: String, value: Imported) {
+    fn imported(&mut self, ctx: &Context, message: String, value: Reopened) {
         if !ctx.json {
             outln!("{message}");
         }
         self.imported.push(value);
-    }
-
-    fn imported_quietly(&mut self) {
-        self.reported += 1;
     }
 
     fn failed(&mut self, ctx: &Context, file: &Path, error: &anyhow::Error) {
@@ -475,7 +292,7 @@ impl ImportReport {
     }
 
     fn report(self, ctx: &Context) -> Result<i32> {
-        let imported = self.imported.len() + self.reported;
+        let imported = self.imported.len();
         let message = if self.failed.is_empty() {
             format!("Imported {imported} spaces")
         } else {
@@ -491,30 +308,6 @@ impl ImportReport {
         )?;
         Ok(code)
     }
-}
-
-/// The workspace of `repo` in whose worktree the `packaged` chat ran, when
-/// this machine has it ready, such as one that moved here before; without
-/// it, the chat starts in the checkout, with a warning.
-async fn hosting_workspace(
-    ctx: &Context,
-    packaged: &PackagedChat,
-    repo: &ChatRepository,
-) -> Option<crate::model::Workspace> {
-    let ran_in = packaged.workspace.as_ref()?;
-    let selector = crate::client::space_names::SpaceSelector::id(&ran_in.id);
-    let found = chat::hosting_workspace(ctx, &selector).await.ok();
-    let in_repository = |workspace: &crate::model::Workspace| {
-        (repo.registered()).is_some_and(|repo| repo.id == workspace.repository_id)
-    };
-    let workspace = found.filter(in_repository);
-    if workspace.is_none() {
-        eprintln!(
-            "warning: chat {} ran in workspace {}, which is not ready here, so it starts in the checkout",
-            packaged.name, ran_in.name
-        );
-    }
-    workspace
 }
 
 /// The repository a package of a space in one goes to: the one `options`

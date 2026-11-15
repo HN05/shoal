@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    output::{batch::Failure, chat::BackgroundChat, outputs, restore::Reopened},
+    output::{batch::Failure, outputs, restore::Reopened},
     removal::RemovalResult,
     transfer::Manifest,
 };
@@ -26,15 +26,6 @@ pub struct Exports {
     pub directory: PathBuf,
 }
 
-/// A space an import continued: a workspace opened again, or a chat started
-/// in the background.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Imported {
-    Workspace(Box<Reopened>),
-    Chat(BackgroundChat),
-}
-
 /// A package an import of several could not import.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ImportFailure {
@@ -45,22 +36,22 @@ pub struct ImportFailure {
 /// The spaces an import of several continued.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Imports {
-    pub imported: Vec<Imported>,
+    pub imported: Vec<Reopened>,
     pub failed: Vec<ImportFailure>,
 }
 
 /// The spaces a move to another machine continued there.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Moves {
-    pub moved: Vec<Imported>,
+    pub moved: Vec<Reopened>,
     pub failed: Vec<Failure>,
 }
 
 /// The copies a copy to another machine opened there.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Copies {
-    pub copied: Vec<Imported>,
+    pub copied: Vec<Reopened>,
     pub failed: Vec<Failure>,
 }
 
-outputs!(Exported, Exports, Imported, Imports, Moves, Copies);
+outputs!(Exported, Exports, Imports, Moves, Copies);

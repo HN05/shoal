@@ -94,33 +94,6 @@ impl Topic {
         }
     }
 
-    /// A chat in `mode` in the worktree of `workspace`, else in the
-    /// checkout of `repo`, or in `root_dir` without one, with `links`,
-    /// imported from another machine. One linked to an issue reopens in a
-    /// new tab with the issue's fields, for its rules, without asking the
-    /// forge, which may have closed it.
-    pub(in crate::cli::commands) fn imported(
-        repo: &ChatRepository,
-        workspace: Option<Workspace>,
-        mode: &crate::config::modes::ModeName,
-        links: &SpaceLinks,
-    ) -> Self {
-        let mut topic = match (workspace, repo) {
-            (Some(workspace), _) => Self::workspace(workspace, mode),
-            (None, ChatRepository::Registered(repo)) => Self::repository(repo, mode),
-            (None, ChatRepository::Outside(_)) => Self::outside_repositories(mode),
-        };
-        if let Relaunch::Start(start) = &mut topic.relaunch {
-            start.linked_issue = links.issue().map(|issue| issue.url.clone());
-            start.linked_issue_title = links.issue_title().map(str::to_owned);
-        }
-        Self {
-            links: links.clone(),
-            linked_issue: templates::IssueFields::linked(links),
-            ..topic
-        }
-    }
-
     /// The topic of a chat whose agent starts from a fork of its session:
     /// in a workspace that became the chat at `home` when `converted`,
     /// otherwise once restored while another space holds the session, as

@@ -105,7 +105,7 @@ pub(super) async fn import(
 ) -> crate::model::RestoredWorkspace {
     let import = Import::read(&mut &file[..]).unwrap();
     let packaged = packaged_workspace(&import.manifest);
-    import_record(manager, repo, &import, packaged.workspace.clone()).await
+    import_record(manager, repo, &import, packaged.record.clone()).await
 }
 
 /// Import the workspace `import` packages as `workspace` says, as `shoal
@@ -119,7 +119,7 @@ async fn import_here(
     let sessions = import
         .manifest
         .sessions_on(crate::process::machine::id().as_deref(), None);
-    let workspace = packaged_workspace(&import.manifest).workspace_with(sessions);
+    let workspace = packaged_workspace(&import.manifest).record_with(sessions);
     import_record(manager, repo, &import, workspace).await
 }
 
@@ -159,11 +159,12 @@ pub(super) fn workspace_import(
 }
 
 /// The workspace `manifest` packages.
-pub(super) fn packaged_workspace(manifest: &Manifest) -> &PackagedWorkspace {
-    match &manifest.space {
-        Space::Workspace(packaged) => packaged,
-        Space::Chat(_) => panic!("a chat package: {manifest:?}"),
-    }
+pub(super) fn packaged_workspace(manifest: &Manifest) -> &PackagedSpace {
+    assert!(
+        manifest.space.record.workspace().is_some(),
+        "a chat package: {manifest:?}"
+    );
+    &manifest.space
 }
 
 #[tokio::test]
@@ -296,7 +297,7 @@ async fn import_writes_nothing_while_the_repository_moves() {
         .await
         .unwrap();
     let import = Import::read(&mut &file[..]).unwrap();
-    let workspace = packaged_workspace(&import.manifest).workspace.clone();
+    let workspace = packaged_workspace(&import.manifest).record.clone();
     let imported =
         (importing.import_space(workspace_import(&target_repo, &import, workspace, &[]))).await;
     assert!(imported.is_err());
@@ -313,7 +314,7 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
         .unwrap();
     let file = export_removed(&exporting, &workspace.id).await;
     let import = Import::read(&mut &file[..]).unwrap();
-    let workspace = packaged_workspace(&import.manifest).workspace.clone();
+    let workspace = packaged_workspace(&import.manifest).record.clone();
     let contents = target.path().join("carried");
     fs::write(&contents, "{}\n").unwrap();
     let session_file = SessionFile {
@@ -371,7 +372,7 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
     );
     assert!(
         packaged_workspace(&reread.manifest)
-            .workspace
+            .record
             .session_files
             .is_empty()
     );

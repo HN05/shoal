@@ -20,7 +20,7 @@ use crate::{
     paths::Paths,
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
     time::UnixTime,
-    transfer::{ExportedSpace, Manifest, SessionSource, Source},
+    transfer::{ExportedSpace, Manifest, SessionSource},
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
@@ -31,16 +31,14 @@ mod moving;
 /// A space prepared for its package, ended here or copied: its repository,
 /// none for a chat without one, the package without its session files, the
 /// removal that ended a workspace, the settings describing its agents when
-/// they are not the repository's, the session files an import kept for it,
-/// and how the user continues the space here when writing the package
-/// fails, unless a removal record or the space itself keeps it.
+/// they are not the repository's, and the session files an import kept for
+/// it.
 struct Prepared {
     repo: Option<Repository>,
     manifest: Manifest,
     removal: Option<RemovalResult>,
     settings: Option<Result<Effective>>,
     kept_sessions: Vec<SessionSource>,
-    continues: Option<String>,
 }
 
 impl Manager {
@@ -51,7 +49,8 @@ impl Manager {
     /// which stays. The daemon writes the file, so closing
     /// the caller's terminal with the space cannot cut the export short; it
     /// checks that it can before ending anything, since its file access can
-    /// differ from the caller's.
+    /// differ from the caller's. Writing it that fails names the restore
+    /// that opens the space here again.
     pub async fn export_space(
         &self,
         selector: &SpaceSelector,
@@ -67,7 +66,9 @@ impl Manager {
                     .await?
             }
         };
-        self.write_prepared(ended, file).await
+        let id = ended.manifest.space.record.space_id.clone();
+        (self.write_prepared(ended, file).await)
+            .with_context(|| format!("shoal restore {id} opens it here again"))
     }
 
     /// Write a copy of the space `selector` names for another Shoal to the
@@ -107,7 +108,7 @@ impl Manager {
             Some(settings) => settings,
             None => self.space_settings_in(repo.map(|repo| &repo.id)).await,
         };
-        let written = self
+        let (manifest, warnings) = self
             .write_package(
                 repo,
                 prepared.manifest,
@@ -115,12 +116,7 @@ impl Manager {
                 prepared.kept_sessions,
                 file,
             )
-            .await;
-        let (manifest, warnings) = match (written, prepared.continues) {
-            (Ok(written), _) => written,
-            (Err(error), Some(continues)) => return Err(error.context(continues)),
-            (Err(error), None) => return Err(error),
-        };
+            .await?;
         Ok(ExportedSpace {
             manifest,
             removal: prepared.removal,
@@ -174,7 +170,7 @@ impl Manager {
             .with_context(|| format!("no space or restorable space {selector}"))?;
         match removed.kind {
             RemovedKind::Workspace(_) => self.prepare_removed_workspace(removed, ended).await,
-            RemovedKind::Chat { .. } => self.prepare_removed_chat(removed).await,
+            RemovedKind::Chat { .. } => self.prepare_removed_chat(removed, &[]).await,
         }
     }
 
@@ -218,7 +214,7 @@ impl Manager {
         };
         let repo = self.repository(removed.repository()?).await?;
         let kept_sessions = self.kept_session_sources(&removed).await;
-        let mut manifest = Manifest::of(Some(&repo), Source::Workspace(removed)).await?;
+        let mut manifest = Manifest::of(Some(&repo), removed).await?;
         manifest.chats = self.carried_records(&carried).await?;
         Ok(Prepared {
             kept_sessions,
@@ -226,27 +222,32 @@ impl Manager {
             repo: Some(repo),
             removal,
             settings,
-            continues: None,
         })
     }
 
     /// Prepare the package of the chat `removed` records, whose record
-    /// stays.
-    async fn prepare_removed_chat(&self, removed: RemovedSpace) -> Result<Prepared> {
+    /// stays, with the chats `carried` that went with it.
+    async fn prepare_removed_chat(
+        &self,
+        removed: RemovedSpace,
+        carried: &[SpaceId],
+    ) -> Result<Prepared> {
         let repo = self.movable_removed_chat(&removed).await?;
+        let kept_sessions = self.kept_session_sources(&removed).await;
+        let mut manifest = Manifest::of(repo.as_ref(), removed).await?;
+        manifest.chats = self.carried_records(carried).await?;
         Ok(Prepared {
-            manifest: Manifest::of(repo.as_ref(), Source::RemovedChat(removed)).await?,
+            manifest,
             repo,
             removal: None,
             settings: None,
-            kept_sessions: Vec::new(),
-            continues: None,
+            kept_sessions,
         })
     }
 
     /// The repository of the chat `removed` records, which moves to another
     /// machine, none for a chat without one, refusing what
-    /// [`Self::movable_chat`] refuses of a live chat that its removal left:
+    /// [`Self::ensure_movable_chat`] refuses of a live chat that its removal left:
     /// one whose agent reported no session to continue.
     async fn movable_removed_chat(&self, removed: &RemovedSpace) -> Result<Option<Repository>> {
         let kept = removed
@@ -295,43 +296,29 @@ impl Manager {
 
     /// Remove `chat` for its export, with the chats that go with it, of
     /// those `unsaved` confirms, once its agent has reported the session the
-    /// package continues and its package is made, stopping the running
-    /// agents, so their sessions' files stop changing and only writing them
-    /// is left. A chat that joins it meanwhile keeps it here.
+    /// package continues, stopping the running agents, so their sessions'
+    /// files stop changing and only writing them is left, and prepare the
+    /// package of the record its removal keeps. A chat that joins it
+    /// meanwhile keeps it here.
     async fn end_chat_for_export(&self, chat: Chat, unsaved: &UnsavedWork) -> Result<Prepared> {
-        let (repo, continues) = self.movable_chat(&chat).await?;
+        self.ensure_movable_chat(&chat).await?;
         let carried = self.chats_carried_by(&chat.id).await?;
         let taking = self.chat_taking(&chat.id, unsaved).await?;
-        let id = chat.id.clone();
-        let mut manifest = Manifest::of(repo.as_ref(), Source::Chat(chat)).await?;
-        (self.remove_chat(&SpaceSelector::id(&id), Some(taking))).await?;
-        manifest.chats = self.carried_records(&carried).await?;
-        Ok(Prepared {
-            repo,
-            manifest,
-            removal: None,
-            settings: None,
-            kept_sessions: Vec::new(),
-            continues: Some(continues),
-        })
+        (self.remove_chat(&SpaceSelector::id(&chat.id), Some(taking))).await?;
+        let removed = self.removal_record(&chat.id).await?;
+        self.prepare_removed_chat(removed, &carried).await
     }
 
-    /// The repository of `chat`, which moves to another machine, none for a
-    /// chat without one, and how the user continues it here, refusing a chat
-    /// whose agent reported no session to continue and one with a space
-    /// below it that does not go with it.
-    async fn movable_chat(&self, chat: &Chat) -> Result<(Option<Repository>, String)> {
-        let repo = self.chat_repository(chat).await?;
-        let Some(continues) =
-            crate::transfer::continue_chat(chat, repo.as_ref().map(crate::repository::name))
-        else {
-            anyhow::bail!(
-                "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",
-                chat.name
-            );
-        };
-        self.ensure_only_carried_below(&chat.id, &chat.name).await?;
-        Ok((repo, continues))
+    /// Refuse to move `chat` to another machine while its agent reported no
+    /// session to continue, or a space below it that does not go with it
+    /// stays.
+    async fn ensure_movable_chat(&self, chat: &Chat) -> Result<()> {
+        ensure!(
+            chat.session.is_some(),
+            "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",
+            chat.name
+        );
+        self.ensure_only_carried_below(&chat.id, &chat.name).await
     }
 
     /// The files of the sessions the agents of the package `manifest`, of
