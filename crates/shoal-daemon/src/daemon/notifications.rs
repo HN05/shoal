@@ -109,7 +109,7 @@ pub(crate) fn insert(
         let pending: Option<i64> = tx
             .query_row(
                 "SELECT id FROM notifications WHERE read=0 AND workspace IS ?1
-                    AND workspace_id IS ?2 AND subject IS ?3 AND kind=?4 AND message=?5
+                    AND space_id IS ?2 AND subject IS ?3 AND kind=?4 AND message=?5
                     AND files=?6",
                 params![about.name, about.id, about.subject, kind, message, files],
                 |row| row.get(0),
@@ -120,7 +120,7 @@ pub(crate) fn insert(
         }
     }
     tx.execute(
-        "INSERT INTO notifications(created_at,workspace,workspace_id,subject,kind,message,files)
+        "INSERT INTO notifications(created_at,workspace,space_id,subject,kind,message,files)
             VALUES (?1,?2,?3,?4,?5,?6,?7)",
         params![
             crate::time::UnixTime::now(),
@@ -141,17 +141,17 @@ pub(crate) fn insert(
 }
 
 /// Delete the unread notification of `kind` recording `message` for the
-/// workspace `workspace_id`, so the user is not shown an event that no
-/// longer applies. Returns whether there was one.
+/// space `space_id`, so the user is not shown an event that no longer
+/// applies. Returns whether there was one.
 pub(crate) fn retract(
     tx: &rusqlite::Transaction<'_>,
-    workspace_id: &SpaceId,
+    space_id: &SpaceId,
     kind: NotificationKind,
     message: &str,
 ) -> Result<bool> {
     let deleted = tx.execute(
-        "DELETE FROM notifications WHERE read=0 AND workspace_id=?1 AND kind=?2 AND message=?3",
-        params![workspace_id, kind, message],
+        "DELETE FROM notifications WHERE read=0 AND space_id=?1 AND kind=?2 AND message=?3",
+        params![space_id, kind, message],
     )?;
     Ok(deleted > 0)
 }
@@ -178,9 +178,7 @@ fn withdraw_message(
 ) -> Result<Notification> {
     let notification = tx
         .query_row(
-            &format!(
-                "SELECT {COLUMNS} FROM notifications WHERE id=?1 AND workspace_id=?2 AND kind=?3"
-            ),
+            &format!("SELECT {COLUMNS} FROM notifications WHERE id=?1 AND space_id=?2 AND kind=?3"),
             params![id, space.id, NotificationKind::AgentMessage],
             row,
         )
@@ -211,7 +209,7 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Notification> {
 }
 
 const COLUMNS: &str = concat!(
-    "id,created_at,workspace,kind,message,read,workspace_id,",
+    "id,created_at,workspace,kind,message,read,space_id,",
     sent_files!("notifications.files")
 );
 
@@ -439,7 +437,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let count: i64 = db.query_row(
-                    "SELECT COUNT(*) FROM notifications WHERE read=0 AND workspace_id=?1",
+                    "SELECT COUNT(*) FROM notifications WHERE read=0 AND space_id=?1",
                     [space_id],
                     |row| row.get(0),
                 )?;

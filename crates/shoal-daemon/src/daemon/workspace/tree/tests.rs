@@ -1928,7 +1928,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number)
+                "INSERT INTO access_requests(id,space_id,target_key,name,record,active,number)
                     VALUES ('broken',?1,'secret/other','default','not json',0,99)",
                 [&other],
             )?;
@@ -2060,7 +2060,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
         .store
         .run(move |db| {
             db.execute(
-                "DELETE FROM access_requests WHERE workspace_id=?1 AND target_key='secret/token'",
+                "DELETE FROM access_requests WHERE space_id=?1 AND target_key='secret/token'",
                 [&parent_id],
             )?;
             Ok(())
@@ -2386,11 +2386,11 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
             manager.store.run(move |db| {
                 if approval_request {
                     db.execute(
-                        "UPDATE access_requests SET workspace_id=?1, record=json_set(record,'$.space_id',?1) WHERE space_number=?2 AND number=?3",
+                        "UPDATE access_requests SET space_id=?1, record=json_set(record,'$.space_id',?1) WHERE space_number=?2 AND number=?3",
                         rusqlite::params![replacement_owner, number.space, number.item],
                     )?;
                 } else {
-                    db.execute("UPDATE questions SET workspace_id=?1 WHERE space_number=?2 AND number=?3", rusqlite::params![replacement_owner, number.space, number.item])?;
+                    db.execute("UPDATE questions SET space_id=?1 WHERE space_number=?2 AND number=?3", rusqlite::params![replacement_owner, number.space, number.item])?;
                 }
                 Ok(())
             }).await.unwrap();

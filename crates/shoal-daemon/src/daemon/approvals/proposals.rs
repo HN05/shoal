@@ -10,10 +10,7 @@ use std::path::Path;
 
 use super::{
     ApprovalRequest, DecisionStatus, Specification, Target,
-    store::{
-        COLUMNS, OWNING_SPACE, by_key, current, decode_record, list, record_row, retire,
-        write_record,
-    },
+    store::{COLUMNS, by_key, current, decode_record, list, record_row, retire, write_record},
 };
 pub(crate) use crate::client::approvals::{
     Duplicate, Finding, ISSUE, IssueSpecification, PR, ProposalDecision, PullSpecification,
@@ -119,11 +116,9 @@ fn insert(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Result<Approval
     // space goes, and keeps its space's number from another space.
     let space = request.repository_id.is_none().then_some(&request.space_id);
     tx.execute(
-        &format!(
-            "INSERT INTO access_requests(id,workspace_id,chat_id,repository_id,target_key,name,
-                    record,space_number,number)
-                VALUES (?1,{OWNING_SPACE},?3,?4,?5,?6,?7,?8)"
-        ),
+        "INSERT INTO access_requests(id,space_id,repository_id,target_key,name,record,
+                space_number,number)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
         params![
             request.key,
             space,

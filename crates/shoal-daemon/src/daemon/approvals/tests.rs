@@ -64,7 +64,7 @@ fn save(db: &Connection, request: &ApprovalRequest) -> Result<()> {
         None => item_numbers::next(db, &request.space_id)?,
     };
     db.execute(
-        "INSERT OR REPLACE INTO access_requests(id,workspace_id,target_key,name,record,active,
+        "INSERT OR REPLACE INTO access_requests(id,space_id,target_key,name,record,active,
                 space_number,number)
             VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
         params![
@@ -117,7 +117,7 @@ async fn current_lookup_isolates_names_and_ignores_unrelated_history() -> Result
                 save(db, &request)?;
                 assert_eq!(current(db, owner, &target, "default")?.unwrap().key, id);
             }
-            db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('history','owner',?1,'default','invalid',0,100)", [&target])?;
+            db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,number) VALUES ('history','owner',?1,'default','invalid',0,100)", [&target])?;
             assert!(list(db, Some(&SpaceId::from("owner"))).is_err());
             assert_eq!(current(db, &SpaceId::from("owner"), &target, "default")?.unwrap().key, "wanted");
             assert!(current(db, &SpaceId::from("owner"), &target, "absent")?.is_none());
@@ -147,7 +147,7 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
                 request.name = key.into();
                 save(db, &request)?;
             }
-            db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,space_number,number) VALUES ('broken','other','simulator','default','invalid',0,2,3)", [])?;
+            db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,space_number,number) VALUES ('broken','other','simulator','default','invalid',0,2,3)", [])?;
             Ok(())
         }).await?;
     for (id, approve, status) in [
@@ -557,7 +557,7 @@ async fn resource_release_targets_both_scopes_and_rolls_back_invalid_candidates(
             db.execute("INSERT INTO resource_leases(id,workspace_id,scope,pool,name,resource,created_at,mode)
                 VALUES ('lease','owner','global','lock','default','lock',1,'read')", [])?;
             // Unrelated port history cannot block release, even without configured definitions.
-            db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('port','owner','port/web','default','invalid',1,100)", [])?;
+            db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,number) VALUES ('port','owner','port/web','default','invalid',1,100)", [])?;
             db.execute("UPDATE access_requests SET record=json_set(record,'$.status','unknown') WHERE id='repo'", [])?;
             Ok(())
         }).await?;
@@ -595,7 +595,7 @@ async fn resource_release_targets_both_scopes_and_rolls_back_invalid_candidates(
 fn unrelated_history(db: &Connection, count: i64) -> Result<()> {
     db.execute(
         "WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<?1)
-            INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number)
+            INSERT INTO access_requests(id,space_id,target_key,name,record,active,number)
             SELECT 'history-'||x, CASE WHEN x%2=0 THEN 'owner' ELSE 'other' END,
                 CASE WHEN x%2=0 THEN 'port/other' ELSE 'resource/global/lock' END,
                 'default', 'invalid', 0, 100000+x FROM n",
@@ -725,11 +725,9 @@ async fn bundled_planner_bounds_lookups_and_limits_candidate_decoding() -> Resul
             let current_plan = plan(db, CURRENT, params!["owner", target, "default"])?;
             let candidate_plan = plan(db, CANDIDATES, params!["owner", target])?;
             assert!(id_plan.contains("SEARCH access_requests USING INDEX sqlite_autoindex_access_requests_1 (id=?)"), "{id_plan}");
-            assert!(current_plan.contains("SEARCH access_requests USING INDEX access_request_name (workspace_id=? AND target_key=? AND name=?)"), "{current_plan}");
-            assert!(current_plan.contains("SEARCH access_requests USING INDEX access_request_chat_name (chat_id=? AND target_key=? AND name=?)"), "{current_plan}");
-            assert!(candidate_plan.contains("SEARCH access_requests USING INDEX access_request_target (workspace_id=? AND target_key=?)"), "{candidate_plan}");
-            assert!(candidate_plan.contains("SEARCH access_requests USING INDEX access_request_chat_target (chat_id=? AND target_key=?)"), "{candidate_plan}");
-            db.execute_batch("SAVEPOINT without_index; DROP INDEX access_request_target; DROP INDEX access_request_chat_target;")?;
+            assert!(current_plan.contains("SEARCH access_requests USING INDEX access_request_name (space_id=? AND target_key=? AND name=?)"), "{current_plan}");
+            assert!(candidate_plan.contains("SEARCH access_requests USING INDEX access_request_target (space_id=? AND target_key=?)"), "{candidate_plan}");
+            db.execute_batch("SAVEPOINT without_index; DROP INDEX access_request_target;")?;
             let old_plan = plan(db, CANDIDATES, params!["owner", target])?;
             assert!(old_plan.contains("SCAN access_requests"), "{old_plan}");
             db.execute_batch("ROLLBACK TO without_index; RELEASE without_index;")?;

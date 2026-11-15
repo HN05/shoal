@@ -127,16 +127,13 @@ impl AskFromChat for Ask {
     }
 }
 
-/// A question's space, workspace or chat, by ID, as a filter names it.
-const SPACE: &str = "COALESCE(q.workspace_id,q.chat_id)";
-
 const SELECT: &str = concat!(
-    "SELECT q.space_number,q.number,COALESCE(q.workspace_id,q.chat_id),s.name,q.created_at,
+    "SELECT q.space_number,q.number,q.space_id,s.name,q.created_at,
     q.question,q.recommendation,q.reason,q.choices,q.answer,q.answered_at,
     (SELECT m.id FROM space_messages m WHERE m.id=q.message_id),
     q.closed_at,q.withdrawn,q.in_chat,",
     sent_files!("q.files"),
-    " FROM questions q LEFT JOIN spaces s ON s.id=COALESCE(q.workspace_id,q.chat_id)"
+    " FROM questions q LEFT JOIN spaces s ON s.id=q.space_id"
 );
 
 fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Question, String)> {
@@ -204,7 +201,7 @@ fn repeated(
 ) -> Result<Option<Question>> {
     let candidates = query(
         tx,
-        &format!("WHERE {SPACE}=?1 AND q.question=?2"),
+        "WHERE q.space_id=?1 AND q.question=?2",
         params![space_id, ask.question],
     )?;
     let Some(question) = candidates.into_iter().rev().find(|question| {
@@ -228,30 +225,25 @@ fn repeated(
     Ok(Some(question))
 }
 
-/// Record `ask` from the agents of `space` with the files `files`, asked in
-/// the conversation when `in_chat`, under the space's next number and
-/// return that number.
+/// Record `ask` from the agents of the space `space_id` with the files
+/// `files`, asked in the conversation when `in_chat`, under the space's next
+/// number and return that number.
 fn insert(
     tx: &Transaction<'_>,
-    space: &PresentSpace,
+    space_id: &SpaceId,
     ask: &Ask,
     files: &[SentFile],
     in_chat: bool,
 ) -> Result<ItemNumber> {
-    let number = item_numbers::next(tx, space.id())?;
-    let (workspace_id, chat_id) = match space {
-        PresentSpace::Workspace(workspace) => (Some(&workspace.id), None),
-        PresentSpace::Chat(chat) => (None, Some(&chat.id)),
-    };
+    let number = item_numbers::next(tx, space_id)?;
     tx.execute(
-        "INSERT INTO questions(space_number,number,workspace_id,chat_id,created_at,question,
+        "INSERT INTO questions(space_number,number,space_id,created_at,question,
                 recommendation,reason,choices,in_chat,files)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
         params![
             number.space,
             number.item,
-            workspace_id,
-            chat_id,
+            space_id,
             crate::time::UnixTime::now(),
             ask.question,
             ask.recommendation,
@@ -372,7 +364,7 @@ fn record_answer(
 /// How many questions of the workspace or chat `space_id` are open.
 pub(crate) fn open_count(db: &Connection, space_id: &SpaceId) -> Result<usize> {
     let count: i64 = db.query_row(
-        &format!("SELECT COUNT(*) FROM questions q WHERE {SPACE}=?1 AND {OPEN}"),
+        &format!("SELECT COUNT(*) FROM questions q WHERE q.space_id=?1 AND {OPEN}"),
         [space_id],
         |row| row.get(0),
     )?;
@@ -383,7 +375,7 @@ pub(crate) fn open_count(db: &Connection, space_id: &SpaceId) -> Result<usize> {
 pub(crate) fn asking_spaces(db: &Connection) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare(&format!(
-            "SELECT DISTINCT {SPACE} FROM questions q WHERE {OPEN}"
+            "SELECT DISTINCT q.space_id FROM questions q WHERE {OPEN}"
         ))?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
@@ -395,7 +387,7 @@ pub(crate) fn close_open(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Vec
     let closed = QuestionStatus::Closed {
         closed_at: crate::time::UnixTime::now(),
     };
-    let filter = format!("{SPACE}=:space_id AND {OPEN}");
+    let filter = format!("q.space_id=:space_id AND {OPEN}");
     let mut numbers =
         store_status_where(tx, &closed, &filter, named_params! {":space_id": space_id})?;
     numbers.sort_unstable();
@@ -488,7 +480,7 @@ fn record(
         return Ok(Recorded::Repeated(question));
     }
     let in_chat = matches!(asker, Asker::Chat(_));
-    let number = insert(tx, space, ask, files, in_chat)?;
+    let number = insert(tx, space.id(), ask, files, in_chat)?;
     let question = by_number(tx, number)?.context("recorded question is missing")?;
     Ok(Recorded::New(question))
 }
@@ -521,7 +513,7 @@ pub(crate) fn set_chat_mark(db: &Connection, turn: &Turn, marked: bool) -> Resul
 fn close_in_chat(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Vec<(Question, bool)>> {
     let open = query(
         tx,
-        &format!("WHERE {SPACE}=?1 AND q.in_chat AND {OPEN}"),
+        &format!("WHERE q.space_id=?1 AND q.in_chat AND {OPEN}"),
         [space_id],
     )?;
     let withdrawn_at = crate::time::UnixTime::now();
@@ -551,7 +543,7 @@ pub(crate) fn delete_delivered(
     message_id: i64,
 ) -> Result<()> {
     tx.execute(
-        "DELETE FROM questions WHERE COALESCE(workspace_id,chat_id)=?1 AND message_id=?2",
+        "DELETE FROM questions WHERE space_id=?1 AND message_id=?2",
         params![space_id, message_id],
     )?;
     Ok(())
@@ -672,7 +664,7 @@ impl Manager {
             .run(move |db| {
                 query(
                     db,
-                    &format!("WHERE (?1 IS NULL OR {SPACE}=?1) AND {OPEN}"),
+                    &format!("WHERE (?1 IS NULL OR q.space_id=?1) AND {OPEN}"),
                     [owner],
                 )
             })
@@ -703,10 +695,7 @@ impl Manager {
             .run(move |db| {
                 crate::daemon::store::exists(
                     db,
-                    &format!(
-                        "SELECT 1 FROM questions q
-                            WHERE (q.workspace_id=?1 OR q.chat_id=?1) AND {OPEN}"
-                    ),
+                    &format!("SELECT 1 FROM questions q WHERE q.space_id=?1 AND {OPEN}"),
                     [id],
                 )
             })

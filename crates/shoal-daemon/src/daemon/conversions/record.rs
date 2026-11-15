@@ -299,14 +299,6 @@ pub(crate) fn replace_chat(
     );
     let row = chat_row(tx, id)?;
     tx.execute(
-        "UPDATE questions SET workspace_id=chat_id,chat_id=NULL WHERE chat_id=?1",
-        [id],
-    )?;
-    tx.execute(
-        "UPDATE access_requests SET workspace_id=chat_id,chat_id=NULL WHERE chat_id=?1",
-        [id],
-    )?;
-    tx.execute(
         "INSERT INTO workspace_scopes(token,workspace_id)
             SELECT scope_token,id FROM chats WHERE id=?1 AND scope_token IS NOT NULL",
         [id],
@@ -336,14 +328,6 @@ pub(crate) fn relocated_chat(
 /// unread messages return to the chat.
 pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) -> Result<()> {
     give_back_chat_row(tx, id, row)?;
-    tx.execute(
-        "UPDATE questions SET chat_id=workspace_id,workspace_id=NULL WHERE workspace_id=?1",
-        [id],
-    )?;
-    tx.execute(
-        "UPDATE access_requests SET chat_id=workspace_id,workspace_id=NULL WHERE workspace_id=?1",
-        [id],
-    )?;
     // The chat's agent, which has yet to move, runs on as the chat's.
     tx.execute(
         "DELETE FROM executions WHERE space_id=?1 AND agent IS NULL",
@@ -397,14 +381,9 @@ pub(crate) fn replace_workspace(
         ],
     )?;
     spaces::convert(tx, id, SpaceKind::Chat, &chat.mode, &chat.narrowing)?;
-    tx.execute(
-        "UPDATE questions SET chat_id=workspace_id,workspace_id=NULL WHERE workspace_id=?1",
-        [id],
-    )?;
     // Requests bound to the worktree, its branch or its leases go with them.
     tx.execute(
-        "UPDATE access_requests SET chat_id=workspace_id,workspace_id=NULL
-         WHERE workspace_id=?1 AND target_key LIKE 'action/%'",
+        "DELETE FROM access_requests WHERE space_id=?1 AND target_key NOT LIKE 'action/%'",
         [id],
     )?;
     let released = release_decided_by(tx, id)?;

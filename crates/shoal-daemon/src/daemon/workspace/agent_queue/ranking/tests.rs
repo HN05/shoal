@@ -114,7 +114,7 @@ async fn waits_come_from_blockers_questions_stacks_and_leases() {
                 params![asking, stacked],
             )?;
             db.execute(
-                "INSERT INTO questions(space_number,number,workspace_id,created_at,question,
+                "INSERT INTO questions(space_number,number,space_id,created_at,question,
                         recommendation,choices)
                     VALUES (9,1,?1,1,'Which?','This','[]')",
                 [asking],

@@ -588,6 +588,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 185 {
         db.execute_batch(include_str!("space_holds.sql"))?;
     }
+    if version >= 186 {
+        db.execute_batch(include_str!("space_columns.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -2053,7 +2056,7 @@ async fn failed_quarantine_rolls_back_without_undoing_migration() {
     assert_eq!(migrated.run(operation_snapshot).await.unwrap(), before);
     migrated.run(|db| {
             assert_eq!(db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?, SCHEMA_VERSION);
-            db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('request','preparing','pool','default','{}',1,1)", [])?;
+            db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,number) VALUES ('request','preparing','pool','default','{}',1,1)", [])?;
             db.execute_batch("DROP TRIGGER fail_quarantine;")?;
             Ok(())
         }).await.unwrap();
@@ -2080,10 +2083,10 @@ async fn approval_records_survive_reopen_and_follow_workspace_ownership() {
         }).await.unwrap();
     let migrated = Store::open(path.clone()).await.unwrap();
     migrated.run(|db| {
-            db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('request','workspace','pool','default','{}',1,1)", [])?;
-            assert!(db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('duplicate','workspace','pool','default','{}',1,2)", []).is_err());
-            assert!(db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('orphan','missing','pool','default','{}',1,3)", []).is_err());
-            assert!(db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('renumbered','workspace','pool','other','{}',1,1)", []).is_err());
+            db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,number) VALUES ('request','workspace','pool','default','{}',1,1)", [])?;
+            assert!(db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,number) VALUES ('duplicate','workspace','pool','default','{}',1,2)", []).is_err());
+            assert!(db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,number) VALUES ('orphan','missing','pool','default','{}',1,3)", []).is_err());
+            assert!(db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,number) VALUES ('renumbered','workspace','pool','other','{}',1,1)", []).is_err());
             Ok(())
         }).await.unwrap();
     Store::open(path)
@@ -2098,7 +2101,7 @@ async fn approval_records_survive_reopen_and_follow_workspace_ownership() {
             assert_eq!(count(db)?, 1);
             db.execute("UPDATE workspaces SET state='failed'", [])?;
             assert_eq!(count(db)?, 1);
-            db.execute("DELETE FROM workspaces", [])?;
+            db.execute("DELETE FROM spaces", [])?;
             assert_eq!(count(db)?, 0);
             Ok(())
         })
@@ -2379,12 +2382,10 @@ fn a_workspaces_questions_keep_their_numbers_as_questions_of_spaces() -> Result<
         [],
     )?;
     migrate(&mut db)?;
-    let kept: (String, Option<String>, i64) = db.query_row(
-        "SELECT workspace_id,chat_id,number FROM questions",
-        [],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-    )?;
-    assert_eq!(kept, ("workspace".to_owned(), None, 4));
+    let kept: (String, i64) = db.query_row("SELECT space_id,number FROM questions", [], |row| {
+        Ok((row.get(0)?, row.get(1)?))
+    })?;
+    assert_eq!(kept, ("workspace".to_owned(), 4));
     Ok(())
 }
 
@@ -2830,5 +2831,79 @@ fn migration_keeps_every_space_with_its_kind_number_and_files() -> Result<()> {
         |r| r.get(0),
     )?;
     assert_eq!(kind_rows, 0);
+    Ok(())
+}
+
+#[test]
+fn migration_keeps_questions_requests_and_notifications_with_their_spaces() -> Result<()> {
+    let mut db = historical_database(185)?;
+    db.execute_batch(
+        "BEGIN;
+         INSERT INTO chats(id,agent,started_at) VALUES ('chat','claude',1);
+         INSERT INTO spaces(id,kind,repository_id,name,number)
+             VALUES ('chat','chat','repo','talk',2);
+         COMMIT;
+         INSERT INTO questions(space_number,number,workspace_id,created_at,question,
+                 recommendation,choices)
+             VALUES (1,1,'workspace',1,'Which?','A','[]');
+         INSERT INTO questions(space_number,number,chat_id,created_at,question,
+                 recommendation,choices)
+             VALUES (2,1,'chat',1,'Which?','A','[]');
+         DELETE FROM sqlite_sequence WHERE name='questions';
+         INSERT INTO sqlite_sequence(name,seq) VALUES ('questions',7);
+         INSERT INTO access_requests(id,workspace_id,target_key,name,record,space_number,number)
+             VALUES ('workspace','workspace','port/web','web','{}',1,2);
+         INSERT INTO access_requests(id,chat_id,target_key,name,record,space_number,number)
+             VALUES ('chat','chat','port/web','web','{}',2,2);
+         INSERT INTO access_requests(id,repository_id,target_key,name,record,space_number,number)
+             VALUES ('issue','repo','issue_open','issue','{}',3,1);
+         INSERT INTO notifications(created_at,kind,message,workspace_id)
+             VALUES (1,'agent_message','hi','chat'),(1,'agent_message','gone','removed');",
+    )?;
+    migrate(&mut db)?;
+    let pairs = |sql: &str| -> Result<Vec<(String, Option<String>)>> {
+        Ok(db
+            .prepare(sql)?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?)
+    };
+    let owned = |id: &str, space: Option<&str>| (id.to_owned(), space.map(str::to_owned));
+    assert_eq!(
+        pairs("SELECT space_number||'.'||number,space_id FROM questions ORDER BY id")?,
+        [owned("1.1", Some("workspace")), owned("2.1", Some("chat"))]
+    );
+    assert_eq!(
+        pairs("SELECT id,space_id FROM access_requests ORDER BY rowid")?,
+        [
+            owned("workspace", Some("workspace")),
+            owned("chat", Some("chat")),
+            owned("issue", None)
+        ]
+    );
+    assert_eq!(
+        pairs("SELECT message,space_id FROM notifications ORDER BY id")?,
+        [owned("hi", Some("chat")), owned("gone", Some("removed"))]
+    );
+    // The issue proposal keeps its number from the next space.
+    let free: i64 = db.query_row("SELECT number FROM free_space_number", [], |r| r.get(0))?;
+    assert_eq!(free, 4);
+    // Question IDs go on from the last one taken.
+    db.execute(
+        "INSERT INTO questions(space_number,number,space_id,created_at,question,
+                recommendation,choices)
+            VALUES (1,3,'workspace',1,'Which?','A','[]')",
+        [],
+    )?;
+    assert_eq!(db.last_insert_rowid(), 8);
+    // A space's questions and requests go with it, and its notifications stay.
+    db.execute("DELETE FROM spaces WHERE id='chat'", [])?;
+    let left: (i64, i64, i64) = db.query_row(
+        "SELECT (SELECT COUNT(*) FROM questions WHERE space_id='chat'),
+            (SELECT COUNT(*) FROM access_requests WHERE space_id='chat'),
+            (SELECT COUNT(*) FROM notifications WHERE space_id='chat')",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
+    assert_eq!(left, (0, 0, 1));
     Ok(())
 }

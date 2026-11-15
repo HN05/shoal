@@ -17,22 +17,18 @@ fn spaces(db: &Connection) -> Result<()> {
 }
 
 fn question(db: &Connection, space: &str, number: ItemNumber) -> Result<()> {
-    let (workspace, chat) = match space {
-        "chat" => (None, Some(space)),
-        _ => (Some(space), None),
-    };
     db.execute(
-        "INSERT INTO questions(space_number,number,workspace_id,chat_id,created_at,question,
+        "INSERT INTO questions(space_number,number,space_id,created_at,question,
                 recommendation,choices)
-            VALUES (?1,?2,?3,?4,1,'Which?','This','[]')",
-        params![number.space, number.item, workspace, chat],
+            VALUES (?1,?2,?3,1,'Which?','This','[]')",
+        params![number.space, number.item, space],
     )?;
     Ok(())
 }
 
 fn request(db: &Connection, key: &str, number: ItemNumber) -> Result<()> {
     db.execute(
-        "INSERT INTO access_requests(id,workspace_id,target_key,name,record,space_number,number)
+        "INSERT INTO access_requests(id,space_id,target_key,name,record,space_number,number)
             VALUES (?1,'first','port/web',?1,'{}',?2,?3)",
         params![key, number.space, number.item],
     )?;

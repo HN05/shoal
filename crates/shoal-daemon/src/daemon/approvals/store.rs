@@ -35,9 +35,8 @@ pub(super) const COLUMNS: &str = select!();
 pub(super) const BY_KEY: &str = select!("WHERE id=?1");
 const BY_NUMBER: &str = select!("WHERE space_number=?1 AND number=?2");
 pub(super) const CURRENT: &str =
-    select!("WHERE (workspace_id=?1 OR chat_id=?1) AND target_key=?2 AND name=?3 AND active=1");
-pub(super) const CANDIDATES: &str =
-    select!("WHERE (workspace_id=?1 OR chat_id=?1) AND target_key=?2 ORDER BY rowid");
+    select!("WHERE space_id=?1 AND target_key=?2 AND name=?3 AND active=1");
+pub(super) const CANDIDATES: &str = select!("WHERE space_id=?1 AND target_key=?2 ORDER BY rowid");
 
 /// Whether a request the repository owns, an issue proposal, was made by
 /// the space `?1`; a malformed record of another space's history stays out
@@ -49,12 +48,6 @@ const REPOSITORY_OWNED: &str = "(repository_id IS NOT NULL
 /// record of another space's history stays out of the selection.
 const DECIDED_BY: &str =
     "CASE WHEN json_valid(record) THEN json_extract(record, '$.decider') END=?1";
-
-/// The `workspace_id` and `chat_id` of a request the space `?2` owns, one
-/// of them the space, the other none; both none without a space, for a
-/// proposed issue its repository owns.
-pub(super) const OWNING_SPACE: &str = "(SELECT id FROM spaces WHERE id=?2 AND kind='workspace'),
-        (SELECT id FROM spaces WHERE id=?2 AND kind='chat')";
 
 /// A stored request's key, record, active flag, number and whether its
 /// space is gone.
@@ -152,8 +145,7 @@ fn by_number(db: &Connection, number: ItemNumber) -> Result<Option<ApprovalReque
 /// for its repository.
 pub fn list(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
-        "{COLUMNS} WHERE ?1 IS NULL OR workspace_id=?1 OR chat_id=?1
-            OR {REPOSITORY_OWNED}
+        "{COLUMNS} WHERE ?1 IS NULL OR space_id=?1 OR {REPOSITORY_OWNED}
         ORDER BY rowid"
     ))?
     .query_map([owner], record_row)?
@@ -165,8 +157,7 @@ pub fn list(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<ApprovalRequ
 /// the order they were made: what the space lists.
 fn list_of_space(db: &Connection, space: Option<&SpaceId>) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
-        "{COLUMNS} WHERE ?1 IS NULL OR workspace_id=?1 OR chat_id=?1
-            OR {REPOSITORY_OWNED} OR {DECIDED_BY}
+        "{COLUMNS} WHERE ?1 IS NULL OR space_id=?1 OR {REPOSITORY_OWNED} OR {DECIDED_BY}
         ORDER BY rowid"
     ))?
     .query_map([space], record_row)?
@@ -226,7 +217,7 @@ pub fn check(
     )?);
     request.key = uuid::Uuid::new_v4().to_string();
     request.number = item_numbers::next(tx, &request.space_id)?;
-    tx.execute(&format!("INSERT INTO access_requests(id,workspace_id,chat_id,target_key,name,record,space_number,number) VALUES (?1,{OWNING_SPACE},?3,?4,?5,?6,?7)"),
+    tx.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,space_number,number) VALUES (?1,?2,?3,?4,?5,?6,?7)",
         params![request.key,request.space_id,request.target,request.name,serde_json::to_string(&request)?,request.number.space,request.number.item])?;
     events::record_approval(tx, EventKind::ApprovalRequested, &request)?;
     Ok(Some(request))

@@ -221,6 +221,7 @@ fn remove_schema_objects(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    db.execute_batch(include_str!("space_columns_undo.sql"))?;
     db.execute_batch(include_str!("space_holds_undo.sql"))?;
     db.execute_batch(include_str!("events_by_space_undo.sql"))?;
     db.execute_batch(include_str!("review_sessions_undo.sql"))?;
@@ -564,7 +565,7 @@ fn renames_questions_and_children_reach_their_spaces_logs() -> Result<()> {
              VALUES ('chat','chat','repo','helper','chat');
          UPDATE spaces SET name='Fix login' WHERE id='child';
          UPDATE workspaces SET branch='fix/login' WHERE id='child';
-         INSERT INTO questions(space_number,number,workspace_id,created_at,question,
+         INSERT INTO questions(space_number,number,space_id,created_at,question,
                  recommendation,choices)
              VALUES (2,1,'child',1,'Which database?','SQLite','[]');
          UPDATE questions SET answer='SQLite',answered_at=2 WHERE number=1;
