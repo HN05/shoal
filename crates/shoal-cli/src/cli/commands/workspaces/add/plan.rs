@@ -1,17 +1,17 @@
 //! What an addition creates: the [`AddPlan`] a terminal host or the agent
 //! queue's worker carries out, built from the command's arguments.
-use shoal_refs::BranchName;
 use std::ffi::OsString;
 
 use anyhow::Result;
 
-use super::{AddOptions, target::AddTarget};
+use super::{AddOptions, reads::DaemonReads, target::AddTarget};
 use crate::{
     cli::{
         commands::{issues, repositories},
         context::Context,
     },
-    env, git,
+    env,
+    launches::workspace,
     start_plan::{AddPlan, Creation, ResolvedAddAgent},
     terminal::PlaceName,
 };
@@ -68,46 +68,14 @@ pub(super) async fn plan_addition(
     })
 }
 
-/// The workspace name `creation` gives, else the one it will derive. An
-/// existing branch opens under its local name, so a remote's prefix is left
-/// out, as opening it does.
+/// The workspace name `creation` gives, else the one it will derive, as
+/// [`workspace::planned_name`] names it.
 pub(super) async fn planned_workspace_name(
     ctx: &Context,
     target: &AddTarget,
     creation: &Creation,
 ) -> Result<SpaceName> {
-    if let Some(name) = &creation.options.name {
-        return Ok(name.clone());
-    }
-    let branch = match (
-        &creation.branch,
-        opened_branch(ctx, target, creation).await?,
-    ) {
-        (Some(branch), _) => branch.clone(),
-        (None, Some(local)) => local,
-        (None, None) => (creation.copy.as_ref()).map_or_else(String::new, |copy| copy.name.clone()),
-    };
-    Ok(SpaceName::derive(&branch, "workspace"))
-}
-
-/// The local name of the existing branch `creation` opens, if any.
-async fn opened_branch(
-    ctx: &Context,
-    target: &AddTarget,
-    creation: &Creation,
-) -> Result<Option<String>> {
-    let Some(selector) = &creation.existing else {
-        return Ok(None);
-    };
-    if let Some(local) = git::strip_local(selector) {
-        return Ok(Some(local.to_owned()));
-    }
-    let repo = target.repository(ctx).await?;
-    let remote = git::remote_branch(&repo.path, selector).await?;
-    Ok(Some(remote.map_or_else(
-        || selector.clone(),
-        |(_, branch)| branch.into(),
-    )))
+    workspace::planned_name(target.repository(ctx).await?, creation).await
 }
 
 /// The existing workspace `plan` reopens: the one it names, else the one on
@@ -121,18 +89,8 @@ pub(super) async fn reopened_workspace(
     if plan.workspace.is_some() {
         return Ok(plan.workspace.clone());
     }
-    let Some(branch) = opened_branch(ctx, target, &plan.creation).await? else {
-        return Ok(None);
-    };
     let repo = target.repository(ctx).await?;
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-    Ok(workspaces
-        .into_iter()
-        .find(|workspace| {
-            workspace.repository_id == repo.id
-                && workspace.branch.as_ref().map(BranchName::as_str) == Some(&branch)
-        })
-        .map(|workspace| workspace.id))
+    workspace::reopened_workspace(&DaemonReads(ctx), repo, &plan.creation).await
 }
 
 /// Agent arguments as a queued launch carries them, refusing one that is

@@ -23,12 +23,11 @@ use crate::{
         output::{Palette, Style},
         shell, terminal,
     },
-    forge::items::reference::ItemInput,
     model::{QueueEntry, Workspace},
     paths::CommandPaths,
     protocol::{
         ConfigTarget,
-        operations::{Preparation, Prepared, QueuedLaunch, WorkspaceStart},
+        operations::{Preparation, Prepared, QueuedLaunch},
     },
     start_plan::{AddPlan, Creation, ResolvedAddAgent},
     state::QueueState,
@@ -328,42 +327,15 @@ async fn start_add_workspace<'c>(
     }: AddStart,
     issue: Option<&issues::Issue>,
 ) -> Result<Preparing<'c, CommandPaths>> {
-    let Creation {
-        path,
-        branch,
-        existing,
-        base,
-        git_profile,
-        pr,
-        options,
-        pull_head,
-        copy,
-        typed,
-    } = creation;
     let issue = issue.filter(|_| workspace.is_none());
-    let start = match (workspace, pull_head, existing, copy) {
-        (Some(workspace), ..) => WorkspaceStart::Workspace(SpaceSelector::Id(workspace)),
-        (None, Some(head), ..) => WorkspaceStart::PullHead {
-            url: match &pr {
-                Some(ItemInput::Url(url)) => url.clone(),
-                _ => anyhow::bail!("a PR head needs its PR's URL"),
-            },
-            head,
-        },
-        (None, None, Some(branch), _) => WorkspaceStart::Branch(branch),
-        (None, None, None, Some(copy)) => WorkspaceStart::Copy {
-            source: copy.source,
-            branch,
-            typed,
-        },
-        (None, None, None, None) => {
-            let branch = branch.context("a branch name is required")?;
-            match typed {
-                true => WorkspaceStart::Typed(branch),
-                false => WorkspaceStart::Name(branch),
-            }
-        }
-    };
+    let crate::start_plan::Opening {
+        start,
+        base,
+        path,
+        git_profile,
+        options,
+        pr,
+    } = creation.opening(workspace)?;
     let new = NewWorkspace {
         repository: target.selector.clone(),
         start,

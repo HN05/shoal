@@ -18,6 +18,7 @@ use super::{
     source::load_linked_issue,
     target::AddTarget,
 };
+use crate::launches::workspace;
 use crate::{
     agent::Agent,
     cli::{commands::issues, context::Context},
@@ -116,31 +117,18 @@ pub(super) async fn start_on_branch(
 }
 
 /// The first flag of a start that only the new workspace of `creation`, on
-/// `issue`, takes. The parent of a `--fork` start without a copy is the
-/// workspace whose agent it forks, which a start of an existing workspace's
-/// worker takes too, as `--in` does.
+/// `issue`, takes, as [`workspace::new_space_flag`] names it. The parent of
+/// a `--fork` start without a copy is the workspace whose agent it forks,
+/// which a start of an existing workspace's worker takes too, as `--in`
+/// does.
 fn new_space_flag(
     creation: &Creation,
     issue: Option<&ItemInput>,
     options: &AddOptions,
 ) -> Option<&'static str> {
     let forks_parent = options.fork.is_some() && creation.copy.is_none();
-    let new_space = [
-        ("--issue", issue.is_some()),
-        ("--name", creation.options.name.is_some()),
-        ("--parent", options.parent.is_some() && !forks_parent),
-        ("--base", creation.base.is_some()),
-        ("--path", creation.path.is_some()),
-        ("--git-profile", creation.git_profile.is_some()),
-        ("--copy", creation.copy.is_some()),
-        ("--skip-setup", creation.options.skip_setup),
-        ("--disposable", creation.options.disposable),
-        // `shoal priority` sets an existing workspace's.
-        ("--priority", creation.options.priority.is_some()),
-    ];
-    (new_space.into_iter())
-        .find(|(_, set)| *set)
-        .map(|(flag, _)| flag)
+    let parent = options.parent.is_some() && !forks_parent;
+    workspace::new_space_flag(creation, issue.is_some(), parent)
 }
 
 /// The plan that starts `agent` in `workspace` on `issue` with `args`,

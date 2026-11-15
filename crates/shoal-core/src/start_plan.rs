@@ -12,7 +12,10 @@ use anyhow::Result;
 use crate::{
     agent::{Agent, ModelChoice},
     model::{QueueRequest, Workspace},
-    protocol::{CreationOptions, PullHead, operations::QueuedLaunch},
+    protocol::{
+        CreationOptions, PullHead,
+        operations::{QueuedLaunch, WorkspaceStart},
+    },
     terminal::PlaceName,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -67,6 +70,69 @@ impl Creation {
         if self.base.is_none() && self.existing.is_none() && self.copy.is_none() {
             self.base = base;
         }
+    }
+}
+
+/// What opening a workspace a [`Creation`] describes starts at, with the
+/// rest it opens with.
+pub struct Opening {
+    pub start: WorkspaceStart,
+    pub base: Option<String>,
+    pub path: Option<PathBuf>,
+    pub git_profile: Option<String>,
+    pub options: CreationOptions,
+    /// The PR it links.
+    pub pr: Option<crate::forge::items::reference::ItemInput>,
+}
+
+impl Creation {
+    /// What opening this creation starts at: the recorded `workspace` a
+    /// launch goes to, else a PR's head, an existing branch, a copy, or a
+    /// new branch, typed or named.
+    pub fn opening(self, workspace: Option<SpaceId>) -> Result<Opening> {
+        let Self {
+            path,
+            branch,
+            existing,
+            base,
+            git_profile,
+            pr,
+            options,
+            pull_head,
+            copy,
+            typed,
+        } = self;
+        let start = match (workspace, pull_head, existing, copy) {
+            (Some(workspace), ..) => WorkspaceStart::Workspace(SpaceSelector::Id(workspace)),
+            (None, Some(head), ..) => WorkspaceStart::PullHead {
+                url: match &pr {
+                    Some(crate::forge::items::reference::ItemInput::Url(url)) => url.clone(),
+                    _ => anyhow::bail!("a PR head needs its PR's URL"),
+                },
+                head,
+            },
+            (None, None, Some(branch), _) => WorkspaceStart::Branch(branch),
+            (None, None, None, Some(copy)) => WorkspaceStart::Copy {
+                source: copy.source,
+                branch,
+                typed,
+            },
+            (None, None, None, None) => {
+                let branch = anyhow::Context::context(branch, "a branch name is required")?;
+                match typed {
+                    true => WorkspaceStart::Typed(branch),
+                    false => WorkspaceStart::Name(branch),
+                }
+            }
+        };
+        Ok(Opening {
+            start,
+            base,
+            path,
+            git_profile,
+            options,
+            pr,
+        })
     }
 }
 
