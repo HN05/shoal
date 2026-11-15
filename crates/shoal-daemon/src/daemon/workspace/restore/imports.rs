@@ -45,6 +45,7 @@ impl Manager {
     /// [`Self::import_space`] does before opening it, with the warnings of
     /// what it changed; an error leaves no record.
     async fn record_package(&self, import: SpaceImport) -> Result<(RemovedSpace, Vec<String>)> {
+        self.ensure_not_here(&import).await?;
         let repo = match &import.repository {
             Some(selector) => Some(self.repository(selector).await?),
             None => None,
@@ -72,6 +73,24 @@ impl Manager {
         };
         let removed = (self.record_imported(removed, &import.session_files)).await?;
         Ok((removed, warnings))
+    }
+
+    /// Refuse to import the space `import` packages under its ID while a
+    /// space here has that ID, whose kept session files and record the
+    /// import would replace; a copy takes an ID of its own.
+    async fn ensure_not_here(&self, import: &SpaceImport) -> Result<()> {
+        let id = &import.space.space_id;
+        if import.copy {
+            return Ok(());
+        }
+        if let Some(here) = self.find_space(id).await? {
+            bail!(
+                "{} is already here as space {}; import a copy of it, or remove it here first",
+                here.name(),
+                here.number()
+            );
+        }
+        Ok(())
     }
 
     /// The exported `removed` as [`Self::imported_record`] records it here,
@@ -257,9 +276,14 @@ impl Manager {
 }
 
 /// Record an imported space's removal record, a workspace's checkpoint under
-/// its next number with the record naming that number, unless its repository
-/// is being removed.
+/// its next number with the record naming that number, unless a space here
+/// has its ID or its repository is being removed.
 fn record_import(tx: &rusqlite::Transaction<'_>, mut removed: RemovedSpace) -> Result<()> {
+    let id = &removed.space_id;
+    ensure!(
+        !crate::daemon::store::exists(tx, "SELECT 1 FROM spaces WHERE id=?1", [id])?,
+        "a space with the ID {id} is already here"
+    );
     if let Some(repository) = &removed.repository_id {
         ensure!(
             !crate::daemon::store::repository_removing(tx, repository)?,

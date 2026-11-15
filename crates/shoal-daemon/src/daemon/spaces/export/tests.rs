@@ -709,3 +709,28 @@ async fn a_moved_chat_keeps_its_id_with_the_chats_it_carried_below_it() {
     let below = importing.chat_by_id(&helper.id).await.unwrap().unwrap();
     assert_eq!(below.parent.map(|parent| parent.id), Some(lead.id));
 }
+
+#[tokio::test]
+async fn an_import_under_the_id_of_a_space_here_is_refused_before_recording_it() {
+    let (root, manager, chat) = removed_chat("notes", "chat", Some("s1")).await;
+    let file = root.path().join("notes.shoal");
+    export_removed(&manager, &chat.id, &file).await.unwrap();
+    // Its record stays, so it can open here again before the import.
+    let selector = SpaceSelector::id(&chat.id);
+    manager.restore_space(&selector, None).await.unwrap();
+    let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
+    let repository = (chat.repository_id.as_ref()).map(|id| id.clone().into());
+    let space = SpaceImport {
+        repository,
+        ..chat_import(None, import.manifest.space.record)
+    };
+
+    let refused = manager.import_space(space).await.unwrap_err();
+
+    assert_eq!(
+        crate::refusal::Reason::of(&refused),
+        Some(crate::refusal::Reason::NotImported)
+    );
+    assert!(manager.removed_spaces().await.unwrap().is_empty());
+    assert!(manager.chat_by_id(&chat.id).await.unwrap().is_some());
+}
