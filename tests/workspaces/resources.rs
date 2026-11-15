@@ -1629,7 +1629,7 @@ fn rwlock_scope_and_kind_drift_preserve_active_leases() {
                 "release",
                 "resource",
                 "cache",
-                "--workspace",
+                "--space",
                 &fixture.id("first"),
                 "--name",
                 "default",

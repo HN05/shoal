@@ -3143,10 +3143,10 @@ grants, before matching typed settings. Malformed history outside those selectio
 does not block access; listings validate every selected record.
 
 Leases use top-level verbs that take the kind first: `acquire <kind>`,
-`release [kind [item]]` and `leases [kind]`, with `--workspace` instead of a
-positional workspace. Like `unlink`, omitting the item or kind widens release
+`release [kind [item]]` and `leases [kind]`, with `--space` instead of a
+positional space. Like `unlink`, omitting the item or kind widens release
 to every lease of that kind or in the workspace. Holds use the same verbs but
-keep a workspace rather than share capacity; releasing leases without a kind
+keep a space, a workspace or a chat, rather than share capacity; releasing leases without a kind
 preserves holds. `leases` shows leases and the usage that limits new ones;
 `catalog [kind]` shows the configuration and machine inventory they draw from,
 secrets without their commands; `history <kind>` shows a kind's audit trail,

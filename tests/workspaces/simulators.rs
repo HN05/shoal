@@ -166,7 +166,7 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
         "sim",
         "--name",
         "default",
-        "--workspace",
+        "--space",
         &fixture.id("second"),
     ]);
     assert!(!scoped.status.success());
