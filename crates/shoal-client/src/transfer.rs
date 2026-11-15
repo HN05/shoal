@@ -272,11 +272,11 @@ pub async fn import(
     request(daemon, method).await
 }
 
-/// Record the chat `chat` a package carried, of `repository`, as removed,
-/// and open it again.
+/// Record the chat `chat` a package carried, of `repository` or of none, as
+/// removed, and open it again.
 pub async fn import_chat(
     daemon: &impl Daemon,
-    repository: Selector,
+    repository: Option<Selector>,
     chat: RemovedSpace,
 ) -> Result<RestoredSpace> {
     let method = RemovalMethod::ImportChat {

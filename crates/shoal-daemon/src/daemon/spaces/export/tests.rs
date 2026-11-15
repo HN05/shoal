@@ -295,7 +295,10 @@ async fn a_workspace_moves_with_the_chats_in_it_and_below_it() {
         let sessions = (import.manifest).chat_sessions_on(carried, Some("elsewhere"), None);
         let chat = carried.chat_with(sessions);
         let repository = (&target_repo.id).into();
-        importing.import_chat(&repository, chat).await.unwrap();
+        importing
+            .import_chat(Some(&repository), chat)
+            .await
+            .unwrap();
     }
 
     // Each opens again under its ID, stopped, where it ran.
@@ -538,4 +541,44 @@ async fn a_chat_without_a_repository_moves_and_copies_for_root_dir() {
         assert!(packaged.outside_repositories);
         assert_eq!(import.manifest.remote_url, None);
     }
+}
+
+#[tokio::test]
+async fn a_chat_without_a_repository_below_one_moves_with_it_into_root_dir() {
+    let (root, manager) = manager().await;
+    let lead = crate::daemon::test_support::chat(&manager, "lead", "orchestrate", None, None).await;
+    manager
+        .record_chat_session(&lead.id, "s1".into())
+        .await
+        .unwrap();
+    let helper =
+        crate::daemon::test_support::chat(&manager, "helper", "orchestrate", None, Some(&lead.id))
+            .await;
+    let file = root.path().join("lead.shoal");
+    let selector = SpaceSelector::id(&lead.id);
+    (manager.export_space(
+        &selector,
+        UnsavedWork::All,
+        InspectionPolicy::GitOnly,
+        file.clone(),
+    ))
+    .await
+    .unwrap();
+    let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
+    let [carried] = import.manifest.chats.as_slice() else {
+        panic!("one chat goes with it: {:?}", import.manifest.chats);
+    };
+    let (_other, importing) = crate::daemon::test_support::manager().await;
+
+    let sessions = (import.manifest).chat_sessions_on(carried, Some("elsewhere"), None);
+    (importing.import_chat(None, carried.chat_with(sessions)))
+        .await
+        .unwrap();
+
+    let restored = importing.chat_by_id(&helper.id).await.unwrap().unwrap();
+    let root_dir = importing.config().root_dir(&importing.paths).unwrap();
+    assert_eq!(
+        (restored.repository_id, restored.root_dir),
+        (None, Some(root_dir))
+    );
 }

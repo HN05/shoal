@@ -14,10 +14,11 @@ use crate::{
     transfer::{CarriedChatExt, CarriedSessionFile, Manifest, ManifestExt},
 };
 
-/// A chat a package carries, as it opens here: the repository it goes to
-/// and its removal record, with the sessions its agent keeps here.
+/// A chat a package carries, as it opens here: the repository it goes to,
+/// none for a chat without one, and its removal record, with the sessions
+/// its agent keeps here.
 pub(super) struct ChatImport {
-    repository: crate::repository::Selector,
+    repository: Option<crate::repository::Selector>,
     chat: RemovedSpace,
 }
 
@@ -30,32 +31,52 @@ impl ChatImport {
     }
 }
 
-/// The chats `manifest` carries, as they open here: in `repository`, where
-/// the package goes, or with its own origin below a chat without one,
-/// keeping their sessions as `sessions` says.
+/// The chats `manifest` carries, as they open here, each in the repository
+/// [`destination`] names, keeping their sessions as `sessions` says. One
+/// that has no destination stays out, with a warning; the exporting machine
+/// keeps its removal record.
 pub(super) fn chats_here(
     manifest: &Manifest,
     repository: Option<&crate::repository::Selector>,
     sessions: Option<bool>,
-) -> Result<Vec<ChatImport>> {
+) -> Vec<ChatImport> {
     let machine = crate::process::machine::id();
-    let import = |carried: &crate::transfer::CarriedChat| {
-        let repository = match repository {
-            Some(repository) => repository.clone(),
-            None => ui::repository_selector(carried.remote_url.clone().with_context(|| {
-                format!(
-                    "chat {} came from a repository without an origin",
+    let mut chats = Vec::new();
+    for carried in &manifest.chats {
+        let repository = match destination(carried, repository) {
+            Ok(repository) => repository,
+            Err(error) => {
+                eprintln!(
+                    "warning: chat {} stays on the machine that exported it: {error:#}",
                     carried.chat.name
-                )
-            })?)?,
+                );
+                continue;
+            }
         };
         let kept = manifest.chat_sessions_on(carried, machine.as_deref(), sessions);
-        Ok(ChatImport {
+        chats.push(ChatImport {
             repository,
             chat: carried.chat_with(kept),
-        })
-    };
-    manifest.chats.iter().map(import).collect()
+        });
+    }
+    chats
+}
+
+/// The repository the `carried` chat goes to: none for a chat without one,
+/// else `repository`, where its package goes, or below a chat without one
+/// the repository with its own origin.
+fn destination(
+    carried: &crate::transfer::CarriedChat,
+    repository: Option<&crate::repository::Selector>,
+) -> Result<Option<crate::repository::Selector>> {
+    if carried.chat.repository_id.is_none() {
+        return Ok(None);
+    }
+    if let Some(repository) = repository {
+        return Ok(Some(repository.clone()));
+    }
+    let origin = (carried.remote_url.clone()).context("its repository has no origin")?;
+    Ok(Some(ui::repository_selector(origin)?))
 }
 
 /// Open each of `chats` again, with the session files among `files` its
@@ -94,7 +115,10 @@ async fn open_one(
         .filter(|file| kept.contains(&&file.file.session))
         .cloned()
         .collect();
-    let home = SessionHome::Repository(import.repository.clone());
+    let home = match &import.repository {
+        Some(repository) => SessionHome::Repository(repository.clone()),
+        None => SessionHome::Root,
+    };
     agents::install_session_files(ctx, home, &own, Existing::Continued).await;
     let mut reopened = reopened_chat(ctx, *restored).await?;
     if restore {

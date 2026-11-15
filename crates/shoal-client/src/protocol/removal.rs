@@ -135,9 +135,10 @@ pub enum RemovalMethod {
         session_files: Vec<crate::transfer::CarriedSessionFile>,
     },
     /// Record a chat another Shoal's package carried as a removed chat of
-    /// `repository` here, and open it again.
+    /// `repository` here, or without one, and open it again.
     ImportChat {
-        repository: crate::repository::Selector,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        repository: Option<crate::repository::Selector>,
         chat: Box<crate::model::RemovedSpace>,
     },
 }

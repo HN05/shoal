@@ -166,7 +166,7 @@ pub(super) async fn handle(
                 .await?,
         )),
         RemovalMethod::ImportChat { repository, chat } => {
-            Body::RestoredSpace(manager.import_chat(&repository, *chat).await?)
+            Body::RestoredSpace(manager.import_chat(repository.as_ref(), *chat).await?)
         }
     }))
 }
@@ -271,7 +271,10 @@ async fn administer<'a>(
 ) -> Result<Option<&'a mut SpaceSelector>> {
     let repository = match method {
         RemovalMethod::ImportWorkspace { repository, .. }
-        | RemovalMethod::ImportChat { repository, .. } => {
+        | RemovalMethod::ImportChat {
+            repository: Some(repository),
+            ..
+        } => {
             const REFUSAL: &str = "scoped processes import only into their own repository";
             *repository = manager.own_repository(caller, repository, REFUSAL).await?;
             Some(manager.repository(&*repository).await?.id)

@@ -160,7 +160,7 @@ impl Package {
             _ => Some(destination(&manifest, options)?),
         };
         let sessions = sessions_here(&manifest, options.sessions);
-        let chats = chats::chats_here(&manifest, repository.as_ref(), options.sessions)?;
+        let chats = chats::chats_here(&manifest, repository.as_ref(), options.sessions);
         let kept: BTreeSet<&AgentSessionId> = (sessions.reported())
             .map(|(_, session)| session)
             .chain(chats.iter().flat_map(ChatImport::sessions))
