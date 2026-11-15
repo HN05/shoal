@@ -108,7 +108,7 @@ pub enum CoordinationCommand {
     Priority {
         /// low (25), normal (50, the default), urgent (75), or a number
         /// from 0 to 100; higher goes first.
-        priority: crate::client::priority::Priority,
+        priority: shoal_schedule::priority::Priority,
         /// Space, a workspace or chat; defaults to the current workspace or
         /// chat, or a picker.
         space: Option<SpaceSelector>,

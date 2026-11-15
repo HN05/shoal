@@ -146,7 +146,7 @@ pub struct StartArgs {
     /// number from 0 to 100; its queued work starts before lower ones'. A
     /// space's agent gives at most its own space's.
     #[arg(long)]
-    pub priority: Option<crate::client::priority::Priority>,
+    pub priority: Option<shoal_schedule::priority::Priority>,
     /// The permissions a restored or imported chat was given, as JSON,
     /// which a start in a background place keeps unchecked.
     #[arg(long, hide = true, value_parser = recorded, conflicts_with = "permissions")]

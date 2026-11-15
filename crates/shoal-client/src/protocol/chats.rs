@@ -45,7 +45,7 @@ pub enum ChatMethod {
         /// The priority set on the chat; a scoped caller gives at most its
         /// own space's.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        priority: Option<crate::priority::Priority>,
+        priority: Option<shoal_schedule::priority::Priority>,
         /// The queued launch whose start records the chat, which a scoped
         /// process may have queued: the chat is then confined as that
         /// process's start would be.
@@ -161,7 +161,7 @@ pub struct ChatStart {
     /// The priority set on it; a scoped caller gives at most its own
     /// space's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub priority: Option<crate::priority::Priority>,
+    pub priority: Option<shoal_schedule::priority::Priority>,
     /// The variables of the terminal whose host opens its place; without
     /// them, the default host opens it.
     #[serde(default, skip_serializing_if = "Option::is_none")]

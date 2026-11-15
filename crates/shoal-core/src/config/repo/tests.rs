@@ -349,7 +349,7 @@ fn the_highest_priority_an_issues_labels_map_to_wins() {
     let priority = |labels: &[&str]| settings.of_labels(labels.iter().copied());
     assert_eq!(
         priority(&["low-priority", "bug", "urgent"]),
-        Some(crate::priority::Priority::URGENT)
+        Some(shoal_schedule::priority::Priority::URGENT)
     );
     assert_eq!(priority(&["bug"]), None);
     assert!(parse("[priority.labels]\nurgent = 101\n").is_err());

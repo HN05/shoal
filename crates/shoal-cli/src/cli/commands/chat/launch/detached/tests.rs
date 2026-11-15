@@ -1,4 +1,5 @@
-use crate::client::{priority::Priority, space_names::SpaceSelector};
+use crate::client::space_names::SpaceSelector;
+use shoal_schedule::priority::Priority;
 
 use super::*;
 use crate::{

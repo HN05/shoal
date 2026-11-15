@@ -2,6 +2,7 @@ use crate::agent::Agent;
 use crate::config::hooks::HookCommand;
 use crate::config::{modes, options::Options};
 use crate::sessions::HostName;
+use shoal_schedule::priority::Priority;
 use shoal_states::states;
 
 pub use crate::client::config::repo::{ConfigLayer, ConflictPolicy, PortDefinition};
@@ -692,15 +693,12 @@ pub struct PriorityConfig {
     /// The priority each forge label gives a space working on an issue
     /// with it, unless the space has one set.
     #[option(named)]
-    pub labels: BTreeMap<String, crate::priority::Priority>,
+    pub labels: BTreeMap<String, Priority>,
 }
 
 impl PrioritySettings {
     /// The highest priority `labels` map to, if any does.
-    pub fn of_labels<'a>(
-        &self,
-        labels: impl IntoIterator<Item = &'a str>,
-    ) -> Option<crate::priority::Priority> {
+    pub fn of_labels<'a>(&self, labels: impl IntoIterator<Item = &'a str>) -> Option<Priority> {
         (labels.into_iter())
             .filter_map(|label| self.labels.get(label).copied())
             .max()

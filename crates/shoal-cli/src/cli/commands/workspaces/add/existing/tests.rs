@@ -44,7 +44,7 @@ fn a_start_into_a_workspaces_branch_takes_only_a_forks_parent() {
     );
     let prioritized = Creation {
         options: crate::protocol::CreationOptions {
-            priority: Some(crate::client::priority::Priority::URGENT),
+            priority: Some(shoal_schedule::priority::Priority::URGENT),
             ..Default::default()
         },
         ..Creation::default()

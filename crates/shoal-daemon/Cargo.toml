@@ -22,6 +22,7 @@ shoal-forge.workspace = true
 shoal-forge-types = { workspace = true, features = ["rusqlite"] }
 shoal-ids = { workspace = true, features = ["rusqlite"] }
 shoal-refs = { workspace = true, features = ["rusqlite"] }
+shoal-schedule = { workspace = true, features = ["rusqlite"] }
 shoal-subprocess.workspace = true
 socket2 = "0.6"
 tempfile.workspace = true

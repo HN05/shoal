@@ -24,6 +24,7 @@ shoal-forge.workspace = true
 shoal-forge-types = { workspace = true, features = ["clap"] }
 shoal-ids.workspace = true
 shoal-refs.workspace = true
+shoal-schedule.workspace = true
 shoal-subprocess.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }

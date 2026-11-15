@@ -57,8 +57,8 @@ pub mod workers;
 use shoal_client as client;
 use shoal_client::time;
 use shoal_client::{
-    agent, approvals, connection, demos, model, priority, protocol, resources, sim, space_names,
-    state, validate,
+    agent, approvals, connection, demos, model, protocol, resources, sim, space_names, state,
+    validate,
 };
 use shoal_forge_types as forge;
 use shoal_subprocess as subprocess;

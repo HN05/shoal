@@ -443,7 +443,7 @@ async fn overload_stops_idle_agents_lowest_rank_first_before_working_ones() {
         .set_priority(
             None,
             &SpaceSelector::id(&agents[1].0.id),
-            crate::client::priority::Priority::URGENT,
+            shoal_schedule::priority::Priority::URGENT,
         )
         .await
         .unwrap();

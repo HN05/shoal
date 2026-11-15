@@ -13,6 +13,7 @@ rusqlite = [
     "dep:rusqlite",
     "shoal-ids/rusqlite",
     "shoal-refs/rusqlite",
+    "shoal-schedule/rusqlite",
     "shoal-states/rusqlite",
     "shoal-time/rusqlite",
 ]
@@ -33,6 +34,7 @@ shoal-config-derive.workspace = true
 shoal-forge-types.workspace = true
 shoal-ids.workspace = true
 shoal-refs.workspace = true
+shoal-schedule.workspace = true
 shoal-states.workspace = true
 shoal-time.workspace = true
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "sync", "time"] }

@@ -17,10 +17,13 @@ use std::{
     time::Duration,
 };
 
-use crate::client::{priority::Priority, time::UnixTime};
+use crate::client::time::UnixTime;
 use crate::config::machine::Schedule;
-use crate::model::{Dependency, InheritedRank, QueueRank, SharedArea, Tier};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_schedule::{
+    priority::Priority,
+    rank::{Dependency, InheritedRank, QueueRank, SharedArea, Tier},
+};
 
 /// How long an entry waits to rise one tier.
 const RISE_AFTER: Duration = Duration::from_secs(60 * 60);

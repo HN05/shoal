@@ -262,7 +262,7 @@ impl Manager {
         chat: Chat,
         home: ChatHome<'_>,
         parent: Option<SpaceId>,
-        priority: Option<crate::client::priority::Priority>,
+        priority: Option<shoal_schedule::priority::Priority>,
     ) -> Result<Chat> {
         ensure!(
             !self.agent_queue.suspended(),
@@ -517,7 +517,7 @@ pub struct NewChat {
     pub narrowing: crate::config::permissions::PermissionsConfig,
     pub origin: Option<crate::sessions::Origin>,
     pub parent: Option<SpaceId>,
-    pub priority: Option<crate::client::priority::Priority>,
+    pub priority: Option<shoal_schedule::priority::Priority>,
 }
 
 /// The reference a chat's record gives to the workspace it runs in.

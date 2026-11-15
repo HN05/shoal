@@ -7,11 +7,9 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    client::{
-        priority::{self, Priority},
-        space_names::SpaceSelector,
-    },
+    client::{priority, space_names::SpaceSelector},
 };
+use shoal_schedule::priority::Priority;
 
 /// Set `value` on the space `space` names, else the current one.
 pub(super) async fn run(

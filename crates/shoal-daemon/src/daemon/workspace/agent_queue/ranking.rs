@@ -11,10 +11,11 @@ use super::{
     rank::{self, Ranked, Snapshot},
     state::WaitingOneShot,
 };
-use crate::client::{priority::Priority, time::UnixTime};
+use crate::client::time::UnixTime;
 use crate::config::{Effective, machine::Schedule};
 use crate::daemon::{approvals::Target, workspace::Manager};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_schedule::priority::Priority;
 
 mod areas;
 mod edges;

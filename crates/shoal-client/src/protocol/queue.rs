@@ -73,7 +73,7 @@ pub enum QueueMethod {
     /// caller gives at most its own space's.
     SetPriority {
         space: SpaceSelector,
-        priority: crate::priority::Priority,
+        priority: shoal_schedule::priority::Priority,
     },
     /// Queue the restore of a stopped agent, which the daemon starts with
     /// `env` once admitted, or with `now` at once, regardless of the limits.

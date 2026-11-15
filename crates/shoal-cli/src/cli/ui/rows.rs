@@ -22,12 +22,10 @@ use crate::{
     },
     client::{executions::ServiceLimit, progress::Progress},
     config::modes::ModeName,
-    model::{
-        Asleep, Chat, Dependency, HeldBy, InheritedRank, QueueEntry, QueueRank, Repository,
-        ReviewMark, SharedArea, Tier, Workspace, WorkspaceUsage,
-    },
+    model::{Asleep, Chat, HeldBy, QueueEntry, Repository, ReviewMark, Workspace, WorkspaceUsage},
     state::{AgentState, QueueKind, QueueState},
 };
+use shoal_schedule::rank::{Dependency, InheritedRank, QueueRank, SharedArea, Tier};
 
 /// `items` joined by `separator` into lines no wider than `width`, where
 /// one item fits; no limit keeps one line.

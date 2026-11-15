@@ -1,6 +1,7 @@
 use super::*;
 use crate::time::UnixTime;
-use crate::{client::priority::Priority, forge::items::link::ItemKind, state::WorkspaceState};
+use crate::{forge::items::link::ItemKind, state::WorkspaceState};
+use shoal_schedule::priority::Priority;
 
 pub(super) fn workspace(
     repository: &str,

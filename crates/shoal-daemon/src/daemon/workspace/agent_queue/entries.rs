@@ -20,12 +20,11 @@ use crate::client::{
 };
 use crate::{
     daemon::{notifications::NotificationKind, scope::Caller, workspace::Manager},
-    model::{
-        PresentSpace, QueueAdmission, QueueEntry, QueueRank, QueueRequest, QueuedPlan, Workspace,
-    },
+    model::{PresentSpace, QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, Workspace},
     state::{QueueKind, QueueState},
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_schedule::rank::QueueRank;
 
 impl Manager {
     /// Admit `request` to a free slot or queue it. A launch that no limit

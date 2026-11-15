@@ -6,8 +6,8 @@
 //! running, as do light agents, a workspace's or a chat's. A woken agent
 //! reports no idle turn until it has worked one, so it finishes that turn
 //! before it can sleep for room again.
-use crate::client::priority::Priority;
 use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_schedule::priority::Priority;
 use std::collections::HashMap;
 
 use anyhow::Result;

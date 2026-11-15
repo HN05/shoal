@@ -121,7 +121,7 @@ pub(in crate::cli) struct ChatLaunch {
     /// The space it goes below.
     pub parent: Option<SpaceSelector>,
     /// The priority set on it.
-    pub priority: Option<crate::client::priority::Priority>,
+    pub priority: Option<shoal_schedule::priority::Priority>,
     pub settings: Effective,
     /// The rendered chat template.
     pub instructions: String,

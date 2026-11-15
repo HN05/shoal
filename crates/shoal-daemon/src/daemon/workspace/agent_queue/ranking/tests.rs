@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use rusqlite::params;
 
 use super::*;
-use crate::client::{priority::Priority, resources::Scope, space_names::SpaceSelector};
+use crate::client::{resources::Scope, space_names::SpaceSelector};
 use crate::{
     daemon::{
         scope::Caller,
@@ -14,8 +14,12 @@ use crate::{
             tests::{add, create, limit_globally, register, request},
         },
     },
-    model::{Blocker, Dependency, InheritedRank, QueueRank, QueueRequest, SharedArea, Tier},
+    model::{Blocker, QueueRequest},
     state::QueueState,
+};
+use shoal_schedule::{
+    priority::Priority,
+    rank::{Dependency, InheritedRank, QueueRank, SharedArea, Tier},
 };
 
 #[tokio::test]

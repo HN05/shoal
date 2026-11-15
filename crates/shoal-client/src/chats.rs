@@ -38,7 +38,7 @@ pub struct NewChat<'a> {
     /// caller's own space without one.
     pub parent: Option<&'a SpaceSelector>,
     /// The priority set on it.
-    pub priority: Option<crate::priority::Priority>,
+    pub priority: Option<shoal_schedule::priority::Priority>,
     /// The queued launch whose start records it, if any.
     pub queue_entry: Option<&'a shoal_ids::queue_entry_ids::QueueEntryId>,
 }

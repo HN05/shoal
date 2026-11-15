@@ -86,7 +86,7 @@ pub(super) struct LaunchRequest {
     pub env: std::collections::BTreeMap<String, String>,
     pub now: bool,
     pub blockers: Vec<crate::model::Blocker>,
-    pub priority: Option<crate::client::priority::Priority>,
+    pub priority: Option<shoal_schedule::priority::Priority>,
 }
 
 impl From<QueueRequest> for LaunchRequest {

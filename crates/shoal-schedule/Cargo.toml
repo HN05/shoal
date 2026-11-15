@@ -1,0 +1,20 @@
+[package]
+name = "shoal-schedule"
+version = "0.1.0"
+description = "The order the Shoal daemon's agent queue starts work in"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+# Store priorities in SQLite columns.
+rusqlite = ["dep:rusqlite"]
+
+[dependencies]
+anyhow.workspace = true
+rusqlite = { workspace = true, optional = true }
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
