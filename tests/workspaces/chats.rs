@@ -148,7 +148,7 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     // The resumed agent exited, which stops the chat again.
     assert_eq!(fixture.ok(&["list", "--chats"])[0]["running"], false);
     assert!(tmp_dir.exists());
-    assert_eq!(chat_kinds(&fixture), ["chat_started"]);
+    assert_eq!(chat_kinds(&fixture), ["created"]);
 }
 
 #[test]
@@ -264,16 +264,26 @@ fn a_chat_a_signal_saved_between_turns_waits_then_comes_back_in_its_place() {
     wait_until("restored chat stopped", || {
         fixture.ok(&["list", "--chats"])[0]["running"] == false
     });
-    assert_eq!(chat_kinds(&fixture), ["chat_started"]);
+    assert_eq!(chat_kinds(&fixture), ["created"]);
 }
 
-/// The kinds of the journal's chat events, in order.
+/// The kinds of the journal's chat creations, renames and removals, in
+/// order.
 fn chat_kinds(fixture: &Fixture) -> Vec<String> {
     journal(fixture)
         .into_iter()
-        .filter(|event| event["type"] == "chat")
+        .filter(|event| event["space_kind"] == "chat")
         .map(|event| event["kind"].as_str().unwrap().to_owned())
+        .filter(|kind| ["created", "renamed", "removed"].contains(&kind.as_str()))
         .collect()
+}
+
+/// The journal's first record of a chat's creation.
+fn chat_created(fixture: &Fixture) -> Value {
+    journal(fixture)
+        .into_iter()
+        .find(|event| event["kind"] == "created" && event["space_kind"] == "chat")
+        .unwrap()
 }
 
 /// A chat's agent that changes into a workspace below the chat acts on that
@@ -685,15 +695,13 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
             "fast"
         ]
     );
-    let started = journal(&fixture)
-        .into_iter()
-        .find(|event| event["kind"] == "chat_started")
-        .unwrap();
-    assert_eq!(started["type"], "chat");
-    assert_eq!(started["chat"]["repository_id"], id);
-    assert_eq!(started["chat"]["agent"], "claude");
-    assert_eq!(started["chat"]["name"], CHAT_NAME);
-    let chat_id = started["chat"]["id"].as_str().unwrap();
+    let started = chat_created(&fixture);
+    assert_eq!(started["type"], "event");
+    assert_eq!(started["repository_id"], id);
+    assert_eq!(started["agent"]["name"], "claude");
+    assert_eq!(started["name"], CHAT_NAME);
+    assert!(started["path"].is_null(), "{started}");
+    let chat_id = started["space_id"].as_str().unwrap();
     // It tells its session apart from a later one under the name before
     // recording the chat there.
     assert_eq!(calls[2], ["list"]);
@@ -708,7 +716,7 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     );
     assert_eq!(
         fs::read_to_string(home.join("chat-id")).unwrap().trim(),
-        started["chat"]["id"].as_str().unwrap()
+        chat_id
     );
     assert_eq!(
         fs::read_to_string(home.join("chat-output")).unwrap().trim(),
@@ -863,11 +871,8 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         "{}\n{transcript}",
         printed(&output)
     );
-    let started = journal(&fixture)
-        .into_iter()
-        .find(|event| event["kind"] == "chat_started")
-        .unwrap();
-    let chat = &started["chat"]["id"];
+    let started = chat_created(&fixture);
+    let chat = &started["space_id"];
     let added: Value =
         serde_json::from_str(&fs::read_to_string(home.join("chat-add")).unwrap()).unwrap();
     assert_eq!(added["parent"]["id"], *chat, "{added}");
@@ -883,21 +888,32 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     // the zmx session it runs in.
     let chats: Value =
         serde_json::from_str(&fs::read_to_string(home.join("chat-chats")).unwrap()).unwrap();
-    let mut listed = started["chat"].clone();
-    listed["origin"] = serde_json::json!({"host": "zmx", "place": "outer"});
+    assert_eq!(chats.as_array().map(Vec::len), Some(1), "{chats}");
+    let listed = &chats[0];
+    assert_eq!(
+        [&listed["id"], &listed["name"], &listed["agent"]],
+        [chat, &started["name"], &started["agent"]["name"]]
+    );
+    assert_eq!(
+        listed["origin"],
+        serde_json::json!({"host": "zmx", "place": "outer"})
+    );
     // The agent ran with its own temporary directory, which the listing names.
     let tmp_dir = fs::read_to_string(home.join("chat-tmpdir")).unwrap();
     assert!(
         tmp_dir.ends_with(&format!("/.tmp/{}", chat.as_str().unwrap())),
         "{tmp_dir}"
     );
-    listed["tmp_dir"] = tmp_dir.into();
-    listed["parent"] = Value::Null;
-    listed["running"] = true.into();
-    listed["children"] = serde_json::json!([{
-        "id": added["id"], "name": "chat-worker", "kind": "workspace", "branch": added["branch"],
-    }]);
-    assert_eq!(chats, serde_json::json!([listed]));
+    assert_eq!(listed["tmp_dir"], tmp_dir.as_str());
+    assert!(listed["parent"].is_null(), "{listed}");
+    assert_eq!(listed["running"], true);
+    assert_eq!(
+        listed["children"],
+        serde_json::json!([{
+            "id": added["id"], "name": "chat-worker", "kind": "workspace",
+            "branch": added["branch"],
+        }])
+    );
     // `list` shows the workspace under its chat.
     let rows = fs::read_to_string(home.join("chat-work")).unwrap();
     let rows: Vec<&str> = rows.lines().collect();

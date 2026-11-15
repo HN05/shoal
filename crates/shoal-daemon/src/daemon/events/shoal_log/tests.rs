@@ -9,16 +9,21 @@ const JOURNAL: &str = "
     INSERT INTO workspaces(id,path,branch,state) VALUES ('plan','/plan','plan','ready');
     INSERT INTO spaces(id,kind,repository_id,name) VALUES ('plan','workspace','repo','plan');
     COMMIT;
-    INSERT INTO workspace_events(record) VALUES
-        (json_object('kind','daemon_started','version','1.0.0')),
-        (json_object('kind','created','workspace_id','fix-id','name','fix')),
-        (json_object('kind','agent_state','workspace_id','fix-id','name','fix',
+    INSERT INTO space_events(space_id,record) VALUES
+        (NULL,json_object('kind','daemon_started','version','1.0.0')),
+        ('fix-id',json_object('kind','created','space_id','fix-id','space_kind','workspace',
+            'name','fix')),
+        ('fix-id',json_object('kind','agent_state','space_id','fix-id','space_kind','workspace',
+            'name','fix',
             'agent_state',json_object('state','working'))),
-        (json_object('kind','removed','workspace_id','fix-id','name','fix','cause','idle')),
-        (json_object('kind','cleanup_ran','removed',json_array('fix'))),
-        (json_object('kind','created','workspace_id','fix-id','name','fix')),
-        (json_object('kind','restored','workspace_id','fix-id','name','fix')),
-        (json_object('kind','config_reloaded','error','expected a table'));";
+        ('fix-id',json_object('kind','removed','space_id','fix-id','space_kind','workspace',
+            'name','fix','cause','idle')),
+        (NULL,json_object('kind','cleanup_ran','removed',json_array('fix'))),
+        ('fix-id',json_object('kind','created','space_id','fix-id','space_kind','workspace',
+            'name','fix')),
+        ('fix-id',json_object('kind','restored','space_id','fix-id','space_kind','workspace',
+            'name','fix')),
+        (NULL,json_object('kind','config_reloaded','error','expected a table'));";
 
 /// Each entry as its space's name and kind, or Shoal's kind alone.
 fn lines(entries: &[LogEntry]) -> Vec<String> {
@@ -64,7 +69,7 @@ async fn shoal_s_log_reads_the_newest_entries_across_batches() {
     let journal = |db: &mut rusqlite::Connection| {
         Ok(db.execute_batch(
             "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<1200)
-             INSERT INTO workspace_events(record)
+             INSERT INTO space_events(record)
                  SELECT json_object('kind','daemon_started','version',CAST(i AS TEXT)) FROM n;",
         )?)
     };

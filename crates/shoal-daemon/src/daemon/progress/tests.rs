@@ -6,7 +6,7 @@ use crate::{
         scope::{self, Caller},
         test_support::{manager, repository},
     },
-    model::Workspace,
+    model::{SpaceKind, Workspace},
     protocol::AgentMethod,
 };
 
@@ -127,7 +127,7 @@ async fn workspaces<const N: usize>(
 }
 
 /// The progress events of the journal, as the space and its status line.
-async fn progress_events(manager: &Manager) -> Vec<(Option<SpaceId>, Option<String>)> {
+async fn progress_events(manager: &Manager) -> Vec<(SpaceId, Option<String>)> {
     (manager
         .workspace_events(None, 100)
         .await
@@ -136,7 +136,7 @@ async fn progress_events(manager: &Manager) -> Vec<(Option<SpaceId>, Option<Stri
     .filter_map(|item| match item {
         EventItem::Event(event) if event.details.kind == EventKind::ProgressChanged => {
             let status = event.details.progress.and_then(|progress| progress.status);
-            Some((event.details.workspace_id, status))
+            Some((event.details.space_id, status))
         }
         _ => None,
     })
@@ -167,7 +167,7 @@ async fn changes_are_journaled_once_and_outlive_a_restart() {
         .set_progress(&selector, ProgressChange::Steps(steps))
         .await
         .unwrap();
-    let id = Some(workspace.id.clone());
+    let id = workspace.id.clone();
     let reproduced = Some("Reproduced".to_owned());
     assert_eq!(
         progress_events(&manager).await,
@@ -304,11 +304,8 @@ async fn a_chats_progress_is_its_own_and_goes_with_it() {
         .collect();
     assert_eq!(events.len(), 1);
     assert_eq!(
-        (
-            events[0].workspace_id.as_ref().map(SpaceId::as_str),
-            events[0].chat_id.as_ref().map(SpaceId::as_str)
-        ),
-        (None, Some(chat.id.as_str()))
+        (&events[0].space_id, events[0].space_kind),
+        (&chat.id, SpaceKind::Chat)
     );
     assert_eq!(events[0].repository_id.as_ref(), Some(&repo.id));
 

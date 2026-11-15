@@ -47,12 +47,12 @@ async fn connect(
 }
 
 async fn seed(manager: &Manager, count: usize) {
-    journal(manager, count, r#"{"kind":"ready","workspace_id":"w","repository_id":"r","name":"worker","path":"/work","branch":"worker","cause":null,"error":null}"#).await;
+    journal(manager, count, r#"{"kind":"ready","space_id":"w","space_kind":"workspace","repository_id":"r","name":"worker","path":"/work","branch":"worker","cause":null,"error":null}"#).await;
 }
 
 /// Journal `count` turn states of one workspace, which keeps its newest 500.
 async fn seed_turns(manager: &Manager, count: usize) {
-    journal(manager, count, r#"{"kind":"agent_state","workspace_id":"w","repository_id":"r","name":"worker","path":"/work","branch":"worker","cause":null,"error":null,"agent_state":{"state":"idle"}}"#).await;
+    journal(manager, count, r#"{"kind":"agent_state","space_id":"w","space_kind":"workspace","repository_id":"r","name":"worker","path":"/work","branch":"worker","cause":null,"error":null,"agent_state":{"state":"idle"}}"#).await;
 }
 
 async fn journal(manager: &Manager, count: usize, record: &'static str) {
@@ -60,7 +60,11 @@ async fn journal(manager: &Manager, count: usize, record: &'static str) {
         .store
         .write(move |tx| {
             for _ in 0..count {
-                tx.execute("INSERT INTO workspace_events(record) VALUES (?1)", [record])?;
+                tx.execute(
+                    "INSERT INTO space_events(space_id,record)
+                     VALUES (json_extract(?1,'$.space_id'),?1)",
+                    [record],
+                )?;
             }
             Ok(())
         })
@@ -273,7 +277,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         }
         assert!(manager.workspace_by_id(&workspace.id).await.is_err());
         let events = manager.workspace_events(None, 100).await.unwrap();
-        assert!(events.iter().any(|e| matches!(e, EventItem::Event(e) if e.details.space_id() == Some(&workspace.id) && e.details.kind == EventKind::Removed && e.details.cause == Some(cause))));
+        assert!(events.iter().any(|e| matches!(e, EventItem::Event(e) if e.details.space_id == workspace.id && e.details.kind == EventKind::Removed && e.details.cause == Some(cause))));
     }
     let workspace = manager
         .create_workspace(&repo.id, "retain".into(), None, None, None)
@@ -303,8 +307,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         .iter()
         .filter_map(|e| match e {
             EventItem::Event(e)
-                if e.details.space_id() == Some(&workspace.id)
-                    && e.details.kind == EventKind::Retained =>
+                if e.details.space_id == workspace.id && e.details.kind == EventKind::Retained =>
             {
                 Some(e.details.error.as_deref().unwrap())
             }

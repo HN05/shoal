@@ -53,7 +53,7 @@ fn batch_before(
     filter: LogFilter,
 ) -> Result<Vec<LogEntry>> {
     let mut statement = tx.prepare(
-        "SELECT id,created_at,record FROM workspace_events
+        "SELECT id,created_at,record FROM space_events
          WHERE id<?1 AND (?2 OR NOT bulk) ORDER BY id DESC LIMIT ?3",
     )?;
     let rows = statement.query_map(params![before, filter == LogFilter::All, BATCH], |row| {
@@ -80,9 +80,9 @@ fn shows(tx: &Transaction<'_>, entry: &LogEntry, filter: LogFilter) -> Result<bo
         return Ok(entry.is_entry());
     }
     let reopened: bool = tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM workspace_events
+        "SELECT EXISTS(SELECT 1 FROM space_events
              WHERE space_id=?1 AND id<?2 AND json_extract(record,'$.kind')=?3)",
-        params![event.details.space_id(), event.id, EventKind::Removed],
+        params![event.details.space_id, event.id, EventKind::Removed],
         |row| row.get(0),
     )?;
     Ok(!reopened)

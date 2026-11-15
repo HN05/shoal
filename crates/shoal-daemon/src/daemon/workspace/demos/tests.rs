@@ -489,7 +489,7 @@ async fn demo_events(
         .unwrap()
         .into_iter()
         .filter_map(|item| match item {
-            EventItem::Event(event) if event.details.space_id() == Some(workspace) => {
+            EventItem::Event(event) if event.details.space_id == *workspace => {
                 let demo = event.details.demo?;
                 Some((event.details.kind, demo.name, demo.udid))
             }

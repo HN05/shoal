@@ -582,6 +582,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 183 {
         db.execute_batch(include_str!("review_sessions.sql"))?;
     }
+    if version >= 184 {
+        db.execute_batch(include_str!("events_by_space.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -813,20 +816,16 @@ fn migration_names_recorded_chats_and_keeps_what_they_own() -> Result<()> {
     );
     assert_eq!(count(&db, "space_messages")?, 1);
     // The journal gains no events and names its chats as the rows do.
-    assert_eq!(count(&db, "workspace_events")?, events);
+    assert_eq!(count(&db, "space_events")?, events);
     let started = db
         .prepare(
-            "SELECT json_extract(record,'$.chat.name'),json_type(record,'$.chat.number')
-             FROM workspace_events WHERE json_extract(record,'$.kind')='chat_started' ORDER BY id",
+            "SELECT json_extract(record,'$.name') FROM space_events
+             WHERE json_extract(record,'$.kind')='created'
+                 AND json_extract(record,'$.space_kind')='chat' ORDER BY id",
         )?
-        .query_map([], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
-        })?
+        .query_map([], |r| r.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    assert_eq!(
-        started,
-        [("repo-chat".into(), None), ("repo-chat-3".into(), None)]
-    );
+    assert_eq!(started, ["repo-chat", "repo-chat-3"]);
     Ok(())
 }
 
@@ -894,7 +893,7 @@ fn migration_keeps_one_parent_for_each_space() -> Result<()> {
         ]
     );
     assert_eq!(
-        db.query_row("SELECT COUNT(*) FROM workspace_events", [], |r| r
+        db.query_row("SELECT COUNT(*) FROM space_events", [], |r| r
             .get::<_, i64>(0))?,
         events
     );
@@ -1657,7 +1656,7 @@ fn migration_keeps_each_space_completion_in_one_table() -> Result<()> {
     );
     // Moving the records journals nothing.
     assert_eq!(
-        db.query_row("SELECT COUNT(*) FROM workspace_events", [], |r| r
+        db.query_row("SELECT COUNT(*) FROM space_events", [], |r| r
             .get::<_, i64>(0))?,
         events
     );
@@ -1672,7 +1671,7 @@ fn migration_keeps_each_space_completion_in_one_table() -> Result<()> {
         0
     );
     let undone: i64 = db.query_row(
-        "SELECT COUNT(*) FROM workspace_events WHERE json_extract(record,'$.kind')='undone'",
+        "SELECT COUNT(*) FROM space_events WHERE json_extract(record,'$.kind')='undone'",
         [],
         |r| r.get(0),
     )?;
@@ -1778,7 +1777,7 @@ fn ready_marks_keep_their_items_and_lose_their_commit() -> Result<()> {
     // Its withdrawal reaches the journal without a commit.
     db.execute("DELETE FROM space_review", [])?;
     let review: String = db.query_row(
-        "SELECT json_extract(record,'$.review') FROM workspace_events ORDER BY id DESC LIMIT 1",
+        "SELECT json_extract(record,'$.review') FROM space_events ORDER BY id DESC LIMIT 1",
         [],
         |r| r.get(0),
     )?;
@@ -2634,13 +2633,13 @@ fn removed_spaces_keep_their_files_until_their_chat_or_removal_record_expires() 
     );
     // A removed chat's file events still name it as a chat.
     db.execute("DELETE FROM space_files WHERE space_id='chat'", [])?;
-    let chat: Option<String> = db.query_row(
-        "SELECT json_extract(record,'$.chat_id') FROM workspace_events
+    let chat: (String, String) = db.query_row(
+        "SELECT space_id,json_extract(record,'$.space_kind') FROM space_events
             WHERE json_extract(record,'$.kind')='file_removed'",
         [],
-        |r| r.get(0),
+        |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
-    assert_eq!(chat.as_deref(), Some("chat"));
+    assert_eq!(chat, ("chat".to_owned(), "chat".to_owned()));
     Ok(())
 }
 

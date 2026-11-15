@@ -504,7 +504,7 @@ mod streams {
         assert!(records.iter().all(|record| matches!(
             record,
             Record::LogEntry(entry) if matches!(&**entry, LogEntry::Event(event)
-                if event.details.space_id() == Some(&own.id))
+                if event.details.space_id == own.id)
         )));
         assert!(!records.is_empty());
         daemon

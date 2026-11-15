@@ -124,9 +124,8 @@ impl Manager {
 
 /// Every event of the space `id`, oldest first.
 fn events_of(db: &Connection, id: &SpaceId) -> Result<Vec<LogEntry>> {
-    let mut statement = db.prepare(
-        "SELECT id,created_at,record FROM workspace_events WHERE space_id=?1 ORDER BY id",
-    )?;
+    let mut statement =
+        db.prepare("SELECT id,created_at,record FROM space_events WHERE space_id=?1 ORDER BY id")?;
     let rows = statement.query_map([id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
     let mut entries = Vec::new();
     for row in rows {
@@ -162,8 +161,8 @@ fn shown(events: Vec<LogEntry>, filter: LogFilter, limit: u32) -> Vec<LogEntry> 
 fn removed(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
     Ok(db
         .query_row(
-            "SELECT space_id FROM workspace_events
-             WHERE json_extract(record,'$.kind') IN (?2,'chat_ended') AND space_id=?1
+            "SELECT space_id FROM space_events
+             WHERE json_extract(record,'$.kind')=?2 AND space_id=?1
                  AND space_id NOT IN (SELECT id FROM spaces)
              ORDER BY id DESC LIMIT 1",
             params![id, EventKind::Removed],
@@ -177,7 +176,7 @@ fn removed(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
 fn parent_at_removal(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
     Ok(db
         .query_row(
-            "SELECT space_id FROM workspace_events
+            "SELECT space_id FROM space_events
              WHERE json_extract(record,'$.kind')=?2 AND json_extract(record,'$.child.id')=?1
              ORDER BY id DESC LIMIT 1",
             params![id, EventKind::ChildRemoved],

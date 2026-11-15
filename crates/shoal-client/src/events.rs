@@ -1,6 +1,7 @@
-//! The journal of workspace, chat, file and Shoal events, as `shoal internal
-//! events` replays it.
+//! The journal of space, file and Shoal events, as `shoal internal events`
+//! replays it.
 use crate::execution_ids::ExecutionId;
+use crate::model::SpaceKind;
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::SpaceId;
 use crate::space_names::SpaceName;
@@ -157,26 +158,13 @@ states!(EventKind {
     ChildCreated => "child_created",
     /// A space below the space was removed.
     ChildRemoved => "child_removed",
-    /// The chat became a workspace, or the workspace a chat, which its
-    /// `workspace_id` or `chat_id` names; `path` and `branch` are the new
-    /// workspace's.
+    /// The chat became a workspace, or the workspace a chat, as its
+    /// `space_kind` says; `path` and `branch` are the new workspace's.
     Converted => "converted",
     /// Shoal ended the workspace's CI job, whose runner kept running after
     /// the forge finished the job's run.
     JobEnded => "job_ended",
 });
-
-states!(
-    /// What happened to a chat.
-    ChatEventKind {
-        Started => "chat_started",
-        /// The chat was removed, as journaled before its removal was
-        /// journaled as a space's `removed`.
-        Ended => "chat_ended",
-        /// The chat took a new name, which its `chat` carries.
-        Renamed => "chat_renamed",
-    }
-);
 
 states!(
     /// What happened to a file attached to a workspace or chat.
@@ -233,22 +221,21 @@ states!(EventCause {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventDetails {
     pub kind: EventKind,
-    /// Null for a chat's event.
-    pub workspace_id: Option<SpaceId>,
-    /// Null for a workspace's event.
-    #[serde(default)]
-    pub chat_id: Option<SpaceId>,
+    pub space_id: SpaceId,
+    /// What the space was when it recorded the event.
+    pub space_kind: SpaceKind,
     /// Null for a chat without a repository.
     pub repository_id: Option<RepositoryId>,
     pub name: SpaceName,
     /// Null for a chat.
     pub path: Option<PathBuf>,
-    /// Observed branch for branch changes; null for a detached HEAD.
+    /// Observed branch for branch changes; null for a chat and a detached
+    /// HEAD.
     pub branch: Option<BranchName>,
     pub cause: Option<EventCause>,
     pub error: Option<String>,
     /// The ref a workspace started from, such as `refs/heads/main`, on its
-    /// creation; null for one at a commit.
+    /// creation; null for one at a commit and for a chat.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_ref: Option<String>,
     /// The mark a review event describes.
@@ -301,7 +288,8 @@ pub struct EventDetails {
     /// The simulator lease acquired or released.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub simulator: Option<SimulatorEvent>,
-    /// The agent that started, stopped or exited.
+    /// The agent that started, stopped or exited, or that a chat was created
+    /// with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<AgentEvent>,
     /// The question asked or answered.
@@ -329,13 +317,6 @@ pub struct EventDetails {
     /// The blocker added, removed or cleared.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocker: Option<Box<BlockerEvent>>,
-}
-
-impl EventDetails {
-    /// The workspace or chat the event belongs to.
-    pub fn space_id(&self) -> Option<&SpaceId> {
-        self.workspace_id.as_ref().or(self.chat_id.as_ref())
-    }
 }
 
 /// Distinguish an absent field from an explicit null.
@@ -520,14 +501,6 @@ pub struct WorkspaceEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatEvent {
-    pub id: EventCursor,
-    pub created_at: UnixTime,
-    pub kind: ChatEventKind,
-    pub chat: crate::model::Chat,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileEvent {
     pub id: EventCursor,
     pub created_at: UnixTime,
@@ -535,15 +508,13 @@ pub struct FileEvent {
     pub details: FileEventDetails,
 }
 
-/// A file event as stored: the space is a workspace or a chat, which may be
-/// gone, so it carries the space's identity in place of its record.
+/// A file event as stored: its space may be gone, so it carries the space's
+/// identity in place of its record.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileEventDetails {
     pub kind: FileEventKind,
-    /// Null for a chat's file.
-    pub workspace_id: Option<SpaceId>,
-    /// Null for a workspace's file.
-    pub chat_id: Option<SpaceId>,
+    pub space_id: SpaceId,
+    pub space_kind: SpaceKind,
     /// Null for the file of a chat without a repository.
     pub repository_id: Option<RepositoryId>,
     /// The record as `shoal files` lists it.
@@ -589,7 +560,6 @@ impl ShoalEventDetails {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventItem {
     Event(Box<WorkspaceEvent>),
-    Chat(Box<ChatEvent>),
     File(Box<FileEvent>),
     Shoal(Box<ShoalEvent>),
     /// The journal no longer holds every event after the requested cursor.
@@ -606,7 +576,6 @@ impl EventItem {
     pub fn event_id(&self) -> Option<EventCursor> {
         match self {
             Self::Event(event) => Some(event.id),
-            Self::Chat(event) => Some(event.id),
             Self::File(event) => Some(event.id),
             Self::Shoal(event) => Some(event.id),
             Self::Gap { .. } => None,
@@ -618,7 +587,6 @@ impl EventItem {
     pub fn cursor(&self) -> EventCursor {
         match self {
             Self::Event(event) => event.id,
-            Self::Chat(event) => event.id,
             Self::File(event) => event.id,
             Self::Shoal(event) => event.id,
             Self::Gap { oldest_id, .. } => oldest_id.before(),
@@ -626,7 +594,7 @@ impl EventItem {
     }
 }
 
-/// The journal of workspace, chat and file events from a cursor: a replay
+/// The journal of space, file and Shoal events from a cursor: a replay
 /// of the retained events, then with `follow` each new one as it happens,
 /// across daemon restarts.
 pub struct Events {

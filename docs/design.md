@@ -2112,10 +2112,11 @@ one whose delivery fails is stopped; nothing is left on disk for the user to
 send. Shoal reads Happy's credentials only for this and stores none. A Happy-side
 pre-spawn hook asking Shoal for a workspace was considered and not adopted.
 
-Workspace and chat lifecycle events persist in a separate SQLite journal alongside
+Every space's lifecycle events persist in a separate SQLite journal alongside
 lifecycle transitions and cleanup outcomes, survive ownership removal, and keep
 increasing IDs. A chat's events go through the same recording path as a
-workspace's. Retention is per space, so one busy space cannot push out
+workspace's and take the same shape, naming the space by its ID and kind, with
+no event kind of one kind of space for what both record. Retention is per space, so one busy space cannot push out
 another's history: a space keeps its events while it exists and for
 `cleanup.restore.retention_days` after its removal, as its checkpoints and
 attached files, and a restored space, which keeps its ID, keeps them; only its

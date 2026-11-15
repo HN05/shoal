@@ -101,7 +101,7 @@ fn fail_stopped_removal(tx: &Connection, id: &SpaceId, why: &str) -> Result<()> 
 fn started_cause(tx: &Connection, id: &SpaceId) -> Result<EventCause> {
     let cause = tx
         .query_row(
-            "SELECT json_extract(record,'$.cause') FROM workspace_events
+            "SELECT json_extract(record,'$.cause') FROM space_events
              WHERE space_id=?1 AND json_extract(record,'$.kind')=?2
              ORDER BY id DESC LIMIT 1",
             params![id, EventKind::RemovalStarted],

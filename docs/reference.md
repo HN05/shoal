@@ -5412,9 +5412,10 @@ all retained history; without `--follow`, the command exits after that backlog.
 Scoped callers cannot read events.
 
 Each JSON line has `type: "event"`, an increasing `id`, Unix-seconds `created_at`,
-the UUID of the workspace or chat it records (`workspace_id` or `chat_id`, the
-other null), `repository_id` (null for a chat without a repository), `name`,
-`path` and `branch` (null for a chat), `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
+the UUID of the space it records as `space_id`, `space_kind` (`workspace` or
+`chat`, as the space was then), `repository_id` (null for a chat without a
+repository), `name`, `path` and `branch` (null for a chat), `kind`, `cause`, and
+`error`. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
 `review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `question_asked`, `question_answered`, `approval_requested`, `approval_decided`, `gate_decided`, `alert_sent`, `progress_changed`, `child_created`, `child_removed` and `job_ended`; history from earlier versions may also contain `continued` and `chat_changed`. Review events add a `review` object with the mark's `kind` and
 `url`, both null for a workspace mark; those from earlier versions also carry
@@ -5426,16 +5427,16 @@ of a change Shoal made to an issue or PR. `item_activity` events add an
 `item_activity` object with the item's `kind` and `url`, and an `update` object
 with the observed update's `kind` and `message`. `created` and `base_changed`
 events add `base_workspace` with the base's `id`, `name` and `branch`, or null,
-and `created` events add `base_ref`, the ref the workspace started from.
+and `created` events add `base_ref`, the ref the workspace started from, both
+null for a chat, and a chat's `agent` with the `name` it started with.
 `created` and `parent_changed` events add `parent`, the space above the
 workspace with its `id`, `name`, `kind` and a workspace's `branch`, or null once
 a [chat](#chats) that opened it returned it to you. Earlier versions recorded
 `parent_workspace` on these events and `chat`, the chat's ID, on
 `chat_changed` events.
-`renamed` events record a workspace's new `name` and `branch`, as
+`renamed` events record a space's new `name` and a workspace's `branch`, as
 `shoal rename` or a branch rename gives them; earlier versions added a
-`title`, which a workspace's name has since replaced. A chat's rename
-is its own `chat_renamed` line. `restored` events record a workspace
+`title`, which a workspace's name has since replaced. `restored` events record a workspace
 `shoal restore` reopened, which takes the removed workspace's events
 under its own ID. `agent_started`, `agent_stopped` (Shoal or a stop request
 stopped it) and `agent_exited` (it exited on its own) events add `agent`
@@ -5473,18 +5474,11 @@ setup or cleanup failures. Branch changes are observed during daemon sweeps;
 detached HEAD has a null branch, and the recorded workspace branch remains
 unchanged.
 
-A `type: "chat"` line records a chat's start or rename: its `id`,
-`created_at`, `kind` (`chat_started` or `chat_renamed`; earlier journals also
-hold `chat_ended` for a removal) and a `chat` object with its `id`, `repository_id` (null for a
-chat without a repository), `name` (the new one after a rename), `agent` and
-Unix-seconds `started_at`. Its removal, and its agent's starts and stops, are
-recorded as a workspace's.
-
 A `type: "file"` line records a file [attached](#attached-files) to a workspace
 or chat by any route (`kind: "file_added"`) or deleted by any route, including
 `shoal files rm`, workspace removal, the retention sweep and disk space cleanup
-(`kind: "file_removed"`): its `id`, `created_at`, `workspace_id` or `chat_id`
-(the other null), `repository_id` (null for a chat without a repository),
+(`kind: "file_removed"`): its `id`, `created_at`, `space_id`, `space_kind`,
+`repository_id` (null for a chat without a repository),
 and `file`, the record as
 `shoal files --json` lists it, with its own `id`. Attaching a file that is
 already attached adds nothing.

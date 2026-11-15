@@ -12,16 +12,22 @@ const JOURNAL: &str = "
     INSERT INTO spaces(id,kind,repository_id,name)
         VALUES ('plan','workspace','repo','plan'),('other','workspace','repo','other');
     COMMIT;
-    INSERT INTO workspace_events(record) VALUES
-        (json_object('kind','created','workspace_id','fix-id','name','fix')),
-        (json_object('kind','agent_started','workspace_id','fix-id','name','fix',
+    INSERT INTO space_events(space_id,record) VALUES
+        ('fix-id',json_object('kind','created','space_id','fix-id','space_kind','workspace',
+            'name','fix')),
+        ('fix-id',json_object('kind','agent_started','space_id','fix-id','space_kind','workspace',
+            'name','fix',
             'agent',json_object('name','claude','execution_id','e','exit_code',NULL))),
-        (json_object('kind','agent_state','workspace_id','fix-id','name','fix',
+        ('fix-id',json_object('kind','agent_state','space_id','fix-id','space_kind','workspace',
+            'name','fix',
             'agent_state',json_object('state','working'))),
-        (json_object('kind','agent_exited','workspace_id','fix-id','name','fix',
+        ('fix-id',json_object('kind','agent_exited','space_id','fix-id','space_kind','workspace',
+            'name','fix',
             'agent',json_object('name','claude','execution_id','e','exit_code',0))),
-        (json_object('kind','removed','workspace_id','fix-id','name','fix','cause','manual')),
-        (json_object('kind','child_removed','workspace_id','plan','name','plan',
+        ('fix-id',json_object('kind','removed','space_id','fix-id','space_kind','workspace',
+            'name','fix','cause','manual')),
+        ('plan',json_object('kind','child_removed','space_id','plan','space_kind','workspace',
+            'name','plan',
             'child',json_object('id','fix-id','name','fix','kind','workspace')));";
 
 fn kinds(entries: &[LogEntry]) -> Vec<EventKind> {
@@ -125,7 +131,8 @@ async fn a_scoped_caller_reads_its_own_log_and_those_of_spaces_below_it() {
 fn a_restore_shows_as_restored_rather_than_created_again() {
     let event = |id, kind: &str| {
         serde_json::from_value::<LogEntry>(serde_json::json!({
-            "type": "event", "id": id, "created_at": 1, "kind": kind, "workspace_id": "w",
+            "type": "event", "id": id, "created_at": 1, "kind": kind, "space_id": "w",
+            "space_kind": "workspace",
             "repository_id": "r", "name": "fix", "path": "/fix", "branch": "fix",
             "cause": null, "error": null,
         }))

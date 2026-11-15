@@ -5,7 +5,7 @@ use rusqlite::params;
 /// The spaces with events, in the order of their first one.
 fn spaces(db: &Connection) -> Result<Vec<String>> {
     Ok(db
-        .prepare("SELECT space_id FROM workspace_events GROUP BY space_id ORDER BY MIN(id)")?
+        .prepare("SELECT space_id FROM space_events GROUP BY space_id ORDER BY MIN(id)")?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
@@ -13,8 +13,8 @@ fn spaces(db: &Connection) -> Result<Vec<String>> {
 /// Journal `kind` for the workspace `id`, `age` seconds ago.
 fn journal(db: &Connection, id: &str, kind: &str, age: i64) -> Result<()> {
     db.execute(
-        "INSERT INTO workspace_events(created_at,record)
-            VALUES (unixepoch()-?3,json_object('kind',?2,'workspace_id',?1))",
+        "INSERT INTO space_events(created_at,space_id,record)
+            VALUES (unixepoch()-?3,?1,json_object('kind',?2,'space_id',?1,'space_kind','workspace'))",
         params![id, kind, age],
     )?;
     Ok(())
@@ -44,8 +44,8 @@ async fn gone_spaces_keep_their_events_for_the_retention_after_their_removal() {
                 [],
             )?;
             db.execute(
-                "INSERT INTO workspace_events(created_at,record) VALUES (unixepoch()-?1,
-                    json_object('kind','chat_ended','chat',json_object('id','chat')))",
+                "INSERT INTO space_events(created_at,space_id,record) VALUES (unixepoch()-?1,
+                    'chat',json_object('kind','removed','space_id','chat','space_kind','chat'))",
                 [decade],
             )?;
             Ok(())
@@ -63,7 +63,7 @@ async fn shoal_s_own_events_stay_for_the_global_retention() {
     let decade = 3651 * 24 * 3600;
     let shoal = |db: &Connection, version: &str, age: i64| {
         db.execute(
-            "INSERT INTO workspace_events(created_at,record) VALUES (unixepoch()-?2,
+            "INSERT INTO space_events(created_at,record) VALUES (unixepoch()-?2,
                 json_object('kind','daemon_started','version',?1))",
             params![version, age],
         )
@@ -81,7 +81,7 @@ async fn shoal_s_own_events_stay_for_the_global_retention() {
     let left: Vec<String> = (manager.store)
         .run(|db| {
             Ok(db
-                .prepare("SELECT json_extract(record,'$.version') FROM workspace_events")?
+                .prepare("SELECT json_extract(record,'$.version') FROM space_events")?
                 .query_map([], |row| row.get(0))?
                 .collect::<rusqlite::Result<_>>()?)
         })

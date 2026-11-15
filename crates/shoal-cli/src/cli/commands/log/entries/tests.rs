@@ -2,7 +2,7 @@ use super::*;
 
 fn event(record: serde_json::Value) -> LogEntry {
     let mut base = serde_json::json!({
-        "type": "event", "id": 1, "created_at": 1, "workspace_id": "w", "chat_id": null,
+        "type": "event", "id": 1, "created_at": 1, "space_id": "w", "space_kind": "workspace",
         "repository_id": "r", "name": "fix", "path": "/fix", "branch": "fix",
         "cause": null, "error": null,
     });
@@ -31,6 +31,13 @@ fn details_name_what_each_entry_is_about() {
             "base_workspace": {"id": "b", "name": "api", "branch": "api-part"}})
         ),
         "from api-part"
+    );
+    assert_eq!(
+        details(serde_json::json!({"kind": "created", "space_kind": "chat",
+            "path": null, "branch": null, "base_ref": null, "base_workspace": null,
+            "agent": {"name": "codex", "execution_id": null, "exit_code": null},
+            "parent": {"id": "p", "name": "plan-auth", "kind": "workspace"}})),
+        "codex, parent plan-auth"
     );
     assert_eq!(
         details(

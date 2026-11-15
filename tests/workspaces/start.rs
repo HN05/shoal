@@ -2899,9 +2899,9 @@ fn plan_mode_opens_a_chat_on_an_issue_that_needs_a_plan() {
     // stopped chat that planned it before is.
     let started = journal(&fixture)
         .into_iter()
-        .rfind(|event| event["kind"] == "chat_started")
+        .rfind(|event| event["kind"] == "created" && event["space_kind"] == "chat")
         .unwrap();
-    assert_eq!(started["chat"]["name"], "Clarify retries");
+    assert_eq!(started["name"], "Clarify retries");
 }
 
 #[test]

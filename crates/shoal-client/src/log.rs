@@ -7,7 +7,7 @@ use shoal_states::states;
 
 use crate::{
     connection::{self, Daemon},
-    events::{ChatEvent, EventCursor, EventKind, FileEvent, ShoalEvent, WorkspaceEvent},
+    events::{EventCursor, EventKind, FileEvent, ShoalEvent, WorkspaceEvent},
     forge::updates::UpdateKind,
     protocol::WorkspaceMethod,
     space_names::SpaceSelector,
@@ -42,7 +42,6 @@ pub struct LogTopic {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LogEntry {
     Event(Box<WorkspaceEvent>),
-    Chat(Box<ChatEvent>),
     File(Box<FileEvent>),
     Shoal(Box<ShoalEvent>),
 }
@@ -52,7 +51,6 @@ impl LogEntry {
     pub fn id(&self) -> EventCursor {
         match self {
             Self::Event(event) => event.id,
-            Self::Chat(event) => event.id,
             Self::File(event) => event.id,
             Self::Shoal(event) => event.id,
         }
@@ -61,17 +59,16 @@ impl LogEntry {
     pub fn created_at(&self) -> UnixTime {
         match self {
             Self::Event(event) => event.created_at,
-            Self::Chat(event) => event.created_at,
             Self::File(event) => event.created_at,
             Self::Shoal(event) => event.created_at,
         }
     }
 
-    /// Whether [`LogFilter::Entries`] shows the event: a chat's lifecycle,
-    /// Shoal's events, and the workspace and chat events that filter names.
+    /// Whether [`LogFilter::Entries`] shows the event: Shoal's events, and
+    /// the events of spaces that filter names.
     pub fn is_entry(&self) -> bool {
         let Self::Event(event) = self else {
-            return matches!(self, Self::Chat(_) | Self::Shoal(_));
+            return matches!(self, Self::Shoal(_));
         };
         let details = &event.details;
         match details.kind {
@@ -86,7 +83,7 @@ impl LogEntry {
     }
 }
 
-/// The workspace and chat events the log shows, apart from forge activity.
+/// The events of spaces the log shows, apart from forge activity.
 const ENTRY_KINDS: [EventKind; 29] = [
     EventKind::Created,
     EventKind::Renamed,

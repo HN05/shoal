@@ -8,22 +8,17 @@ use serde::Deserialize;
 
 use super::{log, workspace::Manager};
 pub(crate) use crate::client::events::{
-    AgentEvent, AlertEvent, ApprovalEvent, ChatEvent, ChatEventKind, EventCause, EventCursor,
-    EventDetails, EventItem, EventKind, FileEvent, FileEventDetails, JobEndedEvent, ShoalEvent,
-    ShoalEventDetails, ShoalEventKind, StoppedProcess, WorkspaceEvent,
+    AgentEvent, AlertEvent, ApprovalEvent, EventCause, EventCursor, EventDetails, EventItem,
+    EventKind, FileEvent, FileEventDetails, JobEndedEvent, ShoalEvent, ShoalEventDetails,
+    ShoalEventKind, StoppedProcess, WorkspaceEvent,
 };
 use crate::time::UnixTime;
 
-/// A journal row as stored: chat events carry the chat in place of a
-/// workspace, file events the space's identity, and Shoal's own events no
-/// space.
+/// A journal row as stored: file events carry the space's identity in
+/// place of its fields, and Shoal's own events no space.
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum Record {
-    Chat {
-        kind: ChatEventKind,
-        chat: Box<crate::model::Chat>,
-    },
     File(Box<FileEventDetails>),
     Shoal(Box<ShoalEventDetails>),
     Workspace(Box<EventDetails>),
@@ -36,12 +31,6 @@ fn decode(id: EventCursor, created_at: UnixTime, record: &str) -> Result<EventIt
             id,
             created_at,
             details: *details,
-        })),
-        Record::Chat { kind, chat } => EventItem::Chat(Box::new(ChatEvent {
-            id,
-            created_at,
-            kind,
-            chat: *chat,
         })),
         Record::File(details) => EventItem::File(Box::new(FileEvent {
             id,
@@ -61,7 +50,6 @@ fn log_entry(item: EventItem) -> Option<crate::client::log::LogEntry> {
     use crate::client::log::LogEntry;
     Some(match item {
         EventItem::Event(event) => LogEntry::Event(event),
-        EventItem::Chat(event) => LogEntry::Chat(event),
         EventItem::File(event) => LogEntry::File(event),
         EventItem::Shoal(event) => LogEntry::Shoal(event),
         EventItem::Gap { .. } => return None,
@@ -95,7 +83,7 @@ impl Bounds {
     fn read(db: &Connection) -> Result<Self> {
         let (oldest, latest, pruned): (Option<EventCursor>, Option<EventCursor>, EventCursor) = db
             .query_row(
-                "SELECT MIN(id),MAX(id),(SELECT id FROM journal_pruned) FROM workspace_events",
+                "SELECT MIN(id),MAX(id),(SELECT id FROM journal_pruned) FROM space_events",
                 [],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )?;
@@ -139,7 +127,7 @@ impl Bounds {
 /// The first `limit` events after `cursor`.
 fn events_after(db: &Connection, cursor: EventCursor, limit: u32) -> Result<Vec<EventItem>> {
     let mut statement = db.prepare(
-        "SELECT id,created_at,record FROM workspace_events WHERE id>?1 ORDER BY id LIMIT ?2",
+        "SELECT id,created_at,record FROM space_events WHERE id>?1 ORDER BY id LIMIT ?2",
     )?;
     let rows = statement.query_map(params![cursor, limit], |r| {
         Ok((r.get(0)?, r.get(1)?, r.get::<_, String>(2)?))
@@ -151,10 +139,15 @@ fn events_after(db: &Connection, cursor: EventCursor, limit: u32) -> Result<Vec<
     .collect()
 }
 
-/// The fields that open every event of a space, from its `journal_spaces`
-/// row: a workspace's or a chat's identity.
-const SPACE_FIELDS: &str = "'workspace_id',workspace_id,'chat_id',chat_id,
-    'repository_id',repository_id,'name',name,'path',path,'branch',branch";
+/// The fields that open every event of a space, from its row in
+/// [`SPACE_ROWS`].
+const SPACE_FIELDS: &str = "'space_id',spaces.id,'space_kind',spaces.kind,
+    'repository_id',spaces.repository_id,'name',spaces.name,
+    'path',workspaces.path,'branch',workspaces.branch";
+
+/// Each space with its worktree's location when it is a workspace.
+const SPACE_ROWS: &str =
+    "spaces LEFT JOIN workspaces ON workspaces.id=spaces.id AND spaces.kind='workspace'";
 
 /// Append in the transaction that owns the transition, before deleting ownership.
 pub(crate) fn record(
@@ -167,11 +160,11 @@ pub(crate) fn record(
     // Repeated cleanup failures are unchanged state, even when notifications are read.
     db.execute(
         &format!(
-            "INSERT INTO workspace_events(record)
-             SELECT json_object('kind',?2,{SPACE_FIELDS},'cause',?3,'error',?4)
-             FROM journal_spaces WHERE id=?1 AND NOT EXISTS (
-                 SELECT 1 FROM workspace_events WHERE id=(
-                     SELECT MAX(id) FROM workspace_events WHERE space_id=?1
+            "INSERT INTO space_events(space_id,record)
+             SELECT spaces.id, json_object('kind',?2,{SPACE_FIELDS},'cause',?3,'error',?4)
+             FROM {SPACE_ROWS} WHERE spaces.id=?1 AND NOT EXISTS (
+                 SELECT 1 FROM space_events WHERE id=(
+                     SELECT MAX(id) FROM space_events WHERE space_id=?1
                  ) AND json_extract(record,'$.kind')=?2 AND json_extract(record,'$.cause')=?3
                      AND json_extract(record,'$.error') IS ?4
              )"
@@ -213,10 +206,10 @@ pub(crate) fn record_link(
     ));
     db.execute(
         &format!(
-            "INSERT INTO workspace_events(record)
-             SELECT json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,
+            "INSERT INTO space_events(space_id,record)
+             SELECT spaces.id, json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,
                  'link',json_object('kind',?3,'url',?4,'relation',?5))
-             FROM journal_spaces WHERE id=?1"
+             FROM {SPACE_ROWS} WHERE spaces.id=?1"
         ),
         params![id, event_kind, kind, url, relation],
     )?;
@@ -234,10 +227,10 @@ pub(crate) fn record_item(
     let kind = kind.into();
     db.execute(
         &format!(
-            "INSERT INTO workspace_events(record)
-             SELECT json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,
+            "INSERT INTO space_events(space_id,record)
+             SELECT spaces.id, json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,
                  'item',json_object('kind',?3,'url',?4,'action',?5))
-             FROM journal_spaces WHERE id=?1"
+             FROM {SPACE_ROWS} WHERE spaces.id=?1"
         ),
         params![id, EventKind::ItemChanged, kind, url, action],
     )?;
@@ -254,11 +247,11 @@ pub(crate) fn record_item_activity(
 ) -> Result<()> {
     db.execute(
         &format!(
-            "INSERT INTO workspace_events(record)
-             SELECT json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,
+            "INSERT INTO space_events(space_id,record)
+             SELECT spaces.id, json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,
                  'item_activity',json_object('kind',?3,'url',?4,
                      'update',json_object('kind',?5,'message',?6)))
-             FROM journal_spaces WHERE id=?1"
+             FROM {SPACE_ROWS} WHERE spaces.id=?1"
         ),
         params![
             id,
@@ -282,9 +275,10 @@ fn record_with(
 ) -> Result<()> {
     db.execute(
         &format!(
-            "INSERT INTO workspace_events(record)
-             SELECT json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,?3,json(?4))
-             FROM journal_spaces WHERE id=?1"
+            "INSERT INTO space_events(space_id,record)
+             SELECT spaces.id,
+                 json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,?3,json(?4))
+             FROM {SPACE_ROWS} WHERE spaces.id=?1"
         ),
         params![id, kind, field, serde_json::to_string(payload)?],
     )?;
@@ -332,7 +326,7 @@ fn record_agent(db: &Connection, id: &SpaceId, kind: EventKind, agent: &AgentEve
 /// records; none before it did.
 pub(crate) fn agent_stopped_at(db: &Connection, id: &SpaceId) -> Result<Option<UnixTime>> {
     Ok(db.query_row(
-        "SELECT MAX(created_at) FROM workspace_events WHERE space_id=?1
+        "SELECT MAX(created_at) FROM space_events WHERE space_id=?1
              AND json_extract(record,'$.kind') IN (?2,?3)",
         params![id, EventKind::AgentStopped, EventKind::AgentExited],
         |row| row.get(0),
@@ -344,7 +338,7 @@ fn agent_ended(db: &Connection, id: &SpaceId, execution: Option<&ExecutionId>) -
     let newest: Option<(EventKind, Option<ExecutionId>)> = db
         .query_row(
             "SELECT json_extract(record,'$.kind'),json_extract(record,'$.agent.execution_id')
-             FROM workspace_events WHERE space_id=?1
+             FROM space_events WHERE space_id=?1
                  AND json_extract(record,'$.kind') IN (?2,?3,?4)
              ORDER BY id DESC LIMIT 1",
             params![
@@ -364,7 +358,7 @@ fn agent_ended(db: &Connection, id: &SpaceId, execution: Option<&ExecutionId>) -
 /// Record `details`, an event of Shoal itself.
 fn record_shoal(db: &Connection, details: &ShoalEventDetails) -> Result<()> {
     db.execute(
-        "INSERT INTO workspace_events(record) VALUES (?1)",
+        "INSERT INTO space_events(record) VALUES (?1)",
         [serde_json::to_string(details)?],
     )?;
     Ok(())
@@ -485,11 +479,11 @@ impl Manager {
     pub(crate) async fn latest_workspace_event_id(&self) -> Result<EventCursor> {
         self.store
             .run(|db| {
-                Ok(db.query_row(
-                    "SELECT COALESCE(MAX(id),0) FROM workspace_events",
-                    [],
-                    |r| r.get(0),
-                )?)
+                Ok(
+                    db.query_row("SELECT COALESCE(MAX(id),0) FROM space_events", [], |r| {
+                        r.get(0)
+                    })?,
+                )
             })
             .await
     }
@@ -547,8 +541,8 @@ impl Manager {
             .write(move |tx| {
                 let retry = super::store::exists(
                     tx,
-                    "SELECT 1 FROM workspace_events WHERE id=(
-                         SELECT MAX(id) FROM workspace_events WHERE space_id=?1
+                    "SELECT 1 FROM space_events WHERE id=(
+                         SELECT MAX(id) FROM space_events WHERE space_id=?1
                      ) AND json_extract(record,'$.kind')=?2
                          AND json_extract(record,'$.cause')=?3",
                     params![id, EventKind::Retained, cause],

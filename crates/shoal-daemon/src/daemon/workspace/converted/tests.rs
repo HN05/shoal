@@ -28,14 +28,9 @@ async fn kinds(manager: &Manager, id: &crate::client::space_ids::SpaceId) -> Vec
         .unwrap()
         .into_iter())
     .filter_map(|item| match item {
-        EventItem::Event(event)
-            if [&event.details.workspace_id, &event.details.chat_id]
-                .iter()
-                .any(|space| space.as_ref() == Some(id)) =>
-        {
+        EventItem::Event(event) if event.details.space_id == *id => {
             Some(event.details.kind.to_string())
         }
-        EventItem::Chat(event) if event.chat.id == *id => Some(event.kind.to_string()),
         _ => None,
     })
     .collect()
@@ -88,16 +83,16 @@ async fn a_chat_becomes_a_workspace_under_its_id_number_name_and_parent() {
         panic!("expected the chat's restart to wait: {pending:?}");
     };
     assert_eq!(chat.agent().unwrap().agent, talk.agent);
+    // The space stays: its conversion is neither a removal nor a creation.
     let kinds = kinds(&manager, &talk.id).await;
-    assert!(
-        kinds.contains(&EventKind::Converted.to_string()),
-        "{kinds:?}"
-    );
+    let converted = (kinds.iter())
+        .position(|kind| *kind == EventKind::Converted.to_string())
+        .unwrap_or_else(|| panic!("no conversion: {kinds:?}"));
     for gone in [
         EventKind::Created.to_string(),
         EventKind::Removed.to_string(),
     ] {
-        assert!(!kinds.contains(&gone), "{kinds:?}");
+        assert!(!kinds[converted..].contains(&gone), "{kinds:?}");
     }
 }
 

@@ -192,7 +192,7 @@ impl Fixture {
             .store
             .read(move |tx| {
                 let mut statement = tx.prepare(
-                    "SELECT json_extract(record,'$.gate.verdict') FROM workspace_events
+                    "SELECT json_extract(record,'$.gate.verdict') FROM space_events
                      WHERE space_id=?1 AND json_extract(record,'$.kind')='gate_decided'
                      ORDER BY id",
                 )?;

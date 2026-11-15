@@ -48,7 +48,7 @@ async fn a_removed_chat_comes_back_under_its_id_below_its_parent() {
     let last: String = (manager.store)
         .run(move |db| {
             Ok(db.query_row(
-                "SELECT json_extract(record,'$.kind') FROM workspace_events
+                "SELECT json_extract(record,'$.kind') FROM space_events
                     WHERE space_id=?1 ORDER BY id DESC LIMIT 1",
                 [&id],
                 |row| row.get(0),

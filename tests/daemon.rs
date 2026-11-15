@@ -975,7 +975,8 @@ fn event_cli_preserves_adjacent_frames_and_finishes_an_empty_listing() {
             for id in 1..=count {
                 frames.push_str(&response(json!({"type": "event_item", "data": {
                     "type": "event", "id": id, "created_at": 0, "kind": "ready",
-                    "workspace_id": "w", "repository_id": "r", "name": "worker",
+                    "space_id": "w", "space_kind": "workspace", "repository_id": "r",
+                    "name": "worker",
                     "path": "/work", "branch": "worker", "cause": null, "error": null
                 }})));
             }

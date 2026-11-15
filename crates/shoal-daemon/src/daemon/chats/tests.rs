@@ -3,15 +3,15 @@ use crate::client::space_names::SpaceSelector;
 use crate::paths::StateFiles;
 use crate::{
     daemon::{
-        events::{ChatEventKind, EventCause, EventItem, EventKind},
+        events::{EventCause, EventItem, EventKind},
         test_support::{chat_process, ended, manager, repository},
     },
     model::{SpaceKind, SpaceRef},
 };
 use shoal_refs::BranchName;
 
-/// Chat starts, stops and removals, and workspace parent changes, in
-/// journal order.
+/// Chat creations and renames, and workspace parent changes, in journal
+/// order.
 async fn chat_events(manager: &Manager) -> Vec<String> {
     manager
         .workspace_events(None, 100)
@@ -19,7 +19,12 @@ async fn chat_events(manager: &Manager) -> Vec<String> {
         .unwrap()
         .into_iter()
         .filter_map(|item| match item {
-            EventItem::Chat(event) => Some(format!("{} {}", event.kind, event.chat.name)),
+            EventItem::Event(event)
+                if event.details.space_kind == SpaceKind::Chat
+                    && matches!(event.details.kind, EventKind::Created | EventKind::Renamed) =>
+            {
+                Some(format!("{} {}", event.details.kind, event.details.name))
+            }
             EventItem::Event(event) if event.details.kind == EventKind::ParentChanged => {
                 let parent = event.details.parent.flatten().map(|parent| parent.id);
                 Some(format!("{} {parent:?}", event.details.name))
@@ -133,8 +138,8 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
     assert_eq!(
         chat_events(&manager).await,
         [
-            format!("{} stopping", ChatEventKind::Started),
-            format!("{} running", ChatEventKind::Started),
+            format!("{} stopping", EventKind::Created),
+            format!("{} running", EventKind::Created),
             format!("worker {:?}", Some(&ending.id)),
             "worker None".to_owned(),
             format!("worker {:?}", Some(&ending.id)),
@@ -328,10 +333,10 @@ async fn a_renamed_chat_keeps_its_files() {
     assert_eq!(
         chat_events(&manager).await,
         [
-            format!("{} talk", ChatEventKind::Started),
-            format!("{} other", ChatEventKind::Started),
-            format!("{} topic", ChatEventKind::Renamed),
-            format!("{} talk", ChatEventKind::Started),
+            format!("{} talk", EventKind::Created),
+            format!("{} other", EventKind::Created),
+            format!("{} topic", EventKind::Renamed),
+            format!("{} talk", EventKind::Created),
         ]
     );
 }
@@ -400,9 +405,11 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
     let ended = (manager.store)
         .run(|db| {
             Ok(db.query_row(
-                "SELECT json_extract(record,'$.kind') FROM workspace_events
-                 WHERE space_id=(SELECT space_id FROM workspace_events
-                     WHERE json_extract(record,'$.kind')='chat_started' ORDER BY id DESC LIMIT 1)
+                "SELECT json_extract(record,'$.kind') FROM space_events
+                 WHERE space_id=(SELECT space_id FROM space_events
+                     WHERE json_extract(record,'$.kind')='created'
+                         AND json_extract(record,'$.space_kind')='chat'
+                     ORDER BY id DESC LIMIT 1)
                  ORDER BY id DESC LIMIT 1",
                 [],
                 |row| row.get::<_, String>(0),

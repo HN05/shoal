@@ -19,7 +19,7 @@ fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
     tx.execute("UPDATE workspaces SET state='ready' WHERE id='w'", [])?;
     tx.rollback()?;
     assert_eq!(
-        db.query_row("SELECT COUNT(*) FROM workspace_events", [], |r| r
+        db.query_row("SELECT COUNT(*) FROM space_events", [], |r| r
             .get::<_, i64>(0))?,
         0
     );
@@ -51,7 +51,7 @@ fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
     )?;
     db.execute("DELETE FROM spaces WHERE id='w'", [])?;
     let records = db
-        .prepare("SELECT record FROM workspace_events ORDER BY id")?
+        .prepare("SELECT record FROM space_events ORDER BY id")?
         .query_map([], |r| r.get::<_, String>(0))?
         .map(|r| Ok(serde_json::from_str::<serde_json::Value>(&r?)?))
         .collect::<Result<Vec<_>>>()?;
@@ -73,11 +73,9 @@ fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
     assert_eq!(records[1]["error"], "setup error");
     assert_eq!(records[3]["cause"], "issue");
     assert!(records[5]["branch"].is_null());
-    assert!(
-        records
-            .iter()
-            .all(|r| r["workspace_id"] == "w" && r["repository_id"] == "repo")
-    );
+    assert!(records.iter().all(|r| r["space_id"] == "w"
+        && r["space_kind"] == "workspace"
+        && r["repository_id"] == "repo"));
     Ok(())
 }
 
@@ -105,7 +103,7 @@ fn link_events_include_item_kind_and_url() -> Result<()> {
         "https://forge.example/team/repo/pulls/7",
     )?;
     let record: String = db.query_row(
-        "SELECT record FROM workspace_events WHERE json_extract(record,'$.kind')='linked'",
+        "SELECT record FROM space_events WHERE json_extract(record,'$.kind')='linked'",
         [],
         |row| row.get(0),
     )?;
@@ -149,7 +147,7 @@ fn item_activity_events_include_item_and_update_details() -> Result<()> {
         &update,
     )?;
     let record: String = db.query_row(
-        "SELECT record FROM workspace_events WHERE json_extract(record,'$.kind')='item_activity'",
+        "SELECT record FROM space_events WHERE json_extract(record,'$.kind')='item_activity'",
         [],
         |row| row.get(0),
     )?;
@@ -167,7 +165,7 @@ fn each_space_keeps_its_newest_bulk_events_and_every_other() -> Result<()> {
     migrate(&mut db)?;
     let insert = |db: &Connection, space: &str, record: &str| {
         db.execute(
-            "INSERT INTO workspace_events(record) VALUES (json_set(json(?2),'$.workspace_id',?1))",
+            "INSERT INTO space_events(space_id,record) VALUES (?1,json_set(json(?2),'$.space_id',?1))",
             [space, record],
         )
     };
@@ -189,7 +187,7 @@ fn each_space_keeps_its_newest_bulk_events_and_every_other() -> Result<()> {
     tx.commit()?;
     let count = |space: &str, bulk: bool| -> Result<i64> {
         Ok(db.query_row(
-            "SELECT COUNT(*) FROM workspace_events WHERE space_id=?1 AND bulk=?2",
+            "SELECT COUNT(*) FROM space_events WHERE space_id=?1 AND bulk=?2",
             rusqlite::params![space, bulk],
             |r| r.get(0),
         )?)
@@ -198,12 +196,12 @@ fn each_space_keeps_its_newest_bulk_events_and_every_other() -> Result<()> {
     assert_eq!(count("busy", false)?, 2);
     assert_eq!((count("quiet", true)?, count("quiet", false)?), (1, 1));
     let oldest_bulk: i64 = db.query_row(
-        "SELECT MIN(id) FROM workspace_events WHERE space_id='busy' AND bulk",
+        "SELECT MIN(id) FROM space_events WHERE space_id='busy' AND bulk",
         [],
         |r| r.get(0),
     )?;
     assert_eq!(oldest_bulk, 105);
-    db.execute("DELETE FROM workspace_events", [])?;
+    db.execute("DELETE FROM space_events", [])?;
     insert(&db, "busy", r#"{"kind":"created"}"#)?;
     assert_eq!(db.last_insert_rowid(), 605);
     Ok(())
@@ -223,6 +221,7 @@ fn remove_schema_objects(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    db.execute_batch(include_str!("events_by_space_undo.sql"))?;
     db.execute_batch(include_str!("review_sessions_undo.sql"))?;
     db.execute_batch(include_str!("spaces_table_undo.sql"))?;
     db.execute_batch(include_str!("marks_without_heads_undo.sql"))?;
@@ -450,7 +449,7 @@ fn run_link_activity_and_approval_events_read_back() -> Result<()> {
     )?;
     crate::daemon::events::record_item(&db, &SpaceId::from("w"), LinkKind::Ci, url, "approve")?;
     let records = db
-        .prepare("SELECT record FROM workspace_events ORDER BY id")?
+        .prepare("SELECT record FROM space_events ORDER BY id")?
         .query_map([], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let events = records
@@ -499,10 +498,7 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
          DELETE FROM space_completion WHERE space_id='c';",
     )?;
     let rows = db
-        .prepare(
-            "SELECT space_id,record FROM workspace_events
-                WHERE json_extract(record,'$.kind') NOT LIKE 'chat_%' ORDER BY id",
-        )?
+        .prepare("SELECT space_id,record FROM space_events ORDER BY id")?
         .query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?
@@ -520,6 +516,7 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
     assert_eq!(
         kinds,
         [
+            EventKind::Created,
             EventKind::ReviewReady,
             EventKind::Linked,
             EventKind::Completed,
@@ -528,8 +525,8 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
     );
     for (space, event) in &events {
         assert_eq!(*space, "c");
-        assert_eq!(event.space_id().map(SpaceId::as_str), Some("c"));
-        assert_eq!(event.workspace_id, None);
+        assert_eq!(event.space_id.as_str(), "c");
+        assert_eq!(event.space_kind, crate::model::SpaceKind::Chat);
         assert_eq!(event.name, "planner");
     }
     Ok(())
@@ -537,13 +534,10 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
 
 /// The journal's records, oldest first.
 fn journal(db: &Connection) -> Result<Vec<crate::daemon::events::EventDetails>> {
-    db.prepare(
-        "SELECT record FROM workspace_events
-            WHERE json_extract(record,'$.kind') NOT LIKE 'chat_%' ORDER BY id",
-    )?
-    .query_map([], |row| row.get::<_, String>(0))?
-    .map(|record| Ok(serde_json::from_str(&record?)?))
-    .collect()
+    db.prepare("SELECT record FROM space_events ORDER BY id")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .map(|record| Ok(serde_json::from_str(&record?)?))
+        .collect()
 }
 
 #[test]
@@ -581,7 +575,7 @@ fn renames_questions_and_children_reach_their_spaces_logs() -> Result<()> {
         .into_iter()
         .filter(|event| !matches!(event.kind, EventKind::Created | EventKind::Ready))
         .map(|event| {
-            let space = event.space_id().map(SpaceId::to_string).unwrap_or_default();
+            let space = event.space_id.to_string();
             let detail = match event.kind {
                 EventKind::ChildCreated | EventKind::ChildRemoved => {
                     event.child.map(|child| child.name.to_string())
@@ -645,5 +639,110 @@ fn a_workspace_s_creation_takes_the_base_recorded_after_it() -> Result<()> {
         .map(|event| event.base_ref)
         .collect();
     assert_eq!(created, [Some("refs/heads/main".to_owned())]);
+    Ok(())
+}
+
+#[test]
+fn the_journal_names_every_space_it_recorded_by_its_id_and_kind() -> Result<()> {
+    use crate::daemon::events::{EventDetails, FileEventDetails, ShoalEventDetails};
+    let mut db = Connection::open_in_memory()?;
+    migrate_to(&mut db, 183)?;
+    let chat = r#""chat":{"id":"c","repository_id":"repo","name":"planner","agent":"claude","started_at":1}"#;
+    let records = [
+        r#"{"kind":"ready","workspace_id":"w","chat_id":null,"repository_id":"repo","name":"fix","path":"/fix","branch":"fix","cause":null,"error":null}"#.to_owned(),
+        format!(r#"{{"kind":"chat_started",{chat}}}"#),
+        r#"{"kind":"completed","workspace_id":null,"chat_id":"c","repository_id":"repo","name":"planner","path":null,"branch":null,"cause":null,"error":null}"#.to_owned(),
+        format!(r#"{{"kind":"chat_renamed",{}}}"#, chat.replace("planner", "helper")),
+        r#"{"kind":"file_added","workspace_id":null,"chat_id":"c","repository_id":"repo","file":{"id":1,"chat":"helper","source":"added","name":"notes.md","path":"/notes.md","bytes":1,"created_at":1}}"#.to_owned(),
+        format!(r#"{{"kind":"chat_ended",{}}}"#, chat.replace("planner", "helper")),
+        r#"{"kind":"daemon_started","version":"0.17.0"}"#.to_owned(),
+        r#"{"kind":"agent_state","workspace_id":"w","repository_id":"repo","name":"fix","path":"/fix","branch":"fix","cause":null,"error":null,"agent_state":{"state":"idle"}}"#.to_owned(),
+    ];
+    for (time, record) in (10i64..).zip(&records) {
+        db.execute(
+            "INSERT INTO workspace_events(created_at,record) VALUES (?1,?2)",
+            rusqlite::params![time, record],
+        )?;
+    }
+    // Retention deleted the newest event, whose ID stays given.
+    db.execute("DELETE FROM workspace_events WHERE id=8", [])?;
+    migrate(&mut db)?;
+
+    let rows = db
+        .prepare("SELECT id,created_at,space_id,record FROM space_events ORDER BY id")?
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })?
+        .collect::<rusqlite::Result<Vec<(i64, i64, Option<String>, String)>>>()?;
+    let times: Vec<_> = rows.iter().map(|(id, time, ..)| (*id, *time)).collect();
+    assert_eq!(times, (1..=7).map(|id| (id, id + 9)).collect::<Vec<_>>());
+    for (_, _, space, record) in &rows {
+        let value: serde_json::Value = serde_json::from_str(record)?;
+        for gone in ["workspace_id", "chat_id", "chat"] {
+            assert!(value.get(gone).is_none(), "{record}");
+        }
+        assert_eq!(value["space_id"].as_str(), space.as_deref(), "{record}");
+    }
+    let space =
+        |index: usize| -> Result<EventDetails> { Ok(serde_json::from_str(&rows[index].3)?) };
+    let summary: Vec<_> = [0, 1, 2, 3, 5]
+        .into_iter()
+        .map(|index| {
+            let event = space(index)?;
+            Ok((
+                event.kind,
+                event.space_id.to_string(),
+                event.space_kind,
+                event.name.to_string(),
+            ))
+        })
+        .collect::<Result<_>>()?;
+    use crate::{daemon::events::EventKind, model::SpaceKind};
+    let chat = |kind, name: &str| (kind, "c".to_owned(), SpaceKind::Chat, name.to_owned());
+    assert_eq!(
+        summary,
+        [
+            (
+                EventKind::Ready,
+                "w".into(),
+                SpaceKind::Workspace,
+                "fix".into()
+            ),
+            chat(EventKind::Created, "planner"),
+            chat(EventKind::Completed, "planner"),
+            chat(EventKind::Renamed, "helper"),
+            chat(EventKind::Removed, "helper"),
+        ]
+    );
+    let created = space(1)?;
+    assert_eq!(
+        created.agent.map(|agent| agent.name.to_string()).as_deref(),
+        Some("claude")
+    );
+    assert_eq!(
+        (created.path, created.branch, created.base_ref),
+        (None, None, None)
+    );
+    let file: FileEventDetails = serde_json::from_str(&rows[4].3)?;
+    assert_eq!(
+        (file.space_id.as_str(), file.space_kind),
+        ("c", SpaceKind::Chat)
+    );
+    let shoal: ShoalEventDetails = serde_json::from_str(&rows[6].3)?;
+    assert_eq!(shoal.version.as_deref(), Some("0.17.0"));
+
+    db.execute_batch(
+        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+         BEGIN;
+         INSERT INTO chats(id,agent,started_at) VALUES ('d','codex',1);
+         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('d','chat','repo','next');
+         COMMIT;",
+    )?;
+    let newest: (i64, String) = db.query_row(
+        "SELECT id,space_id FROM space_events ORDER BY id DESC LIMIT 1",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    assert_eq!(newest, (9, "d".to_owned()));
     Ok(())
 }

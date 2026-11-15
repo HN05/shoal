@@ -38,10 +38,7 @@ async fn review_events(manager: &Manager) -> Vec<(String, Option<String>)> {
                 .details
                 .review
                 .map(|review| (event.details.kind.to_string(), review.url)),
-            EventItem::Chat(_)
-            | EventItem::File(_)
-            | EventItem::Shoal(_)
-            | EventItem::Gap { .. } => None,
+            EventItem::File(_) | EventItem::Shoal(_) | EventItem::Gap { .. } => None,
         })
         .collect()
 }

@@ -21,7 +21,6 @@ pub(super) async fn run(ctx: &Context, follow: bool, after: Option<EventCursor>)
             EventItem::Event(event) => {
                 outln!("{} {} {}", event.id, event.details.kind, event.details.name)
             }
-            EventItem::Chat(event) => outln!("{} {} {}", event.id, event.kind, event.chat.id),
             EventItem::File(event) => {
                 outln!(
                     "{} {} {}",

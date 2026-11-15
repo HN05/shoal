@@ -1,10 +1,11 @@
 use super::*;
 
-/// A workspace event of `kind` as the journal stores it, with `extra` fields.
+/// A workspace's event of `kind` as the journal stores it, with `extra`
+/// fields.
 fn event(kind: &str, extra: serde_json::Value) -> LogEntry {
     let mut record = serde_json::json!({
         "type": "event", "id": 7, "created_at": 1, "kind": kind,
-        "workspace_id": "w", "chat_id": null, "repository_id": "r", "name": "fix",
+        "space_id": "w", "space_kind": "workspace", "repository_id": "r", "name": "fix",
         "path": "/fix", "branch": "fix", "cause": null, "error": null,
     });
     record
@@ -49,17 +50,7 @@ fn an_entry_keeps_the_journal_lines_json() {
     let value = serde_json::to_value(&entry).unwrap();
     assert_eq!(value["type"], "event");
     assert_eq!(value["id"], 7);
-    assert_eq!(value["workspace_id"], "w");
-    assert!(value["chat_id"].is_null());
+    assert_eq!(value["space_id"], "w");
+    assert_eq!(value["space_kind"], "workspace");
     assert_eq!(value["agent"]["exit_code"], 3);
-    let chat: LogEntry = serde_json::from_value(serde_json::json!({
-        "type": "chat", "id": 8, "created_at": 2, "kind": "chat_renamed",
-        "chat": {"id": "c", "repository_id": null, "name": "helper", "agent": "claude",
-            "started_at": 1},
-    }))
-    .unwrap();
-    assert_eq!(
-        (chat.id().id(), chat.created_at(), chat.is_entry()),
-        (8, crate::time::UnixTime::from_seconds(2), true)
-    );
 }

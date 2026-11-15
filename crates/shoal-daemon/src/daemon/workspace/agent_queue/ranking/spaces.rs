@@ -51,9 +51,9 @@ fn rows(db: &Connection) -> Result<Vec<Row>> {
                 (SELECT priority FROM space_priority WHERE space_id=s.id),
                 EXISTS(SELECT 1 FROM space_review WHERE space_id=s.id),
                 s.kind='chat' OR EXISTS(SELECT 1 FROM space_agent_state WHERE space_id=s.id)
-                    OR EXISTS(SELECT 1 FROM workspace_events WHERE space_id=s.id AND NOT bulk
+                    OR EXISTS(SELECT 1 FROM space_events WHERE space_id=s.id AND NOT bulk
                         AND json_extract(record,'$.kind')=?1),
-                (SELECT created_at FROM workspace_events WHERE space_id=s.id AND NOT bulk
+                (SELECT created_at FROM space_events WHERE space_id=s.id AND NOT bulk
                     ORDER BY id LIMIT 1)
              FROM spaces s",
         )?

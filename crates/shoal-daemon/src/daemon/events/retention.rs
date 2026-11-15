@@ -83,11 +83,10 @@ fn gone(db: &Connection) -> Result<Vec<Gone>> {
         .prepare(
             "SELECT space_id, (SELECT id FROM repositories WHERE id=repository), removed_at
             FROM (SELECT space_id,
-                MAX(COALESCE(json_extract(record,'$.repository_id'),
-                    json_extract(record,'$.chat.repository_id'))) AS repository,
-                COALESCE(MAX(CASE WHEN json_extract(record,'$.kind') IN ('removed','chat_ended')
+                MAX(json_extract(record,'$.repository_id')) AS repository,
+                COALESCE(MAX(CASE WHEN json_extract(record,'$.kind')='removed'
                     THEN created_at END), MAX(created_at)) AS removed_at
-            FROM workspace_events
+            FROM space_events
             WHERE space_id IS NOT NULL
                 AND space_id NOT IN (SELECT id FROM spaces)
                 AND space_id NOT IN (SELECT space_id FROM removed_spaces)
@@ -110,11 +109,11 @@ fn forget(tx: &Transaction<'_>, ids: &[SpaceId]) -> Result<()> {
     for id in ids {
         tx.execute(
             "UPDATE journal_pruned SET id=MAX(id, (SELECT COALESCE(MAX(id),0)
-                FROM workspace_events WHERE space_id=?1))",
+                FROM space_events WHERE space_id=?1))",
             [id],
         )?;
         tx.execute(
-            "DELETE FROM workspace_events WHERE space_id=?1
+            "DELETE FROM space_events WHERE space_id=?1
                 AND ?1 NOT IN (SELECT id FROM spaces)
                 AND ?1 NOT IN (SELECT space_id FROM removed_spaces)",
             [id],
@@ -127,11 +126,11 @@ fn forget(tx: &Transaction<'_>, ids: &[SpaceId]) -> Result<()> {
 fn forget_shoal_before(tx: &Transaction<'_>, time: UnixTime) -> Result<()> {
     tx.execute(
         "UPDATE journal_pruned SET id=MAX(id, (SELECT COALESCE(MAX(id),0)
-            FROM workspace_events WHERE space_id IS NULL AND created_at<?1))",
+            FROM space_events WHERE space_id IS NULL AND created_at<?1))",
         [time],
     )?;
     tx.execute(
-        "DELETE FROM workspace_events WHERE space_id IS NULL AND created_at<?1",
+        "DELETE FROM space_events WHERE space_id IS NULL AND created_at<?1",
         [time],
     )?;
     Ok(())

@@ -2,8 +2,7 @@
 use crate::{
     client::{
         events::{
-            ChatEventKind, EventCause, EventDetails, EventKind, FileEventKind, ShoalEventDetails,
-            ShoalEventKind,
+            EventCause, EventDetails, EventKind, FileEventKind, ShoalEventDetails, ShoalEventKind,
         },
         log::LogEntry,
     },
@@ -18,15 +17,6 @@ pub(super) const LABEL_WIDTH: usize = "Approval requested".len();
 pub(super) fn describe(entry: &LogEntry) -> (String, String) {
     match entry {
         LogEntry::Event(event) => event_line(&event.details),
-        LogEntry::Chat(event) => {
-            let chat = &event.chat;
-            let (label, details) = match event.kind {
-                ChatEventKind::Started => ("Created", chat.agent.to_string()),
-                ChatEventKind::Renamed => ("Renamed", chat.name.to_string()),
-                ChatEventKind::Ended => ("Removed", String::new()),
-            };
-            (label.to_owned(), details)
-        }
         LogEntry::File(event) => {
             let label = match event.details.kind {
                 FileEventKind::Added => "File added",
@@ -42,7 +32,6 @@ pub(super) fn describe(entry: &LogEntry) -> (String, String) {
 pub(super) fn space(entry: &LogEntry) -> String {
     match entry {
         LogEntry::Event(event) => event.details.name.to_string(),
-        LogEntry::Chat(event) => event.chat.name.to_string(),
         LogEntry::File(event) => {
             let file = &event.details.file;
             (file.workspace.as_ref().or(file.chat.as_ref()))
@@ -168,13 +157,17 @@ fn blocker(event: &EventDetails) -> String {
     text
 }
 
-/// Where a workspace started and the space it is below.
+/// The agent a chat started with, where a workspace started, and the space
+/// either is below.
 fn created(event: &EventDetails) -> String {
     let base = match event.base_workspace.clone().flatten() {
         Some(base) => base.branch.map(|branch| branch.to_string()),
         None => event.base_ref.as_deref().map(short_ref),
     };
     let mut parts = Vec::new();
+    if let Some(agent) = &event.agent {
+        parts.push(agent.name.to_string());
+    }
     if let Some(base) = base {
         parts.push(format!("from {base}"));
     }
