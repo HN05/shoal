@@ -77,6 +77,18 @@ fn a_space_named_twice_is_selected_once() {
 }
 
 #[test]
+fn a_selection_of_running_chats_alone_restores_nothing_else() {
+    // Only the running chat is named: its interrupted turn is all there is.
+    let only_running = Selected::resolved(&spaces(), &[], vec!["c1".into()]);
+    assert!(only_running.is_empty());
+    // A space with stopped work beside it restores too.
+    let with_space = Selected::resolved(&spaces(), &[], vec!["c1".into(), "3".into()]);
+    assert!(!with_space.is_empty());
+    // Every space with stopped work, for --all.
+    assert!(!Selected::default().is_empty());
+}
+
+#[test]
 fn only_stopped_chats_are_offered() {
     let stopped = stopped_chats(&spaces());
     assert_eq!(stopped.len(), 1);

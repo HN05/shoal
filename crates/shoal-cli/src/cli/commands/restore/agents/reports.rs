@@ -13,31 +13,31 @@ use crate::{
     state::QueueState,
 };
 
-/// Report that no space has anything to restore but the workspaces
-/// `reopened`, as a restore that starts agents at once when `started`,
-/// otherwise as one that queues them.
-pub(super) fn nothing(ctx: &Context, reopened: Vec<Reopened>, started: bool) -> Result<()> {
-    if !reopened.is_empty() {
-        return self::reopened(ctx, reopened);
+/// Report that no space has anything to restore but what `first` reports,
+/// the workspaces reopened and the turns continued, as a restore that
+/// starts agents at once when `started`, otherwise as one that queues them,
+/// returning the exit code.
+pub(super) fn nothing(ctx: &Context, first: Queued, started: bool) -> Result<i32> {
+    if first.reports_anything() {
+        queued(ctx, &first)?;
+        return Ok(if first.failed.is_empty() { 0 } else { 1 });
     }
     let message = "No stopped agents, commands or chats";
     match started {
-        true => ctx.emit(message, StartedRestores::default()),
-        false => ctx.emit(message, Queued::default()),
+        true => ctx.emit(message, StartedRestores::default())?,
+        false => ctx.emit(message, Queued::default())?,
     }
+    Ok(0)
 }
 
-/// Report the workspaces `reopened` for a restore before anything else it
-/// restores; nothing without any.
-pub(super) fn reopened(ctx: &Context, reopened: Vec<Reopened>) -> Result<()> {
-    if reopened.is_empty() {
-        return Ok(());
+/// Report what `first` reports, the workspaces reopened for a restore and
+/// the turns it continued, before the agent it restores in this terminal;
+/// nothing without any.
+pub(super) fn first(ctx: &Context, first: Queued) -> Result<()> {
+    match first.reports_anything() {
+        true => queued(ctx, &first),
+        false => Ok(()),
     }
-    let report = Queued {
-        reopened,
-        ..Default::default()
-    };
-    queued(ctx, &report)
 }
 
 /// Report the `queued` restores and the workspaces reopened and set up.
@@ -77,9 +77,29 @@ fn set_up(set_up: &[SetUp]) {
 pub(crate) trait QueuedExt {
     /// What the user reads once restores are queued, `None` without any.
     fn summary(&self) -> Option<String>;
+
+    /// Whether it reports anything a restore did or failed to do.
+    fn reports_anything(&self) -> bool;
 }
 
 impl QueuedExt for Queued {
+    fn reports_anything(&self) -> bool {
+        let Self {
+            queued,
+            commands,
+            set_up,
+            reopened,
+            continued,
+            failed,
+        } = self;
+        !(queued.is_empty()
+            && commands.is_empty()
+            && set_up.is_empty()
+            && reopened.is_empty()
+            && continued.is_empty()
+            && failed.is_empty())
+    }
+
     fn summary(&self) -> Option<String> {
         let starting = (self.queued.iter()).all(|entry| entry.state == QueueState::Starting);
         (!self.queued.is_empty()).then(|| summary(self.queued.len(), starting))

@@ -373,9 +373,9 @@ fails the command. Messages and item activity reach an interrupted
 agent as they reach any idle one. `shoal restore <space>` continues the turn:
 it submits `Continue where you left off.` in the session, until the agent
 starts another turn. A restore that names spaces with interrupted turns and
-others with stopped work or removed workspaces refuses both; restore them
-separately, and one that names a running chat without an interrupted turn has
-nothing to restore.
+others with stopped work or removed workspaces continues the turns and
+restores the others, reporting the turns in `continued` beside them; one that
+names a running chat without an interrupted turn has nothing to restore.
 Several spaces are interrupted or continued together, reporting each failure
 without keeping the others from it. A scoped process interrupts and continues
 only the agents of the spaces below its own.

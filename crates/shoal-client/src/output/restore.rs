@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     model::{Chat, PresentSpace, QueueEntry, RemovedSpace, Workspace},
-    output::{batch::Failure, outputs},
+    output::{agents::Agent, batch::Failure, outputs},
     saved::SavedSummary,
 };
 
@@ -48,6 +48,9 @@ pub struct StartedRestores {
     /// The removed spaces it opened again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reopened: Vec<Reopened>,
+    /// The agents whose interrupted turns it continued.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub continued: Vec<Agent>,
     pub failed: Vec<Failure>,
 }
 
@@ -62,8 +65,8 @@ pub struct ForgottenWork {
 }
 
 /// The restores a restore queued, the commands it reported, the saved chats
-/// it restored at once, the workspaces it set up and the spaces it failed
-/// for.
+/// it restored at once, the workspaces it set up, the interrupted turns it
+/// continued and the spaces it failed for.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Queued {
     pub queued: Vec<QueueEntry>,
@@ -73,6 +76,9 @@ pub struct Queued {
     /// The removed spaces it opened again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reopened: Vec<Reopened>,
+    /// The agents whose interrupted turns it continued.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub continued: Vec<Agent>,
     pub failed: Vec<Failure>,
 }
 

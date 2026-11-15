@@ -89,6 +89,7 @@ async fn interrupt_turn(ctx: &Context, interruption: &Interruption) -> Result<()
 }
 
 /// The turns an interrupt ended that `shoal restore` continues.
+#[derive(Default)]
 pub(super) struct Continuation(Vec<Target>);
 
 impl Continuation {
@@ -131,6 +132,20 @@ impl Continuation {
 
     /// Submit the prompt that continues each turn, returning the exit code.
     pub(super) async fn submit(self, ctx: &Context) -> Result<i32> {
+        let report = self.submit_each(ctx).await;
+        report.finish(ctx, "", |continued, failed| Continued { continued, failed })
+    }
+
+    /// Submit the prompt that continues each turn, for a restore that
+    /// reports them with what else it restores.
+    pub(super) async fn submit_with_others(self, ctx: &Context) -> Continued {
+        let (continued, failed) = self.submit_each(ctx).await.into_parts();
+        Continued { continued, failed }
+    }
+
+    /// Submit the prompt that continues each turn, printing a line for each
+    /// as it goes, going on after one fails.
+    async fn submit_each(&self, ctx: &Context) -> ui::Report<Agent> {
         let mut report = ui::Report::new("continue");
         for target in &self.0 {
             match crate::terminal::submit_prompt(&target.place, terminal::CONTINUE_PROMPT).await {
@@ -142,7 +157,7 @@ impl Continuation {
                 Err(error) => report.failed(ctx, &target.space, &error),
             }
         }
-        report.finish(ctx, "", |continued, failed| Continued { continued, failed })
+        report
     }
 }
 

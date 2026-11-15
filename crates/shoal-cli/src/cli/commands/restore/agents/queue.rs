@@ -22,14 +22,16 @@ use crate::{
 /// `selected` spaces this process's scope reaches, or of every such space
 /// with any, only `execution`'s when given, restore the `selected` chats in
 /// a background place and retry the selected failed setups, under `change`
-/// when given; the daemon refuses a space outside the scope before any
-/// setup or restore, and starts the workspaces' agents detached.
+/// when given, reporting them with what `first` reports; the daemon refuses
+/// a space outside the scope before any setup or restore, and starts the
+/// workspaces' agents detached.
 pub(super) async fn queue_below(
     ctx: &Context,
     selected: Selected,
     execution: Option<ExecutionId>,
     change: Option<&PermissionChange>,
     now: bool,
+    first: Queued,
 ) -> Result<i32> {
     let stopped = match selected.spaces.clone() {
         Some(selectors) => {
@@ -42,7 +44,7 @@ pub(super) async fn queue_below(
         None => stopped_in_reach(ctx).await?,
     };
     permission_change::apply(ctx, &stopped, &selected.setups, change).await?;
-    let resumed = super::set_up(ctx, &selected, Vec::new(), false).await;
+    let resumed = super::set_up(ctx, &selected, first, false).await;
     queue_all(ctx, stopped, resumed, now).await
 }
 
@@ -224,7 +226,8 @@ pub(super) async fn ensure_daemon_starts_in(
 /// Queue the restore of every agent and last session `stopped` saves,
 /// starting each at once regardless of the limits when `now`, and report
 /// the commands of workspaces without one, going on after one fails, with
-/// the stopped chats, setups and failures `resumed` reports already.
+/// the setups, reopened workspaces, continued turns and failures `resumed`
+/// reports already.
 pub(super) async fn queue_all(
     ctx: &Context,
     stopped: Vec<(PresentSpace, Saved)>,
@@ -237,6 +240,7 @@ pub(super) async fn queue_all(
     queued.failed = failed;
     queued.set_up = resumed.set_up;
     queued.reopened = resumed.reopened;
+    queued.continued = resumed.continued;
     reports::queued(ctx, &queued)?;
     Ok(if queued.failed.is_empty() { 0 } else { 1 })
 }

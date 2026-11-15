@@ -100,6 +100,18 @@ impl Selected {
         selected
     }
 
+    /// Whether nothing is selected but running chats, as once the spaces
+    /// whose interrupted turns continue are taken from the selection.
+    pub fn is_empty(&self) -> bool {
+        let Self {
+            running: _,
+            spaces,
+            setups,
+            removed,
+        } = self;
+        spaces.as_ref().is_some_and(Vec::is_empty) && setups.is_empty() && removed.is_empty()
+    }
+
     /// Refuse the running chats selected, which have nothing to restore.
     pub fn refuse_running(&self) -> Result<()> {
         if let Some(chat) = self.running.first() {
