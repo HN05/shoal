@@ -19,7 +19,7 @@ use anyhow::{Context, Result, ensure};
 
 pub use crate::client::transfer::{
     CarriedChat, CarriedSessionFile, ExportedSpace, Manifest, PackagedChat, PackagedWorkspace,
-    SessionFile, Sessions, Space,
+    SessionFile, Sessions, Space, SpaceImport,
 };
 pub use carried::{CarriedChatExt, carried_chats};
 

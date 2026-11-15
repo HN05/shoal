@@ -25,11 +25,11 @@ use crate::{
         ui,
     },
     execution::recovery::Copied,
-    model::RestoredWorkspace,
+    model::{RestoredSpace, RestoredWorkspace},
     refusal::{Reason, Refusal},
     transfer::{
         CarriedSessionFile, Import, ImportedSessionFile, Manifest, PackagedChat, PackagedWorkspace,
-        Sessions, Space,
+        Sessions, Space, SpaceImport,
     },
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
@@ -204,18 +204,18 @@ impl Package {
         ctx: &Context,
         packaged: &PackagedWorkspace,
     ) -> Result<Box<RestoredWorkspace>> {
-        let repository =
-            (self.repository.clone()).context("a workspace belongs to a repository")?;
-        crate::client::transfer::import(
-            &ctx.paths,
-            repository,
-            self.bundle.as_ref().map(|bundle| bundle.path().to_owned()),
-            packaged.prerequisite.clone(),
-            packaged.workspace_with(self.sessions.clone()),
-            self.copy.is_some(),
-            self.carried(),
-        )
-        .await
+        let import = SpaceImport {
+            repository: self.repository.clone(),
+            bundle: self.bundle.as_ref().map(|bundle| bundle.path().to_owned()),
+            prerequisite: packaged.prerequisite.clone(),
+            space: packaged.workspace_with(self.sessions.clone()),
+            copy: self.copy.is_some(),
+            session_files: self.carried(),
+        };
+        match crate::client::transfer::import(&ctx.paths, import).await? {
+            RestoredSpace::Workspace(restored) => Ok(restored),
+            RestoredSpace::Chat(_) => anyhow::bail!("the import opened a chat"),
+        }
     }
 
     /// The session files the package carries for the agents kept here.

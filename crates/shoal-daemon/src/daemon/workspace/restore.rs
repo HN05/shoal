@@ -22,15 +22,6 @@ use crate::{
 };
 
 impl Manager {
-    /// Open a removed workspace again on its branch at the removed HEAD, with
-    /// its unsaved files, checkpoints, linked issue, opened and related items,
-    /// and stopped agents; the caller sets it up and links its PRs. The
-    /// record goes once the files are back.
-    pub async fn restore_workspace(&self, selector: &SpaceSelector) -> Result<RestoredWorkspace> {
-        let removed = self.claim_removed_space(selector).await?;
-        self.reopen_removed_workspace(removed, None).await
-    }
-
     /// Open the removed space `selector` names again, as its kind reopens,
     /// for `caller`, which relinks only what it may link.
     pub async fn restore_space(
@@ -145,8 +136,11 @@ impl Manager {
         }))
     }
 
-    /// Open the removed workspace `removed` again for `caller`, which
-    /// relinks only what it may link.
+    /// Open the removed workspace `removed` again on its branch at the
+    /// removed HEAD, with its unsaved files, checkpoints, linked issue,
+    /// opened and related items, and stopped agents, for `caller`, which
+    /// relinks only what it may link; the caller sets it up and links its
+    /// PRs. The record goes once the files are back.
     async fn reopen_removed_workspace(
         &self,
         removed: RemovedSpace,

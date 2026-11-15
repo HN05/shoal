@@ -129,18 +129,33 @@ async fn import_record(
     import: &Import,
     workspace: RemovedSpace,
 ) -> crate::model::RestoredWorkspace {
+    let import = workspace_import(repo, import, workspace, &[]);
+    match manager.import_space(import).await.unwrap() {
+        crate::model::RestoredSpace::Workspace(restored) => *restored,
+        crate::model::RestoredSpace::Chat(_) => panic!("the import opened a chat"),
+    }
+}
+
+/// What `shoal move import` sends to import the workspace `import`
+/// packages into `repo` as `workspace`, with `session_files`.
+pub(super) fn workspace_import(
+    repo: &Repository,
+    import: &Import,
+    workspace: RemovedSpace,
+    session_files: &[CarriedSessionFile],
+) -> SpaceImport {
     let packaged = packaged_workspace(&import.manifest);
-    manager
-        .import_workspace(
-            &(&repo.id).into(),
-            import.bundle.as_ref().map(|bundle| bundle.path()),
-            packaged.prerequisite.as_deref(),
-            workspace,
-            import.manifest.copy.is_some(),
-            &[],
-        )
-        .await
-        .unwrap()
+    SpaceImport {
+        repository: Some((&repo.id).into()),
+        bundle: import
+            .bundle
+            .as_ref()
+            .map(|bundle| bundle.path().to_owned()),
+        prerequisite: packaged.prerequisite.clone(),
+        space: workspace,
+        copy: import.manifest.copy.is_some(),
+        session_files: session_files.to_vec(),
+    }
 }
 
 /// The workspace `manifest` packages.
@@ -281,17 +296,9 @@ async fn import_writes_nothing_while_the_repository_moves() {
         .await
         .unwrap();
     let import = Import::read(&mut &file[..]).unwrap();
-    let packaged = packaged_workspace(&import.manifest);
-    let imported = importing
-        .import_workspace(
-            &(&target_repo.id).into(),
-            import.bundle.as_ref().map(|bundle| bundle.path()),
-            packaged.prerequisite.as_deref(),
-            packaged.workspace.clone(),
-            false,
-            &[],
-        )
-        .await;
+    let workspace = packaged_workspace(&import.manifest).workspace.clone();
+    let imported =
+        (importing.import_space(workspace_import(&target_repo, &import, workspace, &[]))).await;
     assert!(imported.is_err());
     assert!(importing.removed_workspaces().await.unwrap().is_empty());
 }
@@ -306,7 +313,7 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
         .unwrap();
     let file = export_removed(&exporting, &workspace.id).await;
     let import = Import::read(&mut &file[..]).unwrap();
-    let packaged = packaged_workspace(&import.manifest);
+    let workspace = packaged_workspace(&import.manifest).workspace.clone();
     let contents = target.path().join("carried");
     fs::write(&contents, "{}\n").unwrap();
     let session_file = SessionFile {
@@ -325,16 +332,9 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
     fs::write(target_repo.path.join("another"), "another\n").unwrap();
     commit(&target_repo.path, "another");
     git(&target_repo.path, &["checkout", "-q", "main"]);
-    let imported = importing
-        .import_workspace(
-            &(&target_repo.id).into(),
-            import.bundle.as_ref().map(|bundle| bundle.path()),
-            packaged.prerequisite.as_deref(),
-            packaged.workspace.clone(),
-            false,
-            std::slice::from_ref(&carried),
-        )
-        .await;
+    let carried_files = std::slice::from_ref(&carried);
+    let import = workspace_import(&target_repo, &import, workspace, carried_files);
+    let imported = importing.import_space(import).await;
     assert!(imported.is_err());
     let removed = importing.removed_workspaces().await.unwrap();
     assert_eq!(

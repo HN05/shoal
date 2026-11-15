@@ -14,7 +14,7 @@ use crate::{
     model::Workspace,
     process::identity,
     removal::UnsavedWork,
-    transfer::{ExportedSpace, Import, Space},
+    transfer::{ExportedSpace, Import, Space, SpaceImport},
 };
 
 /// Export `space` for a move into a new file in `directory` and read it
@@ -214,11 +214,15 @@ async fn an_import_that_records_nothing_says_so() {
     let (exported, _) = export_moving(&exporting, &selector, source.path()).await;
     let packaged = packaged_workspace(&exported.manifest);
 
-    let unknown = crate::repository::Selector::from("no-such-repository");
-    let error = importing
-        .import_workspace(&unknown, None, None, packaged.workspace.clone(), false, &[])
-        .await
-        .unwrap_err();
+    let import = SpaceImport {
+        repository: Some(crate::repository::Selector::from("no-such-repository")),
+        bundle: None,
+        prerequisite: None,
+        space: packaged.workspace.clone(),
+        copy: false,
+        session_files: Vec::new(),
+    };
+    let error = importing.import_space(import).await.unwrap_err();
     assert_eq!(Reason::of(&error), Some(Reason::NotImported));
     assert!(importing.removed_workspaces().await.unwrap().is_empty());
 }

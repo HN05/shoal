@@ -29,8 +29,7 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::ExportSpace { .. }
         | RemovalMethod::ExportMovingSpace { .. }
         | RemovalMethod::EndMovedSpace { .. }
-        | RemovalMethod::ImportWorkspace { .. }
-        | RemovalMethod::ImportChat { .. } => true,
+        | RemovalMethod::ImportSpace(_) => true,
         RemovalMethod::Cleanup { dry_run, .. } => !dry_run,
         RemovalMethod::StopTargets
         | RemovalMethod::CheckStop { .. }
@@ -146,27 +145,8 @@ pub(super) async fn handle(
             unsaved,
             checkpoint,
         } => Body::EndedSpace(manager.end_moved_space(&space, unsaved, checkpoint).await?),
-        RemovalMethod::ImportWorkspace {
-            repository,
-            bundle,
-            prerequisite,
-            workspace,
-            copy,
-            session_files,
-        } => Body::RestoredWorkspace(Box::new(
-            manager
-                .import_workspace(
-                    &repository,
-                    bundle.as_deref(),
-                    prerequisite.as_deref(),
-                    *workspace,
-                    copy,
-                    &session_files,
-                )
-                .await?,
-        )),
-        RemovalMethod::ImportChat { repository, chat } => {
-            Body::RestoredSpace(manager.import_chat(repository.as_ref(), *chat).await?)
+        RemovalMethod::ImportSpace(import) => {
+            Body::RestoredSpace(manager.import_space(*import).await?)
         }
     }))
 }
@@ -255,8 +235,7 @@ impl Scoped for RemovalMethod {
             | RemovalMethod::ExportSpace { .. }
             | RemovalMethod::ExportMovingSpace { .. }
             | RemovalMethod::EndMovedSpace { .. }
-            | RemovalMethod::ImportWorkspace { .. }
-            | RemovalMethod::ImportChat { .. } => administer(manager, caller, self).await,
+            | RemovalMethod::ImportSpace(_) => administer(manager, caller, self).await,
         }
     }
 }
@@ -269,17 +248,17 @@ async fn administer<'a>(
     caller: &Caller,
     method: &'a mut RemovalMethod,
 ) -> Result<Option<&'a mut SpaceSelector>> {
-    let repository = match method {
-        RemovalMethod::ImportWorkspace { repository, .. }
-        | RemovalMethod::ImportChat {
-            repository: Some(repository),
-            ..
-        } => {
+    let importing = match method {
+        RemovalMethod::ImportSpace(import) => import.repository.as_mut(),
+        _ => None,
+    };
+    let repository = match importing {
+        Some(repository) => {
             const REFUSAL: &str = "scoped processes import only into their own repository";
             *repository = manager.own_repository(caller, repository, REFUSAL).await?;
             Some(manager.repository(&*repository).await?.id)
         }
-        _ => None,
+        None => None,
     };
     manager
         .ensure_selected_reached(caller, administered(method))

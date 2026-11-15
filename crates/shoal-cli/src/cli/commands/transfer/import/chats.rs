@@ -4,13 +4,9 @@ use anyhow::{Context as _, Result, bail};
 
 use crate::cli::commands::restore::reopen::{ReopenedExt, reopened_chat};
 use crate::{
-    cli::{
-        agents::{self, Existing, SessionHome},
-        context::Context,
-        ui,
-    },
+    cli::{context::Context, ui},
     model::{RemovedSpace, RestoredSpace},
-    transfer::{CarriedChatExt, CarriedSessionFile, Manifest, ManifestExt},
+    transfer::{CarriedChatExt, CarriedSessionFile, Manifest, ManifestExt, SpaceImport},
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
 
@@ -105,21 +101,23 @@ async fn open_one(
     files: &[CarriedSessionFile],
     restore: bool,
 ) -> Result<()> {
-    let (repository, chat) = (import.repository.clone(), import.chat.clone());
-    let restored = crate::client::transfer::import_chat(&ctx.paths, repository, chat).await?;
-    let RestoredSpace::Chat(restored) = restored else {
-        bail!("the import opened a workspace");
-    };
     let kept: Vec<_> = import.sessions().collect();
     let own: Vec<CarriedSessionFile> = (files.iter())
         .filter(|file| kept.contains(&&file.file.session))
         .cloned()
         .collect();
-    let home = match &import.repository {
-        Some(repository) => SessionHome::Repository(repository.clone()),
-        None => SessionHome::Root,
+    let import = SpaceImport {
+        repository: import.repository.clone(),
+        bundle: None,
+        prerequisite: None,
+        space: import.chat.clone(),
+        copy: false,
+        session_files: own,
     };
-    agents::install_session_files(ctx, home, &own, Existing::Continued).await;
+    let restored = crate::client::transfer::import(&ctx.paths, import).await?;
+    let RestoredSpace::Chat(restored) = restored else {
+        bail!("the import opened a workspace");
+    };
     let mut reopened = reopened_chat(ctx, *restored).await?;
     if restore {
         reopened.queue_agents(ctx).await;

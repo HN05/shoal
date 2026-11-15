@@ -120,25 +120,7 @@ pub enum RemovalMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         checkpoint: Option<shoal_ids::checkpoint_numbers::CheckpointNumber>,
     },
-    /// Record a workspace another Shoal exported as removed here, with its
-    /// checkpoint fetched from `bundle`, and open it again; a `copy` as a
-    /// new workspace on a branch of its own. The daemon keeps the agents'
-    /// `session_files` with the record.
-    ImportWorkspace {
-        repository: crate::repository::Selector,
-        bundle: Option<std::path::PathBuf>,
-        prerequisite: Option<String>,
-        workspace: Box<crate::model::RemovedSpace>,
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        copy: bool,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        session_files: Vec<crate::transfer::CarriedSessionFile>,
-    },
-    /// Record a chat another Shoal's package carried as a removed chat of
-    /// `repository` here, or without one, and open it again.
-    ImportChat {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        repository: Option<crate::repository::Selector>,
-        chat: Box<crate::model::RemovedSpace>,
-    },
+    /// Record a space another Shoal exported as removed here, keeping its
+    /// agents' session files with the record, and open it again.
+    ImportSpace(Box<crate::transfer::SpaceImport>),
 }

@@ -6,9 +6,10 @@ use crate::{
         test_support::{manager, repository, unmarked},
         workspace::Manager,
     },
+    model::RemovedSpace,
     process::identity,
     removal::{InspectionPolicy, UnsavedWork},
-    transfer::{CarriedChatExt, ExportedSpace, Import, ManifestExt, Space},
+    transfer::{CarriedChatExt, ExportedSpace, Import, ManifestExt, Space, SpaceImport},
 };
 
 mod moving;
@@ -56,6 +57,19 @@ async fn chat_running(name: &str, script: &str) -> (tempfile::TempDir, Arc<Manag
         .await
         .unwrap();
     (root, manager, pid)
+}
+
+/// What `shoal move import` sends to import the carried chat `chat` into
+/// `repository`, or into none.
+fn chat_import(repository: Option<&crate::model::Repository>, chat: RemovedSpace) -> SpaceImport {
+    SpaceImport {
+        repository: repository.map(|repository| (&repository.id).into()),
+        bundle: None,
+        prerequisite: None,
+        space: chat,
+        copy: false,
+        session_files: Vec::new(),
+    }
 }
 
 /// Stop the agent of `chat`, as `shoal stop` does.
@@ -294,11 +308,8 @@ async fn a_workspace_moves_with_the_chats_in_it_and_below_it() {
     for carried in &import.manifest.chats {
         let sessions = (import.manifest).chat_sessions_on(carried, Some("elsewhere"), None);
         let chat = carried.chat_with(sessions);
-        let repository = (&target_repo.id).into();
-        importing
-            .import_chat(Some(&repository), chat)
-            .await
-            .unwrap();
+        let import = chat_import(Some(&target_repo), chat);
+        importing.import_space(import).await.unwrap();
     }
 
     // Each opens again under its ID, stopped, where it ran.
@@ -571,7 +582,7 @@ async fn a_chat_without_a_repository_below_one_moves_with_it_into_root_dir() {
     let (_other, importing) = crate::daemon::test_support::manager().await;
 
     let sessions = (import.manifest).chat_sessions_on(carried, Some("elsewhere"), None);
-    (importing.import_chat(None, carried.chat_with(sessions)))
+    (importing.import_space(chat_import(None, carried.chat_with(sessions))))
         .await
         .unwrap();
 
@@ -611,9 +622,7 @@ async fn a_carried_chat_whose_worktree_is_not_here_opens_in_the_checkout() {
         .find(|removed| removed.space_id == reading.id)
         .unwrap();
 
-    let repository = (&target_repo.id).into();
-    let restored = importing
-        .import_chat(Some(&repository), removed)
+    let restored = (importing.import_space(chat_import(Some(&target_repo), removed)))
         .await
         .unwrap();
 
@@ -622,4 +631,34 @@ async fn a_carried_chat_whose_worktree_is_not_here_opens_in_the_checkout() {
     };
     assert_eq!(restored.chat.workspace, None);
     assert_eq!(restored.warnings.len(), 1, "{:?}", restored.warnings);
+}
+
+#[tokio::test]
+async fn an_imported_chat_keeps_its_id_and_a_copy_takes_its_own() {
+    let (_source, exporting, source_repo, origin) = transfer::exporter().await;
+    let (_target, importing, target_repo) = transfer::importer(&origin).await;
+    let (_copies, copying, copy_repo) = transfer::importer(&origin).await;
+    let reading =
+        crate::daemon::test_support::chat(&exporting, "reading", "chat", Some(&source_repo), None)
+            .await;
+    (exporting.remove_chat(&SpaceSelector::id(&reading.id), None))
+        .await
+        .unwrap();
+    let removed = exporting.removed_spaces().await.unwrap().remove(0);
+
+    let moved = (importing.import_space(chat_import(Some(&target_repo), removed.clone())))
+        .await
+        .unwrap();
+    let copy = SpaceImport {
+        copy: true,
+        ..chat_import(Some(&copy_repo), removed)
+    };
+    let copied = copying.import_space(copy).await.unwrap();
+
+    let id = |restored| match restored {
+        crate::model::RestoredSpace::Chat(restored) => restored.chat.id,
+        crate::model::RestoredSpace::Workspace(_) => panic!("not a chat"),
+    };
+    assert_eq!(id(moved), reading.id);
+    assert_ne!(id(copied), reading.id);
 }

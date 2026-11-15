@@ -9,7 +9,7 @@ use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, request},
     executions::{Copied, LastSession, StoppedAgent},
-    model::{RemovedSpace, RestoredSpace, RestoredWorkspace},
+    model::{RemovedSpace, RestoredSpace},
     protocol::{RemovalMethod, WorkspaceMethod},
     removal::{RemovalResult, UnsavedWork},
     repository::Selector,
@@ -249,40 +249,31 @@ pub async fn copy(
     .await
 }
 
-/// Record the packaged `workspace` of `repository` as removed, keeping its
-/// agents' `session_files`, and open it again, fetching its commits from
-/// `bundle`, which needs `prerequisite`; a `copy` opens as a new workspace
-/// on a branch of its own.
-pub async fn import(
-    daemon: &impl Daemon,
-    repository: Selector,
-    bundle: Option<PathBuf>,
-    prerequisite: Option<String>,
-    workspace: RemovedSpace,
-    copy: bool,
-    session_files: Vec<CarriedSessionFile>,
-) -> Result<Box<RestoredWorkspace>> {
-    let method = RemovalMethod::ImportWorkspace {
-        repository,
-        bundle,
-        prerequisite,
-        workspace: Box::new(workspace),
-        copy,
-        session_files,
-    };
-    request(daemon, method).await
+/// A packaged space to record as removed here and open again.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpaceImport {
+    /// The repository it goes to; none for a chat without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<Selector>,
+    /// A Git bundle of a workspace's checkpoint, whose commits it fetches.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bundle: Option<PathBuf>,
+    /// A commit of the default branch the bundle builds on, which the
+    /// repository fetches when it lacks it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prerequisite: Option<String>,
+    /// Its removal record, with the agents that continue here.
+    pub space: RemovedSpace,
+    /// Set for a copy, which opens as a new space, a workspace on a branch
+    /// of its own.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub copy: bool,
+    /// The agents' session files, which the daemon keeps with the record.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub session_files: Vec<CarriedSessionFile>,
 }
 
-/// Record the chat `chat` a package carried, of `repository` or of none, as
-/// removed, and open it again.
-pub async fn import_chat(
-    daemon: &impl Daemon,
-    repository: Option<Selector>,
-    chat: RemovedSpace,
-) -> Result<RestoredSpace> {
-    let method = RemovalMethod::ImportChat {
-        repository,
-        chat: Box::new(chat),
-    };
-    request(daemon, method).await
+/// Record the space `import` packages as removed and open it again.
+pub async fn import(daemon: &impl Daemon, import: SpaceImport) -> Result<RestoredSpace> {
+    request(daemon, RemovalMethod::ImportSpace(Box::new(import))).await
 }

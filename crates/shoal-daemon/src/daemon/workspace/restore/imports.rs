@@ -1,5 +1,5 @@
-//! Importing a workspace another Shoal exported: recording it as removed
-//! here, then restoring it.
+//! Importing a space another Shoal exported: recording its removal record
+//! here as its kind needs, then restoring it as `shoal restore` does.
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 use std::path::Path;
@@ -12,77 +12,91 @@ use crate::daemon::workspace::Manager;
 use crate::refusal::{Reason, Refusal};
 use crate::{
     git,
-    model::{RemovedKind, RemovedSpace, Repository, RestoredSpace, RestoredWorkspace},
+    model::{RemovedKind, RemovedSpace, Repository, RestoredSpace},
     time::UnixTime,
-    transfer::CarriedSessionFile,
+    transfer::{CarriedSessionFile, SpaceImport},
 };
 
 impl Manager {
-    /// Open a workspace another Shoal exported: record it as removed here
-    /// with its checkpoint, fetched from `bundle` or else on the default
-    /// branch, and its agents' `session_files`, and restore it; a `copy` as
-    /// a new workspace of its own. A failed restore leaves the record for
+    /// Open a space another Shoal exported, as `import` describes: record
+    /// it as removed here, with a workspace's checkpoint fetched from its
+    /// bundle or else on the default branch, and its agents' session files,
+    /// and restore it under its ID, below its parent where that is here, a
+    /// copy under an ID of its own. A failed restore leaves the record for
     /// `shoal restore`.
-    pub async fn import_workspace(
-        &self,
-        selector: &crate::repository::Selector,
-        bundle: Option<&Path>,
-        prerequisite: Option<&str>,
-        removed: RemovedSpace,
-        copy: bool,
-        session_files: &[CarriedSessionFile],
-    ) -> Result<RestoredWorkspace> {
-        let removed = self
-            .record_package(selector, bundle, prerequisite, removed, copy, session_files)
+    pub async fn import_space(&self, import: SpaceImport) -> Result<RestoredSpace> {
+        let (removed, warnings) = (self.record_package(import))
             .await
             .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
-        self.restore_workspace(&SpaceSelector::id(&removed.space_id))
-            .await
-            .with_context(|| {
-                format!(
-                    "the imported workspace is recorded as removed; shoal restore {} retries",
-                    removed.space_id
-                )
-            })
-    }
-
-    /// Open a chat another Shoal's package carried: record it as a removed
-    /// chat of the repository `selector` names, or without one in
-    /// `root_dir`, as its removal here would, and restore it under its ID,
-    /// below its parent where that is here, and in the worktree it ran in
-    /// where that workspace is ready here, else in the checkout, with a
-    /// warning. A failed restore leaves the record for `shoal restore`.
-    pub async fn import_chat(
-        &self,
-        selector: Option<&crate::repository::Selector>,
-        removed: RemovedSpace,
-    ) -> Result<RestoredSpace> {
-        ensure!(
-            removed.chat().is_some(),
-            "the export carried a workspace as a chat"
-        );
-        let repo = match selector {
-            Some(selector) => Some(
-                (self.repository(selector).await)
-                    .map_err(|error| Refusal::wrap(Reason::NotImported, error))?,
-            ),
-            None => None,
-        };
-        let mut removed = self.imported_record(repo.as_ref(), removed).await?;
-        let moved_out = self.without_absent_worktree(&mut removed).await;
-        let id = removed.space_id.clone();
-        self.store
-            .write(move |tx| record_imported_chat(tx, &removed))
-            .await?;
+        let id = removed.space_id;
         let mut restored = (self.restore_space(&SpaceSelector::id(&id), None))
             .await
             .with_context(|| {
-                format!("the imported chat is recorded as removed; shoal restore {id} retries")
+                format!("the imported space is recorded as removed; shoal restore {id} retries")
             })?;
-        if let (Some(warning), RestoredSpace::Chat(chat)) = (moved_out, &mut restored) {
-            chat.warnings.push(warning);
+        match &mut restored {
+            RestoredSpace::Workspace(workspace) => workspace.warnings.extend(warnings),
+            RestoredSpace::Chat(chat) => chat.warnings.extend(warnings),
         }
         Ok(restored)
+    }
+
+    /// Record the space `import` packages as removed here, as
+    /// [`Self::import_space`] does before opening it, with the warnings of
+    /// what it changed; an error leaves no record.
+    async fn record_package(&self, import: SpaceImport) -> Result<(RemovedSpace, Vec<String>)> {
+        let repo = match &import.repository {
+            Some(selector) => Some(self.repository(selector).await?),
+            None => None,
+        };
+        let mut warnings = Vec::new();
+        let prerequisite = import.prerequisite.as_deref();
+        let removed =
+            (self.recorded_here(repo.as_ref(), prerequisite, import.space, &mut warnings)).await?;
+        // A repository move holds this gate; the checkout may have moved.
+        let locked = match &repo {
+            Some(repo) => Some(self.lock_repository(&repo.id).await?),
+            None => None,
+        };
+        let repo = locked.as_ref().map(|(repo, _git)| repo);
+        let _refs = self.gates.lock_checkpoints().await;
+        if let Some(kept) = removed.workspace() {
+            let repo = repo.context("a workspace belongs to a repository")?;
+            let bundle = import.bundle.as_deref();
+            self.save_imported_checkpoint(repo, bundle, &kept.checkpoint.commit)
+                .await?;
+        }
+        let removed = match import.copy {
+            true => self.copied_record(repo, removed).await?,
+            false => removed,
+        };
+        let removed = (self.record_imported(removed, &import.session_files)).await?;
+        Ok((removed, warnings))
+    }
+
+    /// The exported `removed` as [`Self::imported_record`] records it here,
+    /// once a workspace's checkpoint is its own and its repository has the
+    /// `prerequisite` its bundle builds on, a chat in the place it runs here,
+    /// with a warning in `warnings` when that is not where it ran.
+    async fn recorded_here(
+        &self,
+        repo: Option<&Repository>,
+        prerequisite: Option<&str>,
+        removed: RemovedSpace,
+        warnings: &mut Vec<String>,
+    ) -> Result<RemovedSpace> {
+        if let Some(kept) = removed.workspace() {
+            ensure!(
+                kept.checkpoint.workspace_id == removed.space_id,
+                "the export's checkpoint belongs to another workspace"
+            );
+        }
+        if let (Some(commit), Some(repo)) = (prerequisite, repo) {
+            self.fetch_missing(repo, &commit.into()).await?;
+        }
+        let mut removed = self.imported_record(repo, removed).await?;
+        warnings.extend(self.without_absent_worktree(&mut removed).await);
+        Ok(removed)
     }
 
     /// Record that the imported chat `removed` runs in its repository's
@@ -104,33 +118,6 @@ impl Manager {
         );
         chat.workspace = None;
         Some(warning)
-    }
-
-    /// Record the packaged `removed` as a removed workspace of the
-    /// repository `selector` names, as [`Self::import_workspace`] does
-    /// before opening it; an error leaves no record.
-    async fn record_package(
-        &self,
-        selector: &crate::repository::Selector,
-        bundle: Option<&Path>,
-        prerequisite: Option<&str>,
-        removed: RemovedSpace,
-        copy: bool,
-        session_files: &[CarriedSessionFile],
-    ) -> Result<RemovedSpace> {
-        let repo = self.repository(selector).await?;
-        ensure!(
-            removed.kept_workspace()?.checkpoint.workspace_id == removed.space_id,
-            "the export's checkpoint belongs to another workspace"
-        );
-        if let Some(commit) = prerequisite {
-            self.fetch_missing(&repo, &commit.into()).await?;
-        }
-        let removed = self.imported_record(Some(&repo), removed).await?;
-        // A repository move holds this gate; the checkout may have moved.
-        let (repo, _git) = self.lock_repository(&repo.id).await?;
-        self.record_import(&repo, bundle, removed, copy, session_files)
-            .await
     }
 
     /// Fetch the default branch when the repository lacks `commit`, which
@@ -182,20 +169,40 @@ impl Manager {
         Ok(removed)
     }
 
-    /// The exported `removed` as a new workspace of `repo` that copies it:
-    /// with its own ID, on a branch of its own named after the original's,
-    /// created at its HEAD, and without the PRs and CI runs, which stay with
-    /// the original's branch. The caller holds the repository's Git gate,
-    /// so a concurrent import takes another branch.
+    /// The exported `removed` as a new space that copies it, with its own
+    /// ID; a workspace's as [`Self::copied_workspace`] says. The caller
+    /// holds the repository's Git gate.
     async fn copied_record(
         &self,
-        repo: &Repository,
+        repo: Option<&Repository>,
         removed: RemovedSpace,
     ) -> Result<RemovedSpace> {
-        let id = SpaceId::generate();
-        let mut removed = removed;
+        let removed = RemovedSpace {
+            space_id: SpaceId::generate(),
+            ..removed
+        };
+        match removed.workspace() {
+            Some(_) => {
+                let repo = repo.context("a workspace belongs to a repository")?;
+                self.copied_workspace(repo, removed).await
+            }
+            None => Ok(removed),
+        }
+    }
+
+    /// The exported workspace `removed`, which copies another under its ID,
+    /// with a checkpoint of its own, on a branch of its own named after the
+    /// original's, created at its HEAD, and without the PRs and CI runs,
+    /// which stay with the original's branch. The caller holds the
+    /// repository's Git gate, so a concurrent import takes another branch.
+    async fn copied_workspace(
+        &self,
+        repo: &Repository,
+        mut removed: RemovedSpace,
+    ) -> Result<RemovedSpace> {
+        let id = removed.space_id.clone();
         let checkpoint = &mut removed.kept_workspace_mut()?.checkpoint;
-        checkpoint.workspace_id = id.clone();
+        checkpoint.workspace_id = id;
         let name = match &checkpoint.branch {
             Some(branch) => {
                 let branch = self.copy_branch(repo, branch.as_str()).await?;
@@ -206,45 +213,42 @@ impl Manager {
             None => removed.name.clone(),
         };
         Ok(RemovedSpace {
-            space_id: id,
             name,
             links: removed.links.copied(),
             ..removed
         })
     }
 
-    /// Point the checkpoint's ref at its commit, keep the agents'
-    /// `session_files`, then record the checkpoint and the removal in one
-    /// transaction, as a removal would; a `copy` as the new workspace that
-    /// copies it. The caller holds the repository's Git gate.
-    async fn record_import(
+    /// Point the ref of the imported checkpoint `commit` at it, fetching it
+    /// from `bundle`, or else from the default branch. The caller holds the
+    /// repository's Git gate and the checkpoint gate.
+    async fn save_imported_checkpoint(
         &self,
         repo: &Repository,
         bundle: Option<&Path>,
-        removed: RemovedSpace,
-        copy: bool,
-        session_files: &[CarriedSessionFile],
-    ) -> Result<RemovedSpace> {
-        let _refs = self.gates.lock_checkpoints().await;
-        let commit = &removed.kept_workspace()?.checkpoint.commit;
+        commit: &CommitId,
+    ) -> Result<()> {
         let reference = git::checkpoint::reference(commit);
         match bundle {
-            Some(bundle) => git::bundle::fetch(&repo.path, bundle, &reference).await?,
+            Some(bundle) => git::bundle::fetch(&repo.path, bundle, &reference).await,
             None => git::checkpoint::save(&repo.path, &reference, commit)
                 .await
-                .with_context(|| format!("the default branch has no commit {commit}"))?,
+                .with_context(|| format!("the default branch has no commit {commit}")),
         }
-        let removed = match copy {
-            true => self.copied_record(repo, removed).await?,
-            false => removed,
-        };
+    }
+
+    /// Keep the agents' `session_files` for `removed`, then record it in one
+    /// transaction, as a removal would: a workspace's checkpoint with it. A
+    /// failure keeps neither. The caller holds the checkpoint gate, and for
+    /// a space of a repository its Git gate.
+    async fn record_imported(
+        &self,
+        removed: RemovedSpace,
+        session_files: &[CarriedSessionFile],
+    ) -> Result<RemovedSpace> {
         let removed = self.keep_imported_sessions(removed, session_files).await?;
         let record = removed.clone();
-        if let Err(error) = self
-            .store
-            .write(move |tx| record_imported(tx, record))
-            .await
-        {
+        if let Err(error) = self.store.write(move |tx| record_import(tx, record)).await {
             let _ = self.discard_imported_sessions(&removed).await;
             return Err(error);
         }
@@ -252,27 +256,19 @@ impl Manager {
     }
 }
 
-/// Record an imported chat's removal record, unless its repository is being
-/// removed.
-fn record_imported_chat(tx: &rusqlite::Transaction<'_>, removed: &RemovedSpace) -> Result<()> {
+/// Record an imported space's removal record, a workspace's checkpoint under
+/// its next number with the record naming that number, unless its repository
+/// is being removed.
+fn record_import(tx: &rusqlite::Transaction<'_>, mut removed: RemovedSpace) -> Result<()> {
     if let Some(repository) = &removed.repository_id {
-        anyhow::ensure!(
+        ensure!(
             !crate::daemon::store::repository_removing(tx, repository)?,
             "the repository is being removed"
         );
     }
-    super::records::record(tx, removed)
-}
-
-/// Record an imported workspace's checkpoint under its next number and its
-/// removal record naming that number, unless the repository is being removed.
-fn record_imported(tx: &rusqlite::Transaction<'_>, mut removed: RemovedSpace) -> Result<()> {
-    anyhow::ensure!(
-        !crate::daemon::store::repository_removing(tx, removed.repository()?)?,
-        "the repository is being removed"
-    );
-    let checkpoint = &mut removed.kept_workspace_mut()?.checkpoint;
-    checkpoint.number = super::super::checkpoints::insert_numbered(tx, checkpoint)?;
-    super::records::record(tx, &removed)?;
-    Ok(())
+    if let RemovedKind::Workspace(kept) = &mut removed.kind {
+        let checkpoint = &mut kept.checkpoint;
+        checkpoint.number = super::super::checkpoints::insert_numbered(tx, checkpoint)?;
+    }
+    super::records::record(tx, &removed)
 }

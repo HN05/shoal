@@ -147,6 +147,18 @@ impl Manager {
             .await
     }
 
+    /// Open the removed workspace `selector` names again for the user, as
+    /// `shoal restore` does.
+    pub async fn restore_workspace(
+        &self,
+        selector: &crate::client::space_names::SpaceSelector,
+    ) -> anyhow::Result<crate::model::RestoredWorkspace> {
+        match self.restore_space(selector, None).await? {
+            crate::model::RestoredSpace::Workspace(restored) => Ok(*restored),
+            crate::model::RestoredSpace::Chat(_) => anyhow::bail!("restored a chat"),
+        }
+    }
+
     /// The selector of the space named `name`, as tests name the spaces
     /// they make: a workspace, a chat, else a removed workspace, by its ID,
     /// since a name never selects one. A name no space has selects nothing.
