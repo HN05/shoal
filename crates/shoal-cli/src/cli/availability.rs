@@ -82,7 +82,8 @@ impl Need {
             [
                 "diff" | "conflicts" | "rm" | "leases" | "messages" | "files" | "questions"
                 | "approvals" | "view" | "catalog" | "history" | "config" | "pr" | "issue"
-                | "alerts" | "demo" | "queue" | "review",
+                | "alerts" | "demo" | "queue" | "review" | "progress" | "sleep" | "priority"
+                | "log",
                 ..,
             ] => Self::Any,
             ["internal", ..] => Self::Any,

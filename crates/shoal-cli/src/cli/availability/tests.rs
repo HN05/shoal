@@ -3,36 +3,40 @@ use clap::CommandFactory;
 use super::*;
 use crate::state::WorkspaceState;
 
-/// Every built-in command path whose arguments name a workspace.
-fn workspace_commands(
+/// Every built-in command path whose arguments name a workspace or a space.
+fn space_commands(
     command: &clap::Command,
     path: &mut Vec<String>,
     found: &mut Vec<Vec<String>>,
 ) {
     if command
         .get_arguments()
-        .any(|arg| arg.get_id() == "workspace")
+        .any(|arg| matches!(arg.get_id().as_str(), "workspace" | "space"))
     {
         found.push(path.clone());
     }
     for subcommand in command.get_subcommands() {
         path.push(subcommand.get_name().to_owned());
-        workspace_commands(subcommand, path, found);
+        space_commands(subcommand, path, found);
         path.pop();
     }
 }
 
 #[test]
-fn every_command_naming_a_workspace_states_its_need() {
+fn every_command_naming_a_space_states_its_need() {
     let mut found = vec![];
     let mut command = crate::cli::Cli::command();
     command.build();
-    workspace_commands(&command, &mut vec![], &mut found);
+    space_commands(&command, &mut vec![], &mut found);
     assert!(found.len() > 30, "{found:?}");
-    for path in found {
-        let path: Vec<_> = path.iter().map(String::as_str).collect();
-        assert!(Need::of(&path).is_some(), "{path:?}");
-    }
+    let unstated: Vec<_> = found
+        .iter()
+        .filter(|path| {
+            let path: Vec<_> = path.iter().map(String::as_str).collect();
+            Need::of(&path).is_none()
+        })
+        .collect();
+    assert!(unstated.is_empty(), "{unstated:?}");
 }
 
 fn workspace(state: WorkspaceState) -> Workspace {
