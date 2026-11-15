@@ -1419,12 +1419,8 @@ async fn a_jobs_workspace_a_restart_caught_before_its_checkout_is_removed() {
     assert!(removed_with_its_claim(&fixture.manager, &workspace).await);
 }
 
-#[tokio::test]
-async fn a_jobs_workspace_a_restart_caught_seeding_is_removed() {
-    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
-    let workspace = workspace_a_restart_caught_preparing(&fixture).await;
-    // As if the daemon stopped during the seed clone, once Git had added
-    // the worktree and Shoal recorded it.
+/// Add the worktree of `workspace` as Git does before Shoal records it.
+async fn add_worktree(fixture: &Fixture, workspace: &Workspace) {
     let manager = &fixture.manager;
     let checkout = manager.repository(&fixture.repository).await.unwrap().path;
     let path = workspace.path.to_str().unwrap();
@@ -1432,9 +1428,39 @@ async fn a_jobs_workspace_a_restart_caught_seeding_is_removed() {
         &checkout,
         &["worktree", "add", "--detach", path, &fixture.head],
     );
+}
+
+#[tokio::test]
+async fn a_jobs_workspace_a_restart_caught_adding_its_worktree_is_removed() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
+    let workspace = workspace_a_restart_caught_preparing(&fixture).await;
+    add_worktree(&fixture, &workspace).await;
+    assert!(removed_with_its_claim(&fixture.manager, &workspace).await);
+    assert!(!workspace.path.exists());
+}
+
+#[tokio::test]
+async fn a_jobs_workspace_a_restart_caught_seeding_is_removed() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
+    let workspace = workspace_a_restart_caught_preparing(&fixture).await;
+    // As if the daemon stopped during the seed clone, once Shoal had
+    // recorded the worktree Git added.
+    add_worktree(&fixture, &workspace).await;
+    let manager = &fixture.manager;
     manager.record_worktree_identity(&workspace).await.unwrap();
     assert!(removed_with_its_claim(manager, &workspace).await);
     assert!(!workspace.path.exists());
+}
+
+#[tokio::test]
+async fn an_unrecorded_worktree_another_workspace_marked_stays_with_its_job() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
+    let workspace = workspace_a_restart_caught_preparing(&fixture).await;
+    add_worktree(&fixture, &workspace).await;
+    let admin_dir = git(&workspace.path, &["rev-parse", "--absolute-git-dir"]);
+    super::super::identity::mark_owner(admin_dir.trim_end().as_ref(), "another").unwrap();
+    assert!(!removed_with_its_claim(&fixture.manager, &workspace).await);
+    assert!(workspace.path.join(".git").exists());
 }
 
 #[tokio::test]

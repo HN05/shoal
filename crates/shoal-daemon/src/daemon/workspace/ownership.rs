@@ -157,12 +157,15 @@ impl Manager {
 
     /// Verify the worktree a removal deletes as [`Self::verify_worktree`]
     /// does, except one Git disowned, whose admin directory is gone and
-    /// whose `.git` link still names the recorded one, or the one its failed
-    /// checkout made. What a workspace that recorded no admin directory
-    /// holds at its path otherwise is the user's to delete.
+    /// whose `.git` link still names the recorded one, or the one a checkout
+    /// that failed or a restart cut short left. What a workspace that
+    /// recorded no admin directory holds at its path otherwise is the user's
+    /// to delete.
     pub(crate) async fn verify_removed_worktree(&self, workspace: &Workspace) -> Result<()> {
         let repo = self.repository(&workspace.repository_id).await?;
-        if crate::removal::disowned(workspace, &repo.path).await? {
+        if crate::removal::disowned(workspace, &repo.path).await?
+            || self.left_by_unfinished_add(workspace).await?
+        {
             return Ok(());
         }
         let verified = self.verify_worktree(workspace).await;
@@ -176,6 +179,22 @@ impl Manager {
                 workspace.name
             )
         })
+    }
+
+    /// Whether the worktree at the path of the disposable `workspace`, which
+    /// recorded no admin directory, is what a `worktree add` for it that a
+    /// restart cut short left: a linked worktree of its repository whose
+    /// admin directory no workspace marked. Nothing was at the path of a
+    /// disposable workspace, which adopts nothing, when Shoal recorded it.
+    async fn left_by_unfinished_add(&self, workspace: &Workspace) -> Result<bool> {
+        if !workspace.disposable || workspace.git_dir.is_some() {
+            return Ok(false);
+        }
+        // One Git cannot read proves nothing about whose directory it is.
+        let Ok(git_dir) = self.linked_git_dir(workspace).await else {
+            return Ok(false);
+        };
+        off_runtime::run(move || Ok(marked_owner(&git_dir)?.is_none())).await
     }
 
     async fn verify_worktree_identity(&self, workspace: &Workspace) -> Result<()> {
