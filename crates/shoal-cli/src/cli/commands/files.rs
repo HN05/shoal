@@ -93,8 +93,7 @@ pub(super) async fn remove(
 ) -> Result<i32> {
     // Names and records belong to one workspace or chat, so they offer no
     // choice of every workspace.
-    let in_chat = ui::current_chat(&scope.workspace).is_some() && !scope.all;
-    let space = if names.is_empty() && ids.is_empty() && !in_chat {
+    let space = if names.is_empty() && ids.is_empty() {
         ui::select_space_filter(ctx, scope).await?
     } else {
         Some(ui::select_space(ctx, scope.workspace, Fallback::CurrentDirectory).await?)

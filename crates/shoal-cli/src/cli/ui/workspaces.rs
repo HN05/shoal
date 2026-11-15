@@ -535,6 +535,10 @@ pub async fn select_space_filter(
     if scope.all {
         return Ok(None);
     }
+    if current_chat(&scope.workspace).is_some() {
+        let space = select_space(ctx, scope.workspace, Fallback::CurrentDirectory).await?;
+        return Ok(Some(space));
+    }
     Ok(
         match resolve_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await? {
             Resolution::Named(selector) => Some(selector),

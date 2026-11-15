@@ -596,10 +596,17 @@ fn a_hold_keeps_a_stopped_chat_until_it_is_released() {
         "quay-thread",
     ]);
     assert_eq!(held["space_id"], chat.as_str(), "{held}");
-    assert_eq!(
-        fixture.ok(&["leases", "hold", "--space", &space])[0]["name"],
-        "quay-thread"
-    );
+    // Without --space, a command run in the chat lists the chat's own.
+    let listed = fixture
+        .command()
+        .args(["--json", "leases", "hold"])
+        .env("SHOAL_CHAT", &chat)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(listed.status.success(), "{}", printed(&listed));
+    let listed: Value = serde_json::from_slice(&listed.stdout).unwrap();
+    assert_eq!(listed[0]["name"], "quay-thread", "{listed}");
     let status = fixture.ok(&["status", &space]);
     assert_eq!(
         status["chat"]["holds"][0]["name"], "quay-thread",
