@@ -128,19 +128,15 @@ async fn workspaces<const N: usize>(
 
 /// The progress events of the journal, as the space and its status line.
 async fn progress_events(manager: &Manager) -> Vec<(SpaceId, Option<String>)> {
-    (manager
-        .workspace_events(None, 100)
-        .await
-        .unwrap()
-        .into_iter())
-    .filter_map(|item| match item {
-        EventItem::Event(event) if event.details.kind == EventKind::ProgressChanged => {
-            let status = event.details.progress.and_then(|progress| progress.status);
-            Some((event.details.space_id, status))
-        }
-        _ => None,
-    })
-    .collect()
+    (manager.space_events(None, 100).await.unwrap().into_iter())
+        .filter_map(|item| match item {
+            EventItem::Event(event) if event.details.kind == EventKind::ProgressChanged => {
+                let status = event.details.progress.and_then(|progress| progress.status);
+                Some((event.details.space_id, status))
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 #[tokio::test]
@@ -293,7 +289,7 @@ async fn a_chats_progress_is_its_own_and_goes_with_it() {
     let listed = manager.chats().await.unwrap();
     let progress = listed[0].progress.as_ref().unwrap();
     assert_eq!(progress.status.as_deref(), Some("Drafting"));
-    let events: Vec<_> = (manager.workspace_events(None, 100).await.unwrap())
+    let events: Vec<_> = (manager.space_events(None, 100).await.unwrap())
         .into_iter()
         .filter_map(|item| match item {
             EventItem::Event(event) if event.details.kind == EventKind::ProgressChanged => {
@@ -361,19 +357,15 @@ async fn a_done_summary_sets_the_status_line_with_the_completion_it_records() {
 
 /// The blocker events of the journal, as their kind and cause.
 async fn blocker_events(manager: &Manager) -> Vec<(EventKind, String)> {
-    (manager
-        .workspace_events(None, 100)
-        .await
-        .unwrap()
-        .into_iter())
-    .filter_map(|item| match item {
-        EventItem::Event(event) => {
-            let blocker = event.details.blocker?;
-            Some((event.details.kind, blocker.blocker.cause()))
-        }
-        _ => None,
-    })
-    .collect()
+    (manager.space_events(None, 100).await.unwrap().into_iter())
+        .filter_map(|item| match item {
+            EventItem::Event(event) => {
+                let blocker = event.details.blocker?;
+                Some((event.details.kind, blocker.blocker.cause()))
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 #[tokio::test]

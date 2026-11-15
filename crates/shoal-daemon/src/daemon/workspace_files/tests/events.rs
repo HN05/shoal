@@ -11,7 +11,7 @@ use crate::{
 /// The journal's file events, oldest first.
 async fn file_events(manager: &Manager) -> Vec<FileEventDetails> {
     manager
-        .workspace_events(None, 1000)
+        .space_events(None, 1000)
         .await
         .unwrap()
         .into_iter()
@@ -109,7 +109,7 @@ async fn every_route_records_one_added_event_per_file() {
     assert_eq!(added.file.title.as_deref(), Some("Crash log"));
     assert_eq!(added.file.attached_by, Some(Attacher::User));
 
-    let item = manager.workspace_events(None, 1000).await.unwrap();
+    let item = manager.space_events(None, 1000).await.unwrap();
     let line = item
         .iter()
         .find(|item| matches!(item, EventItem::File(_)))

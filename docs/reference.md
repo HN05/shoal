@@ -1855,7 +1855,7 @@ asks the chat's agent to choose the name and set it instead. Workspace processes
 cannot rename chats.
 
 `shoal list` shows the chat by name with the spaces below it, and
-[workspace events](#workspace-events) report its start, renames, stops,
+[space events](#space-events) report its start, renames, stops,
 restores and removal. A workspace the chat's agent opens with `shoal start` is
 below the chat, unless it was split from a workspace, below which it stays: its `parent` field and `shoal status` name the chat until the
 workspace is reopened outside a chat for its issue or a picked branch, which
@@ -1887,7 +1887,7 @@ shoal convert chat --space 7 --mode plan # The user's terminal converts any spac
 turns a chat into a workspace, and `shoal convert chat [--mode MODE] [--space S]`
 turns a workspace into a chat. The space stays the same: it keeps its ID,
 number, name, parent, children, links and watched PRs, questions, attached
-files, progress and `TMPDIR`, and the [journal](#workspace-events) records a
+files, progress and `TMPDIR`, and the [journal](#space-events) records a
 `converted` event instead of a new space. Unread messages go to the agent in
 the new place. Converting a space into the kind it already is, is refused.
 
@@ -4635,7 +4635,7 @@ fails is left out.
 The daemon sends each change through the forge's REST API as the workspace's
 [agent account](#agent-accounts), except `merge`, which uses your login and is
 refused to processes inside a workspace execution. Each change records an
-`item_changed` [workspace event](#workspace-events). `--json` returns the item
+`item_changed` [space event](#space-events). `--json` returns the item
 as the forge then reports it: `kind`, `number`, `url`, `title`, `state` (`open`,
 `closed` or `merged`), `labels`, and for a PR, `pr` with `head`, `base` and
 `draft`.
@@ -5054,14 +5054,14 @@ with `kind`, `url` and `created_at`.
 `shoal inbox` lists them across repositories. `unready` fails when
 it selects no mark. Unlinking an item withdraws its mark, and removal deletes
 all marks. Each mark and withdrawal
-is a [workspace event](#workspace-events). Scoped callers mark only their own
+is a [space event](#space-events). Scoped callers mark only their own
 workspace; `--space` selects another workspace or a chat for unscoped callers.
 
 A [chat](#chats) marks each linked open PR whatever its head on the forge, since
 its checkout is not on the PR's branch, and its linked issue, or the chat
 itself when nothing is linked. `list --chats` shows a marked chat as `ready`,
-`inbox` lists its marks, and `list --json` lists them as the chat's `review`. A chat's marks are not workspace events, and
-the [review gate](#local-reviews) does not apply to them; `hooks.post_ready` runs in
+`inbox` lists its marks, and `list --json` lists them as the chat's `review`. The
+[review gate](#local-reviews) does not apply to a chat's marks; `hooks.post_ready` runs in
 the chat's checkout, with the repository's `[env]`, whose `{path}` is the
 checkout and `{repo}` the repository; a chat has no `{workspace}`, `{branch}`
 or ports.
@@ -5122,7 +5122,7 @@ agent whose process died, such as with a reboot, shows none, and the state ends
 with the execution's record; one reported from outside lasts until the next
 report or removal. A chat's state ends when the chat stops or is restored, and a
 report arriving while it is stopped is not recorded. Each change, and each end,
-of a workspace's state is a [workspace event](#workspace-events); repeating the
+of a workspace's state is a [space event](#space-events); repeating the
 current state is not a change. Agent state never notifies, records completion, or affects cleanup.
 A space's own process keeps each report it sends in the state directory until
 the daemon answers, so a report the daemon does not receive, which the hooks
@@ -5225,7 +5225,7 @@ space's ID or the item's URL), `name`, `reason` and, after a failed lookup,
 `lookup_failed`; a space without progress has none. `shoal progress` and the
 `Progress` section list each blocker with its cause and reason, the space's
 after the status line and a step's below it.
-Each change is a `progress_changed` [event](#workspace-events), which
+Each change is a `progress_changed` [event](#space-events), which
 `shoal log --all` shows, and setting the same value again is not a
 change. Progress never notifies, and coordinating agents read their
 children's progress on demand.
@@ -5376,7 +5376,7 @@ details, under a heading for each date:
 base and parent changes, its agent's turn states and progress changes, other
 forge activity such as comments and checks, demos, simulator leases and
 attached files. With `--json` each line is the entry as
-[`shoal internal events`](#workspace-events) prints it.
+[`shoal internal events`](#space-events) prints it.
 
 A removed space's log stays for `cleanup.restore.retention_days` after its
 removal and is selected by the space's ID, as `shoal files` selects it; a
@@ -5396,7 +5396,7 @@ own events stay for the global `cleanup.restore.retention_days`. The daemon's
 diagnostic log is not part of it. Workspace processes read Shoal's log as
 their space's [`notifications` permission](#permitted-actions) allows.
 
-### Workspace events
+### Space events
 
 ```sh
 shoal internal events --follow --json             # stream lifecycle changes

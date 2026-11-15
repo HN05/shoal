@@ -967,7 +967,7 @@ fn event_cli_preserves_adjacent_frames_and_finishes_an_empty_listing() {
             let request =
                 support::fake_daemon::read_request(&stream).expect("missing fake daemon request");
             assert_eq!(
-                request["method"]["watch_workspace_events"],
+                request["method"]["watch_space_events"],
                 json!({"since": 0, "follow": false})
             );
             let response = |body| support::fake_daemon::frame(&request, body);

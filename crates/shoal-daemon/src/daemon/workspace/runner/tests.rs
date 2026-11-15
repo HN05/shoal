@@ -1281,7 +1281,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
     assert!(manager.workspace_by_id(&workspace.id).await.is_err());
     let ended: Vec<_> = manager
-        .workspace_events(None, 1000)
+        .space_events(None, 1000)
         .await
         .unwrap()
         .into_iter()

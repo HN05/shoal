@@ -226,7 +226,7 @@ async fn background_activity_uses_its_own_baseline_and_publishes_events() {
         .await
         .unwrap();
     assert!(manager
-            .workspace_events(None, 100)
+            .space_events(None, 100)
             .await
             .unwrap()
             .iter()
@@ -239,7 +239,7 @@ async fn background_activity_uses_its_own_baseline_and_publishes_events() {
         )
         .await
         .unwrap();
-    let events = manager.workspace_events(None, 100).await.unwrap();
+    let events = manager.space_events(None, 100).await.unwrap();
     let activity = events.iter().find_map(|item| match item {
         crate::daemon::events::EventItem::Event(event)
             if event.details.kind == crate::daemon::events::EventKind::ItemActivity =>
@@ -336,7 +336,7 @@ async fn a_failed_first_background_read_leaves_the_baseline_to_the_next() {
             .unwrap();
     }
     assert!(manager
-            .workspace_events(None, 100)
+            .space_events(None, 100)
             .await
             .unwrap()
             .iter()
@@ -1885,7 +1885,7 @@ async fn background_activity_does_not_repeat_an_unchanged_baseline_failure() {
         .await
         .unwrap();
     assert!(manager
-            .workspace_events(None, 100)
+            .space_events(None, 100)
             .await
             .unwrap()
             .iter()
@@ -2910,7 +2910,7 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
         .record_background_activity(&id, vec![(RUN.as_str().into(), run_snapshot("finished"))])
         .await
         .unwrap();
-    let events = manager.workspace_events(None, 100).await.unwrap();
+    let events = manager.space_events(None, 100).await.unwrap();
     assert!(events.iter().any(|item| matches!(item,
         crate::daemon::events::EventItem::Event(event)
             if event.details.item_activity.as_deref().is_some_and(|activity|

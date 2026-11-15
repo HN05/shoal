@@ -133,7 +133,7 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
     let links = manager.workspace_by_id(&workspace.id).await.unwrap().links;
     assert_eq!(links.opened.len(), 1);
     let created = manager
-        .workspace_events(None, 100)
+        .space_events(None, 100)
         .await
         .unwrap()
         .into_iter()

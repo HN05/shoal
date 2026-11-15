@@ -17,7 +17,7 @@ async fn follower_reconnects_at_the_last_displayed_cursor() {
         assert!(matches!(
             request.method,
             Method::Operation(Operation::Workspace(
-                WorkspaceMethod::WatchWorkspaceEvents {
+                WorkspaceMethod::WatchSpaceEvents {
                     after: Some(after),
                     follow: true
                 }
@@ -45,7 +45,7 @@ async fn follower_reconnects_at_the_last_displayed_cursor() {
         assert!(matches!(
             request.method,
             Method::Operation(Operation::Workspace(
-                WorkspaceMethod::WatchWorkspaceEvents {
+                WorkspaceMethod::WatchSpaceEvents {
                     after: Some(after),
                     follow: true
                 }

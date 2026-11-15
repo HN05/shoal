@@ -484,7 +484,7 @@ async fn demo_events(
     workspace: &SpaceId,
 ) -> Vec<(EventKind, String, Option<String>)> {
     manager
-        .workspace_events(None, 1000)
+        .space_events(None, 1000)
         .await
         .unwrap()
         .into_iter()

@@ -493,7 +493,7 @@ pub struct ItemActivityUpdate {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkspaceEvent {
+pub struct SpaceEvent {
     pub id: EventCursor,
     pub created_at: UnixTime,
     #[serde(flatten)]
@@ -559,7 +559,7 @@ impl ShoalEventDetails {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventItem {
-    Event(Box<WorkspaceEvent>),
+    Event(Box<SpaceEvent>),
     File(Box<FileEvent>),
     Shoal(Box<ShoalEvent>),
     /// The journal no longer holds every event after the requested cursor.
@@ -610,7 +610,7 @@ impl Events {
         after: Option<EventCursor>,
         follow: bool,
     ) -> Result<Self> {
-        let method = WorkspaceMethod::WatchWorkspaceEvents { after, follow };
+        let method = WorkspaceMethod::WatchSpaceEvents { after, follow };
         let (reader, body) = open_buffered(daemon, method).await?;
         <()>::try_from(body)?;
         Ok(Self {
@@ -632,7 +632,7 @@ impl Events {
                 Ok(response) => response,
                 Err(error) if self.follow && stream_closed(&error) => {
                     let (after, follow) = (self.cursor, self.follow);
-                    let method = || WorkspaceMethod::WatchWorkspaceEvents { after, follow };
+                    let method = || WorkspaceMethod::WatchSpaceEvents { after, follow };
                     let (reader, body) = reconnect(daemon, method).await?;
                     <()>::try_from(body)?;
                     self.reader = reader;

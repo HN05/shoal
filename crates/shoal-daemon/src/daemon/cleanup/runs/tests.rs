@@ -16,7 +16,7 @@ async fn a_pass_is_recorded_after_removals_or_with_new_failures() {
     manager
         .record_cleanup_run(Some("idle cleanup: denied".into()))
         .await;
-    let runs: Vec<_> = (manager.workspace_events(None, 50).await.unwrap())
+    let runs: Vec<_> = (manager.space_events(None, 50).await.unwrap())
         .into_iter()
         .map(|item| match item {
             EventItem::Shoal(event) => event.details,

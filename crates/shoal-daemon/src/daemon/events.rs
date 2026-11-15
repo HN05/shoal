@@ -10,7 +10,7 @@ use super::{log, workspace::Manager};
 pub(crate) use crate::client::events::{
     AgentEvent, AlertEvent, ApprovalEvent, EventCause, EventCursor, EventDetails, EventItem,
     EventKind, FileEvent, FileEventDetails, JobEndedEvent, ShoalEvent, ShoalEventDetails,
-    ShoalEventKind, StoppedProcess, WorkspaceEvent,
+    ShoalEventKind, SpaceEvent, StoppedProcess,
 };
 use crate::time::UnixTime;
 
@@ -27,7 +27,7 @@ enum Record {
 /// The stored event `record` with its journal ID and time.
 fn decode(id: EventCursor, created_at: UnixTime, record: &str) -> Result<EventItem> {
     Ok(match serde_json::from_str(record)? {
-        Record::Workspace(details) => EventItem::Event(Box::new(WorkspaceEvent {
+        Record::Workspace(details) => EventItem::Event(Box::new(SpaceEvent {
             id,
             created_at,
             details: *details,
@@ -476,7 +476,7 @@ impl Manager {
         }).await
     }
 
-    pub(crate) async fn latest_workspace_event_id(&self) -> Result<EventCursor> {
+    pub(crate) async fn latest_space_event_id(&self) -> Result<EventCursor> {
         self.store
             .run(|db| {
                 Ok(
@@ -491,19 +491,19 @@ impl Manager {
     /// A consistent replay batch from a client's cursor, including an
     /// explicit expired or future one.
     #[cfg(test)]
-    pub async fn workspace_events(
+    pub async fn space_events(
         &self,
         after: Option<EventCursor>,
         limit: u32,
     ) -> Result<Vec<EventItem>> {
-        let (items, _) = self.workspace_events_page(after, None, limit).await?;
+        let (items, _) = self.space_events_page(after, None, limit).await?;
         Ok(items)
     }
 
     /// A replay batch after `cursor` and the highest ID retention had
     /// deleted, `pruned`, when the previous batch read it; none for the
     /// client's own cursor. Returns that ID as of this batch, for the next.
-    pub(crate) async fn workspace_events_page(
+    pub(crate) async fn space_events_page(
         &self,
         cursor: Option<EventCursor>,
         pruned: Option<EventCursor>,

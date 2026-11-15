@@ -100,18 +100,14 @@ async fn forge_blockers_clear_as_their_lookups_say_and_failures_keep_them() {
     );
     assert_eq!(blockers(&manager, &blocked).await[0].lookup_failed, None);
 
-    let events: Vec<_> = (manager
-        .workspace_events(None, 100)
-        .await
-        .unwrap()
-        .into_iter())
-    .filter_map(|item| match item {
-        EventItem::Event(event) if event.details.kind == EventKind::BlockerCleared => {
-            event.details.blocker.map(|blocker| blocker.blocker.target)
-        }
-        _ => None,
-    })
-    .collect();
+    let events: Vec<_> = (manager.space_events(None, 100).await.unwrap().into_iter())
+        .filter_map(|item| match item {
+            EventItem::Event(event) if event.details.kind == EventKind::BlockerCleared => {
+                event.details.blocker.map(|blocker| blocker.blocker.target)
+            }
+            _ => None,
+        })
+        .collect();
     assert_eq!(events, [ISSUE, RUN]);
 }
 

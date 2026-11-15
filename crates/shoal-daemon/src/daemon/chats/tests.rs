@@ -14,7 +14,7 @@ use shoal_refs::BranchName;
 /// order.
 async fn chat_events(manager: &Manager) -> Vec<String> {
     manager
-        .workspace_events(None, 100)
+        .space_events(None, 100)
         .await
         .unwrap()
         .into_iter()

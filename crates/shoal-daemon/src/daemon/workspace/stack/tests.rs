@@ -70,7 +70,7 @@ async fn creation_infers_the_base_and_removal_moves_stacked_workspaces_down() {
         );
     }
 
-    let events = manager.workspace_events(None, 100).await.unwrap();
+    let events = manager.space_events(None, 100).await.unwrap();
     let bases: Vec<_> = events
         .iter()
         .filter_map(|item| match item {
@@ -183,7 +183,7 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
     assert_eq!(set(upper, None).await.unwrap().base_workspace, None);
     assert!(set(foreign, None).await.is_err());
 
-    let events = manager.workspace_events(None, 100).await.unwrap();
+    let events = manager.space_events(None, 100).await.unwrap();
     let changes: Vec<_> = events
         .iter()
         .filter_map(|item| match item {

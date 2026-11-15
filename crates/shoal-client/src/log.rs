@@ -7,7 +7,7 @@ use shoal_states::states;
 
 use crate::{
     connection::{self, Daemon},
-    events::{EventCursor, EventKind, FileEvent, ShoalEvent, WorkspaceEvent},
+    events::{EventCursor, EventKind, FileEvent, ShoalEvent, SpaceEvent},
     forge::updates::UpdateKind,
     protocol::WorkspaceMethod,
     space_names::SpaceSelector,
@@ -41,7 +41,7 @@ pub struct LogTopic {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LogEntry {
-    Event(Box<WorkspaceEvent>),
+    Event(Box<SpaceEvent>),
     File(Box<FileEvent>),
     Shoal(Box<ShoalEvent>),
 }

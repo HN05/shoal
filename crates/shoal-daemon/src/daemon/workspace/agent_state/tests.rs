@@ -15,7 +15,7 @@ use crate::{
 
 async fn state_events(manager: &Manager) -> Vec<Option<AgentState>> {
     manager
-        .workspace_events(None, 100)
+        .space_events(None, 100)
         .await
         .unwrap()
         .into_iter()

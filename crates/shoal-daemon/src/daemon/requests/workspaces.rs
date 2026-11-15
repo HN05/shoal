@@ -23,10 +23,10 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        WorkspaceMethod::WatchWorkspaceEvents { after, follow } => {
+        WorkspaceMethod::WatchSpaceEvents { after, follow } => {
             let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {
-                watch_workspace_events(stream, request_id, manager, after, follow, guard)
+                watch_space_events(stream, request_id, manager, after, follow, guard)
             }));
         }
         WorkspaceMethod::SpaceLog {
@@ -423,7 +423,7 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::CopySpace { .. } => administer(manager, caller, self).await?,
             WorkspaceMethod::RevokeWorkspaceEnv { .. }
             | WorkspaceMethod::OwnedPlaces
-            | WorkspaceMethod::WatchWorkspaceEvents { .. } => return Err(denied()),
+            | WorkspaceMethod::WatchSpaceEvents { .. } => return Err(denied()),
         })
     }
 }
@@ -465,7 +465,7 @@ fn administered(method: &mut WorkspaceMethod) -> Option<&mut SpaceSelector> {
     }
 }
 
-pub(in crate::daemon) async fn watch_workspace_events(
+pub(in crate::daemon) async fn watch_space_events(
     mut stream: UnixStream,
     request_id: u64,
     manager: Arc<Manager>,
@@ -488,7 +488,7 @@ pub(in crate::daemon) async fn watch_workspace_events(
     }
     // Subscribe before the first read so a concurrent commit cannot be missed.
     let mut changed = manager.store.watch_changes();
-    let end = manager.latest_workspace_event_id().await?;
+    let end = manager.latest_space_event_id().await?;
     protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
     let _finite_request = if follow {
         drop(startup);
@@ -501,7 +501,7 @@ pub(in crate::daemon) async fn watch_workspace_events(
     let mut pruned = None;
     loop {
         let operation = manager.gates.operation().await;
-        let (items, now_pruned) = (manager.workspace_events_page(cursor, pruned, 100)).await?;
+        let (items, now_pruned) = (manager.space_events_page(cursor, pruned, 100)).await?;
         pruned = Some(now_pruned);
         let mut delivered = false;
         for item in items {

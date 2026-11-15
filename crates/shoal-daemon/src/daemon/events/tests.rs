@@ -34,7 +34,7 @@ async fn connect(
     let (server, client) = UnixStream::pair().unwrap();
     let mut client = BufReader::new(client);
     let startup = manager.gates.owned_operation().await;
-    let task = tokio::spawn(crate::daemon::requests::workspaces::watch_workspace_events(
+    let task = tokio::spawn(crate::daemon::requests::workspaces::watch_space_events(
         server,
         1,
         manager,
@@ -158,7 +158,7 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
         .await
         .unwrap();
     for follow in [false, true] {
-        let mut method = WorkspaceMethod::WatchWorkspaceEvents {
+        let mut method = WorkspaceMethod::WatchSpaceEvents {
             after: Some(EventCursor::new(0)),
             follow,
         };
@@ -191,7 +191,7 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
             .map(BranchName::as_str),
         Some("worker")
     );
-    let events = manager.workspace_events(None, 100).await.unwrap();
+    let events = manager.space_events(None, 100).await.unwrap();
     let changed: Vec<_> = events
         .iter()
         .filter_map(|e| match e {
@@ -276,7 +276,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
             _ => unreachable!(),
         }
         assert!(manager.workspace_by_id(&workspace.id).await.is_err());
-        let events = manager.workspace_events(None, 100).await.unwrap();
+        let events = manager.space_events(None, 100).await.unwrap();
         assert!(events.iter().any(|e| matches!(e, EventItem::Event(e) if e.details.space_id == workspace.id && e.details.kind == EventKind::Removed && e.details.cause == Some(cause))));
     }
     let workspace = manager
@@ -302,7 +302,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
-    let events = manager.workspace_events(None, 100).await.unwrap();
+    let events = manager.space_events(None, 100).await.unwrap();
     let errors: Vec<_> = events
         .iter()
         .filter_map(|e| match e {
@@ -342,7 +342,7 @@ async fn boundary_future_and_empty_cursors_have_explicit_gap_semantics() {
     task.await.unwrap().unwrap();
     seed_turns(&manager, 1004).await;
     let boundary = manager
-        .workspace_events(Some(EventCursor::new(505)), 1000)
+        .space_events(Some(EventCursor::new(505)), 1000)
         .await
         .unwrap();
     assert_eq!(boundary.len(), 500);
@@ -351,7 +351,7 @@ async fn boundary_future_and_empty_cursors_have_explicit_gap_semantics() {
         EventItem::Event(event) if event.id.id() == 506
     ));
     let future = manager
-        .workspace_events(Some(EventCursor::new(1006)), 1000)
+        .space_events(Some(EventCursor::new(1006)), 1000)
         .await
         .unwrap();
     assert!(matches!(
@@ -365,7 +365,7 @@ async fn boundary_future_and_empty_cursors_have_explicit_gap_semantics() {
     assert_eq!(future.len(), 501);
     assert!(
         manager
-            .workspace_events(Some(EventCursor::new(-1)), 100)
+            .space_events(Some(EventCursor::new(-1)), 100)
             .await
             .is_err()
     );
@@ -407,7 +407,7 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
         .await;
     events.unwrap();
     let agents: Vec<_> = manager
-        .workspace_events(None, 100)
+        .space_events(None, 100)
         .await
         .unwrap()
         .into_iter()
@@ -442,7 +442,7 @@ async fn a_cursor_below_what_retention_pruned_reports_the_gap() {
     seed_turns(&manager, 600).await;
     seed(&manager, 1).await;
     let behind = manager
-        .workspace_events(Some(EventCursor::new(50)), 1000)
+        .space_events(Some(EventCursor::new(50)), 1000)
         .await
         .unwrap();
     assert!(matches!(
@@ -455,11 +455,11 @@ async fn a_cursor_below_what_retention_pruned_reports_the_gap() {
     ));
     assert!(matches!(&behind[1], EventItem::Event(event) if event.id.id() == 102));
     let past = manager
-        .workspace_events(Some(EventCursor::new(101)), 1000)
+        .space_events(Some(EventCursor::new(101)), 1000)
         .await
         .unwrap();
     assert!(matches!(&past[0], EventItem::Event(event) if event.id.id() == 102));
-    let all = manager.workspace_events(None, 1000).await.unwrap();
+    let all = manager.space_events(None, 1000).await.unwrap();
     assert!(matches!(&all[0], EventItem::Event(event) if event.id.id() == 1));
 }
 

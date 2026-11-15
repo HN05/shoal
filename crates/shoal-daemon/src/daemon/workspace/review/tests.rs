@@ -29,7 +29,7 @@ fn select(kind: Option<LinkKind>, input: Option<&str>) -> Selection {
 
 async fn review_events(manager: &Manager) -> Vec<(String, Option<String>)> {
     manager
-        .workspace_events(None, 100)
+        .space_events(None, 100)
         .await
         .unwrap()
         .into_iter()
@@ -671,7 +671,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .unwrap();
     assert_eq!(mutations(), 1);
     let changes = manager
-        .workspace_events(None, 100)
+        .space_events(None, 100)
         .await
         .unwrap()
         .into_iter()

@@ -1236,7 +1236,7 @@ async fn wait_start_handled(manager: &Manager, workspace: &crate::model::Workspa
     let execution = only_execution(manager, workspace).await;
     bounded(async {
         loop {
-            let events = manager.workspace_events(None, 100).await.unwrap();
+            let events = manager.space_events(None, 100).await.unwrap();
             if events.iter().any(|item| match item {
                 EventItem::Event(event) => {
                     event.details.kind == EventKind::AgentStarted

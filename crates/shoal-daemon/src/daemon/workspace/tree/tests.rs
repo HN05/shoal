@@ -126,7 +126,7 @@ async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
         assert!(restorable.iter().any(|removed| removed == name), "{name}");
     }
 
-    let events = manager.workspace_events(None, 100).await.unwrap();
+    let events = manager.space_events(None, 100).await.unwrap();
     let removals: Vec<_> = events
         .iter()
         .filter_map(|item| match item {

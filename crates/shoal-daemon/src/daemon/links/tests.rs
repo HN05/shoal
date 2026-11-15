@@ -34,7 +34,7 @@ async fn workspace_with_origin() -> (tempfile::TempDir, std::sync::Arc<Manager>,
 
 async fn link_events(manager: &Manager, kind: EventKind) -> Vec<LinkEvent> {
     manager
-        .workspace_events(None, 100)
+        .space_events(None, 100)
         .await
         .unwrap()
         .into_iter()

@@ -55,7 +55,7 @@ async fn shoal_s_log_records_each_reload_and_why_one_kept_the_settings() {
     assert!(manager.reload_config_and_recheck().await.is_err());
     crate::test_support::write_global_config(&manager.paths, "");
     manager.reload_config_and_recheck().await.unwrap();
-    let events = manager.workspace_events(None, 50).await.unwrap();
+    let events = manager.space_events(None, 50).await.unwrap();
     let reloads: Vec<_> = (events.iter())
         .map(|item| match item {
             crate::daemon::events::EventItem::Shoal(event) => {

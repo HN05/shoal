@@ -6,7 +6,7 @@ use crate::daemon::{
 
 /// The causes of the retentions the journal records.
 async fn retentions(manager: &Manager) -> Vec<Option<EventCause>> {
-    let events = manager.workspace_events(None, 100).await.unwrap();
+    let events = manager.space_events(None, 100).await.unwrap();
     events
         .into_iter()
         .filter_map(|item| match item {

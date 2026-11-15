@@ -251,7 +251,7 @@ pub enum WorkspaceMethod {
     LayeredConfig {
         target: ConfigTarget,
     },
-    WatchWorkspaceEvents {
+    WatchSpaceEvents {
         #[serde(rename = "since")]
         after: Option<crate::events::EventCursor>,
         follow: bool,
@@ -333,7 +333,7 @@ pub struct PullHead {
 impl WorkspaceMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
-            Self::WatchWorkspaceEvents { .. } => Lifetime::Open,
+            Self::WatchSpaceEvents { .. } => Lifetime::Open,
             _ => Lifetime::Reply,
         }
     }

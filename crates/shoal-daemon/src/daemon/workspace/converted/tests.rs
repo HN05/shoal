@@ -22,18 +22,14 @@ async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
 
 /// The kinds of the journal's events about the space `id`.
 async fn kinds(manager: &Manager, id: &crate::client::space_ids::SpaceId) -> Vec<String> {
-    (manager
-        .workspace_events(None, 100)
-        .await
-        .unwrap()
-        .into_iter())
-    .filter_map(|item| match item {
-        EventItem::Event(event) if event.details.space_id == *id => {
-            Some(event.details.kind.to_string())
-        }
-        _ => None,
-    })
-    .collect()
+    (manager.space_events(None, 100).await.unwrap().into_iter())
+        .filter_map(|item| match item {
+            EventItem::Event(event) if event.details.space_id == *id => {
+                Some(event.details.kind.to_string())
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 #[tokio::test]

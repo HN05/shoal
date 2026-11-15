@@ -55,7 +55,7 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
     assert_eq!(issue.url.url(), url);
     assert_eq!(issue.title.as_deref(), Some("Show titles"));
     let linked: Vec<_> = manager
-        .workspace_events(None, 100)
+        .space_events(None, 100)
         .await
         .unwrap()
         .into_iter()
@@ -126,10 +126,10 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
         )
         .await
         .unwrap();
-    assert!(reopened.workspace_events(None, 100).await.unwrap().iter().any(
-            |item| matches!(item, EventItem::Event(event) if event.details.kind == EventKind::Unlinked
+    assert!(reopened.space_events(None, 100).await.unwrap().iter().any(
+        |item| matches!(item, EventItem::Event(event) if event.details.kind == EventKind::Unlinked
                 && event.details.link.as_ref().is_some_and(|link| link.url == url))
-        ));
+    ));
     let registrations = reopened.issue_registrations(&workspace.id).await.unwrap();
     assert_eq!(numbers(&registrations), [317]);
     let links = reopened.workspace_by_id(&workspace.id).await.unwrap().links;
