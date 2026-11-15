@@ -78,7 +78,7 @@ impl Manager {
     /// returning once it runs again, with the place of the wrapper that runs
     /// it when that runs in a terminal host. `run` names the `shoal restart`
     /// run that asks for it, which the process of the space `giver` runs
-    /// when given. A new wrapper starts the agent with `change` made to the
+    /// when given. The agent starts again with `change` made to the
     /// permissions it was given, which that process must hold.
     pub(crate) async fn restart_agent(
         &self,
@@ -159,10 +159,6 @@ impl Manager {
         in_place: bool,
         change: Option<PermissionChange>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
-        ensure!(
-            !(in_place && change.is_some()),
-            "--permission restarts an agent in a new wrapper, which starts it with the permissions given; leave out --in-place"
-        );
         let current = (self.executions)
             .with_restarts(|_, renewals| renewal::current(renewals, id))
             .await;
@@ -188,8 +184,8 @@ impl Manager {
 
     /// Save the handoff of `agent`, the agent of `id` with the protection
     /// stop that stopped it if any and the turn state it reported, then stop
-    /// it for a restart, `in_place` or in a new wrapper, which starts it with `change`
-    /// made when given, or join the restart already in progress as
+    /// it for a restart, `in_place` or in a new wrapper, starting it with
+    /// `change` made when given, or join the restart already in progress as
     /// it was asked.
     fn stop_for_restart(
         &self,
@@ -296,16 +292,33 @@ impl Manager {
         self.executions
             .with_restarts(|agents, renewals| {
                 let agent = agents.get_mut(id).context("the restart was cancelled")?;
-                let restart = agent.restarts.current.as_ref();
-                if let Some(change) = restart.and_then(Restart::change) {
-                    recovery::change_permission(&self.paths, &agent.workspace_id, id, change)
-                        .context("give the restarted agent its permissions")?;
-                }
+                self.save_restart_change(id, agent)?;
                 let renewal = agent.hand_over().context("the restart was cancelled")?;
                 renewals.insert(id.to_owned(), renewal);
                 Ok(())
             })
             .await
+    }
+
+    /// Give the record of `id`, whose agent restarts in its wrapper, the
+    /// change the restart makes to the permissions it was given, which
+    /// that wrapper restores it under.
+    pub(crate) async fn give_restart_change(&self, id: &ExecutionId) -> Result<()> {
+        (self.executions)
+            .with_agent(id, |agent| self.save_restart_change(id, agent))
+            .await
+            .context("the restart was cancelled")?
+    }
+
+    /// Make the change the restart of `agent`, the agent of `id`, makes to
+    /// the permissions it was given in the record it restores from.
+    fn save_restart_change(&self, id: &ExecutionId, agent: &Agent) -> Result<()> {
+        let restart = agent.restarts.current.as_ref();
+        if let Some(change) = restart.and_then(Restart::change) {
+            recovery::change_permission(&self.paths, &agent.workspace_id, id, change)
+                .context("give the restarted agent its permissions")?;
+        }
+        Ok(())
     }
 
     /// Whether a new wrapper starts the agent of `id` again for its restart.

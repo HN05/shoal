@@ -110,8 +110,7 @@ pub enum SessionsCommand {
         #[arg(
             long = "permission",
             value_name = "KEY=VALUE",
-            value_parser = permission_assignment,
-            conflicts_with = "in_place"
+            value_parser = permission_assignment
         )]
         permissions: Vec<crate::config::permissions::PermissionChange>,
     },

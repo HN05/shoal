@@ -44,6 +44,24 @@ async fn restart_in_place_restores_the_agent_in_its_wrapper_without_waiting_for_
 }
 
 #[tokio::test]
+async fn restart_in_place_restores_the_agent_under_the_permissions_given() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    let execution = agent_execution(&manager, &workspace).await;
+    let change = crate::config::permissions::PermissionChange::assigned("push=propose").unwrap();
+    let restart = manager.restart_agent(&execution, None, true, None, Some(change.clone()));
+    bounded(restart).await.unwrap();
+    assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
+    assert!(workspace.path.join("restored").is_file());
+    // The space records the restarted agent's narrowing, which its
+    // permission checks read.
+    let recorded = manager.workspace_by_id(&workspace.id).await.unwrap();
+    assert_eq!(recorded.narrowing, change.applied_to(Default::default()));
+    serving.abort();
+}
+
+#[tokio::test]
 async fn a_restart_in_place_that_cannot_start_the_agent_leaves_it_for_shoal_resume() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);

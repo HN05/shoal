@@ -691,7 +691,7 @@ async fn a_stop_cancels_a_restart_between_its_wrappers() {
 }
 
 #[tokio::test]
-async fn a_narrowing_restarts_an_agent_only_in_a_new_wrapper_and_only_its_own_restart() {
+async fn a_restart_making_a_permission_change_is_joined_only_with_the_same_change() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let execution = manager
@@ -703,16 +703,6 @@ async fn a_narrowing_restarts_an_agent_only_in_a_new_wrapper_and_only_its_own_re
     let narrowing = |assignment: &str| {
         Some(crate::config::permissions::PermissionChange::assigned(assignment).unwrap())
     };
-    // The wrapper that restarts its agent in place keeps the permissions it
-    // launched it with.
-    assert!(
-        manager
-            .request_restart(&id, None, true, narrowing("push=propose"))
-            .await
-            .is_err()
-    );
-    assert!(!manager.restart_requested(&id).await);
-
     let _first = manager
         .request_restart(&id, Some("first".into()), false, narrowing("push=propose"))
         .await

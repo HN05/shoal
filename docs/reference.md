@@ -409,8 +409,8 @@ repeatable, restarts each agent with that [permission](#mode-permissions)
 given, as [`shoal start`](#mode-permissions) gives it, `KEY=mode` dropping
 one given before, while the keys it leaves out keep theirs. A value the
 caller does not hold is refused before any agent stops, and so is
-`--permission` with `--in-place`, whose wrapper keeps the push rules it
-launched with, or for an agent another run is restarting. An agent protection stopped waits
+`--permission` for an agent another run is restarting. With `--in-place` the
+wrapper restarts the agent under them, as a new one would. An agent protection stopped waits
 for its restore and is left out; a named space whose only agent waits is
 reported with why it stopped and that `shoal queue start` restores it now. An agent that does not start
 again, as when no terminal host can open its new place, stays stopped for
