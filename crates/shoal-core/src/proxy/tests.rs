@@ -42,6 +42,15 @@ fn tools_and_their_profiles_reach_the_upstream_of_the_proxy_they_name() {
 }
 
 #[test]
+fn an_upstream_the_proxy_cannot_reach_is_refused_by_its_key() {
+    for upstream in ["https://", "https://h/?q=1"] {
+        let text = format!("[machine.proxies.local]\nupstream = '{upstream}'\n");
+        let error = parse(&text).unwrap_err().to_string();
+        assert!(error.contains("machine.proxies.local.upstream"), "{error}");
+    }
+}
+
+#[test]
 fn a_proxy_codex_names_takes_a_server_root_rather_than_codexs_api_url() {
     let with = |upstream: &str, agent: &str| {
         let text = format!(

@@ -28,7 +28,7 @@ pub fn validate(proxies: &Proxies) -> Result<()> {
     for (name, proxy) in proxies {
         crate::validate::name("proxy", name)?;
         if let Some(upstream) = &proxy.upstream {
-            validate_upstream(upstream)
+            shoal_proxy::Upstream::parse(upstream)
                 .with_context(|| format!("machine.proxies.{name}.upstream"))?;
         }
         ensure!(
@@ -45,15 +45,6 @@ pub fn validate(proxies: &Proxies) -> Result<()> {
             );
         }
     }
-    Ok(())
-}
-
-/// Only the scheme: the proxy checks the rest of the URL when it starts.
-fn validate_upstream(url: &str) -> Result<()> {
-    ensure!(
-        url.starts_with("http://") || url.starts_with("https://"),
-        "upstream URL needs http:// or https://"
-    );
     Ok(())
 }
 
