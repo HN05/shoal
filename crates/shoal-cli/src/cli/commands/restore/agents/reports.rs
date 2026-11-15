@@ -31,13 +31,13 @@ pub(super) fn nothing(ctx: &Context, first: Queued, started: bool) -> Result<i32
 }
 
 /// Report what `first` reports, the workspaces reopened for a restore and
-/// the turns it continued, before the agent it restores in this terminal;
-/// nothing without any.
-pub(super) fn first(ctx: &Context, first: Queued) -> Result<()> {
-    match first.reports_anything() {
-        true => queued(ctx, &first),
-        false => Ok(()),
+/// the turns it continued, before the agent it restores in this terminal,
+/// returning the exit code; nothing without any.
+pub(super) fn first(ctx: &Context, first: Queued) -> Result<i32> {
+    if first.reports_anything() {
+        queued(ctx, &first)?;
     }
+    Ok(if first.failed.is_empty() { 0 } else { 1 })
 }
 
 /// Report the `queued` restores and the workspaces reopened and set up.

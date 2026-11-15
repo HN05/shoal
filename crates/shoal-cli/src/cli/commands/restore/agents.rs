@@ -115,7 +115,7 @@ impl Alongside {
     /// Continue the interrupted turns, returning what to report: the
     /// reopened workspaces, the continued turns and the failures to
     /// continue them.
-    async fn act(self, ctx: &Context) -> Queued {
+    async fn continue_turns(self, ctx: &Context) -> Queued {
         let continued = self.turns.submit_with_others(ctx).await;
         Queued {
             reopened: self.reopened,
@@ -193,8 +193,9 @@ async fn restore_selected(
             forget::forget_work(ctx, space.clone(), execution).await
         }
         (Some([space]), []) if focus => {
-            reports::first(ctx, alongside.act(ctx).await)?;
-            space::run(ctx, space.clone(), execution, true, change).await
+            let first = reports::first(ctx, alongside.continue_turns(ctx).await)?;
+            let code = space::run(ctx, space.clone(), execution, true, change).await?;
+            Ok(first.max(code))
         }
         (Some([space]), []) if alone && queuing == Queuing::Here { now: true } => {
             space::run(ctx, space.clone(), execution, false, change).await
@@ -203,8 +204,9 @@ async fn restore_selected(
             queue::queue_space(ctx, space.clone(), execution, queuing, change).await
         }
         (Some([]), [setup]) if focus => {
-            reports::first(ctx, alongside.act(ctx).await)?;
-            setups::retry_here(ctx, setup, change).await
+            let first = reports::first(ctx, alongside.continue_turns(ctx).await)?;
+            let code = setups::retry_here(ctx, setup, change).await?;
+            Ok(first.max(code))
         }
         _ => {
             let restore = Restore {
@@ -249,9 +251,9 @@ async fn restore_without_agents(
     alongside: Alongside,
 ) -> Result<i32> {
     if selected.setups.is_empty() {
-        return reports::nothing(ctx, alongside.act(ctx).await, false);
+        return reports::nothing(ctx, alongside.continue_turns(ctx).await, false);
     }
-    let restored = set_up(ctx, selected, alongside, false).await;
+    let restored = set_up(ctx, selected, alongside.continue_turns(ctx).await, false).await;
     reports::queued(ctx, &restored)?;
     Ok(if restored.failed.is_empty() { 0 } else { 1 })
 }
@@ -330,7 +332,7 @@ async fn restore_each(
     }
     if stopped.is_empty() && selected.setups.is_empty() {
         let started = forget || queuing == Queuing::Here { now: true };
-        return reports::nothing(ctx, alongside.act(ctx).await, started);
+        return reports::nothing(ctx, alongside.continue_turns(ctx).await, started);
     }
     if forget {
         return forget::forget_each(ctx, &stopped, alongside.reopened).await;
@@ -341,7 +343,7 @@ async fn restore_each(
     }
     permission_change::apply(ctx, &stopped, &selected.setups, change).await?;
     let now = matches!(queuing, Queuing::Here { now } | Queuing::Daemon { now } if now);
-    let mut restored = set_up(ctx, &selected, alongside, now).await;
+    let mut restored = set_up(ctx, &selected, alongside.continue_turns(ctx).await, now).await;
     restored.failed.append(&mut refused);
     match queuing {
         Queuing::Here { now: true } => {
@@ -389,10 +391,9 @@ async fn daemon_startable(
 }
 
 /// Retry the `selected` failed setups, starting the agents waiting for them
-/// at once when `now`, going on after one fails, and do what the restore
-/// does `alongside`, reporting them together.
-async fn set_up(ctx: &Context, selected: &Selected, alongside: Alongside, now: bool) -> Queued {
-    let mut restored = alongside.act(ctx).await;
+/// at once when `now`, going on after one fails, and report them with what
+/// the restore did already, `restored`.
+async fn set_up(ctx: &Context, selected: &Selected, mut restored: Queued, now: bool) -> Queued {
     let (set_up, mut failed) = setups::retry_each(ctx, &selected.setups, now).await;
     restored.set_up = set_up;
     restored.failed.append(&mut failed);

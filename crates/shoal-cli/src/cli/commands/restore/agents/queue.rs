@@ -44,7 +44,7 @@ pub(super) async fn queue_below(
         None => stopped_in_reach(ctx).await?,
     };
     permission_change::apply(ctx, &stopped, &selected.setups, change).await?;
-    let resumed = super::set_up(ctx, &selected, alongside, false).await;
+    let resumed = super::set_up(ctx, &selected, alongside.continue_turns(ctx).await, false).await;
     queue_all(ctx, stopped, resumed, now).await
 }
 
