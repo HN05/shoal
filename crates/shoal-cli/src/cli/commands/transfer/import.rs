@@ -85,11 +85,10 @@ pub(super) async fn import(
                 reopened
             }
             // A chat starts on this terminal, unless it is to start in the
-            // background or there is none to start it on, so the chats that
-            // go with it open first.
+            // background or there is none to start it on.
             Space::Chat(_) => {
-                package.open_chats(ctx, options.restore).await;
-                match package.start_chat(ctx, chat_place(ctx, &options)).await? {
+                let place = chat_place(ctx, &options);
+                match package.start_chat(ctx, place, options.restore).await? {
                     Started::Exited(code) => Ok(code),
                     Started::Background(chat) => {
                         ctx.emit(&chat_message(&chat), &chat)?;
@@ -227,27 +226,21 @@ impl Package {
             .collect()
     }
 
-    /// Put the packaged chat's session files in place, then start the chat
-    /// in its repository's checkout, or in `root_dir` without one, at
-    /// `place`, under its name, resuming the session its agent keeps here.
-    async fn start_chat(self, ctx: &Context, place: ChatPlace) -> Result<Started> {
+    /// Start the packaged chat at `place`, as [`Self::chat_start`] says,
+    /// under its name, resuming the session its agent keeps here, once its
+    /// session files are in place and the chats that go with it opened,
+    /// queueing their agents' restores when `restore`.
+    async fn start_chat(self, ctx: &Context, place: ChatPlace, restore: bool) -> Result<Started> {
         // Nothing is recorded yet, so a program that moves the chat knows it
         // is not here.
         let start = self
             .chat_start(ctx, place)
             .await
             .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
-        let home = match &self.repository {
-            Some(selector) => SessionHome::Repository(selector.clone()),
-            None => SessionHome::Root,
-        };
-        agents::install_session_files(
-            ctx,
-            home,
-            &self.carried(),
-            agents::Existing::of_copy(self.copy.is_some()),
-        )
-        .await;
+        // The chat may run in this terminal until it ends, so the chats that
+        // go with it open first.
+        self.open_chats(ctx, restore).await;
+        self.place_chat_sessions(ctx).await;
         let ChatStart {
             repo,
             settings,
@@ -255,6 +248,17 @@ impl Package {
             options,
         } = start;
         chat::launch(ctx, repo, settings, topic, options).await
+    }
+
+    /// Put the session files of the packaged chat's agent where it looks for
+    /// them.
+    async fn place_chat_sessions(&self, ctx: &Context) {
+        let home = match &self.repository {
+            Some(selector) => SessionHome::Repository(selector.clone()),
+            None => SessionHome::Root,
+        };
+        let existing = agents::Existing::of_copy(self.copy.is_some());
+        agents::install_session_files(ctx, home, &self.carried(), existing).await;
     }
 
     /// How the packaged chat starts at `place`, in the repository the
@@ -376,8 +380,8 @@ async fn import_each(ctx: &Context, files: &[PathBuf], options: &ImportOptions) 
                 }
             }
             Space::Chat(_) => {
-                package.open_chats(ctx, options.restore).await;
-                match package.start_chat(ctx, ChatPlace::Background).await {
+                let started = package.start_chat(ctx, ChatPlace::Background, options.restore);
+                match started.await {
                     Ok(Started::Background(chat)) => {
                         report.imported(ctx, chat_message(&chat), Imported::Chat(chat))
                     }
