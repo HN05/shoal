@@ -1,64 +1,29 @@
 //! The branch a start names as typed, which opens as `git switch` takes it:
 //! an existing local or remote branch opens, in the workspace that already
 //! has it, and any other name is a new branch under exactly that name.
-use anyhow::{Context as _, Result, ensure};
-use shoal_refs::BranchName;
+use anyhow::Result;
 
-use super::target::AddTarget;
+use super::{reads::DaemonReads, target::AddTarget};
 use crate::{
     cli::context::Context,
-    git,
+    launches::workspace,
     model::{Repository, Workspace},
     start_plan::Creation,
 };
 
-/// Settle the branch `creation` names as typed: the workspace that already
-/// has it, which the start goes into instead, else the existing branch
-/// `creation` then opens, else the new branch it creates, which a name
-/// already taken would suffix and is refused.
+/// Settle the branch `creation` names as typed, as
+/// [`workspace::settle`] does: the workspace that already has it, which the
+/// start goes into instead, else the branch `creation` then opens.
 pub(super) async fn settle(
     ctx: &Context,
     target: &AddTarget,
     creation: &mut Creation,
 ) -> Result<Option<Workspace>> {
-    let Some(name) = creation.branch.take() else {
+    if creation.branch.is_none() {
         return Ok(None);
-    };
+    }
     let repo = target.repository(ctx).await?;
-    let (remote, mut taken) = branches(repo, &name).await.with_context(|| {
-        format!(
-            "read the branches of repository {}",
-            crate::repository::name(repo)
-        )
-    })?;
-    let workspaces = repository_workspaces(ctx, repo).await?;
-    if let Some(workspace) = crate::launches::on_branch(&workspaces, &name, remote.as_ref()) {
-        // A remote branch opens a local one only where it tracks it.
-        if remote.is_some() {
-            check_opens(ctx, target, &name).await?;
-        }
-        return Ok(Some(workspace.clone()));
-    }
-    if remote.is_some() || taken.contains(&name.as_str().into()) {
-        ensure!(
-            creation.copy.is_none(),
-            "a copy starts a new branch, and branch {name} exists; name another"
-        );
-        creation.existing = Some(name);
-        return Ok(None);
-    }
-    taken.extend(
-        workspaces
-            .into_iter()
-            .filter_map(|workspace| workspace.branch),
-    );
-    ensure!(
-        git::repo::allocate_branch(&name, &taken) == name,
-        "branch {name} conflicts with an existing branch or workspace; name another"
-    );
-    creation.branch = Some(name);
-    creation.typed = true;
-    Ok(None)
+    workspace::settle(&DaemonReads(ctx), (&target.selector, repo), creation).await
 }
 
 /// The workspace of `repo` that already has the branch `name` selects, as
@@ -68,41 +33,5 @@ pub(in crate::cli::commands) async fn owning_workspace(
     repo: &Repository,
     name: &str,
 ) -> Result<Option<Workspace>> {
-    let remote = git::remote_branch(&repo.path, name).await?;
-    let workspaces = repository_workspaces(ctx, repo).await?;
-    Ok(crate::launches::on_branch(&workspaces, name, remote.as_ref()).cloned())
-}
-
-/// The workspaces of `repo`.
-async fn repository_workspaces(ctx: &Context, repo: &Repository) -> Result<Vec<Workspace>> {
-    Ok((crate::client::workspaces::list(&ctx.paths).await?)
-        .into_iter()
-        .filter(|workspace| workspace.repository_id == repo.id)
-        .collect())
-}
-
-/// The remote and branch `name` names in `repo`, if it names a remote one,
-/// and the branch names a new branch must not take.
-async fn branches(
-    repo: &Repository,
-    name: &str,
-) -> Result<(Option<(String, BranchName)>, Vec<BranchName>)> {
-    let remote = git::remote_branch(&repo.path, name).await?;
-    Ok((remote, git::branch::names_in_use(&repo.path).await?))
-}
-
-/// Refuse what opening the existing branch `selector` would refuse, such as
-/// a local branch of its name that does not track it.
-async fn check_opens(ctx: &Context, target: &AddTarget, selector: &str) -> Result<()> {
-    let planned = crate::client::workspaces::PlannedWorkspace {
-        repository: target.selector.clone(),
-        branch: None,
-        existing: Some(selector.to_owned()),
-        base: None,
-        git_profile: None,
-        path: None,
-        parent: None,
-        options: Default::default(),
-    };
-    crate::client::workspaces::check_creation(&ctx.paths, planned).await
+    workspace::owning_workspace(&DaemonReads(ctx), repo, name).await
 }

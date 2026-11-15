@@ -1,23 +1,15 @@
 //! Starting a workspace from a pasted issue, PR or branch link, or an issue
 //! number.
-use shoal_refs::BranchName;
 use std::ffi::OsString;
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, ensure};
 
-use super::{AddOptions, AgentLaunch};
+use super::{AddOptions, AgentLaunch, reads::DaemonReads};
 use crate::{
     agent::Agent,
-    cli::{
-        client,
-        commands::{issues, review},
-        context::Context,
-        ui,
-    },
-    forge::{ForgeRepo, PullRequest, items::reference::ItemInput},
-    git,
-    model::Repository,
-    protocol::PullHead,
+    cli::{client, commands::issues, context::Context, ui},
+    forge::items::reference::ItemInput,
+    launches::workspace,
     start_plan::Creation,
 };
 use shoal_protocol::launches::StartTarget;
@@ -130,17 +122,14 @@ async fn request(
             agent: AgentLaunch::IssueDefault(agent),
         });
     }
-    ensure_link_in(repo, linked.as_ref()).await?;
+    workspace::ensure_link_in(repo, linked.as_ref()).await?;
     match positional {
         StartTarget::Pull(pull) => {
             let context = issues::read_context(ctx, repo).await?;
             let pull = client::pull_request(&ctx.paths, context, pull.into()).await?;
-            pull_creation(ctx, repo, pull, creation).await?;
+            workspace::pull_creation(&DaemonReads(ctx), repo, pull, creation).await?;
         }
-        StartTarget::Branch { branch, .. } => {
-            git::check_branch_name(None, &branch).await?;
-            creation.existing = Some(git::remote_ref("origin", &branch));
-        }
+        StartTarget::Branch { branch, .. } => workspace::branch_creation(&branch, creation).await?,
         StartTarget::Repository(_) | StartTarget::Number(_) | StartTarget::Issue(_) => {
             unreachable!("returned above")
         }
@@ -149,87 +138,5 @@ async fn request(
         repository: Some(repo.id.clone().into()),
         issue: None,
         agent: AgentLaunch::Add(agent),
-    })
-}
-
-/// Refuse a link that is not of `repo`, the repository of its checkout's
-/// origin.
-async fn ensure_link_in(repo: &Repository, linked: Option<&ForgeRepo>) -> Result<()> {
-    let remote = crate::repository::remote_url_from_path(&repo.path)
-        .await?
-        .context("forge lookup needs an origin remote")?;
-    ensure!(
-        linked.is_some_and(|linked| linked.is_remote(&remote)),
-        "link belongs to a different repository"
-    );
-    Ok(())
-}
-
-/// Reopen the workspace that owns the PR's head branch, or open the pushed
-/// branch compared against the PR's base; either way the PR is linked.
-pub(in crate::cli::commands) async fn pull_creation(
-    ctx: &Context,
-    repo: &Repository,
-    pull: PullRequest,
-    creation: &mut Creation,
-) -> Result<()> {
-    // Without a name of its own, a new workspace takes the PR's title.
-    (creation.options.name).get_or_insert_with(|| {
-        shoal_protocol::space_names::SpaceName::derive(&pull.title, "workspace")
-    });
-    if pull.fork {
-        ensure!(
-            creation.path.is_none() && creation.git_profile.is_none() && creation.base.is_none(),
-            "PR #{} comes from a fork and opens at its head in a workspace Shoal places; --path, --git-profile and --base apply to a branch",
-            pull.number
-        );
-        creation.pull_head = Some(fork_head(repo, &pull).await?);
-        creation.pr = Some(pull.url.into());
-        return Ok(());
-    }
-    let owned = crate::client::workspaces::list(&ctx.paths)
-        .await?
-        .iter()
-        .any(|workspace| {
-            workspace.repository_id == repo.id
-                && workspace.branch.as_ref().map(BranchName::as_str) == Some(pull.head.as_str())
-        });
-    if owned {
-        creation.existing = Some(pull.head.into());
-    } else {
-        if creation.base.is_none() {
-            let base = pull.base.as_str();
-            creation.base =
-                Some(review::fetch_pull_branch(&repo.path, "base", &base.into()).await?);
-        }
-        creation.existing = Some(git::remote_ref("origin", pull.head.as_str()));
-    }
-    creation.pr = Some(pull.url.into());
-    Ok(())
-}
-
-/// The head of `pull`, a PR from a fork in `repo`, which only the ref the
-/// forge serves it under reaches, with its base branch fetched for its
-/// workspace's diff to compare with.
-pub(in crate::cli::commands) async fn fork_head(
-    repo: &Repository,
-    pull: &PullRequest,
-) -> Result<PullHead> {
-    let reference = pull.head_ref.clone().with_context(|| {
-        format!(
-            "PR #{} comes from a fork, and its forge serves no ref for a fork's head, so Shoal cannot open it",
-            pull.number
-        )
-    })?;
-    let commit = pull
-        .head_commit
-        .clone()
-        .with_context(|| format!("PR #{} reports no head commit", pull.number))?;
-    let base = review::fetch_pull_branch(&repo.path, "base", &pull.base).await?;
-    Ok(PullHead {
-        number: pull.number,
-        reference,
-        commit,
-        base: Some(base),
     })
 }

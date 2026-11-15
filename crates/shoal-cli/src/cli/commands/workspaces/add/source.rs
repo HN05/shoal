@@ -1,20 +1,14 @@
 //! What an interactive addition starts from: a new or existing branch, an issue or a PR.
 use crate::git::existing_branch::BranchExt;
-use anyhow::{Result, ensure};
-use shoal_refs::BranchName;
+use anyhow::Result;
 
-use super::target::AddTarget;
+use super::{reads::DaemonReads, target::AddTarget};
 use crate::{
     cli::{client, commands::issues, context::Context, ui},
-    forge::items::{
-        link::ItemKind,
-        list::Search,
-        reference::{ItemInput, ItemRef},
-    },
-    git,
+    forge::items::{link::ItemKind, list::Search, reference::ItemInput},
+    launches::workspace,
     protocol::ItemContext,
     start_plan::{AddPlan, Creation},
-    state::WorkspaceState,
 };
 
 /// Ask what an interactive addition starts from when no option says. Branch
@@ -68,7 +62,7 @@ pub(super) async fn pick_add_source(
             let pull = client::pull_request(&ctx.paths, context, ItemInput::Number(number));
             let pull = pull.await?;
             let repo = target.repository(ctx).await?;
-            super::link::pull_creation(ctx, repo, pull, creation).await?;
+            workspace::pull_creation(&DaemonReads(ctx), repo, pull, creation).await?;
         }
     }
     Ok(None)
@@ -134,68 +128,12 @@ pub(super) async fn select_add_creation(
 ) -> Result<Creation> {
     match issue {
         Some(issue) if creation.unsettled() => {
-            issue_creation(ctx, target, creation, issue.branch_name(), &issue.url).await
+            let repo = target.repository(ctx).await?;
+            let branch = (issue.branch_name(), &issue.url);
+            workspace::issue_creation(&DaemonReads(ctx), repo, creation, branch).await
         }
         _ => Ok(creation),
     }
-}
-
-/// Reopen the local branch or workspace that earlier work on the issue left
-/// instead of suffixing a new branch, failing here when it cannot be reopened.
-async fn issue_creation(
-    ctx: &Context,
-    target: &AddTarget,
-    mut creation: Creation,
-    name: String,
-    issue_url: &ItemRef,
-) -> Result<Creation> {
-    let repo = target.repository(ctx).await?;
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-    let mut associated = None;
-    for workspace in workspaces
-        .iter()
-        .filter(|workspace| workspace.repository_id == repo.id)
-    {
-        if (workspace.links.issues.iter()).any(|issue| issue.url == *issue_url) {
-            ensure!(
-                associated.is_none(),
-                "multiple workspaces are associated with this issue; pass an explicit branch"
-            );
-            ensure!(
-                workspace.state == WorkspaceState::Ready,
-                "workspace {} is {}; inspect or set it up before reopening",
-                workspace.name,
-                workspace.state
-            );
-            associated = Some(
-                workspace
-                    .require_branch("reopening for an issue")?
-                    .to_owned(),
-            );
-        }
-    }
-    if let Some(branch) = associated {
-        creation.existing = Some(branch.into());
-        return Ok(creation);
-    }
-    let local = BranchName::from(name.as_str());
-    if let Some(workspace) = workspaces.into_iter().find(|workspace| {
-        workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&local)
-    }) {
-        ensure!(
-            workspace.state == WorkspaceState::Ready,
-            "workspace {} is {}; inspect or set it up before reopening",
-            workspace.name,
-            workspace.state
-        );
-    } else if git::ref_exists(&repo.path, &git::local_ref(&local), git::isolated_command).await? {
-        git::existing_branch::ensure_not_checked_out(&repo.path, &local).await?;
-    } else {
-        creation.branch = Some(name);
-        return Ok(creation);
-    }
-    creation.existing = Some(name);
-    Ok(creation)
 }
 
 async fn pick_add_branch(ctx: &Context, target: &AddTarget) -> Result<String> {

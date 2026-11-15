@@ -275,5 +275,7 @@ fn positional_target(
     }
 }
 
+pub mod workspace;
+
 #[cfg(test)]
 mod tests;

@@ -17,8 +17,6 @@ mod answer;
 pub(super) mod show;
 mod start;
 
-pub(super) use start::fetch_pull_branch;
-
 pub(super) async fn run(ctx: &Context, command: ReviewCommand) -> Result<i32> {
     match command {
         ReviewCommand::Run {

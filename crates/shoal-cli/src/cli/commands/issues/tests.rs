@@ -109,25 +109,14 @@ async fn missing_repositories_suggest_the_repository_url() {
 }
 
 #[test]
-fn issue_names_are_portable_bounded_and_stable() {
+fn an_issues_subject_names_it_by_number_title_and_url() {
     let mut issue = Issue {
         number: 34,
-        title: "Fix `API`: $(touch /tmp/no); 日本語".into(),
+        title: "日本語 to the".into(),
         url: "https://forge.example/team/repo/issues/34".parse().unwrap(),
         details: "body".into(),
         labels: Vec::new(),
     };
-    assert_eq!(issue.branch_name(), "34-fix-api-touch");
-    issue.title = "Remove a merged workspace whose HEAD is a rebased copy".into();
-    assert_eq!(issue.branch_name(), "34-remove-merged-workspace");
-    issue.title = format!("{} done", "x".repeat(200));
-    assert_eq!(issue.branch_name(), format!("34-{}", "x".repeat(29)));
-    issue.title = format!("{} done", "x".repeat(29));
-    assert_eq!(issue.branch_name(), format!("34-{}", "x".repeat(29)));
-    issue.title = format!("Fix {}", "x".repeat(200));
-    assert_eq!(issue.branch_name(), "34-fix");
-    issue.title = "日本語 to the".into();
-    assert_eq!(issue.branch_name(), "issue-34");
     let subject = issue.subject();
     assert!(
         (subject.text).contains("#34: 日本語 to the\nhttps://forge.example/team/repo/issues/34\n"),

@@ -160,27 +160,10 @@ pub(in crate::cli) struct Issue {
 }
 
 impl Issue {
-    /// `<number>-<words>`: up to three title words, or `issue-<number>` when
-    /// the title has none, so a bare number is never mistaken for a revision.
+    /// The branch of the issue, as [`crate::launches::workspace::issue_branch`]
+    /// names it.
     pub fn branch_name(&self) -> String {
-        let words = title_words(&self.title);
-        if words.is_empty() {
-            return format!("issue-{}", self.number);
-        }
-        let mut name = self.number.to_string();
-        for (index, word) in words.iter().enumerate() {
-            let room = BRANCH_NAME_LEN.saturating_sub(name.len() + 1);
-            if word.len() > room {
-                if index == 0 {
-                    name.push('-');
-                    name.push_str(&word[..room]);
-                }
-                break;
-            }
-            name.push('-');
-            name.push_str(word);
-        }
-        name
+        crate::launches::workspace::issue_branch(self.number, &self.title)
     }
 
     /// The issue's number and title, which name a place for its workspace.
@@ -218,25 +201,6 @@ impl Issue {
 }
 
 /// Fits a zmx session name, which keeps the first 32 characters.
-const BRANCH_NAME_LEN: usize = 32;
-const BRANCH_NAME_WORDS: usize = 3;
-/// Title words that add length without naming the issue.
-const FILLER_WORDS: &[&str] = &[
-    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is", "it", "its", "of",
-    "on", "or", "s", "that", "the", "this", "to", "when", "with",
-];
-
-/// The first lowercase ASCII words of `title` that name the issue.
-fn title_words(title: &str) -> Vec<String> {
-    title
-        .split(|c: char| !c.is_ascii_alphanumeric())
-        .filter(|word| !word.is_empty())
-        .map(str::to_ascii_lowercase)
-        .filter(|word| !FILLER_WORDS.contains(&word.as_str()))
-        .take(BRANCH_NAME_WORDS)
-        .collect()
-}
-
 /// Where a command reads from the forge of `repo`: the workspace or chat
 /// this runs in, whose scope reads only there, when it is of `repo`, else
 /// the repository's registered checkout.

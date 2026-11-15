@@ -11,6 +11,7 @@ mod mode;
 mod place;
 mod plan;
 mod queue;
+mod reads;
 mod source;
 mod target;
 mod waiting;

@@ -267,7 +267,7 @@ async fn pull_request(
         });
     let workspace = match owner {
         Some(workspace) => {
-            fetch_pull_branch(&repo.path, "base", &pull.base).await?;
+            crate::launches::workspace::fetch_pull_branch(&repo.path, "base", &pull.base).await?;
             update_to_head(ctx, &repo.path, &workspace, &pull.head).await?;
             let linked = LinkedItem {
                 url: pull.url.clone(),
@@ -281,7 +281,9 @@ async fn pull_request(
             workspace.id
         }
         None => {
-            let tracking = fetch_pull_branch(&repo.path, "base", &pull.base).await?;
+            let tracking =
+                crate::launches::workspace::fetch_pull_branch(&repo.path, "base", &pull.base)
+                    .await?;
             let creation = crate::start_plan::Creation {
                 existing: Some(git::remote_ref("origin", pull.head.as_str())),
                 base: Some(tracking),
@@ -345,7 +347,7 @@ async fn fork_pull_workspace(
 ) -> Result<SpaceId> {
     let start = WorkspaceStart::PullHead {
         url: pull.url.clone(),
-        head: super::super::workspaces::link::fork_head(repo, pull).await?,
+        head: crate::launches::workspace::fork_head(repo, pull).await?,
     };
     let new = NewWorkspace {
         parent: crate::cli::ui::current_chat(&None)
@@ -380,7 +382,7 @@ async fn update_to_head(
     workspace: &Workspace,
     head: &BranchName,
 ) -> Result<()> {
-    let tracking = fetch_pull_branch(repo, "head", head).await?;
+    let tracking = crate::launches::workspace::fetch_pull_branch(repo, "head", head).await?;
     let updated = crate::client::workspaces::fast_forward(
         &ctx.paths,
         SpaceSelector::id(&workspace.id),
@@ -391,20 +393,6 @@ async fn update_to_head(
         eprintln!("Updated workspace {} to {tracking}", workspace.name);
     }
     Ok(())
-}
-
-/// Fetch the PR's `role` (head or base) branch into its origin tracking ref.
-pub(in crate::cli::commands) async fn fetch_pull_branch(
-    path: &Path,
-    role: &str,
-    branch: &BranchName,
-) -> Result<String> {
-    git::check_branch_name(None, branch.as_str())
-        .await
-        .with_context(|| format!("PR {role} {branch:?} is not a branch name"))?;
-    git::fetch::review_branch(path, branch)
-        .await
-        .with_context(|| format!("could not fetch the PR {role} {branch}"))
 }
 
 async fn run(
