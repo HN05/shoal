@@ -94,7 +94,7 @@ impl Manager {
         let workspace = self.workspace_by_id(&workspace.id).await?;
         let agents = recovery::stopped_agents(&self.paths, &workspace.id)?;
         let mut record = packaged_record(&self.paths, &workspace, checkpoint, agents);
-        record.kept_workspace_mut()?.session_files = self.unplaced_sessions(&workspace).await;
+        record.session_files = self.unplaced_sessions(&workspace).await;
         let repo = self.repository(&workspace.repository_id).await?;
         let kept_sessions = kept_session_sources(&repo, &record);
         let mut manifest = Manifest::of(Some(&repo), Source::Workspace(record)).await?;

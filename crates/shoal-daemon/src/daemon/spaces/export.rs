@@ -428,6 +428,7 @@ fn packaged_record(
         agents,
         // An unreadable last session is not worth refusing the export for.
         last_sessions: LastSession::all(paths, &workspace.id).unwrap_or_default(),
+        session_files: Vec::new(),
         cause: EventCause::Manual,
         removed_at: UnixTime::now(),
         kind: RemovedKind::Workspace(Box::new(KeptWorkspace {
@@ -436,7 +437,6 @@ fn packaged_record(
             base_commit: workspace.base_commit.clone(),
             at: workspace.at.clone(),
             setup_skipped: workspace.setup_skipped,
-            session_files: Vec::new(),
         })),
     }
 }

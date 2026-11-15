@@ -338,7 +338,7 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
     assert!(imported.is_err());
     let removed = importing.removed_workspaces().await.unwrap();
     assert_eq!(
-        removed[0].kept_workspace().unwrap().session_files,
+        removed[0].session_files,
         std::slice::from_ref(&session_file)
     );
     // The repository's directory keeps them, beside its workspaces.
@@ -372,8 +372,6 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
     assert!(
         packaged_workspace(&reread.manifest)
             .workspace
-            .kept_workspace()
-            .unwrap()
             .session_files
             .is_empty()
     );

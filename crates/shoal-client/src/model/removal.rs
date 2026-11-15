@@ -68,6 +68,11 @@ pub struct RemovedSpace {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub last_sessions: Vec<crate::executions::LastSession>,
+    /// The agents' session files an import carried, which the daemon keeps
+    /// until the restore that opens the space puts them in place with its
+    /// settings.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub session_files: Vec<crate::transfer::SessionFile>,
     pub cause: crate::events::EventCause,
     pub removed_at: crate::time::UnixTime,
     pub expires_at: crate::time::UnixTime,
@@ -129,11 +134,6 @@ pub struct KeptWorkspace {
     /// Whether it was created without setup, which its restore skips too.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub setup_skipped: bool,
-    /// The agents' session files an import carried, which the daemon keeps
-    /// until the restore that opens the workspace puts them in place with
-    /// its settings.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub session_files: Vec<crate::transfer::SessionFile>,
 }
 
 impl RemovedSpace {

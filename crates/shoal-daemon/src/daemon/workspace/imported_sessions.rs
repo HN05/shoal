@@ -36,7 +36,7 @@ impl Manager {
         files: &[CarriedSessionFile],
     ) -> Result<RemovedSpace> {
         let listed: Vec<_> = files.iter().map(|carried| carried.file.clone()).collect();
-        removed.kept_workspace_mut()?.session_files = listed.clone();
+        removed.session_files = listed.clone();
         let layout = match files.is_empty() {
             true => Layout::of(repo),
             false => Some(Layout::new(&self.workspaces_dir(repo).await?, &repo.id)),
@@ -86,10 +86,7 @@ impl Manager {
         &self,
         removed: &RemovedSpace,
     ) -> Result<Vec<CarriedSessionFile>> {
-        let Some(kept) = removed.workspace() else {
-            return Ok(Vec::new());
-        };
-        let session_files = &kept.session_files;
+        let session_files = &removed.session_files;
         if session_files.is_empty() {
             return Ok(Vec::new());
         }
@@ -135,11 +132,11 @@ pub(crate) fn kept_session_sources(
     repo: &Repository,
     removed: &RemovedSpace,
 ) -> Vec<SessionSource> {
-    let (Some(layout), Some(kept)) = (Layout::of(repo), removed.workspace()) else {
+    let Some(layout) = Layout::of(repo) else {
         return Vec::new();
     };
     layout
-        .kept(&removed.space_id, &kept.session_files)
+        .kept(&removed.space_id, &removed.session_files)
         .into_iter()
         .map(|kept| SessionSource {
             agent: kept.file.agent,

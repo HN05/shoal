@@ -58,6 +58,7 @@ impl Manager {
             links,
             agents,
             last_sessions,
+            session_files,
             cause,
             removed_at: UnixTime::now(),
             kind: RemovedKind::Workspace(Box::new(KeptWorkspace {
@@ -66,7 +67,6 @@ impl Manager {
                 base_commit: workspace.base_commit.clone(),
                 at: workspace.at.clone(),
                 setup_skipped: workspace.setup_skipped,
-                session_files,
             })),
         };
         let record = removed.clone();
@@ -108,6 +108,7 @@ impl Manager {
             links: chat.links,
             agents,
             last_sessions,
+            session_files: Vec::new(),
             cause,
             removed_at: UnixTime::now(),
             expires_at,

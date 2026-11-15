@@ -679,14 +679,12 @@ fn moved(removed: RemovedSpace) -> RemovedSpace {
             .into_iter()
             .map(LastSession::moved)
             .collect(),
+        session_files: Vec::new(),
         ..removed
     };
-    match &mut moved.kind {
-        RemovedKind::Workspace(kept) => kept.session_files = Vec::new(),
-        RemovedKind::Chat { chat } => {
-            chat.session = None;
-            chat.origin = None;
-        }
+    if let RemovedKind::Chat { chat } = &mut moved.kind {
+        chat.session = None;
+        chat.origin = None;
     }
     moved
 }
