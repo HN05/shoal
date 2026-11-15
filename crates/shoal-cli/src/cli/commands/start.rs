@@ -20,7 +20,6 @@ use crate::{
     config::{
         self, Effective, modes,
         permissions::{PermissionChange, PermissionsConfig},
-        templates,
     },
     forge::items::reference::{ItemInput, ItemRef},
     model::{AgentSession, SpaceKind},
@@ -430,7 +429,7 @@ async fn in_workspace_kind(
 /// place it opens in starts, or one a flag only a chat's start takes asks
 /// for, such as a session it continues.
 fn asks_chat(args: &StartArgs) -> bool {
-    args.as_chat || args.session.is_some() || args.linked_issue.is_some() || args.handoff.is_some()
+    args.as_chat || args.session.is_some() || args.handoff.is_some()
 }
 
 /// The kind of space a start that [`asks_chat`] asks for, whatever the
@@ -760,13 +759,7 @@ async fn in_chat_with(
         args.issue,
         args.in_workspace.is_some(),
     )?;
-    let linked_issue = (args.linked_issue.as_ref())
-        .map(|issue| templates::IssueFields::at(issue, args.linked_issue_title));
-    let subject = chat::Subject {
-        mode,
-        issue,
-        linked_issue,
-    };
+    let subject = chat::Subject { mode, issue };
     match args.in_workspace {
         Some(workspace) => chat::start_in_workspace(ctx, workspace, subject, options).await,
         None => chat::start(ctx, repository, subject, options).await,

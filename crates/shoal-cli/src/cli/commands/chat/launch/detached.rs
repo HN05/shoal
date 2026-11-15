@@ -33,16 +33,12 @@ pub(super) fn request(
         repository,
         in_workspace,
         issue,
-        linked_issue,
         ..
     } = &**start;
     let Narrowing::Requested(narrowing) = options.narrowing else {
         return None;
     };
-    let carried = options.session.is_none()
-        && options.handoff.is_none()
-        && linked_issue.is_none()
-        && !topic.tells_resumed;
+    let carried = options.session.is_none() && options.handoff.is_none() && !topic.tells_resumed;
     if !carried {
         return None;
     }

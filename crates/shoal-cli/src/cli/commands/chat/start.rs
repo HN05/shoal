@@ -12,7 +12,7 @@ use super::{ChatPlace, Narrowing, Options, Topic, issue, launch::begin};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{agents::ChatRepository, context::Context, ui},
-    config::{Effective, templates},
+    config::Effective,
     forge::items::reference::ItemInput,
     model::{Repository, SpaceKind, Workspace},
     protocol::{ChatStart, ConfigTarget},
@@ -24,8 +24,6 @@ use crate::{
 pub(in crate::cli::commands) struct Subject {
     pub mode: ui::ModeChoice,
     pub issue: Option<Option<ItemInput>>,
-    /// The issue an imported chat is linked to, as [`Topic::linked_issue`].
-    pub linked_issue: Option<templates::IssueFields>,
 }
 
 /// Start a chat about the repository `repository` names, else the issue's,
@@ -51,10 +49,7 @@ pub(in crate::cli::commands) async fn start(
             ui::ModeFit::in_repository(SpaceKind::Chat),
         )?;
         options.check_given(ctx, Some(repo.id.as_str())).await?;
-        let topic = Topic {
-            linked_issue: subject.linked_issue,
-            ..Topic::repository(&repo, &mode)
-        };
+        let topic = Topic::repository(&repo, &mode);
         let topic = on_issue(ctx, &repo, &settings, topic, subject.issue).await?;
         begin(
             ctx,
@@ -135,7 +130,6 @@ async fn start_resolved(ctx: &Context, resolved: ChatStart) -> Result<i32> {
     let subject = Subject {
         mode: ui::ModeChoice::Named(mode.clone()),
         issue: issue.map(Some),
-        linked_issue: None,
     };
     match (workspace, repository) {
         (Some(workspace), _) => start_in_workspace(ctx, Some(workspace), subject, options).await,
@@ -177,10 +171,7 @@ pub(in crate::cli::commands) async fn start_in_workspace(
             ui::ModeFit::in_repository(SpaceKind::Chat),
         )?;
         options.check_given(ctx, Some(repo.id.as_str())).await?;
-        let topic = Topic {
-            linked_issue: subject.linked_issue,
-            ..Topic::workspace(workspace, &mode)
-        };
+        let topic = Topic::workspace(workspace, &mode);
         let topic = on_issue(ctx, &repo, &settings, topic, subject.issue).await?;
         begin(
             ctx,

@@ -247,13 +247,6 @@ pub struct StartArgs {
     /// move import passes for a copy.
     #[arg(long, hide = true, requires = "session")]
     pub fork_session: bool,
-    /// Issue, by URL, that an imported chat is linked to, whose fields its
-    /// rules take without asking the forge, which shoal move import passes.
-    #[arg(long, hide = true, value_parser = linked_issue)]
-    pub linked_issue: Option<crate::forge::items::reference::ItemRef>,
-    /// Title of --linked-issue.
-    #[arg(long, hide = true, requires = "linked_issue")]
-    pub linked_issue_title: Option<String>,
     /// Handoff of the starter that waits on this background place, which
     /// shoal start passes.
     #[arg(long, hide = true, requires = "here")]
@@ -299,8 +292,6 @@ impl StartArgs {
             model: ModelArgs { model, effort },
             session,
             fork_session,
-            linked_issue,
-            linked_issue_title,
             handoff,
             args,
         } = self;
@@ -343,11 +334,6 @@ impl StartArgs {
         line.values("effort", effort);
         line.values("session", session.as_ref().map(|session| session.as_str()));
         line.switch("fork_session", *fork_session);
-        line.values(
-            "linked_issue",
-            linked_issue.as_ref().map(ToString::to_string),
-        );
-        line.values("linked_issue_title", linked_issue_title);
         line.values("handoff", handoff);
         line.trailing("args", args);
         line.into_args()
@@ -447,12 +433,6 @@ pub struct ContributeArgs {
 /// A recorded narrowing passed on as JSON.
 fn recorded(json: &str) -> Result<crate::config::permissions::PermissionsConfig, String> {
     serde_json::from_str(json).map_err(|error| error.to_string())
-}
-
-/// clap parser for an issue's URL.
-fn linked_issue(url: &str) -> Result<crate::forge::items::reference::ItemRef, String> {
-    use crate::forge::items::{link::LinkKind, reference::ItemRef};
-    ItemRef::parse_kind(LinkKind::Issue, url).map_err(|error| format!("{error:#}"))
 }
 
 #[cfg(test)]
