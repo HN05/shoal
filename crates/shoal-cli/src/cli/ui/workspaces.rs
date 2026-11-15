@@ -586,11 +586,16 @@ pub async fn pick_space(
     Ok(SpaceId::from(pick(ctx, "Space> ", entries)?))
 }
 
-/// The picker entries for `workspaces`, then `chats`.
+/// The picker entries for `workspaces`, then the `chats` the command's need
+/// offers.
 async fn space_entries(ctx: &Context, workspaces: Vec<Workspace>, chats: &[Chat]) -> Entries {
     let mut entries = workspace_entries(ctx, workspaces, true).await;
+    let chats: Vec<Chat> = (chats.iter())
+        .filter(|chat| ctx.need.offers_chat(chat))
+        .cloned()
+        .collect();
     entries.extend(chat_entries(
-        chats,
+        &chats,
         Palette::stderr(ctx.json),
         picker_width(),
     ));

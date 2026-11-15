@@ -7,7 +7,7 @@ use crate::client::{execution_ids::ExecutionId, space_ids::SpaceId, space_names:
 use crate::{
     cli::{list_status::ListStatus, terminal},
     client::connection::Daemon,
-    model::{RunningAgent, Workspace},
+    model::{Chat, RunningAgent, Workspace},
     paths::CommandPaths,
     sessions::Origin,
     state::WorkspaceState,
@@ -96,6 +96,12 @@ impl Need {
         Self::of(path).unwrap_or(Self::Ready)
     }
 
+    /// Whether a command of this need offers `chat`, which has what it acts
+    /// on: for one that acts on holds, a chat that has one.
+    pub fn offers_chat(self, chat: &Chat) -> bool {
+        self != Self::Holds || !chat.holds.is_empty()
+    }
+
     /// What a picker reports when no workspace is left to offer.
     pub fn none_offered(self) -> &'static str {
         match self {
@@ -103,7 +109,7 @@ impl Need {
             Self::Running => "nothing is running in any workspace",
             Self::Done => "no workspace is done",
             Self::Base => "no workspace has a base workspace",
-            Self::Holds => "no workspace has holds",
+            Self::Holds => "no space has holds",
             Self::Marks => "no workspace is marked ready",
             Self::Directory => "no workspace directory exists",
             Self::Untracked => "no workspace or chat",

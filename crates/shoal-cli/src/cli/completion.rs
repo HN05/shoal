@@ -530,13 +530,12 @@ fn chat_candidate(chat: &Chat, kind: &str) -> CompletionCandidate {
     CompletionCandidate::new(chat.number.to_string()).help(Some(help.into()))
 }
 
-/// Every chat, a stopped one described as such, or for a command that acts
-/// on holds, each chat that has one.
+/// Every chat `need` offers, a stopped one described as such.
 async fn chat_candidates(paths: &CommandPaths, need: Need) -> Result<Vec<CompletionCandidate>> {
     Ok(crate::client::chats::recorded(paths)
         .await?
         .iter()
-        .filter(|chat| need != Need::Holds || !chat.holds.is_empty())
+        .filter(|chat| need.offers_chat(chat))
         .map(|chat| {
             let kind = match chat.running {
                 false => STOPPED_CHAT,
