@@ -1,6 +1,6 @@
 //! Agent launches: what a start asks for, which the daemon resolves into
 //! the space it starts in and the agent it queues there.
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -9,6 +9,7 @@ use shoal_schedule::priority::Priority;
 
 use crate::{
     agent::{Agent, ModelChoice},
+    chats::StartedChat,
     config::{modes::ModeName, permissions::PermissionsConfig},
     forge::items::reference::ItemInput,
     space_names::{SpaceName, SpaceSelector},
@@ -98,6 +99,22 @@ pub struct Launch {
     /// What the agent is told to do, passed on to it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub task: Vec<String>,
+    /// The directory the start is made in, whose checkout or worktree names
+    /// the repository or workspace the start leaves out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub directory: Option<PathBuf>,
+    /// The variables of the terminal whose host opens the agent's place;
+    /// without them, the default host opens it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<BTreeMap<String, String>>,
+}
+
+/// Where a launch started its agent.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Launched {
+    /// In a new chat.
+    Chat(StartedChat),
 }
 
 /// What made a launch, which the journal records with its agent's start.

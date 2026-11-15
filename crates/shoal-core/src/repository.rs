@@ -5,6 +5,7 @@ use std::path::Path;
 
 use crate::{
     forge::{
+        ForgeRepo,
         items::{link::LinkKind, reference::ItemRef},
         repo::remote_url::RemoteUrl,
     },
@@ -244,6 +245,101 @@ async fn find_by_origin_path<'a>(
         }
     }
     None
+}
+
+/// The only registered repository whose origin `item` belongs to, or none
+/// when no registered repository has that origin.
+pub async fn registered_for_item<'a>(
+    repos: &'a [Repository],
+    item: &ItemRef,
+) -> Result<Option<&'a Repository>> {
+    let forge = item.repository().clone();
+    match with_remote(repos, forge, "--repo <ID>").await {
+        Ok(repo) => Ok(Some(repo)),
+        Err(error) if error.is::<UnregisteredRemote>() => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+/// The refusal of a forge repository no registered repository has as its
+/// origin.
+#[derive(Debug)]
+pub struct UnregisteredRemote(pub ForgeRepo);
+
+impl std::fmt::Display for UnregisteredRemote {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "no registered repository has the remote {}/{}; register it with `shoal repo add {}` and retry",
+            self.0.host,
+            self.0.path,
+            self.0.repository_url()
+        )
+    }
+}
+
+impl std::error::Error for UnregisteredRemote {}
+
+/// The only registered repository whose origin is `forge`; `retry` names the
+/// spelling that selects one explicitly.
+pub async fn with_remote<'a>(
+    repos: &'a [Repository],
+    forge: ForgeRepo,
+    retry: &str,
+) -> Result<&'a Repository> {
+    let mut matches = Vec::new();
+    for repo in repos {
+        let Some(remote) = remote_url_from_source(&repo.source).await? else {
+            continue;
+        };
+        if forge.is_remote(&remote) {
+            matches.push(repo);
+        }
+    }
+    match matches.as_slice() {
+        [repo] => Ok(repo),
+        [] => Err(UnregisteredRemote(forge).into()),
+        _ => anyhow::bail!(
+            "several registered repositories share the remote {}/{}; use `{retry}`",
+            forge.host,
+            forge.path
+        ),
+    }
+}
+
+/// The root of the worktree `directory` is in, if it still exists.
+pub async fn worktree_root(directory: &Path) -> Result<Option<std::path::PathBuf>> {
+    match git::worktree_root(directory).await {
+        Ok(root) => Ok(Some(std::fs::canonicalize(root.trim_end())?)),
+        Err(_) => Ok(None),
+    }
+}
+
+/// The repository whose checkout, or one of whose `workspaces`' worktree,
+/// is at `root`.
+pub fn at_root<'a>(
+    root: &Path,
+    repos: &'a [Repository],
+    workspaces: &'a [crate::model::Workspace],
+) -> Option<&'a shoal_ids::repository_ids::RepositoryId> {
+    if let Some(repo) = repos.iter().find(|repo| repo.path == root) {
+        return Some(&repo.id);
+    }
+    (workspaces.iter())
+        .find(|workspace| workspace.path == root)
+        .map(|workspace| &workspace.repository_id)
+}
+
+/// The selector `value` names: a path, canonical once it exists, else a
+/// repository's ID or name.
+pub fn named(value: String) -> Result<Selector> {
+    if Path::new(&value).exists() {
+        let path = std::fs::canonicalize(&value)?;
+        path.to_str().context("repository path is not UTF-8")?;
+        Ok(Selector::Path { value, path })
+    } else {
+        Ok(value.into())
+    }
 }
 
 #[cfg(test)]

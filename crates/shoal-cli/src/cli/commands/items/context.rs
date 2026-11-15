@@ -133,7 +133,7 @@ async fn item_checkout(ctx: &Context, item: Option<&ItemInput>) -> Result<Option
         return Ok(None);
     };
     let repos = crate::client::repositories::list(&ctx.paths).await?;
-    let registered = super::super::issues::registered_for_item(&repos, item).await?;
+    let registered = crate::repository::registered_for_item(&repos, item).await?;
     Ok(registered.map(|repo| ItemContext::Checkout(repo.id.clone())))
 }
 

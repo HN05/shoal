@@ -10,20 +10,11 @@ use shoal_protocol::space_names::SpaceSelector;
 use crate::connection::{Daemon, request};
 use shoal_protocol::{
     model::{Chat, ChatHome, RenamedChat},
-    protocol::{ChatMethod, ChatScope, ChatStart},
+    protocol::{ChatMethod, ChatScope},
     repository::Selector,
     scope_tokens::ScopeToken,
     sessions::Origin,
 };
-
-/// Start the chat `start` describes in a background place the daemon
-/// opens, or in the app that runs its agent detached, resolving what it
-/// leaves out under the chat's settings, and return it once it runs its
-/// agent.
-pub async fn launch(daemon: &impl Daemon, start: ChatStart) -> Result<StartedChat> {
-    let start = Box::new(start);
-    request(daemon, ChatMethod::LaunchChat { start }).await
-}
 
 /// What a new chat is recorded as: its name, its agent, the mode the agent
 /// starts in and the space it goes below.

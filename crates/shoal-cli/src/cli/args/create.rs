@@ -261,8 +261,9 @@ pub struct StartArgs {
 }
 
 impl StartArgs {
-    /// The launch these ask for, apart from the agent's task and the
-    /// session `--fork` forks, which only this process reads.
+    /// The launch these ask for, apart from the agent's task, the session
+    /// `--fork` forks and where the start is made, which only this process
+    /// reads.
     pub(in crate::cli) fn launch(&self) -> Launch {
         Launch {
             target: self.repository.clone(),
@@ -289,6 +290,8 @@ impl StartArgs {
             blockers: self.add_blocker.clone(),
             now: self.now,
             task: Vec::new(),
+            directory: None,
+            env: None,
         }
     }
 

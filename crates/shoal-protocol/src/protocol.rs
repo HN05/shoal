@@ -13,6 +13,7 @@ mod files;
 mod frames;
 mod holds;
 mod items;
+mod launches;
 mod notifications;
 pub mod operations;
 mod ports;
@@ -51,6 +52,7 @@ pub use frames::{
 };
 pub use holds::HoldMethod;
 pub use items::{DownloadPiece, ItemContext, ItemMethod, ViewPiece};
+pub use launches::LaunchMethod;
 pub use notifications::NotificationMethod;
 pub use operations::OperationMethod;
 pub use ports::PortMethod;

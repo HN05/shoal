@@ -10,6 +10,7 @@ mod executions;
 mod files;
 mod holds;
 mod items;
+mod launches;
 mod notifications;
 mod operations;
 mod ports;
@@ -65,6 +66,7 @@ pub(super) async fn handle(
         Operation::Assignment(method) => assignments::handle(&server.manager, method, caller).await,
         Operation::Agent(method) => agents::handle(&server.manager, method, caller).await,
         Operation::Chat(method) => chats::handle(&server.manager, method, caller).await,
+        Operation::Launch(method) => launches::handle(&server.manager, method, caller).await,
         Operation::Queue(method) => queue::handle(&server.manager, method, caller).await,
         Operation::Hold(method) => holds::handle(&server.manager, method, caller).await,
         Operation::Demo(method) => demos::handle(&server.manager, method).await,

@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::SpaceId;
 
-use super::Lifetime;
 use crate::space_names::SpaceName;
 use crate::space_names::SpaceSelector;
 
@@ -9,12 +8,6 @@ use crate::space_names::SpaceSelector;
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChatMethod {
-    /// Start the chat `start` describes in a background place, as `shoal
-    /// start` starts one without a terminal, once it runs its agent.
-    /// Answers with [`super::Body::StartedChat`].
-    LaunchChat {
-        start: Box<ChatStart>,
-    },
     /// Record a chat named `name`, whose agent its wrapper then registers
     /// as an execution of the chat, in the worktree of `workspace` when
     /// given, which is in `repository`; without either, a chat without a
@@ -99,16 +92,6 @@ pub enum ChatMethod {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatScope {
     pub token: crate::scope_tokens::ScopeToken,
-}
-
-impl ChatMethod {
-    pub fn lifetime(&self) -> Lifetime {
-        match self {
-            // A start waits for requests of the chat start worker it runs.
-            Self::LaunchChat { .. } => Lifetime::Open,
-            _ => Lifetime::Reply,
-        }
-    }
 }
 
 /// The answer to [`ChatMethod::ChatRoot`].

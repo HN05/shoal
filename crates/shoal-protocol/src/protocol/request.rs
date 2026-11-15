@@ -1,10 +1,10 @@
 //! The request envelope and the method each request carries.
 use super::{
     AgentMethod, ApprovalMethod, AssignmentMethod, ChatMethod, CiMethod, DaemonMethod, DemoMethod,
-    ExecutionMethod, ExitRequest, FileMethod, HoldMethod, ItemMethod, NotificationMethod,
-    OperationMethod, PortMethod, QuestionMethod, QueueMethod, Reattach, RecoveryMethod,
-    RemovalMethod, RepositoryMethod, ResourceMethod, ReviewMethod, SecretMethod, SimulatorMethod,
-    SubscriptionMethod, VERSION, WorkspaceMethod,
+    ExecutionMethod, ExitRequest, FileMethod, HoldMethod, ItemMethod, LaunchMethod,
+    NotificationMethod, OperationMethod, PortMethod, QuestionMethod, QueueMethod, Reattach,
+    RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod, ReviewMethod, SecretMethod,
+    SimulatorMethod, SubscriptionMethod, VERSION, WorkspaceMethod,
 };
 use serde::{Deserialize, Serialize};
 
@@ -62,6 +62,7 @@ pub enum Operation {
     Assignment(AssignmentMethod),
     Agent(AgentMethod),
     Chat(ChatMethod),
+    Launch(LaunchMethod),
     Queue(QueueMethod),
     Hold(HoldMethod),
     Demo(DemoMethod),
@@ -136,7 +137,7 @@ impl Operation {
             Self::Workspace(method) => method.lifetime(),
             Self::Execution(method) => method.lifetime(),
             Self::Agent(method) => method.lifetime(),
-            Self::Chat(method) => method.lifetime(),
+            Self::Launch(method) => method.lifetime(),
             Self::Queue(method) => method.lifetime(),
             Self::Item(method) => method.lifetime(),
             Self::Notification(method) => method.lifetime(),
@@ -146,6 +147,7 @@ impl Operation {
             Self::Subscription(method) => method.lifetime(),
             Self::Daemon(_)
             | Self::Repository(_)
+            | Self::Chat(_)
             | Self::Removal(_)
             | Self::Recovery(_)
             | Self::Assignment(_)
@@ -201,6 +203,7 @@ from_domains!(
     Assignment(AssignmentMethod),
     Agent(AgentMethod),
     Chat(ChatMethod),
+    Launch(LaunchMethod),
     Queue(QueueMethod),
     Hold(HoldMethod),
     Demo(DemoMethod),

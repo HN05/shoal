@@ -1,5 +1,5 @@
-//! A new chat that runs detached: the daemon starts it through `LaunchChat`,
-//! as it does for an app, in a background place its worker opens.
+//! A new chat that runs detached: the daemon launches it, as it does for
+//! an app, in a background place its worker opens.
 use anyhow::Result;
 
 use super::{super::Options, Started};
@@ -10,13 +10,13 @@ use crate::{
         commands::chat::{Narrowing, Relaunch, Topic},
         context::Context,
     },
-    protocol::ChatStart,
 };
 use shoal_protocol::chats::{QueuedChat, StartedChat};
 use shoal_protocol::launches::StartTarget;
+use shoal_protocol::launches::{IssueChoice, Launch, LaunchSource, Launched, SpaceChoice};
 use shoal_protocol::space_names::SpaceName;
 
-/// The start the daemon carries out for the chat about `topic` with
+/// The launch the daemon carries out for the chat about `topic` with
 /// `options`, run by `agent` under `name`: the chat its `shoal start` makes,
 /// in the caller's terminal's host. `None` for one only this process can
 /// start, since the request cannot carry it: a restore, a session the chat
@@ -26,7 +26,7 @@ pub(super) fn request(
     topic: &Topic,
     options: &Options,
     (agent, name): (&Agent, &SpaceName),
-) -> Option<ChatStart> {
+) -> Option<Launch> {
     let Relaunch::Start(start) = &topic.relaunch else {
         return None;
     };
@@ -43,35 +43,36 @@ pub(super) fn request(
     if !carried {
         return None;
     }
-    let repository = match repository {
-        Some(StartTarget::Repository(id)) => Some(id.as_str().into()),
-        _ => None,
-    };
-    let args = (options.args.iter())
+    let task = (options.args.iter())
         .map(|arg| arg.to_str().map(str::to_owned))
         .collect::<Option<_>>()?;
-    Some(ChatStart {
-        repository,
-        workspace: in_workspace.clone().flatten(),
+    Some(Launch {
+        target: repository.clone(),
+        in_workspace: in_workspace.clone().flatten().map(SpaceChoice::Space),
+        chat: true,
         parent: options.parent.clone(),
         name: Some(name.clone()),
         agent: Some(agent.clone()),
         mode: Some(topic.mode.clone()),
         model: options.model.clone(),
-        narrowing,
-        issue: issue.clone().flatten(),
-        args,
+        permissions: narrowing,
+        issue: issue.clone().flatten().map(IssueChoice::Named),
+        task,
         priority: options.priority,
         env: Some(crate::terminal::start_environment()),
         now: options.now,
+        ..Default::default()
     })
 }
 
-/// Have the daemon start the chat `start` describes, reporting one that
+/// Have the daemon launch the chat `launch` describes, reporting one that
 /// runs in a background place to the caller, one an app runs here, and one
 /// whose agent waits in the agent queue.
-pub(super) async fn start(ctx: &Context, start: ChatStart) -> Result<Started> {
-    match crate::client::chats::launch(&ctx.paths, start).await? {
+pub(super) async fn start(ctx: &Context, launch: Launch) -> Result<Started> {
+    let source = LaunchSource::Manual;
+    let Launched::Chat(started) =
+        crate::client::launches::launch(&ctx.paths, launch, source).await?;
+    match started {
         StartedChat::Queued(queued) => {
             report_queued(ctx, &queued)?;
             Ok(Started::Exited(0))

@@ -32,7 +32,7 @@ pub(super) async fn settle(
         )
     })?;
     let workspaces = repository_workspaces(ctx, repo).await?;
-    if let Some(workspace) = on_branch(&workspaces, &name, remote.as_ref()) {
+    if let Some(workspace) = crate::launches::on_branch(&workspaces, &name, remote.as_ref()) {
         // A remote branch opens a local one only where it tracks it.
         if remote.is_some() {
             check_opens(ctx, target, &name).await?;
@@ -70,7 +70,7 @@ pub(in crate::cli::commands) async fn owning_workspace(
 ) -> Result<Option<Workspace>> {
     let remote = git::remote_branch(&repo.path, name).await?;
     let workspaces = repository_workspaces(ctx, repo).await?;
-    Ok(on_branch(&workspaces, name, remote.as_ref()).cloned())
+    Ok(crate::launches::on_branch(&workspaces, name, remote.as_ref()).cloned())
 }
 
 /// The workspaces of `repo`.
@@ -79,18 +79,6 @@ async fn repository_workspaces(ctx: &Context, repo: &Repository) -> Result<Vec<W
         .into_iter()
         .filter(|workspace| workspace.repository_id == repo.id)
         .collect())
-}
-
-/// The workspace among `workspaces` on the local branch `name` selects: its
-/// own name, or the branch of the `remote` one it names.
-fn on_branch<'a>(
-    workspaces: &'a [Workspace],
-    name: &str,
-    remote: Option<&(String, BranchName)>,
-) -> Option<&'a Workspace> {
-    let local = remote.map_or(name, |(_, branch)| branch.as_str());
-    (workspaces.iter())
-        .find(|workspace| workspace.branch.as_ref().map(BranchName::as_str) == Some(local))
 }
 
 /// The remote and branch `name` names in `repo`, if it names a remote one,

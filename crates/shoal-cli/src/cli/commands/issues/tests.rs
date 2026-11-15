@@ -4,7 +4,7 @@ use anyhow::Result;
 
 async fn repository_for<'a>(repos: &'a [Repository], url: &str) -> Result<&'a Repository> {
     let issue = ItemRef::parse_kind(LinkKind::Issue, url)?;
-    repository_with_remote(repos, issue.repository().clone(), "retry").await
+    repository::with_remote(repos, issue.repository().clone(), "retry").await
 }
 
 #[test]
@@ -62,7 +62,7 @@ async fn issue_urls_select_exactly_one_registered_repository() {
     let pull: ItemRef = "https://code.example/group/sub/repo/-/merge_requests/3"
         .parse()
         .unwrap();
-    let pull = repository_with_remote(&repos, pull.repository().clone(), "retry").await;
+    let pull = repository::with_remote(&repos, pull.repository().clone(), "retry").await;
     assert_eq!(pull.unwrap().id, "d");
     assert!(
         repository_for(&repos, "https://forge.example/team/repo/issues/7")

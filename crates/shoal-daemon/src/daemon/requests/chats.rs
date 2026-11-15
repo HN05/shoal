@@ -6,10 +6,10 @@ use anyhow::Result;
 use super::super::{
     answer::Answer,
     chats::NewChat,
-    scope::{Caller, Scoped, confine_target},
+    scope::{Caller, Scoped},
     workspace::Manager,
 };
-use crate::protocol::{Body, ChatMethod, ChatStart};
+use crate::protocol::{Body, ChatMethod};
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn handle(
@@ -18,16 +18,6 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        ChatMethod::LaunchChat { start } => {
-            if caller.is_none() {
-                let (workspace, parent) = (start.workspace.as_ref(), start.parent.as_ref());
-                (manager.ensure_parent_not_host(workspace, parent)).await?;
-            }
-            let held = (start.repository.as_ref(), start.workspace.as_ref());
-            ensure_caller_holds(manager, caller, &start.narrowing, held).await?;
-            let source = shoal_protocol::launches::LaunchSource::Manual;
-            Body::StartedChat(manager.launch_chat(*start, source, caller).await?)
-        }
         ChatMethod::StartChat {
             repository,
             workspace,
@@ -46,7 +36,7 @@ pub(super) async fn handle(
             let queued = queued_scope(manager, caller, queue_entry.as_ref(), &mut parent).await?;
             let caller = caller.or(queued.as_ref());
             let held = (repository.as_ref(), workspace.as_ref());
-            ensure_caller_holds(manager, caller, &narrowing, held).await?;
+            (manager.ensure_chat_given_held(caller, &narrowing, held)).await?;
             let priority = manager.given_priority(caller, priority).await?;
             let new = NewChat {
                 name,
@@ -120,26 +110,6 @@ async fn queued_scope(
     Ok(Some(queued))
 }
 
-/// Refuse the permissions `given` to a new chat in the repository or the
-/// workspace of `place` where the scoped `caller` does not hold them.
-async fn ensure_caller_holds(
-    manager: &Manager,
-    caller: Option<&Caller>,
-    given: &crate::config::permissions::PermissionsConfig,
-    place: (Option<&crate::repository::Selector>, Option<&SpaceSelector>),
-) -> Result<()> {
-    let Some(caller) = caller.filter(|_| !given.is_empty()) else {
-        return Ok(());
-    };
-    let repository = match place {
-        (_, Some(workspace)) => Some(manager.chat_workspace(workspace).await?.repository_id),
-        (Some(repository), None) => Some(manager.repository(repository.clone()).await?.id),
-        (None, None) => None,
-    };
-    let giver = Some(&caller.space_id);
-    (manager.ensure_caller_holds(giver, given, repository.as_ref())).await
-}
-
 impl Scoped for ChatMethod {
     async fn scope(
         &mut self,
@@ -165,25 +135,6 @@ impl Scoped for ChatMethod {
                 (manager.ensure_parent_not_host(workspace.as_ref(), parent.as_ref())).await?;
                 manager.parent_below(caller, parent).await?;
                 workspace.as_mut()
-            }
-            // A chat the daemon starts goes where one the caller recorded
-            // itself would: the worker acts with the caller's scope, which
-            // puts it below the caller's own space without a parent.
-            ChatMethod::LaunchChat { start } => {
-                let ChatStart {
-                    parent, workspace, ..
-                } = &mut **start;
-                (manager.ensure_parent_not_host(workspace.as_ref(), parent.as_ref())).await?;
-                manager.parent_below(caller, &mut parent.clone()).await?;
-                if start.now {
-                    // Its workspace is confined before it asks, so a start
-                    // the scope refuses makes no approval request.
-                    if let Some(workspace) = start.workspace.as_mut() {
-                        confine_target(manager, caller, workspace, false).await?;
-                    }
-                    manager.authorize_chat_now(caller, start).await?;
-                }
-                start.workspace.as_mut()
             }
             // Its check takes the parent as its start would.
             ChatMethod::CheckChatParent {

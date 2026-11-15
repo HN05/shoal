@@ -4,11 +4,12 @@
 //! checks before it asks or creates anything.
 use anyhow::{Result, ensure};
 use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
+use shoal_refs::BranchName;
 
 use crate::{
     config::{self, modes::ModeName},
     forge::items::reference::{ItemInput, ItemRef},
-    model::SpaceKind,
+    model::{SpaceKind, Workspace},
 };
 
 /// Refuse the arguments the kind of space `mode`, or the other arguments,
@@ -193,6 +194,18 @@ pub fn linked_items(launch: &Launch) -> impl Iterator<Item = &ItemRef> {
         _ => None,
     };
     issue.into_iter().chain(positional)
+}
+
+/// The workspace among `workspaces` on the local branch `name` selects: its
+/// own name, or the branch of the `remote` one it names.
+pub fn on_branch<'a>(
+    workspaces: &'a [Workspace],
+    name: &str,
+    remote: Option<&(String, BranchName)>,
+) -> Option<&'a Workspace> {
+    let local = remote.map_or(name, |(_, branch)| branch.as_str());
+    (workspaces.iter())
+        .find(|workspace| workspace.branch.as_ref().map(BranchName::as_str) == Some(local))
 }
 
 /// Refuse a repository or issue the launch names for `mode`, which starts a

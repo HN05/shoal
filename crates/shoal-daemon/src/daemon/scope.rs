@@ -137,6 +137,7 @@ impl Scoped for Operation {
             Operation::Assignment(method) => method.scope(manager, caller).await,
             Operation::Agent(method) => method.scope(manager, caller).await,
             Operation::Chat(method) => method.scope(manager, caller).await,
+            Operation::Launch(method) => method.scope(manager, caller).await,
             Operation::Queue(method) => method.scope(manager, caller).await,
             Operation::Hold(method) => method.scope(manager, caller).await,
             Operation::Demo(method) => method.scope(manager, caller).await,

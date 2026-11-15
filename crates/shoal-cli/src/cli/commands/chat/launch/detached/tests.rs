@@ -1,3 +1,4 @@
+use shoal_protocol::launches::StartTarget;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_schedule::priority::Priority;
 
@@ -47,19 +48,17 @@ fn a_new_chat_on_an_issue_becomes_the_daemons_start_in_its_repository() {
         ..topic
     };
     let (agent, name) = (Agent::from("claude"), SpaceName::from("talk"));
-    let start = request(&topic, &options(), (&agent, &name)).unwrap();
-    assert_eq!(
-        start.repository.as_ref().map(|named| named.value()),
-        Some("repo")
-    );
-    assert_eq!(start.workspace, None);
-    assert_eq!(start.issue, Some(issue.into()));
-    assert_eq!(start.mode, Some(ModeName::CHAT));
-    assert_eq!(start.parent, Some(SpaceSelector::from("7")));
-    assert_eq!(start.args, ["Read the build"]);
-    assert_eq!(start.agent, Some("claude".into()));
-    assert_eq!(start.name, Some("talk".into()));
-    assert_eq!(start.priority, Some(Priority::URGENT));
+    let launch = request(&topic, &options(), (&agent, &name)).unwrap();
+    assert_eq!(launch.target, Some(StartTarget::Repository("repo".into())));
+    assert_eq!(launch.in_workspace, None);
+    assert!(launch.chat);
+    assert_eq!(launch.issue, Some(IssueChoice::Named(issue.into())));
+    assert_eq!(launch.mode, Some(ModeName::CHAT));
+    assert_eq!(launch.parent, Some(SpaceSelector::from("7")));
+    assert_eq!(launch.task, ["Read the build"]);
+    assert_eq!(launch.agent, Some("claude".into()));
+    assert_eq!(launch.name, Some("talk".into()));
+    assert_eq!(launch.priority, Some(Priority::URGENT));
 }
 
 #[test]

@@ -12,7 +12,7 @@ mod tree;
 pub use statuses::Statuses;
 pub use tree::workspace_tree_rows;
 
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use futures_util::future::join_all;
 
 use crate::{
@@ -725,13 +725,7 @@ async fn distinguishing_sources(
 
 /// Preserve the argument and resolve existing paths in the caller's directory.
 pub fn repository_selector(value: String) -> Result<crate::repository::Selector> {
-    if Path::new(&value).exists() {
-        let path = std::fs::canonicalize(&value)?;
-        path.to_str().context("repository path is not UTF-8")?;
-        Ok(crate::repository::Selector::Path { value, path })
-    } else {
-        Ok(value.into())
-    }
+    crate::repository::named(value)
 }
 
 #[cfg(test)]

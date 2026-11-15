@@ -30,6 +30,7 @@ use crate::{
     state::WorkspaceState,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::launches::{Launch, LaunchSource, StartTarget};
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_protocol::{
     approvals::ApprovalRequest,
@@ -768,12 +769,15 @@ fn launched_chats() -> Vec<(ChatStart, bool)> {
 async fn an_app_starts_a_chat_whose_agent_and_mode_the_daemon_resolves() {
     let daemon = TestDaemon::start().await;
     let app = daemon.connector();
-    let start = || ChatStart {
-        repository: Some(daemon.repository.path.to_str().unwrap().into()),
-        args: vec!["Read the build".into()],
+    let start = || Launch {
+        target: Some(StartTarget::Repository(
+            daemon.repository.path.to_str().unwrap().into(),
+        )),
+        chat: true,
+        task: vec!["Read the build".into()],
         ..Default::default()
     };
-    let error = crate::client::chats::launch(&app, start())
+    let error = crate::client::launches::launch(&app, start(), LaunchSource::Manual)
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("agent.default"), "{error:#}");
@@ -783,7 +787,9 @@ async fn an_app_starts_a_chat_whose_agent_and_mode_the_daemon_resolves() {
         "[agent]\ndefault = \"probe\"\n[agents.probe]\ncommand = [\"true\"]\n",
     )
     .await;
-    crate::client::chats::launch(&app, start()).await.unwrap();
+    (crate::client::launches::launch(&app, start(), LaunchSource::Manual))
+        .await
+        .unwrap();
     let [(launched, scoped)] = launched_chats().try_into().unwrap();
     assert!(!scoped);
     assert_eq!(launched.agent, Some("probe".into()));
@@ -809,17 +815,17 @@ async fn a_scoped_app_starts_chats_below_its_own_space() {
     let parent = daemon.workspace("parent").await;
     let other = daemon.workspace("other").await;
     let agent = daemon.scoped(&parent).await;
-    let start = |parent: Option<SpaceSelector>| ChatStart {
-        repository: Some(daemon.repository.id.clone().into()),
+    let start = |parent: Option<SpaceSelector>| Launch {
+        target: Some(StartTarget::Repository(daemon.repository.id.to_string())),
+        chat: true,
         agent: Some("probe".into()),
         parent,
         ..Default::default()
     };
+    let launch = |launch| crate::client::launches::launch(&agent, launch, LaunchSource::Manual);
     let outside = start(Some(SpaceSelector::id(&other.id)));
-    assert!(crate::client::chats::launch(&agent, outside).await.is_err());
-    crate::client::chats::launch(&agent, start(None))
-        .await
-        .unwrap();
+    assert!(launch(outside).await.is_err());
+    launch(start(None)).await.unwrap();
     // The worker records it with the caller's scope, below the caller.
     let [(launched, scoped)] = launched_chats().try_into().unwrap();
     assert!(scoped);

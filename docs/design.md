@@ -147,8 +147,10 @@ no configuration of its own to start one as the CLI does. `QueueAgent` queues
 the worker of an existing workspace the same way, on the workspace's issue,
 and every detached start of such a worker sends it, `shoal start`'s included.
 A new chat that runs detached, a scoped caller's, one started without a
-terminal or an app's, goes through `LaunchChat`: the daemon resolves its agent
-and mode the same way, `chat` by default, and its name, after its issue's title
+terminal or an app's, goes through `Launch`, which carries what `shoal start`
+takes and what made the launch: the daemon decides the mode, the kind of
+space and the repository the launch leaves out, as the start's own checks
+in `shoal-core` do, resolves its agent the same way, and its name, after its issue's title
 or where it runs, checks where it goes as recording it would, then runs a
 worker of its own that opens the background place, whose chat worker starts
 the chat there from the handoff it waits on, and answers once the chat runs

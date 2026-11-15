@@ -127,7 +127,7 @@ const REQUESTS: &[&str] = &[
     r#"{"session_signalled":{"signal":"terminate"}}"#,
     // Chats.
     r#"{"start_chat":{"repository":"app","name":"app-chat","agent":"claude"}}"#,
-    r#"{"launch_chat":{"start":{"repository":"app","agent":"claude","args":["Read the build"]}}}"#,
+    r#"{"launch":{"launch":{"target":"app","in":{"space":"3"},"mode":"chat","agent":"claude","task":["Read the build"]},"source":{"kind":"manual"}}}"#,
     r#""list_chats""#,
     r#"{"remove_chat":{"chat":"app-chat"}}"#,
     r#"{"rename_chat":{"chat":"app-chat","name":"topic"}}"#,
@@ -304,6 +304,7 @@ fn every_request_has_its_json_above() {
         variants::<AssignmentMethod>(),
         variants::<AgentMethod>(),
         variants::<ChatMethod>(),
+        variants::<LaunchMethod>(),
         variants::<QueueMethod>(),
         variants::<HoldMethod>(),
         variants::<DemoMethod>(),

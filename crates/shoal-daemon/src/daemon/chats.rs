@@ -15,7 +15,9 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
     daemon::{
-        events, spaces, store,
+        events,
+        scope::Caller,
+        spaces, store,
         workspace::{self, Manager},
     },
     fsutil::off_runtime,
@@ -136,6 +138,27 @@ impl Manager {
             (None, None) => (None, None),
         };
         self.record_new_chat(repository, workspace, new).await
+    }
+
+    /// Refuse the permissions `given` to a new chat in the repository or
+    /// the workspace of `place` where the scoped `caller` does not hold
+    /// them.
+    pub(crate) async fn ensure_chat_given_held(
+        &self,
+        caller: Option<&Caller>,
+        given: &crate::config::permissions::PermissionsConfig,
+        place: (Option<&crate::repository::Selector>, Option<&SpaceSelector>),
+    ) -> Result<()> {
+        let Some(caller) = caller.filter(|_| !given.is_empty()) else {
+            return Ok(());
+        };
+        let repository = match place {
+            (_, Some(workspace)) => Some(self.chat_workspace(workspace).await?.repository_id),
+            (Some(repository), None) => Some(self.repository(repository.clone()).await?.id),
+            (None, None) => None,
+        };
+        let giver = Some(&caller.space_id);
+        (self.ensure_caller_holds(giver, given, repository.as_ref())).await
     }
 
     /// Refuse a named `parent` that is `workspace`, whose worktree the chat

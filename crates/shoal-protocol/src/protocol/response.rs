@@ -203,7 +203,7 @@ response_bodies! {
     RenamedWorkspace(crate::model::RenamedWorkspace),
     Chats(Vec<crate::model::Chat>),
     RemovedChat(crate::chats::RemovedChat),
-    StartedChat(crate::chats::StartedChat),
+    Launched(crate::launches::Launched),
     ScopeToken(ChatScope),
     Granted(Option<crate::scope_tokens::ScopeToken>),
     Branches(Vec<crate::model::Branch>),

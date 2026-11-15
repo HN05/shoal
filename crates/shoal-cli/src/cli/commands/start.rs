@@ -365,7 +365,7 @@ async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<Repos
         return Ok(Some(repo.id.clone()));
     }
     for item in launches::linked_items(&launch) {
-        if let Ok(Some(repo)) = super::issues::registered_for_item(&repos, item).await {
+        if let Ok(Some(repo)) = crate::repository::registered_for_item(&repos, item).await {
             return Ok(Some(repo.id.clone()));
         }
     }

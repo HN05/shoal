@@ -1,5 +1,5 @@
 //! Resolve issue context before workspace creation and agent launch.
-use anyhow::{Context as _, Result, bail, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{client, context::Context, ui},
@@ -10,7 +10,6 @@ use crate::{
             reference::{ItemInput, ItemRef},
         },
     },
-    git,
     model::{PresentSpace, Repository},
     protocol::{ItemContext, operations::LaunchIssue},
     repository,
@@ -48,14 +47,8 @@ pub(super) async fn current_repository_id(
     let Some(root) = current_root().await? else {
         return Ok(None);
     };
-    if let Some(repo) = repos.iter().find(|repo| repo.path == root) {
-        return Ok(Some(repo.id.clone()));
-    }
-    Ok(crate::client::workspaces::list(&ctx.paths)
-        .await?
-        .into_iter()
-        .find(|workspace| workspace.path == root)
-        .map(|workspace| workspace.repository_id))
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    Ok(repository::at_root(&root, repos, &workspaces).cloned())
 }
 
 /// The registered repository whose checkout the current directory is in.
@@ -69,10 +62,7 @@ async fn current_root() -> Result<Option<std::path::PathBuf>> {
     let Some(cwd) = ui::current_directory()? else {
         return Ok(None);
     };
-    match git::worktree_root(&cwd).await {
-        Ok(root) => Ok(Some(std::fs::canonicalize(root.trim_end())?)),
-        Err(_) => Ok(None),
-    }
+    repository::worktree_root(&cwd).await
 }
 
 /// The registered repository whose origin the issue `issue` belongs to,
@@ -88,26 +78,12 @@ pub(super) async fn repository_for(
         "shoal start <repository> --issue <url>",
     );
     if !offer {
-        return Ok(repository_with_remote(repos, forge, retry)
+        return Ok(repository::with_remote(repos, forge, retry)
             .await?
             .id
             .clone());
     }
     registered_remote(ctx, repos, forge, retry).await
-}
-
-/// The only registered repository whose origin `item` belongs to, or none
-/// when no registered repository has that origin.
-pub(super) async fn registered_for_item<'a>(
-    repos: &'a [Repository],
-    item: &ItemRef,
-) -> Result<Option<&'a Repository>> {
-    let forge = item.repository().clone();
-    match repository_with_remote(repos, forge, "--repo <ID>").await {
-        Ok(repo) => Ok(Some(repo)),
-        Err(error) if error.is::<UnregisteredRemote>() => Ok(None),
-        Err(error) => Err(error),
-    }
 }
 
 /// The ID of the repository [`repository_with_remote`] selects. When none has
@@ -118,12 +94,12 @@ pub(super) async fn registered_remote(
     forge: ForgeRepo,
     retry: &str,
 ) -> Result<RepositoryId> {
-    let error = match repository_with_remote(repos, forge, retry).await {
+    let error = match repository::with_remote(repos, forge, retry).await {
         Ok(repo) => return Ok(repo.id.clone()),
         Err(error) => error,
     };
     let Some(url) = error
-        .downcast_ref::<UnregisteredRemote>()
+        .downcast_ref::<repository::UnregisteredRemote>()
         .map(|remote| remote.0.repository_url())
     else {
         return Err(error);
@@ -134,50 +110,6 @@ pub(super) async fn registered_remote(
     let id = repo.id.clone();
     repos.push(repo);
     Ok(id)
-}
-
-#[derive(Debug)]
-struct UnregisteredRemote(ForgeRepo);
-
-impl std::fmt::Display for UnregisteredRemote {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "no registered repository has the remote {}/{}; register it with `shoal repo add {}` and retry",
-            self.0.host,
-            self.0.path,
-            self.0.repository_url()
-        )
-    }
-}
-
-impl std::error::Error for UnregisteredRemote {}
-
-/// The only registered repository whose origin is `forge`; `retry` names the
-/// spelling that selects one explicitly.
-async fn repository_with_remote<'a>(
-    repos: &'a [Repository],
-    forge: ForgeRepo,
-    retry: &str,
-) -> Result<&'a Repository> {
-    let mut matches = Vec::new();
-    for repo in repos {
-        let Some(remote) = repository::remote_url_from_source(&repo.source).await? else {
-            continue;
-        };
-        if forge.is_remote(&remote) {
-            matches.push(repo);
-        }
-    }
-    match matches.as_slice() {
-        [repo] => Ok(repo),
-        [] => Err(UnregisteredRemote(forge).into()),
-        _ => bail!(
-            "several registered repositories share the remote {}/{}; use `{retry}`",
-            forge.host,
-            forge.path
-        ),
-    }
 }
 
 /// The registered repository of a PR or issue, from `--repo`, its URL, or the

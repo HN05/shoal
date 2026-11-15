@@ -8,7 +8,9 @@ use crate::{
         test_support::{chat, global_config, manager, repository},
     },
     model::ChatQueueRequest,
+    protocol::LaunchMethod,
 };
+use shoal_protocol::launches::{Launch, LaunchSource, SpaceChoice, StartTarget};
 
 /// A chat the user's process records for a launch a scoped process queued
 /// goes below that process's space, as its own start would put it; one for
@@ -84,14 +86,16 @@ async fn a_scoped_chat_start_now_asks_the_limits_permission() {
         Err(error) => panic!("expected an approval request: {error:#}"),
     };
 
-    let mut launch = ChatMethod::LaunchChat {
-        start: Box::new(ChatStart {
-            repository: Some((&repo.id).into()),
-            now: true,
-            ..ChatStart::default()
-        }),
+    let launch = Launch {
+        target: Some(StartTarget::Repository(repo.id.to_string())),
+        chat: true,
+        agent: Some("claude".into()),
+        now: true,
+        ..Launch::default()
     };
-    let launched = launch.scope(&manager, &caller).await.map(drop);
+    let launched = (manager.launch(launch, LaunchSource::Manual, Some(&caller)))
+        .await
+        .map(drop);
     assert_eq!(limits(launched), Target::Action(PermissionKey::Limits));
 
     let mut queued = ChatQueueRequest {
@@ -133,13 +137,19 @@ async fn a_scoped_chat_start_now_elsewhere_is_refused_without_asking() {
         read_only: false,
     };
 
-    let mut launch = ChatMethod::LaunchChat {
-        start: Box::new(ChatStart {
-            workspace: Some(SpaceSelector::id(&other.id)),
+    let mut launch = LaunchMethod::Launch {
+        launch: Box::new(Launch {
+            in_workspace: Some(SpaceChoice::Space(SpaceSelector::id(&other.id))),
+            chat: true,
             now: true,
-            ..ChatStart::default()
+            ..Launch::default()
         }),
+        source: LaunchSource::Manual,
     };
-    let error = launch.scope(&manager, &caller).await.map(drop).unwrap_err();
+    // Its scope confines the workspace before the launch asks anything.
+    let target = launch.scope(&manager, &caller).await.unwrap().unwrap();
+    let error = (crate::daemon::scope::confine_target(&manager, &caller, target, false))
+        .await
+        .unwrap_err();
     assert!(error.downcast_ref::<Undecided>().is_none(), "{error:#}");
 }

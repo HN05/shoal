@@ -27,6 +27,7 @@ mod git_logins;
 pub(crate) mod idle_wakes;
 pub(crate) mod item_numbers;
 mod keep_awake;
+mod launches;
 pub mod leftovers;
 pub mod links;
 pub(crate) mod log;
