@@ -22,7 +22,7 @@ use crate::{
 /// `selected` spaces this process's scope reaches, or of every such space
 /// with any, only `execution`'s when given, restore the `selected` chats in
 /// a background place and retry the selected failed setups, under `change`
-/// when given, reporting them with what `first` reports; the daemon refuses
+/// when given, with what the restore does `alongside`; the daemon refuses
 /// a space outside the scope before any setup or restore, and starts the
 /// workspaces' agents detached.
 pub(super) async fn queue_below(
@@ -31,7 +31,7 @@ pub(super) async fn queue_below(
     execution: Option<ExecutionId>,
     change: Option<&PermissionChange>,
     now: bool,
-    first: Queued,
+    alongside: super::Alongside,
 ) -> Result<i32> {
     let stopped = match selected.spaces.clone() {
         Some(selectors) => {
@@ -44,7 +44,7 @@ pub(super) async fn queue_below(
         None => stopped_in_reach(ctx).await?,
     };
     permission_change::apply(ctx, &stopped, &selected.setups, change).await?;
-    let resumed = super::set_up(ctx, &selected, first, false).await;
+    let resumed = super::set_up(ctx, &selected, alongside, false).await;
     queue_all(ctx, stopped, resumed, now).await
 }
 
