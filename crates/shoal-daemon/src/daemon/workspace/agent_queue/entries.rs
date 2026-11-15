@@ -11,7 +11,6 @@ use rusqlite::{OptionalExtension, params};
 use super::{
     blockers,
     dispatch::Start,
-    schedule::scheduler::Ranked,
     store::{self, ENTRY_COLUMNS, Launch, entry, insert_launch, opens_existing_branch},
 };
 use crate::client::{
@@ -24,7 +23,7 @@ use crate::{
     state::{QueueKind, QueueState},
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
-use shoal_schedule::rank::QueueRank;
+use shoal_schedule::{rank::QueueRank, scheduler::Ranked};
 
 impl Manager {
     /// Admit `request` to a free slot or queue it. A launch that no limit

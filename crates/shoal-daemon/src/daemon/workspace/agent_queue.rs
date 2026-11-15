@@ -12,7 +12,6 @@ mod expiry;
 mod limits;
 mod ranking;
 mod restores;
-mod schedule;
 mod setup_waits;
 mod slots;
 mod state;

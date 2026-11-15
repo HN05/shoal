@@ -15,6 +15,9 @@ rusqlite = ["dep:rusqlite"]
 anyhow.workspace = true
 rusqlite = { workspace = true, optional = true }
 serde.workspace = true
+shoal-ids.workspace = true
+shoal-time.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+shoal-ids = { workspace = true, features = ["test-support"] }

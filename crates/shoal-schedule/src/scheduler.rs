@@ -1,8 +1,8 @@
 //! The policy that orders the queue's waiting work. It owns the whole
 //! order, from priority to the last tie-break; the daemon admits entries in
 //! the order it returns, under limits of its own that no policy replaces.
+use crate::{priority::Priority, rank::QueueRank};
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
-use shoal_schedule::{priority::Priority, rank::QueueRank};
 
 use super::snapshot::Snapshot;
 

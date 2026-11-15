@@ -5,10 +5,7 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 
-use super::super::{
-    schedule::snapshot::{Entry, Work},
-    state::WaitingOneShot,
-};
+use super::super::state::WaitingOneShot;
 use crate::client::time::UnixTime;
 use crate::{
     forge::ci::runner::Trigger,
@@ -16,7 +13,11 @@ use crate::{
     state::{QueueKind, QueueState},
 };
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
-use shoal_schedule::{priority::Priority, rank::Tier};
+use shoal_schedule::{
+    priority::Priority,
+    rank::Tier,
+    snapshot::{Entry, Work},
+};
 
 /// The waiting entries, the queue's and `oneshots`, numbered in the order
 /// they arrived; `jobs` holds the spaces each waiting job serves now.

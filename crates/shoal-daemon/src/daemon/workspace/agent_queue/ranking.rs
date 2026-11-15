@@ -7,20 +7,18 @@ use std::collections::{HashMap, hash_map};
 use anyhow::Result;
 use rusqlite::Transaction;
 
-use super::{
-    schedule::{
-        leads::{LongestChain, Nothing, WarmCache},
-        ranking::Ranking,
-        scheduler::{Ranked, Scheduler},
-        snapshot::Snapshot,
-    },
-    state::WaitingOneShot,
-};
+use super::state::WaitingOneShot;
 use crate::client::time::UnixTime;
 use crate::config::{Effective, machine::Schedule};
 use crate::daemon::{approvals::Target, workspace::Manager};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
-use shoal_schedule::priority::Priority;
+use shoal_schedule::{
+    leads::{LongestChain, Nothing, WarmCache},
+    priority::Priority,
+    ranking::Ranking,
+    scheduler::{Ranked, Scheduler},
+    snapshot::Snapshot,
+};
 
 mod areas;
 mod edges;

@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::workspace::agent_queue::schedule::leads::{LongestChain, Nothing, WarmCache};
+use crate::leads::{LongestChain, Nothing, WarmCache};
 
 const BALANCED: Ranking<Nothing> = Ranking::new(Nothing);
 const SPEED: Ranking<LongestChain> = Ranking::new(LongestChain);

@@ -6,12 +6,12 @@ use std::{
     collections::{BTreeMap, HashMap},
 };
 
-use crate::client::time::UnixTime;
-use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
-use shoal_schedule::{
+use crate::{
     priority::Priority,
     rank::{Dependency, Tier},
 };
+use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_time::UnixTime;
 
 /// What ranking reads: the waiting entries, the spaces they and the work
 /// waiting on them belong to, and what waits on what.

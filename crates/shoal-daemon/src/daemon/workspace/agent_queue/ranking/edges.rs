@@ -6,14 +6,16 @@
 use anyhow::Result;
 use rusqlite::{Connection, params};
 
-use super::super::schedule::snapshot::{Carries, Edge, Node};
 use crate::{
     daemon::{approvals::Target, progress, questions, store},
     model::QueuedJob,
     state::{BlockerKind, QueueKind, QueueState},
 };
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
-use shoal_schedule::rank::Dependency;
+use shoal_schedule::{
+    rank::Dependency,
+    snapshot::{Carries, Edge, Node},
+};
 
 /// Every edge, with the spaces queued for `leases`.
 pub(super) fn waits(db: &Connection, leases: &[(Target, SpaceId)]) -> Result<Vec<Edge>> {

@@ -7,7 +7,6 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{
-    super::schedule::snapshot::{Space, Steps},
     Settings,
     labels::{self, Labelled},
 };
@@ -17,7 +16,11 @@ use crate::{
     forge::{items::link::LinkKind, updates::SnapshotState},
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
-use shoal_schedule::{priority::Priority, rank::Tier};
+use shoal_schedule::{
+    priority::Priority,
+    rank::Tier,
+    snapshot::{Space, Steps},
+};
 
 /// A space as the store records it.
 struct Row {

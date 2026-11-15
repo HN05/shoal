@@ -1484,6 +1484,8 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "shoal-ids",
+ "shoal-time",
 ]
 
 [[package]]

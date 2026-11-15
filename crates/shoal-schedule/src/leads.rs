@@ -3,7 +3,7 @@
 //! `cache` restores whose prompt cache is still warm.
 use std::collections::HashMap;
 
-use crate::client::time::UnixTime;
+use shoal_time::UnixTime;
 
 use super::{
     ranking::Lead,

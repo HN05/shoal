@@ -15,12 +15,12 @@ use std::{
     time::Duration,
 };
 
-use crate::client::time::UnixTime;
-use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
-use shoal_schedule::{
+use crate::{
     priority::Priority,
     rank::{Dependency, InheritedRank, QueueRank, SharedArea, Tier},
 };
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
+use shoal_time::UnixTime;
 
 use super::{
     scheduler::{Ranked, Scheduler},

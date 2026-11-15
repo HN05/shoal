@@ -10,7 +10,6 @@ use crate::{
         test_support::{global_config, manager},
         workspace::agent_queue::{
             Serving, last_seq,
-            schedule::snapshot::{Carries, Edge, Node},
             tests::{add, create, limit_globally, register, request},
         },
     },
@@ -20,6 +19,7 @@ use crate::{
 use shoal_schedule::{
     priority::Priority,
     rank::{Dependency, InheritedRank, QueueRank, SharedArea, Tier},
+    snapshot::{Carries, Edge, Node},
 };
 
 #[tokio::test]

@@ -6,12 +6,12 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 
 use super::{
-    super::schedule::snapshot::{Snapshot, Work},
     Settings,
     labels::{self, Labelled},
 };
 use crate::state::{QueueKind, QueueState};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_schedule::snapshot::{Snapshot, Work};
 
 /// The labels areas come from.
 pub(super) struct Labels {
