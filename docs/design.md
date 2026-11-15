@@ -2459,8 +2459,8 @@ An assigned issue shows on the forge who works it through its assignees, since
 every forge has them and a label would need one per repository. The agent
 account is assigned while an agent works the issue: a space linking it as
 assigned has an agent of its own that runs, is queued, restarts or is asleep, or
-an agent made the link, as for a child a coordinator splits for its subagents,
-and the space's work is not done. It comes off an open issue once none does, at
+an agent made the link and no agent of the space's own has ended since, as for a
+child a coordinator splits for its subagents, and the space's work is not done. It comes off an open issue once none does, at
 `shoal done`, a stop that waits for `shoal restore`, an exit, an unlink or a
 removal, and goes back on when an agent starts or is restored or `done --undo`
 withdraws the completion. Only Shoal assigns the agent account, so Shoal reads the

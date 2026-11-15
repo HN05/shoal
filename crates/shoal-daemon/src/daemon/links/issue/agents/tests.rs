@@ -3,6 +3,7 @@ use crate::client::assignments::Done;
 use crate::daemon::links::issue::test_support::{AGENT_TOKEN, Fixture};
 use crate::daemon::{workspace::ExecutionKind, workspace_files::Attacher};
 use crate::execution::recovery::RecordExt;
+use crate::paths::StateFiles;
 use crate::removal::{InspectionPolicy, UnsavedWork};
 use crate::{client::executions::Stage, execution::TrackedAgent, model::Workspace};
 use serde_json::json;
@@ -247,5 +248,19 @@ async fn a_queued_launch_puts_the_agent_account_on_until_cancelled() {
         .await
         .unwrap();
     manager.settle_requested_agents().await;
+    assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
+}
+
+#[tokio::test]
+async fn forgetting_a_stopped_agent_leaves_the_issue_it_gave_up() {
+    let fixture = agents(&["fix", "other"], &[], "").await;
+    let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
+    fixture.link_as(workspace, Assigner::Agent).await;
+    let execution = run_agent(manager, workspace).await;
+    save_stop(manager, workspace, &execution, false);
+    finish(manager, execution).await;
+    std::fs::remove_dir_all(manager.paths.space_state(&workspace.id)).unwrap();
+    // Another space's link settles the issue again.
+    fixture.link(&fixture.workspaces[1]).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
 }

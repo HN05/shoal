@@ -122,7 +122,7 @@ impl Manager {
     /// Whether the agent of `linker`'s space works the issue it links,
     /// where its `[issue] assign` assigns the agent account: while its
     /// work is not done, it has an agent or one asleep, or else an agent
-    /// assigned it the issue and no agent of its own stopped.
+    /// assigned it the issue and no agent of its own ended since.
     async fn agent_works(&self, linker: &Linker) -> Result<bool> {
         let space = self.link_space(&SpaceSelector::id(&linker.id)).await?;
         if !self.space_settings(&space).await?.issue.assign.agent() {
@@ -133,9 +133,7 @@ impl Manager {
         if record.done {
             return Ok(false);
         }
-        Ok(record.present
-            || self.agent_sleeps(&linker.id)?
-            || (linker.assigner == Assigner::Agent && !self.has_saved_agent(&linker.id)))
+        Ok(record.present || self.agent_sleeps(&linker.id)? || linker.assigner == Assigner::Agent)
     }
 
     /// Whether the agent of the space `id` is asleep, stopped by Shoal with
@@ -163,6 +161,16 @@ pub(super) fn settled_here(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef>
         )?
         .query_map([id], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Record that an agent of the space `id` ended: the issues an agent assigned
+/// it count as worked only while it has an agent again.
+pub(super) fn agent_ended(db: &Connection, id: &SpaceId) -> Result<()> {
+    db.execute(
+        "UPDATE space_issue SET linked_by=?2 WHERE space_id=?1 AND linked_by=?3",
+        params![id, Assigner::User, Assigner::Agent],
+    )?;
+    Ok(())
 }
 
 /// The spaces here that link the issue `url` as assigned.

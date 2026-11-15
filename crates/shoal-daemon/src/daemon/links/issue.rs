@@ -289,6 +289,13 @@ pub(crate) fn removed_issues(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRe
     agents::settled_here(db, id)
 }
 
+/// Record that an agent of the space `id` ended, within the caller's
+/// transaction, so the issues an agent assigned it no longer count as
+/// worked without one.
+pub(crate) fn agent_ended(db: &Connection, id: &SpaceId) -> Result<()> {
+    agents::agent_ended(db, id)
+}
+
 /// What the caller hears of the issue `url`'s assignees but the accounts
 /// Shoal assigns: the `others`.
 fn also_assigned(url: &ItemRef, others: &[String]) -> String {

@@ -4871,7 +4871,8 @@ An open issue a space links as assigned has the accounts
 where that account has a token of its own there. With the default, `"agent"`,
 the agent account is assigned while an agent works the issue: the space has an
 agent of its own that runs, waits in the queue, restarts or is asleep, or an
-agent linked the issue, and the space is not done. Shoal takes it off once no
+agent linked the issue and no agent of its own has ended since, and the space is
+not done. Shoal takes it off once no
 space whose agent works the issue links it, after `shoal done`, a stop that
 waits for `shoal restore`, the agent's exit, an unlink or a removal, and puts it
 back when an agent starts, `shoal restore` queues one or `shoal done --undo`

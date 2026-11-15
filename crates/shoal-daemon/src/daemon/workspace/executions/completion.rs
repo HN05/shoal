@@ -38,7 +38,7 @@ impl Manager {
                     let demo =
                         super::super::sessions::pending::record_demo(tx, &record_id, &hosts)?;
                     let released = release_attended_decisions(tx, &record_id)?;
-                    (demo, released, agent_space(tx, &record_id)?)
+                    (demo, released, record_agent_end(tx, &record_id)?)
                 } else {
                     (None, Vec::new(), None)
                 };
@@ -154,15 +154,20 @@ fn release_attended_decisions(
     }
 }
 
-/// The space whose agent execution `id` runs; none for another execution.
-fn agent_space(tx: &Transaction<'_>, id: &ExecutionId) -> Result<Option<SpaceId>> {
-    Ok(tx
+/// Record the end of agent execution `id` for its space, returning the
+/// space; none for another execution.
+fn record_agent_end(tx: &Transaction<'_>, id: &ExecutionId) -> Result<Option<SpaceId>> {
+    let space: Option<SpaceId> = tx
         .query_row(
             "SELECT space_id FROM executions WHERE id=?1 AND agent IS NOT NULL",
             [id],
             |row| row.get(0),
         )
-        .optional()?)
+        .optional()?;
+    if let Some(space) = &space {
+        crate::daemon::links::issue::agent_ended(tx, space)?;
+    }
+    Ok(space)
 }
 
 /// Retain unverified executions for recovery; only verified completion deletes
