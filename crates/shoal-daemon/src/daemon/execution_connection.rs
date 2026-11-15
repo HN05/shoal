@@ -312,7 +312,7 @@ async fn relay(
     let mut recovering = resumed_pause;
     // Keeps permission changes out of the record a resumed agent restores
     // from until it starts.
-    let mut _restored_record = None;
+    let mut restored_record = None;
     loop {
         let event = if std::mem::take(&mut resumed_pause) {
             ExecutionEvent::Paused
@@ -352,7 +352,13 @@ async fn relay(
             } => {
                 awaiting_started = false;
                 *started = true;
-                _restored_record = None;
+                // The started agent restored from the record, which goes
+                // while claimed: the wrapper consumes it only once this
+                // start is acknowledged.
+                if let Some(claim) = restored_record.take() {
+                    execution_recovery::discard_handoff(manager, space.id(), execution_id);
+                    drop(claim);
+                }
                 let resumed_here = std::mem::take(resuming);
                 let _operation = match unattachable.take() {
                     Some(operation) => operation,
@@ -462,7 +468,7 @@ async fn relay(
                             narrowing,
                             claim,
                         } = resumed;
-                        _restored_record = claim;
+                        restored_record = claim;
                         if let (Some(tracked), Some(narrowing)) = (agent.as_mut(), narrowing) {
                             tracked.narrowing = narrowing;
                         }
