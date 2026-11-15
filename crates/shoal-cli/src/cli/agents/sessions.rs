@@ -15,7 +15,7 @@ use crate::{
     cli::{commands::workspaces, context::Context},
     client::transcripts::{self, AgentEnvironment},
     config::Effective,
-    model::{RemovedSpace, Workspace},
+    model::{Chat, RemovedSpace, Workspace},
     protocol::ConfigTarget,
     transfer::CarriedSessionFile,
 };
@@ -24,6 +24,8 @@ use crate::{
 pub(in crate::cli) enum SessionHome<'a> {
     /// The workspace the import or restore opened.
     Workspace(&'a Workspace),
+    /// The chat the import or restore opened.
+    Chat(&'a Chat),
     /// The repository whose checkout an imported chat starts in.
     Repository(crate::repository::Selector),
     /// The `root_dir` an imported chat without a repository starts in.
@@ -73,6 +75,7 @@ pub(in crate::cli) async fn install_session_files(
             ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
             Some(workspace),
         ),
+        SessionHome::Chat(chat) => (ConfigTarget::chat(chat), None),
         SessionHome::Repository(selector) => (ConfigTarget::Repository(selector), None),
         SessionHome::Root => (ConfigTarget::Global, None),
     };
@@ -114,23 +117,27 @@ pub(in crate::cli) async fn install_session_files(
 }
 
 /// Put `files`, which the daemon kept with the removal record `restored`,
-/// where the agents of the workspace `workspace` that restores it look for
-/// them, then have the daemon delete them once they all are.
+/// where the agents of `space` that restores it look for them, then have
+/// the daemon delete them once they all are.
 pub(in crate::cli) async fn install_kept_session_files(
     ctx: &Context,
-    workspace: &Workspace,
+    space: SessionHome<'_>,
     restored: &RemovedSpace,
     files: &[CarriedSessionFile],
 ) {
     if files.is_empty() {
         return;
     }
+    let selector = match &space {
+        SessionHome::Workspace(workspace) => SpaceSelector::id(&workspace.id),
+        SessionHome::Chat(chat) => SpaceSelector::id(&chat.id),
+        SessionHome::Repository(_) | SessionHome::Root => return,
+    };
     let existing = Existing::of_copy(restored.is_copy());
-    // Left behind, the workspace's next removal record lists them again.
-    if !install_session_files(ctx, SessionHome::Workspace(workspace), files, existing).await {
+    // Left behind, the space's next removal record lists them again.
+    if !install_session_files(ctx, space, files, existing).await {
         return;
     }
-    let selector = SpaceSelector::id(&workspace.id);
     if let Err(error) = crate::client::removal::drop_restored_sessions(&ctx.paths, selector).await {
         eprintln!("warning: cannot delete the kept session files: {error:#}");
     }

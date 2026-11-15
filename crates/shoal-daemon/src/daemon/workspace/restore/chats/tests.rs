@@ -83,3 +83,50 @@ async fn a_chat_in_a_removed_workspace_restores_once_that_workspace_does() {
     let place = restored.chat.workspace.map(|workspace| workspace.id);
     assert_eq!(place, Some(workspace.id));
 }
+
+#[tokio::test]
+async fn a_chat_without_a_repository_gets_back_the_session_files_its_root_dir_kept() {
+    let (root, manager) = manager().await;
+    let removed = chat(&manager, "notes", "chat", None, None).await;
+    manager
+        .remove_chat(&SpaceSelector::id(&removed.id), None)
+        .await
+        .unwrap();
+    let record = manager.removed_spaces().await.unwrap().remove(0);
+    let contents = root.path().join("carried");
+    std::fs::write(&contents, "{}\n").unwrap();
+    let carried = crate::transfer::CarriedSessionFile {
+        file: crate::transfer::SessionFile {
+            agent: "claude".into(),
+            session: "s1".into(),
+            path: "project/s1.jsonl".into(),
+            size: 3,
+        },
+        contents,
+    };
+    let record = manager
+        .keep_imported_sessions(record, std::slice::from_ref(&carried))
+        .await
+        .unwrap();
+    let kept = record.clone();
+    (manager.store)
+        .run(move |db| super::super::records::record(db, &kept))
+        .await
+        .unwrap();
+
+    let restored = restore_chat(&manager, &removed.id).await;
+    let [handed] = restored.session_files.as_slice() else {
+        panic!("{:?}", restored.session_files);
+    };
+    assert_eq!(handed.file, carried.file);
+    let root_dir = record.chat().unwrap().root_dir.clone().unwrap();
+    assert!(handed.contents.starts_with(root_dir.join(".sessions")));
+    assert_eq!(std::fs::read_to_string(&handed.contents).unwrap(), "{}\n");
+
+    // Once the caller put them in place, the daemon deletes them.
+    manager
+        .drop_restored_sessions(&SpaceSelector::id(&removed.id))
+        .await
+        .unwrap();
+    assert!(!handed.contents.exists());
+}

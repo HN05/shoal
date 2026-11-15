@@ -125,8 +125,8 @@ pub(super) async fn handle(
         RemovalMethod::RestoreSpace { space } => {
             Body::RestoredSpace(manager.restore_space(&space, caller).await?)
         }
-        RemovalMethod::DropRestoredSessions { workspace } => {
-            manager.drop_restored_sessions(&workspace).await?;
+        RemovalMethod::DropRestoredSessions { space } => {
+            manager.drop_restored_sessions(&space).await?;
             Body::Ok
         }
         RemovalMethod::ExportSpace {
@@ -299,7 +299,7 @@ fn administered(method: &mut RemovalMethod) -> Option<&mut SpaceSelector> {
         RemovalMethod::ExportSpace { space, .. }
         | RemovalMethod::ExportMovingSpace { space, .. }
         | RemovalMethod::EndMovedSpace { space, .. }
-        | RemovalMethod::DropRestoredSessions { workspace: space } => Some(space),
+        | RemovalMethod::DropRestoredSessions { space } => Some(space),
         _ => None,
     }
 }

@@ -1,10 +1,10 @@
 //! The agents' session files an import carried, kept with the removal
-//! record it made until the restore that opens the workspace puts them in
-//! place with the workspace's own settings. A repository keeps them in its
-//! directory's `.sessions`, a directory per workspace named by its ID,
-//! holding each file under its place in the list beside them. Files a
-//! restore hands over but its caller does not put in place stay listed
-//! there for the workspace's next removal record.
+//! record it made until the restore that opens the space puts them in place
+//! with the space's own settings. A repository keeps them in its
+//! directory's `.sessions`, and `root_dir` those of the chats without one,
+//! a directory per space named by its ID, holding each file under its place
+//! in the list beside them. Files a restore hands over but its caller does
+//! not put in place stay listed there for the space's next removal record.
 use shoal_ids::repository_ids::RepositoryId;
 use std::{
     collections::HashSet,
@@ -18,28 +18,32 @@ use rusqlite::Connection;
 use super::Manager;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    model::{RemovedSpace, Repository, Workspace},
+    daemon::workspace_files::HomeKey,
+    model::{PresentSpace, RemovedSpace, Repository},
     shoal_dirs::{Contents, ShoalDir, remove_dir},
     transfer::{CarriedSessionFile, SessionFile, SessionSource},
 };
 use shoal_ids::space_ids::SpaceId;
 
 impl Manager {
-    /// Keep `files` for `removed`, imported into `repo`, replacing what an
-    /// earlier import of it kept, and list them in its record. The caller
-    /// holds the repository's Git gate and the checkpoint gate, so the sweep
-    /// cannot take them before the record exists.
+    /// Keep `files` for `removed`, imported here, replacing what an earlier
+    /// import of it kept, and list them in its record. The caller holds the
+    /// checkpoint gate, and for a space of a repository its Git gate, so the
+    /// sweep cannot take them before the record exists.
     pub(super) async fn keep_imported_sessions(
         &self,
-        repo: &Repository,
         mut removed: RemovedSpace,
         files: &[CarriedSessionFile],
     ) -> Result<RemovedSpace> {
         let listed: Vec<_> = files.iter().map(|carried| carried.file.clone()).collect();
         removed.session_files = listed.clone();
-        let layout = match files.is_empty() {
-            true => Layout::of(repo),
-            false => Some(Layout::new(&self.workspaces_dir(repo).await?, &repo.id)),
+        let home = self.removed_home(&removed).await?;
+        let layout = match (files.is_empty(), &home) {
+            (true, _) => self.sessions_layout(&home),
+            (false, HomeKey::Repository(repo)) => {
+                Some(Layout::new(&self.workspaces_dir(repo).await?, &repo.id))
+            }
+            (false, HomeKey::Root(root_dir)) => Some(self.outside_sessions_layout(root_dir)),
         };
         let Some(layout) = layout else {
             return Ok(removed);
@@ -49,39 +53,40 @@ impl Manager {
             .zip(layout.kept(&removed.space_id, &listed))
             .map(|(carried, kept)| (carried.contents.clone(), kept.contents))
             .collect();
-        let workspace_id = removed.space_id.clone();
-        tokio::task::spawn_blocking(move || layout.keep(&workspace_id, &listed, &copies))
+        let space_id = removed.space_id.clone();
+        tokio::task::spawn_blocking(move || layout.keep(&space_id, &listed, &copies))
             .await
             .context("keep the agents' session files")??;
         Ok(removed)
     }
 
-    /// Forget the session files `repo` keeps for the workspace
-    /// `workspace_id`.
-    pub(super) async fn discard_imported_sessions(
-        &self,
-        repo: &Repository,
-        workspace_id: &SpaceId,
-    ) -> Result<()> {
-        let Some(layout) = Layout::of(repo) else {
+    /// Forget the session files kept for the removed space `removed`.
+    pub(super) async fn discard_imported_sessions(&self, removed: &RemovedSpace) -> Result<()> {
+        let home = self.removed_home(removed).await?;
+        self.discard_sessions_in(&home, &removed.space_id).await
+    }
+
+    /// Forget the session files `home` keeps for the space `id`.
+    async fn discard_sessions_in(&self, home: &HomeKey, id: &SpaceId) -> Result<()> {
+        let Some(layout) = self.sessions_layout(home) else {
             return Ok(());
         };
-        let workspace_id = workspace_id.clone();
-        tokio::task::spawn_blocking(move || layout.remove_one(&workspace_id))
+        let id = id.clone();
+        tokio::task::spawn_blocking(move || layout.remove_one(&id))
             .await
             .context("delete the kept session files")?
     }
 
-    /// Forget the session files the restore that opened `workspace` handed
+    /// Forget the session files the restore that opened `space` handed
     /// over, once the caller has put them in place.
-    pub async fn drop_restored_sessions(&self, workspace: &SpaceSelector) -> Result<()> {
-        let workspace = self.workspace(workspace).await?;
-        let repo = self.repository(&workspace.repository_id).await?;
-        self.discard_imported_sessions(&repo, &workspace.id).await
+    pub async fn drop_restored_sessions(&self, space: &SpaceSelector) -> Result<()> {
+        let space = self.space(space).await?;
+        let home = self.present_home(&space).await?;
+        self.discard_sessions_in(&home, space.id()).await
     }
 
-    /// The session files kept for `removed`, which the workspace restoring
-    /// it under its ID owns where they are, for the caller to put in place.
+    /// The session files kept for `removed`, which the space restoring it
+    /// under its ID owns where they are, for the caller to put in place.
     pub(super) async fn imported_sessions(
         &self,
         removed: &RemovedSpace,
@@ -90,33 +95,32 @@ impl Manager {
         if session_files.is_empty() {
             return Ok(Vec::new());
         }
-        let repo = self.repository(removed.repository()?).await?;
-        let layout = Layout::of(&repo).context("the repository has no directory")?;
+        let home = self.removed_home(removed).await?;
+        let layout = (self.sessions_layout(&home)).context("the repository has no directory")?;
         Ok(layout.kept(&removed.space_id, session_files))
     }
 
-    /// The session files kept for `workspace` that its restore's caller did
-    /// not put in place, for its removal record. An unreadable list is not
-    /// worth keeping the workspace for.
-    pub(crate) async fn unplaced_sessions(&self, workspace: &Workspace) -> Vec<SessionFile> {
-        let Ok(repo) = self.repository(&workspace.repository_id).await else {
+    /// The session files kept for `space` that its restore's caller did not
+    /// put in place, for its removal record. An unreadable list is not worth
+    /// keeping the space for.
+    pub(crate) async fn unplaced_sessions(&self, space: &PresentSpace) -> Vec<SessionFile> {
+        let Ok(home) = self.present_home(space).await else {
             return Vec::new();
         };
-        let Some(layout) = Layout::of(&repo) else {
+        let Some(layout) = self.sessions_layout(&home) else {
             return Vec::new();
         };
-        let id = workspace.id.clone();
+        let id = space.id().clone();
         match tokio::task::spawn_blocking(move || layout.listed(&id)).await {
             Ok(Ok(listed)) => listed,
             _ => Vec::new(),
         }
     }
 
-    /// Delete the session files `repo` keeps for workspaces that neither
-    /// exist nor have a removal record left. The caller holds the
-    /// checkpoint gate.
-    pub(super) async fn expire_imported_sessions(&self, repo: &Repository) -> Result<()> {
-        let Some(layout) = Layout::of(repo) else {
+    /// Delete the session files `home` keeps for spaces that neither exist
+    /// nor have a removal record left. The caller holds the checkpoint gate.
+    pub(super) async fn expire_imported_sessions(&self, home: &HomeKey) -> Result<()> {
+        let Some(layout) = self.sessions_layout(home) else {
             return Ok(());
         };
         let owners = self.store.run(|db| session_owners(db)).await?;
@@ -124,27 +128,69 @@ impl Manager {
             .await
             .context("delete expired session files")?
     }
-}
 
-/// The kept session files of `removed`, a workspace of `repo`, as sources
-/// of its export.
-pub(crate) fn kept_session_sources(
-    repo: &Repository,
-    removed: &RemovedSpace,
-) -> Vec<SessionSource> {
-    let Some(layout) = Layout::of(repo) else {
-        return Vec::new();
-    };
-    layout
-        .kept(&removed.space_id, &removed.session_files)
-        .into_iter()
-        .map(|kept| SessionSource {
-            agent: kept.file.agent,
-            session: kept.file.session,
-            path: kept.file.path,
-            source: kept.contents,
-        })
-        .collect()
+    /// The kept session files of `removed` as sources of its export.
+    pub(crate) async fn kept_session_sources(&self, removed: &RemovedSpace) -> Vec<SessionSource> {
+        if removed.session_files.is_empty() {
+            return Vec::new();
+        }
+        let Ok(home) = self.removed_home(removed).await else {
+            return Vec::new();
+        };
+        let Some(layout) = self.sessions_layout(&home) else {
+            return Vec::new();
+        };
+        layout
+            .kept(&removed.space_id, &removed.session_files)
+            .into_iter()
+            .map(|kept| SessionSource {
+                agent: kept.file.agent,
+                session: kept.file.session,
+                path: kept.file.path,
+                source: kept.contents,
+            })
+            .collect()
+    }
+
+    /// The home that keeps the session files of the removed space
+    /// `removed`.
+    async fn removed_home(&self, removed: &RemovedSpace) -> Result<HomeKey> {
+        let root_dir = removed.chat().and_then(|chat| chat.root_dir.as_deref());
+        self.home_of(removed.repository_id.as_ref(), root_dir).await
+    }
+
+    /// The home that keeps the session files of `space`.
+    async fn present_home(&self, space: &PresentSpace) -> Result<HomeKey> {
+        match space {
+            PresentSpace::Workspace(workspace) => {
+                self.home_of(Some(&workspace.repository_id), None).await
+            }
+            PresentSpace::Chat(chat) => {
+                (self.home_of(chat.repository_id.as_ref(), chat.root_dir.as_deref())).await
+            }
+        }
+    }
+
+    /// The kept session files of `home`; registrations from before the
+    /// repository directory layout have none until an import reserves it.
+    fn sessions_layout(&self, home: &HomeKey) -> Option<Layout> {
+        match home {
+            HomeKey::Repository(repo) => Layout::of(repo),
+            HomeKey::Root(root_dir) => Some(self.outside_sessions_layout(root_dir)),
+        }
+    }
+
+    /// The kept session files of the chats without a repository in
+    /// `root_dir`, marked as this daemon's.
+    fn outside_sessions_layout(&self, root_dir: &Path) -> Layout {
+        Layout {
+            dir: ShoalDir::outside_repositories(
+                root_dir,
+                &self.root_dir_owner(),
+                Contents::ImportedSessions,
+            ),
+        }
+    }
 }
 
 /// Delete every kept session file of `repo` with their directory, when the
@@ -277,13 +323,11 @@ impl Layout {
     }
 }
 
-/// The IDs of the workspaces and removal records that keep their session
+/// The IDs of the spaces and removal records that keep their session
 /// files.
 fn session_owners(db: &Connection) -> Result<HashSet<String>> {
-    db.prepare(
-        "SELECT id FROM spaces WHERE kind='workspace' UNION SELECT space_id FROM removed_spaces",
-    )?
-    .query_map([], |row| row.get(0))?
-    .map(|id| Ok(id?))
-    .collect()
+    db.prepare("SELECT id FROM spaces UNION SELECT space_id FROM removed_spaces")?
+        .query_map([], |row| row.get(0))?
+        .map(|id| Ok(id?))
+        .collect()
 }

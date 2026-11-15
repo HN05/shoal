@@ -238,18 +238,14 @@ impl Manager {
             true => self.copied_record(repo, removed).await?,
             false => removed,
         };
-        let removed = self
-            .keep_imported_sessions(repo, removed, session_files)
-            .await?;
+        let removed = self.keep_imported_sessions(removed, session_files).await?;
         let record = removed.clone();
         if let Err(error) = self
             .store
             .write(move |tx| record_imported(tx, record))
             .await
         {
-            let _ = self
-                .discard_imported_sessions(repo, &removed.space_id)
-                .await;
+            let _ = self.discard_imported_sessions(&removed).await;
             return Err(error);
         }
         Ok(removed)

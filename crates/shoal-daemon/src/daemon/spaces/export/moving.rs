@@ -10,7 +10,7 @@ use super::{Prepared, ensure_exportable, packaged_record};
 use crate::client::space_names::SpaceSelector;
 use crate::transfer::ManifestExt;
 use crate::{
-    daemon::workspace::{Manager, StopRequest, kept_session_sources},
+    daemon::workspace::{Manager, StopRequest},
     execution::recovery,
     model::{Chat, Checkpoint, PresentSpace, Workspace},
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
@@ -94,9 +94,10 @@ impl Manager {
         let workspace = self.workspace_by_id(&workspace.id).await?;
         let agents = recovery::stopped_agents(&self.paths, &workspace.id)?;
         let mut record = packaged_record(&self.paths, &workspace, checkpoint, agents);
-        record.session_files = self.unplaced_sessions(&workspace).await;
         let repo = self.repository(&workspace.repository_id).await?;
-        let kept_sessions = kept_session_sources(&repo, &record);
+        let present = PresentSpace::Workspace(workspace.clone());
+        record.session_files = self.unplaced_sessions(&present).await;
+        let kept_sessions = self.kept_session_sources(&record).await;
         let mut manifest = Manifest::of(Some(&repo), Source::Workspace(record)).await?;
         manifest.chats = chats;
         Ok(Prepared {

@@ -197,6 +197,10 @@ pub enum RestoredSpace {
 pub struct RestoredChat {
     pub chat: super::Chat,
     pub removed: RemovedSpace,
+    /// The session files the daemon kept with the removal record, which
+    /// the caller puts in place and then deletes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub session_files: Vec<crate::transfer::CarriedSessionFile>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
 }

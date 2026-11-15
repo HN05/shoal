@@ -62,7 +62,8 @@ async fn reopen(ctx: &Context, removed: &RemovedSpace) -> Result<Reopened> {
     Ok(opened)
 }
 
-/// Print the warnings of the chat `restored` and link its PRs again.
+/// Print the warnings of the chat `restored`, put the session files kept
+/// for its agent in place and link its PRs again.
 pub(in crate::cli::commands) async fn reopened_chat(
     ctx: &Context,
     restored: RestoredChat,
@@ -70,11 +71,14 @@ pub(in crate::cli::commands) async fn reopened_chat(
     let RestoredChat {
         chat,
         removed,
+        session_files,
         warnings,
     } = restored;
     for warning in &warnings {
         eprintln!("warning: {warning}");
     }
+    let home = crate::cli::agents::SessionHome::Chat(&chat);
+    crate::cli::agents::install_kept_session_files(ctx, home, &removed, &session_files).await;
     for pr in &removed.links.prs {
         let url = pr.url.clone().into();
         crate::opened_pull::link_or_warn(&ctx.paths, &chat.id, &url, pr.title.clone()).await;
@@ -228,13 +232,8 @@ pub(in crate::cli::commands) async fn prepare_reopened(
         eprintln!("warning: {warning}");
     }
     crate::cli::agents::trust_resumed(ctx, &opened.workspace, &removed).await;
-    crate::cli::agents::install_kept_session_files(
-        ctx,
-        &opened.workspace,
-        &removed,
-        &session_files,
-    )
-    .await;
+    let home = crate::cli::agents::SessionHome::Workspace(&opened.workspace);
+    crate::cli::agents::install_kept_session_files(ctx, home, &removed, &session_files).await;
     let mut workspace = opened.workspace;
     if workspace.state == WorkspaceState::Preparing {
         let Some(set_up) =

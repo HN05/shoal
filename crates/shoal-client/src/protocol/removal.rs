@@ -92,9 +92,9 @@ pub enum RemovalMethod {
     RemovedSpace { space: SpaceSelector },
     /// Open a removed space again from its removal record.
     RestoreSpace { space: SpaceSelector },
-    /// Delete the agents' session files the restore that opened `workspace`
+    /// Delete the agents' session files the restore that opened `space`
     /// returned, once the caller has put them in place.
-    DropRestoredSessions { workspace: SpaceSelector },
+    DropRestoredSessions { space: SpaceSelector },
     /// End a space here, removing a workspace or stopping a chat's agent,
     /// or take a removed space, and write it for another Shoal to the
     /// new file `file`.

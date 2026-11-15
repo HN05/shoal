@@ -12,7 +12,7 @@ use shoal_refs::BranchName;
 use super::Manager;
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    daemon::{log, scope::Caller},
+    daemon::{log, scope::Caller, workspace_files::HomeKey},
     git,
     model::{Checkpoint, CheckpointCause, RemovedSpace, Repository, RestoredCheckpoint, Workspace},
     state::WorkspaceState,
@@ -415,8 +415,19 @@ impl Manager {
                 failed.push(format!("{}: {error:#}", repo.path.display()));
             }
         }
+        if let Err(error) = self.expire_outside_sessions().await {
+            failed.push(format!("root_dir: {error:#}"));
+        }
         ensure!(failed.is_empty(), "{}", failed.join("; "));
         Ok(())
+    }
+
+    /// Delete the session files the configured `root_dir` keeps for chats
+    /// without a repository that neither exist nor have a removal record.
+    async fn expire_outside_sessions(&self) -> Result<()> {
+        let home = HomeKey::Root(self.config().root_dir(&self.paths)?);
+        let _refs = self.gates.lock_checkpoints().await;
+        self.expire_imported_sessions(&home).await
     }
 
     /// A busy repository, or one being moved or removed, keeps its refs until
@@ -439,7 +450,7 @@ impl Manager {
             })
             .await?;
         // An unreadable session file keeps no ref.
-        let sessions = self.expire_imported_sessions(repo).await;
+        let sessions = (self.expire_imported_sessions(&HomeKey::Repository(repo.clone()))).await;
         self.adopt_legacy_refs(repo, &kept).await?;
         self.delete_unowned_refs(repo, &kept).await?;
         sessions

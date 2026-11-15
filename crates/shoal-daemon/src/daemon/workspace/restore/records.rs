@@ -47,7 +47,7 @@ impl Manager {
         // The agents carrying on in the chat keep the session files.
         let session_files = match carried_on {
             Some(_) => Vec::new(),
-            None => self.unplaced_sessions(workspace).await,
+            None => (self.unplaced_sessions(&PresentSpace::Workspace(workspace.clone()))).await,
         };
         let removed = RemovedSpace {
             space_id: workspace.id.clone(),
@@ -100,6 +100,7 @@ impl Manager {
         let chat = (self.chat_by_id(id).await?).context("the chat was removed meanwhile")?;
         let expires_at = (self.removed_files_expiry(&PresentSpace::Chat(chat.clone()))).await;
         let (agents, last_sessions) = self.saved_agents(&chat.id, None)?;
+        let session_files = (self.unplaced_sessions(&PresentSpace::Chat(chat.clone()))).await;
         let removed = RemovedSpace {
             space_id: chat.id,
             repository_id: chat.repository_id,
@@ -108,7 +109,7 @@ impl Manager {
             links: chat.links,
             agents,
             last_sessions,
-            session_files: Vec::new(),
+            session_files,
             cause,
             removed_at: UnixTime::now(),
             expires_at,

@@ -487,12 +487,22 @@ impl Manager {
         Layout::outside_repositories(root_dir, &self.root_dir_owner())
     }
 
-    /// The home that keeps the files of `space`: its repository's, or the
-    /// `root_dir` a chat without one started in, or else the configured one.
+    /// The home that keeps the files of `space`, as [`Self::home_of`] says.
     pub(crate) async fn space_home(&self, space: &Space) -> Result<HomeKey> {
-        Ok(match (&space.repository_id, &space.root_dir) {
+        (self.home_of(space.repository_id.as_ref(), space.root_dir.as_deref())).await
+    }
+
+    /// The home that keeps the files of a space of the repository
+    /// `repository`: its directory, or for a chat without one the
+    /// `root_dir` it started in, or else the configured one.
+    pub(crate) async fn home_of(
+        &self,
+        repository: Option<&RepositoryId>,
+        root_dir: Option<&std::path::Path>,
+    ) -> Result<HomeKey> {
+        Ok(match (repository, root_dir) {
             (Some(id), _) => HomeKey::Repository(self.repository(id).await?),
-            (None, Some(root_dir)) => HomeKey::Root(root_dir.clone()),
+            (None, Some(root_dir)) => HomeKey::Root(root_dir.to_owned()),
             (None, None) => HomeKey::Root(self.config().root_dir(&self.paths)?),
         })
     }

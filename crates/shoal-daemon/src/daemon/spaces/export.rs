@@ -11,10 +11,7 @@ use crate::client::space_names::SpaceSelector;
 use crate::{
     client::transcripts::Environments,
     config::Effective,
-    daemon::{
-        events::EventCause,
-        workspace::{Manager, kept_session_sources},
-    },
+    daemon::{events::EventCause, workspace::Manager},
     execution::recovery::{LastSession, StoppedAgent},
     model::{
         Chat, Checkpoint, KeptWorkspace, PresentSpace, RemovedKind, RemovedSpace, Repository,
@@ -220,7 +217,7 @@ impl Manager {
             None => (None, None, Vec::new()),
         };
         let repo = self.repository(removed.repository()?).await?;
-        let kept_sessions = kept_session_sources(&repo, &removed);
+        let kept_sessions = self.kept_session_sources(&removed).await;
         let mut manifest = Manifest::of(Some(&repo), Source::Workspace(removed)).await?;
         manifest.chats = self.carried_records(&carried).await?;
         Ok(Prepared {
