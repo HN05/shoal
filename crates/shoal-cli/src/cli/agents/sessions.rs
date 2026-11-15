@@ -75,8 +75,6 @@ pub(in crate::cli) async fn install_session_files(
     };
     let settings = match crate::config::settings(&ctx.paths, target).await {
         Ok(settings) => settings,
-        // The import's own error says why it found no repository.
-        Err(_) if workspace.is_none() => return false,
         Err(error) => {
             eprintln!("warning: cannot place the agents' session files: {error:#}");
             return false;
