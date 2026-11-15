@@ -1,156 +1,11 @@
-use std::sync::{Arc, Mutex};
-
 use super::*;
 use crate::client::space_names::SpaceSelector;
-use crate::daemon::test_support::{configure, git, manager, repository};
+use crate::daemon::links::issue::test_support::{AGENT_TOKEN, Fixture, Refuse, USER};
 use crate::{
     model::Workspace,
     removal::{InspectionPolicy, UnsavedWork},
 };
-use serde_json::{Value, json};
-use shoal_forge::test_support::Server;
-
-/// Which assignee edits the scripted forge refuses.
-#[derive(Clone, Copy, PartialEq)]
-enum Refuse {
-    Nothing,
-    Adding,
-    Removing,
-}
-
-/// A Forgejo repository `team/repo` whose open issue 7 starts with the
-/// `assignees` and changes them as edits say, unless it refuses them, where
-/// every token signs in as `shoal-user`, and a manager under `config` with a
-/// workspace of each of `names` in a repository that has it as its origin.
-struct Fixture {
-    _root: tempfile::TempDir,
-    manager: std::sync::Arc<Manager>,
-    server: Server,
-    workspaces: Vec<Workspace>,
-    refuse: Arc<Mutex<Refuse>>,
-}
-
-/// The config that assigns the user's own login.
-const USER: &str = "[issue]\nassign = \"user\"\n";
-
-impl Fixture {
-    async fn new(names: &[&str], assignees: &[&str], config: &str) -> Self {
-        Self::start(names, assignees, config, "").await
-    }
-
-    /// [`Self::new`] with the forge host's `settings` beside the user's
-    /// token.
-    async fn start(names: &[&str], assignees: &[&str], config: &str, settings: &str) -> Self {
-        let (root, manager) = manager().await;
-        let path = repository(root.path(), "repo");
-        let repository = manager
-            .register_repository(path.to_str().unwrap().into(), None, None)
-            .await
-            .unwrap()
-            .id;
-        let mut workspaces = Vec::new();
-        for name in names {
-            let created = manager.create_workspace(&repository, (*name).into(), None, None, None);
-            workspaces.push(created.await.unwrap());
-        }
-        let assignees = Arc::new(Mutex::new(logins(assignees)));
-        let refuse = Arc::new(Mutex::new(Refuse::Nothing));
-        let refusing = refuse.clone();
-        let server = Server::start(move |request| {
-            let body = match request.line.as_str() {
-                "GET /api/v1/user" => json!({"login": "shoal-user"}),
-                "GET /api/v1/repos/team/repo/issues/7" => json!({"number": 7,
-                    "title": "Bug", "state": "open", "assignees": *assignees.lock().unwrap()}),
-                "PATCH /api/v1/repos/team/repo/issues/7" => {
-                    let edit: Value = serde_json::from_str(&request.body).unwrap();
-                    let edited: Vec<&str> = (edit["assignees"].as_array().unwrap().iter())
-                        .map(|login| login.as_str().unwrap())
-                        .collect();
-                    let mut current = assignees.lock().unwrap();
-                    let change = match edited.len() > current.len() {
-                        true => Refuse::Adding,
-                        false => Refuse::Removing,
-                    };
-                    if *refusing.lock().unwrap() == change {
-                        return (403, Vec::new(), r#"{"message":"forbidden"}"#.into());
-                    }
-                    *current = logins(&edited);
-                    json!({})
-                }
-                _ => return (404, Vec::new(), Vec::new()),
-            };
-            (200, Vec::new(), body.to_string().into())
-        });
-        let host = &server.host;
-        crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::Forgejo);
-        let forge = format!(
-            "[machine.forges.\"{host}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n{settings}"
-        );
-        configure(&manager, &format!("{config}\n{forge}")).await;
-        git(
-            &path,
-            &[
-                "remote",
-                "add",
-                "origin",
-                &format!("http://{host}/team/repo"),
-            ],
-        );
-        Self {
-            _root: root,
-            manager,
-            server,
-            workspaces,
-            refuse,
-        }
-    }
-
-    /// Refuse the assignee edits of `change` from now on.
-    fn refuse(&self, change: Refuse) {
-        *self.refuse.lock().unwrap() = change;
-    }
-
-    /// Link issue 7 to `workspace` as assigned, as the user's terminal does.
-    async fn link(&self, workspace: &Workspace) -> Vec<String> {
-        let selector = SpaceSelector::id(&workspace.id);
-        (self
-            .manager
-            .set_issue(&selector, &"7".parse().unwrap(), None, Assigner::User))
-        .await
-        .unwrap()
-    }
-
-    async fn unlink(&self, workspace: &Workspace) -> Vec<String> {
-        let selector = SpaceSelector::id(&workspace.id);
-        self.manager.clear_issue(&selector, None).await.unwrap()
-    }
-
-    /// The token of each assignee edit the forge received, in order.
-    fn change_tokens(&self) -> Vec<String> {
-        let received = self.server.received();
-        (received.iter())
-            .filter(|request| request.line.starts_with("PATCH"))
-            .map(|request| request.header("Authorization").unwrap().to_owned())
-            .collect()
-    }
-
-    /// Each set of assignees the forge was asked to change to, in order.
-    fn changes(&self) -> Vec<Value> {
-        let received = self.server.received();
-        (received.iter())
-            .filter(|request| request.line.starts_with("PATCH"))
-            .map(|request| {
-                serde_json::from_str::<Value>(&request.body).unwrap()["assignees"].clone()
-            })
-            .collect()
-    }
-}
-
-fn logins(names: &[&str]) -> Vec<Value> {
-    (names.iter())
-        .map(|login| json!({"login": login}))
-        .collect()
-}
+use serde_json::json;
 
 #[tokio::test]
 async fn linking_assigns_the_account_once() {
@@ -363,8 +218,7 @@ async fn a_refused_assignment_warns_and_keeps_the_link() {
 
 #[tokio::test]
 async fn an_agents_assignment_adds_the_users_login() {
-    let agent = "agent_token = \"agent\"\n";
-    let fixture = Fixture::start(&["fix"], &[], USER, agent).await;
+    let fixture = Fixture::start(&["fix"], &[], USER, AGENT_TOKEN).await;
     let workspace = &fixture.workspaces[0];
     let selector = SpaceSelector::id(&workspace.id);
     let warnings = (fixture.manager)

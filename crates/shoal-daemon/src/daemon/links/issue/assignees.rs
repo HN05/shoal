@@ -7,9 +7,7 @@ use rusqlite::{Connection, OptionalExtension};
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    daemon::{
-        links::space::LinkSpace, notifications::NotificationKind, scope::Caller, workspace::Manager,
-    },
+    daemon::{notifications::NotificationKind, scope::Caller, workspace::Manager},
     forge::{ForgeRepo, items::reference::ItemRef},
     model::{Assigner, IssueAssignee},
 };
@@ -39,25 +37,19 @@ pub(crate) struct Dropped {
 }
 
 impl Manager {
-    /// Assign the issue `url`, of the repository of `forge`, which `space`
-    /// just linked as assigned, to the user's own login, where its
-    /// `[issue] assign` says to. Returns what the caller hears: the issue's
-    /// other assignees, or why it was not assigned.
+    /// Assign the issue `url`, of the repository of `forge`, which the
+    /// space `id` just linked as assigned, to the user's own login. Returns
+    /// what the caller hears: the issue's other assignees, or why it was
+    /// not assigned.
     pub(super) async fn assign_on_forge(
         &self,
-        space: &LinkSpace,
+        id: &SpaceId,
         forge: &ForgeRepo,
         url: &ItemRef,
     ) -> Vec<String> {
-        match self.space_settings(space).await {
-            Ok(settings) if !settings.issue.assign.user() => return Vec::new(),
-            Ok(_) => {}
-            Err(error) => return vec![unassigned(url, &error)],
-        }
-        match (self.assign_recorded(space.id(), forge, url)).await {
+        match (self.assign_recorded(id, forge, url)).await {
             Ok(Some(assignment)) if !assignment.others.is_empty() => {
-                let others = assignment.others.join(", ");
-                vec![format!("{url} is also assigned to {others}")]
+                vec![super::also_assigned(url, &assignment.others)]
             }
             Ok(_) => Vec::new(),
             Err(error) => vec![unassigned(url, &error)],
@@ -150,7 +142,7 @@ impl Manager {
 }
 
 /// Why the issue `url` was linked but not assigned on the forge.
-fn unassigned(url: &ItemRef, error: &anyhow::Error) -> String {
+pub(super) fn unassigned(url: &ItemRef, error: &anyhow::Error) -> String {
     format!("{url} is linked, but assigning it on the forge failed: {error:#}")
 }
 
@@ -239,8 +231,14 @@ fn claim(db: &Connection, id: &SpaceId, assignees: &[IssueAssignee]) -> Result<(
     Ok(())
 }
 
-/// [`Manager::hand_over_assignees`] within the caller's transaction.
+/// [`Manager::hand_over_assignees`] within the caller's transaction: the
+/// space's links no longer say who assigned them, so its agent works none
+/// here.
 fn hand_over(db: &Connection, id: &SpaceId) -> Result<()> {
+    db.execute(
+        "UPDATE space_issue SET linked_by=NULL WHERE space_id=?1",
+        [id],
+    )?;
     for Dropped { url, login } in dropped(db, id, &super::assigned_urls(db, id)?)? {
         db.execute(
             "UPDATE space_issue SET assignee=NULL WHERE space_id=?1 AND url=?2",

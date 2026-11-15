@@ -7,6 +7,7 @@ use std::path::Path;
 use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
 
+mod agents;
 mod assignees;
 
 pub(crate) use crate::client::links::issue::Registration;
@@ -14,6 +15,7 @@ pub(crate) use crate::model::{Assigner, IssueAssignee};
 use crate::{
     daemon::{
         events::{self, EventKind},
+        links::space::LinkSpace,
         store,
         workspace::Manager,
     },
@@ -82,14 +84,39 @@ impl Manager {
         let space = self.link_space(selector).await?;
         self.verify_space(&space).await?;
         let (forge, url) = self.issue_forge(space.origin_path(), input).await?;
-        if !self
+        let fresh = self
             .persist_issue_assignment(space.id(), &url, title, assigner)
-            .await?
-        {
-            // The forge shows it already.
-            return Ok(Vec::new());
+            .await?;
+        Ok(self.assign_linked(&space, &forge, &url, fresh).await)
+    }
+
+    /// Put the accounts its `[issue] assign` names on the issue `url`, of
+    /// the repository of `forge`, which `space` just linked as assigned:
+    /// the user's own login where the forge has yet to show the link, as
+    /// `fresh` says, and the agent account while an agent works the issue.
+    /// Returns what the caller hears: the issue's other assignees, or why
+    /// an account was not assigned.
+    async fn assign_linked(
+        &self,
+        space: &LinkSpace,
+        forge: &ForgeRepo,
+        url: &ItemRef,
+        fresh: bool,
+    ) -> Vec<String> {
+        let assign = match self.space_settings(space).await {
+            Ok(settings) => settings.issue.assign,
+            Err(error) => return vec![assignees::unassigned(url, &error)],
+        };
+        let mut warnings = Vec::new();
+        if fresh && assign.user() {
+            warnings.extend(self.assign_on_forge(space.id(), forge, url).await);
         }
-        Ok(self.assign_on_forge(&space, &forge, &url).await)
+        if assign.agent() {
+            // The user's assignment names the others already.
+            let others = !assign.user();
+            warnings.extend(self.assign_linked_agent(url, others).await);
+        }
+        warnings
     }
 
     /// Record the issue `url` as assigned to the space `id` by `assigner`,
@@ -109,7 +136,7 @@ impl Manager {
 
     /// Unlink the space's assigned issue `input` names, or every one, and
     /// take back the forge assignments that only it kept. Returns why an
-    /// assignee stays.
+    /// assignee stays or was not taken back.
     pub async fn clear_issue(
         &self,
         selector: &SpaceSelector,
@@ -122,12 +149,14 @@ impl Manager {
             Some(input) => Some(self.issue_forge(space.origin_path(), input).await?.1),
             None => None,
         };
-        let dropped = self
+        let (removed, dropped) = self
             .store
             .write(move |tx| unlink(tx, &id, selected.as_ref().map(ItemRef::url)))
             .await?;
         self.signals.wake_cleanup();
-        Ok(self.release_assignees(dropped).await)
+        let mut warnings = self.release_assignees(dropped).await;
+        warnings.extend(self.settle_issue_agents(&space, &removed).await);
+        Ok(warnings)
     }
 
     /// The canonical URL, title and labels of the open issue `input` names in the
@@ -221,8 +250,12 @@ fn assign(
 
 /// Remove the space's issue `selected` names, which must be assigned, or
 /// else every assigned issue, along with what their links kept, returning
-/// the assignees the space stood for.
-fn unlink(db: &Connection, id: &SpaceId, selected: Option<&str>) -> Result<Vec<Dropped>> {
+/// the issues removed and the user's assignees the space stood for.
+fn unlink(
+    db: &Connection,
+    id: &SpaceId,
+    selected: Option<&str>,
+) -> Result<(Vec<ItemRef>, Vec<Dropped>)> {
     super::ensure_accepts_links(db, id)?;
     let mut removed = assigned_urls(db, id)?;
     if let Some(url) = selected {
@@ -240,13 +273,26 @@ fn unlink(db: &Connection, id: &SpaceId, selected: Option<&str>) -> Result<Vec<D
             rusqlite::params![id, url.url()],
         )?;
     }
-    Ok(dropped)
+    Ok((removed, dropped))
 }
 
-/// The assignees the space `id` stands for on every issue it links as
-/// assigned, which its removal drops.
+/// The user's assignees the space `id` stands for on every issue it links
+/// as assigned, which its removal drops.
 pub(crate) fn removed_assignees(db: &Connection, id: &SpaceId) -> Result<Vec<Dropped>> {
     assignees::dropped(db, id, &assigned_urls(db, id)?)
+}
+
+/// The issues the space `id` links as assigned whose agent account its
+/// removal settles: all but those it handed to the machine it moved to.
+pub(crate) fn removed_issues(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
+    agents::settled_here(db, id)
+}
+
+/// What the caller hears of the issue `url`'s assignees but the accounts
+/// Shoal assigns: the `others`.
+fn also_assigned(url: &ItemRef, others: &[String]) -> String {
+    let others = others.join(", ");
+    format!("{url} is also assigned to {others}")
 }
 
 /// The URLs of the space's assigned issues in the order they were assigned.
@@ -255,5 +301,7 @@ pub(crate) fn assigned_urls(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef
     Ok(issues.map(|issue| issue.url).collect())
 }
 
+#[cfg(test)]
+mod test_support;
 #[cfg(test)]
 mod tests;

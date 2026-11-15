@@ -123,7 +123,13 @@ impl LinkSpace {
 impl Manager {
     /// The workspace or running chat `selector` names, by ID or name.
     pub(crate) async fn link_space(&self, selector: &SpaceSelector) -> Result<LinkSpace> {
-        Ok(match self.space(selector).await? {
+        self.link_space_of(self.space(selector).await?).await
+    }
+
+    /// `space` as the space whose items a request links, which may have
+    /// been removed meanwhile.
+    pub(crate) async fn link_space_of(&self, space: PresentSpace) -> Result<LinkSpace> {
+        Ok(match space {
             PresentSpace::Workspace(workspace) => LinkSpace::Workspace(Box::new(workspace)),
             PresentSpace::Chat(chat) => {
                 let checkout = self.chat_own_checkout(&chat).await?;

@@ -98,8 +98,10 @@ states!(NotificationKind {
     /// Packages an earlier `shoal move ssh` kept in the state directory
     /// moved to `root_dir`.
     UnmovedPackages => "unmoved_packages",
-    /// Shoal could not take back an issue assignee it added once no space
-    /// linked the issue.
+    /// Shoal could not change an issue's assignees as its links say: take
+    /// back an assignee it added once no space linked the issue, or put the
+    /// agent account on while an agent works it or take it off once none
+    /// does.
     UnassignFailed => "unassign_failed",
 });
 

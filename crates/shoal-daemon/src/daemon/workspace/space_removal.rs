@@ -2,6 +2,7 @@
 //! its agent, reserving it for removal, and its record. Cleanup and removal
 //! call only these, and ask nothing else of a space's kind than whether it
 //! has a worktree.
+use crate::forge::items::reference::ItemRef;
 use crate::paths::StateFiles;
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::params;
@@ -271,11 +272,31 @@ impl Manager {
         if let Some(id) = deleted.notification {
             self.signals.notification_recorded(id);
         }
-        for warning in self.release_assignees(deleted.assignees).await {
+        (self.release_removed_assignees(space, deleted.assignees, &deleted.issues)).await;
+        Ok(())
+    }
+
+    /// Take back the forge assignments only the removed `space` kept: the
+    /// user's logins `dropped` names, and the agent account on `issues` once
+    /// no agent here works them. Each failure notifies.
+    async fn release_removed_assignees(
+        &self,
+        space: &PresentSpace,
+        dropped: Vec<Dropped>,
+        issues: &[ItemRef],
+    ) {
+        let mut warnings = self.release_assignees(dropped).await;
+        match self.link_space_of(space.clone()).await {
+            Ok(linked) => warnings.extend(self.settle_issue_agents(&linked, issues).await),
+            Err(error) => crate::daemon::log!(
+                "agent assignees of removed {} not settled: {error:#}",
+                space.name()
+            ),
+        }
+        for warning in warnings {
             let kind = NotificationKind::UnassignFailed;
             (self.notify_space(space.name(), space.id(), kind, warning)).await;
         }
-        Ok(())
     }
 
     /// Forget what `space` kept outside its record once that is deleted or,
@@ -314,8 +335,11 @@ struct Deleted {
     notification: Option<i64>,
     /// The approval requests the space had not decided.
     released: Vec<ApprovalRequest>,
-    /// The forge assignees the space stood for on its assigned issues.
+    /// The user's forge assignees the space stood for on its assigned
+    /// issues.
     assignees: Vec<Dropped>,
+    /// The assigned issues whose agent account its removal settles.
+    issues: Vec<ItemRef>,
 }
 
 /// Delete the record of the space `id`, which `cause` removed, once the
@@ -340,6 +364,7 @@ fn delete_record(
     // With the record, so no request is left with a removed decider.
     let released = release_decided_by(tx, id)?;
     let assignees = links::issue::removed_assignees(tx, id)?;
+    let issues = links::issue::removed_issues(tx, id)?;
     ensure!(
         spaces::records::remove(tx, id)?,
         "the space was removed meanwhile"
@@ -348,5 +373,6 @@ fn delete_record(
         notification,
         released,
         assignees,
+        issues,
     })
 }
