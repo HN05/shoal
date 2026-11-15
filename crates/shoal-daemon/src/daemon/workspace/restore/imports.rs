@@ -84,10 +84,10 @@ impl Manager {
             return Ok(());
         }
         if let Some(here) = self.find_space(id).await? {
+            let (name, number) = (here.name(), here.number());
             bail!(
-                "{} is already here as space {}; import a copy of it, or remove it here first",
-                here.name(),
-                here.number()
+                "{name} is already here as space {number}; shoal rm {number} removes it here, \
+                 or shoal move export --keep where it was exported writes a copy that opens beside it"
             );
         }
         Ok(())
