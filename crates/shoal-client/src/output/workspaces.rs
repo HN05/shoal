@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    model::{Completion, WorkspaceHold, WorkspaceRef},
+    model::{Completion, SpaceHold, WorkspaceRef},
     output::{batch::Failure, outputs},
     removal::RemovalResult,
 };
@@ -22,7 +22,7 @@ pub struct Removed {
     /// The removal goes on in the background.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background: Option<BackgroundRemoval>,
-    pub holds: Vec<WorkspaceHold>,
+    pub holds: Vec<SpaceHold>,
 }
 
 impl Removed {

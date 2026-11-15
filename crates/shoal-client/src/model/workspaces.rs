@@ -1,6 +1,6 @@
 //! Workspace records and the commit, copy or branch they start from.
 use super::{
-    AgentStatus, CheckpointNumber, QueuedJob, ReviewMark, SpaceLinks, SpaceRef, WorkspaceHold,
+    AgentStatus, CheckpointNumber, QueuedJob, ReviewMark, SpaceHold, SpaceLinks, SpaceRef,
 };
 use crate::repository_ids::RepositoryId;
 use crate::space_ids::{SpaceId, SpaceNumber};
@@ -47,7 +47,7 @@ pub struct Workspace {
     pub git_dir: Option<PathBuf>,
     pub git_dir_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub holds: Vec<WorkspaceHold>,
+    pub holds: Vec<SpaceHold>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review: Vec<ReviewMark>,
     /// Its newest local review.

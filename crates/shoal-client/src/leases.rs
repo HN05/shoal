@@ -9,9 +9,7 @@ use crate::space_names::SpaceSelector;
 use crate::{
     approvals::{ApprovalRequest, DecisionStatus},
     connection::{Daemon, call, request},
-    model::{
-        PortCatalog, PortOverview, PortRequest, PortReservation, PortSuggestion, WorkspaceHold,
-    },
+    model::{PortCatalog, PortOverview, PortRequest, PortReservation, PortSuggestion, SpaceHold},
     protocol::{Body, HoldMethod, PortMethod, ResourceMethod, SecretMethod, SimulatorMethod},
     resources::{Catalog, Overview, ResourceLease, ResourceRequest},
     secrets::{SecretCatalog, SecretGrant, SecretRequest},
@@ -92,7 +90,7 @@ impl Leased for SecretGrant {
     const BUSY: Option<RefusalCode> = None;
 }
 
-impl Leased for WorkspaceHold {
+impl Leased for SpaceHold {
     const BUSY: Option<RefusalCode> = None;
 }
 
@@ -301,7 +299,7 @@ pub async fn acquire_hold(
     workspace: SpaceSelector,
     name: String,
     reason: Option<String>,
-) -> Result<Acquisition<WorkspaceHold>> {
+) -> Result<Acquisition<SpaceHold>> {
     let method = HoldMethod::HoldAcquire {
         workspace,
         name,
@@ -319,7 +317,7 @@ pub async fn release_hold(
 }
 
 /// The holds on `workspace`.
-pub async fn holds(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Vec<WorkspaceHold>> {
+pub async fn holds(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Vec<SpaceHold>> {
     request(daemon, HoldMethod::HoldList { workspace }).await
 }
 

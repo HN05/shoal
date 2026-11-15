@@ -12,7 +12,7 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    model::{HoldPlacer, WorkspaceHold},
+    model::{HoldPlacer, SpaceHold},
 };
 
 /// Exit 2 means a pending or denied approval: a workspace process holding
@@ -91,7 +91,7 @@ async fn pick(ctx: &Context, workspace: &SpaceSelector) -> Result<String> {
     ui::pick(ctx, "Hold> ", entries)
 }
 
-fn render(holds: &[WorkspaceHold]) {
+fn render(holds: &[SpaceHold]) {
     if holds.is_empty() {
         outln!("No holds");
     }

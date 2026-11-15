@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 /// A caller-named claim that a workspace is still in use.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WorkspaceHold {
-    pub workspace_id: SpaceId,
+pub struct SpaceHold {
+    pub space_id: SpaceId,
     pub name: String,
     pub reason: Option<String>,
     pub created_at: crate::time::UnixTime,

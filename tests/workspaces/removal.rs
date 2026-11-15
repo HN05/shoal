@@ -1078,7 +1078,7 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         "--reason",
         "Open thread",
     ]);
-    assert_eq!(hold["workspace_id"], workspace["id"]);
+    assert_eq!(hold["space_id"], workspace["id"]);
     let expected = serde_json::json!([hold]);
     assert_eq!(
         fixture.ok(&["status", &fixture.id("held")])["workspace"]["holds"],

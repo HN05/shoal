@@ -18,7 +18,7 @@ use crate::{
         scope::Caller,
         store,
     },
-    model::{HoldPlacer, WorkspaceHold},
+    model::{HoldPlacer, SpaceHold},
     validate,
 };
 
@@ -31,7 +31,7 @@ impl Manager {
         name: String,
         reason: Option<String>,
         placed_by: HoldPlacer,
-    ) -> Result<WorkspaceHold> {
+    ) -> Result<SpaceHold> {
         self.place_hold(selector, name, reason, placed_by, Authority::Caller)
             .await
     }
@@ -45,7 +45,7 @@ impl Manager {
         reason: Option<String>,
         placed_by: HoldPlacer,
         authority: Authority,
-    ) -> Result<WorkspaceHold> {
+    ) -> Result<SpaceHold> {
         validate::name("hold", &name)?;
         validate::reason("hold", reason.as_deref())?;
         let workspace = self.workspace(selector).await?;
@@ -70,7 +70,7 @@ impl Manager {
         selector: &SpaceSelector,
         name: String,
         reason: Option<String>,
-    ) -> Result<Allocation<WorkspaceHold>> {
+    ) -> Result<Allocation<SpaceHold>> {
         validate::name("hold", &name)?;
         let workspace = self.workspace(selector).await?;
         // Acquiring returns the held one, with every check acquisition makes.
@@ -188,20 +188,14 @@ impl Manager {
         self.release_hold(selector, name, HoldPlacer::User).await
     }
 
-    pub async fn holds(&self, selector: &SpaceSelector) -> Result<Vec<WorkspaceHold>> {
+    pub async fn holds(&self, selector: &SpaceSelector) -> Result<Vec<SpaceHold>> {
         Ok(self.workspace(selector).await?.holds)
     }
 
     pub(crate) async fn has_holds(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         self.store
-            .run(move |db| {
-                store::exists(
-                    db,
-                    "SELECT 1 FROM space_holds WHERE space_id=?1",
-                    [id],
-                )
-            })
+            .run(move |db| store::exists(db, "SELECT 1 FROM space_holds WHERE space_id=?1", [id]))
             .await
     }
 }
@@ -246,7 +240,7 @@ fn place(
     reason: Option<&str>,
     placed_by: HoldPlacer,
     authority: Authority,
-) -> Result<WorkspaceHold> {
+) -> Result<SpaceHold> {
     store::require_ready(tx, id)?;
     authority.ensure(tx, id, name)?;
     insert(tx, id, name, reason, placed_by)?;
@@ -317,16 +311,16 @@ fn insert(
 
 const COLUMNS: &str = "SELECT space_id,name,reason,created_at,placed_by FROM space_holds";
 
-pub(super) fn list(db: &Connection, id: &SpaceId) -> Result<Vec<WorkspaceHold>> {
+pub(super) fn list(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceHold>> {
     Ok(db
         .prepare(&format!("{COLUMNS} WHERE space_id=?1 ORDER BY name"))?
         .query_map([id], row)?
         .collect::<rusqlite::Result<_>>()?)
 }
 
-fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceHold> {
-    Ok(WorkspaceHold {
-        workspace_id: row.get(0)?,
+fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SpaceHold> {
+    Ok(SpaceHold {
+        space_id: row.get(0)?,
         name: row.get(1)?,
         reason: row.get(2)?,
         created_at: row.get(3)?,

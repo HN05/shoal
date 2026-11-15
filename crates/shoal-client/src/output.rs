@@ -135,7 +135,7 @@ outputs!(
     crate::model::ReviewMark,
     crate::model::SyncedRepository,
     crate::model::Workspace,
-    crate::model::WorkspaceHold,
+    crate::model::SpaceHold,
     crate::forge::capability::Capabilities,
     crate::forge::ci::CiActed,
     crate::forge::ci::approval::RunsApproved,
