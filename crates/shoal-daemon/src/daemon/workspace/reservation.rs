@@ -5,7 +5,7 @@
 use super::{GuardMode, Manager};
 use crate::client::space_ids::SpaceId;
 use crate::{daemon::store, state::WorkspaceState};
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, bail};
 use rusqlite::{OptionalExtension, params};
 
 impl Manager {
@@ -100,17 +100,6 @@ impl Manager {
                         "workspace is {current}; wait for that operation to finish before another lifecycle operation"
                     ),
                 };
-                // Holds need a ready workspace, so none can arrive once it is
-                // reserved.
-                ensure!(
-                    !rules.refuse_holds
-                        || !store::exists(
-                            tx,
-                            "SELECT 1 FROM space_holds WHERE space_id=?1 AND placed_by=?2",
-                            params![id, crate::model::HoldPlacer::User],
-                        )?,
-                    "workspace has holds, which are the user's; ask the user to remove it"
-                );
                 if let Some(state) = state {
                     tx.execute(
                         "UPDATE workspaces SET state=?2 WHERE id=?1",
@@ -133,7 +122,4 @@ pub(super) struct RemovalRules {
     /// for its creation to end and holds the repository's Git gate, under
     /// which setup starts.
     pub(super) awaiting_setup: bool,
-    /// A workspace with holds the user placed, whose removal would release
-    /// them.
-    pub(super) refuse_holds: bool,
 }

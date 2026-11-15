@@ -218,6 +218,7 @@ impl Manager {
             running: false,
             links: SpaceLinks::default(),
             review: Vec::new(),
+            holds: Vec::new(),
             completion: None,
             agent_state: None,
             progress: None,
@@ -713,6 +714,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
             running: row.get("running")?,
             links: SpaceLinks::default(),
             review: Vec::new(),
+            holds: Vec::new(),
             // An unreadable record fails the cleanup that reads it, for that
             // chat alone, rather than every listing of chats.
             completion: (row.get::<_, Option<String>>("completion")?)
@@ -731,6 +733,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
     .map(|mut chat| {
         chat.links = store::space_links(db, &chat.id)?;
         chat.review = crate::daemon::workspace::review::list(db, &chat.id)?;
+        chat.holds = crate::daemon::workspace::holds::list(db, &chat.id)?;
         chat.parent = workspace::parent(db, &chat.id)?;
         chat.children = workspace::children(db, &chat.id)?;
         chat.agent_state = workspace::agent_state::current(db, &chat.id)?;

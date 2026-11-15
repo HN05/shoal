@@ -69,9 +69,9 @@ const REQUESTS: &[&str] = &[
     r#"{"place_ownership":{"workspace":"fix","place":{"host":"herdr","place":"w1:p1"}}}"#,
     r#"{"record_owned_place":{"workspace":"fix","origin":{"host":"rex","place":"block:1","owned":true}}}"#,
     r#""owned_places""#,
-    r#"{"hold_acquire":{"workspace":"fix","name":"review","reason":null}}"#,
-    r#"{"hold_release":{"workspace":"fix","name":"review"}}"#,
-    r#"{"hold_list":{"workspace":"fix"}}"#,
+    r#"{"hold_acquire":{"space":"fix","name":"review","reason":null}}"#,
+    r#"{"hold_release":{"space":"fix","name":"review"}}"#,
+    r#"{"hold_list":{"space":"fix"}}"#,
     r#"{"watch_space_events":{"since":4,"follow":true}}"#,
     r#"{"space_log":{"space":"fix","filter":"entries","limit":50}}"#,
     // Removal and restore.

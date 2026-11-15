@@ -1,8 +1,8 @@
-//! Holds that keep a workspace from cleanup.
+//! Holds that keep a space from cleanup.
 use crate::space_ids::SpaceId;
 use serde::{Deserialize, Serialize};
 
-/// A caller-named claim that a workspace is still in use.
+/// A caller-named claim that a space is still in use.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpaceHold {
     pub space_id: SpaceId,
@@ -20,7 +20,7 @@ shoal_states::states!(
         /// The user or a host app; only they release it.
         #[default]
         User => "user",
-        /// An agent, whose workspace or one above it may release it.
+        /// An agent, whose space or one above it may release it.
         Agent => "agent",
     }
 );

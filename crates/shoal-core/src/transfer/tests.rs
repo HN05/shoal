@@ -104,6 +104,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
             assignees: Vec::new(),
         },
         review: Vec::new(),
+        holds: Vec::new(),
         completion: None,
         agent_state: None,
         progress: None,

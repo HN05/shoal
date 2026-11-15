@@ -102,6 +102,14 @@ impl PresentSpace {
         }
     }
 
+    /// What keeps it from cleanup until released.
+    pub fn holds(&self) -> &[crate::model::SpaceHold] {
+        match self {
+            Self::Workspace(workspace) => &workspace.holds,
+            Self::Chat(chat) => &chat.holds,
+        }
+    }
+
     pub fn into_links(self) -> SpaceLinks {
         match self {
             Self::Workspace(workspace) => workspace.links,

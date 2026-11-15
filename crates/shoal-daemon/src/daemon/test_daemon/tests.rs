@@ -90,7 +90,7 @@ async fn a_scoped_app_reaches_only_its_workspace_tree() {
     );
     // A workspace's agent asks to hold its own workspace.
     let hold = HoldMethod::HoldAcquire {
-        workspace: SpaceSelector::id(&own.id),
+        space: SpaceSelector::id(&own.id),
         name: "review".into(),
         reason: Some("open in Quay".into()),
     };

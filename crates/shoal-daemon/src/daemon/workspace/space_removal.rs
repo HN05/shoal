@@ -174,6 +174,11 @@ impl Manager {
         // Reserved first, so no agent of it registers and nothing opens
         // below it while the removal goes on.
         let reservation = self.space_removals.reserve(id)?;
+        // No hold arrives once the space is reserved.
+        ensure!(
+            !removal.refuses_holds() || !self.user_holds(id).await?,
+            "the space has holds, which are the user's; ask the user to remove it"
+        );
         let space = (self.find_space(id).await?).with_context(|| format!("no space {id}"))?;
         let worktree = match space.worktree() {
             Some(workspace) => Some(self.reserve_worktree(workspace, removal).await?),
@@ -214,7 +219,6 @@ impl Manager {
         let rules = RemovalRules {
             allow_pending_rename: !off_runtime::try_exists(&workspace.path).await?,
             awaiting_setup: manual && workspace.state == WorkspaceState::Preparing,
-            refuse_holds: removal.refuses_holds(),
         };
         let replaced = self
             .reserve_lifecycle_for_removal(&workspace.id, rules)

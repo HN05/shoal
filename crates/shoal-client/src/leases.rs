@@ -293,32 +293,28 @@ pub async fn secret_catalog(
     request(daemon, SecretMethod::SecretCatalog { workspace }).await
 }
 
-/// Hold `workspace` against cleanup as `name`, for `reason`.
+/// Hold `space` against cleanup as `name`, for `reason`.
 pub async fn acquire_hold(
     daemon: &impl Daemon,
-    workspace: SpaceSelector,
+    space: SpaceSelector,
     name: String,
     reason: Option<String>,
 ) -> Result<Acquisition<SpaceHold>> {
     let method = HoldMethod::HoldAcquire {
-        workspace,
+        space,
         name,
         reason,
     };
     request(daemon, method).await
 }
 
-pub async fn release_hold(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    name: String,
-) -> Result<()> {
-    request(daemon, HoldMethod::HoldRelease { workspace, name }).await
+pub async fn release_hold(daemon: &impl Daemon, space: SpaceSelector, name: String) -> Result<()> {
+    request(daemon, HoldMethod::HoldRelease { space, name }).await
 }
 
-/// The holds on `workspace`.
-pub async fn holds(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Vec<SpaceHold>> {
-    request(daemon, HoldMethod::HoldList { workspace }).await
+/// The holds on `space`.
+pub async fn holds(daemon: &impl Daemon, space: SpaceSelector) -> Result<Vec<SpaceHold>> {
+    request(daemon, HoldMethod::HoldList { space }).await
 }
 
 #[cfg(test)]

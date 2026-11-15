@@ -103,6 +103,7 @@ fn restored_record(removed: &RemovedSpace, kept: &KeptChat) -> Chat {
         running: false,
         links: Default::default(),
         review: Vec::new(),
+        holds: Vec::new(),
         completion: None,
         agent_state: None,
         progress: None,

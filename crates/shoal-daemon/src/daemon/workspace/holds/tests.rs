@@ -68,14 +68,14 @@ async fn holds_are_idempotent_persistent_and_scoped() {
     for target in [workspace.id.as_str(), other.id.as_str()] {
         let own = workspace.id == target;
         let mut list = HoldMethod::HoldList {
-            workspace: SpaceSelector::from(target),
+            space: SpaceSelector::from(target),
         };
         let mut release = HoldMethod::HoldRelease {
-            workspace: SpaceSelector::from(target),
+            space: SpaceSelector::from(target),
             name: "app".into(),
         };
         let mut acquire = HoldMethod::HoldAcquire {
-            workspace: SpaceSelector::from(target),
+            space: SpaceSelector::from(target),
             name: "app".into(),
             reason: None,
         };
@@ -283,7 +283,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
             .await;
     }
     let mut acquire = HoldMethod::HoldAcquire {
-        workspace: SpaceSelector::id(&child.id),
+        space: SpaceSelector::id(&child.id),
         name: "review".into(),
         reason: Some("Waiting for the parent's merge".into()),
     };
@@ -319,7 +319,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
         .unwrap();
     for name in ["review", "editor"] {
         let mut release = HoldMethod::HoldRelease {
-            workspace: SpaceSelector::id(&child.id),
+            space: SpaceSelector::id(&child.id),
             name: name.into(),
         };
         scope::authorize(&manager, Some(&"child".into()), &mut release)
@@ -411,5 +411,87 @@ async fn an_agent_places_its_own_hold_only_while_approved() {
             .unwrap()
             .holds
             .is_empty()
+    );
+}
+
+/// A chat in a fresh repository, with what keeps it: its holds alone.
+async fn chat(manager: &std::sync::Arc<Manager>, root: &std::path::Path) -> crate::model::Chat {
+    let checkout = repository(root, "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    manager
+        .start_chat(repo.id.into(), "audit".into(), "claude".into(), None)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_hold_keeps_a_chat_until_it_is_released() {
+    let (temp, manager) = manager().await;
+    let chat = chat(&manager, temp.path()).await;
+    let selected = SpaceSelector::id(&chat.id);
+    let hold = (manager.acquire_hold(&selected, "notes".into(), None, HoldPlacer::User))
+        .await
+        .unwrap();
+    assert_eq!(hold.space_id, chat.id);
+    assert_eq!(manager.holds(&selected).await.unwrap(), [hold]);
+    // Only the hold keeps it, as its release shows below.
+    assert!(manager.keep_reason(&chat.id).await.unwrap().is_some());
+    // A removal that leaves the user's holds in place refuses it.
+    let parent = super::super::lifecycle::Removal::Parent {
+        cause: crate::daemon::events::EventCause::Parent,
+        refuse_holds: true,
+        confirmed: None,
+    };
+    let Err(refused) = manager.reserve_space(&chat.id, parent).await else {
+        panic!("the user's hold keeps the chat");
+    };
+    assert!(format!("{refused:#}").contains("holds"), "{refused:#}");
+    manager
+        .release_hold(&selected, "notes".into(), HoldPlacer::User)
+        .await
+        .unwrap();
+    assert!(manager.keep_reason(&chat.id).await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn a_removal_reserving_a_chat_takes_no_new_hold() {
+    let (temp, manager) = manager().await;
+    let chat = chat(&manager, temp.path()).await;
+    let _removal = manager.space_removals.reserve(&chat.id).unwrap();
+    manager
+        .acquire_hold(
+            &SpaceSelector::id(&chat.id),
+            "late".into(),
+            None,
+            HoldPlacer::User,
+        )
+        .await
+        .unwrap_err();
+    assert!(!manager.has_holds(&chat.id).await.unwrap());
+}
+
+#[tokio::test]
+async fn a_chats_agent_holds_its_own_chat_once_approved() {
+    let (temp, manager) = manager().await;
+    let chat = chat(&manager, temp.path()).await;
+    let selected = SpaceSelector::id(&chat.id);
+    let Ok(crate::daemon::allocation::Allocation::Approval(requested)) =
+        (manager.request_hold(&selected, "review".into(), Some("Keep it".into()))).await
+    else {
+        panic!("holding its own chat needs approval");
+    };
+    assert_eq!(requested.space_id, chat.id);
+    assert!(!manager.has_holds(&chat.id).await.unwrap());
+    manager
+        .decide_approval(requested.number, true, None, Default::default(), None)
+        .await
+        .unwrap();
+    let holds = manager.holds(&selected).await.unwrap();
+    assert_eq!(
+        (holds[0].name.as_str(), holds[0].placed_by),
+        ("review", HoldPlacer::Agent)
     );
 }

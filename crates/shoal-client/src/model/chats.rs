@@ -1,6 +1,7 @@
 //! Chat records and where a chat runs.
 use super::{
-    AgentStatus, Completion, Repository, ReviewMark, SpaceLinks, SpaceRef, Workspace, WorkspaceRef,
+    AgentStatus, Completion, Repository, ReviewMark, SpaceHold, SpaceLinks, SpaceRef, Workspace,
+    WorkspaceRef,
 };
 use crate::agent::AgentSessionId;
 use crate::repository_ids::RepositoryId;
@@ -68,6 +69,9 @@ pub struct Chat {
     /// Its ready-for-review marks, on its linked items or on itself.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review: Vec<ReviewMark>,
+    /// What keeps it from cleanup until released.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub holds: Vec<SpaceHold>,
     /// What `shoal done` recorded, until `shoal done --undo`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completion: Option<Completion>,

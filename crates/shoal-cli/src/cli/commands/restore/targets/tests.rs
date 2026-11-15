@@ -31,6 +31,7 @@ fn spaces() -> Spaces {
         running,
         links: Default::default(),
         review: Vec::new(),
+        holds: Vec::new(),
         completion: None,
         agent_state: None,
         progress: None,

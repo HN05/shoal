@@ -1,7 +1,7 @@
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
-/// Requests about the holds that keep workspaces from cleanup.
+/// Requests about the holds that keep spaces from cleanup.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[allow(
@@ -10,15 +10,15 @@ use serde::{Deserialize, Serialize};
 )]
 pub enum HoldMethod {
     HoldAcquire {
-        workspace: SpaceSelector,
+        space: SpaceSelector,
         name: String,
         reason: Option<String>,
     },
     HoldRelease {
-        workspace: SpaceSelector,
+        space: SpaceSelector,
         name: String,
     },
     HoldList {
-        workspace: SpaceSelector,
+        space: SpaceSelector,
     },
 }

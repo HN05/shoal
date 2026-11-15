@@ -27,7 +27,7 @@ mod environment;
 pub(crate) mod executions;
 mod fast_forward;
 mod gates;
-mod holds;
+pub(crate) mod holds;
 pub(super) mod identity;
 mod imported_sessions;
 mod kept_branches;

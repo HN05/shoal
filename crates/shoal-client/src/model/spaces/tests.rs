@@ -31,6 +31,7 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_or_id() {
         running,
         links: Default::default(),
         review: Vec::new(),
+        holds: Vec::new(),
         completion: None,
         agent_state: None,
         progress: None,

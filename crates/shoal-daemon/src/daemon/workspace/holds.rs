@@ -1,4 +1,5 @@
-//! Caller-named claims of workspace use, independent of assignment completion.
+//! Caller-named claims of a space's use, a workspace's or a chat's,
+//! independent of assignment completion.
 use crate::client::space_ids::SpaceId;
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Result, anyhow, ensure};
@@ -18,13 +19,13 @@ use crate::{
         scope::Caller,
         store,
     },
-    model::{HoldPlacer, SpaceHold},
+    model::{HoldPlacer, PresentSpace, SpaceHold},
     validate,
 };
 
 impl Manager {
-    /// Hold the workspace as `placed_by`; repeating a held name keeps the
-    /// hold as it was placed.
+    /// Hold the space as `placed_by`; repeating a held name keeps the hold
+    /// as it was placed.
     pub async fn acquire_hold(
         &self,
         selector: &SpaceSelector,
@@ -36,7 +37,7 @@ impl Manager {
             .await
     }
 
-    /// Hold the workspace as `placed_by` once `authority` allows it in the
+    /// Hold the space as `placed_by` once `authority` allows it in the
     /// transaction that places the hold.
     async fn place_hold(
         &self,
@@ -48,22 +49,32 @@ impl Manager {
     ) -> Result<SpaceHold> {
         validate::name("hold", &name)?;
         validate::reason("hold", reason.as_deref())?;
-        let workspace = self.workspace(selector).await?;
-        let _guard = self
-            .gates
-            .resource_guard(&workspace.id, GuardMode::Shared)?;
-        self.verify_worktree(&workspace).await?;
-        let id = workspace.id.clone();
-        let hold = self
-            .store
-            .write(move |tx| place(tx, &id, &name, reason.as_deref(), placed_by, authority))
+        let space = self.space(selector).await?;
+        let _guard = self.hold_guard(&space).await?;
+        let id = space.id().clone();
+        let removing = self.space_removals.clone();
+        let hold = (self.store)
+            .write(move |tx| {
+                ensure_holdable(tx, &id, &removing)?;
+                place(tx, &id, &name, reason.as_deref(), placed_by, authority)
+            })
             .await?;
-        self.touch(&workspace.id).await;
+        self.touch(space.id()).await;
         Ok(hold)
     }
 
-    /// Hold the workspace for its own agent once its coordinator, or the
-    /// user when it has none, approves; approval places the hold, and asking
+    /// What placing a hold on `space` holds meanwhile: no resource hook runs
+    /// in the worktree of a workspace, which must still be its own.
+    async fn hold_guard(&self, space: &PresentSpace) -> Result<ResourceGuard> {
+        let guard = (self.gates).resource_guard(space.id(), GuardMode::Shared)?;
+        if let Some(workspace) = space.worktree() {
+            self.verify_worktree(workspace).await?;
+        }
+        Ok(guard)
+    }
+
+    /// Hold the space for its own agent once its coordinator, or the user
+    /// when it has none, approves; approval places the hold, and asking
     /// again returns it.
     pub async fn request_hold(
         &self,
@@ -72,12 +83,13 @@ impl Manager {
         reason: Option<String>,
     ) -> Result<Allocation<SpaceHold>> {
         validate::name("hold", &name)?;
-        let workspace = self.workspace(selector).await?;
+        let space = self.space(selector).await?;
+        let id = space.id();
         // Acquiring returns the held one, with every check acquisition makes.
-        if workspace.holds.iter().any(|hold| hold.name == name) {
+        if space.holds().iter().any(|hold| hold.name == name) {
             return Ok(Allocation::Granted(
                 self.place_hold(
-                    &SpaceSelector::id(&workspace.id),
+                    &SpaceSelector::id(id),
                     name,
                     reason,
                     HoldPlacer::Agent,
@@ -87,7 +99,7 @@ impl Manager {
             ));
         }
         let request = ApprovalRequest::new(
-            &workspace.id,
+            id,
             Target::Hold(name.clone()),
             &name,
             Specification::Hold(HoldSpecification { hold: name.clone() }),
@@ -97,7 +109,7 @@ impl Manager {
         let pending = self.request_approval(request).await.map_err(|error| {
             if error.is::<ReasonRequired>() {
                 anyhow!(
-                    "holding your own workspace needs approval; request it with shoal acquire hold --name {name} --reason <why>"
+                    "holding your own space needs approval; request it with shoal acquire hold --name {name} --reason <why>"
                 )
             } else {
                 error
@@ -107,7 +119,7 @@ impl Manager {
             Some(pending) => Allocation::Approval(Box::new(pending)),
             None => Allocation::Granted(
                 self.place_hold(
-                    &SpaceSelector::id(&workspace.id),
+                    &SpaceSelector::id(id),
                     name,
                     reason,
                     HoldPlacer::Agent,
@@ -116,15 +128,13 @@ impl Manager {
                 .await?,
             ),
         };
-        self.notify_allocation((&workspace.name, &workspace.id), &outcome, "")
-            .await;
+        (self.notify_allocation((space.name(), id), &outcome, "")).await;
         Ok(outcome)
     }
 
     /// What approving `request` needs held while its decision places the
-    /// hold it asks for, as acquiring one directly does: no resource hook
-    /// running in its verified worktree. `None` for other requests and
-    /// denials.
+    /// hold it asks for, as acquiring one directly does. `None` for other
+    /// requests and denials.
     pub(crate) async fn hold_decision_guard(
         &self,
         request: &ApprovalRequest,
@@ -133,12 +143,8 @@ impl Manager {
         if !approve || !matches!(request.target, Target::Hold(_)) {
             return Ok(None);
         }
-        let workspace = self.workspace_by_id(&request.space_id).await?;
-        let guard = self
-            .gates
-            .resource_guard(&workspace.id, GuardMode::Shared)?;
-        self.verify_worktree(&workspace).await?;
-        Ok(Some(guard))
+        let space = self.space_by_id(&request.space_id).await?;
+        Ok(Some(self.hold_guard(&space).await?))
     }
 
     /// Release the hold `name` for `released_by`: an agent releases only
@@ -150,12 +156,12 @@ impl Manager {
         released_by: HoldPlacer,
     ) -> Result<()> {
         validate::name("hold", &name)?;
-        let workspace = self.workspace(selector).await?;
-        let id = workspace.id.clone();
+        let space = self.space(selector).await?;
+        let id = space.id().clone();
         self.store
             .write(move |tx| release(tx, &id, &name, released_by))
             .await?;
-        self.touch(&workspace.id).await;
+        self.touch(space.id()).await;
         self.signals.wake_cleanup();
         Ok(())
     }
@@ -171,25 +177,42 @@ impl Manager {
         let Some(caller) = caller else {
             return self.release_hold(selector, name, HoldPlacer::User).await;
         };
-        let workspace = self.workspace(selector).await?;
-        let users = (workspace.holds.iter())
+        let space = self.space(selector).await?;
+        let users = (space.holds().iter())
             .any(|hold| hold.name == name && hold.placed_by == HoldPlacer::User);
         if !users {
             return self.release_hold(selector, name, HoldPlacer::Agent).await;
         }
-        // A name may repeat, so the workspace's ID binds the approval.
+        // A name may repeat, so the space's ID binds the approval.
         let release = format!(
             "release the user's hold {name} on {} ({})",
-            workspace.name, workspace.id
+            space.name(),
+            space.id()
         );
-        let action = Action::new(PermissionKey::UserHolds, release)
-            .in_repository(workspace.repository_id.clone());
+        let action = Action {
+            repository: space.repository_id().cloned(),
+            ..Action::new(PermissionKey::UserHolds, release)
+        };
         self.authorize_action(Some(caller), action).await?;
         self.release_hold(selector, name, HoldPlacer::User).await
     }
 
     pub async fn holds(&self, selector: &SpaceSelector) -> Result<Vec<SpaceHold>> {
-        Ok(self.workspace(selector).await?.holds)
+        Ok(self.space(selector).await?.holds().to_vec())
+    }
+
+    /// Whether the user placed a hold on the space `id`.
+    pub(crate) async fn user_holds(&self, id: &SpaceId) -> Result<bool> {
+        let id = id.to_owned();
+        (self.store)
+            .run(move |db| {
+                store::exists(
+                    db,
+                    "SELECT 1 FROM space_holds WHERE space_id=?1 AND placed_by=?2",
+                    params![id, HoldPlacer::User],
+                )
+            })
+            .await
     }
 
     pub(crate) async fn has_holds(&self, id: &SpaceId) -> Result<bool> {
@@ -203,9 +226,9 @@ impl Manager {
 /// What lets a hold be placed.
 #[derive(Clone, Copy)]
 enum Authority {
-    /// The caller may hold the workspace, as the user or an agent above it.
+    /// The caller may hold the space, as the user or an agent above it.
     Caller,
-    /// The workspace's own agent holds it only with its approval: the hold
+    /// The space's own agent holds it only with its approval: the hold
     /// already placed, or an approved request, either of which a release
     /// meanwhile ends.
     Approval,
@@ -231,8 +254,21 @@ impl Authority {
     }
 }
 
-/// Place the hold once `authority` allows it, in a ready workspace, and
-/// return it as it stands: a held name keeps the hold as it was placed.
+/// Refuse a hold on a space a removal has reserved, which has read its holds
+/// already, or on a workspace that is not ready. A reservation precedes the
+/// removal's read on the store's one thread, so that read sees every hold
+/// this lets through.
+fn ensure_holdable(
+    tx: &rusqlite::Transaction<'_>,
+    id: &SpaceId,
+    removing: &crate::daemon::spaces::Removing,
+) -> Result<()> {
+    ensure!(!removing.reserved(id), "the space is being removed");
+    crate::daemon::links::space::require_ready_space(tx, id)
+}
+
+/// Place the hold once `authority` allows it and return it as it stands: a
+/// held name keeps the hold as it was placed.
 fn place(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
@@ -241,7 +277,6 @@ fn place(
     placed_by: HoldPlacer,
     authority: Authority,
 ) -> Result<SpaceHold> {
-    store::require_ready(tx, id)?;
     authority.ensure(tx, id, name)?;
     insert(tx, id, name, reason, placed_by)?;
     let hold = tx.query_row(
@@ -270,7 +305,7 @@ fn release(
         .optional()?;
     ensure!(
         released_by == HoldPlacer::User || placed_by != Some(HoldPlacer::User),
-        "hold {name} is the user's; workspace processes release only the holds agents placed"
+        "hold {name} is the user's; scoped processes release only the holds agents placed"
     );
     tx.execute(
         "DELETE FROM space_holds WHERE space_id=?1 AND name=?2",
@@ -293,7 +328,7 @@ pub(crate) fn place_approved(
     insert(tx, &request.space_id, name, reason, HoldPlacer::Agent)
 }
 
-/// Insert the hold unless the workspace already has one by that name.
+/// Insert the hold unless the space already has one by that name.
 fn insert(
     db: &Connection,
     id: &SpaceId,
@@ -311,7 +346,8 @@ fn insert(
 
 const COLUMNS: &str = "SELECT space_id,name,reason,created_at,placed_by FROM space_holds";
 
-pub(super) fn list(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceHold>> {
+/// The holds on the space `id`, by name.
+pub(crate) fn list(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceHold>> {
     Ok(db
         .prepare(&format!("{COLUMNS} WHERE space_id=?1 ORDER BY name"))?
         .query_map([id], row)?

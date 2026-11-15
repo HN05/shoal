@@ -2467,7 +2467,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
             .await;
     }
     let mut acquire = Operation::Hold(HoldMethod::HoldAcquire {
-        workspace: SpaceSelector::id(&child.id),
+        space: SpaceSelector::id(&child.id),
         name: "review".into(),
         reason: None,
     });

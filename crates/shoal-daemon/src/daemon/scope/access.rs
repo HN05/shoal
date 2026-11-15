@@ -207,14 +207,10 @@ impl Manager {
         Ok(workspace)
     }
 
-    /// Whether the user holds the workspace `id` or one below it.
+    /// Whether the user holds the space `id` or one below it.
     async fn user_holds_below(&self, id: &SpaceId) -> Result<bool> {
         for id in self.subtree(id).await? {
-            // A chat below has no holds.
-            let Some(held) = self.find_workspace(&id).await? else {
-                continue;
-            };
-            if (held.holds.iter()).any(|hold| hold.placed_by == crate::model::HoldPlacer::User) {
+            if self.user_holds(&id).await? {
                 return Ok(true);
             }
         }
