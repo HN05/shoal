@@ -106,7 +106,7 @@ impl Manager {
                     !rules.refuse_holds
                         || !store::exists(
                             tx,
-                            "SELECT 1 FROM workspace_holds WHERE workspace_id=?1 AND placed_by=?2",
+                            "SELECT 1 FROM space_holds WHERE space_id=?1 AND placed_by=?2",
                             params![id, crate::model::HoldPlacer::User],
                         )?,
                     "workspace has holds, which are the user's; ask the user to remove it"

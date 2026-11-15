@@ -1150,7 +1150,7 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
     assert_eq!(removed["holds"], expected);
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     assert_eq!(
-        db.query_row("SELECT count(*) FROM workspace_holds", [], |row| row
+        db.query_row("SELECT count(*) FROM space_holds", [], |row| row
             .get::<_, i64>(0))
             .unwrap(),
         0
@@ -1175,7 +1175,7 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
     wait_removed(&fixture, "missing-held");
     assert!(!git(&fixture.repo, &["branch", "--list", "missing-held"]).is_empty());
     assert_eq!(
-        db.query_row("SELECT count(*) FROM workspace_holds", [], |row| row
+        db.query_row("SELECT count(*) FROM space_holds", [], |row| row
             .get::<_, i64>(0))
             .unwrap(),
         0

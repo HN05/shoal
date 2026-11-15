@@ -585,6 +585,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 184 {
         db.execute_batch(include_str!("events_by_space.sql"))?;
     }
+    if version >= 185 {
+        db.execute_batch(include_str!("space_holds.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -1746,8 +1749,47 @@ fn a_hold_shoal_continue_made_stays_as_an_ordinary_hold() -> Result<()> {
         [],
     )?;
     migrate(&mut db)?;
-    let held: String = db.query_row("SELECT name FROM workspace_holds", [], |r| r.get(0))?;
+    let held: String = db.query_row("SELECT name FROM space_holds", [], |r| r.get(0))?;
     assert_eq!(held, "continue");
+    Ok(())
+}
+
+#[test]
+fn workspace_holds_become_holds_of_their_space() -> Result<()> {
+    let mut db = historical_database(184)?;
+    db.execute(
+        "INSERT INTO workspace_holds(workspace_id,name,reason,created_at,placed_by)
+            VALUES ('workspace','review','Waiting for review',7,'agent')",
+        [],
+    )?;
+    migrate(&mut db)?;
+    let hold = db.query_row(
+        "SELECT space_id,name,reason,created_at,placed_by FROM space_holds",
+        [],
+        |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, i64>(3)?,
+                r.get::<_, String>(4)?,
+            ))
+        },
+    )?;
+    assert_eq!(
+        hold,
+        (
+            "workspace".into(),
+            "review".into(),
+            "Waiting for review".into(),
+            7,
+            "agent".into()
+        )
+    );
+    // The hold goes with its space.
+    db.execute("DELETE FROM spaces WHERE id='workspace'", [])?;
+    let left: i64 = db.query_row("SELECT COUNT(*) FROM space_holds", [], |r| r.get(0))?;
+    assert_eq!(left, 0);
     Ok(())
 }
 

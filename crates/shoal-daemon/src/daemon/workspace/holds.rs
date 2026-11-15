@@ -198,7 +198,7 @@ impl Manager {
             .run(move |db| {
                 store::exists(
                     db,
-                    "SELECT 1 FROM workspace_holds WHERE workspace_id=?1",
+                    "SELECT 1 FROM space_holds WHERE space_id=?1",
                     [id],
                 )
             })
@@ -224,7 +224,7 @@ impl Authority {
         }
         let held = store::exists(
             tx,
-            "SELECT 1 FROM workspace_holds WHERE workspace_id=?1 AND name=?2",
+            "SELECT 1 FROM space_holds WHERE space_id=?1 AND name=?2",
             params![id, name],
         )?;
         let approved = approvals::current(tx, id, &Target::Hold(name.to_owned()), name)?
@@ -251,7 +251,7 @@ fn place(
     authority.ensure(tx, id, name)?;
     insert(tx, id, name, reason, placed_by)?;
     let hold = tx.query_row(
-        &format!("{COLUMNS} WHERE workspace_id=?1 AND name=?2"),
+        &format!("{COLUMNS} WHERE space_id=?1 AND name=?2"),
         params![id, name],
         row,
     )?;
@@ -269,7 +269,7 @@ fn release(
 ) -> Result<()> {
     let placed_by: Option<HoldPlacer> = tx
         .query_row(
-            "SELECT placed_by FROM workspace_holds WHERE workspace_id=?1 AND name=?2",
+            "SELECT placed_by FROM space_holds WHERE space_id=?1 AND name=?2",
             params![id, name],
             |row| row.get(0),
         )
@@ -279,7 +279,7 @@ fn release(
         "hold {name} is the user's; workspace processes release only the holds agents placed"
     );
     tx.execute(
-        "DELETE FROM workspace_holds WHERE workspace_id=?1 AND name=?2",
+        "DELETE FROM space_holds WHERE space_id=?1 AND name=?2",
         params![id, name],
     )?;
     approvals::release(tx, id, &Target::Hold(name.to_owned()), name)?;
@@ -308,18 +308,18 @@ fn insert(
     placed_by: HoldPlacer,
 ) -> Result<()> {
     db.execute(
-        "INSERT INTO workspace_holds(workspace_id,name,reason,created_at,placed_by) VALUES (?1,?2,?3,?4,?5)
-         ON CONFLICT(workspace_id,name) DO NOTHING",
+        "INSERT INTO space_holds(space_id,name,reason,created_at,placed_by) VALUES (?1,?2,?3,?4,?5)
+         ON CONFLICT(space_id,name) DO NOTHING",
         params![id, name, reason, crate::time::UnixTime::now(), placed_by],
     )?;
     Ok(())
 }
 
-const COLUMNS: &str = "SELECT workspace_id,name,reason,created_at,placed_by FROM workspace_holds";
+const COLUMNS: &str = "SELECT space_id,name,reason,created_at,placed_by FROM space_holds";
 
 pub(super) fn list(db: &Connection, id: &SpaceId) -> Result<Vec<WorkspaceHold>> {
     Ok(db
-        .prepare(&format!("{COLUMNS} WHERE workspace_id=?1 ORDER BY name"))?
+        .prepare(&format!("{COLUMNS} WHERE space_id=?1 ORDER BY name"))?
         .query_map([id], row)?
         .collect::<rusqlite::Result<_>>()?)
 }

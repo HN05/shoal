@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, consumed_upgrades, place_owners, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 184;
+pub(super) const SCHEMA_VERSION: i64 = 185;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -462,6 +462,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (182, include_str!("spaces_table.sql"), None),
     (183, include_str!("review_sessions.sql"), None),
     (184, include_str!("events_by_space.sql"), None),
+    (185, include_str!("space_holds.sql"), None),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
