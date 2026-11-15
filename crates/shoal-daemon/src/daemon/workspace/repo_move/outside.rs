@@ -1,7 +1,7 @@
 //! The files of the chats without a repository, which `shoal move root`
 //! moves into the directory that holds the repositories once it is done:
-//! the temporary directory and attached files of each such chat, running,
-//! stopped or removed, whose records then name the configured root, which
+//! the temporary directory, attached files and kept session files of each
+//! such chat, running, stopped or removed, whose records then name the configured root, which
 //! is that directory or links to it.
 use std::path::{Path, PathBuf};
 
@@ -14,7 +14,8 @@ use crate::{daemon::workspace::Manager, fsutil, model::Execution, tmp_dirs};
 use shoal_ids::space_ids::SpaceId;
 
 /// A chat without a repository: its ID and name, the `root_dir` it runs
-/// in, its temporary directory and attached files, where it has them, as
+/// in, its temporary directory, attached files and the session files an
+/// import kept for it, where it has them, as
 /// they resolve before the root changes, and the commands and agents
 /// running in it, which must stop before its files move.
 pub(super) struct OutsideChat {
@@ -23,6 +24,7 @@ pub(super) struct OutsideChat {
     root_dir: PathBuf,
     tmp: Option<PathBuf>,
     files: Option<PathBuf>,
+    sessions: Option<PathBuf>,
     pub(super) running: Vec<Execution>,
 }
 
@@ -33,11 +35,14 @@ impl OutsideChat {
         self.root_dir != root_dir
             || elsewhere(&self.tmp, destination).is_some()
             || elsewhere(&self.files, destination).is_some()
+            || elsewhere(&self.sessions, destination).is_some()
     }
 
     /// The `root_dir` its files are in now, resolved.
     fn source_root(&self) -> Option<PathBuf> {
-        let directory = self.tmp.as_ref().or(self.files.as_ref())?;
+        let directory = (self.tmp.as_ref())
+            .or(self.files.as_ref())
+            .or(self.sessions.as_ref())?;
         Some(directory.parent()?.parent()?.to_owned())
     }
 }
@@ -77,6 +82,7 @@ impl Manager {
             let root_dir = root_dir.unwrap_or_else(|| configured.clone());
             let tmp = tmp_dirs::Layout::outside_repositories(&root_dir, &owner).existing(&id);
             let files = self.outside_files_layout(&root_dir).existing(&id);
+            let sessions = self.outside_sessions_layout(&root_dir).existing(&id);
             let resolved = |path: Option<PathBuf>| {
                 (path.map(std::fs::canonicalize).transpose())
                     .with_context(|| format!("find the files of chat {name}"))
@@ -84,6 +90,7 @@ impl Manager {
             chats.push(OutsideChat {
                 tmp: resolved(tmp)?,
                 files: resolved(files)?,
+                sessions: resolved(sessions)?,
                 running: self.workspace_executions(&id).await?,
                 root_dir,
                 id,
@@ -138,7 +145,9 @@ impl Manager {
         for root in left {
             let tmp = tmp_dirs::Layout::outside_repositories(&root, &self.root_dir_owner());
             let files = self.outside_files_layout(&root);
-            tokio::task::spawn_blocking(move || tmp.remove().and(files.remove())).await??;
+            let sessions = self.outside_sessions_layout(&root);
+            let removed = move || tmp.remove().and(files.remove()).and(sessions.remove());
+            tokio::task::spawn_blocking(removed).await??;
         }
         Ok(())
     }
@@ -154,6 +163,7 @@ impl Manager {
         let owner = self.root_dir_owner();
         let tmp = tmp_dirs::Layout::outside_repositories(destination, &owner);
         let files = self.outside_files_layout(destination);
+        let sessions = self.outside_sessions_layout(destination);
         for chat in chats {
             let name = &chat.name;
             if let Some(source) = elsewhere(&chat.tmp, destination) {
@@ -167,6 +177,12 @@ impl Manager {
                 moved
                     .await
                     .with_context(|| format!("move the files of chat {name}"))?;
+            }
+            if let Some(source) = elsewhere(&chat.sessions, destination) {
+                let moved = move_into(source, sessions.prepare(&chat.id)?);
+                moved
+                    .await
+                    .with_context(|| format!("move the session files of chat {name}"))?;
             }
             let (id, root_dir) = (chat.id.clone(), root_dir.to_owned());
             (self.store)

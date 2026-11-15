@@ -145,15 +145,18 @@ impl Manager {
         Ok((plan, moving))
     }
 
-    /// The directories in `root` that keep the temporary directories and
-    /// attached files of the chats without a repository, where they are
-    /// this Shoal's, which move with the chats and leave the root.
+    /// The directories in `root` that keep the temporary directories,
+    /// attached files and kept session files of the chats without a
+    /// repository, where they are this Shoal's, which move with the chats
+    /// and leave the root.
     fn outside_dirs(&self, root: &Path) -> Vec<PathBuf> {
         let owner = self.root_dir_owner();
         let tmp = crate::tmp_dirs::Layout::outside_repositories(root, &owner);
         let files = self.outside_files_layout(root);
+        let sessions = self.outside_sessions_layout(root);
         (tmp.own_root().into_iter())
             .chain(files.own_root())
+            .chain(sessions.own_root())
             .map(Path::to_owned)
             .collect()
     }

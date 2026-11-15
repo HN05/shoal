@@ -681,7 +681,7 @@ rolls back an incomplete one, deleting only directories with their recorded iden
 does and queues the agents' restores after the move, trusting the new paths
 for them: a stop keeps sessions, which resume by ID from any directory. The
 chats without a repository, which run in `root_dir`, go with the root: their
-agents stop the same way, their temporary directories and attached files move
+agents stop the same way, their temporary directories, attached files and kept session files move
 into the directory that holds the repositories, and their records name the
 configured root, which is that directory or links to it, so a root that
 becomes a link is empty once they have moved. Registration is idempotent by normalized origin URL,

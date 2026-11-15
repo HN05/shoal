@@ -3077,11 +3077,11 @@ operation, a checkout leased as a repository resource, another repository's
 checkout or workspace or Shoal's state inside its directory, or a process
 other than those commands and agents whose working directory is inside it, so
 leave those directories first. A Git command the daemon itself runs there is
-waited for, for up to a minute, before it counts. The temporary directory and attached files of a [master session](#master-session)
+waited for, for up to a minute, before it counts. The temporary directory, attached files and kept imported session files of a [master session](#master-session)
 or any other chat without a repository, running, stopped or removed, move with
 the repositories into the new root, where the chat runs from then on; a running
-one stops and restores as their agents do, and the move deletes the `.tmp` and
-`.attachments` left in the root they left. The move is recorded before anything moves; a failed or
+one stops and restores as their agents do, and the move deletes the `.tmp`,
+`.attachments` and `.sessions` left in the root they left. The move is recorded before anything moves; a failed or
 interrupted move rolls back, or finishes once the directory has arrived, and the
 repository refuses other changes until the next `move root` or daemon start
 completes it. Agent trust for the old paths is removed, and the new paths are
@@ -3938,7 +3938,10 @@ repository. The chats a file carries open again after its space the same way,
 parents first, below their parents where those are there, so a chat's own
 chats open below it. Without `--restore`, the agents of every imported space
 stay stopped and the report names the `shoal restore` that restores them.
-An import that fails before it records
+An import is refused, before it records anything, when a space with the
+package's ID is already here: `shoal rm` removes that space here, or `shoal
+move export --keep` where the package was exported writes a copy, which opens
+under an ID of its own. An import that fails before it records
 anything of the space reports the error code `not_imported`. Workspace
 processes can neither export nor import.
 

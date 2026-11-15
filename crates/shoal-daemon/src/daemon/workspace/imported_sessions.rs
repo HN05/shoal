@@ -182,7 +182,7 @@ impl Manager {
 
     /// The kept session files of the chats without a repository in
     /// `root_dir`, marked as this daemon's.
-    fn outside_sessions_layout(&self, root_dir: &Path) -> Layout {
+    pub(super) fn outside_sessions_layout(&self, root_dir: &Path) -> Layout {
         Layout {
             dir: ShoalDir::outside_repositories(
                 root_dir,
@@ -208,8 +208,9 @@ pub(super) async fn remove_imported_sessions(repo: &Repository) -> Result<()> {
 /// The file beside a workspace's kept session files that lists them.
 const LIST: &str = "files.json";
 
-/// The directory of one repository's kept session files.
-struct Layout {
+/// The directory of one repository's kept session files, or of those of
+/// the chats without a repository.
+pub(super) struct Layout {
     dir: ShoalDir,
 }
 
@@ -228,6 +229,28 @@ impl Layout {
     /// repository directory layout have none until an import reserves it.
     fn of(repo: &Repository) -> Option<Self> {
         ShoalDir::of(repo, Contents::ImportedSessions).map(|dir| Self { dir })
+    }
+
+    /// The directory, when this Shoal created it for its owner.
+    pub(super) fn own_root(&self) -> Option<&Path> {
+        self.dir.is_own().then(|| self.root())
+    }
+
+    /// The directory of the session files kept for the space `id`, when
+    /// this Shoal keeps one there.
+    pub(super) fn existing(&self, id: &SpaceId) -> Option<PathBuf> {
+        let directory = self.root().join(id);
+        (self.dir.is_own() && directory.is_dir()).then_some(directory)
+    }
+
+    /// The new, empty directory of the session files kept for the space
+    /// `id`, creating the marked directory when missing.
+    pub(super) fn prepare(&self, id: &SpaceId) -> Result<PathBuf> {
+        self.dir.create()?;
+        let directory = self.root().join(id);
+        std::fs::create_dir(&directory)
+            .with_context(|| format!("create {}", directory.display()))?;
+        Ok(directory)
     }
 
     /// The session files `files` kept for the workspace `id`, each named by
@@ -258,10 +281,7 @@ impl Layout {
         if copies.is_empty() {
             return Ok(());
         }
-        self.dir.create()?;
-        let directory = self.root().join(id);
-        std::fs::create_dir(&directory)
-            .with_context(|| format!("create {}", directory.display()))?;
+        let directory = self.prepare(id)?;
         let written = copies
             .iter()
             .try_for_each(|(source, destination)| {
@@ -318,7 +338,7 @@ impl Layout {
         Ok(())
     }
 
-    fn remove(&self) -> Result<()> {
+    pub(super) fn remove(&self) -> Result<()> {
         self.dir.remove()
     }
 }

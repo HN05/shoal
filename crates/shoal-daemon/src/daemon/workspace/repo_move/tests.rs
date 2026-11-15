@@ -861,3 +861,40 @@ async fn a_root_move_takes_the_files_of_removed_chats_without_a_repository() -> 
     assert_eq!(fs::read_to_string(&kept[0].path)?, "Plan");
     Ok(())
 }
+
+#[tokio::test]
+async fn a_root_move_takes_the_session_files_kept_for_chats_without_a_repository() -> Result<()> {
+    let (temp, manager, chat, root) = with_master().await?;
+    let selector = SpaceSelector::id(&chat.id);
+    manager.end_executions(&chat.id).await;
+    manager.remove_chat(&selector, None).await?;
+    let record = manager.removed_spaces().await?.remove(0);
+    let contents = temp.path().join("carried");
+    fs::write(&contents, "{}\n")?;
+    let carried = crate::transfer::CarriedSessionFile {
+        file: crate::transfer::SessionFile {
+            agent: "claude".into(),
+            session: "s1".into(),
+            path: "project/s1.jsonl".into(),
+            size: 3,
+        },
+        contents,
+    };
+    // Imported again, the chat keeps them until a caller puts them in place.
+    let import = crate::transfer::SpaceImport {
+        repository: None,
+        bundle: None,
+        prerequisite: None,
+        space: record,
+        copy: false,
+        session_files: vec![carried],
+    };
+    manager.import_space(import).await?;
+
+    manager.move_repositories(Layout::Excluded).await?;
+
+    let kept = (manager.outside_sessions_layout(&root).existing(&chat.id))
+        .context("no session files kept in the new root")?;
+    assert_eq!(fs::read_to_string(kept.join("0"))?, "{}\n");
+    Ok(())
+}
