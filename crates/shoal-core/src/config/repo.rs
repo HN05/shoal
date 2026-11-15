@@ -659,13 +659,41 @@ pub struct IssueConfig {
     pub plan_label: Option<String>,
     /// Marks an issue whose body holds a settled plan.
     pub planned_label: Option<String>,
-    /// Whether linking an issue as assigned adds the account that links it
-    /// to its assignees on the forge.
-    #[option(default = true)]
-    pub assign: Option<bool>,
+    /// Whose accounts Shoal adds to the forge assignees of the issues
+    /// spaces link as assigned.
+    #[option(default = IssueAssign::default())]
+    pub assign: Option<IssueAssign>,
     /// The prefix of the labels that name the areas of the code an issue or
     /// PR changes, which order the agent queue's new workspaces.
     pub area_prefix: Option<String>,
+}
+
+states!(
+    #[derive(Default)]
+    /// Whose accounts an assigned issue's forge assignees take: the agent
+    /// account while an agent works the issue, the user's own login for as
+    /// long as a space links it, both, or neither.
+    IssueAssign {
+        #[default]
+        Agent => "agent",
+        User => "user",
+        Both => "both",
+        Nobody => "none",
+    }
+);
+
+impl IssueAssign {
+    /// Whether the agent account joins the assignees while an agent works
+    /// the issue.
+    pub fn agent(self) -> bool {
+        matches!(self, Self::Agent | Self::Both)
+    }
+
+    /// Whether the user's own login joins the assignees of every assigned
+    /// link.
+    pub fn user(self) -> bool {
+        matches!(self, Self::User | Self::Both)
+    }
 }
 
 impl Issue {

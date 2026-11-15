@@ -30,6 +30,9 @@ struct Fixture {
     refuse: Arc<Mutex<Refuse>>,
 }
 
+/// The config that assigns the user's own login.
+const USER: &str = "[issue]\nassign = \"user\"\n";
+
 impl Fixture {
     async fn new(names: &[&str], assignees: &[&str], config: &str) -> Self {
         Self::start(names, assignees, config, "").await
@@ -151,7 +154,7 @@ fn logins(names: &[&str]) -> Vec<Value> {
 
 #[tokio::test]
 async fn linking_assigns_the_account_once() {
-    let fixture = Fixture::new(&["fix"], &[], "").await;
+    let fixture = Fixture::new(&["fix"], &[], USER).await;
     let workspace = &fixture.workspaces[0];
     assert!(fixture.link(workspace).await.is_empty());
     assert_eq!(fixture.changes(), [json!(["shoal-user"])]);
@@ -162,7 +165,7 @@ async fn linking_assigns_the_account_once() {
 
 #[tokio::test]
 async fn unlinking_takes_back_the_assignee_shoal_added() {
-    let fixture = Fixture::new(&["fix"], &["ann"], "").await;
+    let fixture = Fixture::new(&["fix"], &["ann"], USER).await;
     let workspace = &fixture.workspaces[0];
     fixture.link(workspace).await;
     assert!(fixture.unlink(workspace).await.is_empty());
@@ -174,7 +177,7 @@ async fn unlinking_takes_back_the_assignee_shoal_added() {
 
 #[tokio::test]
 async fn an_assignee_shoal_did_not_add_stays() {
-    let fixture = Fixture::new(&["fix"], &["shoal-user"], "").await;
+    let fixture = Fixture::new(&["fix"], &["shoal-user"], USER).await;
     let workspace = &fixture.workspaces[0];
     fixture.link(workspace).await;
     fixture.unlink(workspace).await;
@@ -183,7 +186,7 @@ async fn an_assignee_shoal_did_not_add_stays() {
 
 #[tokio::test]
 async fn the_assignee_stays_while_another_space_of_the_login_links_the_issue() {
-    let fixture = Fixture::new(&["first", "second"], &[], "").await;
+    let fixture = Fixture::new(&["first", "second"], &[], USER).await;
     let [first, second] = &fixture.workspaces[..] else {
         unreachable!()
     };
@@ -202,7 +205,7 @@ async fn the_assignee_stays_while_another_space_of_the_login_links_the_issue() {
 
 #[tokio::test]
 async fn an_assignee_a_removal_cannot_take_back_notifies_the_user() {
-    let fixture = Fixture::new(&["fix"], &[], "").await;
+    let fixture = Fixture::new(&["fix"], &[], USER).await;
     fixture.refuse(Refuse::Removing);
     let workspace = &fixture.workspaces[0];
     fixture.link(workspace).await;
@@ -224,7 +227,7 @@ async fn an_assignee_a_removal_cannot_take_back_notifies_the_user() {
 
 #[tokio::test]
 async fn a_moved_space_leaves_its_assignee_to_the_other_machine() {
-    let fixture = Fixture::new(&["fix"], &[], "").await;
+    let fixture = Fixture::new(&["fix"], &[], USER).await;
     let workspace = &fixture.workspaces[0];
     fixture.link(workspace).await;
     let manager = &fixture.manager;
@@ -237,25 +240,8 @@ async fn a_moved_space_leaves_its_assignee_to_the_other_machine() {
 }
 
 #[tokio::test]
-async fn a_restored_space_assigns_its_issue_as_the_account_that_had_it() {
-    let agent = "agent_token = \"agent\"\n";
-    let fixture = Fixture::start(&["fix"], &[], "", agent).await;
-    let workspace = &fixture.workspaces[0];
-    let (manager, selector) = (&fixture.manager, SpaceSelector::id(&workspace.id));
-    (manager.set_issue(&selector, &"7".parse().unwrap(), None, Assigner::Agent))
-        .await
-        .unwrap();
-    (manager.remove_workspace(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly))
-        .await
-        .unwrap();
-    let restored = manager.restore_workspace(&selector).await.unwrap();
-    assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
-    assert_eq!(fixture.change_tokens(), ["token agent"; 3]);
-}
-
-#[tokio::test]
 async fn a_restored_space_takes_back_the_assignee_shoal_added_before() {
-    let fixture = Fixture::new(&["fix"], &[], "").await;
+    let fixture = Fixture::new(&["fix"], &[], USER).await;
     let workspace = &fixture.workspaces[0];
     let (manager, selector) = (&fixture.manager, SpaceSelector::id(&workspace.id));
     fixture.link(workspace).await;
@@ -273,7 +259,7 @@ async fn a_restored_space_takes_back_the_assignee_shoal_added_before() {
     );
 }
 
-/// The links of a space whose issue 7 the agent account had, which Shoal
+/// The links of a space whose issue 7 has the user's login, which Shoal
 /// added.
 fn carried(fixture: &Fixture) -> crate::model::SpaceLinks {
     let url = format!("http://{}/team/repo/issues/7", fixture.server.host);
@@ -285,7 +271,7 @@ fn carried(fixture: &Fixture) -> crate::model::SpaceLinks {
         }],
         assignees: vec![IssueAssignee {
             url,
-            account: Assigner::Agent,
+            account: Assigner::User,
             added: true,
         }],
         ..Default::default()
@@ -293,23 +279,10 @@ fn carried(fixture: &Fixture) -> crate::model::SpaceLinks {
 }
 
 #[tokio::test]
-async fn a_relinked_space_assigns_as_the_account_its_links_carry_for_the_user() {
-    let agent = "agent_token = \"agent\"\n";
-    let fixture = Fixture::start(&["fix"], &[], "", agent).await;
+async fn a_scoped_relink_takes_on_no_assignment() {
+    let fixture = Fixture::new(&["fix"], &["shoal-user"], USER).await;
     let workspace = &fixture.workspaces[0];
     let links = carried(&fixture);
-    let warnings = (fixture.manager.relink_space(&workspace.id, &links, None)).await;
-    assert!(warnings.is_empty(), "{warnings:?}");
-    assert_eq!(fixture.change_tokens(), ["token agent"]);
-}
-
-#[tokio::test]
-async fn a_scoped_relink_assigns_as_the_agent_and_takes_on_nothing() {
-    let agent = "agent_token = \"agent\"\n";
-    let fixture = Fixture::start(&["fix"], &["shoal-user"], "", agent).await;
-    let workspace = &fixture.workspaces[0];
-    let mut links = carried(&fixture);
-    links.assignees[0].account = Assigner::User;
     let caller = crate::daemon::scope::Caller {
         space_id: workspace.id.clone(),
         execution: None,
@@ -329,7 +302,7 @@ async fn a_scoped_relink_assigns_as_the_agent_and_takes_on_nothing() {
 
 #[tokio::test]
 async fn a_scoped_relink_checks_its_related_items_as_links_do() {
-    let fixture = Fixture::new(&["fix"], &[], "").await;
+    let fixture = Fixture::new(&["fix"], &[], USER).await;
     let workspace = &fixture.workspaces[0];
     let elsewhere = crate::model::LinkedItem {
         url: "https://github.com/other/repo/issues/9".parse().unwrap(),
@@ -367,7 +340,7 @@ async fn a_scoped_relink_checks_its_related_items_as_links_do() {
 
 #[tokio::test]
 async fn linking_an_issue_others_are_assigned_names_them() {
-    let fixture = Fixture::new(&["fix"], &["ann", "bob"], "").await;
+    let fixture = Fixture::new(&["fix"], &["ann", "bob"], USER).await;
     let workspace = &fixture.workspaces[0];
     let warnings = fixture.link(workspace).await;
     assert_eq!(warnings.len(), 1);
@@ -377,7 +350,7 @@ async fn linking_an_issue_others_are_assigned_names_them() {
 
 #[tokio::test]
 async fn a_refused_assignment_warns_and_keeps_the_link() {
-    let fixture = Fixture::new(&["fix"], &[], "").await;
+    let fixture = Fixture::new(&["fix"], &[], USER).await;
     fixture.refuse(Refuse::Adding);
     let workspace = &fixture.workspaces[0];
     let warnings = fixture.link(workspace).await;
@@ -389,22 +362,22 @@ async fn a_refused_assignment_warns_and_keeps_the_link() {
 }
 
 #[tokio::test]
-async fn an_account_without_a_token_there_assigns_nothing() {
-    let fixture = Fixture::new(&["fix"], &[], "").await;
+async fn an_agents_assignment_adds_the_users_login() {
+    let agent = "agent_token = \"agent\"\n";
+    let fixture = Fixture::start(&["fix"], &[], USER, agent).await;
     let workspace = &fixture.workspaces[0];
     let selector = SpaceSelector::id(&workspace.id);
-    // The agent account has no token of its own on the forge.
     let warnings = (fixture.manager)
         .set_issue(&selector, &"7".parse().unwrap(), None, Assigner::Agent)
         .await
         .unwrap();
     assert!(warnings.is_empty(), "{warnings:?}");
-    assert!(fixture.server.received().is_empty());
+    assert_eq!(fixture.change_tokens(), ["token user"]);
 }
 
 #[tokio::test]
 async fn assigning_off_leaves_assignees_alone() {
-    let fixture = Fixture::new(&["fix"], &[], "[issue]\nassign = false\n").await;
+    let fixture = Fixture::new(&["fix"], &[], "[issue]\nassign = \"none\"\n").await;
     let workspace = &fixture.workspaces[0];
     assert!(fixture.link(workspace).await.is_empty());
     fixture.unlink(workspace).await;

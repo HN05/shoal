@@ -54,10 +54,10 @@ impl Manager {
     }
 
     /// Association is part of opening a workspace, before tracked setup starts.
-    /// The issue joins the space's assigned issues; linking an assigned one
-    /// again records a newly known title. An issue no assignee is recorded
-    /// for, a new one or one whose assignment failed, is assigned on the
-    /// forge to the account of `assigner`; returns the warnings that gives.
+    /// The issue joins the space's assigned issues as `assigner` assigns it;
+    /// linking an assigned one again records a newly known title. An issue
+    /// no assignee is recorded for, a new one or one whose assignment
+    /// failed, is assigned on the forge; returns the warnings that gives.
     pub async fn set_issue(
         &self,
         selector: &SpaceSelector,
@@ -83,26 +83,27 @@ impl Manager {
         self.verify_space(&space).await?;
         let (forge, url) = self.issue_forge(space.origin_path(), input).await?;
         if !self
-            .persist_issue_assignment(space.id(), &url, title)
+            .persist_issue_assignment(space.id(), &url, title, assigner)
             .await?
         {
             // The forge shows it already.
             return Ok(Vec::new());
         }
-        Ok(self.assign_on_forge(&space, &forge, &url, assigner).await)
+        Ok(self.assign_on_forge(&space, &forge, &url).await)
     }
 
-    /// Record the issue `url` as assigned to the space `id`, returning
-    /// whether the forge has yet to show it as the space's.
+    /// Record the issue `url` as assigned to the space `id` by `assigner`,
+    /// returning whether the forge has yet to show it as the space's.
     async fn persist_issue_assignment(
         &self,
         id: &SpaceId,
         url: &ItemRef,
         title: Option<String>,
+        assigner: Assigner,
     ) -> Result<bool> {
         let (id, url) = (id.to_owned(), url.clone());
         self.store
-            .write(move |tx| assign(tx, &id, url.url(), title.as_deref()))
+            .write(move |tx| assign(tx, &id, url.url(), title.as_deref(), assigner))
             .await
     }
 
@@ -182,18 +183,26 @@ impl Manager {
 /// Assign an issue within the caller's transaction, after those already
 /// assigned and in place of its opened or related link, retaining a known
 /// title when none is supplied and recording only a new association as
-/// linked. Returns whether the forge has yet to show the link: no assignee
-/// is recorded for it, as for a new one or one whose assignment failed.
-fn assign(db: &Connection, id: &SpaceId, url: &str, title: Option<&str>) -> Result<bool> {
+/// linked. Once an agent assigns it, it stays an agent's. Returns whether
+/// the forge has yet to show the link: no assignee is recorded for it, as
+/// for a new one or one whose assignment failed.
+fn assign(
+    db: &Connection,
+    id: &SpaceId,
+    url: &str,
+    title: Option<&str>,
+    assigner: Assigner,
+) -> Result<bool> {
     super::ensure_accepts_links(db, id)?;
     let assigned = assigned_urls(db, id)?
         .iter()
         .any(|issue| issue.url() == url);
     let assignee: Option<String> = db.query_row(
-        "INSERT INTO space_issue(space_id,url,title) VALUES (?1,?2,?3)
-         ON CONFLICT(space_id,url) DO UPDATE SET title=COALESCE(excluded.title,title)
+        "INSERT INTO space_issue(space_id,url,title,linked_by) VALUES (?1,?2,?3,?4)
+         ON CONFLICT(space_id,url) DO UPDATE SET title=COALESCE(excluded.title,title),
+            linked_by=CASE WHEN excluded.linked_by=?5 THEN ?5 ELSE linked_by END
          RETURNING assignee",
-        rusqlite::params![id, url, title],
+        rusqlite::params![id, url, title, assigner, Assigner::Agent],
         |row| row.get(0),
     )?;
     if !assigned {

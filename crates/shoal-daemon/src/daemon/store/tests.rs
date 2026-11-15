@@ -594,6 +594,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 187 {
         db.execute_batch(include_str!("space_scopes.sql"))?;
     }
+    if version >= 188 {
+        db.execute_batch(include_str!("issue_agents.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -1685,6 +1688,42 @@ fn migration_keeps_each_space_completion_in_one_table() -> Result<()> {
         |r| r.get(0),
     )?;
     assert_eq!(undone, 0);
+    Ok(())
+}
+
+#[test]
+fn migration_forgets_the_agent_accounts_assignments_and_keeps_who_assigned() -> Result<()> {
+    let mut db = historical_database(187)?;
+    db.execute_batch(
+        "INSERT INTO space_issue(space_id,url,assignee,assigner)
+            VALUES ('agent','i/1','shoal-agent','agent'),('user','i/2','ann','user'),
+                ('off','i/3',NULL,NULL);
+         INSERT INTO issue_assignments(url,login,account)
+            VALUES ('i/1','shoal-agent','agent'),('i/2','ann','user');",
+    )?;
+
+    migrate(&mut db)?;
+
+    let issues = db
+        .prepare("SELECT space_id,assignee,linked_by FROM space_issue ORDER BY url")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<rusqlite::Result<Vec<(String, Option<String>, String)>>>()?;
+    let issue = |space: &str, assignee: Option<&str>, by: &str| {
+        (space.to_owned(), assignee.map(String::from), by.to_owned())
+    };
+    assert_eq!(
+        issues,
+        [
+            issue("agent", None, "agent"),
+            issue("user", Some("ann"), "user"),
+            issue("off", None, "user"),
+        ]
+    );
+    let assignments = db
+        .prepare("SELECT url,login FROM issue_assignments")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<(String, String)>>>()?;
+    assert_eq!(assignments, [("i/2".to_owned(), "ann".to_owned())]);
     Ok(())
 }
 

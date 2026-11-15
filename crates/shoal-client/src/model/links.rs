@@ -19,23 +19,25 @@ pub struct SpaceLinks {
     /// Issues and PRs linked as related to the work, oldest first.
     pub related: Vec<LinkedItem>,
     /// The forge assignees the assigned issues stand for, which a restore
-    /// or a move assigns again as the same account.
+    /// or a move assigns again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assignees: Vec<IssueAssignee>,
 }
 
 shoal_states::states!(
-    /// Whose account assigns an issue: the user's own, for the user's
-    /// terminal, or the agent account, for a scoped caller.
+    /// Who assigns an issue to a space, and so whose account it stands for:
+    /// the user, from the user's terminal, or an agent, as a scoped caller,
+    /// whose agent then works it.
     Assigner {
         User => "user",
         Agent => "agent",
     }
 );
 
-/// The forge assignee an assigned issue stands for: the account that
-/// assigned it, and whether Shoal added that assignee, which it then takes
-/// back once no space links the issue.
+/// The forge assignee an assigned issue stands for: the user's own login,
+/// with whether Shoal added it, which it then takes back once no space links
+/// the issue, or the agent account, which an agent's assignment stands for
+/// while an agent works the issue and Shoal never records as added.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct IssueAssignee {
     pub url: ItemRef,

@@ -803,7 +803,7 @@ takes a free port instead of suggesting one. See
 required_labels = ["type/"]  # Default: []
 plan_label = "needs-plan"    # Default: unset
 planned_label = "planned"    # Default: unset
-assign = true                # Default: true
+assign = "agent"             # "agent", "user", "both" or "none"
 area_prefix = "area/"        # Default: unset
 ```
 
@@ -811,8 +811,10 @@ area_prefix = "area/"        # Default: unset
 with, so `area/` takes any area label; see
 [repository conventions](../../../../../../docs/reference.md#repository-conventions). `plan_label`
 marks issues that need a plan and `planned_label` those whose plan is settled;
-see [planning issues](../../../../../../docs/reference.md#planning-issues). `assign` adds the account
-that links an issue as assigned to the issue's assignees on the forge; see
+see [planning issues](../../../../../../docs/reference.md#planning-issues). `assign` says whose
+accounts join the forge assignees of an issue a space links as assigned: the
+agent account while an agent works the issue, the user's own login for every
+assigned link, both, or none; see
 [linked items](../../../../../../docs/reference.md#linked-items-and-cleanup). `area_prefix` is the
 prefix of the labels that name an issue's areas, so the
 [agent queue](../../../../../../docs/reference.md#queue-order) starts new workspaces whose issues share

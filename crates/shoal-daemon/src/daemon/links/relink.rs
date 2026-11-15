@@ -1,7 +1,7 @@
 //! Linking a space's carried links again, as a restored workspace or a
-//! moved chat brings them: its assigned issues as the account each was
-//! assigned as, with the assignments Shoal had added, and its opened and
-//! related items. The caller links its PRs.
+//! moved chat brings them: its assigned issues as whoever assigned each,
+//! with the user's assignments Shoal had added, and its opened and related
+//! items. The caller links its PRs.
 use crate::client::space_names::SpaceSelector;
 use shoal_ids::space_ids::SpaceId;
 
@@ -17,9 +17,10 @@ use crate::{
 
 impl Manager {
     /// Link `links` to the space `id` again. For the user, each assigned
-    /// issue is assigned on the forge as the account it was, and Shoal takes
-    /// on the assignments it had added; a scoped `caller` assigns as the
-    /// agent account and takes on none. Each failure becomes a warning.
+    /// issue is assigned to the space as it was, by the user or an agent,
+    /// and Shoal takes on the user's assignments it had added; a scoped
+    /// `caller` assigns each as an agent and takes on none. Each failure
+    /// becomes a warning.
     pub(crate) async fn relink_space(
         &self,
         id: &SpaceId,
@@ -81,12 +82,15 @@ impl Manager {
     }
 }
 
-/// The account `carried` records the issue `url` assigned as, else the
-/// one `caller` assigns as.
+/// An agent where `carried` records the agent account for the issue `url`,
+/// as an agent's assignment carries it, else who `caller` assigns as.
 fn assigned_as(carried: &[IssueAssignee], url: &ItemRef, caller: Option<&Caller>) -> Assigner {
-    (carried.iter())
-        .find(|assignee| assignee.url == *url)
-        .map_or_else(|| Assigner::of(caller), |assignee| assignee.account)
+    let agents = (carried.iter())
+        .any(|assignee| assignee.url == *url && assignee.account == Assigner::Agent);
+    match agents {
+        true => Assigner::Agent,
+        false => Assigner::of(caller),
+    }
 }
 
 /// The opened and related items to record again from `links`, each under the
