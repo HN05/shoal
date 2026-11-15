@@ -591,10 +591,17 @@ async fn children_never_keep_their_parent_and_go_with_it() {
         .unwrap();
     std::fs::write(child.path.join("draft.txt"), "draft").unwrap();
     assert!(matches!(
-        manager.cleanup_reason(&parent).await,
+        manager
+            .cleanup_reason(&crate::model::PresentSpace::Workspace(parent.clone()))
+            .await,
         CleanupReason::Idle { .. }
     ));
-    assert_eq!(manager.cleanup_reason(&child).await, CleanupReason::Held);
+    assert_eq!(
+        manager
+            .cleanup_reason(&crate::model::PresentSpace::Workspace(child.clone()))
+            .await,
+        CleanupReason::Held
+    );
 
     let snapshot = manager.cleanup_snapshot(&parent.id).await.unwrap().unwrap();
     manager

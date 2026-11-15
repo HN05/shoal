@@ -37,8 +37,6 @@ impl Manager {
             Err(error) => (None, Some(format!("{error:#}"))),
         };
         let cleanup_error = self.workspace_cleanup_problem(&workspace.id);
-        let cleanup_reason = self.cleanup_reason(&workspace).await;
-        let cleanup_at = self.cleanup_at(&workspace.id).await?;
         let workspace_id = workspace.id.clone();
         let setup_finished = self
             .store
@@ -69,8 +67,6 @@ impl Manager {
             diff,
             diff_error,
             cleanup_error,
-            cleanup_reason,
-            cleanup_at,
             leftover_count,
             leftovers,
             sync,

@@ -1,9 +1,9 @@
-//! Why automatic cleanup keeps a workspace.
+//! Why automatic cleanup keeps a space.
 use crate::space_names::SpaceName;
 use crate::state::WorkspaceState;
 use serde::{Deserialize, Serialize};
 
-/// The first condition that keeps a workspace from automatic cleanup, in the
+/// The first condition that keeps a space from automatic cleanup, in the
 /// order the daemon checks them, or the idle delay when none does.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "reason", rename_all = "snake_case")]

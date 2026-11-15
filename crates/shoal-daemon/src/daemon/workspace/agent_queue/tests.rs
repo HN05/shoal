@@ -932,7 +932,9 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
     assert!(started(&entry.id));
     // A launch that has yet to start keeps its workspace from cleanup.
     assert_eq!(
-        manager.cleanup_reason(&child).await,
+        manager
+            .cleanup_reason(&crate::model::PresentSpace::Workspace(child.clone()))
+            .await,
         crate::model::CleanupReason::QueuedAgent
     );
     // Its worker may attach only the workspace it opens.

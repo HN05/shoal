@@ -43,6 +43,8 @@ impl Manager {
             Ok(permissions) => (Some(permissions), None),
             Err(error) => (None, Some(format!("{error:#}"))),
         };
+        let cleanup_reason = self.cleanup_reason(&space).await;
+        let cleanup_at = self.cleanup_at(space.id()).await?;
         let (space, records, origin) = self.space_detail(space).await?;
         let (prs, issue_states) = self.linked_states(&origin, &records).await;
         let attention = self.attention(&space).await?;
@@ -59,6 +61,8 @@ impl Manager {
             issue_states,
             permissions,
             permissions_error,
+            cleanup_reason,
+            cleanup_at,
             jobs,
             waiting_jobs,
             turn_retry,

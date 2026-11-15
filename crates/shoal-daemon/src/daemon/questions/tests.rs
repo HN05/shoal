@@ -430,7 +430,9 @@ async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
         .await
         .unwrap();
     assert_eq!(
-        manager.cleanup_reason(&workspace).await,
+        manager
+            .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+            .await,
         CleanupReason::Question
     );
     manager
@@ -438,7 +440,9 @@ async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
         .await
         .unwrap();
     assert_eq!(
-        manager.cleanup_reason(&workspace).await,
+        manager
+            .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+            .await,
         CleanupReason::Idle { minutes: 10 }
     );
 
@@ -732,7 +736,9 @@ async fn done_closes_open_questions_for_good() {
 
     assert!(manager.questions(None).await.unwrap().questions.is_empty());
     assert_ne!(
-        manager.cleanup_reason(&workspace).await,
+        manager
+            .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+            .await,
         CleanupReason::Question
     );
     let notifications = manager.notifications(true, 50).await.unwrap();
@@ -879,7 +885,9 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
     assert!(matches!(withdrawn.status, QuestionStatus::Withdrawn { .. }));
     assert!(manager.questions(None).await.unwrap().questions.is_empty());
     assert_ne!(
-        manager.cleanup_reason(&workspace).await,
+        manager
+            .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+            .await,
         CleanupReason::Question
     );
     // The user was never shown it, so nothing tells them about it.

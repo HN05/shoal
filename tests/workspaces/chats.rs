@@ -400,9 +400,11 @@ fn status_shows_a_chat_without_the_parts_a_worktree_has() {
     assert_eq!(status["kind"], "chat", "{status}");
     assert_eq!(status["chat"]["id"], chat.as_str(), "{status}");
     assert_eq!(status["sessions"], serde_json::json!([]), "{status}");
-    for worktree in ["workspace", "executions", "ports", "diff", "cleanup_reason"] {
+    for worktree in ["workspace", "executions", "ports", "diff"] {
         assert_eq!(status.get(worktree), None, "{worktree}: {status}");
     }
+    // Its running agent keeps it from cleanup, as it would a workspace.
+    assert_eq!(status["cleanup_reason"]["reason"], "agent_running", "{status}");
 
     let status = fixture.ok(&["status", &fixture.id("own")]);
     assert_eq!(status["kind"], "workspace", "{status}");

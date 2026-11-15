@@ -76,10 +76,9 @@ async fn completion_cleanup_starts_the_grace_period_only_once_eligible() {
     let cleanup_at = manager.cleanup_at(&workspace.id).await.unwrap().unwrap();
     assert!(cleanup_at >= UnixTime::now() + std::time::Duration::from_secs(599 * 60));
     let status = manager
-        .worktree_status(&SpaceSelector::id(&workspace.id))
+        .space_status(&SpaceSelector::id(&workspace.id))
         .await
-        .unwrap()
-        .0;
+        .unwrap();
     assert_eq!(status.cleanup_at, Some(cleanup_at));
     // Later attempts keep the deadline the first one set.
     manager.sweep_completed().await.unwrap();

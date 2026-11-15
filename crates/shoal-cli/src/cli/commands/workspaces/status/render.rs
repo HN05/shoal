@@ -27,9 +27,7 @@ pub(super) fn render_status(view: &StatusView, json: bool) {
     }
     render_assignment(status, palette);
     render_permissions(status, palette);
-    if let Some(worktree) = status.space.worktree() {
-        render_cleanup(worktree, palette);
-    }
+    render_cleanup(status, palette);
     render_attention(status);
 }
 
@@ -95,8 +93,13 @@ fn render_workspace(status: &WorktreeStatus, palette: Palette) {
     if let Some(error) = &workspace.error {
         outln!("Error:         {}", palette.paint(Style::Error, error));
     }
-    outln!("Holds:         {}", workspace.holds.len());
-    for hold in &workspace.holds {
+    render_holds(&workspace.holds);
+}
+
+/// What keeps the space from cleanup until released.
+fn render_holds(holds: &[crate::model::SpaceHold]) {
+    outln!("Holds:         {}", holds.len());
+    for hold in holds {
         outln!(
             "  {}{}",
             hold.name,
@@ -155,6 +158,7 @@ fn render_chat(chat: &Chat, palette: Palette) {
     render_sleep(chat.sleep);
     render_asleep(chat.asleep.as_ref(), chat.number);
     split::render(&chat.parent, &chat.children);
+    render_holds(&chat.holds);
 }
 
 /// When the repository's default branch last synced with its remote, and
@@ -454,13 +458,17 @@ fn render_pr_watch(status: &SpaceStatus, palette: Palette) {
     }
 }
 
-/// When and why cleanup removes the workspace.
-fn render_cleanup(status: &WorktreeStatus, palette: Palette) {
+/// When and why cleanup removes the space.
+fn render_cleanup(status: &SpaceStatus, palette: Palette) {
     outln!("Cleanup:       {}", status.cleanup_reason);
     if let Some(at) = status.cleanup_at {
         outln!("Grace period:  ends {}", at.local_minutes());
     }
-    if let Some(error) = &status.cleanup_error {
+    let error = status
+        .space
+        .worktree()
+        .and_then(|worktree| worktree.cleanup_error.as_ref());
+    if let Some(error) = error {
         outln!("Auto cleanup:  {}", palette.paint(Style::Warning, error));
     }
 }

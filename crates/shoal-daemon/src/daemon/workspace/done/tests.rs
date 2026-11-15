@@ -1052,12 +1052,19 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
         .await
         .unwrap();
     assert_eq!(
-        manager.cleanup_reason(&dirty).await,
+        manager
+            .cleanup_reason(&crate::model::PresentSpace::Workspace(dirty.clone()))
+            .await,
         CleanupReason::AncestorCompleted {
             workspace: "finished".into()
         }
     );
-    assert_eq!(manager.cleanup_reason(&held).await, CleanupReason::Held);
+    assert_eq!(
+        manager
+            .cleanup_reason(&crate::model::PresentSpace::Workspace(held.clone()))
+            .await,
+        CleanupReason::Held
+    );
     // The leaf goes first, then the workspace it was split from.
     manager.sweep_completed().await.unwrap();
     manager.sweep_completed().await.unwrap();
@@ -1193,7 +1200,9 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
     manager.sweep_completed().await.unwrap();
     assert!(child.path.exists());
     assert!(matches!(
-        manager.cleanup_reason(&child).await,
+        manager
+            .cleanup_reason(&crate::model::PresentSpace::Workspace(child.clone()))
+            .await,
         CleanupReason::Idle { .. }
     ));
 }

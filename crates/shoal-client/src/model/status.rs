@@ -56,6 +56,11 @@ pub struct SpaceStatus {
     /// Why its permissions could not be resolved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permissions_error: Option<String>,
+    /// Why automatic cleanup keeps it now.
+    pub cleanup_reason: CleanupReason,
+    /// When automatic cleanup removes it, while its grace period runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleanup_at: Option<crate::time::UnixTime>,
     /// The workspaces of the CI jobs running for its PR, or a workspace's
     /// branch.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -165,12 +170,6 @@ pub struct WorktreeStatus {
     /// Why the daemon's automatic cleanup fails in this workspace.
     #[serde(default)]
     pub cleanup_error: Option<String>,
-    /// Why automatic cleanup keeps this workspace now.
-    pub cleanup_reason: CleanupReason,
-    /// When automatic cleanup removes the workspace, while its grace period
-    /// runs.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cleanup_at: Option<crate::time::UnixTime>,
     /// How many processes are still running after what started them exited,
     /// as the cleanup sweep last found them.
     #[serde(default)]

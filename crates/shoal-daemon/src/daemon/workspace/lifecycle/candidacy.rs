@@ -9,7 +9,7 @@ use super::Retention;
 use crate::client::space_ids::SpaceId;
 use crate::{
     daemon::cleanup::{Rule, Snapshot, Tree, signals},
-    model::{CleanupReason, PresentSpace, Workspace},
+    model::{CleanupReason, PresentSpace},
     process,
     removal::IdleRestore,
 };
@@ -253,10 +253,10 @@ impl Manager {
         Ok(self.active_at(space.id()).await?.max(stopped_at))
     }
 
-    /// Why automatic cleanup keeps the workspace, or its idle delay when
-    /// nothing does; a failed inspection is reported as the reason.
-    pub async fn cleanup_reason(&self, workspace: &Workspace) -> CleanupReason {
-        self.inspect_cleanup(&PresentSpace::Workspace(workspace.clone()))
+    /// Why automatic cleanup keeps `space`, or its idle delay when nothing
+    /// does; a failed inspection is reported as the reason.
+    pub(crate) async fn cleanup_reason(&self, space: &PresentSpace) -> CleanupReason {
+        self.inspect_cleanup(space)
             .await
             .unwrap_or_else(|error| CleanupReason::InspectionFailed {
                 error: format!("{error:#}"),

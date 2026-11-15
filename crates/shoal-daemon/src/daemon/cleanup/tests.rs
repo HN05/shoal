@@ -306,7 +306,11 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         .create_workspace(&repo.id, "kept".into(), None, None, None)
         .await
         .unwrap();
-    let reason = || async { manager.cleanup_reason(&workspace).await };
+    let reason = || async {
+        manager
+            .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+            .await
+    };
     assert_eq!(reason().await, CleanupReason::Idle { minutes: 10 });
 
     fs::write(workspace.path.join("work"), "work").unwrap();
@@ -375,10 +379,9 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         .await
         .unwrap();
     let status = manager
-        .worktree_status(&SpaceSelector::id(&workspace.id))
+        .space_status(&SpaceSelector::id(&workspace.id))
         .await
-        .unwrap()
-        .0;
+        .unwrap();
     assert_eq!(status.cleanup_reason, CleanupReason::IdleDisabled);
 }
 
@@ -881,7 +884,9 @@ async fn git_state_is_inspected_when_the_idle_timer_starts_and_expires() {
     assert!(workspace.path.exists());
     assert!(!timers.idle.contains_key(&workspace.id));
     assert_eq!(
-        manager.cleanup_reason(&workspace).await,
+        manager
+            .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+            .await,
         CleanupReason::Unpushed { commits: 1 }
     );
 }
@@ -1579,7 +1584,11 @@ async fn a_chat_in_a_workspace_keeps_it_while_it_runs_and_from_idle_cleanup_whil
         .create_workspace(&repo.id, "kept".into(), None, None, None)
         .await
         .unwrap();
-    let reason = || async { manager.cleanup_reason(&workspace).await };
+    let reason = || async {
+        manager
+            .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+            .await
+    };
     let merged = || async { manager.merged_snapshot(&workspace.id).await.unwrap() };
     assert!(merged().await.is_some());
     let chat = manager
@@ -1628,7 +1637,9 @@ async fn requested_cleanup_removes_a_merged_workspace_whose_config_the_format_re
     git(&checkout, &["rm", "-q", ".shoal.toml"]);
     git(&checkout, &["commit", "-m", "New config"]);
 
-    let reason = manager.cleanup_reason(&workspace).await;
+    let reason = manager
+        .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+        .await;
     assert!(matches!(reason, CleanupReason::Idle { .. }), "{reason:?}");
     let all = Selection {
         spaces: Pick::All,

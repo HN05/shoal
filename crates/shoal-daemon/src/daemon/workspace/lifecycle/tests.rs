@@ -1437,11 +1437,15 @@ async fn idle_cleanup_takes_a_disposable_workspace_whatever_it_holds() {
         fs::write(workspace.path.join("draft"), "unsaved").unwrap();
     }
     assert!(matches!(
-        manager.cleanup_reason(&disposable).await,
+        manager
+            .cleanup_reason(&crate::model::PresentSpace::Workspace(disposable.clone()))
+            .await,
         CleanupReason::Idle { .. }
     ));
     assert!(!matches!(
-        manager.cleanup_reason(&kept).await,
+        manager
+            .cleanup_reason(&crate::model::PresentSpace::Workspace(kept.clone()))
+            .await,
         CleanupReason::Idle { .. }
     ));
 }
