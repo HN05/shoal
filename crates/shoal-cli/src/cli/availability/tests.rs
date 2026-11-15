@@ -4,11 +4,7 @@ use super::*;
 use crate::state::WorkspaceState;
 
 /// Every built-in command path whose arguments name a workspace or a space.
-fn space_commands(
-    command: &clap::Command,
-    path: &mut Vec<String>,
-    found: &mut Vec<Vec<String>>,
-) {
+fn space_commands(command: &clap::Command, path: &mut Vec<String>, found: &mut Vec<Vec<String>>) {
     if command
         .get_arguments()
         .any(|arg| matches!(arg.get_id().as_str(), "workspace" | "space"))
