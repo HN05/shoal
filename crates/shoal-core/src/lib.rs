@@ -25,6 +25,7 @@ pub mod git_profile;
 mod happy;
 pub mod hooks;
 pub mod installed;
+pub mod launches;
 pub mod opened_pull;
 pub mod operations;
 pub mod paths;

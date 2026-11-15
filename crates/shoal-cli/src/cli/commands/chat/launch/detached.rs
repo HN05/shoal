@@ -6,13 +6,14 @@ use super::{super::Options, Started};
 use crate::{
     agent::Agent,
     cli::{
-        args::{create::StartArgs, target::StartTarget},
+        args::create::StartArgs,
         commands::chat::{Narrowing, Relaunch, Topic},
         context::Context,
     },
     protocol::ChatStart,
 };
 use shoal_protocol::chats::{QueuedChat, StartedChat};
+use shoal_protocol::launches::StartTarget;
 use shoal_protocol::space_names::SpaceName;
 
 /// The start the daemon carries out for the chat about `topic` with

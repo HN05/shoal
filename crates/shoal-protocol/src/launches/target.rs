@@ -104,9 +104,18 @@ impl fmt::Display for StartTarget {
     }
 }
 
-/// clap parser for [`StartTarget`].
-pub(in crate::cli) fn start_target(input: &str) -> Result<StartTarget, String> {
-    input.parse().map_err(|error| format!("{error:#}"))
+// A launch carries the target as it was typed, which parses back to it.
+impl serde::Serialize for StartTarget {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for StartTarget {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let input = String::deserialize(deserializer)?;
+        input.parse().map_err(serde::de::Error::custom)
+    }
 }
 
 #[cfg(test)]

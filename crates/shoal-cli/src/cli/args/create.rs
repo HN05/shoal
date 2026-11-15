@@ -6,14 +6,18 @@ use clap::{Args, Subcommand};
 use crate::{
     agent::Agent,
     cli::args::{
-        AgentParser, ModelArgs,
-        command_line::CommandLine,
-        issue_input, permission_assignment,
-        target::{StartTarget, start_target},
+        AgentParser, ModelArgs, command_line::CommandLine, issue_input, permission_assignment,
     },
+    config::permissions::PermissionChange,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_protocol::launches::{IssueChoice, Launch, SpaceChoice, StartTarget};
 use shoal_protocol::space_names::SpaceSelector;
+
+/// clap parser for [`StartTarget`].
+fn start_target(input: &str) -> Result<StartTarget, String> {
+    input.parse().map_err(|error| format!("{error:#}"))
+}
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -257,6 +261,53 @@ pub struct StartArgs {
 }
 
 impl StartArgs {
+    /// The launch these ask for, apart from the agent's task and the
+    /// session `--fork` forks, which only this process reads.
+    pub(in crate::cli) fn launch(&self) -> Launch {
+        Launch {
+            target: self.repository.clone(),
+            repository: self.repository_override.clone(),
+            branch: self.branch.clone(),
+            path: self.path.clone(),
+            base: self.base.clone(),
+            git_profile: self.git_profile.clone(),
+            issue: self.issue.clone().map(IssueChoice::from),
+            copy: self.copy.copy.clone().map(SpaceChoice::from),
+            checkpoint: self.copy.checkpoint,
+            skip_setup: self.creation.skip_setup,
+            disposable: self.creation.disposable,
+            in_workspace: self.in_workspace.clone().map(SpaceChoice::from),
+            chat: self.asks_chat(),
+            mode: self.mode.clone(),
+            agent: self.agent.clone(),
+            model: self.model.clone().into(),
+            fork: None,
+            name: self.name.clone(),
+            priority: self.priority,
+            permissions: PermissionChange::combined(&self.permissions).set,
+            parent: self.parent.clone(),
+            blockers: self.add_blocker.clone(),
+            now: self.now,
+            task: Vec::new(),
+        }
+    }
+
+    /// Whether the start continues a chat whatever its mode's kind: one the
+    /// place it opens in starts, or one a flag only a chat's start takes asks
+    /// for, such as a session it continues.
+    pub(in crate::cli) fn asks_chat(&self) -> bool {
+        self.as_chat || self.session.is_some() || self.handoff.is_some()
+    }
+
+    /// The flags these set that only a workspace takes and only this
+    /// process reads, which a [`Launch`] leaves out.
+    pub(in crate::cli) fn terminal_workspace_flags(&self) -> Vec<&'static str> {
+        [("--fork", self.fork), ("--focus", self.focus)]
+            .into_iter()
+            .filter_map(|(flag, set)| set.then_some(flag))
+            .collect()
+    }
+
     /// The `shoal` arguments that parse to these, without
     /// `checked_repository`, which no argument gives.
     pub(in crate::cli) fn command_line(&self) -> Vec<OsString> {

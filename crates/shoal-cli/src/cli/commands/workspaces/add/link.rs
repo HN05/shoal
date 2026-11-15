@@ -9,7 +9,6 @@ use super::{AddOptions, AgentLaunch};
 use crate::{
     agent::Agent,
     cli::{
-        args::target::StartTarget,
         client,
         commands::{issues, review},
         context::Context,
@@ -21,6 +20,7 @@ use crate::{
     protocol::PullHead,
     start_plan::Creation,
 };
+use shoal_protocol::launches::StartTarget;
 
 pub(in crate::cli::commands) struct AddInput {
     pub positional: Option<StartTarget>,

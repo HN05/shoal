@@ -8,11 +8,11 @@ use crate::cli::{
         ConfirmationArgs,
         create::{CreateCommand, StartArgs},
         repository::{RepoCommand, RepositoryCommand},
-        target::StartTarget,
     },
     context::Context,
     ui::{self, Key, KeyBindings},
 };
+use shoal_protocol::launches::StartTarget;
 
 const REGISTER_ENTRY: &str = "register-repository";
 

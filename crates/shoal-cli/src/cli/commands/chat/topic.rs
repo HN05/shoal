@@ -5,14 +5,12 @@ use std::ffi::OsString;
 
 use super::Options;
 use crate::{
-    cli::{
-        agents::ChatRepository,
-        args::{create::StartArgs, target::StartTarget},
-    },
+    cli::{agents::ChatRepository, args::create::StartArgs},
     config::templates,
     forge::items::reference::ItemRef,
     model::{ChatHome, Repository, SpaceLinks, Workspace},
 };
+use shoal_protocol::launches::StartTarget;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// What a chat is about beyond its repository, and how it reopens in a new tab.

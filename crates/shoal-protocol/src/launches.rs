@@ -1,0 +1,154 @@
+//! Agent launches: what a start asks for, which the daemon resolves into
+//! the space it starts in and the agent it queues there.
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
+
+use shoal_ids::{agent_session_ids::AgentSessionId, checkpoint_numbers::CheckpointNumber};
+use shoal_schedule::priority::Priority;
+
+use crate::{
+    agent::{Agent, ModelChoice},
+    config::{modes::ModeName, permissions::PermissionsConfig},
+    forge::items::reference::ItemInput,
+    space_names::{SpaceName, SpaceSelector},
+};
+
+mod target;
+
+pub use target::StartTarget;
+
+/// What `shoal start` takes, as the command line gave it: what the agent
+/// starts on, the space it starts in and how its agent runs. What it leaves
+/// out the daemon decides, such as the mode, the kind of space and the
+/// repository.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Launch {
+    /// The positional argument: a registered repository, or an issue, PR
+    /// or branch it starts on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<StartTarget>,
+    /// The repository `--repo` names, for an issue number or a link.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
+    /// The branch a workspace starts on, as `git switch` takes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    /// The exact directory of a new worktree.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<PathBuf>,
+    /// The ref a new branch starts from, or an existing one compares with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
+    /// The Git profile of a new worktree.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_profile: Option<String>,
+    /// The issue the agent starts on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issue: Option<IssueChoice>,
+    /// The workspace whose files a new workspace copies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy: Option<SpaceChoice>,
+    /// The checkpoint of the copied workspace whose files it copies instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint: Option<CheckpointNumber>,
+    /// Skip a new workspace's setup.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub skip_setup: bool,
+    /// A new workspace whose every removal deletes it whatever it holds.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub disposable: bool,
+    /// The existing workspace the agent starts in instead of a new space:
+    /// its worker, or a chat in its worktree.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "in")]
+    pub in_workspace: Option<SpaceChoice>,
+    /// Start in a chat whatever the mode's kind.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub chat: bool,
+    /// The mode the agent starts in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<ModeName>,
+    /// The agent to start.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<Agent>,
+    /// The model and effort requested over the configured ones.
+    #[serde(default, skip_serializing_if = "ModelChoice::is_empty")]
+    pub model: ModelChoice,
+    /// The session the agent starts from a fork of.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fork: Option<AgentSessionId>,
+    /// The new space's name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<SpaceName>,
+    /// The new space's priority.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Priority>,
+    /// The permissions given to the agent, whatever its mode's.
+    #[serde(default, skip_serializing_if = "PermissionsConfig::is_empty")]
+    pub permissions: PermissionsConfig,
+    /// The space the new one goes below.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<SpaceSelector>,
+    /// The spaces, queued agents and issues the agent waits for.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blockers: Vec<String>,
+    /// Start the agent at once regardless of the agent slots.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub now: bool,
+    /// What the agent is told to do, passed on to it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub task: Vec<String>,
+}
+
+/// The issue a start names.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IssueChoice {
+    /// One picked among the open issues that need a plan, in plan mode.
+    Pick,
+    /// The issue of this number or URL.
+    Named(ItemInput),
+}
+
+impl IssueChoice {
+    /// The issue it names, if it names one.
+    pub fn named(&self) -> Option<&ItemInput> {
+        match self {
+            Self::Pick => None,
+            Self::Named(issue) => Some(issue),
+        }
+    }
+}
+
+impl From<Option<ItemInput>> for IssueChoice {
+    /// `--issue` with a value, else without one.
+    fn from(issue: Option<ItemInput>) -> Self {
+        issue.map_or(Self::Pick, Self::Named)
+    }
+}
+
+/// A space a start names, or the one it is made in.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpaceChoice {
+    /// The workspace the start is made in.
+    Current,
+    Space(SpaceSelector),
+}
+
+impl From<Option<SpaceSelector>> for SpaceChoice {
+    /// A flag such as `--in` with a value, else without one.
+    fn from(space: Option<SpaceSelector>) -> Self {
+        space.map_or(Self::Current, Self::Space)
+    }
+}
+
+impl SpaceChoice {
+    /// The space it names, if it names one.
+    pub fn named(&self) -> Option<&SpaceSelector> {
+        match self {
+            Self::Current => None,
+            Self::Space(space) => Some(space),
+        }
+    }
+}
