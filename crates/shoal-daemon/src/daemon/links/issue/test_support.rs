@@ -9,6 +9,7 @@ use crate::{
 };
 use serde_json::{Value, json};
 use shoal_forge::test_support::Server;
+use shoal_ids::space_ids::SpaceId;
 
 /// Which assignee edits the scripted forge refuses.
 #[derive(Clone, Copy, PartialEq)]
@@ -27,6 +28,7 @@ pub(crate) struct Fixture {
     _root: tempfile::TempDir,
     pub(crate) manager: std::sync::Arc<Manager>,
     pub(crate) server: Server,
+    pub(crate) repository: crate::model::Repository,
     pub(crate) workspaces: Vec<Workspace>,
     refuse: Arc<Mutex<Refuse>>,
 }
@@ -55,11 +57,11 @@ impl Fixture {
         let repository = manager
             .register_repository(path.to_str().unwrap().into(), None, None)
             .await
-            .unwrap()
-            .id;
+            .unwrap();
         let mut workspaces = Vec::new();
         for name in names {
-            let created = manager.create_workspace(&repository, (*name).into(), None, None, None);
+            let created =
+                manager.create_workspace(&repository.id, (*name).into(), None, None, None);
             workspaces.push(created.await.unwrap());
         }
         let assignees = Arc::new(Mutex::new(logins(assignees)));
@@ -112,6 +114,7 @@ impl Fixture {
             _root: root,
             manager,
             server,
+            repository,
             workspaces,
             refuse,
         }
@@ -129,7 +132,12 @@ impl Fixture {
 
     /// Link issue 7 to `workspace` as assigned by `assigner`.
     pub(crate) async fn link_as(&self, workspace: &Workspace, assigner: Assigner) -> Vec<String> {
-        let selector = SpaceSelector::id(&workspace.id);
+        self.link_space(&workspace.id, assigner).await
+    }
+
+    /// Link issue 7 to the space `id` as assigned by `assigner`.
+    pub(crate) async fn link_space(&self, id: &SpaceId, assigner: Assigner) -> Vec<String> {
+        let selector = SpaceSelector::id(id);
         (self
             .manager
             .set_issue(&selector, &"7".parse().unwrap(), None, assigner))

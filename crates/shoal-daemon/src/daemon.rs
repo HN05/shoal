@@ -206,6 +206,12 @@ pub async fn run(
         "progress sections",
         progress::run,
     );
+    spawn_supervised(
+        &mut background,
+        &manager,
+        "agent assignees",
+        links::issue::agent_settles::run,
+    );
     spawn_supervised(&mut background, &manager, "reviews", reviews::run);
     spawn_supervised(&mut background, &manager, "gate", gate::run);
     spawn_supervised(

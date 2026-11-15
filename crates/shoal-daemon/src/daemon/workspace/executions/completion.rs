@@ -10,11 +10,12 @@ use crate::{
     state::{ExecutionState, WorkspaceState},
 };
 
-/// What a verified completion recorded: the demo the execution ran, and
-/// the requests it gave back to the user.
+/// What a verified completion recorded: the demo the execution ran, the
+/// requests it gave back to the user, and the space whose agent it ran.
 pub(super) struct Completed {
     pub demo: Option<String>,
     pub released: Vec<ApprovalRequest>,
+    pub agent_space: Option<SpaceId>,
 }
 
 impl Manager {
@@ -33,15 +34,20 @@ impl Manager {
                 if kind == ExecutionKind::Setup {
                     record_setup_result(tx, &record_id, exit_code, issue.as_deref())?;
                 }
-                let (demo, released) = if complete {
+                let (demo, released, agent_space) = if complete {
                     let demo =
                         super::super::sessions::pending::record_demo(tx, &record_id, &hosts)?;
-                    (demo, release_attended_decisions(tx, &record_id)?)
+                    let released = release_attended_decisions(tx, &record_id)?;
+                    (demo, released, agent_space(tx, &record_id)?)
                 } else {
-                    (None, Vec::new())
+                    (None, Vec::new(), None)
                 };
                 record_execution_end(tx, &record_id, complete)?;
-                Ok(Completed { demo, released })
+                Ok(Completed {
+                    demo,
+                    released,
+                    agent_space,
+                })
             })
             .await
     }
@@ -146,6 +152,17 @@ fn release_attended_decisions(
         Some(space) => release_decided_by(tx, &space),
         None => Ok(Vec::new()),
     }
+}
+
+/// The space whose agent execution `id` runs; none for another execution.
+fn agent_space(tx: &Transaction<'_>, id: &ExecutionId) -> Result<Option<SpaceId>> {
+    Ok(tx
+        .query_row(
+            "SELECT space_id FROM executions WHERE id=?1 AND agent IS NOT NULL",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?)
 }
 
 /// Retain unverified executions for recovery; only verified completion deletes

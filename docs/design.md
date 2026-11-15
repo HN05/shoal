@@ -2379,7 +2379,7 @@ needs no agent; a conflicting revert does, so it is abandoned rather than left
 half done. Which commits the merge added is established from their trees and
 patches, never assumed, since reverting a guess can undo someone else's work. Actions run in the
 daemon, where scope applies: they act as the workspace's agent account, except
-an issue's assignee for a link the user's terminal makes, while
+the user's own login among an issue's assignees, while
 merging, deleting a PR's branch and a review's verdict stay the user's
 decisions unless a permission gives them to a scoped caller: `merge` its
 merges and branch deletions, as the agent account, and `pr_review` its
@@ -2455,18 +2455,27 @@ returns the item as the forge reports it afterwards and records an
 assigned only on request: a workspace's assigned issues are its work, while an issue
 an agent opens is usually follow-up work. Browsing across repositories and review
 tooling stay with clients.
-An assigned issue shows on the forge as being worked on through its assignees,
-since every forge has them and a label would need one per repository: the link
-and unlink paths every `assigned` issue link goes through, removal among them,
-add the account that links it and take it back: the agent account for a scoped
-caller, and the user's own login for a link from the user's own terminal, since
-that shows the user taking the issue on. Shoal records each
-assignment it made, per issue and login, so it takes back only its own and only
-once no space links the issue for that login; a closed issue keeps its assignee.
-A space's links carry each assignee's account and whether Shoal added it, so a
-restore or a move assigns as the same account and keeps Shoal's ownership.
-Assigning never refuses or undoes the link: other assignees and forge failures
-come back as warnings.
+An assigned issue shows on the forge who works it through its assignees, since
+every forge has them and a label would need one per repository. The agent
+account is assigned while an agent works the issue: a space linking it as
+assigned has an agent of its own that runs, is queued, restarts or is asleep, or
+an agent made the link, as for a child a coordinator splits for its subagents,
+and the space's work is not done. It comes off an open issue once none does, at
+`shoal done`, a stop that waits for `shoal restore`, an exit, an unlink or a
+removal, and goes back on when an agent starts or is restored or `done --undo`
+withdraws the completion. Only Shoal assigns the agent account, so Shoal reads the
+forge for it instead of recording it, and settles it in the background, so a
+slow forge holds back no start or stop. The user's own login, under `[issue]
+assign = "user"` or `"both"`, joins on every assigned link, whoever makes it, and
+leaves through the link and unlink paths, removal among them: Shoal records each
+login it added, per issue, so it takes back only its own and only once no space
+links the issue for it, never one the user assigned themselves. A closed issue
+keeps its assignees. A space's links carry whether an agent assigned each issue
+and the user's login Shoal added, so a restore or a move assigns as before and
+keeps Shoal's ownership, and a moved space leaves the agent account to the
+machine it moved to. Assigning never refuses or undoes the link or the
+transition: other assignees and forge failures come back as warnings or
+notifications.
 
 `shoal pr open` pushes to the branch's push remote, then finds or opens the branch's
 PR and assigns it in one daemon request; a push remote on the origin's forge host

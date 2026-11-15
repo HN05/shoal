@@ -117,6 +117,8 @@ pub struct Manager {
     pub(crate) syncs: super::checkout_sync::Syncs,
     /// The spaces whose PRs' progress sections wait for an update.
     pub(crate) publications: super::progress::Publications,
+    /// The spaces whose issues wait for the agent account to be settled.
+    pub(crate) agent_settles: super::links::issue::agent_settles::AgentSettles,
     pub(crate) config_state: config_state::ConfigState,
     pub(crate) paths: Paths,
     /// Arrival order of queued resource and simulator requests.
@@ -183,6 +185,7 @@ impl Manager {
             cleanup_removals: Default::default(),
             syncs: Default::default(),
             publications: Default::default(),
+            agent_settles: Default::default(),
             store: Store::open(paths.database()).await?,
             // Unit tests inject hosts and never discover or close the
             // user's sessions.

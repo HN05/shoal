@@ -296,10 +296,11 @@ does not show refuses the whole review before anything is posted. These
 commands act on the linked item, or on the number or URL given.
 
 `issue open` records the issue as opened by the space, or with `--link`
-assigns it instead. Linking an issue as assigned, by any command, adds the
-agent account, or the user's own login from the user's terminal, to its
-assignees on the forge and warns of anyone else assigned; unlinking it, or
-removing the space, takes back an assignment Shoal made. `--repo OWNER/NAME`, or a repository URL on another forge, opens it
+assigns it instead. An issue a space links as assigned has the agent account
+among its assignees on the forge while an agent works it, from the link or the
+agent's start until `shoal done`, a stop that waits for `shoal restore`, an
+unlink or the space's removal, and linking it warns of anyone else assigned;
+`[issue] assign` also or instead adds the user's own login. `--repo OWNER/NAME`, or a repository URL on another forge, opens it
 in another repository, as the space's `issue_other_repositories` permission
 allows;
 `issue ls` and `pr ls` take `--repo` too. `shoal pr revert [<number>]`

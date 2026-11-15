@@ -728,6 +728,9 @@ impl Manager {
             .record_execution_completion(&id, kind, exit_code, issue)
             .await?;
         self.ask_user_about(&completed.released).await;
+        if let Some(space) = &completed.agent_space {
+            self.agent_settles.request(space);
+        }
         let demo = completed.demo;
         if connections.disconnect(&id).await {
             self.agent_queue.wake();

@@ -8,7 +8,7 @@ use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     client::space_names::SpaceSelector,
-    daemon::{links::space::LinkSpace, workspace::Manager},
+    daemon::{links::space::LinkSpace, notifications::NotificationKind, workspace::Manager},
     execution::recovery,
     forge::items::reference::ItemRef,
     model::Assigner,
@@ -32,6 +32,31 @@ struct AgentRecord {
 }
 
 impl Manager {
+    /// Settle the agent account on the issues the space `id` links as
+    /// assigned, as its agent starts or stops or its work is done or
+    /// resumes. Each failure notifies.
+    pub(crate) async fn settle_agent_assignees(&self, id: &SpaceId) {
+        let settled = async {
+            let space = self.link_space(&SpaceSelector::id(id)).await?;
+            let owner = id.to_owned();
+            let issues = (self.store)
+                .read(move |tx| settled_here(tx, &owner))
+                .await?;
+            anyhow::Ok((self.settle_issue_agents(&space, &issues).await, space))
+        };
+        let (warnings, space) = match settled.await {
+            Ok(settled) => settled,
+            Err(error) => {
+                crate::daemon::log!("agent assignees of {id} not settled: {error:#}");
+                return;
+            }
+        };
+        for warning in warnings {
+            let kind = NotificationKind::UnassignFailed;
+            (self.notify_space(space.name(), id, kind, warning)).await;
+        }
+    }
+
     /// Settle the agent account on each of `issues`, which `space` links as
     /// assigned or just dropped, where the space's `[issue] assign` assigns
     /// it. Returns why each one that could not be settled was not.

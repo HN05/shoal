@@ -4866,21 +4866,26 @@ Linking an issue or PR records its title, which later reads of the item on its
 forge keep current, and workspace lists show the first assigned issue's; when
 the forge cannot be read, the link is recorded without one and a warning names
 the error.
-Linking an open issue as assigned, however the link is made, also adds the
-account that links it to its assignees on the forge: the agent account for a
-scoped caller, the user's own login for the user's terminal, unless
-[`[issue] assign`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#issues) is off or that account has no token of its
-own for the forge. A warning on stderr and in the JSON `warnings` names the
+An open issue a space links as assigned has the accounts
+[`[issue] assign`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#issues) names among its assignees on the forge,
+where that account has a token of its own there. With the default, `"agent"`,
+the agent account is assigned while an agent works the issue: the space has an
+agent of its own that runs, waits in the queue, restarts or is asleep, or an
+agent linked the issue, and the space is not done. Shoal takes it off once no
+space whose agent works the issue links it, after `shoal done`, a stop that
+waits for `shoal restore`, the agent's exit, an unlink or a removal, and puts it
+back when an agent starts, `shoal restore` queues one or `shoal done --undo`
+withdraws the completion. `"user"` adds the user's own login on every assigned
+link, whoever makes it, and Shoal takes it off once no space links the issue,
+if Shoal added it; `"both"` does both, and `"none"` neither. A closed issue
+keeps its assignees. A warning on stderr and in the JSON `warnings` names the
 issue's other assignees, or why the forge did not assign it; the link stands
-either way. When a space drops the link, by unlinking it or being removed,
-Shoal takes off the assignee it added once no other space links the issue for
-the same login; an assignee it did not add, and that of a closed issue, stays.
-A restored space, or one moved to another machine, assigns its issues again as
-the account that had them, and takes back what Shoal added there; the space's
-JSON lists them under `links.assignees`.
-An assignee the forge refuses to take off comes back as a warning, or after a
-removal as an `unassign_failed` notification, naming the
-`shoal issue edit --remove-assignee` command that takes it off.
+either way. A restored space, or one moved to another machine, assigns its
+issues again as before, and takes back the user's login Shoal added there; the
+space's JSON lists them under `links.assignees`.
+An assignee the forge refuses to change comes back as a warning, or else as an
+`unassign_failed` notification, naming the `shoal issue edit` command that
+changes it.
 Assigned PRs accumulate without duplicates, and any PR of the repository can be
 assigned whatever its head branch, such as one pushed from the worktree on
 another branch. Assigned items suppress idle cleanup.

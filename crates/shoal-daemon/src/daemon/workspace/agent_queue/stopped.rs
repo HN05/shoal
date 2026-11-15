@@ -351,6 +351,8 @@ impl Manager {
         self.tell_still_blocked(&id).await;
         let entry = (self.record_stopped_restore(&space, execution, env, now)).await?;
         self.reopen_for_resume(&id).await;
+        // The queued agent works its issues again.
+        self.agent_settles.request(&id);
         Ok(entry)
     }
 

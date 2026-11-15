@@ -42,6 +42,7 @@ impl Manager {
     pub async fn undo_done(&self, selector: &SpaceSelector) -> Result<Completion> {
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         self.verify_worktree(&workspace).await?;
+        let id = workspace.id.clone();
         let completion = self
             .store
             .write(move |tx| {
@@ -50,6 +51,7 @@ impl Manager {
             })
             .await?;
         self.signals.wake_cleanup();
+        self.agent_settles.request(&id);
         Ok(completion)
     }
 
@@ -128,6 +130,7 @@ impl Manager {
         if persisted.progressed {
             self.publications.request(&workspace.id);
         }
+        self.agent_settles.request(&workspace.id);
         let closed = persisted.closed;
         self.forget_last_sessions(&workspace.id);
         // A done assignment needs no agent; only naming the workspace in

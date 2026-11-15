@@ -7,6 +7,7 @@ use std::path::Path;
 use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
 
+pub(crate) mod agent_settles;
 mod agents;
 mod assignees;
 

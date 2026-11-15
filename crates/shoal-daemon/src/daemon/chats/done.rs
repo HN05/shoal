@@ -66,6 +66,7 @@ impl Manager {
         if progressed {
             self.publications.request(&chat.id);
         }
+        self.agent_settles.request(&chat.id);
         if !closed.is_empty() {
             self.signals.question_changed();
         }
@@ -86,9 +87,11 @@ impl Manager {
         let chat = (self.chat_by_id(id).await?).with_context(|| format!("no chat {id}"))?;
         let _guard = self.gates.lock_prs([&chat.id]).await;
         let id = chat.id.clone();
-        (self.store)
+        let completion = (self.store)
             .write(move |tx| done::take_completion(tx, &id)?.context("the chat is not marked done"))
-            .await
+            .await?;
+        self.agent_settles.request(&chat.id);
+        Ok(completion)
     }
 
     /// The HEAD of `chat`'s checkout, which its completion records; empty

@@ -505,6 +505,7 @@ impl Manager {
         running: Duration,
     ) {
         self.record_execution_agent(id, tracked).await;
+        self.agent_settles.request(workspace_id);
         let connections = self.executions.connections().await;
         let Some(stop) = connections.stop_channel(id) else {
             return;

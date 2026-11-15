@@ -1,14 +1,19 @@
 use super::*;
+use crate::client::assignments::Done;
 use crate::daemon::links::issue::test_support::{AGENT_TOKEN, Fixture};
+use crate::daemon::{workspace::ExecutionKind, workspace_files::Attacher};
+use crate::execution::recovery::RecordExt;
 use crate::removal::{InspectionPolicy, UnsavedWork};
+use crate::{client::executions::Stage, execution::TrackedAgent, model::Workspace};
 use serde_json::json;
+use shoal_ids::execution_ids::ExecutionId;
 
 /// A fixture whose agent account has a token, under `config`.
 async fn agents(names: &[&str], assignees: &[&str], config: &str) -> Fixture {
     Fixture::start(names, assignees, config, AGENT_TOKEN).await
 }
 
-async fn remove(fixture: &Fixture, workspace: &crate::model::Workspace) {
+async fn remove(fixture: &Fixture, workspace: &Workspace) {
     let selector = SpaceSelector::id(&workspace.id);
     (fixture.manager)
         .remove_workspace(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
@@ -108,4 +113,114 @@ async fn a_relinked_agents_assignment_puts_the_agent_account_on_again() {
     let warnings = (fixture.manager.relink_space(&workspace.id, &links, None)).await;
     assert!(warnings.is_empty(), "{warnings:?}");
     assert_eq!(fixture.change_tokens(), ["token agent"]);
+}
+
+/// Start a tracked agent in `workspace`, which runs until its execution
+/// finishes.
+async fn run_agent(manager: &Manager, workspace: &Workspace) -> ExecutionId {
+    let execution = manager
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let agent = TrackedAgent::named("claude");
+    let id = execution.plan.id.clone();
+    (manager.track_agent(
+        &id,
+        &agent,
+        &workspace.id,
+        &workspace.name,
+        false,
+        Default::default(),
+    ))
+    .await;
+    id
+}
+
+/// Save the stop of the agent `execution` ran in `workspace`, with a
+/// restore request when Shoal stopped it to restore it on its own.
+fn save_stop(manager: &Manager, workspace: &Workspace, execution: &ExecutionId, asleep: bool) {
+    let record = recovery::Record::new(&TrackedAgent::named("claude"), None, Stage::Stopped, None);
+    let restore = asleep.then(Default::default);
+    recovery::save_stopped(&manager.paths, &workspace.id, execution, record, restore).unwrap();
+}
+
+async fn finish(manager: &Manager, execution: ExecutionId) {
+    (manager.finish_execution(execution, ExecutionKind::Command, Some(0)))
+        .await
+        .unwrap();
+    manager.settle_requested_agents().await;
+}
+
+#[tokio::test]
+async fn an_agent_starting_puts_the_agent_account_on_and_exiting_takes_it_off() {
+    let fixture = agents(&["fix"], &[], "").await;
+    let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
+    fixture.link(workspace).await;
+    let execution = run_agent(manager, workspace).await;
+    manager.settle_requested_agents().await;
+    assert_eq!(fixture.changes(), [json!(["shoal-agent"])]);
+    finish(manager, execution).await;
+    assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
+}
+
+#[tokio::test]
+async fn an_asleep_agent_keeps_the_agent_account() {
+    let fixture = agents(&["fix"], &[], "").await;
+    let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
+    fixture.link(workspace).await;
+    let execution = run_agent(manager, workspace).await;
+    save_stop(manager, workspace, &execution, true);
+    finish(manager, execution).await;
+    assert_eq!(fixture.changes(), [json!(["shoal-agent"])]);
+}
+
+#[tokio::test]
+async fn a_stopped_agent_gives_up_the_issue_an_agent_assigned_until_restored() {
+    let fixture = agents(&["fix"], &[], "").await;
+    let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
+    fixture.link_as(workspace, Assigner::Agent).await;
+    let execution = run_agent(manager, workspace).await;
+    save_stop(manager, workspace, &execution, false);
+    finish(manager, execution.clone()).await;
+    assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.queue_stopped_restore(&selector, &execution, Default::default()))
+        .await
+        .unwrap();
+    manager.settle_requested_agents().await;
+    assert_eq!(fixture.changes()[2], json!(["shoal-agent"]));
+}
+
+#[tokio::test]
+async fn done_takes_the_agent_account_off_and_undoing_it_puts_it_back() {
+    let fixture = agents(&["fix"], &[], "").await;
+    let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
+    fixture.link_as(workspace, Assigner::Agent).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    let done = Done::default();
+    (manager.mark_done(&selector, done, &Attacher::User))
+        .await
+        .unwrap();
+    manager.settle_requested_agents().await;
+    manager.undo_done(&selector).await.unwrap();
+    manager.settle_requested_agents().await;
+    assert_eq!(
+        fixture.changes(),
+        [json!(["shoal-agent"]), json!([]), json!(["shoal-agent"])]
+    );
+}
+
+#[tokio::test]
+async fn a_chats_agent_gives_up_its_issue_once_done() {
+    let fixture = agents(&[], &[], "").await;
+    let manager = &fixture.manager;
+    let repository = Some(&fixture.repository);
+    let chat = crate::daemon::test_support::chat(manager, "plan", "plan", repository, None).await;
+    fixture.link_space(&chat.id, Assigner::User).await;
+    let done = Done::default();
+    (manager.mark_chat_done(&chat.id, done, &Attacher::User))
+        .await
+        .unwrap();
+    manager.settle_requested_agents().await;
+    assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
 }
