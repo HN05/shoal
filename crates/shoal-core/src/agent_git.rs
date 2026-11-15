@@ -54,6 +54,11 @@ impl Launch {
         self.git.extend_from_slice(settings);
     }
 
+    /// Keep only the settings whose key `keep` accepts, in their order.
+    pub(crate) fn retain(&mut self, mut keep: impl FnMut(&str) -> bool) {
+        self.git.retain(|(key, _)| keep(key));
+    }
+
     /// Profile settings follow inherited `GIT_CONFIG_*` entries and take
     /// precedence over every Git config file. Inherited author and committer
     /// variables would override the profile's identity, so they are dropped

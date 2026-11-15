@@ -70,7 +70,8 @@ pub use subscriptions::SubscriptionMethod;
 pub use version::VERSION;
 pub use workspaces::{CommitStart, CopySource, CreationOptions, PullHead, WorkspaceMethod};
 pub use wrapper::{
-    Control, ExecutionEvent, Protection, RESTORE_WAITS, Reattach, default_resumes_when,
+    Control, ExecutionEvent, Protection, RESTORE_WAITS, RESUME_NARROWING, Reattach,
+    default_resumes_when,
 };
 
 #[cfg(test)]

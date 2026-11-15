@@ -13,6 +13,7 @@ use super::{
     takeover,
 };
 use crate::{
+    config::permissions::PermissionsConfig,
     model::{ExecutionPlan, PortReservation},
     paths::{CommandPaths, Paths},
     process,
@@ -25,18 +26,21 @@ pub(super) enum AfterPause {
     Finish,
     /// The daemon resumed the agent: run `command` through `proxy`, from
     /// the same settings, with `ports`, consuming `record` once the restored
-    /// child is registered.
+    /// child is registered, under `narrowing` when the daemon changed it.
     Restart {
         command: Vec<OsString>,
         proxy: Option<crate::proxy::Proxy>,
         ports: Vec<PortReservation>,
         record: Option<PathBuf>,
+        narrowing: Option<PermissionsConfig>,
     },
     /// The daemon resumed the agent, which `installed`, the binary an
-    /// upgrade put in place of this wrapper's, restores from `record`.
+    /// upgrade put in place of this wrapper's, restores from `record`,
+    /// under `narrowing` when the daemon changed it.
     TakeOver {
         installed: PathBuf,
         record: Option<PathBuf>,
+        narrowing: Option<PermissionsConfig>,
     },
 }
 
@@ -97,11 +101,19 @@ async fn await_restore(
     record: Result<PathBuf>,
 ) -> Result<AfterPause> {
     match recovery::wait(link).await? {
-        recovery::Waited::Resume { ports, executable } => {
+        recovery::Waited::Resume {
+            ports,
+            executable,
+            narrowing,
+        } => {
             let record = record.ok();
             eprintln!("shoal: restoring agent session");
             if let Some(installed) = takeover::installed(link, executable) {
-                return Ok(AfterPause::TakeOver { installed, record });
+                return Ok(AfterPause::TakeOver {
+                    installed,
+                    record,
+                    narrowing,
+                });
             }
             let (command, proxy) = recovery
                 .restore_command(paths, &plan.space, record.as_deref())
@@ -111,6 +123,7 @@ async fn await_restore(
                 proxy,
                 ports,
                 record,
+                narrowing,
             })
         }
         recovery::Waited::Cancelled { reason, removed } => {

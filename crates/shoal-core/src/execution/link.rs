@@ -134,6 +134,16 @@ impl Link {
         }
     }
 
+    /// Reattach as an agent given `narrowing`, which it runs under from now on.
+    pub(super) fn keep_narrowing(
+        &mut self,
+        narrowing: crate::config::permissions::PermissionsConfig,
+    ) {
+        if let Some(reattach) = &mut self.reattach {
+            reattach.request.narrowing = narrowing;
+        }
+    }
+
     /// Stop reattaching: the daemon's record no longer names a running child.
     pub(super) fn disarm(&mut self) {
         if let Some(reattach) = &mut self.reattach {

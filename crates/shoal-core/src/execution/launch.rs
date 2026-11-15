@@ -218,15 +218,30 @@ impl TrackedLaunch {
         };
         match pause_agent(&mut self.link, paths, &self.plan, mode, recovery, stop).await? {
             AfterPause::Finish => Ok(false),
-            AfterPause::TakeOver { installed, record } => Err(self
-                .hand_over(paths, mode, &installed, record.as_deref())
-                .await),
+            AfterPause::TakeOver {
+                installed,
+                record,
+                narrowing,
+            } => {
+                // The installed binary prepares the agent's launch again
+                // from what this wrapper hands it.
+                if let Some(narrowing) = narrowing {
+                    self.keep_narrowing(narrowing);
+                }
+                Err(self
+                    .hand_over(paths, mode, &installed, record.as_deref())
+                    .await)
+            }
             AfterPause::Restart {
                 command,
                 proxy,
                 ports,
                 record,
+                narrowing,
             } => {
+                if let Some(narrowing) = narrowing {
+                    self.give_narrowing(paths, narrowing).await?;
+                }
                 // The restore command may name another proxy, or none, or
                 // send its requests elsewhere; what the old one reported goes
                 // with it.
@@ -246,6 +261,35 @@ impl TrackedLaunch {
                 Ok(true)
             }
         }
+    }
+
+    /// Restore the agent under `narrowing`, which the daemon resumed it
+    /// under, as a new wrapper would start it: its pushes go through the
+    /// gate its `push` permission asks for now.
+    async fn give_narrowing(
+        &mut self,
+        paths: &CommandPaths,
+        narrowing: crate::config::permissions::PermissionsConfig,
+    ) -> Result<()> {
+        self.keep_narrowing(narrowing);
+        let (Some(auth), Some(agent)) = (self.auth.as_mut(), &self.agent) else {
+            return Ok(());
+        };
+        let space = SpaceSelector::id(&self.plan.space.id);
+        auth.regate(prepare_push_gate(paths, &space, agent).await?);
+        Ok(())
+    }
+
+    /// Keep `narrowing` as the agent's, which its later recovery records
+    /// and reattachments name.
+    fn keep_narrowing(&mut self, narrowing: crate::config::permissions::PermissionsConfig) {
+        if let Some(agent) = &mut self.agent {
+            agent.narrowing = narrowing;
+        }
+        if let Some(recovery) = &mut self.recovery {
+            recovery.narrowing = narrowing;
+        }
+        self.link.keep_narrowing(narrowing);
     }
 
     /// Continue from `installed`, which restores the agent from `record`.

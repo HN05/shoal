@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 /// The first protocol whose wrappers read [`Control::RestoreWaits`].
 pub const RESTORE_WAITS: u32 = 174;
 
+/// The first protocol whose wrappers restore their agent under the
+/// narrowing a [`Control::Resume`] gives.
+pub const RESUME_NARROWING: u32 = 241;
+
 /// A wrapper's request to restore its execution connection after the daemon
 /// went away. It is permanent: daemons accept it at every protocol version, so
 /// wrappers from older releases can reattach after an upgrade. Add fields only
@@ -131,6 +135,11 @@ pub enum Control {
         /// protocol. Older daemons leave it out.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         executable: Option<crate::executions::FileIdentity>,
+        /// The `--permission` narrowing the agent restores under in place of
+        /// the one it ran with, which only wrappers of [`RESUME_NARROWING`]
+        /// and later read.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        narrowing: Option<crate::config::permissions::PermissionsConfig>,
     },
     Finished {
         complete: bool,

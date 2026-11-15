@@ -66,6 +66,15 @@ pub(super) async fn fetch_command_key(
 }
 
 impl AgentLaunch {
+    /// Hold back the agent's pushes through `gate` in place of the one it
+    /// launched with.
+    pub(super) fn regate(&mut self, gate: crate::push_gate::Launch) {
+        self.git
+            .retain(|key| !crate::push_gate::is_rewrite(key.as_ref()));
+        self.git.add(gate.settings());
+        self.push_gate = gate;
+    }
+
     /// Start the agent's proxy for its launch as `command` in `directory`,
     /// with the workspace's `environment`, which its key may come from.
     pub(super) async fn start_proxy(
