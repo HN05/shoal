@@ -317,6 +317,22 @@ async fn a_launch_waiting_in_the_agent_queue_overlaps_until_it_ends() {
 }
 
 #[tokio::test]
+async fn overlap_outlasts_a_history_longer_than_it_keeps() {
+    let (_temp, manager, repo) = with_triggers(&overlapping("skip")).await;
+    let last = chat(&manager, "last", "chat", Some(&repo), None).await;
+    started_in(&manager, &repo, "check", &last.id).await;
+    for _ in 0..=super::state::HISTORY {
+        let skipped = fire(&manager, &repo, "check").await;
+        assert_eq!(skipped.unwrap().outcome, RunOutcome::Skipped);
+    }
+
+    let run = fire(&manager, &repo, "check").await;
+
+    assert_eq!(run.unwrap().outcome, RunOutcome::Skipped);
+    assert!(started_tasks().is_empty());
+}
+
+#[tokio::test]
 async fn overlap_parallel_launches_at_once() {
     let (_temp, manager, repo) = with_triggers(&overlapping("parallel")).await;
     let last = chat(&manager, "last", "chat", Some(&repo), None).await;

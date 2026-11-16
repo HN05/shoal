@@ -9,8 +9,9 @@ use shoal_protocol::triggers::{RunOutcome, TriggerRun};
 
 use crate::time::UnixTime;
 
-/// How many runs a trigger's history keeps.
-const HISTORY: i64 = 50;
+/// How many runs a trigger's history keeps, besides its queued run and
+/// its last started one, which overlap reads.
+pub(super) const HISTORY: i64 = 50;
 
 /// A trigger's runtime state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,7 +142,8 @@ pub(super) fn fired(db: &Connection, scope: &str, name: &str, at: UnixTime) -> R
 }
 
 /// Add `run` to the trigger's history, with what a queued run waits to
-/// launch, and drop the oldest runs beyond the history.
+/// launch, and drop the oldest runs beyond the history but the queued run
+/// and the last started one.
 pub(super) fn record(
     db: &Connection,
     scope: &str,
@@ -166,9 +168,20 @@ pub(super) fn record(
         ],
     )?;
     db.execute(
-        "DELETE FROM trigger_runs WHERE scope=?1 AND name=?2 AND outcome<>?4 AND id NOT IN (
-            SELECT id FROM trigger_runs WHERE scope=?1 AND name=?2 ORDER BY id DESC LIMIT ?3)",
-        params![scope, name, HISTORY, RunOutcome::Queued],
+        "DELETE FROM trigger_runs WHERE scope=?1 AND name=?2 AND outcome<>?4
+            AND id NOT IN (
+                SELECT id FROM trigger_runs WHERE scope=?1 AND name=?2 ORDER BY id DESC LIMIT ?3)
+            AND id NOT IN (
+                SELECT id FROM trigger_runs WHERE scope=?1 AND name=?2 AND outcome=?5
+                    AND (space_id IS NOT NULL OR queue_entry IS NOT NULL)
+                ORDER BY id DESC LIMIT 1)",
+        params![
+            scope,
+            name,
+            HISTORY,
+            RunOutcome::Queued,
+            RunOutcome::Started
+        ],
     )?;
     Ok(())
 }
