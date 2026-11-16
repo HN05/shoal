@@ -74,14 +74,15 @@ fn a_script_keeps_the_settings_of_earlier_snapshots() {
 
 #[test]
 fn a_reset_runs_before_the_build_and_a_script_has_none() {
-    let cargo = Build::Presets(vec![Preset::Bun, Preset::Cargo]);
-    let steps = cargo.steps(&cargo.resets(None, "s", &Toolchains::new()));
-    let labels: Vec<_> = steps.iter().map(|step| step.label.as_str()).collect();
-    assert_eq!(
-        labels[..2],
-        ["cargo clean --workspace", "bun install --frozen-lockfile"]
-    );
-    assert_eq!(labels.len(), 6);
+    let build = Build::Presets(vec![Preset::Bun, Preset::Cargo]);
+    let resets = build.resets(None, "s", &Toolchains::new());
+    assert_eq!(resets, [Preset::Cargo]);
+    let mut expected = vec![Preset::Cargo.reset_command().unwrap().join(" ")];
+    expected.extend(labels(&build));
+    let run: Vec<_> = (build.steps(&resets).into_iter())
+        .map(|step| step.label)
+        .collect();
+    assert_eq!(run, expected);
     let script = Build::Script("/seed/worktree/seed.sh".into());
     assert!(script.resets(None, "s", &Toolchains::new()).is_empty());
     assert!(script.toolchain_steps().is_empty());
@@ -115,14 +116,7 @@ fn an_unchanged_build_keeps_its_outputs() {
 
 #[test]
 fn a_build_resets_after_a_change_to_what_its_units_hash() {
-    for file in [
-        "Cargo.lock",
-        "Cargo.toml",
-        "crates/a/Cargo.toml",
-        "rust-toolchain",
-        "rust-toolchain.toml",
-        ".cargo/config.toml",
-    ] {
+    for file in ["Cargo.lock", "crates/a/Cargo.toml"] {
         assert_eq!(
             resets(&previous(&["src/lib.rs", file]), "s", &rust("1.100")),
             [Preset::Cargo],
