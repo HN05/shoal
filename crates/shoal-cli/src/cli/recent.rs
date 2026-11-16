@@ -16,7 +16,6 @@ use crate::{
     fsutil::atomic::{Permissions, ReplaceOptions},
     model::Chat,
     paths::Paths,
-    sessions::HostName,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -187,19 +186,6 @@ pub async fn record_chat_attach(ctx: &Context, selector: &SpaceSelector) {
     if let Some(chat) = chats.iter().find(named) {
         let _ = History::update(&ctx.paths, |history| history.record(ATTACH, &chat.id));
     }
-}
-
-/// The chat that runs in the session `session` of `host`, which a chat
-/// Shoal started there records as its place once it runs; none before or
-/// when the chats cannot be listed.
-pub async fn session_chat(ctx: &Context, host: HostName, session: &str) -> Option<Chat> {
-    let chats = crate::client::spaces::list(&ctx.paths)
-        .await
-        .map(shoal_protocol::model::Spaces::into_running_chats)
-        .ok()?;
-    let places = crate::cli::commands::sessions::chat_places(&ctx.paths, &chats).await;
-    let (id, _) = (places.iter()).find(|(_, place)| place.host == host && place.id() == session)?;
-    chats.into_iter().find(|chat| chat.id == *id)
 }
 
 /// Failing to keep the history never fails the command.

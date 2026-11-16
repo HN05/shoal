@@ -258,7 +258,8 @@ pub(in crate::cli) async fn start_chat(
     };
     if let Some(attaches) = attaches {
         let session = attaches.run_chat(&start).await?;
-        let chat = recent::session_chat(ctx, host.host.name(), &session).await;
+        let chat =
+            crate::cli::commands::sessions::session_chat(ctx, host.host.name(), &session).await;
         // Before the chat records its session, `-` is where it returns to.
         let space = chat.as_ref().map(|chat| chat.number.to_string());
         let space = space.as_deref().unwrap_or(SpaceSelector::PREVIOUS);

@@ -17,7 +17,7 @@ use crate::{
     client::connection::CommandPaths,
     model::{Chat, Inspection},
     protocol::{ConfigTarget, Protection},
-    sessions::Origin,
+    sessions::{HostName, Origin},
     terminal::Session,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -387,6 +387,23 @@ pub(in crate::cli) async fn chat_places(
         .chain(created)
         .filter(|(id, _)| chats.iter().any(|chat| chat.id == *id))
         .collect()
+}
+
+/// The chat that runs in the session `session` of `host`, which a chat
+/// Shoal started there records as its place once it runs; none before or
+/// when the chats cannot be listed.
+pub(in crate::cli) async fn session_chat(
+    ctx: &Context,
+    host: HostName,
+    session: &str,
+) -> Option<Chat> {
+    let chats = crate::client::spaces::list(&ctx.paths)
+        .await
+        .map(shoal_protocol::model::Spaces::into_running_chats)
+        .ok()?;
+    let places = chat_places(&ctx.paths, &chats).await;
+    let (id, _) = (places.iter()).find(|(_, place)| place.host == host && place.id() == session)?;
+    chats.into_iter().find(|chat| chat.id == *id)
 }
 
 /// The only running chat of the registered checkout the current directory
