@@ -1089,8 +1089,8 @@ start = "acquire"              # Or "setup"
 it the repository's workspaces have none. Each port in `ports` is reserved as
 `shoal acquire port` reserves it, so its `[ports.<name>]` table applies, and
 the project reads it from the port's variable, such as `${SHOAL_PORT_DB}`.
-`start = "setup"` starts the project with setup, before the workspace is
-ready, instead of on `shoal acquire containers`. See
+`start = "setup"` starts the project once setup readies the workspace, before
+its post-setup hook and agent, instead of on `shoal acquire containers`. See
 [containers](../../../../../../docs/reference.md#containers).
 
 ### Approvals

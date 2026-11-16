@@ -1,6 +1,7 @@
 //! Starting a workspace's containers without `shoal acquire containers`,
-//! where its repository sets `start = "setup"`: with its setup, before it
-//! is ready, and before its agent starts.
+//! where its repository sets `start = "setup"`: once setup readies the
+//! workspace, before its post-setup hook and agent, and before an agent
+//! starts there.
 use anyhow::{Result, anyhow};
 
 use super::{ContainerAcquisition, Starter};

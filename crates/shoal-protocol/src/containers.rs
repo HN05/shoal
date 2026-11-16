@@ -23,7 +23,8 @@ impl ContainerRuntime {
 states!(
     #[derive(Default)]
     /// When a workspace's project starts: on `shoal acquire containers`, or
-    /// with its setup, before it is ready.
+    /// once setup readies the workspace, before its post-setup hook and
+    /// agent.
     ContainerStart {
         #[default]
         Acquire => "acquire",

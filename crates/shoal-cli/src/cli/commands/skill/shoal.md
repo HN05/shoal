@@ -740,8 +740,9 @@ and returns its services with the ports they published; repeating it returns
 the running project. Exit 2 means a port it reserves waits for approval or its
 preferred port is taken. `release containers` stops them, keeping their volumes
 and ports, and removing the workspace removes them with their volumes. With
-`start = "setup"` they start with setup, before the workspace is ready, and an
-agent starting there starts them when they are stopped. Chats have none.
+`start = "setup"` they start once setup readies the workspace, before its
+post-setup hook and agent, and an agent starting there starts them when they
+are stopped. Chats have none.
 
 ## Secrets
 

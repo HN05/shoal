@@ -6211,15 +6211,17 @@ runtime lists them; repeating it returns the running project. `release
 containers` runs `compose stop`, keeping the volumes and the port
 reservations, and the next acquire starts the same project again.
 
-With `start = "setup"`, setup starts the project after its command, before the
-workspace is ready; a failure fails setup, and `shoal setup` retries. The
+With `start = "setup"`, setup starts the project once its command readies the
+workspace, before the post-setup hook and the agent that waits for setup; a
+failure marks the workspace failed, and `shoal setup` retries. The
 project is then the workspace's own agent's, once it starts, else whoever
 created the workspace's. An agent that starts in such a workspace while the
 project is stopped starts it first.
 
 The project is a [lease](#leases): an agent's stops when the agent does, the
-user's runs until released, and running containers keep the workspace from
-automatic removal. Removal runs `compose down --volumes --remove-orphans` by
+user's runs until released, and a project that is not stopped keeps the
+workspace from automatic removal, since a failed `up` can leave some services
+running. Removal runs `compose down --volumes --remove-orphans` by
 the project's name, after `hooks.pre_remove`, so a deleted worktree or a
 changed file still removes it; a failure keeps the workspace. Checkpoints keep
 no volume data: a restored workspace starts fresh containers. The record
