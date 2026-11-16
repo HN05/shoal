@@ -229,7 +229,8 @@ async fn select_held(
         .filter(|request| request.space_id == id && request.active)
         .filter_map(requested);
     let mut selected = Vec::new();
-    let held = ports.chain(simulators).chain(containers).chain(resources);
+    // Containers stop before the ports they bind go back to the pool.
+    let held = containers.chain(ports).chain(simulators).chain(resources);
     for held in held.chain(requests) {
         if matches_kind(&held, kind.as_ref()) && !selected.contains(&held) {
             selected.push(held);
