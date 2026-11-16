@@ -11,12 +11,14 @@ use crate::{
     model::Workspace,
     state::WorkspaceState,
 };
-use shoal_protocol::{acquirers::Acquirer, space_names::SpaceSelector};
+use shoal_protocol::{acquirers::Acquirer, containers::ContainerState, space_names::SpaceSelector};
 
 impl Manager {
     /// Start the containers of `selector`'s workspace after its setup
-    /// command, for its own agent when `for_agent`, else for `caller`, who
-    /// created it. A failure fails the workspace's setup.
+    /// command unless they run, which leaves them to whoever holds them: for
+    /// its own agent when `for_agent` or an agent launch waits there, as one
+    /// does for a retried setup, else for `caller`, who created it. A
+    /// failure fails the workspace's setup.
     pub async fn set_up_containers(
         &self,
         selector: &SpaceSelector,
@@ -24,9 +26,10 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
-        if !self.starts_with_setup(&workspace).await? {
+        if !self.starts_with_setup(&workspace).await? || self.containers_run(&workspace).await? {
             return Ok(());
         }
+        let for_agent = for_agent || self.has_queued_launch(&workspace.id).await?;
         // The agent takes the project over when it starts.
         let acquirer = match for_agent {
             true => Acquirer::User,
@@ -65,6 +68,12 @@ impl Manager {
         };
         let started = self.start_containers(&workspace, starter, caller).await;
         started.and_then(started_or_refused)
+    }
+
+    /// Whether the project of `workspace` runs.
+    async fn containers_run(&self, workspace: &Workspace) -> Result<bool> {
+        let recorded = self.container_project(&workspace.id).await?;
+        Ok(recorded.is_some_and(|recorded| recorded.project.state == ContainerState::Running))
     }
 
     /// Whether the repository of `workspace` starts its containers with

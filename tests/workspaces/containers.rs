@@ -319,3 +319,33 @@ fn the_workspaces_agent_takes_over_the_project_setup_started_for_it() {
         ["up", "stop", "up", "stop"]
     );
 }
+
+#[test]
+fn a_retried_setup_leaves_the_project_to_the_agent_that_waited_for_it() {
+    let fixture = with_containers(SETUP);
+    install_test_script(
+        fixture.root.path().join("bin/claude"),
+        format!(
+            "#!/bin/sh\n'{}' leases containers >\"$HOME/agent-saw.tmp\"\nmv \"$HOME/agent-saw.tmp\" \"$HOME/agent-saw\"\n",
+            support::shoal_binary()
+        ),
+    );
+    fs::write(fixture.root.path().join("compose-fail"), "up").unwrap();
+    let failed = fixture.run(&[
+        "start",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "worker",
+        "--agent",
+        "claude",
+    ]);
+    assert!(!failed.status.success(), "{}", printed(&failed));
+
+    fs::remove_file(fixture.root.path().join("compose-fail")).unwrap();
+    fixture.ok(&["setup", &fixture.id("worker")]);
+    let saw = wait_for("the waiting agent to start", || {
+        fs::read_to_string(fixture.root.path().join("agent-saw")).ok()
+    });
+    let saw: Value = serde_json::from_str(&saw).unwrap();
+    assert_eq!(saw["projects"][0]["acquirer"]["kind"], "agent");
+}
