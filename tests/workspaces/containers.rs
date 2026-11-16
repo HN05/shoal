@@ -269,6 +269,13 @@ fn containers_that_do_not_start_fail_setup_until_it_is_retried() {
         fixture.ok(&["status", &space])["workspace"]["state"],
         "failed"
     );
+    // What the failed `up` started stops with it, since no release can.
+    let listed = fixture.ok(&["leases", "containers", "--space", &space]);
+    assert_eq!(listed["projects"][0]["state"], "stopped");
+    assert_eq!(
+        commands(&fixture, &listed["projects"][0]["project"]),
+        ["up", "stop"]
+    );
 
     fs::remove_file(fixture.root.path().join("compose-fail")).unwrap();
     fixture.ok(&["setup", &space]);

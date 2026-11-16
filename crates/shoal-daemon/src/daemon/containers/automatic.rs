@@ -42,6 +42,7 @@ impl Manager {
         };
         let started = self.start_containers(&workspace, starter, caller).await;
         if let Err(error) = started.and_then(started_or_refused) {
+            self.stop_failed_containers(&workspace.id).await;
             let message = format!("containers did not start: {error:#}; retry with shoal setup");
             (self.set_state(&workspace.id, WorkspaceState::Failed, Some(message))).await?;
             return Err(error);

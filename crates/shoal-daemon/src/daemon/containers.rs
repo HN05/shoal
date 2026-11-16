@@ -14,6 +14,7 @@ use records::Recorded;
 
 use super::{
     allocation::Allocation,
+    log,
     ports::{self, PortRequest},
     scope::Caller,
     workspace::Manager,
@@ -311,6 +312,28 @@ impl Manager {
         })?;
         let id = workspace.id.clone();
         self.store.write(move |tx| records::delete(tx, &id)).await
+    }
+
+    /// Stop the services a failed `up` left of the project of `workspace`,
+    /// which no release can stop while setup's failure leaves the workspace
+    /// unready; a stop that fails is only logged, and removal still takes
+    /// the project down.
+    pub(crate) async fn stop_failed_containers(&self, workspace: &SpaceId) {
+        let _gate = self.gates.lock_containers(workspace).await;
+        let stopped = async {
+            let Some(mut recorded) = self.container_project(workspace).await? else {
+                return Ok(());
+            };
+            if recorded.project.state != ContainerState::Failed {
+                return Ok(());
+            }
+            Compose::of(&recorded.project).stop().await?;
+            recorded.project.state = ContainerState::Stopped;
+            self.save_containers(&recorded).await
+        };
+        if let Err(error) = stopped.await {
+            log!("the failed containers of {workspace} were not stopped: {error:#}");
+        }
     }
 
     /// Make the project of `workspace` the user's.
