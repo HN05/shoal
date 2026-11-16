@@ -413,3 +413,29 @@ async fn an_agent_ending_during_a_stop_releases_its_leases_once_the_stop_ends() 
     manager.release_leases_of_ended_executions().await.unwrap();
     assert_eq!(fixture.permits().await, []);
 }
+
+/// A release another resource operation holds off, such as a hook, stays
+/// the agent's and goes on the next pass, rather than becoming the user's.
+#[tokio::test]
+async fn a_release_a_busy_resource_operation_holds_off_waits_for_the_next_pass() {
+    let fixture = Fixture::new(POOL).await;
+    let (execution_id, caller) = fixture.agent().await;
+    fixture.acquire("agent", Some(&caller)).await;
+    let manager = &fixture.manager;
+    let hook = crate::daemon::workspace::GuardMode::Exclusive;
+    let hook = manager.gates.resource_guard(&fixture.workspace.id, hook);
+    let hook = hook.unwrap();
+
+    manager.end_test_execution(execution_id.clone()).await;
+    let agent = Acquirer::Agent { execution_id };
+    assert_eq!(fixture.permits().await, [permit("agent", &agent)]);
+
+    drop(hook);
+    manager.release_leases_of_ended_executions().await.unwrap();
+    assert_eq!(fixture.permits().await, []);
+    let notices = manager.notifications(false, 10).await.unwrap();
+    assert!(
+        (notices.iter()).all(|notice| notice.kind != NotificationKind::ReleaseFailed),
+        "no release failed"
+    );
+}

@@ -5,7 +5,7 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::protocol::{ErrorCode, Exit};
 use tokio::sync::{
@@ -61,6 +61,19 @@ pub(crate) enum ResourceGuard {
     Operation { _guard: OwnedRwLockReadGuard<()> },
     Hook { _guard: OwnedRwLockWriteGuard<()> },
 }
+
+/// Another resource operation in the workspace holds its resource guard,
+/// such as a hook, so one that needs it fails now and may run once it ends.
+#[derive(Debug)]
+pub(crate) struct ResourcesBusy;
+
+impl std::fmt::Display for ResourcesBusy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("workspace resource operation is in progress; retry when its hook finishes")
+    }
+}
+
+impl std::error::Error for ResourcesBusy {}
 
 /// The daemon holds back new work until it exits: a restart's next daemon
 /// takes the request, which [`ErrorCode::Exiting`] tells its client, while
@@ -365,7 +378,7 @@ impl Gates {
                 .try_read_owned()
                 .map(|guard| ResourceGuard::Operation { _guard: guard }),
         };
-        guard.context("workspace resource operation is in progress; retry when its hook finishes")
+        guard.map_err(|_| ResourcesBusy.into())
     }
 
     /// Hold the PR gates of every workspace in `ids`, which order a

@@ -10,7 +10,12 @@ use shoal_ids::space_ids::SpaceId;
 
 #[cfg(test)]
 use super::allocation::Allocation;
-use super::{log, resources, scope::Caller, workspace::Manager};
+use super::{
+    log, resources,
+    scope::Caller,
+    workspace::{Manager, ResourcesBusy},
+};
+use crate::refusal::Reason;
 use crate::{model::Workspace, state::WorkspaceState};
 use shoal_protocol::{
     acquirers::Acquirer, demos::Launch, notifications::NotificationKind, space_names::SpaceSelector,
@@ -183,9 +188,10 @@ impl Manager {
     }
 
     /// Release `lease` as `shoal release` does. One in a workspace that is
-    /// not ready waits until it is, since a release cannot overlap another
-    /// lifecycle operation, or goes with its removal. A failed release
-    /// hands the lease to the user, so a failing hook is not retried.
+    /// not ready, or whose resources another operation holds, waits for the
+    /// next pass, since a release cannot overlap them, or goes with the
+    /// workspace's removal. A failed release hands the lease to the user, so
+    /// a failing hook is not retried.
     async fn release_acquired_lease(&self, lease: Acquired) {
         let workspace = match self.workspace_by_id(&lease.workspace).await {
             Ok(workspace) if workspace.state == WorkspaceState::Ready => workspace,
@@ -206,8 +212,12 @@ impl Manager {
                 (self.release_resource(&selector, pool.clone(), name.clone())).await
             }
         };
-        if let Err(error) = released {
-            self.hand_to_user(&workspace, &lease, &error).await;
+        match released {
+            Ok(()) => {}
+            Err(error) if waits(&error) => {
+                log!("{} waits for the next pass: {error:#}", lease.held);
+            }
+            Err(error) => self.hand_to_user(&workspace, &lease, &error).await,
         }
     }
 
@@ -249,6 +259,13 @@ fn recorded_executions(db: &rusqlite::Connection) -> Result<HashMap<ExecutionId,
         db.prepare("SELECT id, child IS NOT NULL OR group_id IS NOT NULL FROM executions")?;
     let ids = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
     Ok(ids.collect::<rusqlite::Result<_>>()?)
+}
+
+/// Whether a release that failed with `error` can succeed once what holds
+/// the workspace ends: another resource operation, or a lifecycle operation
+/// that began after the workspace was found ready.
+fn waits(error: &anyhow::Error) -> bool {
+    error.downcast_ref::<ResourcesBusy>().is_some() || Reason::of(error) == Some(Reason::NotReady)
 }
 
 /// Whether `acquirer` ended, as `executions` records them: an agent once

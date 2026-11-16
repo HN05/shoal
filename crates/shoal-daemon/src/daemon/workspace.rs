@@ -76,7 +76,9 @@ pub(crate) use creation::NewWorkspace;
 pub(crate) use daemon_exit::Ending;
 pub(crate) use executions::{Completing, ExecutionRequest, ReattachedExecution, StartedExecution};
 pub use executions::{ExecutionKind, StopRequest, UnprovenStop};
-pub(crate) use gates::{ExitQuiescence, Exiting, GuardMode, HeldBack, PrGuard, ResourceGuard};
+pub(crate) use gates::{
+    ExitQuiescence, Exiting, GuardMode, HeldBack, PrGuard, ResourceGuard, ResourcesBusy,
+};
 pub(crate) use holds::place_approved as place_approved_hold;
 pub(crate) use lifecycle::not_ready;
 pub(crate) use merge::RecordChange;
