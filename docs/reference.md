@@ -5850,7 +5850,8 @@ holds, in order, and stops at the first failure. A kind narrows it to that kind,
 to its pool, and `--name` or a port name to one lease; selecting nothing fails.
 Holds are released separately.
 
-`shoal leases` shows every kind's leases; a kind shows
+`shoal leases` shows every kind's leases, each simulator and resource lease
+with who acquired it: `user`, `agent` or `demo`; a kind shows
 only that kind, with repositories listed apart from other resources, and `--all`
 covers every workspace. `shoal catalog` shows what each kind's leases draw from,
 its configuration and what the machine offers, for one workspace (`--workspace`,

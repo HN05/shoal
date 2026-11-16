@@ -122,8 +122,13 @@ pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32
 
 pub(super) fn render_overview(overview: &SimulatorOverview, palette: Palette) {
     for sim in &overview.simulators {
+        // An idle device has no lease, so no one acquired it.
+        let acquirer = match sim.lease_name {
+            Some(_) => format!("  acquired by {}", sim.acquirer.kind()),
+            None => String::new(),
+        };
         outln!(
-            "{}  {}  {}  {}  {}",
+            "{}  {}  {}  {}  {}{acquirer}",
             sim.udid.as_deref().unwrap_or("pending"),
             sim.lease_name.as_deref().unwrap_or("idle"),
             palette.simulator_state(sim.state),

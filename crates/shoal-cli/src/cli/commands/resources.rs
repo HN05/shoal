@@ -57,11 +57,12 @@ fn describe(lease: &ResourceLease, palette: Palette) -> String {
 
 fn describe_short(lease: &ResourceLease, palette: Palette) -> String {
     format!(
-        "{}/{} -> {} [{}]{}{}",
+        "{}/{} -> {} [{}] acquired by {}{}{}",
         palette.paint(Style::Heading, &lease.pool),
         lease.name,
         lease.resource,
         lease.mode,
+        lease.acquirer.kind(),
         optional(lease.reason.as_deref(), |r| format!(" ({r})")),
         repository_path(lease)
     )
