@@ -621,8 +621,9 @@ comment your run there, and open it, with that label, only when none is open.
   even when another merge crossed yours: at once, before you start the fix,
   comment your run on the open `main-broken` issue or, when none is open,
   open one with that label, the failing test and log excerpt; then open a PR
-  that fixes `main` and closes it. You are finished once that run or a later
-  run on `main` passes, or once that issue closes.
+  that fixes `main` and closes it, unless such a PR is already open. You are
+  finished once that run or a later run on `main` passes, or once that issue
+  closes.
 
 ## Shoal feedback
 
