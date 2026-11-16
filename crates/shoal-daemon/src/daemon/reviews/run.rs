@@ -27,14 +27,11 @@ use crate::{
     },
     model::{Repository, Workspace},
     reviews::{FailureReason, Review, ReviewId, ReviewState, ReviewTarget},
-    shoal_dirs::{Contents, ShoalDir, remove_if_empty},
+    shoal_dirs::{Contents, ShoalDir},
 };
 use shoal_forge::review::view::ViewRequests;
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
-
-/// Where earlier versions kept the runs, in the state directory.
-const OLD_RUNS: &str = "reviews";
 
 /// Start every queued review, now and whenever one is queued; each then
 /// waits in the agent queue for admission.
@@ -642,16 +639,9 @@ impl Manager {
         Ok(unlisted)
     }
 
-    /// Where running review `id`'s run is: in the state directory, for one
-    /// an earlier version started, or else in the reviewed workspace's
+    /// Where running review `id`'s run is: in the reviewed workspace's
     /// repository's directory, while the workspace exists.
     async fn running_run(&self, id: ReviewId) -> Option<LeftRun> {
-        let old = Files {
-            directory: self.paths.state.join(OLD_RUNS).join(id.to_string()),
-        };
-        if old.directory.exists() {
-            return Some(LeftRun::old(old));
-        }
         let review = self.store.run(move |db| store::load(db, id)).await.ok()??;
         let workspace = self.workspace_by_id(&review.workspace_id).await.ok()?;
         let repository = self.repository(workspace.repository()).await.ok()?;
@@ -662,7 +652,7 @@ impl Manager {
                 true => beside,
                 false => place,
             },
-            repository: Some(repository.id),
+            repository: repository.id,
         })
     }
 
@@ -678,9 +668,7 @@ impl Manager {
         }
         // Its place names the repository, as removing the workspace deletes
         // the review.
-        let Some(repository) = &left.repository else {
-            return;
-        };
+        let repository = &left.repository;
         (self.reviews)
             .hold_checkout(run.id, repository, &left.files.directory)
             .keep();
@@ -690,8 +678,7 @@ impl Manager {
     }
 
     /// Remove the runs a stopped daemon left, returning those that could
-    /// not be removed; their checkouts stay for the next start. The state
-    /// directory's old runs go with the directory.
+    /// not be removed; their checkouts stay for the next start.
     async fn remove_interrupted_runs(&self) -> Result<Vec<Unreconciled>> {
         let mut kept = Vec::new();
         for left in self.left_runs().await? {
@@ -706,13 +693,11 @@ impl Manager {
                 });
             }
         }
-        remove_if_empty(&self.paths.state.join(OLD_RUNS))?;
         Ok(kept)
     }
 
-    /// The runs stopped daemons may have left: in each repository's
-    /// directory, and in the state directory, where earlier versions kept
-    /// them.
+    /// The runs stopped daemons may have left, in each repository's
+    /// directory.
     async fn left_runs(&self) -> Result<Vec<LeftRun>> {
         let mut runs = Vec::new();
         for repository in self.repositories().await? {
@@ -727,12 +712,10 @@ impl Manager {
                     .into_iter()
                     .map(|files| LeftRun {
                         files,
-                        repository: Some(repository.id.clone()),
+                        repository: repository.id.clone(),
                     }),
             );
         }
-        let old = run_directories(&self.paths.state.join(OLD_RUNS))?;
-        runs.extend(old.into_iter().map(LeftRun::old));
         Ok(runs)
     }
 
@@ -772,26 +755,11 @@ struct HeldRun<'a> {
 }
 
 /// A run a stopped daemon may have left, with the repository its checkout
-/// belongs to, when that is known.
+/// belongs to.
 #[derive(Clone)]
 struct LeftRun {
     files: Files,
-    repository: Option<RepositoryId>,
-}
-
-impl LeftRun {
-    /// A run in the state directory, from an earlier version, which wrote
-    /// its repository beside it.
-    fn old(files: Files) -> Self {
-        let repository = match std::fs::read_to_string(files.repository()) {
-            Ok(repository) => Some(RepositoryId::from(repository)),
-            Err(error) => {
-                log!("read {}: {error}", files.repository().display());
-                None
-            }
-        };
-        Self { files, repository }
-    }
+    repository: RepositoryId,
 }
 
 /// A run a stopped daemon left that recovery could not remove.

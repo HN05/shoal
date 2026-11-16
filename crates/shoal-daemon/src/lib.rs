@@ -9,7 +9,7 @@ use shoal_core::test_support;
 use shoal_core::{
     agents, ai, build, caches, config, config_file, daemon_handoff, daemon_owner, env, execution,
     fsutil, git, git_profile, hooks, installed, launches, paths, presets, process, profile,
-    refusal, releases, removal, repository, reviews, secrets, service, sessions, shell, shoal_dirs,
+    refusal, releases, removal, repository, reviews, secrets, service, sessions, shoal_dirs,
     start_plan, terminal, tmp_dirs, tools, transfer, triggers, workers,
 };
 

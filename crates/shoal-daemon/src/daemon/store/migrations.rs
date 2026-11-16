@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, consumed_upgrades, place_owners, place_servers, record_shapes};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 208;
+pub(super) const SCHEMA_VERSION: i64 = 209;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -486,6 +486,11 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (206, "", Some(record_shapes::listed_items)),
     (207, "", Some(record_shapes::current_events)),
     (208, "", Some(record_shapes::birth_identities)),
+    (
+        209,
+        RETIRED_NOTIFICATIONS,
+        Some(consumed_upgrades::refuse_earlier_state),
+    ),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
@@ -1076,6 +1081,11 @@ pub(super) const RETIRED_KEEP_REQUESTS: &str = "UPDATE workspace_completion
     UPDATE workspace_completion SET record=json_remove(record, '$.keep_request')
         WHERE json_valid(record);
     DELETE FROM access_requests WHERE target_key='keep';";
+
+/// Notifications of packages an earlier `shoal move ssh` kept in the state
+/// directory, which no daemon moves any longer; the user read each one.
+pub(super) const RETIRED_NOTIFICATIONS: &str =
+    "DELETE FROM notifications WHERE kind='unmoved_packages';";
 
 /// Checkpoints outlive their workspace, not their repository.
 pub(super) const CHECKPOINTS: &str = "CREATE TABLE checkpoints (

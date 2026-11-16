@@ -25,13 +25,9 @@ pub(super) struct Files {
 }
 
 impl Files {
-    /// The review whose run these are, named in its [`Self::id`] file, or
-    /// by the directory, as earlier versions named it.
+    /// The review whose run these are, named in its [`Self::id`] file.
     pub fn review(&self) -> Option<ReviewId> {
-        match fs::read_to_string(self.id()) {
-            Ok(id) => id.trim().parse().ok(),
-            Err(_) => self.directory.file_name()?.to_str()?.parse().ok(),
-        }
+        fs::read_to_string(self.id()).ok()?.trim().parse().ok()
     }
 
     /// The ID of the review whose run these are, written first, since the
@@ -42,13 +38,6 @@ impl Files {
 
     pub fn checkout(&self) -> PathBuf {
         self.directory.join("checkout")
-    }
-
-    /// The ID of the checkout's repository, which runs in the state
-    /// directory, from earlier versions, wrote before the checkout, since
-    /// that directory names no repository.
-    pub fn repository(&self) -> PathBuf {
-        self.directory.join("repository")
     }
 
     pub fn schema(&self) -> PathBuf {

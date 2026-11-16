@@ -153,29 +153,6 @@ async fn a_decided_proposal_takes_its_files_and_a_removed_repository_the_rest() 
 }
 
 #[tokio::test]
-async fn copies_from_before_the_upgrade_stay_until_no_proposal_attaches_them() {
-    let (_root, manager, _repo, workspace) = with_workspace().await;
-    let old = manager.paths.state.join("proposals");
-    let kept = old.join("kept/0/shot.png");
-    std::fs::create_dir_all(kept.parent().unwrap()).unwrap();
-    std::fs::write(&kept, "png").unwrap();
-    std::fs::create_dir_all(old.join("stale/0")).unwrap();
-    let attachment = Attachment {
-        path: kept.clone(),
-        alt: None,
-    };
-    let request = store_pull_proposal(&manager, &workspace, String::new(), vec![attachment]).await;
-
-    manager.sweep_proposal_files().await.unwrap();
-    assert!(kept.exists());
-    assert!(!old.join("stale").exists());
-
-    manager.forget_proposal(&request).await.unwrap();
-    manager.prune_proposal_files(&request).await;
-    assert!(!old.exists());
-}
-
-#[tokio::test]
 async fn a_decision_refuses_a_proposal_changed_while_it_waited() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");

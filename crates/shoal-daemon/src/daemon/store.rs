@@ -137,6 +137,13 @@ pub fn write_transaction<T>(
     Ok(value)
 }
 
+/// The state directory holding the database `db` has open, which an
+/// in-memory database has none of.
+fn state_directory(db: &Connection) -> Option<PathBuf> {
+    let path = db.path().filter(|path| !path.is_empty())?;
+    Some(std::path::Path::new(path).parent()?.to_path_buf())
+}
+
 /// Whether the supplied SELECT query returns any rows.
 pub fn exists(db: &Connection, sql: &str, params: impl Params) -> Result<bool> {
     Ok(db.query_row(&format!("SELECT EXISTS({sql})"), params, |row| row.get(0))?)

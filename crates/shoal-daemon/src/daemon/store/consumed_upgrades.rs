@@ -30,3 +30,58 @@ pub(super) fn refuse_unconsumed(db: &Connection) -> Result<()> {
     }
     Ok(())
 }
+
+/// The last release whose daemon looks for what earlier releases kept in
+/// the state directory.
+const STATE_RELEASE: &str = "v0.17.2";
+
+/// What earlier releases kept in the state directory, which the daemon of
+/// [`STATE_RELEASE`] still clears: each directory, what it holds, and what
+/// clears it.
+const EARLIER_STATE: [(&str, &str, &str); 3] = [
+    (
+        "unmoved",
+        "packages of failed moves",
+        "its daemon moves them to root_dir when it starts",
+    ),
+    (
+        "reviews",
+        "review runs",
+        "its daemon removes them when it starts",
+    ),
+    (
+        "proposals",
+        "files proposals attach",
+        "it removes them once their proposals are decided",
+    ),
+];
+
+/// Refuse to drop what clears the files earlier releases kept in the state
+/// directory, which may be the only copy of a chat or a worktree a
+/// repository still lists, while some are still there, or while a notice
+/// naming where moved packages went is unread.
+pub(super) fn refuse_earlier_state(db: &Connection) -> Result<()> {
+    if let Some(state) = super::state_directory(db) {
+        for (directory, holds, clears) in EARLIER_STATE {
+            ensure!(
+                !state.join(directory).is_dir(),
+                "the state directory holds {holds} in {directory}, which Shoal \
+                 {STATE_RELEASE} clears: {clears}; run Shoal {STATE_RELEASE} until it \
+                 is gone before this version"
+            );
+        }
+    }
+    ensure!(
+        !super::exists(
+            db,
+            "SELECT 1 FROM notifications WHERE kind='unmoved_packages' AND read=0",
+            [],
+        )?,
+        "an unread notice names packages of failed moves; read it with shoal inbox \
+         under Shoal {STATE_RELEASE} before this version"
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;

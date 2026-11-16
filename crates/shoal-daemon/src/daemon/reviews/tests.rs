@@ -1218,20 +1218,6 @@ async fn a_review_queued_while_a_cancelled_one_ends_waits_for_its_run() {
 }
 
 #[tokio::test]
-async fn recovery_removes_the_runs_an_earlier_version_left_in_the_state_directory() {
-    let fixture = fixture(&[], "").await;
-    let manager = &fixture.manager;
-    let repository = fixture.workspace.repository().clone();
-    let old = manager.paths.state.join("reviews");
-    let run = old.join("7");
-    std::fs::create_dir_all(run.join("checkout")).unwrap();
-    std::fs::write(run.join("repository"), repository.as_str()).unwrap();
-    manager.recover_reviews().await.unwrap();
-    assert!(!old.exists());
-    manager.ensure_no_reviews_in(&repository).await.unwrap();
-}
-
-#[tokio::test]
 async fn a_run_left_in_the_repository_directory_holds_back_its_move_and_removal() {
     let fixture = fixture(&[], "").await;
     let manager = &fixture.manager;
@@ -1342,13 +1328,14 @@ async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_admission() {
         })
         .await
         .unwrap();
-    // The second run's review, which an earlier version named it by, went
-    // with its workspace.
+    // The second run's review went with its workspace.
     let gone = ReviewId(stuck.0 + 1);
     let runs = [
         fixture.left_run(stuck),
         fixture.runs.root().join(gone.to_string()),
     ];
+    std::fs::create_dir_all(&runs[1]).unwrap();
+    std::fs::write(runs[1].join("review"), gone.to_string()).unwrap();
     for run in &runs {
         std::fs::create_dir_all(run.join("checkout")).unwrap();
     }

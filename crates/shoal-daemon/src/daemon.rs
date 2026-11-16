@@ -73,7 +73,6 @@ pub(crate) mod test_daemon;
 pub(crate) mod test_support;
 mod tmp_dirs;
 pub(crate) mod triggers;
-mod unmoved_packages;
 mod untracked;
 mod warnings;
 pub mod workspace;
@@ -357,13 +356,6 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     let chat_files = manager.remove_unowned_chat_files();
     if let Err(error) = startup
         .step("deleting ended chats' files", chat_files)
-        .await
-    {
-        log!("{error:#}");
-    }
-    let unmoved = manager.move_unmoved_packages();
-    if let Err(error) = startup
-        .step("moving packages of failed moves", unmoved)
         .await
     {
         log!("{error:#}");

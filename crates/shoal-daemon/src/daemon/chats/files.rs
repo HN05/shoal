@@ -13,7 +13,7 @@ use crate::{
 
 impl Manager {
     /// Delete the files in the chats' directory that no chat owns, which
-    /// ended chats and earlier versions left.
+    /// ended chats left.
     pub(crate) async fn remove_unowned_chat_files(&self) -> Result<()> {
         let chats = self.chats().await?;
         let paths = self.paths.clone();

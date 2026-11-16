@@ -1,8 +1,7 @@
 //! Copies of the files proposed issues and PRs attach, kept until the user
 //! or a coordinator decides, since the agent's own may be gone by then. They
 //! live in the `.proposals` directory of the repository the proposal is
-//! for. Earlier versions kept them in the state directory, where the
-//! proposals made then still find them until they are decided.
+//! for.
 use anyhow::{Context, Result};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -22,12 +21,9 @@ use crate::{
     },
     forge::items::attach::Attachment,
     model::Repository,
-    shoal_dirs::{Contents, ShoalDir, remove_if_empty},
+    shoal_dirs::{Contents, ShoalDir},
 };
 use shoal_forge::items::attach;
-
-/// Where earlier versions kept the copies in the state directory.
-const OLD_DIRECTORY: &str = "proposals";
 
 impl Manager {
     /// Hold `proposal_files` for a proposal for the repository `repository`
@@ -123,22 +119,18 @@ impl Manager {
         }
     }
 
-    /// Delete the copies in `dirs` and in the state directory's old one
-    /// that no pending proposal attaches, and the old directory once it
-    /// holds none.
+    /// Delete the copies in `dirs` that no pending proposal attaches.
     async fn remove_unattached_files(&self, dirs: Vec<ShoalDir>) -> Result<()> {
         let attached: Vec<PathBuf> = (self.approval_requests(None).await?.iter())
             .filter(|request| request.status == DecisionStatus::Pending)
             .flat_map(ApprovalRequest::attachments)
             .map(|attachment| attachment.path.clone())
             .collect();
-        let old = self.paths.state.join(OLD_DIRECTORY);
         tokio::task::spawn_blocking(move || {
             for dir in dirs.iter().filter(|dir| dir.is_own()) {
                 remove_unattached(dir.root(), &attached)?;
             }
-            remove_unattached(&old, &attached)?;
-            remove_if_empty(&old)
+            Ok(())
         })
         .await?
     }
