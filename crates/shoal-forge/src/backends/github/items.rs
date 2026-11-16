@@ -13,10 +13,7 @@ use crate::{
     },
     conventions::draft::DraftMarker,
     items::{create::Head, item::ItemRequests, reaction::Subject},
-    transport::{
-        api::{Request, TransportRequests, encode},
-        limits::rate_limited,
-    },
+    transport::api::{Request, TransportRequests, encode},
     updates::DISCUSSION,
 };
 use shoal_forge_types::{
@@ -187,7 +184,9 @@ const SEARCH_PAGE: usize = 100;
 
 /// Up to `search.limit` issues or PRs of the repository that GitHub's
 /// search matches, newest first. Matching both ways takes the keyword
-/// matches alone when GitHub limits its searches by meaning.
+/// matches alone when the search by meaning fails, such as under its rate
+/// limit or on a server without it, since a keyword search matched them
+/// before there was one.
 async fn searched(
     repo: &ForgeRepo,
     account: &Account,
@@ -203,8 +202,7 @@ async fn searched(
             let keyword = found(SearchType::Keyword).await?;
             match found(SearchType::Hybrid).await {
                 Ok(meaning) => Ok(merged(keyword, meaning, search.limit)),
-                Err(error) if rate_limited(&error).is_some() => Ok(keyword),
-                Err(error) => Err(error),
+                Err(_) => Ok(keyword),
             }
         }
     }

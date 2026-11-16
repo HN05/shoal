@@ -1,7 +1,10 @@
 use serde_json::json;
 
 use super::*;
-use crate::test_support::{Received, Reply, Server, agent_on, repo_on};
+use crate::{
+    test_support::{Received, Reply, Server, agent_on, repo_on},
+    transport::limits::rate_limited,
+};
 use shoal_forge_types::backends::ForgeKind;
 
 #[test]
@@ -107,7 +110,7 @@ async fn matching_both_ways_adds_the_meaning_matches_keywords_miss_newest_first(
 }
 
 #[tokio::test]
-async fn matching_both_ways_takes_the_keyword_matches_while_meaning_is_rate_limited() {
+async fn matching_both_ways_takes_the_keyword_matches_when_meaning_fails() {
     let limited = || {
         let headers = [
             "x-ratelimit-resource: semantic_search",
@@ -129,14 +132,17 @@ async fn matching_both_ways_takes_the_keyword_matches_while_meaning_is_rate_limi
         rate_limited(&error).map(|limited| limited.limit),
         Some(Some("semantic_search"))
     );
-    // Other failures of the search by meaning fail the search.
-    let failed = || {
+    // Such as on a server that takes no search by meaning, which fails a
+    // search by meaning alone.
+    let refused = || {
         (
             422,
             Vec::new(),
             br#"{"message": "Validation Failed"}"#.to_vec(),
         )
     };
-    let (both, _) = found(Some("proxy"), Matching::Both, 30, failed).await;
-    assert!(both.is_err());
+    let (both, _) = found(Some("proxy"), Matching::Both, 30, refused).await;
+    assert_eq!(both.unwrap(), [5, 3]);
+    let (by_meaning, _) = found(Some("proxy"), Matching::Meaning, 30, refused).await;
+    assert!(by_meaning.is_err());
 }

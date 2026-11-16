@@ -2420,8 +2420,9 @@ duplicate before filing there is only a read. A search uses each forge's own sea
 reads pages only until the limit is met. A search for words matches them both
 ways by default: GitHub's search by meaning misses exact matches, such as an
 error message or a flag, that keyword search finds, so `both` adds its matches
-to the keyword ones, and gives the keyword ones alone under the stricter rate
-limit GitHub keeps for it. A forge's rate limit for some requests, such as
+to the keyword ones, and gives the keyword ones alone when that search fails,
+such as under the stricter rate limit GitHub keeps for it or on a server
+without it, so the default never fails a search keyword matching answers. A forge's rate limit for some requests, such as
 GitHub's for searches, holds back only those requests, never the watches and
 reads the others serve; a pause the forge puts on the whole account, such as a
 `Retry-After`, holds back every request. `shoal forge api` passes any request under
