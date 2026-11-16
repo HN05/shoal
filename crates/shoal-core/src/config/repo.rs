@@ -104,6 +104,10 @@ pub struct RepoConfig {
     pub permissions: crate::config::permissions::PermissionsConfig,
     #[option(section)]
     pub runner: RunnerConfig,
+    /// What starts agents on its own, by name. A repository's triggers
+    /// start in it; the global config's are its own, never a repository's.
+    #[option(named)]
+    pub triggers: crate::triggers::Triggers,
     /// The options of this layer that take another's value.
     #[serde(
         default,
@@ -458,6 +462,7 @@ impl RepoConfig {
             );
         }
         crate::resources::definitions(&self.resources, &self.resource_pools)?;
+        crate::triggers::validate(&self.triggers)?;
         crate::env::validate_configured_environment(&self.env)?;
         crate::config::validate_agent_dirs(self.agent.dirs.as_deref().unwrap_or_default())?;
         crate::agent::ModelChoice {

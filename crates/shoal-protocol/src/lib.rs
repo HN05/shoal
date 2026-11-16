@@ -49,6 +49,7 @@ pub mod subscriptions;
 pub mod time;
 pub mod transcripts;
 pub mod transfer;
+pub mod triggers;
 pub mod validate;
 pub mod views;
 

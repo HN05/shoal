@@ -230,9 +230,19 @@ impl Config {
     }
 
     /// This machine's repository-overridable settings as the layer below the
-    /// repository's own.
+    /// repository's own, without its triggers, which are its own and never
+    /// a repository's.
     pub fn repository_layer(&self) -> RepoConfig {
-        self.repository.clone()
+        RepoConfig {
+            triggers: Default::default(),
+            ..self.repository.clone()
+        }
+    }
+
+    /// The global config's triggers, each starting in the repository it
+    /// names or in a chat without one.
+    pub fn triggers(&self) -> &crate::triggers::Triggers {
+        &self.repository.triggers
     }
 
     /// This machine's settings over the built-in defaults, without a

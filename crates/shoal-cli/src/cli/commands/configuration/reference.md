@@ -565,6 +565,57 @@ settle_seconds = 5   # At most 60; 0 delivers each message at once
 that long, and at most six times as long after the first; see
 [agent messages](../../../../../../docs/reference.md#agent-messages).
 
+### Triggers
+
+```toml
+[triggers.triage]
+on = "timer"
+at = "09:00"                      # Or ["09:00", "14:00"]; or every = "1h"
+days = ["mon", "tue", "wed", "thu", "fri"]  # Every day when omitted
+timezone = "Europe/Oslo"          # The local time zone when omitted
+catch_up = "2h"                   # One interval for every, 24h for at
+mode = "chat"
+agent = "claude"
+name = "Morning triage"
+task = "Triage the issues opened since {{ previous_at }}."
+overlap = "skip"                  # Or "queue" or "parallel"
+filter = [{ path = "trigger", equals = "triage" }]
+key = "{{ scheduled_at }}"
+key_window = "10m"
+```
+
+A trigger starts an agent when its source fires, as `shoal start` would. A
+repository's triggers start in that repository; a global trigger starts in the
+registered repository its `repository` names, or without one in a chat without
+a repository, which only the global file may set. A trigger is config like
+every other setting: a higher layer replaces a lower one's of the same name,
+and the global file's never reach a repository's. Names follow port names.
+
+`on` names the source. The `timer` source fires `every` interval after its last
+firing, or `at` each time of day, as `HH:MM`, on `days`, from `mon` to `sun`.
+Lengths of time, such as `every`, `catch_up` and `key_window`, are whole
+numbers each followed by `s`, `m`, `h`, `d` or `w`, largest first, as in
+`1h30m`. A firing missed while the daemon was stopped or the machine slept runs
+once on its return when it is at most `catch_up` old.
+
+The launch takes the keys of `shoal start`'s flags, `agent`, `mode`, `model`,
+`effort`, `branch`, `base`, `issue`, `pr` (a PR URL), `name`, `priority`,
+`permission` (a table of `KEY = VALUE`, as `--permission` gives them) and `in`
+(a workspace's ID), and `task`, the text after `--`. Every one of them, and
+`key`, is a template: `{{ path }}` looks up a value of the firing's input
+document, such as `{{ payload.labels.0.name }}`, a string or number as text and
+an object or array as JSON. A timer's input has `scheduled_at`, `fired_at` and
+`previous_at`, the last firing or, before the first, when Shoal first read the
+trigger, as RFC 3339 times in its time zone, and `trigger`, its name.
+
+`overlap` decides a firing that would start a new space while the space of the
+trigger's last run still has its agent running or queued. `filter` lists
+conditions on the input, each a `path` with one of `equals`, `not_equals`,
+`in`, `starts_with` or `exists`; `[]` after a key, as in `payload.labels[].name`,
+matches when any element does. `key` names what a firing is about, whose repeat
+within `key_window` does not run. See
+[triggers](../../../../../../docs/reference.md#triggers).
+
 ## Terminal
 
 ```toml

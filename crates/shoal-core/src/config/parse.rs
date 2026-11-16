@@ -104,6 +104,7 @@ pub fn repository(text: &str) -> Result<RepoConfig, Error> {
     let mut root = DeTable::parse(text)?;
     refuse(&root, &[MACHINE], "[machine] belongs in the global config")
         .and_then(|()| refuse_mode_repositories(&root))
+        .and_then(|()| refuse_trigger_repositories(&root))
         .and_then(|()| refuse_removed(&root))
         .and_then(|()| refuse_root_same_as(&root))
         .map_err(positioned)?;
@@ -134,6 +135,13 @@ fn refuse_mode_repositories(root: &Spanned<DeTable<'_>>) -> Result<(), Error> {
         refuse(root, &["modes", name, "repository"], &message)?;
     }
     Ok(())
+}
+
+/// Refuse a trigger's `repository` in a repository config, whose triggers
+/// start in that repository.
+fn refuse_trigger_repositories(root: &Spanned<DeTable<'_>>) -> Result<(), Error> {
+    let message = "a repository's trigger starts in that repository; repository belongs to a trigger in the global config";
+    refuse(root, &["triggers", "*", "repository"], message)
 }
 
 /// Fail with `message` at the first value `path` names, when `root` sets
