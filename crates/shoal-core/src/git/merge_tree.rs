@@ -2,9 +2,12 @@
 //! never the index, worktree or refs.
 use std::{path::Path, process::Output};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
-use crate::subprocess;
+use super::version::{self, Release};
+
+/// The first Git whose `merge-tree` takes `--write-tree`.
+const WRITE_TREE: Release = (2, 38);
 
 /// What `git merge-tree --write-tree` reported.
 pub(crate) enum Merge {
@@ -21,8 +24,8 @@ pub(crate) async fn write_tree(repo: &Path, args: &[&str]) -> Result<Merge> {
     command.args(["merge-tree", "--write-tree"]).args(args);
     match super::bounded(command).capture().await {
         Ok(output) if output.status.code() == Some(1) => Ok(Merge::Conflicted(output)),
-        output => subprocess::checked_output("git merge-tree", output)
-            .context("Git 2.38 or newer is required")
+        output => version::checked_output("git merge-tree", output, WRITE_TREE)
+            .await
             .map(Merge::Clean),
     }
 }
@@ -36,3 +39,6 @@ pub(crate) async fn merged_tree(repo: &Path, ours: &str, theirs: &str) -> Result
         },
     )
 }
+
+#[cfg(test)]
+mod tests;
