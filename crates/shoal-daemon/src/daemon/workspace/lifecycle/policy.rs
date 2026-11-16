@@ -1,6 +1,6 @@
 //! Removal policy: who removes a space and what that removal checks at each
 //! stage, and what retains a space from every unattended removal.
-use super::super::{done::CompletedAncestor, executions::StopPolicy};
+use super::super::{completion_cleanup::CompletedAncestor, executions::StopPolicy};
 use crate::daemon::space_processes::WorktreeTies;
 use crate::refusal::{Reason, Refusal};
 use crate::{

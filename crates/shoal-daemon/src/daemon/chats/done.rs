@@ -8,11 +8,8 @@ use crate::{
     daemon::{
         notifications::{About, NotificationKind},
         progress, questions,
-        workspace::{
-            Manager,
-            done::{self, push_completion_details},
-            turn_retry,
-        },
+        spaces::done::{self, push_completion_details},
+        workspace::{Manager, turn_retry},
         workspace_files::Attacher,
     },
     model::{Chat, Completion},

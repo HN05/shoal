@@ -1,7 +1,9 @@
 //! Removing a space, whichever removes it: reserving it, checking it again
 //! at each step, stopping its agent, removing the spaces below it, then its
 //! worktree where it has one, and deleting its record.
-use super::super::{Manager, StopRequest, done::CompletedAncestor, space_removal::AgentState};
+use super::super::{
+    Manager, StopRequest, completion_cleanup::CompletedAncestor, space_removal::AgentState,
+};
 use super::worktree::{WorktreeRemoval, WorktreeStage};
 use super::{Removal, Stage};
 use crate::{

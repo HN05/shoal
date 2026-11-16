@@ -3,12 +3,11 @@
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 
-use super::{workspace::Manager, workspace_files::Attacher};
+use super::workspace::Manager;
 use crate::{
     config::Effective,
-    model::{Completion, Space, SpaceKind},
+    model::{Space, SpaceKind},
 };
-use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
 
 impl Manager {
     /// The settings of `space`: a workspace's own, or a chat's
@@ -17,33 +16,6 @@ impl Manager {
         match space.to_workspace() {
             Some(workspace) => self.workspace_settings(&workspace).await,
             None => self.space_settings_in(space.repository_id.as_ref()).await,
-        }
-    }
-
-    /// Record the work of the workspace or running chat `selector` names as
-    /// done, as [`Self::mark_done`] or [`Self::mark_chat_done`] does.
-    pub async fn mark_space_done(
-        &self,
-        selector: &SpaceSelector,
-        done: Done,
-        attacher: &Attacher,
-    ) -> Result<Completion> {
-        let space = self.space(selector).await?;
-        match space.kind() {
-            SpaceKind::Workspace => {
-                (self.mark_done(&SpaceSelector::id(&space.id), done, attacher)).await
-            }
-            SpaceKind::Chat => self.mark_chat_done(&space.id, done, attacher).await,
-        }
-    }
-
-    /// Withdraw the completion the workspace or chat `selector`
-    /// names recorded.
-    pub async fn undo_space_done(&self, selector: &SpaceSelector) -> Result<Completion> {
-        let space = self.space(selector).await?;
-        match space.kind() {
-            SpaceKind::Workspace => self.undo_done(&SpaceSelector::id(&space.id)).await,
-            SpaceKind::Chat => self.undo_chat_done(&space.id).await,
         }
     }
 }
@@ -58,6 +30,7 @@ pub(crate) fn space_kind(db: &rusqlite::Connection, id: &SpaceId) -> Result<Opti
         .optional()?)
 }
 
+pub(crate) mod done;
 mod export;
 mod find;
 mod naming;
