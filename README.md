@@ -159,7 +159,8 @@ that starts and steers the work of every repository for you. Without `--mode`,
 `[modes.<name>]` and `[rules.<name>]`; see
 [modes and rules](docs/reference.md#modes-and-rules). A trigger,
 `[triggers.<name>]`, starts an agent on its own, such as every weekday at
-09:00; see [triggers](docs/reference.md#triggers).
+09:00 or when a forge's webhook says an issue was labelled; see
+[triggers](docs/reference.md#triggers).
 
 ```sh
 shoal                         # Inbox when something needs you, else workspaces; Tab switches

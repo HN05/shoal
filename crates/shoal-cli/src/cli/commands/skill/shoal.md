@@ -758,10 +758,12 @@ shoal trigger ls [--repo R]   # Source, paused or active, next firing, last run 
 shoal trigger pause <name>    # It fires, and launches a queued run, no more until resumed
 shoal trigger resume <name>   # It counts its times from now; those it missed never run
 shoal trigger run <name>      # Fire it now and print the run's outcome
+shoal trigger run <name> --payload issue.json --header X-Forgejo-Event=issues
 ```
 
 A trigger, `[triggers.NAME]` in a repository's config or the global config,
-starts an agent when its source fires, such as a timer at set times, as the
+starts an agent when its source fires, such as a timer at set times or an
+HTTP request to its webhook route, as the
 user's `shoal start` would: through the agent queue, in a top-level space with
 its mode's permissions. The commands act on the triggers of the repository the
 caller acts in, or `--repo` names, and the global config's, and change a
@@ -769,7 +771,9 @@ trigger's runtime state, never its config. `ls` is open to every space;
 `pause`, `resume` and `run` follow its `triggers`
 [permission](#permitted-actions). A run that a trigger's `overlap` skips or
 queues, whose key repeats a recent run's, or whose launch fails says so; one
-its filter drops is no run.
+its filter drops is no run, and names the condition that did not hold.
+`--payload` and `--header` give a webhook trigger the request it fires with,
+without its signature.
 
 ## Processes
 

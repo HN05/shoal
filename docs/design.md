@@ -19,7 +19,8 @@ Macraft owns VM/container provisioning. Shoal does not provision tools, manage
 browsers or store conversations, and schedules work only on its own machine:
 its agent queue, which also admits registered repositories' CI jobs, and
 triggers, config that starts agents when an event source fires, such as a
-timer. A trigger is config like every other setting, without commands that
+timer or a webhook request to the daemon's own listener, which serves nothing
+else and which the user exposes through a tunnel of their choice. A trigger is config like every other setting, without commands that
 create or change it, except that a contribution's tracked file defines none,
 since its repository's maintainers are not the user who runs it; each source is a module behind one interface whose
 firings carry a JSON input document, which filters, templates and keys read
@@ -32,7 +33,8 @@ adapters retain their tool-specific setup. Shoal does not switch the user's or
 daemon's login. `[secrets]` names
 user commands that fetch values in the CLI, for an agent's environment at launch
 or, for listed tools, through private PATH launchers each time the tool runs;
-the daemon and state never hold the values, and hooks drop them. A tool secret
+the daemon fetches only a webhook trigger's, to check each request's
+signature, and neither it nor state keeps a value; hooks drop them. A tool secret
 may require approval: the launcher fetches it only after the daemon confirms a
 workspace grant bound to its command and tools, and fails instead of waiting.
 Environment secrets cannot require approval, since they are fetched before the
@@ -1352,8 +1354,8 @@ job only once admitted, so until then any other runner may take it. GitHub
 has no handle and no label that keeps a runner to one job, so its runner may
 take another job its labels match; a job-started hook holds a job of another
 run until its workspace is at that run's commit, so a check never reports on
-another commit. Polling stands in for webhooks, which a local daemon cannot
-receive; it runs every ten seconds while a job could start and every minute
+another commit. Polling finds jobs, which works without the webhook listener
+and the tunnel it needs; it runs every ten seconds while a job could start and every minute
 while none can, so the queue still shows new jobs and drops those other
 runners took, and conditional reads keep unchanged answers off the rate
 limit. Each job runs as a tracked execution in

@@ -381,7 +381,8 @@ instead of the PR delivery guidance below.
   a bounded tail; scoped callers cannot access another workspace's logs.
 - `[secrets]` values are fetched in the CLI by user commands run without
   input, at agent launch or, for tool-scoped secrets, by the tool's launcher on
-  each run; the daemon, state and logs never hold them, hooks drop them and
+  each run; the daemon fetches only a webhook trigger's, for each request it
+  verifies, and neither it, state nor logs keep one; hooks drop them and
   their launchers, and executions other than agent launches fetch none of
   their own. A gated tool secret is fetched only after the daemon confirms the
   workspace's grant; only tool secrets can be gated.
