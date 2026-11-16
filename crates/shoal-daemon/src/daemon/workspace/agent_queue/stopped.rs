@@ -517,10 +517,13 @@ impl Manager {
         let _gate = self.agent_queue.lock_admission().await;
         self.cancel_renewals(workspace_id).await;
         self.clear_restore_requests(workspace_id)?;
-        let workspace_id = workspace_id.to_owned();
-        self.store
-            .run(move |db| delete_stopped_restores(db, &workspace_id))
-            .await
+        let id = workspace_id.to_owned();
+        (self.store)
+            .run(move |db| delete_stopped_restores(db, &id))
+            .await?;
+        // An agent no longer asleep no longer works its issues.
+        self.agent_settles.request(workspace_id);
+        Ok(())
     }
 
     /// Forget the restore requests of `workspace_id`'s stopped agents.

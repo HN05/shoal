@@ -276,3 +276,19 @@ async fn a_forgotten_agent_execution_gives_up_the_issue() {
     manager.settle_requested_agents().await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
 }
+
+#[tokio::test]
+async fn stopping_an_asleep_agent_takes_the_agent_account_off() {
+    let fixture = agents(&["fix"], &[], "").await;
+    let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
+    fixture.link(workspace).await;
+    let execution = run_agent(manager, workspace).await;
+    save_stop(manager, workspace, &execution, true);
+    finish(manager, execution).await;
+    let stop = crate::daemon::workspace::StopRequest::manual();
+    (manager.stop_space(&SpaceSelector::id(&workspace.id), stop))
+        .await
+        .unwrap();
+    manager.settle_requested_agents().await;
+    assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
+}
