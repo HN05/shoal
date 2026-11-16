@@ -4,7 +4,10 @@
 use crate::{config::Effective, sessions::Origin, terminal::Configured};
 
 /// The first host a queued start from `origin` tries, unless none can.
-pub fn first_queued_host(settings: &Effective, origin: Option<&Origin>) -> Option<Configured> {
+pub(crate) fn first_queued_host(
+    settings: &Effective,
+    origin: Option<&Origin>,
+) -> Option<Configured> {
     fallbacks(settings, origin)
         .into_iter()
         .next()
