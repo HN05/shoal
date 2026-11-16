@@ -264,3 +264,15 @@ async fn forgetting_a_stopped_agent_leaves_the_issue_it_gave_up() {
     fixture.link(&fixture.workspaces[1]).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
 }
+
+#[tokio::test]
+async fn a_forgotten_agent_execution_gives_up_the_issue() {
+    let fixture = agents(&["fix"], &[], "").await;
+    let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
+    fixture.link_as(workspace, Assigner::Agent).await;
+    let execution = run_agent(manager, workspace).await;
+    // As after a reboot, whose processes ran in an earlier boot.
+    manager.forget_execution(&execution).await.unwrap();
+    manager.settle_requested_agents().await;
+    assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
+}

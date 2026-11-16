@@ -43,6 +43,7 @@ mod state;
 mod tests;
 
 pub use crate::client::executions::ExecutionKind;
+pub(crate) use completion::agent_execution_space;
 pub(crate) use state::{Completing, Connections, Executions};
 pub(super) use stopping::StopPolicy;
 pub use stopping::{Save, StopRequest, UnprovenStop};

@@ -79,13 +79,19 @@ impl Manager {
     pub(super) async fn delete_execution_record(&self, id: &ExecutionId) -> Result<Option<String>> {
         let id = id.to_owned();
         let hosts: Vec<_> = self.session_hosts.iter().map(|host| host.name()).collect();
-        self.store
+        let (demo, agent_space) = self
+            .store
             .write(move |tx| {
                 let demo = super::super::sessions::pending::record_demo(tx, &id, &hosts)?;
+                let agent_space = record_agent_end(tx, &id)?;
                 record_execution_end(tx, &id, true)?;
-                Ok(demo)
+                Ok((demo, agent_space))
             })
-            .await
+            .await?;
+        if let Some(space) = &agent_space {
+            self.agent_settles.request(space);
+        }
+        Ok(demo)
     }
 }
 
@@ -157,17 +163,25 @@ fn release_attended_decisions(
 /// Record the end of agent execution `id` for its space, returning the
 /// space; none for another execution.
 fn record_agent_end(tx: &Transaction<'_>, id: &ExecutionId) -> Result<Option<SpaceId>> {
-    let space: Option<SpaceId> = tx
+    let space = agent_execution_space(tx, id)?;
+    if let Some(space) = &space {
+        crate::daemon::links::issue::agent_ended(tx, space)?;
+    }
+    Ok(space)
+}
+
+/// The space whose agent execution `id` runs; none for another execution.
+pub(crate) fn agent_execution_space(
+    tx: &Transaction<'_>,
+    id: &ExecutionId,
+) -> Result<Option<SpaceId>> {
+    Ok(tx
         .query_row(
             "SELECT space_id FROM executions WHERE id=?1 AND agent IS NOT NULL",
             [id],
             |row| row.get(0),
         )
-        .optional()?;
-    if let Some(space) = &space {
-        crate::daemon::links::issue::agent_ended(tx, space)?;
-    }
-    Ok(space)
+        .optional()?)
 }
 
 /// Retain unverified executions for recovery; only verified completion deletes

@@ -273,16 +273,13 @@ impl Manager {
         self.keep_stopped_turn(&interrupted.execution.id, None)
             .await;
         let id = interrupted.execution.id.clone();
-        let forgotten = self
-            .store
-            .run(move |db| {
-                Ok(db.execute(
-                    "DELETE FROM executions WHERE id=?1 AND state=?2",
-                    rusqlite::params![id, ExecutionState::Unknown],
-                )? == 1)
-            })
+        let forgotten = (self.store)
+            .write(move |tx| forget_unknown_execution(tx, &id))
             .await?;
-        if forgotten {
+        if let Some(Some(space)) = &forgotten {
+            self.agent_settles.request(space);
+        }
+        if forgotten.is_some() {
             log!(
                 "reconciled stopped {} in {}",
                 interrupted.record.agent,
@@ -363,4 +360,25 @@ fn assess(interrupted: &Interrupted, processes: &Processes) -> Outcome {
     } else {
         Outcome::Unresolved("its process identity is incomplete".into())
     }
+}
+
+/// Delete the execution `id` while it is unknown, recording its agent's end
+/// for its space. Returns, once deleted, the space whose agent it ran, if
+/// it ran one.
+fn forget_unknown_execution(
+    tx: &rusqlite::Transaction<'_>,
+    id: &ExecutionId,
+) -> Result<Option<Option<shoal_ids::space_ids::SpaceId>>> {
+    let space = crate::daemon::workspace::executions::agent_execution_space(tx, id)?;
+    let deleted = tx.execute(
+        "DELETE FROM executions WHERE id=?1 AND state=?2",
+        rusqlite::params![id, ExecutionState::Unknown],
+    )? == 1;
+    if !deleted {
+        return Ok(None);
+    }
+    if let Some(space) = &space {
+        crate::daemon::links::issue::agent_ended(tx, space)?;
+    }
+    Ok(Some(space))
 }
