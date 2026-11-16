@@ -4161,9 +4161,7 @@ repository's checkout, or an empty HEAD without a repository, and its agent and
 session keep running until completion cleanup, requested as for a workspace,
 removes the chat and the spaces below it after the grace period, stopping its
 agent, whatever PRs it watches. It has no branch of its own, so `--integrated`
-is refused. Otherwise `done` acts on it as on a workspace: `--attach`,
-`--summary`, closing its open questions, telling its coordinator, else the
-user, and `hooks.post_done`. Its
+is refused. Otherwise `done` acts on it as on a workspace. Its
 closed linked items stop being polled, as a finished workspace's do. `work
 --chats` shows the chat as `finished`, `shoal inbox` and the menu list it, and
 its record carries the `completion` until `shoal done --undo` withdraws it.
