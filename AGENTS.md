@@ -119,7 +119,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   carries without reading, lives in `shoal-core`. `shoal-protocol` depends on
   no Shoal crate but `shoal-config-derive`, `shoal-forge-types`, `shoal-ids`,
   `shoal-refs`, `shoal-schedule`, `shoal-states` and `shoal-time`;
-  `shoal-client` on none but `shoal-forge-types`, `shoal-ids`,
+  `shoal-client`'s code on none but `shoal-forge-types`, `shoal-ids`,
   `shoal-protocol`, `shoal-schedule` and `shoal-states`.
 - `crates/shoal-schedule` holds the agent queue's order: priorities, the
   rank types that explain an entry's place, the snapshot a policy reads, the
@@ -151,7 +151,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   where it calls the daemon.
 - `crates/shoal-workers` holds the execution wrapper and the workers: the
   code that runs in the processes Shoal starts and calls the daemon, which the
-  CLI reaches there too. It depends on no Shoal crate but `shoal-client`,
+  CLI reaches there too. Its code depends on no Shoal crate but `shoal-client`,
   `shoal-core`, `shoal-forge-types`, `shoal-ids`, `shoal-protocol`,
   `shoal-proxy` and `shoal-refs`; neither core nor the daemon's own code
   depends on it. Where core logic needs a value the daemon records, its

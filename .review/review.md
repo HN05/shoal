@@ -31,7 +31,7 @@ instead of the PR delivery guidance below.
   live in `shoal-core`; the protocol carries a target's repository layers
   without reading them. `shoal-protocol` depends on no Shoal crate but
   `shoal-config-derive`, `shoal-forge-types`, `shoal-ids`, `shoal-refs`,
-  `shoal-schedule`, `shoal-states` and `shoal-time`; `shoal-client` on none
+  `shoal-schedule`, `shoal-states` and `shoal-time`; `shoal-client`'s code on none
   but `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-schedule`
   and `shoal-states`.
 - `crates/shoal-schedule` holds the agent queue's order: priorities, the rank
@@ -55,8 +55,8 @@ instead of the PR delivery guidance below.
 - `crates/shoal-cli` serves only the CLI: flag code there that the daemon, the
   execution wrapper, the proxy or the workers need.
 - `crates/shoal-workers` holds the execution wrapper and the workers, the
-  code that runs in the processes Shoal starts and calls the daemon, and
-  depends on no Shoal crate but `shoal-client`, `shoal-core`,
+  code that runs in the processes Shoal starts and calls the daemon, whose
+  code depends on no Shoal crate but `shoal-client`, `shoal-core`,
   `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-proxy` and
   `shoal-refs`. Flag a daemon call in core, a callback core takes that calls
   the daemon, and a dependency of core on
