@@ -70,7 +70,8 @@ async fn relabel(ctx: &Context, renamed: &RenamedSpace) -> Result<()> {
     } = renamed;
     let places =
         crate::client::workspaces::places(&ctx.paths, SpaceSelector::id(space.id())).await?;
-    let running = (places.executions.into_iter()).filter_map(|execution| execution.origin);
+    let agents = (places.executions.into_iter()).filter(|execution| execution.agent.is_some());
+    let running = agents.filter_map(|execution| execution.origin);
     let mut shown = Vec::new();
     for place in running.chain(places.places) {
         if !shown.contains(&place) {
