@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{Result, ensure};
 
-use super::super::{Options, Topic};
+use super::super::super::{Options, Topic};
 use crate::{
     agent::Agent,
     cli::{

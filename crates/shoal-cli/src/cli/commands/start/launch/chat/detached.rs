@@ -2,7 +2,7 @@
 //! an app, in a background place its worker opens.
 use anyhow::Result;
 
-use super::{super::Options, Started};
+use super::{super::super::Options, Started};
 use crate::{
     agent::Agent,
     cli::{
