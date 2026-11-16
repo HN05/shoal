@@ -468,6 +468,20 @@ impl Manager {
         pool: String,
         name: String,
     ) -> Result<()> {
+        self.release_resource_held_by(selector, pool, name, None)
+            .await
+    }
+
+    /// Release the lease `name` of `pool` in `selector`'s workspace, unless
+    /// `holder` names an acquirer it no longer has, as when the user took
+    /// over an agent's lease since a release of it was decided.
+    pub(crate) async fn release_resource_held_by(
+        &self,
+        selector: &SpaceSelector,
+        pool: String,
+        name: String,
+        holder: Option<&Acquirer>,
+    ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         self.touch(&workspace.id).await;
         let hook = self
@@ -484,12 +498,18 @@ impl Manager {
             .store
             .run(move |db| releasable_lease(db, &id, &lookup_pool, &lookup_name))
             .await?;
+        if let Some(holder) = holder
+            && owned.as_ref().is_none_or(|lease| lease.acquirer != *holder)
+        {
+            return Ok(());
+        }
         if let Some(lease) = &owned {
             self.run_resource_release_hook(&workspace, lease, hook.as_deref())
                 .await?;
         }
+        let holder = holder.cloned();
         self.store
-            .write(move |tx| release_lease(tx, &workspace, &pool, &name))
+            .write(move |tx| release_lease(tx, &workspace, &pool, &name, holder.as_ref()))
             .await
     }
 
@@ -594,14 +614,22 @@ fn releasable_lease(
 }
 
 /// Delete a lease and end its approval atomically, in either scope, so
-/// release works even after the pool definition is edited or deleted.
+/// release works even after the pool definition is edited or deleted;
+/// nothing when `holder` names an acquirer the lease no longer has.
 fn release_lease(
     tx: &Transaction<'_>,
     workspace: &crate::model::Workspace,
     pool: &str,
     name: &str,
+    holder: Option<&Acquirer>,
 ) -> Result<()> {
     store::require_ready(tx, &workspace.id)?;
+    if let Some(holder) = holder {
+        let current = named_lease(tx, &workspace.id, pool, name)?;
+        if current.is_none_or(|lease| lease.acquirer != *holder) {
+            return Ok(());
+        }
+    }
     let mut released = false;
     for scope in [Scope::Global, Scope::Repo(workspace.repository_id.clone())] {
         let target = Target::Resource {

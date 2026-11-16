@@ -459,3 +459,32 @@ async fn a_simulator_release_a_lifecycle_operation_holds_off_waits() {
 
     assert!(waits(&released.unwrap_err()));
 }
+
+/// A release decided for an agent's lease leaves it alone once the user
+/// has taken it over since.
+#[tokio::test]
+async fn a_release_decided_for_an_agent_leaves_a_lease_the_user_took_over_since() {
+    let fixture = Fixture::new(POOL).await;
+    let (execution_id, caller) = fixture.agent().await;
+    let agent = Acquirer::Agent { execution_id };
+    fixture.acquire("permit", Some(&caller)).await;
+    fixture.lease_simulator("sim", agent.clone()).await;
+    let manager = &fixture.manager;
+    fixture.acquire("permit", None).await;
+    (manager.give_simulator_lease_to_user(&fixture.workspace.id, "sim"))
+        .await
+        .unwrap();
+
+    let selector = fixture.selector();
+    let permit =
+        manager.release_resource_held_by(&selector, "lock".into(), "permit".into(), Some(&agent));
+    permit.await.unwrap();
+    let sim = manager.release_simulator_held_by(&selector, "sim".into(), Some(&agent));
+    sim.await.unwrap();
+
+    assert_eq!(
+        fixture.permits().await,
+        [self::permit("permit", &Acquirer::User)]
+    );
+    assert_eq!(fixture.simulators().await, ["sim"]);
+}

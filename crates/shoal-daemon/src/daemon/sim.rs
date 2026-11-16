@@ -550,6 +550,18 @@ impl Manager {
     }
 
     pub async fn release_simulator(&self, selector: &SpaceSelector, name: String) -> Result<()> {
+        self.release_simulator_held_by(selector, name, None).await
+    }
+
+    /// Release the simulator lease `name` of `selector`'s workspace, unless
+    /// `holder` names an acquirer it no longer has, as when the user took
+    /// over an agent's lease since a release of it was decided.
+    pub(crate) async fn release_simulator_held_by(
+        &self,
+        selector: &SpaceSelector,
+        name: String,
+        holder: Option<&Acquirer>,
+    ) -> Result<()> {
         let _guard = self.gates.lock_simulators().await;
         let workspace = self.workspace(selector).await?;
         ensure!(
@@ -562,6 +574,11 @@ impl Manager {
             .await?
             .into_iter()
             .find(|s| s.is_leased_by(&workspace.id, &name));
+        if let Some(holder) = holder
+            && sim.as_ref().is_none_or(|sim| sim.acquirer != *holder)
+        {
+            return Ok(());
+        }
         let Some(mut sim) = sim else {
             ensure!(
                 self.release_simulator_access(workspace.id, name).await?,

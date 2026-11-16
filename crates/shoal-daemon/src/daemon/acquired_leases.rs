@@ -206,10 +206,15 @@ impl Manager {
             }
         };
         let selector = SpaceSelector::id(&workspace.id);
+        // Only while it is still the lease of the acquirer that ended.
+        let holder = Some(&lease.acquirer);
         let released = match &lease.held {
-            Held::Simulator { name } => self.release_simulator(&selector, name.clone()).await,
+            Held::Simulator { name } => {
+                (self.release_simulator_held_by(&selector, name.clone(), holder)).await
+            }
             Held::Permit { pool, name } => {
-                (self.release_resource(&selector, pool.clone(), name.clone())).await
+                let (pool, name) = (pool.clone(), name.clone());
+                (self.release_resource_held_by(&selector, pool, name, holder)).await
             }
         };
         match released {
