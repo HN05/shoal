@@ -1,6 +1,6 @@
 //! The triggers the config defines: the global config's, and each
 //! registered repository's, from its checkout's file and its local config.
-use anyhow::Result;
+use anyhow::{Result, bail};
 use shoal_ids::repository_ids::RepositoryId;
 
 use crate::{
@@ -59,6 +59,40 @@ impl Manager {
             }
         }
         triggers
+    }
+
+    /// The triggers of `repository`, if any, after the global config's.
+    pub(crate) async fn triggers_of(
+        &self,
+        repository: Option<&RepositoryId>,
+    ) -> Result<Vec<Configured>> {
+        let mut triggers = global(self.config().triggers());
+        if let Some(repository) = repository {
+            triggers.extend(self.repository_triggers(repository).await?);
+        }
+        Ok(triggers)
+    }
+
+    /// The trigger `name` of `repository`, else of the global config.
+    pub(crate) async fn named_trigger(
+        &self,
+        repository: Option<&RepositoryId>,
+        name: &str,
+    ) -> Result<Configured> {
+        let triggers = self.triggers_of(repository).await?;
+        // A repository's trigger, listed last, stands before the global
+        // config's.
+        match (triggers.into_iter()).rfind(|trigger| trigger.name == name) {
+            Some(trigger) => Ok(trigger),
+            None => match repository {
+                Some(repository) => bail!(
+                    "no trigger {name} in repository {repository} or the global config; see shoal trigger ls"
+                ),
+                None => bail!(
+                    "no trigger {name} in the global config; run this in a repository or pass --repo for a repository's, see shoal trigger ls"
+                ),
+            },
+        }
     }
 
     /// The triggers the registered `repository`'s config defines.

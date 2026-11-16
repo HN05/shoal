@@ -39,6 +39,7 @@ pub mod stopping;
 pub mod subscriptions;
 pub mod transcripts;
 pub mod transfer;
+pub mod triggers;
 pub mod views;
 pub mod workspaces;
 

@@ -71,6 +71,25 @@ pub(super) fn state(db: &Connection, scope: &str, name: &str, now: UnixTime) -> 
     )?)
 }
 
+/// Pause the trigger, or resume it counting from `now`, so a resume never
+/// catches up.
+pub(super) fn set_paused(
+    db: &Connection,
+    scope: &str,
+    name: &str,
+    paused: bool,
+    now: UnixTime,
+) -> Result<()> {
+    state(db, scope, name, now)?;
+    db.execute(
+        "UPDATE trigger_states SET paused=?3,
+            counted_from=CASE WHEN ?3 THEN counted_from ELSE ?4 END
+            WHERE scope=?1 AND name=?2 AND paused<>?3",
+        params![scope, name, paused, now],
+    )?;
+    Ok(())
+}
+
 /// Have the trigger's source count from `to`.
 pub(super) fn count_from(db: &Connection, scope: &str, name: &str, to: UnixTime) -> Result<()> {
     db.execute(
@@ -119,6 +138,26 @@ pub(super) fn record(
         params![scope, name, HISTORY, RunOutcome::Queued],
     )?;
     Ok(())
+}
+
+/// The trigger's newest run.
+pub(super) fn last_run(db: &Connection, scope: &str, name: &str) -> Result<Option<TriggerRun>> {
+    Ok(db
+        .query_row(
+            "SELECT at,origin,outcome,reason,space_id FROM trigger_runs
+                WHERE scope=?1 AND name=?2 ORDER BY id DESC LIMIT 1",
+            params![scope, name],
+            |row| {
+                Ok(TriggerRun {
+                    at: row.get(0)?,
+                    origin: row.get(1)?,
+                    outcome: row.get(2)?,
+                    reason: row.get(3)?,
+                    space_id: row.get(4)?,
+                })
+            },
+        )
+        .optional()?)
 }
 
 /// The space the trigger's newest started run started.

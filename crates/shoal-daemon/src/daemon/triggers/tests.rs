@@ -1,5 +1,6 @@
 //! Triggers firing through the launch `shoal start` uses: when their times
-//! come, across restarts, and against their overlap, key and filter.
+//! come, across restarts, against their overlap, key and filter, and as a
+//! scoped caller's permission allows.
 use std::{sync::Arc, time::Duration};
 
 use shoal_ids::space_ids::SpaceId;
@@ -7,13 +8,16 @@ use shoal_protocol::triggers::{RunOrigin, RunOutcome, TriggerRun};
 
 use crate::{
     daemon::{
+        approvals::Undecided,
         chats::launches::tests::STARTED,
-        test_support::{chat, manager, repository},
+        scope::Caller,
+        test_support::{chat, configure, manager, repository},
         triggers::firing::Firing,
         workspace::Manager,
     },
     model::Repository,
     paths::Paths,
+    protocol::ItemContext,
     time::UnixTime,
 };
 
@@ -31,6 +35,11 @@ async fn with_triggers(triggers: &str) -> (tempfile::TempDir, Arc<Manager>, Repo
         .await
         .unwrap();
     (temp, manager, repo)
+}
+
+/// The context of a request made in `repo`'s checkout.
+fn context(repo: &Repository) -> Option<ItemContext> {
+    Some(ItemContext::Checkout(repo.id.clone()))
 }
 
 /// Set the runtime state of the repository's trigger `name`: counting
@@ -164,6 +173,29 @@ async fn a_time_beyond_catch_up_is_skipped() {
     assert!(started_tasks().is_empty());
 }
 
+#[tokio::test]
+async fn a_paused_trigger_waits_and_resumes_without_catching_up() {
+    let (_temp, manager, repo) = with_triggers(HOURLY).await;
+    let status = (manager.pause_trigger(context(&repo), "check", true, None))
+        .await
+        .unwrap();
+    assert!(status.paused && status.next_at.is_none());
+    let fired = UnixTime::now() - 2 * HOUR;
+    set_state(&manager, &repo, "check", fired, Some(fired)).await;
+    (manager.pause_trigger(context(&repo), "check", true, None))
+        .await
+        .unwrap();
+    manager.trigger_pass(UnixTime::now()).await;
+    assert!(runs(&manager, &repo, "check").await.is_empty());
+
+    let status = (manager.pause_trigger(context(&repo), "check", false, None))
+        .await
+        .unwrap();
+    manager.trigger_pass(UnixTime::now()).await;
+    assert!(runs(&manager, &repo, "check").await.is_empty());
+    assert!(status.next_at.unwrap() > UnixTime::now());
+}
+
 /// Record a started run of the repository's trigger `name` in `space`.
 async fn started_in(manager: &Manager, repo: &Repository, name: &str, space: &SpaceId) {
     let (scope, name) = (repo.id.to_string(), name.to_owned());
@@ -292,4 +324,57 @@ async fn a_missing_value_fails_the_firing_with_its_path() {
     assert_eq!(run.outcome, RunOutcome::Failed);
     assert!(run.reason.unwrap().contains("payload.issue"));
     assert!(started_tasks().is_empty());
+}
+
+#[tokio::test]
+async fn a_global_trigger_is_listed_beside_the_repositorys() {
+    let (_temp, manager, repo) = with_triggers(HOURLY).await;
+    configure(
+        &manager,
+        "[cleanup]\ngrace_minutes = 0\n[triggers.nightly]\non = 'timer'\nat = '02:00'\n\
+         mode = 'chat'\nagent = 'claude'\ntask = 'Nightly'\n",
+    )
+    .await;
+
+    let listed = manager.list_triggers(context(&repo)).await.unwrap();
+    let names: Vec<_> = (listed.iter())
+        .map(|status| (status.name.as_str(), status.repository.is_some()))
+        .collect();
+    assert_eq!(names, [("nightly", false), ("check", true)]);
+    assert!(listed.iter().all(|status| status.next_at.is_some()));
+    let global = manager.list_triggers(None).await.unwrap();
+    assert_eq!(global.len(), 1);
+}
+
+#[tokio::test]
+async fn a_scoped_run_follows_the_triggers_permission() {
+    let (_temp, manager, repo) = with_triggers(HOURLY).await;
+    let agent = chat(&manager, "agent", "chat", Some(&repo), None).await;
+    let caller = Caller {
+        space_id: agent.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+    };
+
+    // The built-in modes propose it: an approval request, and no run.
+    let error = (manager.run_trigger(context(&repo), "check", Some(&caller)))
+        .await
+        .unwrap_err();
+    assert!(error.downcast_ref::<Undecided>().is_some(), "{error:#}");
+    assert!(runs(&manager, &repo, "check").await.is_empty());
+
+    let config = format!("{HOURLY}[permissions]\ntriggers = 'direct'\n");
+    (manager.write_local_config(&repo.id, Some(config)))
+        .await
+        .unwrap();
+    let run = manager
+        .run_trigger(context(&repo), "check", Some(&caller))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (run.outcome, run.origin),
+        (RunOutcome::Started, RunOrigin::Manual)
+    );
 }

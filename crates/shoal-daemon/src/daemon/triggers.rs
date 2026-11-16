@@ -1,10 +1,11 @@
 //! Triggers, the daemon's side of `[triggers.NAME]`: it reads the
 //! configured triggers, keeps each one's runtime state, and fires them, the
-//! timer source's from a background loop. Every firing takes the same
-//! steps whatever its source, and launches through the operation `shoal
-//! start` uses.
+//! timer source's from a background loop and any trigger at once for
+//! `shoal trigger run`. Every firing takes the same steps whatever its
+//! source, and launches through the operation `shoal start` uses.
 use tokio::sync::{Mutex, Notify};
 
+mod commands;
 mod configured;
 mod firing;
 mod state;

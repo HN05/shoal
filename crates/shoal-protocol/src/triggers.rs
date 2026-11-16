@@ -1,7 +1,7 @@
 //! Triggers: `[triggers.NAME]` config that starts agents when an event
 //! source fires, and the runtime state the daemon keeps for each.
 use serde::{Deserialize, Serialize};
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_states::states;
 
 use crate::time::UnixTime;
@@ -41,6 +41,15 @@ states!(
     }
 );
 
+states!(
+    /// What `shoal trigger` does to a trigger's runtime state.
+    TriggerAction: Variants {
+        Pause => "pause",
+        Resume => "resume",
+        Run => "run",
+    }
+);
+
 /// One run of a trigger, as its history keeps it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TriggerRun {
@@ -54,4 +63,22 @@ pub struct TriggerRun {
     /// The space it started, or the one it waits for while queued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub space_id: Option<SpaceId>,
+}
+
+/// A configured trigger with its runtime state, as `shoal trigger ls`
+/// lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TriggerStatus {
+    pub name: String,
+    /// The registered repository whose config defines it; none for the
+    /// global config's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<RepositoryId>,
+    pub source: SourceKind,
+    pub paused: bool,
+    /// When its source fires next, while it is active.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_at: Option<UnixTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_run: Option<TriggerRun>,
 }

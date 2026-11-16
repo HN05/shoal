@@ -32,6 +32,7 @@ mod simulators;
 mod status;
 mod subscriptions;
 pub mod timing;
+mod triggers;
 mod version;
 mod workspaces;
 mod wrapper;
@@ -69,6 +70,7 @@ pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use status::{AccessStall, DaemonStatus};
 pub use subscriptions::SubscriptionMethod;
+pub use triggers::TriggerMethod;
 pub use version::VERSION;
 pub use workspaces::{CommitStart, CopySource, CreationOptions, PullHead, WorkspaceMethod};
 pub use wrapper::{

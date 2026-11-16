@@ -24,6 +24,7 @@ mod reviews;
 mod secrets;
 mod simulators;
 mod subscriptions;
+mod triggers;
 pub(super) mod workspaces;
 use anyhow::Result;
 use shoal_protocol::scope_tokens::ScopeToken;
@@ -89,5 +90,6 @@ pub(super) async fn handle(
         Operation::Subscription(method) => {
             subscriptions::handle(&server.manager, method, caller, scope)
         }
+        Operation::Trigger(method) => triggers::handle(&server.manager, method, caller).await,
     }
 }

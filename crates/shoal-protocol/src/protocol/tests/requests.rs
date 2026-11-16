@@ -153,6 +153,9 @@ const REQUESTS: &[&str] = &[
     r#"{"list_demos":{"workspace":null}}"#,
     r#"{"demo_progress":{"workspace":"fix","launch":"l1"}}"#,
     r#"{"stop_demos":{"workspace":"fix","name":"web"}}"#,
+    // Triggers.
+    r#"{"list_triggers":{"context":{"checkout":"r1"}}}"#,
+    r#"{"act_on_trigger":{"context":null,"name":"triage","action":"run"}}"#,
     // Issues and PRs.
     r#"{"link_item":{"space":"fix","kind":"issue","item":"1","relation":"related"}}"#,
     r#"{"relink_space":{"space":"fix","links":{"issues":[{"kind":"issue","url":"https://github.com/o/r/issues/1"}],"prs":[],"opened":[],"related":[],"assignees":[{"url":"https://github.com/o/r/issues/1","account":"agent","added":true}]}}}"#,
@@ -318,6 +321,7 @@ fn every_request_has_its_json_above() {
         variants::<ResourceMethod>(),
         variants::<SimulatorMethod>(),
         variants::<SubscriptionMethod>(),
+        variants::<TriggerMethod>(),
     ]
     .concat()
     .into_iter()

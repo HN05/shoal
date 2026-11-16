@@ -6,10 +6,11 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use shoal_protocol::triggers::SourceKind;
 use shoal_states::states;
 
-use crate::config::span::Span;
+use crate::{config::span::Span, time::UnixTime};
 
 pub mod filter;
 pub mod launch;
@@ -49,6 +50,22 @@ impl Source {
     pub fn kind(&self) -> SourceKind {
         match self {
             Self::Timer(_) => SourceKind::Timer,
+        }
+    }
+
+    /// When it fires next, counting from `counted_from`, for a trigger that
+    /// last fired at `last_fired`.
+    pub fn next(&self, counted_from: UnixTime, last_fired: Option<UnixTime>) -> UnixTime {
+        match self {
+            Self::Timer(timer) => timer.next(counted_from, last_fired),
+        }
+    }
+
+    /// The input of the firing of the trigger `name` that `shoal trigger
+    /// run` makes at `now`, after the firing at `previous`.
+    pub fn manual_input(&self, name: &str, now: UnixTime, previous: UnixTime) -> Value {
+        match self {
+            Self::Timer(timer) => timer.input(name, now, now, Some(previous)),
         }
     }
 }

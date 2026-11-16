@@ -4,7 +4,7 @@ use super::{
     ExecutionMethod, ExitRequest, FileMethod, HoldMethod, ItemMethod, LaunchMethod,
     NotificationMethod, OperationMethod, PortMethod, QuestionMethod, QueueMethod, Reattach,
     RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod, ReviewMethod, SecretMethod,
-    SimulatorMethod, SubscriptionMethod, VERSION, WorkspaceMethod,
+    SimulatorMethod, SubscriptionMethod, TriggerMethod, VERSION, WorkspaceMethod,
 };
 use serde::{Deserialize, Serialize};
 
@@ -79,6 +79,7 @@ pub enum Operation {
     Resource(ResourceMethod),
     Simulator(SimulatorMethod),
     Subscription(SubscriptionMethod),
+    Trigger(TriggerMethod),
 }
 
 impl Method {
@@ -159,7 +160,8 @@ impl Operation {
             | Self::Port(_)
             | Self::Secret(_)
             | Self::Resource(_)
-            | Self::Simulator(_) => Lifetime::Reply,
+            | Self::Simulator(_)
+            | Self::Trigger(_) => Lifetime::Reply,
         }
     }
 }
@@ -220,6 +222,7 @@ from_domains!(
     Resource(ResourceMethod),
     Simulator(SimulatorMethod),
     Subscription(SubscriptionMethod),
+    Trigger(TriggerMethod),
 );
 
 /// How long a request keeps its connection.

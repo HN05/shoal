@@ -5,7 +5,7 @@ use super::{
     AgentMethod, ApprovalMethod, ChatMethod, CiMethod, DaemonMethod, DemoMethod, ExecutionMethod,
     FileMethod, HoldMethod, ItemMethod, NotificationMethod, Operation, PortMethod, QuestionMethod,
     QueueMethod, RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod, SecretMethod,
-    SimulatorMethod, WorkspaceMethod,
+    SimulatorMethod, TriggerMethod, WorkspaceMethod,
 };
 
 impl Operation {
@@ -81,6 +81,7 @@ impl Operation {
                         | ResourceMethod::ResourceCatalog { .. }
                 )
                 | Self::Secret(SecretMethod::SecretCatalog { .. })
+                | Self::Trigger(TriggerMethod::ListTriggers { .. })
                 | Self::Simulator(
                     SimulatorMethod::SimCatalog { .. }
                         | SimulatorMethod::SimOverview { .. }
