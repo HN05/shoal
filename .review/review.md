@@ -733,15 +733,20 @@ configured command for another agent, plus proven child
   `Store::write` or `Store::read` fits, or without saying why.
   Closed Shoal enums with matching display and wire names share
   explicit spellings through one macro and reject unknown values. Opening persistence
-  only migrates schema; daemon startup
+  migrates the store, rewriting what it and Shoal's files beside it hold into
+  the shapes this release reads; daemon startup
   quarantines interrupted operations atomically after migration and before ownership
   auditing, requests, or cleanup. Failure aborts startup without undoing migration.
   A migration that drops one-time upgrade state refuses a database that still
   holds some, naming the release to start first; earlier migrations stay.
   The separate native simulator state enum preserves
   unfamiliar strings and native spellings; only confirmed shutdown frees running
-  capacity. Schema and state-file changes need a compatibility
-  story for existing daemons. `install` preserves compatible daemons and commands,
+  capacity. Shoal promises earlier versions no compatibility: flag an
+  alias, fallback or second reader kept for a shape only an earlier Shoal
+  wrote, and a shape change whose migration leaves the store holding the old
+  one; do not ask a change to keep an old representation, except for what a
+  process an upgrade leaves running, such as an agent's wrapper, sends.
+  `install` preserves compatible daemons and commands,
   deferring service changes until restart; incompatible daemons restart. Service
   installation refuses state-directory changes until the existing service stops.
   The shell initialization hint is omitted when a startup file already initializes Shoal.

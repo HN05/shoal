@@ -2,8 +2,7 @@
 //! the `queue-start` worker that carries it out agree on. The queue keeps it
 //! as JSON in [`QueueRequest::plan`] until the worker runs; the protocol
 //! calls live in `shoal-client`'s `queue`, the worker in `shoal-workers`'
-//! `queued_starts` and the daemon's runner in `daemon::queued_starts`. Entries queued by an earlier version still
-//! start, so the format only gains fields with defaults.
+//! `queued_starts` and the daemon's runner in `daemon::queued_starts`.
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use std::{ffi::OsString, path::PathBuf};
 

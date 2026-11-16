@@ -3791,7 +3791,11 @@ proven stopped while preserving work and leases; `stop` stops survivors and asks
 before forgetting an execution it cannot prove ended. Every other command reports
 an unreachable or mismatched daemon itself, and `shoal cd` says when shell
 integration is not loaded. Opening
-persistence only migrates schema. State that carries one upgrade across it,
+persistence migrates the store, rewriting what it holds into the shapes this
+release reads: Shoal promises its earlier versions no compatibility, so code
+reads one shape of each record and file, and refuses a package or request of
+another version, except from a process an upgrade left running, such as an
+agent's wrapper. State that carries one upgrade across it,
 for that release's daemon to consume once, goes in a later migration, which
 refuses a database that still holds some and names the release to start
 first; earlier migrations stay, so a database that skips releases runs them

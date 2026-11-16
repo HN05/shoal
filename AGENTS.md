@@ -16,6 +16,15 @@ for delivering a PR, under Committing near the end, decide when work is done.
 - A store operation that needs a transaction runs in `Store::write`, or in
   `Store::read` when it only reads; one that opens its own on `Store::run`
   says why.
+- Shoal makes no compatibility promise yet, to its earlier versions or to
+  what they wrote: when a type, record, protocol message, output or file
+  format should take another shape, change it now, while that is cheap. A
+  store migration rewrites what the store holds into the new shape in the
+  same change, so code reads one shape and keeps no alias, fallback or
+  second reader for an old one; what another version sends, such as a
+  `shoal move` package, is refused, not converted. Only a process an
+  upgrade leaves running, such as an agent's wrapper, keeps being served in
+  its version's shape, since no migration can rewrite it.
 - Treat function abstraction as a correctness requirement and a review gate.
   Every function must stay at one abstraction level: orchestration calls named
   domain operations, and helpers own lower-level implementation details. If a
@@ -339,8 +348,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   permission alone; an approved command's own requests take the actions of
   its key without asking again.
 - Lifecycle states, resource scopes, approval targets and approval
-  specifications are typed; preserve their existing SQLite/JSON representation
-  and reject unknown values.
+  specifications are typed and reject unknown values.
 - Problems show where the user looks (`inbox`, `alerts`, `status`, the failing
   command's error) and name the command that fixes them; repair preserves work
   and resource leases. Startup audits ownership and never deletes work, and the cleanup sweep readies a
