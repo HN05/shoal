@@ -1,5 +1,7 @@
 //! Rewrite the JSON records the store holds into the shapes this release
 //! reads, a migration per change of shape, so code reads one shape of each.
+use std::collections::HashMap;
+
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use serde_json::{Map, Value, json};
@@ -12,20 +14,8 @@ pub(super) fn renamed_fields(db: &Connection) -> Result<()> {
         renamed(watch, "own_state_at", "own_change_at")
     })?;
     rewrite(db, "removed_spaces", |removed| {
-        if let Some(last) = removed
-            .remove("last_session")
-            .filter(|last| !last.is_null())
-        {
-            (removed.entry("last_sessions")).or_insert_with(|| Value::Array(vec![last]));
-        }
-        for agent in objects(removed, "agents") {
-            if let Some(record) = agent.get_mut("record").and_then(Value::as_object_mut) {
-                origin_from_place(record);
-            }
-        }
-        for last in objects(removed, "last_sessions") {
-            origin_from_place(last);
-        }
+        listed(removed, "last_session", "last_sessions");
+        for_each_agent(removed, origin_from_place);
     })
 }
 
@@ -38,30 +28,31 @@ pub(super) fn filled_fields(db: &Connection) -> Result<()> {
         filled(simulator, "acquirer", || json!({"kind": "user"}))
     })?;
     rewrite(db, "removed_spaces", |removed| {
-        for agent in objects(removed, "agents") {
-            if let Some(record) = agent.get_mut("record").and_then(Value::as_object_mut) {
-                filled(record, "mode", default_mode);
-            }
-        }
+        for_each_agent(removed, |agent| filled(agent, "mode", default_mode));
         for last in objects(removed, "last_sessions") {
-            filled(last, "mode", default_mode);
             filled(last, "execution", || {
                 json!(shoal_ids::execution_ids::ExecutionId::generate())
             });
         }
     })?;
-    db.execute_batch(
-        r#"UPDATE space_files SET attached_by='{"kind":"user"}' WHERE attached_by IS NULL;
-        UPDATE space_events
-            SET record=json_set(record,'$.file.attached_by',json('{"kind":"user"}'))
-            WHERE json_valid(record) AND json_type(record,'$.file') IS NOT NULL
-                AND coalesce(json_type(record,'$.file.attached_by'),'null')='null';
-        UPDATE space_events SET record=json_set(record,'$.link.relation','assigned')
-            WHERE json_valid(record) AND json_type(record,'$.link') IS NOT NULL
-                AND json_type(record,'$.link.relation') IS NULL;"#,
-    )?;
+    db.execute_batch(USER_ATTACHED_FILES)?;
+    db.execute_batch(ASSIGNED_LINK_EVENTS)?;
     Ok(())
 }
+
+/// Files and their events that name no attacher were the user's.
+const USER_ATTACHED_FILES: &str = r#"
+    UPDATE space_files SET attached_by='{"kind":"user"}' WHERE attached_by IS NULL;
+    UPDATE space_events
+        SET record=json_set(record,'$.file.attached_by',json('{"kind":"user"}'))
+        WHERE json_valid(record) AND json_type(record,'$.file') IS NOT NULL
+            AND coalesce(json_type(record,'$.file.attached_by'),'null')='null';"#;
+
+/// Link events without a relation were assignments.
+const ASSIGNED_LINK_EVENTS: &str = "
+    UPDATE space_events SET record=json_set(record,'$.link.relation','assigned')
+        WHERE json_valid(record) AND json_type(record,'$.link') IS NOT NULL
+            AND json_type(record,'$.link.relation') IS NULL;";
 
 fn default_mode() -> Value {
     json!(shoal_protocol::config::modes::ModeName::DEFAULT)
@@ -79,9 +70,7 @@ pub(super) fn listed_items(db: &Connection) -> Result<()> {
         }
     })?;
     rewrite(db, "pr_cleanup", |registration| {
-        if let Some(url) = registration.remove("url").filter(|url| !url.is_null()) {
-            (registration.entry("urls")).or_insert_with(|| Value::Array(vec![url]));
-        }
+        listed(registration, "url", "urls")
     })?;
     for table in ["pr_activity", "space_item_activity"] {
         rewrite(db, table, |snapshot| {
@@ -150,37 +139,47 @@ pub(super) fn current_events(db: &Connection) -> Result<()> {
             Some("continued") => {
                 event.insert("kind".into(), json!("undone"));
             }
-            Some("chat_changed") => {
-                event.insert("kind".into(), json!("parent_changed"));
-                let chat = event
-                    .remove("chat")
-                    .and_then(|chat| chat.as_str().map(str::to_owned));
-                let parent = chat.map(|id| {
-                    let name = chats.get(&id).cloned().unwrap_or_else(|| id.clone());
-                    json!({"id": id, "name": name, "kind": "chat"})
-                });
-                event.insert("parent".into(), parent.unwrap_or(Value::Null));
-            }
+            Some("chat_changed") => parent_from_chat(event, &chats),
             _ => {}
         }
-        if let Some(workspace) = event.remove("parent_workspace") {
-            let parent = match workspace {
-                Value::Object(mut workspace) => {
-                    workspace.insert("kind".into(), json!("workspace"));
-                    Value::Object(workspace)
-                }
-                none => none,
-            };
-            event.entry("parent").or_insert(parent);
-        }
+        parent_from_workspace(event);
         if let Some(review) = event.get_mut("review").and_then(Value::as_object_mut) {
             review.remove("head");
         }
     })
 }
 
+/// A `chat_changed` event as the `parent_changed` event naming its chat,
+/// by the name `chats` holds for it, or none once it returned to the user.
+fn parent_from_chat(event: &mut Map<String, Value>, chats: &HashMap<String, String>) {
+    event.insert("kind".into(), json!("parent_changed"));
+    let chat = event
+        .remove("chat")
+        .and_then(|chat| chat.as_str().map(str::to_owned));
+    let parent = chat.map(|id| {
+        let name = chats.get(&id).cloned().unwrap_or_else(|| id.clone());
+        json!({"id": id, "name": name, "kind": "chat"})
+    });
+    event.insert("parent".into(), parent.unwrap_or(Value::Null));
+}
+
+/// An event's `parent_workspace` as its `parent`.
+fn parent_from_workspace(event: &mut Map<String, Value>) {
+    let Some(workspace) = event.remove("parent_workspace") else {
+        return;
+    };
+    let parent = match workspace {
+        Value::Object(mut workspace) => {
+            workspace.insert("kind".into(), json!("workspace"));
+            Value::Object(workspace)
+        }
+        none => none,
+    };
+    event.entry("parent").or_insert(parent);
+}
+
 /// The name of every chat, removed or not, by its ID.
-fn chat_names(db: &Connection) -> Result<std::collections::HashMap<String, String>> {
+fn chat_names(db: &Connection) -> Result<HashMap<String, String>> {
     Ok(db
         .prepare(
             "SELECT id,name FROM spaces WHERE kind='chat'
@@ -269,6 +268,27 @@ fn objects<'a>(
         .into_iter())
     .flatten()
     .filter_map(Value::as_object_mut)
+}
+
+/// Apply `change` to each stopped agent's record and each last session of
+/// a removal record.
+fn for_each_agent(removed: &mut Map<String, Value>, change: impl Fn(&mut Map<String, Value>)) {
+    for agent in objects(removed, "agents") {
+        if let Some(record) = agent.get_mut("record").and_then(Value::as_object_mut) {
+            change(record);
+        }
+    }
+    for last in objects(removed, "last_sessions") {
+        change(last);
+    }
+}
+
+/// Move `record`'s single value `one` into the list `many`, unless it has
+/// that list already.
+fn listed(record: &mut Map<String, Value>, one: &str, many: &str) {
+    if let Some(value) = record.remove(one).filter(|value| !value.is_null()) {
+        (record.entry(many)).or_insert_with(|| Value::Array(vec![value]));
+    }
 }
 
 /// Move `record`'s field `old` to `new`, unless it has `new` already.
