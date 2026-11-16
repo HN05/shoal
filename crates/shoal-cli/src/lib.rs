@@ -14,8 +14,8 @@ use shoal_core::{
     agents, ai, build, chat_handoff, chat_starts, config, config_file, daemon_handoff,
     daemon_owner, env, execution, fsutil, git, installed, launches, opened_pull, operations, paths,
     process, profile, proxy, queued_launches, queued_starts, refusal, releases, removal,
-    repository, reviews, secrets, service, sessions, shell, start_plan, stdout, terminal, tools,
-    transfer, workers,
+    repository, reviews, service, sessions, shell, start_plan, stdout, terminal, tools, transfer,
+    workers,
 };
 
 use shoal_client as client;

@@ -1547,8 +1547,10 @@ name = "shoal-workers"
 version = "0.17.2"
 dependencies = [
  "anyhow",
+ "serde_json",
  "shoal-client",
  "shoal-core",
+ "shoal-ids",
  "shoal-protocol",
  "shoal-refs",
  "tokio",

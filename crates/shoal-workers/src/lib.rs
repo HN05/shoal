@@ -5,10 +5,11 @@
 
 pub mod git_credential;
 pub mod push_gate;
+pub mod secrets;
 
 use shoal_client as client;
 use shoal_core::{env, fsutil, git, tools};
-use shoal_protocol::model;
+use shoal_protocol::{model, protocol};
 
 #[cfg(test)]
 mod helper_tests {

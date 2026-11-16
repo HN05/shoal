@@ -110,7 +110,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             launchers,
             tool,
             args,
-        } => crate::secrets::run_tool(&ctx.paths, &launchers, &tool, args).await,
+        } => shoal_workers::secrets::run_tool(&ctx.paths, &launchers, &tool, args).await,
         InternalCommand::PushGate { remote, url } => {
             shoal_workers::push_gate::serve(&ctx.paths, remote, url).await
         }

@@ -453,7 +453,7 @@ pub fn inherits_scope(state: &std::path::Path) -> bool {
             .any(|dir| same_directory(dir, state))
 }
 
-pub(crate) fn same_directory(a: &std::path::Path, b: &std::path::Path) -> bool {
+pub fn same_directory(a: &std::path::Path, b: &std::path::Path) -> bool {
     match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
         (Ok(a), Ok(b)) => a == b,
         _ => a == b,
