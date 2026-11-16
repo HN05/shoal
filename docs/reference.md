@@ -167,7 +167,9 @@ How the daemon exits decides what becomes of tracked agents and commands:
   starts in a transient systemd scope of its own in the service's slice, with
   `OOMPolicy=continue`, where systemd 254 or later and a user bus start one
   when the daemon starts; otherwise it runs in the service's control group,
-  which systemd's stop ends.
+  which systemd's stop ends. Wrappers of releases before reattachment stop
+  instead, and `shoal daemon restart` names the `shoal restore` of the spaces
+  they ran in.
 - `shoal daemon stop` stops them, [chats'](#chats) agents included, as
   `shoal stop --all` does, so they stay down until `shoal restore`, then stops
   the daemon and names that `shoal restore` with the spaces it stopped. Unlike

@@ -107,14 +107,11 @@ pub(super) async fn restart(ctx: &Context, when: ExitWhen) -> Result<i32> {
             "foreground daemon: stop it and run `shoal daemon run` again"
         );
     }
-    let waited_for = match stop_showing_work(ctx, Exit::Restart, when).await? {
-        Stopping::Stopped { waited_for, .. } => waited_for,
+    let (left, waited_for) = match stop_showing_work(ctx, Exit::Restart, when).await? {
+        Stopping::Stopped { left, waited_for } => (left, waited_for),
         Stopping::Refused(work) => return kept(ctx, Exit::Restart, work),
     };
     start_service(ctx).await?;
-    // The restart succeeded even when its saved work cannot be read.
-    let stopped = crate::client::saved::waits_for_resume(&ctx.paths).await;
-    let left = stopped.map_or(Left::Unknown, Left::Any);
     emit_stopped_work(ctx, "Daemon restarted", true, left, waited_for)?;
     Ok(0)
 }
@@ -123,8 +120,6 @@ pub(super) async fn restart(ctx: &Context, when: ExitWhen) -> Result<i32> {
 pub(super) enum Left {
     /// The stopped work of these spaces, by number, which the exit stopped.
     Spaces(Vec<SpaceNumber>),
-    /// Whether any space has stopped work, as a restart reads afterwards.
-    Any(bool),
     /// Not known, as from a daemon that does not say.
     Unknown,
 }
@@ -142,8 +137,6 @@ impl Left {
                     numbers.join(" ")
                 ))
             }
-            Self::Any(true) => Some("restore stopped work with shoal restore --all".into()),
-            Self::Any(false) => None,
             Self::Unknown => Some("restore any stopped work with shoal restore".into()),
         }
     }
@@ -164,7 +157,6 @@ fn emit_stopped_work(
     };
     let (stopped_work, stopped_spaces) = match left {
         Left::Spaces(spaces) => (Some(!spaces.is_empty()), spaces),
-        Left::Any(any) => (Some(any), Vec::new()),
         Left::Unknown => (None, Vec::new()),
     };
     ctx.emit_styled(

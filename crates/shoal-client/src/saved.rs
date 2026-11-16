@@ -24,10 +24,3 @@ pub async fn read(daemon: &impl Daemon, space: SpaceSelector) -> Result<Saved> {
 pub async fn summaries(daemon: &impl Daemon) -> Result<Vec<SavedSummary>> {
     pages(daemon, RecoveryMethod::SavedSummaries).await
 }
-
-/// Whether a space this caller sees has stopped work that waits for `shoal
-/// resume`.
-pub async fn waits_for_resume(daemon: &impl Daemon) -> Result<bool> {
-    let summaries = summaries(daemon).await?;
-    Ok(summaries.iter().any(|summary| summary.restorable))
-}

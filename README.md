@@ -530,7 +530,8 @@ brew upgrade hn05/tap/shoal
 Update a downloaded binary or `Shoal.app` with `shoal update`. Managed daemons apply the upgrade once their operations are idle; run
 `shoal daemon restart` to apply an upgrade immediately; running agents and
 commands reattach to the new daemon. Wrappers from releases before reattachment
-are stopped instead; restore them with `shoal restore --all`. The next `shoal`
+are stopped instead, and the restart names the `shoal restore` that restores
+them. The next `shoal`
 command updates installed skills; reload `source <(shoal shell init)` in open
 terminals.
 
