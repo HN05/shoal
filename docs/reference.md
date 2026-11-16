@@ -1310,8 +1310,8 @@ workspace ends the sessions Shoal created for it,
 regardless of `terminal.close_when_done`, and daemon startup and `shoal cleanup` end those
 whose workspace is gone. Once a space's agent starts in another place than
 the one its stopped agent ran in, as a restore does when that place is not
-back at its prompt, Shoal ends the one it left, if Shoal created it and
-nothing Shoal tracks runs there. A session you opened yourself stays open, even after a
+back at its prompt, Shoal ends the one it left, if Shoal created it, nothing
+Shoal tracks runs there and no other stopped agent waits there. A session you opened yourself stays open, even after a
 Shoal agent ran in it, as do sessions from Shoal versions without the label. An
 agent or chat launched in place refuses to start if Shoal cannot relabel the
 session.

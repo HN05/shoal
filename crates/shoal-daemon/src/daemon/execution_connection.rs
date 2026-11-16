@@ -355,6 +355,7 @@ async fn relay(
                 child,
                 group_id,
                 restored,
+                restored_from,
             } => {
                 awaiting_started = false;
                 *started = true;
@@ -374,7 +375,7 @@ async fn relay(
                     .record_execution_child(execution_id.clone(), child, group_id)
                     .await?;
                 let left = match agent {
-                    Some(_) => manager.left_places(&space.id, execution_id).await,
+                    Some(_) => (manager.left_places(&space.id, execution_id, &restored_from)).await,
                     None => Vec::new(),
                 };
                 if let Some(tracked) = agent {

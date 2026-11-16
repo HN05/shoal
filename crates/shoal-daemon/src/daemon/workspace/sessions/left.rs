@@ -1,8 +1,10 @@
-//! The places a space's agent left: those its saved agents ran in, which
-//! serve nothing once the space's agent runs elsewhere, as after a restore
-//! that could not run where its agent stopped. Shoal closes the ones it
-//! created then, so `shoal status` and `shoal attach` show only the place
-//! the agent runs in.
+//! The places a space's agent left: those the saved agents it restores ran
+//! in, which serve nothing once it runs elsewhere, as after a restore that
+//! could not run where its agent stopped. Shoal closes the ones it created
+//! then, so `shoal status` and `shoal attach` show the place the agent runs
+//! in, and keeps those where another saved agent waits for its restore.
+use std::path::PathBuf;
+
 use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
@@ -15,16 +17,20 @@ use crate::{
 };
 
 impl Manager {
-    /// The places the saved agents of `space` ran in, other than the one
-    /// its agent `execution` starts in, which that agent leaves. Read them
-    /// before the start is acknowledged: the wrapper then consumes what it
-    /// restored from. Saved agents that cannot be read leave none.
+    /// The places the agent `execution` of `space` leaves: those the saved
+    /// agents at `restored_from`, which it restores, ran in, except where it
+    /// starts and where another saved agent waits. Read them before the
+    /// start is acknowledged: the wrapper then consumes the records. Saved
+    /// agents that cannot be read leave none.
     pub(crate) async fn left_places(
         &self,
         space: &SpaceId,
         execution: &ExecutionId,
+        restored_from: &[PathBuf],
     ) -> Vec<Origin> {
-        let runs_in = self.execution_place(execution).await;
+        if restored_from.is_empty() {
+            return Vec::new();
+        }
         let saved = match Saved::load(&self.paths, space) {
             Ok(saved) => saved,
             Err(error) => {
@@ -32,15 +38,19 @@ impl Manager {
                 return Vec::new();
             }
         };
-        let ran_in = (saved.agents.into_iter().chain(saved.sessions))
+        let (restored, waiting): (Vec<_>, Vec<_>) = (saved.agents.into_iter())
+            .chain(saved.sessions)
+            .partition(|session| restored_from.contains(&session.path));
+        let mut kept: Vec<Origin> = (waiting.into_iter())
+            .filter_map(|session| session.origin)
+            .collect();
+        kept.extend(self.execution_place(execution).await);
+        let ran_in = (restored.into_iter())
             .filter_map(|session| session.origin)
             .filter(|origin| origin.place.is_some());
         let mut left: Vec<Origin> = Vec::new();
         for origin in ran_in {
-            let known = runs_in
-                .iter()
-                .chain(&left)
-                .any(|known| same_place(known, &origin));
+            let known = (kept.iter().chain(&left)).any(|known| same_place(known, &origin));
             if !known {
                 left.push(origin);
             }

@@ -1,6 +1,11 @@
 //! Supervising a tracked command: registering its process group with the
 //! daemon, handing it the terminal, and waiting for it to exit or be stopped.
-use std::{ffi::OsString, os::unix::process::ExitStatusExt, path::Path, process::ExitStatus};
+use std::{
+    ffi::OsString,
+    os::unix::process::ExitStatusExt,
+    path::{Path, PathBuf},
+    process::ExitStatus,
+};
 
 use anyhow::{Context, Result, bail, ensure};
 use tokio::{
@@ -154,8 +159,9 @@ async fn register_child(
 )> {
     let (child, group, terminal, scope) = spawn_registered_child(paths, plan, command, mode, auth)?;
     let restored = matches!(mode, Mode::Recovery { .. }) || recovery_record.is_some();
-    register_process(link, &group, restored).await?;
-    consume_recovery_records(mode, recovery_record)?;
+    let records = restored_records(mode, recovery_record);
+    register_process(link, &group, restored, &records).await?;
+    consume_recovery_records(&records)?;
     report_detached_launch(plan, mode, &group)?;
     Ok((child, group, terminal, scope))
 }
@@ -185,12 +191,18 @@ fn spawn_registered_child(
     Ok((child, group, terminal, scope))
 }
 
-async fn register_process(link: &mut Link, group: &ProcessGroup, restored: bool) -> Result<()> {
+async fn register_process(
+    link: &mut Link,
+    group: &ProcessGroup,
+    restored: bool,
+    records: &[&Path],
+) -> Result<()> {
     let identity = process::identity::capture(group.pid())?;
     link.send(&ExecutionEvent::Started {
         child: identity.clone(),
         group_id: group.pid(),
         restored,
+        restored_from: records.iter().map(|record| record.to_path_buf()).collect(),
     })
     .await?;
     let acknowledged = timeout(timing::START_ACK_TIMEOUT, link.control()).await??;
@@ -224,13 +236,20 @@ fn handoff_terminal(terminal: &mut Option<Terminal>, group: &ProcessGroup) -> Re
     Ok(())
 }
 
-fn consume_recovery_records(mode: &Mode, recovery_record: Option<&Path>) -> Result<()> {
-    if let Mode::Recovery { records } = mode {
-        for record in records {
-            recovery::consume(record)?;
-        }
-    }
-    if let Some(record) = recovery_record {
+/// The saved records the child of `mode` restores from: a restore's, and
+/// the `recovery_record` an agent resumed in place restores from.
+fn restored_records<'a>(mode: &'a Mode, recovery_record: Option<&'a Path>) -> Vec<&'a Path> {
+    let records = match mode {
+        Mode::Recovery { records } => records.as_slice(),
+        _ => &[],
+    };
+    (records.iter().map(PathBuf::as_path))
+        .chain(recovery_record)
+        .collect()
+}
+
+fn consume_recovery_records(records: &[&Path]) -> Result<()> {
+    for record in records {
         recovery::consume(record)?;
     }
     Ok(())

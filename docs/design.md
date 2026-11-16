@@ -1475,11 +1475,13 @@ have resolved or the agent's turn finished, since interactive agents stay runnin
 at their prompt, and never while stopped work waits for resume, so the place keeps
 the stop's cause and `shoal restore --all` can restore the agent there; removal
 closes it immediately, so completion cleanup leaves the agent its grace period.
-A space's agent that starts in another place than its saved agents ran in,
-as a restore whose place is not back at its prompt does, closes the places
-Shoal created that it left once it runs, unless an execution is recorded
-there: the space has one agent, so such a place serves nothing, and `attach`
-offers only the sessions that show the agent.
+A restored agent that starts in another place than the saved agents it
+restores ran in, as a restore whose place is not back at its prompt does,
+closes the places Shoal created that they left once it runs, unless an
+execution is recorded there or another saved agent waits there: such a place
+serves nothing, and `attach` offers only the sessions that show the agent.
+The wrapper names the records it restores from, since a workspace may save
+several agents.
 The turn comes from the agent's hooks, and from the host only for an agent
 without them, such as Herdr's `idle` or `done`; zmx reads none, so its sessions
 of such agents close with their execution. The rule, the watcher and its marker

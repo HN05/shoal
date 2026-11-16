@@ -73,6 +73,10 @@ pub enum ExecutionEvent {
         /// other last sessions; a new agent replaces them.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         restored: bool,
+        /// The saved records the child restores from, which the wrapper
+        /// consumes once the start is acknowledged.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        restored_from: Vec<std::path::PathBuf>,
     },
     Finished {
         exit_code: i32,

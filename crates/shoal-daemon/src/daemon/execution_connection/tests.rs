@@ -157,6 +157,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
             child: None,
             group_id: wrapper.pid,
             restored: false,
+            restored_from: Vec::new(),
         },
     )
     .await
@@ -244,6 +245,7 @@ async fn running_executions_leave_daemon_operations_idle() {
             child: None,
             group_id: wrapper.pid,
             restored: false,
+            restored_from: Vec::new(),
         },
     )
     .await
