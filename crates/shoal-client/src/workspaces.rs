@@ -245,17 +245,17 @@ pub async fn record_owned_place(
     Ok(())
 }
 
-/// Whose `place`, the place of a terminal host, is for `workspace`, as the
+/// Whose `place`, the place of a terminal host, is for `space`, as the
 /// daemon knows it.
 pub async fn place_ownership(
     daemon: &impl Daemon,
-    workspace: &SpaceId,
+    space: &SpaceId,
     place: &Origin,
 ) -> Result<PlaceOwnership> {
     request(
         daemon,
         WorkspaceMethod::PlaceOwnership {
-            workspace: SpaceSelector::id(workspace),
+            space: SpaceSelector::id(space),
             place: place.clone(),
         },
     )

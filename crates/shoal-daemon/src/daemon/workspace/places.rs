@@ -174,24 +174,24 @@ impl Manager {
         self.store.run(move |db| owned(db, space.as_ref())).await
     }
 
-    /// Whose `place` is for the workspace `selector` names: the record's
-    /// owner when the daemon records it, otherwise the workspace's when its
-    /// host labels it as the workspace's session.
+    /// Whose `place` is for the space `selector` names: the record's owner
+    /// when the daemon records it, otherwise the space's when its host
+    /// labels it as the space's session.
     pub(crate) async fn place_ownership(
         &self,
         selector: &SpaceSelector,
         place: &Origin,
     ) -> Result<PlaceOwnership> {
-        let workspace = self.workspace(selector).await?;
+        let space = self.space(selector).await?;
         if let Some((owner, _)) = self.place_owner(place).await? {
-            return Ok(if owner == workspace.id {
+            return Ok(if owner == space.id {
                 PlaceOwnership::Workspace
             } else {
                 PlaceOwnership::Elsewhere
             });
         }
         let labelled = self
-            .labels_session(place.host, place.id(), &workspace.id)
+            .labels_session(place.host, place.id(), &space.id)
             .await?;
         Ok(if labelled {
             PlaceOwnership::Workspace

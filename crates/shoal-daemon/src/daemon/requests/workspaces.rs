@@ -270,8 +270,8 @@ pub(super) async fn handle(
         WorkspaceMethod::CloseOwnedPlace { workspace, place } => {
             Body::PlaceClose(manager.close_recorded_place(&workspace, &place).await?)
         }
-        WorkspaceMethod::PlaceOwnership { workspace, place } => {
-            Body::PlaceOwnership(manager.place_ownership(&workspace, &place).await?)
+        WorkspaceMethod::PlaceOwnership { space, place } => {
+            Body::PlaceOwnership(manager.place_ownership(&space, &place).await?)
         }
         WorkspaceMethod::OwnedPlaces => owned_places(manager).await?,
         WorkspaceMethod::SpacePlaces { space } => {
@@ -398,13 +398,13 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::WorkspaceHook { workspace, .. }
             | WorkspaceMethod::KeepAgentEnvironment { workspace, .. }
             | WorkspaceMethod::RecordOwnedPlace { workspace, .. }
-            | WorkspaceMethod::PlaceOwnership { workspace, .. }
             | WorkspaceMethod::LayeredConfig {
                 target: ConfigTarget::Space(workspace),
             } => Some(workspace),
             WorkspaceMethod::RenameSpace { space, .. }
             | WorkspaceMethod::SpaceStatus { space }
-            | WorkspaceMethod::SpaceSessions { space } => Some(space),
+            | WorkspaceMethod::SpaceSessions { space }
+            | WorkspaceMethod::PlaceOwnership { space, .. } => Some(space),
             // The inbox lists them with the user's notifications.
             WorkspaceMethod::UntrackedWorktrees => {
                 let action = Action::new(PermissionKey::Notifications, "the untracked worktrees");

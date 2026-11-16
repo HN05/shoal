@@ -10,20 +10,20 @@ use crate::{
     terminal::{Host, Owner, current_place, hosts, named, origin_here, with_instance},
 };
 
-/// Whether the place this process runs in closes once `workspace` is
+/// Whether the place this process runs in closes once the space `space` is
 /// removed, ending anything it streams: a watcher closes it then, or the
-/// daemon does, which records it as a place Shoal created for the workspace
-/// or whose host labels it as the workspace's session.
+/// daemon does, which records it as a place Shoal created for the space or
+/// whose host labels it as the space's session.
 pub(in crate::cli) async fn closes_with(
     paths: &crate::client::connection::CommandPaths,
-    workspace: &SpaceId,
+    space: &SpaceId,
 ) -> Result<bool> {
-    if closing::closes_with(paths, workspace).await {
+    if closing::closes_with(paths, space).await {
         return Ok(true);
     }
     match current_place().await {
         Some(place) => Ok(
-            crate::client::workspaces::place_ownership(paths, workspace, &place).await?
+            crate::client::workspaces::place_ownership(paths, space, &place).await?
                 == crate::sessions::PlaceOwnership::Workspace,
         ),
         None => Ok(false),

@@ -66,7 +66,7 @@ const REQUESTS: &[&str] = &[
     r#"{"layered_config":{"target":{"space":"fix"}}}"#,
     r#"{"keep_agent_environment":{"workspace":"fix","environment":{}}}"#,
     r#"{"close_owned_place":{"workspace":"fix","place":{"host":"rex","place":"block:1"}}}"#,
-    r#"{"place_ownership":{"workspace":"fix","place":{"host":"herdr","place":"w1:p1"}}}"#,
+    r#"{"place_ownership":{"space":"fix","place":{"host":"herdr","place":"w1:p1"}}}"#,
     r#"{"record_owned_place":{"workspace":"fix","origin":{"host":"rex","place":"block:1","owned":true}}}"#,
     r#""owned_places""#,
     r#"{"hold_acquire":{"space":"fix","name":"review","reason":null}}"#,

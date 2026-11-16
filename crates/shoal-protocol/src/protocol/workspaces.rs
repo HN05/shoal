@@ -241,9 +241,10 @@ pub enum WorkspaceMethod {
         workspace: shoal_ids::space_ids::SpaceId,
         place: crate::sessions::Origin,
     },
-    /// Whose `place` is, as the daemon knows it for `workspace`.
+    /// Whose `place` is, as the daemon knows it for the workspace or chat
+    /// `space`.
     PlaceOwnership {
-        workspace: SpaceSelector,
+        space: SpaceSelector,
         place: crate::sessions::Origin,
     },
     /// One effective hook, resolved against the directory where it runs.

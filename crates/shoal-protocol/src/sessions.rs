@@ -85,14 +85,14 @@ impl Origin {
     }
 }
 
-/// Whose a place is, as the daemon knows it when asked for a workspace.
+/// Whose a place is, as the daemon knows it when asked for a space.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlaceOwnership {
-    /// The workspace's: its record names the workspace, or its host labels
-    /// it as the workspace's session, so the workspace's removal closes it.
+    /// The space's: its record names the space, or its host labels it as
+    /// the space's session, so the space's removal closes it.
     Workspace,
-    /// Another workspace's agent or a chat took it over.
+    /// Another space's agent took it over.
     Elsewhere,
     /// Neither recorded nor labelled, as a place opened before Shoal
     /// recorded its places.
