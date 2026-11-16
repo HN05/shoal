@@ -373,7 +373,8 @@ only to a value your space holds, and `config reset`, `install`, `setup` and
 `repo setup` stay the user's), `limits` starting agents regardless of the limits, with
 `--now`, `--focus` or `queue start`, `ci_approve` approving CI runs that wait
 for approval, `pr_review` approving and requesting changes on PRs, bound to
-the PR's head and the review's text, `user_holds` releasing the user's holds
+the PR's head and the review's text, `triggers` pausing, resuming and running
+[triggers](#triggers), `user_holds` releasing the user's holds
 and removing what the user holds, and `daemon` the daemon's service
 commands and `shoal update` while a daemon of this Shoal answers to decide
 it. `notifications`, `deny` or `direct`, lets a
@@ -383,9 +384,9 @@ of the spaces below as the user does.
 With `propose` the command exits 2 with `approval_pending` and the request,
 which goes to the space above whose own value is `direct`, or the user; once
 approved, the same command proceeds once. A master session has every one
-at `direct` but `daemon`, which it proposes, as it proposes `api_writes`;
-other modes propose `admin`, `limits`, `ci_approve`, `pr_review` and
-`user_holds` and are denied the rest.
+at `direct` but `daemon` and `triggers`, which it proposes, as it proposes
+`api_writes`; other modes propose `admin`, `limits`, `ci_approve`,
+`pr_review`, `triggers` and `user_holds` and are denied the rest.
 
 ## Links and watches
 
@@ -749,6 +750,26 @@ user how to open it; `shoal demo` and the inbox open it for them. The `server`
 preset reserves a port and passes it as `PORT`, and `web` does the same for a
 page opened in a browser; the `simulator` preset leases the workspace's
 simulator and passes its UDID as `SHOAL_SIM_UDID`. Chats have no demos.
+
+## Triggers
+
+```sh
+shoal trigger ls [--repo R]   # Source, paused or active, next firing, last run and its space
+shoal trigger pause <name>    # Its source fires it no more until resumed
+shoal trigger resume <name>   # It counts its times from now; those it missed never run
+shoal trigger run <name>      # Fire it now and print the run's outcome
+```
+
+A trigger, `[triggers.NAME]` in a repository's config or the global config,
+starts an agent when its source fires, such as a timer at set times, as the
+user's `shoal start` would: through the agent queue, in a top-level space with
+its mode's permissions. The commands act on the triggers of the repository the
+caller acts in, or `--repo` names, and the global config's, and change a
+trigger's runtime state, never its config. `ls` is open to every space;
+`pause`, `resume` and `run` follow its `triggers`
+[permission](#permitted-actions). A run that a trigger's `overlap` skips or
+queues, whose key repeats a recent run's, or whose launch fails says so; one
+its filter drops is no run.
 
 ## Processes
 

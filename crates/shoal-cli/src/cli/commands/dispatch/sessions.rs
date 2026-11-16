@@ -5,7 +5,7 @@ use crate::cli::{
     commands::{
         demo, queue, restart,
         restore::{self, agents},
-        sessions,
+        sessions, triggers,
     },
     context::Context,
 };
@@ -76,6 +76,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             repository,
             print,
         } => queue::run(&ctx, command, repository, print).await,
+        SessionsCommand::Trigger { command } => triggers::run(&ctx, command).await,
     }
 }
 

@@ -1,4 +1,4 @@
-//! Arguments of commands for agent sessions and demos.
+//! Arguments of commands for agent sessions, demos and triggers.
 use shoal_ids::execution_ids::ExecutionId;
 use std::ffi::OsString;
 
@@ -161,6 +161,53 @@ pub enum SessionsCommand {
         /// otherwise every workspace.
         #[arg(short = 'w', long)]
         workspace: Option<SpaceSelector>,
+    },
+    /// List, pause, resume and run triggers, which start agents on their own.
+    ///
+    /// A trigger is `[triggers.NAME]` config: a source, such as a timer,
+    /// whose firings start an agent as shoal start would. These commands
+    /// change a trigger's runtime state, never the config, and act on the
+    /// triggers of the repository this runs in, or that --repo names, and
+    /// the global config's.
+    Trigger {
+        #[command(subcommand)]
+        command: TriggerCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum TriggerCommand {
+    /// List the triggers with their source, whether they are paused, their
+    /// next firing and their last run's outcome and space.
+    Ls {
+        /// A registered repository other than the one this runs in.
+        #[arg(short = 'r', long = "repo")]
+        repository: Option<String>,
+    },
+    /// Pause a trigger: its source fires it no more until resumed, through
+    /// config edits and restarts.
+    Pause {
+        name: String,
+        /// A registered repository other than the one this runs in.
+        #[arg(short = 'r', long = "repo")]
+        repository: Option<String>,
+    },
+    /// Resume a paused trigger, counting its times from now, so the times
+    /// it missed while paused never run.
+    Resume {
+        name: String,
+        /// A registered repository other than the one this runs in.
+        #[arg(short = 'r', long = "repo")]
+        repository: Option<String>,
+    },
+    /// Fire a trigger now, through its filter, templates, key and overlap,
+    /// and print its run's outcome.
+    Run {
+        name: String,
+        /// A registered repository other than the one this runs in.
+        #[arg(short = 'r', long = "repo")]
+        repository: Option<String>,
     },
 }
 

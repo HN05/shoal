@@ -157,7 +157,9 @@ with you; `orchestrate` starts a master session, a chat without a repository
 that starts and steers the work of every repository for you. Without `--mode`,
 `shoal start` asks which on a terminal. Configure your own under
 `[modes.<name>]` and `[rules.<name>]`; see
-[modes and rules](docs/reference.md#modes-and-rules).
+[modes and rules](docs/reference.md#modes-and-rules). A trigger,
+`[triggers.<name>]`, starts an agent on its own, such as every weekday at
+09:00; see [triggers](docs/reference.md#triggers).
 
 ```sh
 shoal                         # Inbox when something needs you, else workspaces; Tab switches
@@ -165,6 +167,8 @@ shoal repo                    # Interactive repository menu
 shoal inbox                   # Questions, approvals, agents needing input, failures, ready work, demos; --print to list
 shoal list                    # Workspaces, chats and queued agents; --print to list
 shoal queue                   # Agents waiting for a slot under the agent limits; start or cancel one
+shoal trigger ls              # Triggers of this repository and the global config: next firing, last run
+shoal trigger run triage      # Fire the trigger triage now; pause and resume stop and restart it
 shoal list --chats            # Running chats
 shoal list --repo my-project  # Only one repository's workspaces, chats and queued agents
 shoal list --status needs-input,failed  # Only rows with these statuses

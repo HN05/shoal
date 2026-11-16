@@ -67,6 +67,7 @@ mod start;
 mod stop;
 mod subagents;
 mod transfer;
+mod triggers;
 mod turns;
 mod update;
 mod view;
