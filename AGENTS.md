@@ -136,15 +136,24 @@ for delivering a PR, under Committing near the end, decide when work is done.
   the other nor its tests. The `shoal` package is only `main`, which runs the
   CLI and passes it the daemon for `shoal daemon run`. Code both use, directly
   or through code they call, lives in `crates/shoal-core`, in a top-level
-  module named for what it does; it names neither the CLI nor the daemon and
-  depends on no Shoal crate but `shoal-client`, `shoal-config-derive`,
-  `shoal-forge`, `shoal-forge-types`, `shoal-ids`, `shoal-protocol`,
-  `shoal-proxy`, `shoal-refs`, `shoal-schedule`, `shoal-states` and
-  `shoal-subprocess`. Its
+  module named for what it does; it names neither the CLI nor the daemon,
+  makes no daemon calls and depends on no Shoal crate but
+  `shoal-config-derive`, `shoal-forge`, `shoal-forge-types`, `shoal-ids`,
+  `shoal-protocol`, `shoal-proxy`, `shoal-refs`, `shoal-schedule`,
+  `shoal-states` and `shoal-subprocess`. Its
   items are `pub` only where another Shoal crate uses them, and fixtures the
   other crates' tests share sit behind its `test-support` feature.
 - `crates/shoal-cli` serves only the CLI. Code that the daemon, the execution
-  wrapper, the proxy or the workers use lives outside it.
+  wrapper, the proxy or the workers use lives outside it, in `shoal-workers`
+  where it calls the daemon.
+- `crates/shoal-workers` holds the execution wrapper and the workers: the
+  code that runs in the processes Shoal starts and calls the daemon, which the
+  CLI reaches there too. It depends on no Shoal crate but `shoal-client`,
+  `shoal-core`, `shoal-forge-types`, `shoal-ids`, `shoal-protocol`,
+  `shoal-proxy` and `shoal-refs`; neither core nor the daemon's own code
+  depends on it. Where core logic needs a value the daemon records, its
+  caller reads it and passes core the value, never a callback that calls the
+  daemon.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
   together. `setup.command` is tracked and gates
   readiness; hooks are untracked user processes with workspace identity and no

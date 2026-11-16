@@ -70,8 +70,11 @@ protocol carries a target's repository layers as JSON the caller reads, and
 the daemon resolves what a launch needs. A layer's `same_as` references travel
 in it, taken out of its file before its options are read and followed once
 every layer is merged, so an option takes another's final value. The CLI and the daemon are the `shoal-cli` and
-`shoal-daemon` crates, which depend on it and on `shoal-core`, the code they
-share, but not on each other; the binary-only `shoal` package joins them.
+`shoal-daemon` crates, which depend on `shoal-core`, the code they share,
+which makes no daemon calls, but not on each other; the CLI also depends on
+`shoal-client` and on `shoal-workers`, the execution wrapper and the workers
+that run in the processes Shoal starts and call the daemon. The binary-only
+`shoal` package joins them.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, and changing
 the daemon neither the CLI nor `shoal-core`. Commands print only the
 library's types with `--json`, which a development build checks read back, so
