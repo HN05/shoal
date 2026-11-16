@@ -1,5 +1,5 @@
 //! Copies of spaces that keep running: a workspace at a checkpoint with its
-//! agents and the sessions they reported, or a chat with its session, which
+//! agents and the sessions they reported, or a chat with its agents, which
 //! `shoal move import` opens as a new space whose agents start from forks.
 use crate::transfer::ManifestExt;
 use anyhow::{Result, ensure};
@@ -13,6 +13,7 @@ use crate::{
     transfer::Manifest,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
@@ -60,7 +61,7 @@ impl Manager {
             checkpoint.number,
             workspace.name
         );
-        let agents = self.copied_agents(&workspace).await?;
+        let agents = self.copied_agents(&workspace.id).await?;
         let copied = super::packaged_record(&self.paths, &workspace, checkpoint, agents);
         let repo = self.repository(&workspace.repository_id).await?;
         let mut manifest = Manifest::of(Some(&repo), copied).await?;
@@ -77,16 +78,17 @@ impl Manager {
         })
     }
 
-    /// The agents of `workspace` a copy starts again, each with the session
-    /// it reported last: those stopped, then those its executions run.
-    async fn copied_agents(&self, workspace: &Workspace) -> Result<Vec<StoppedAgent>> {
-        let mut agents = recovery::stopped_agents(&self.paths, &workspace.id)?;
+    /// The agents of the space `id` a copy starts again, each with the
+    /// session it reported last: those stopped, then those its executions
+    /// run.
+    async fn copied_agents(&self, id: &SpaceId) -> Result<Vec<StoppedAgent>> {
+        let mut agents = recovery::stopped_agents(&self.paths, id)?;
         let now = UnixTime::now();
-        for execution in self.workspace_executions(&workspace.id).await? {
+        for execution in self.workspace_executions(id).await? {
             if agents.iter().any(|agent| agent.execution == execution.id) {
                 continue;
             }
-            let session = recovery::reported_session(&self.paths, &workspace.id, &execution.id);
+            let session = recovery::reported_session(&self.paths, id, &execution.id);
             let Some(record) = running_record(&execution, session) else {
                 continue;
             };
@@ -99,8 +101,9 @@ impl Manager {
         Ok(agents)
     }
 
-    /// A copy of `chat`, as its removal would record it now, whose agent
-    /// starts from a fork of its session.
+    /// A copy of `chat`, as its removal would record it now, with its agents
+    /// as a workspace's copy has them, which start from forks of their
+    /// sessions.
     pub(super) async fn copy_chat(&self, chat: Chat) -> Result<Prepared> {
         ensure!(
             chat.session.is_some(),
@@ -108,7 +111,8 @@ impl Manager {
             chat.name
         );
         let repo = self.chat_repository(&chat).await?;
-        let record = (self.chat_removal_record(&chat.id, EventCause::Manual)).await?;
+        let mut record = (self.chat_removal_record(&chat.id, EventCause::Manual)).await?;
+        record.agents = self.copied_agents(&chat.id).await?;
         let mut manifest = Manifest::of(repo.as_ref(), record).await?;
         manifest.copy = Some(Copied::default());
         Ok(Prepared {
