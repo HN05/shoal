@@ -185,7 +185,7 @@ async fn picked_mode(ctx: &Context, args: &mut StartArgs) -> Result<modes::ModeN
     let settings = match (&selector, &args.in_workspace) {
         (Some(selector), None) => {
             let target = ConfigTarget::Repository(selector.clone());
-            crate::config::settings(&ctx.paths, target).await?
+            shoal_workers::settings::of(&ctx.paths, target).await?
         }
         _ => mode_settings(ctx, args).await?,
     };
@@ -477,7 +477,7 @@ async fn forked(
         None => running.name().parse()?,
     };
     let target = ConfigTarget::Space(parent.clone());
-    let settings = crate::config::settings(&ctx.paths, target).await?;
+    let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     crate::agents::ensure_forks(&settings, &agent)?;
     Ok((parent, agent, session))
 }

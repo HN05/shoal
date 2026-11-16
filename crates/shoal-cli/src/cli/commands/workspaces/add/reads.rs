@@ -28,7 +28,7 @@ impl LaunchReads for DaemonReads<'_> {
         match target {
             ConfigTarget::Global => crate::config::Config::load_with_templates(&self.0.paths)?
                 .resolve(&Default::default()),
-            target => crate::config::settings(&self.0.paths, target).await,
+            target => shoal_workers::settings::of(&self.0.paths, target).await,
         }
     }
 

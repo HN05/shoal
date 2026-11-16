@@ -105,7 +105,7 @@ impl Launch {
         let agent = chat_agent(ctx, &settings, options.agent.clone())?;
         check_model(&settings, &agent, &options.model)?;
         let name = initial_name(&topic, topic.home(&repo), options.name.clone());
-        let settings = crate::config::settings(&ctx.paths, repo.config()).await?;
+        let settings = shoal_workers::settings::of(&ctx.paths, repo.config()).await?;
         let chat = command::chat_launch(settings, &agent, repo, &topic, &options, name)?;
         Ok(Self {
             agent,
@@ -377,7 +377,7 @@ pub(in crate::cli::commands) async fn start_changed(
     records: Vec<std::path::PathBuf>,
 ) -> Result<i32> {
     let repo = repository_of(ctx, chat).await?;
-    let settings = crate::config::settings(&ctx.paths, repo.config()).await?;
+    let settings = shoal_workers::settings::of(&ctx.paths, repo.config()).await?;
     let topic = place_topic(ctx, chat, &repo, session).await?;
     let home = topic.home(&repo).path().to_owned();
     let topic = Topic {

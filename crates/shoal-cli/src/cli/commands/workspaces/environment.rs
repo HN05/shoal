@@ -41,13 +41,13 @@ pub(in crate::cli::commands) async fn environment(
     Ok(0)
 }
 
-/// The workspace's [`crate::env::configured_environment`] for finding its agents' files,
+/// The workspace's [`shoal_workers::settings::configured_environment`] for finding its agents' files,
 /// or none with a warning when it cannot be resolved.
 pub(in crate::cli) async fn agent_environment(
     ctx: &Context,
     workspace: &Workspace,
 ) -> BTreeMap<String, OsString> {
-    crate::env::configured_environment(&ctx.paths, workspace)
+    shoal_workers::settings::configured_environment(&ctx.paths, workspace)
         .await
         .unwrap_or_else(|error| {
             eprintln!(

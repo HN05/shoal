@@ -24,7 +24,7 @@ pub(super) async fn start(paths: &CommandPaths, entry: &QueueEntry) -> Result<()
     let space = crate::client::workspaces::present_space(paths, &selector)
         .await?
         .with_context(|| format!("no space {selector}"))?;
-    let settings = crate::config::settings(paths, ConfigTarget::Space(selector.clone())).await?;
+    let settings = crate::settings::of(paths, ConfigTarget::Space(selector.clone())).await?;
     let stopped = stopped_place(paths, selector, execution).await?;
     let args = restore_args(&space, execution, entry);
     if crate::terminal::queued::rerun_where_stopped(paths, &settings, stopped.as_ref(), &args)

@@ -92,7 +92,7 @@ async fn chat_restore_child() {
     // It continues its session, told the chat's rules again, with the
     // hooks of a chat and its directories: `/tmp`, the default agent
     // directory, and its temporary directory.
-    let settings = crate::config::settings(
+    let settings = shoal_workers::settings::of(
         &paths,
         crate::protocol::ConfigTarget::Space(SpaceSelector::id(&chat.id)),
     )
@@ -186,7 +186,7 @@ async fn built_in_restore_child() {
         // The restored session is told its mode's rules again, after its
         // resume arguments.
         let target = crate::protocol::ConfigTarget::Space(SpaceSelector::id(&workspace.id));
-        let settings = crate::config::settings(&paths, target).await.unwrap();
+        let settings = shoal_workers::settings::of(&paths, target).await.unwrap();
         let rules = crate::agents::restored_instruction_args(
             &settings,
             &agent.into(),

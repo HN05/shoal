@@ -80,7 +80,7 @@ impl NewChat {
             Some(repository) => ConfigTarget::Repository(repository.id.clone().into()),
             None => ConfigTarget::Global,
         };
-        let settings = crate::config::settings(paths, target).await?;
+        let settings = crate::settings::of(paths, target).await?;
         Ok(Self {
             name,
             agent,

@@ -79,7 +79,7 @@ pub(super) async fn start(
     let workspace = crate::client::workspaces::inspect(&ctx.paths, id.clone())
         .await?
         .workspace;
-    let settings = crate::config::settings(
+    let settings = shoal_workers::settings::of(
         &ctx.paths,
         ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
     )

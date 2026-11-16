@@ -29,7 +29,7 @@ pub(super) async fn start(
                 Some(repository) => ConfigTarget::Repository(repository.id.clone().into()),
                 None => ConfigTarget::Global,
             };
-            let settings = crate::config::settings(paths, target).await?;
+            let settings = crate::settings::of(paths, target).await?;
             let args: Vec<OsString> = args.into_iter().map(OsString::from).collect();
             let argv = crate::terminal::shoal_command(paths, &args)?;
             let repository = repository.as_ref();

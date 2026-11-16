@@ -30,7 +30,6 @@ use std::{
     time::Duration,
 };
 
-use crate::client::connection::Daemon;
 use crate::paths::Paths;
 pub use machine::Machine;
 pub use repo::{
@@ -40,7 +39,6 @@ pub use repo::{
 use repo::{ConfigLayers, RepoConfig};
 pub use resolve::Effective;
 pub use shoal_protocol::config::options;
-use shoal_protocol::protocol::ConfigTarget;
 
 /// How many tracked agents, or CI jobs, may run concurrently.
 ///
@@ -350,20 +348,12 @@ impl Config {
     }
 }
 
-/// The settings that apply to `target` after every layer. The global config
-/// is read now, so launch defaults follow it without a daemon restart.
-pub async fn settings(daemon: &impl Daemon, target: ConfigTarget) -> Result<Effective> {
-    Ok(configuration(daemon, target).await?.1)
-}
-
-/// The global config read at launch and the settings it yields for `target`.
-pub async fn configuration(
-    daemon: &impl Daemon,
-    target: ConfigTarget,
-) -> Result<(Config, Effective)> {
-    let layers: ConfigLayers = crate::client::workspaces::config_layers(daemon, target).await?;
-    let config = Config::load_with_templates(daemon.paths())?;
-    let settings = config.resolve(&layers)?;
+/// The global config read at launch and the settings it yields under the
+/// repository `layers`. The global config is read now, so launch defaults
+/// follow it without a daemon restart.
+pub fn configuration(paths: &Paths, layers: &ConfigLayers) -> Result<(Config, Effective)> {
+    let config = Config::load_with_templates(paths)?;
+    let settings = config.resolve(layers)?;
     // With every layer's mode and rule files read, a launch refuses a mode
     // naming a rule none defines before it creates anything.
     modes::check(&settings.modes, &settings.rules)?;

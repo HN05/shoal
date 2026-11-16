@@ -138,7 +138,7 @@ async fn start_session(
         return Ok(Started::InWrapper);
     }
     let target = ConfigTarget::Space(SpaceSelector::id(space.id()));
-    let settings = crate::config::settings(&ctx.paths, target).await?;
+    let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     let args = [
         "restore",
         space.id().as_str(),

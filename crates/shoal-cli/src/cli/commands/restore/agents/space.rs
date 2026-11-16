@@ -225,7 +225,7 @@ async fn start_copied(
     records: Vec<PathBuf>,
 ) -> Result<i32> {
     let agent = &session.agent;
-    let settings = crate::config::settings(
+    let settings = shoal_workers::settings::of(
         &ctx.paths,
         ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
     )
@@ -256,7 +256,7 @@ async fn start_converted(
         .name()
         .parse()
         .with_context(|| format!("cannot start agent {agent} of {}", workspace.name))?;
-    let settings = crate::config::settings(
+    let settings = shoal_workers::settings::of(
         &ctx.paths,
         ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
     )
@@ -334,7 +334,7 @@ async fn launch(
         // there; a chat runs where its resume runs, as its start does.
         PresentSpace::Workspace(workspace) => {
             let target = ConfigTarget::Space(SpaceSelector::id(&workspace.id));
-            let settings = crate::config::settings(&ctx.paths, target).await?;
+            let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
             let command = &recovery.command;
             let ran = terminal::run_agent(ctx, &settings, workspace, &agent, &records, command);
             if let Some(code) = ran.await? {

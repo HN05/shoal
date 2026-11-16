@@ -73,7 +73,7 @@ pub(in crate::cli) async fn install_session_files(
         ),
         SessionHome::Chat(chat) => (ConfigTarget::chat(chat), None),
     };
-    let settings = match crate::config::settings(&ctx.paths, target).await {
+    let settings = match shoal_workers::settings::of(&ctx.paths, target).await {
         Ok(settings) => settings,
         Err(error) => {
             eprintln!("warning: cannot place the agents' session files: {error:#}");

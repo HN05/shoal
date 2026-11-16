@@ -85,7 +85,7 @@ enum Placement {
 
 /// Place `launch` in the set-up `workspace`.
 async fn place(ctx: &Context, workspace: &Workspace, launch: QueuedLaunch) -> Result<Placement> {
-    let settings = crate::config::settings(
+    let settings = shoal_workers::settings::of(
         &ctx.paths,
         ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
     )

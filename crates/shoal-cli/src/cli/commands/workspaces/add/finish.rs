@@ -289,7 +289,7 @@ async fn enters_added(
     let Some(chosen) = agent.and_then(|agent| agent.agent.as_ref()) else {
         return Ok(true);
     };
-    let settings = crate::config::settings(
+    let settings = shoal_workers::settings::of(
         &ctx.paths,
         ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
     )

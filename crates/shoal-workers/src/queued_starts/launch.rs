@@ -50,7 +50,7 @@ pub async fn start_admitted(
         Some(workspace) => ConfigTarget::Space(SpaceSelector::id(workspace)),
         None => ConfigTarget::Repository(plan.repository.clone()),
     };
-    let settings = crate::config::settings(paths, target).await?;
+    let settings = crate::settings::of(paths, target).await?;
     if runs_its_own_way(&settings, &plan) {
         return run_add_worker(paths, &plan, json).await;
     }

@@ -214,7 +214,7 @@ pub(super) async fn ensure_daemon_starts_in(
         return Ok(());
     }
     let target = ConfigTarget::Space(SpaceSelector::id(space.id()));
-    let settings = crate::config::settings(&ctx.paths, target).await?;
+    let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     crate::terminal::queued::ensure_background(&settings).with_context(|| {
         format!(
             "cannot restore the agents of {} in the background; pass --focus to restore one here",

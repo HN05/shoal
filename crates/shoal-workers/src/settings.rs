@@ -1,13 +1,32 @@
-//! A workspace's `[env]` variables, resolved through the daemon, as tracked
-//! commands, hooks and agents receive them.
+//! A space's settings as its launches resolve them: the global config read
+//! now under the repository layers the daemon has, and the `[env]`
+//! variables they give the space's tracked commands, hooks and agents.
 use std::{collections::BTreeMap, ffi::OsString};
 
 use anyhow::{Context as _, Result};
 
 use crate::{
-    client::connection::CommandPaths, model::Workspace, protocol::ConfigTarget, repository,
+    client::connection::{CommandPaths, Daemon},
+    config::{Config, Effective, repo::ConfigLayers},
+    model::Workspace,
+    protocol::ConfigTarget,
+    repository,
 };
 use shoal_protocol::space_names::SpaceSelector;
+
+/// The settings that apply to `target` after every layer.
+pub async fn of(daemon: &impl Daemon, target: ConfigTarget) -> Result<Effective> {
+    Ok(configuration(daemon, target).await?.1)
+}
+
+/// The global config read at launch and the settings it yields for `target`.
+pub async fn configuration(
+    daemon: &impl Daemon,
+    target: ConfigTarget,
+) -> Result<(Config, Effective)> {
+    let layers: ConfigLayers = crate::client::workspaces::config_layers(daemon, target).await?;
+    crate::config::configuration(daemon.paths(), &layers)
+}
 
 /// The variables `[env]` and the workspace's temporary directory add to its
 /// tracked executions and hooks.
@@ -15,15 +34,13 @@ pub async fn configured_environment(
     paths: &CommandPaths,
     workspace: &Workspace,
 ) -> Result<BTreeMap<String, OsString>> {
-    let settings =
-        crate::config::settings(paths, ConfigTarget::Space(SpaceSelector::id(&workspace.id)))
-            .await?;
+    let settings = of(paths, ConfigTarget::Space(SpaceSelector::id(&workspace.id))).await?;
     let repo = crate::client::repositories::list(paths)
         .await?
         .into_iter()
         .find(|repo| repo.id == workspace.repository_id)
         .context("workspace repository is missing")?;
-    Ok(super::render_configured_environment(
+    Ok(crate::env::render_configured_environment(
         &settings.env,
         workspace,
         repository::name(&repo),

@@ -18,10 +18,6 @@ use crate::{
 };
 pub use shoal_protocol::env::*;
 
-mod configured;
-
-pub use configured::configured_environment;
-
 /// Private socket and lock descriptors transferred across a managed update.
 pub(crate) const DAEMON_HANDOFF: &str = "SHOAL_DAEMON_HANDOFF";
 

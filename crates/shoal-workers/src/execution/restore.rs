@@ -146,7 +146,7 @@ pub async fn resolve<'a>(
 ) -> Result<Recovery> {
     let home = home.into();
     let settings =
-        crate::config::settings(paths, ConfigTarget::Space(SpaceSelector::id(home.id()))).await?;
+        crate::settings::of(paths, ConfigTarget::Space(SpaceSelector::id(home.id()))).await?;
     let name = restored.agent.normalized();
     // A restore of an agent config turned off waits, as one it cannot
     // run with its model does.

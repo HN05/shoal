@@ -57,7 +57,7 @@ async fn relabel(ctx: &Context, renamed: &RenamedChat) -> Result<()> {
         return Ok(());
     };
     let target = ConfigTarget::chat(chat);
-    let settings = crate::config::settings(&ctx.paths, target).await?;
+    let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     let labels = terminal::Labels {
         new: chat.name.to_string(),
         expected: previous_name.to_string(),

@@ -74,7 +74,7 @@ pub(in crate::cli::commands) async fn start_outside_repositories(
         let options = options.for_caller(ctx)?;
         check_parent(ctx, None, None, options.parent.as_ref()).await?;
         let repository = ChatRepository::Outside(root_dir(ctx).await?);
-        let settings = crate::config::settings(&ctx.paths, repository.config()).await?;
+        let settings = shoal_workers::settings::of(&ctx.paths, repository.config()).await?;
         crate::config::modes::resolve(&settings.modes, &topic.mode, SpaceKind::Chat, false)?;
         options.check_given(ctx, None).await?;
         begin(ctx, repository, settings, topic, options).await
@@ -270,7 +270,7 @@ pub(in crate::cli::commands) async fn settings(
     ctx: &Context,
     repo: &Repository,
 ) -> Result<Effective> {
-    crate::config::settings(&ctx.paths, ConfigTarget::Repository(repo.id.clone().into())).await
+    shoal_workers::settings::of(&ctx.paths, ConfigTarget::Repository(repo.id.clone().into())).await
 }
 
 /// The named repository, else the current checkout's or workspace's, else a picker.
