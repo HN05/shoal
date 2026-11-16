@@ -54,7 +54,7 @@ pub async fn start_admitted(
     if runs_its_own_way(&settings, &plan) {
         return run_add_worker(paths, &plan, json).await;
     }
-    crate::terminal::queued::start_add(paths, &settings, &mut plan, name).await
+    crate::places::queued::start_add(paths, &settings, &mut plan, name).await
 }
 
 /// The plan of the starting launch `entry`, building on the branch of the

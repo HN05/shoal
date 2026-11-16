@@ -36,10 +36,10 @@ pub use hosts::{
     Beside, Configured, Options, background_place, current, enabled_host, hosts, installed_hosts,
     keeps_agents_in_sessions, named, names_places,
 };
-pub use naming::{PlaceName, name_plan, place_name};
+pub use naming::PlaceName;
 pub use opening::{
-    chat_place_env, open_add, place_env, rerun_in_host, shoal_command, show_opened,
-    start_in_background,
+    chat_place_env, open_add, open_in_background, place_env, rerun_in_host, shoal_command,
+    show_opened,
 };
 pub use prompts::PromptSession;
 pub(crate) use prompts::agents_can_be_prompted;

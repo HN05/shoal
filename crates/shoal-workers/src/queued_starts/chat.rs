@@ -33,7 +33,7 @@ pub(super) async fn start(
             let args: Vec<OsString> = args.into_iter().map(OsString::from).collect();
             let argv = crate::terminal::shoal_command(paths, &args)?;
             let repository = repository.as_ref();
-            crate::terminal::queued::start_chat(
+            crate::places::queued::start_chat(
                 paths, &settings, repository, &home, &name, argv, false,
             )
             .await

@@ -26,7 +26,7 @@ pub(super) async fn run_in_background(
         }
         PresentSpace::Chat(_) => {
             let paths = &ctx.paths;
-            crate::terminal::queued::restore_chat(paths, settings, space, args).await?;
+            shoal_workers::places::queued::restore_chat(paths, settings, space, args).await?;
             Ok(Some("a background place"))
         }
     }

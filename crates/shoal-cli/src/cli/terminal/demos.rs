@@ -7,9 +7,10 @@ use crate::{
     config::Effective,
     model::Workspace,
     sessions::Origin,
-    terminal::{Demo, DemoWorker, Host, current_origin, groups, named, names_places, place_env},
+    terminal::{Demo, DemoWorker, Host, current_origin, named, names_places, place_env},
 };
 use shoal_protocol::demos::Launch;
+use shoal_workers::places::groups;
 
 /// Start a demo of `workspace` in the first host that runs queued starts and
 /// keeps demos, failing with the last host's reason when none does. `worker`

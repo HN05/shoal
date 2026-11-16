@@ -6,10 +6,8 @@ use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result};
 
-use super::{Beside, Configured, Host, Places, Start, current_origin, names_places, naming};
-use crate::{
-    client::connection::CommandPaths, env, model::Workspace, sessions::Origin, start_plan::AddPlan,
-};
+use super::{Beside, Configured, Host, Places, Start, current_origin, names_places};
+use crate::{env, paths::Paths, sessions::Origin, start_plan::AddPlan};
 
 /// Have `host` run the add worker for `plan`, the planned workspace `name`,
 /// in a new place of its `places` `beside`, `focus`ed or in the background.
@@ -17,7 +15,7 @@ use crate::{
 /// that keeps a shell gets the directive through which the worker has it
 /// enter the workspace.
 pub async fn open_add(
-    paths: &CommandPaths,
+    paths: &Paths,
     host: &Configured,
     places: &dyn Places,
     beside: Beside<'_>,
@@ -53,7 +51,7 @@ pub async fn open_add(
 /// The worker that adds the workspace a plan describes in the place `host`
 /// opened for it, `focused` or not, closing the place with the workspace
 /// when config says so. The plan reaches it in the place's environment.
-fn add_worker(paths: &CommandPaths, host: &Configured, focused: bool) -> Result<Vec<OsString>> {
+fn add_worker(paths: &Paths, host: &Configured, focused: bool) -> Result<Vec<OsString>> {
     crate::workers::internal_command(
         paths,
         false,
@@ -92,7 +90,7 @@ fn add_label(host: &dyn Host, plan: &AddPlan, name: &str) -> String {
 /// The variables of the place that adds `plan`: a new place's, the plan,
 /// and the `directive` of a place that keeps a shell.
 fn add_env(
-    paths: &CommandPaths,
+    paths: &Paths,
     plan: &AddPlan,
     directive: Option<&ShellDirective>,
 ) -> Result<Vec<(&'static str, String)>> {
@@ -132,7 +130,7 @@ impl ShellDirective {
 /// The variables a command in a new place needs from this process: its
 /// output setting, which agents there inherit, and its home and config
 /// location, whatever the environment the host starts places in.
-pub fn place_env(paths: &CommandPaths) -> Result<Vec<(&'static str, String)>> {
+pub fn place_env(paths: &Paths) -> Result<Vec<(&'static str, String)>> {
     let config = crate::config::Config::path(paths);
     let config_home = config
         .parent()
@@ -149,7 +147,7 @@ pub fn place_env(paths: &CommandPaths) -> Result<Vec<(&'static str, String)>> {
 /// [`place_env`], the mark that tells the chat the place is its own, which
 /// it records so its removal closes the place, and the queue entry whose
 /// slot this process's agent takes, which the chat's agent takes instead.
-pub fn chat_place_env(paths: &CommandPaths) -> Result<Vec<(&'static str, String)>> {
+pub fn chat_place_env(paths: &Paths) -> Result<Vec<(&'static str, String)>> {
     let mut env = place_env(paths)?;
     env.push((env::OPENED_CHAT_PLACE, "1".to_owned()));
     if let Some(entry) = env::queue_entry() {
@@ -159,7 +157,7 @@ pub fn chat_place_env(paths: &CommandPaths) -> Result<Vec<(&'static str, String)
 }
 
 /// This executable with `args`, as a place runs it.
-pub fn shoal_command(paths: &CommandPaths, args: &[OsString]) -> Result<Vec<OsString>> {
+pub fn shoal_command(paths: &Paths, args: &[OsString]) -> Result<Vec<OsString>> {
     let mut argv = crate::workers::shoal_argv(paths)?;
     argv.extend_from_slice(args);
     Ok(argv)
@@ -168,7 +166,7 @@ pub fn shoal_command(paths: &CommandPaths, args: &[OsString]) -> Result<Vec<OsSt
 /// Restore an agent in `stopped`, its earlier place, when that is in `host`
 /// and idle.
 pub async fn rerun_in_host(
-    paths: &CommandPaths,
+    paths: &Paths,
     host: &dyn Host,
     stopped: Option<&Origin>,
     args: &[OsString],
@@ -192,34 +190,10 @@ pub(super) fn reusable_place(stopped: Option<&Origin>) -> Option<&Origin> {
     stopped.filter(|origin| origin.place.is_some() && origin.place != here)
 }
 
-/// Run Shoal with `args`, a restore of `workspace`, in a new background
-/// place of `host`'s `places` `beside`, telling the restore to close
-/// the place with the workspace when config says so.
-pub async fn start_in_background(
-    paths: &CommandPaths,
-    host: &Configured,
-    places: &dyn Places,
-    beside: Beside<'_>,
-    workspace: &Workspace,
-    args: &[OsString],
-) -> Result<()> {
-    let template = host.options.name_template.clone();
-    let label = naming::workspace_label(paths, template, host.host, workspace).await;
-    let name = host.host.name().as_str();
-    // The restore records its place before anything can run there.
-    let mut argv = shoal_command(paths, args)?;
-    argv.extend(["--opened-in".into(), name.into()]);
-    if host.closes_when_done {
-        argv.extend(["--close-in".into(), name.into()]);
-    }
-    let env = place_env(paths)?;
-    open_in_background(paths, places, beside, &workspace.path, &label, &argv, &env).await
-}
-
 /// Run `argv` at `cwd` with `env` in a new background place of `places`
 /// `beside`, called `label`.
-pub(super) async fn open_in_background(
-    paths: &CommandPaths,
+pub async fn open_in_background(
+    paths: &Paths,
     places: &dyn Places,
     beside: Beside<'_>,
     cwd: &Path,

@@ -12,6 +12,7 @@ pub mod execution;
 pub mod git_credential;
 pub mod opened_pull;
 pub mod operations;
+pub mod places;
 pub mod proxy;
 pub mod push_gate;
 pub mod queued_launches;

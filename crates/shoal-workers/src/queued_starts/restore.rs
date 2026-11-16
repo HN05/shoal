@@ -8,9 +8,9 @@ use anyhow::{Context as _, Result};
 use crate::{
     client::connection::CommandPaths,
     model::{PresentSpace, QueueEntry},
+    places::queued,
     protocol::ConfigTarget,
     sessions::Origin,
-    terminal::queued,
 };
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -27,7 +27,9 @@ pub(super) async fn start(paths: &CommandPaths, entry: &QueueEntry) -> Result<()
     let settings = crate::config::settings(paths, ConfigTarget::Space(selector.clone())).await?;
     let stopped = stopped_place(paths, selector, execution).await?;
     let args = restore_args(&space, execution, entry);
-    if queued::rerun_where_stopped(paths, &settings, stopped.as_ref(), &args).await? {
+    if crate::terminal::queued::rerun_where_stopped(paths, &settings, stopped.as_ref(), &args)
+        .await?
+    {
         return Ok(());
     }
     match &space {

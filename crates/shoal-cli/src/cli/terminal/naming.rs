@@ -11,8 +11,9 @@ use crate::{
     config::Effective,
     model::Workspace,
     sessions::{HostName, Origin},
-    terminal::{Configured, Options, PlaceName, Places, place_name},
+    terminal::{Configured, Options, PlaceName, Places},
 };
+use shoal_workers::places::naming::place_name;
 
 /// What a space's places on one host show: `new` from now on, in place of
 /// `expected`, the label Shoal gave them before.

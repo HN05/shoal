@@ -18,10 +18,11 @@ use crate::{
     sessions::Origin,
     start_plan::AddPlan,
     terminal::{
-        Attaches, Configured, Owner, Places, Start, chat_place_env, current, groups, name_plan,
-        open_add, place_env, rerun_in_host, shoal_command, show_opened, start_in_background,
+        Attaches, Configured, Owner, Places, Start, chat_place_env, current, open_add, place_env,
+        rerun_in_host, shoal_command, show_opened,
     },
 };
+use shoal_workers::places::{groups, naming::name_plan, queued::start_in_background};
 
 /// Start `plan` beside this terminal: focused when it waits for the user,
 /// otherwise in the background, unless its mode's or the terminal's `focus`

@@ -155,7 +155,7 @@ impl Launch {
         let relaunch = crate::terminal::shoal_command(&ctx.paths, &relaunch)?;
         let chat = &self.chat;
         let repository = chat.repository.registered();
-        let place = crate::terminal::queued::start_chat(
+        let place = shoal_workers::places::queued::start_chat(
             &ctx.paths,
             &chat.settings,
             repository,

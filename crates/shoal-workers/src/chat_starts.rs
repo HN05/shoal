@@ -107,7 +107,7 @@ impl NewChat {
         let worker = internal_command(paths, false, chat_worker(&handoff))?;
         let repository = self.repository.as_ref();
         let (home, name) = (&self.home, self.name.as_str());
-        let place = crate::terminal::queued::start_chat(
+        let place = crate::places::queued::start_chat(
             paths,
             &self.settings,
             repository,
