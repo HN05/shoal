@@ -5929,7 +5929,7 @@ with `withdrawn_at`.
 ### Leases
 
 `shoal acquire <kind>` reserves a port, simulator, resource permit, or related
-repository for the current workspace, or the one named by `--workspace`, starts
+repository for the current workspace, or the one named by `--space`, starts
 its [containers](#containers), or requests access to a
 [secret](#agent-secrets) that requires approval.
 Simulator, resource, and repository leases take `--name` (default `default`) to
