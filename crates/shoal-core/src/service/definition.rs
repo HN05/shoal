@@ -133,7 +133,12 @@ pub(super) fn check_state_dir(paths: &Paths, path: &Path, platform: Platform) ->
 }
 
 pub(super) fn state_dir_matches(paths: &Paths, path: &Path, platform: Platform) -> Result<bool> {
-    let content = fs::read_to_string(path)?;
+    names_state_dir(paths, &fs::read_to_string(path)?, platform)
+}
+
+/// Whether the service definition `content` runs the daemon of `paths`'
+/// state directory.
+pub(super) fn names_state_dir(paths: &Paths, content: &str, platform: Platform) -> Result<bool> {
     let expected = match platform {
         Platform::Mac => format!(
             "<string>--state-dir</string>\n<string>{}</string>",

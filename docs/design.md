@@ -513,7 +513,11 @@ input. Keep writable state outside the binary's directory.
 Service setup manages one per-user launchd/systemd service and refuses to change
 its state directory until the existing service is stopped; foreground mode covers
 environments without a service manager. The service captures the installing shell's
-`PATH`. The unit and every scope Shoal starts set
+`PATH`. A managed daemon keeps the installed definition of its state directory
+current, rewriting it at startup when its release renders it differently and
+reloading systemd without restarting anything: service managers read only the
+file `shoal daemon install` wrote, and a definition in a system directory would
+need root and a distribution package. The unit and every scope Shoal starts set
 `OOMPolicy=continue`, so an OOM kill ends only the process it chose and the
 daemon's own death alone fails the service.
 Managed daemons record their stable executable path before startup work and restart

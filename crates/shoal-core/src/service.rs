@@ -6,12 +6,14 @@ use std::path::Path;
 pub mod apart;
 mod control;
 mod definition;
+mod refresh;
 mod replacement;
 mod shutdown;
 mod supervision;
 use control::{command, domain};
 use definition::{check_state_dir, text, write_definition};
 pub use definition::{definition, executable, file};
+pub use refresh::refresh;
 pub use supervision::Command;
 
 const LABEL: &str = "com.shoal.daemon";

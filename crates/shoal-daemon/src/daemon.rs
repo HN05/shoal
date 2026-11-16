@@ -93,6 +93,7 @@ use tokio::{
 use answer::OperationGuard;
 use events::{ShoalEventDetails, ShoalEventKind};
 pub(crate) use log::log;
+use notifications::NotificationKind;
 use ownership::Ownership;
 use scope::Caller;
 use workspace::{Ending, Manager};
@@ -137,6 +138,7 @@ pub async fn run(
     let manager = start(&startup, &paths).await?;
     if managed {
         manager.runners.run_jobs_apart_from_service().await;
+        manager.refresh_service_definition().await;
     }
     manager.record_start().await;
     let mut terminate = signal(SignalKind::terminate())?;
@@ -356,6 +358,24 @@ impl Manager {
         let mut started = ShoalEventDetails::new(ShoalEventKind::DaemonStarted);
         started.version = Some(env!("CARGO_PKG_VERSION").to_owned());
         self.record_shoal(started).await;
+    }
+
+    /// Bring the installed service definition up to date with this release,
+    /// as the daemon its service manager started does, telling the user
+    /// when it cannot.
+    async fn refresh_service_definition(&self) {
+        match crate::service::refresh(&self.paths).await {
+            Ok(true) => log!("updated the installed service definition"),
+            Ok(false) => {}
+            Err(error) => {
+                log!("service definition not updated: {error:#}");
+                let message = format!(
+                    "Shoal could not update its installed service definition: {error:#}; run `shoal daemon install`"
+                );
+                self.notify(None, NotificationKind::EnvironmentProblem, message)
+                    .await;
+            }
+        }
     }
 
     /// Record in Shoal's log that the daemon exits with `ending`, after
