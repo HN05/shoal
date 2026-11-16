@@ -328,9 +328,7 @@ impl Manager {
         let base = self.restore_base(removed).await?;
         let new = super::NewWorkspace {
             options: crate::protocol::CreationOptions {
-                // A name an older Shoal recorded may be longer than one set
-                // now allows.
-                name: Some(SpaceName::derive(removed.name.as_str(), "workspace")),
+                name: Some(removed.name.clone()),
                 skip_setup: removed.kept_workspace()?.setup_skipped,
                 ..Default::default()
             },

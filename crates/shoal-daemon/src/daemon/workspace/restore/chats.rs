@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail, ensure};
 use crate::daemon::scope::Caller;
 use crate::daemon::workspace::Manager;
 use crate::model::{Chat, ChatPart, KeptChat, RemovedSpace, RestoredChat, Workdir};
-use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Record the removed chat `removed` again, stopped, in the place it
@@ -97,9 +97,7 @@ fn restored_record(removed: &RemovedSpace, kept: &KeptChat, workdir: Workdir) ->
         id: removed.space_id.clone(),
         number: Default::default(),
         repository_id: removed.repository_id.clone(),
-        // A name an older Shoal recorded may be longer than one set now
-        // allows.
-        name: SpaceName::derive(removed.name.as_str(), "chat"),
+        name: removed.name.clone(),
         mode: Some(kept.mode.clone()),
         narrowing: kept.narrowing,
         running: false,

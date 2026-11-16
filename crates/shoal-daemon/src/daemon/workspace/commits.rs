@@ -396,12 +396,7 @@ impl Manager {
         let workspace = self
             .record_commit_workspace(
                 &repo,
-                // A name an older Shoal recorded may be longer than one set
-                // now allows.
-                (
-                    &directory,
-                    SpaceName::derive(removed.name.as_str(), "workspace"),
-                ),
+                (&directory, removed.name.clone()),
                 at,
                 diff_ref,
                 new,
