@@ -1,6 +1,5 @@
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
-use shoal_ids::space_ids::SpaceId;
 
 /// Requests about the files attached to spaces: workspaces and chats.
 #[derive(Debug, Serialize, Deserialize)]
@@ -17,9 +16,6 @@ pub enum FileMethod {
         space: SpaceSelector,
         /// The files by absolute path, which the daemon copies.
         files: Vec<crate::files::NewFile>,
-        /// The chat whose agent sends the request, which attaches them.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        sender_chat: Option<SpaceId>,
     },
     /// Delete the attached files of a workspace or chat, only those with one
     /// of `names` and the records `ids` when there are any; without one,

@@ -58,14 +58,7 @@ pub(super) async fn ask(
     let attachments = super::messages::attachments(&attach)?;
     shoal_protocol::files::check_sent(&attachments)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let question = questions::ask(
-        &ctx.paths,
-        space.clone(),
-        ask,
-        attachments,
-        crate::env::chat(),
-    )
-    .await?;
+    let question = questions::ask(&ctx.paths, space.clone(), ask, attachments).await?;
     if !wait && question.is_open() {
         ctx.emit(
             &format!(

@@ -206,19 +206,13 @@ impl Manager {
     }
 
     /// Who a request from `caller` attaches files as: the agent it comes
-    /// from, the chat whose agent's scope it carries, else the running chat
-    /// `sender_chat` whose agent, started before chats carried scope, sends
-    /// it unscoped, else the user.
-    pub(crate) async fn attacher(
-        &self,
-        caller: Option<&Caller>,
-        sender_chat: Option<&SpaceId>,
-    ) -> Attacher {
+    /// from, the chat whose agent's scope it carries, else the user.
+    pub(crate) async fn attacher(&self, caller: Option<&Caller>) -> Attacher {
         let Some(caller) = caller else {
-            return self.chat_attacher(sender_chat).await;
+            return Attacher::User;
         };
         if self.caller_is_chat(caller).await.unwrap_or_default() {
-            return self.chat_attacher(Some(&caller.space_id)).await;
+            return self.chat_attacher(&caller.space_id).await;
         }
         let Some(agent) = self.caller_agent(caller).await else {
             return Attacher::User;
@@ -234,13 +228,8 @@ impl Manager {
         }
     }
 
-    /// The running chat `sender_chat`, by ID or name, as an attacher, else
-    /// the user, as for a chat that is stopped or a request from outside any
-    /// chat.
-    async fn chat_attacher(&self, sender_chat: Option<&SpaceId>) -> Attacher {
-        let Some(chat) = sender_chat else {
-            return Attacher::User;
-        };
+    /// The chat `chat` as an attacher while it runs, else the user.
+    async fn chat_attacher(&self, chat: &SpaceId) -> Attacher {
         match self.chat(&SpaceSelector::id(chat)).await {
             Ok(crate::model::Chat {
                 running: true,

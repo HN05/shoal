@@ -144,7 +144,6 @@ async fn done_renames_and_links_go_through_the_protocol() {
     let done = AssignmentMethod::MarkDone {
         space: SpaceSelector::id(&workspace.id),
         done: Default::default(),
-        sender_chat: None,
     };
     let completion: Completion = connection::request(&app, done).await.unwrap();
     assert!(!completion.head.as_str().is_empty());

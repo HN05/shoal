@@ -1,8 +1,6 @@
 //! Files attached to a workspace or chat: Shoal's copies and how they came.
 use shoal_protocol::files::{AttachedFile, NewFile};
 
-use shoal_ids::space_ids::SpaceId;
-
 use anyhow::Result;
 
 use crate::connection::{Daemon, pages};
@@ -14,19 +12,13 @@ pub async fn list(daemon: &impl Daemon, space: SpaceSelector) -> Result<Vec<Atta
     pages(daemon, FileMethod::ListFiles { space }).await
 }
 
-/// Attach copies of `files` to `space`; the chat `sender_chat` names, when
-/// its agent attaches them, attaches its own files.
+/// Attach copies of `files` to `space`.
 pub async fn add(
     daemon: &impl Daemon,
     space: SpaceSelector,
     files: Vec<NewFile>,
-    sender_chat: Option<SpaceId>,
 ) -> Result<Vec<AttachedFile>> {
-    let method = FileMethod::AddFiles {
-        space,
-        files,
-        sender_chat,
-    };
+    let method = FileMethod::AddFiles { space, files };
     pages(daemon, method).await
 }
 

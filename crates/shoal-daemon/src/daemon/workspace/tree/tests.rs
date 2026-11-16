@@ -259,7 +259,6 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
     let mut done = AssignmentMethod::MarkDone {
         space: SpaceSelector::id(&grandchild.id),
         done: Default::default(),
-        sender_chat: None,
     };
     crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut done)
         .await
@@ -1013,7 +1012,6 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
                 space: name(),
                 message: "Rebase onto main".into(),
                 attachments: Vec::new(),
-                sender_chat: None,
             },
             AgentMethod::SpaceAgents { space: name() },
             AgentMethod::InterruptTurn {

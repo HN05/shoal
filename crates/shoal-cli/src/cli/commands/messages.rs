@@ -62,9 +62,7 @@ async fn send_to_space(
     attachments: Vec<NewFile>,
 ) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let sender_chat = crate::env::chat();
-    let reached =
-        agent_messages::send(&ctx.paths, space, message, attachments, sender_chat).await?;
+    let reached = agent_messages::send(&ctx.paths, space, message, attachments).await?;
     show_sent(ctx, &reached)
 }
 
@@ -75,10 +73,7 @@ async fn send_to_all(
     message: String,
     attachments: Vec<NewFile>,
 ) -> Result<i32> {
-    let sender_chat = crate::env::chat();
-    let reached =
-        agent_messages::send_to_all(&ctx.paths, repository, message, attachments, sender_chat)
-            .await?;
+    let reached = agent_messages::send_to_all(&ctx.paths, repository, message, attachments).await?;
     show_sent(ctx, &reached)
 }
 

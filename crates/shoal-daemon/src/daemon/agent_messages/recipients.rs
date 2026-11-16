@@ -41,9 +41,9 @@ impl Manager {
 
     /// [`Self::send_to`] to every workspace and chat with an
     /// agent, running, reattaching, stopped, queued or waiting for its
-    /// restore, but the sending chat `sender_chat`, of `repository` when it
-    /// names one, or only to the workspaces below `below`, the sender's own
-    /// workspace; the spaces it reached, by whether their agent runs. An
+    /// restore, but the sender's own space `sender`, of `repository` when
+    /// it names one, or only to the workspaces below `below`, the sender's
+    /// own workspace; the spaces it reached, by whether their agent runs. An
     /// agent that does not run reads the message once it next runs, which
     /// the message does not cause, except for a restore waiting for an
     /// update. A space that refuses the message, such as one whose unread
@@ -58,10 +58,10 @@ impl Manager {
         attachments: Vec<NewFile>,
         attacher: &Attacher,
         below: Option<&SpaceId>,
-        sender_chat: Option<&SpaceId>,
+        sender: Option<&SpaceId>,
     ) -> Result<Reached> {
         let mut reached = Reached::default();
-        for (space, reader) in self.recipients(repository, below, sender_chat).await? {
+        for (space, reader) in self.recipients(repository, below, sender).await? {
             let sent = self
                 .send_to(
                     space.clone(),
@@ -83,7 +83,7 @@ impl Manager {
         &self,
         repository: Option<&Selector>,
         below: Option<&SpaceId>,
-        sender_chat: Option<&SpaceId>,
+        sender: Option<&SpaceId>,
     ) -> Result<Vec<(Space, Reader)>> {
         let repository = match repository {
             Some(repository) => Some(self.repository(repository.clone()).await?.id),
@@ -94,10 +94,7 @@ impl Manager {
             .await?;
         let chats = match below {
             Some(_) => Vec::new(),
-            None => {
-                self.chat_recipients(repository.as_ref(), sender_chat)
-                    .await?
-            }
+            None => self.chat_recipients(repository.as_ref(), sender).await?,
         };
         let agents = self.agents().await?;
         Ok((workspaces.into_iter().map(Space::from))
@@ -126,17 +123,17 @@ impl Manager {
         Ok(workspaces)
     }
 
-    /// The chats, running or stopped, but `sender_chat`, by name, of
-    /// `repository` when it names one.
+    /// The chats, running or stopped, but the sender's own space `sender`,
+    /// by name, of `repository` when it names one.
     async fn chat_recipients(
         &self,
         repository: Option<&RepositoryId>,
-        sender_chat: Option<&SpaceId>,
+        sender: Option<&SpaceId>,
     ) -> Result<Vec<Chat>> {
         let mut chats = self.chats().await?;
         chats.retain(|chat| {
             repository.is_none_or(|repository| Some(repository) == chat.repository_id.as_ref())
-                && sender_chat.is_none_or(|sender| *sender != chat.id)
+                && sender.is_none_or(|sender| *sender != chat.id)
         });
         chats.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(chats)

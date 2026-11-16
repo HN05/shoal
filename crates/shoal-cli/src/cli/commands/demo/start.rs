@@ -105,7 +105,6 @@ pub(super) async fn start(
             SpaceSelector::id(&space),
             message,
             Vec::new(),
-            None,
         )
         .await?;
     }

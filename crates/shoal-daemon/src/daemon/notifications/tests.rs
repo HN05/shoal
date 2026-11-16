@@ -172,7 +172,6 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
                 space: SpaceSelector::from(target),
                 message: "hello".into(),
                 attachments: Vec::new(),
-                sender_chat: None,
             },
             NotificationMethod::WithdrawMessage {
                 space: SpaceSelector::from(target),

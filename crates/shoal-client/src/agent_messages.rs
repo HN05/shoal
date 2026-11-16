@@ -1,5 +1,4 @@
 //! Messages for the agents working in a workspace, from the user or the daemon.
-use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::agent_messages::{AgentMessage, Reached};
 
 use anyhow::Result;
@@ -9,20 +8,17 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{files::NewFile, links::Updates, protocol::AgentMethod, repository::Selector};
 
 /// Queue `message` with `attachments` for the agents of `space`, returning
-/// the space it reached; the chat `sender_chat` names, when its agent sends
-/// it, attaches its files.
+/// the space it reached.
 pub async fn send(
     daemon: &impl Daemon,
     space: SpaceSelector,
     message: String,
     attachments: Vec<NewFile>,
-    sender_chat: Option<SpaceId>,
 ) -> Result<Reached> {
     let method = AgentMethod::SendAgentMessage {
         space,
         message,
         attachments,
-        sender_chat,
     };
     request(daemon, method).await
 }
@@ -35,13 +31,11 @@ pub async fn send_to_all(
     repository: Option<Selector>,
     message: String,
     attachments: Vec<NewFile>,
-    sender_chat: Option<SpaceId>,
 ) -> Result<Reached> {
     let method = AgentMethod::SendAllAgentMessage {
         repository,
         message,
         attachments,
-        sender_chat,
     };
     request(daemon, method).await
 }

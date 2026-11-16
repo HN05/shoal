@@ -71,7 +71,7 @@ async fn agent_caller(manager: &Manager, workspace: &Workspace, name: &str) -> C
 async fn files_from_outside_any_agent_are_the_users() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
-    assert_eq!(manager.attacher(None, None).await, Attacher::User);
+    assert_eq!(manager.attacher(None).await, Attacher::User);
     // A workspace terminal or a command, scoped without an agent.
     let terminal = Caller {
         space_id: workspace.id.clone(),
@@ -79,16 +79,13 @@ async fn files_from_outside_any_agent_are_the_users() {
         granted: None,
         read_only: false,
     };
-    assert_eq!(
-        manager.attacher(Some(&terminal), None).await,
-        Attacher::User
-    );
+    assert_eq!(manager.attacher(Some(&terminal)).await, Attacher::User);
     let command = command_caller(&manager, &workspace, None).await;
-    assert_eq!(manager.attacher(Some(&command), None).await, Attacher::User);
+    assert_eq!(manager.attacher(Some(&command)).await, Attacher::User);
 
     let file = temp.path().join("notes.md");
     std::fs::write(&file, "plan").unwrap();
-    let attacher = manager.attacher(None, None).await;
+    let attacher = manager.attacher(None).await;
     let [added] = manager
         .add_attached_files(
             &SpaceSelector::id(&workspace.id),
@@ -114,7 +111,7 @@ async fn an_agents_files_name_its_kind_and_session() {
     let execution = caller.execution_id().unwrap().to_owned();
     // An agent that has not reported its session yet.
     assert_eq!(
-        manager.attacher(Some(&caller), None).await,
+        manager.attacher(Some(&caller)).await,
         Attacher::Agent {
             agent: "happy-claude".into(),
             execution: execution.clone(),
@@ -122,7 +119,7 @@ async fn an_agents_files_name_its_kind_and_session() {
         }
     );
     recovery::save_session(&manager.paths, &workspace.id, &execution, &"s1".into()).unwrap();
-    let attacher = manager.attacher(Some(&caller), None).await;
+    let attacher = manager.attacher(Some(&caller)).await;
     assert_eq!(
         serde_json::to_value(&attacher).unwrap(),
         serde_json::json!({
@@ -156,7 +153,7 @@ async fn an_agents_files_name_its_kind_and_session() {
     // A command the agent runs with `shoal run`, and one that runs.
     let command = command_caller(&manager, &workspace, Some(&caller)).await;
     let nested = command_caller(&manager, &workspace, Some(&command)).await;
-    assert_eq!(manager.attacher(Some(&nested), None).await, attacher);
+    assert_eq!(manager.attacher(Some(&nested)).await, attacher);
     // A reattaching command keeps the agent it runs under.
     let id = nested.execution_id().unwrap().to_owned();
     let recorded: Option<ExecutionId> = manager
@@ -178,9 +175,9 @@ async fn an_agents_files_name_its_kind_and_session() {
         .with_agents(|agents| agents.remove(&execution))
         .await
         .unwrap();
-    assert_eq!(manager.attacher(Some(&nested), None).await, attacher);
+    assert_eq!(manager.attacher(Some(&nested)).await, attacher);
     let later = command_caller(&manager, &workspace, Some(&nested)).await;
-    assert_eq!(manager.attacher(Some(&later), None).await, attacher);
+    assert_eq!(manager.attacher(Some(&later)).await, attacher);
     let files = manager
         .attached_files(&SpaceSelector::id(&workspace.id))
         .await
@@ -199,7 +196,7 @@ async fn results_name_the_agent_that_handed_them_back() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
     let caller = agent_caller(&manager, &workspace, "codex").await;
-    let attacher = manager.attacher(Some(&caller), None).await;
+    let attacher = manager.attacher(Some(&caller)).await;
     let report = temp.path().join("report.md");
     std::fs::write(&report, "done").unwrap();
     manager
@@ -1375,31 +1372,20 @@ async fn files_of_a_chat_without_a_repository_stay_with_the_root_dir_it_started_
 }
 
 #[tokio::test]
-async fn a_chats_agent_attaches_as_its_chat_outside_any_workspace() {
+async fn a_chats_agent_attaches_as_its_chat_while_it_runs() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
     let chat = chat(&manager, &workspace, "planning").await;
+    let token = manager.chat_scope(&chat.id).await.unwrap();
+    let caller = manager.caller(&token).await.unwrap().unwrap();
     let as_chat = Attacher::Chat {
         agent: "claude".into(),
         chat: chat.id.clone(),
     };
-    assert_eq!(manager.attacher(None, Some(&chat.id)).await, as_chat);
-    // Workspace scope comes first, as for a command a chat's agent runs
-    // in a workspace.
-    let terminal = Caller {
-        space_id: workspace.id.clone(),
-        execution: None,
-        granted: None,
-        read_only: false,
-    };
-    assert_eq!(
-        manager.attacher(Some(&terminal), Some(&chat.id)).await,
-        Attacher::User
-    );
-    // A chat's agent attaching to a workspace attaches as its chat too.
+    // A chat's agent attaching to a workspace attaches as its chat.
     let report = temp.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();
-    let attacher = manager.attacher(None, Some(&chat.id)).await;
+    let attacher = manager.attacher(Some(&caller)).await;
     let added = manager
         .add_attached_files(
             &SpaceSelector::id(&workspace.id),
@@ -1411,7 +1397,7 @@ async fn a_chats_agent_attaches_as_its_chat_outside_any_workspace() {
     assert_eq!(added[0].attached_by, Some(as_chat));
 
     manager.end_executions(&chat.id).await;
-    assert_eq!(manager.attacher(None, Some(&chat.id)).await, Attacher::User);
+    assert_eq!(manager.attacher(Some(&caller)).await, Attacher::User);
 }
 
 mod events;

@@ -3,8 +3,6 @@ use shoal_protocol::notifications::{Cleared, Notification, Sent};
 
 use anyhow::{Context, Result};
 
-use shoal_ids::space_ids::SpaceId;
-
 use tokio::{io::BufReader, net::UnixStream};
 
 use crate::connection::{Daemon, open_buffered, pages, reconnect, request, stream_closed};
@@ -37,20 +35,17 @@ pub async fn clear(daemon: &impl Daemon) -> Result<Cleared> {
 }
 
 /// Send the user, or the coordinating agent, `message` from `space` with
-/// `attachments`; the chat `sender_chat` names, when its agent sends it,
-/// attaches its files.
+/// `attachments`.
 pub async fn send(
     daemon: &impl Daemon,
     space: SpaceSelector,
     message: String,
     attachments: Vec<NewFile>,
-    sender_chat: Option<SpaceId>,
 ) -> Result<Sent> {
     let method = NotificationMethod::SendMessage {
         space,
         message,
         attachments,
-        sender_chat,
     };
     request(daemon, method).await
 }

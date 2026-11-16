@@ -45,12 +45,8 @@ pub(super) async fn handle(
             selection,
             draft,
         } => Body::ReviewMarks(manager.clear_ready(&space, selection, draft).await?),
-        AssignmentMethod::MarkDone {
-            space,
-            done,
-            sender_chat,
-        } => {
-            let attacher = manager.attacher(caller, sender_chat.as_ref()).await;
+        AssignmentMethod::MarkDone { space, done } => {
+            let attacher = manager.attacher(caller).await;
             Body::Completion(manager.mark_space_done(&space, done, &attacher).await?)
         }
     }))

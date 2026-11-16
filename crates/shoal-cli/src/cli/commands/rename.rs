@@ -120,14 +120,8 @@ pub(super) async fn request(ctx: &Context, space: Option<SpaceSelector>) -> Resu
         space.label(),
         space.number
     );
-    crate::client::agent_messages::send(
-        &ctx.paths,
-        selector,
-        NAME_REQUEST.into(),
-        Vec::new(),
-        None,
-    )
-    .await?;
+    crate::client::agent_messages::send(&ctx.paths, selector, NAME_REQUEST.into(), Vec::new())
+        .await?;
     ctx.emit("Asked the space's agent to choose its name.", ())?;
     Ok(0)
 }

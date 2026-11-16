@@ -66,8 +66,7 @@ pub(super) async fn add(
 ) -> Result<i32> {
     let files = super::messages::attachments(&files)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let added =
-        crate::client::files::add(&ctx.paths, space.clone(), files, crate::env::chat()).await?;
+    let added = crate::client::files::add(&ctx.paths, space.clone(), files).await?;
     ctx.show(&added, |added| {
         let now = crate::time::UnixTime::now();
         let rows = added.iter().map(|file| cells(file, now)).collect();

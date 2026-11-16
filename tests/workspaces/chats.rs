@@ -567,6 +567,7 @@ fn a_chat_records_its_work_done_and_withdraws_it() {
         .command()
         .args(["--json", "done", "--attach", notes.to_str().unwrap()])
         .env("SHOAL_CHAT", &chat)
+        .env("SHOAL_SCOPE_TOKEN", fixture.chat_scope(&chat))
         .current_dir(&fixture.repo)
         .output()
         .unwrap();

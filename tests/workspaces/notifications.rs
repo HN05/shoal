@@ -870,11 +870,13 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
     let fixture = Fixture::new();
     let (mut agent, chat) = fixture.run_chat("planning", &[]);
     fs::write(fixture.repo.join("report.md"), "Plan").unwrap();
+    let token = fixture.chat_scope(&chat);
     let in_chat = |args: &[&str]| {
         let output = fixture
             .command()
             .current_dir(&fixture.repo)
             .env("SHOAL_CHAT", &chat)
+            .env("SHOAL_SCOPE_TOKEN", &token)
             .arg("--json")
             .args(args)
             .output()

@@ -3,13 +3,11 @@
 use anyhow::Result;
 use shoal_protocol::assignments::Done;
 
-use shoal_ids::execution_ids::ExecutionId;
-use shoal_ids::space_ids::SpaceId;
-
 use crate::{
     connection::{Daemon, request},
     forge::items::link::Selection,
 };
+use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     executions::Forgotten,
@@ -17,19 +15,13 @@ use shoal_protocol::{
     protocol::AssignmentMethod,
 };
 
-/// Mark `space`'s assignment done as `done` describes. The chat
-/// `sender_chat` names, when its agent completes, attaches its files.
+/// Mark `space`'s assignment done as `done` describes.
 pub async fn mark_done(
     daemon: &impl Daemon,
     space: SpaceSelector,
     done: Done,
-    sender_chat: Option<SpaceId>,
 ) -> Result<Completion> {
-    let method = AssignmentMethod::MarkDone {
-        space,
-        done,
-        sender_chat,
-    };
+    let method = AssignmentMethod::MarkDone { space, done };
     request(daemon, method).await
 }
 

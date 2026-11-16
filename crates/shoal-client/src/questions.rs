@@ -2,8 +2,6 @@
 use anyhow::Result;
 use shoal_protocol::questions::{Ask, Listing, Question};
 
-use shoal_ids::space_ids::SpaceId;
-
 use crate::connection::{Daemon, await_reply, request};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{files::NewFile, item_numbers::ItemNumber, protocol::QuestionMethod};
@@ -18,20 +16,17 @@ pub async fn list(daemon: &impl Daemon, space: Option<SpaceSelector>) -> Result<
     request(daemon, QuestionMethod::ListQuestions { space }).await
 }
 
-/// Ask the user `ask` for the agents of `space` with `attachments`; the
-/// chat `sender_chat` names, when its agent asks, attaches its files.
+/// Ask the user `ask` for the agents of `space` with `attachments`.
 pub async fn ask(
     daemon: &impl Daemon,
     space: SpaceSelector,
     ask: Ask,
     attachments: Vec<NewFile>,
-    sender_chat: Option<SpaceId>,
 ) -> Result<Question> {
     let method = QuestionMethod::AskQuestion {
         space,
         ask,
         attachments,
-        sender_chat,
     };
     request(daemon, method).await
 }

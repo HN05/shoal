@@ -58,7 +58,7 @@ pub(in crate::cli::commands) async fn done(
         Selected::Chat(chat) => SpaceSelector::id(chat),
         Selected::Workspace(workspace) => workspace.clone(),
     };
-    let completion = assignments::mark_done(&ctx.paths, space, done, crate::env::chat()).await?;
+    let completion = assignments::mark_done(&ctx.paths, space, done).await?;
     let message = match selected {
         Selected::Chat(_) if completion.cleanup => {
             "Chat marked done; cleanup requested. Its agent may stop and the chat may be removed."

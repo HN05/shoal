@@ -164,9 +164,8 @@ pub(super) async fn handle(
             space,
             message,
             attachments,
-            sender_chat,
         } => {
-            let attacher = manager.attacher(caller, sender_chat.as_ref()).await;
+            let attacher = manager.attacher(caller).await;
             Body::Reached(
                 manager
                     .send_space_message(&space, message, attachments, &attacher)
@@ -177,9 +176,8 @@ pub(super) async fn handle(
             repository,
             message,
             attachments,
-            sender_chat,
         } => {
-            let attacher = manager.attacher(caller, sender_chat.as_ref()).await;
+            let attacher = manager.attacher(caller).await;
             let below = manager.reach_root(caller).await?;
             let below = below.as_ref();
             Body::Reached(
@@ -190,7 +188,7 @@ pub(super) async fn handle(
                         attachments,
                         &attacher,
                         below,
-                        sender_chat.as_ref(),
+                        caller.map(|caller| &caller.space_id),
                     )
                     .await?,
             )

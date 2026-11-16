@@ -2,7 +2,6 @@ use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_ids::space_ids::SpaceId;
 
 use super::Lifetime;
 
@@ -143,9 +142,6 @@ pub enum AgentMethod {
         /// Files to attach by absolute path, which the daemon copies.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<crate::files::NewFile>,
-        /// The chat whose agent sends the message, which attaches its files.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        sender_chat: Option<SpaceId>,
     },
     /// [`Self::SendAgentMessage`] to every workspace and chat with a running
     /// agent, of one repository when it names one, answered with the spaces
@@ -156,9 +152,6 @@ pub enum AgentMethod {
         message: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<crate::files::NewFile>,
-        /// The chat whose agent sends the message, which attaches its files.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        sender_chat: Option<SpaceId>,
     },
     /// The undelivered messages of the agents of a workspace or running
     /// chat, oldest first.

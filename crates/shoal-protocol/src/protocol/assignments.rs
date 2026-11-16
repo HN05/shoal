@@ -1,7 +1,6 @@
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_ids::space_ids::SpaceId;
 
 /// Requests about a space's assignment: completion, ready marks and a
 /// workspace's stopped work.
@@ -13,9 +12,6 @@ pub enum AssignmentMethod {
         space: SpaceSelector,
         #[serde(flatten)]
         done: crate::assignments::Done,
-        /// The chat whose agent sends the request, which attaches them.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        sender_chat: Option<SpaceId>,
     },
     /// Withdraw the completion of a workspace or running chat.
     UndoDone { space: SpaceSelector },

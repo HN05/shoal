@@ -491,7 +491,6 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
                 space: SpaceSelector::from(target),
                 ask: ask("Which database?", &[]),
                 attachments: Vec::new(),
-                sender_chat: None,
             },
             QuestionMethod::AwaitAnswer {
                 space: SpaceSelector::from(target),

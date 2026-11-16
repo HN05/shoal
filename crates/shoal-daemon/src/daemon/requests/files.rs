@@ -20,12 +20,8 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     let files = match method {
         FileMethod::ListFiles { space } => manager.attached_files(&space).await,
-        FileMethod::AddFiles {
-            space,
-            files,
-            sender_chat,
-        } => {
-            let attacher = manager.attacher(caller, sender_chat.as_ref()).await;
+        FileMethod::AddFiles { space, files } => {
+            let attacher = manager.attacher(caller).await;
             manager.add_attached_files(&space, files, &attacher).await
         }
         FileMethod::RemoveFiles {

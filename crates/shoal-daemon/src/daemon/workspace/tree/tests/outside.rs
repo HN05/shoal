@@ -337,7 +337,6 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
         space: SpaceSelector::id(&user.id),
         message: "Rebase onto main".into(),
         attachments: Vec::new(),
-        sender_chat: None,
     };
     let token = manager.chat_scope(&master.id).await.unwrap();
     let mut method = message();

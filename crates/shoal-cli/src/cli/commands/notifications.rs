@@ -103,9 +103,7 @@ pub(super) async fn send(
     let attachments = super::messages::attachments(&attach)?;
     shoal_protocol::files::check_sent(&attachments)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let sender_chat = crate::env::chat();
-    let sent =
-        notifications::send(&ctx.paths, space.clone(), message, attachments, sender_chat).await?;
+    let sent = notifications::send(&ctx.paths, space.clone(), message, attachments).await?;
     let text = match sent.notification {
         Some(id) => format!("Notification {id} sent."),
         None => "Sent to the coordinating agent.".to_owned(),

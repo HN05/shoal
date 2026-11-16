@@ -249,7 +249,6 @@ async fn finish(ctx: &Context, workspace: &Workspace) -> Result<()> {
             cleanup: true,
             ..Default::default()
         },
-        None,
     )
     .await
     .map(drop)

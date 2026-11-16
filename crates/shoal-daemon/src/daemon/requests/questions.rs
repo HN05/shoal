@@ -30,9 +30,8 @@ pub(super) async fn handle(
             space,
             ask,
             attachments,
-            sender_chat,
         } => {
-            let attacher = manager.attacher(caller, sender_chat.as_ref()).await;
+            let attacher = manager.attacher(caller).await;
             let asked = manager.ask_question(&space, ask, attachments, &attacher);
             Body::Question(asked.await?)
         }
