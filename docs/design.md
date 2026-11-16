@@ -455,7 +455,8 @@ the workspace identity in their environment, so the user can see which
 workspace loads the machine; admission learns a settled agent's memory from
 it, and protection and warnings do not use it yet. A workspace's containers
 count in its usage, read from the runtime's stats by the project name Shoal
-gave them; other processes that leave the workspace's environment, such as
+gave them, so a settled agent's memory includes the services its work
+started; other processes that leave the workspace's environment, such as
 work handed to a shared server, count for the machine only.
 Warnings come first: below each enabled protection's stop threshold, the daemon
 queues an agent message for every workspace with a running agent, so agents
