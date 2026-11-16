@@ -185,8 +185,8 @@ pub enum TriggerCommand {
         #[arg(short = 'r', long = "repo")]
         repository: Option<String>,
     },
-    /// Pause a trigger: its source fires it no more until resumed, through
-    /// config edits and restarts.
+    /// Pause a trigger: its source fires it no more, and a run it queued
+    /// waits, until resumed, through config edits and restarts.
     Pause {
         name: String,
         /// A registered repository other than the one this runs in.

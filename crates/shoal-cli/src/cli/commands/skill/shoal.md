@@ -755,7 +755,7 @@ simulator and passes its UDID as `SHOAL_SIM_UDID`. Chats have no demos.
 
 ```sh
 shoal trigger ls [--repo R]   # Source, paused or active, next firing, last run and its space
-shoal trigger pause <name>    # Its source fires it no more until resumed
+shoal trigger pause <name>    # It fires, and launches a queued run, no more until resumed
 shoal trigger resume <name>   # It counts its times from now; those it missed never run
 shoal trigger run <name>      # Fire it now and print the run's outcome
 ```

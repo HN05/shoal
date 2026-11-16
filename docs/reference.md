@@ -2272,7 +2272,7 @@ as in `sharing area/daemon: 12, 15; area/cli: 3`.
 ```sh
 shoal trigger ls                 # This repository's triggers and the global config's
 shoal trigger ls --repo docs     # Another registered repository's
-shoal trigger pause triage       # Its source fires it no more, through config edits and restarts
+shoal trigger pause triage       # It fires and launches its queued run no more, through config edits and restarts
 shoal trigger resume triage      # It counts its times from now
 shoal trigger run triage         # Fire it now and print the run's outcome
 ```

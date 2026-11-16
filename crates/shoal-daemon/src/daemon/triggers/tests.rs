@@ -333,6 +333,35 @@ async fn overlap_outlasts_a_history_longer_than_it_keeps() {
 }
 
 #[tokio::test]
+async fn a_paused_trigger_holds_its_queued_run() {
+    let (_temp, manager, repo) = with_triggers(&overlapping("queue")).await;
+    let last = chat(&manager, "last", "chat", Some(&repo), None).await;
+    started_in(&manager, &repo, "check", &last.id).await;
+    let queued = fire(&manager, &repo, "check").await;
+    assert_eq!(queued.unwrap().outcome, RunOutcome::Queued);
+    (manager.pause_trigger(context(&repo), "check", true, None))
+        .await
+        .unwrap();
+    let id = last.id.clone();
+    manager
+        .store
+        .write(move |tx| {
+            tx.execute("DELETE FROM executions WHERE space_id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    manager.trigger_pass(UnixTime::now()).await;
+    assert!(started_tasks().is_empty());
+    (manager.pause_trigger(context(&repo), "check", false, None))
+        .await
+        .unwrap();
+    manager.trigger_pass(UnixTime::now()).await;
+    assert_eq!(started_tasks().len(), 1);
+}
+
+#[tokio::test]
 async fn overlap_parallel_launches_at_once() {
     let (_temp, manager, repo) = with_triggers(&overlapping("parallel")).await;
     let last = chat(&manager, "last", "chat", Some(&repo), None).await;

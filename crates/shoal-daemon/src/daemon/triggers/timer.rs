@@ -112,8 +112,12 @@ impl Manager {
             .await
     }
 
-    /// Launch the trigger's queued run once the agent it waits for stopped.
+    /// Launch the trigger's queued run once the agent it waits for stopped,
+    /// unless the trigger is paused, which holds it until it resumes.
     async fn launch_queued(self: &Arc<Self>, trigger: &Configured, now: UnixTime) -> Result<()> {
+        if self.trigger_state(trigger, now).await?.paused {
+            return Ok(());
+        }
         let (scope, name) = (trigger.scope(), trigger.name.clone());
         let queued = self
             .store
