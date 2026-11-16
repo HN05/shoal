@@ -51,9 +51,7 @@ fn a_unit_of_another_state_directory_is_left_alone() {
 fn no_unit_is_installed_by_a_refresh() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
-    let current = current(&paths, root.path());
-    assert!(!rewrite(&paths, &current, Platform::Linux).unwrap());
-    assert!(!current.path.exists());
+    assert!(!outdated(&paths, &current(&paths, root.path()), Platform::Linux).unwrap());
 }
 
 #[test]

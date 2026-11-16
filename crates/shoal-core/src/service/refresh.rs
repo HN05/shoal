@@ -8,19 +8,23 @@ use super::{
     definition::{definition, executable, names_state_dir, write_definition},
 };
 use crate::{paths::Paths, tools::Tool};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use shoal_protocol::service::Definition;
-use std::{fs, io};
+use std::{fs, io, path::PathBuf};
 
 /// Replace the installed service definition of `paths`' state directory
 /// with the one `shoal daemon install` would write now, for the executable
 /// this daemon was started through and the `PATH` it was given, and have
 /// systemd reload it. It restarts nothing: a running service applies what
-/// its manager applies on reload, and the rest from its next start. Returns
-/// whether it replaced the definition.
+/// its manager applies on reload, and the rest from its next start. Once an
+/// upgrade replaced the executable, it leaves the definition to the daemon
+/// that upgrade restarts. Returns whether it replaced the definition.
 pub async fn refresh(paths: &Paths) -> Result<bool> {
+    let Some(executable) = started_executable()? else {
+        return Ok(false);
+    };
     let platform = Platform::current()?;
-    let current = definition(paths, &executable(None)?, platform)?;
+    let current = definition(paths, &executable, platform)?;
     if !rewrite(paths, &current, platform)? {
         return Ok(false);
     }
@@ -28,6 +32,20 @@ pub async fn refresh(paths: &Paths) -> Result<bool> {
         command(Tool::Systemctl, &["--user", "daemon-reload"], true).await?;
     }
     Ok(true)
+}
+
+/// The path this daemon was started through, as it read it before startup
+/// work, while that path still named the running binary; `None` once
+/// another binary replaced it there.
+fn started_executable() -> Result<Option<PathBuf>> {
+    let started = crate::installed::started();
+    if started.installed().is_some() {
+        return Ok(None);
+    }
+    let path = started
+        .path()
+        .context("the path the daemon was started through is unknown")?;
+    executable(Some(path.to_owned())).map(Some)
 }
 
 /// Write `current` over the installed definition when it runs this state
