@@ -1,7 +1,5 @@
-//! The client side of the daemon protocol, which the CLI and apps share:
-//! finding the daemon, sending one request per connection with the caller's
-//! scope token, reading its reply, and the daemon's own status, reload, exit
-//! and wait.
+//! What a connection to the daemon can find that a caller reads without
+//! one: a daemon that speaks another protocol version.
 use crate::protocol;
 
 /// The daemon answered with another protocol `version`.

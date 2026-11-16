@@ -1,5 +1,7 @@
-//! What apps use Shoal through: the daemon's protocol, the types it carries,
-//! and the client-side logic the `shoal` command shares with them.
+//! What apps use Shoal through: the connection to the daemon, an operation
+//! for each request, the handles that read from a connection, and what the
+//! `shoal` command prints. The types the protocol carries are
+//! `shoal-protocol`'s.
 
 pub mod agent_messages;
 pub mod agents;

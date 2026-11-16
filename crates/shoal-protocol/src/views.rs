@@ -1,6 +1,5 @@
-//! What `shoal view` reads through the daemon: issues and PRs as the forge
-//! reports them, with failed checks' logs, and CI runs with their jobs and
-//! failed jobs' logs, in the order they were selected.
+//! What `shoal view` reads through the daemon: the items a selection named,
+//! with the views of its issues and PRs.
 use serde::{Deserialize, Serialize};
 
 use crate::{forge::review::view::ItemView, model::SelectedItem};

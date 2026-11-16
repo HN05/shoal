@@ -1,4 +1,4 @@
-//! Setting a space's priority, which ranks its queued work.
+//! A space's priority, which ranks its queued work.
 use serde::{Deserialize, Serialize};
 use shoal_schedule::priority::Priority;
 

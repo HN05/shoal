@@ -1,7 +1,5 @@
 //! Subscriptions: a snapshot of the records of some topics, then their
-//! changes, on a connection of their own. A daemon restart closes the
-//! connection; the subscription subscribes again and reports the new
-//! snapshot as a resync.
+//! changes, as a subscription reports them.
 pub mod records;
 
 use records::{Record, RecordKey};

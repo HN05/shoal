@@ -1,5 +1,4 @@
-//! The agent queue: admitting launches under `max_agents`, the entries
-//! waiting, and the hold that keeps a starting entry's slot.
+//! The agent queue: the start of a workspace's worker that it queues.
 use crate::space_names::SpaceSelector;
 
 /// The worker of an existing workspace for the daemon to queue and start
