@@ -1,7 +1,6 @@
 //! Packages of spaces `shoal move` carries between machines: what one holds.
 use std::path::PathBuf;
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -58,9 +57,8 @@ pub struct CarriedChat {
 
 /// The space a package holds: its removal record, whose kind it is, with
 /// agents that start new sessions, and for a workspace how its checkpoint's
-/// commits arrive. It writes its kind beside them, as packages have always
-/// named it.
-#[derive(Debug, Clone, Deserialize)]
+/// commits arrive.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackagedSpace {
     /// A commit of the default branch the bundle leaves out, which the
     /// importing repository fetches when it lacks it.
@@ -70,38 +68,7 @@ pub struct PackagedSpace {
     /// default branch already has a checkpoint without one.
     #[serde(default)]
     pub bundle: bool,
-    /// Named as packages of workspaces have always named it.
-    #[serde(rename = "workspace")]
     pub record: RemovedSpace,
-}
-
-impl Serialize for PackagedSpace {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        #[derive(Serialize)]
-        #[serde(rename_all = "snake_case")]
-        enum Kind {
-            Workspace,
-            Chat,
-        }
-        #[derive(Serialize)]
-        struct Written<'a> {
-            kind: Kind,
-            prerequisite: &'a Option<String>,
-            bundle: bool,
-            workspace: &'a RemovedSpace,
-        }
-        let kind = match self.record.workspace() {
-            Some(_) => Kind::Workspace,
-            None => Kind::Chat,
-        };
-        let written = Written {
-            kind,
-            prerequisite: &self.prerequisite,
-            bundle: self.bundle,
-            workspace: &self.record,
-        };
-        written.serialize(serializer)
-    }
 }
 
 /// A file of an agent's session, copied unread.
@@ -132,12 +99,7 @@ pub struct Sessions {
     pub machine: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub agents: Vec<StoppedAgent>,
-    #[serde(
-        default,
-        alias = "last_session",
-        deserialize_with = "crate::executions::one_or_many_sessions",
-        skip_serializing_if = "Vec::is_empty"
-    )]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub last_sessions: Vec<LastSession>,
 }
 

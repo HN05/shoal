@@ -31,27 +31,25 @@ use crate::{
 use shoal_protocol::transcripts;
 use shoal_protocol::transcripts::Environments;
 
-/// The first line of a package names its format and the version of it,
-/// the lowest that reads the package, so an older Shoal imports what it
-/// can: 7 a chat as its removal record, which earlier importers would not
-/// read, 8 chats whose agents and last sessions alone name their agent,
-/// which earlier importers would fail to read, and 9 a workspace that
-/// holds its branch or starting commit in one value, which earlier
-/// importers would restore on the branch its checkpoint names.
+/// The first line of a package names its format and the Shoal version that
+/// wrote it; another version refuses the package, since the shapes it holds
+/// change freely between versions.
 pub const FORMAT: &str = "shoal workspace";
-const VERSION: u32 = 9;
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// The lowest version whose chat packages this Shoal reads.
-const CHAT_VERSION: u32 = 7;
-
-/// The lowest version whose workspace packages this Shoal reads.
-const WORKSPACE_VERSION: u32 = 9;
-
-/// The version of the format that reads the package `manifest` describes.
-fn version(manifest: &Manifest) -> u32 {
-    match manifest.space.record.workspace() {
-        Some(_) => WORKSPACE_VERSION,
-        None => 8,
+/// Why a package of `version`, another than this Shoal's, is refused: a
+/// release names the Shoal that imports it, and a format number of an
+/// earlier package none that still does.
+fn other_version(version: &str) -> String {
+    match version.contains('.') {
+        true => format!(
+            "the export was written by Shoal {version}, and this is Shoal {VERSION}; \
+             import it with Shoal {version}, or export it again with this one"
+        ),
+        false => format!(
+            "the export was written by an earlier Shoal, and this is Shoal {VERSION}; \
+             export it again with this one"
+        ),
     }
 }
 
@@ -387,7 +385,7 @@ fn write_new(
     let file = tempfile::NamedTempFile::new_in(directory)
         .with_context(|| format!("create a file in {}", directory.display()))?;
     let mut out = std::io::BufWriter::new(file.as_file());
-    writeln!(out, "{FORMAT} {}", version(manifest))?;
+    writeln!(out, "{FORMAT} {VERSION}")?;
     serde_json::to_writer(&mut out, manifest)?;
     writeln!(out)?;
     for (session, input) in sessions {
@@ -449,28 +447,11 @@ impl Import {
             .strip_prefix(FORMAT)
             .and_then(|version| version.strip_prefix(' '))
             .context("not a Shoal export")?;
-        let version: u32 = version
-            .parse()
-            .ok()
-            .filter(|version| (1..=VERSION).contains(version))
-            .with_context(|| {
-                format!("the export uses a newer format ({FORMAT} {version}); upgrade Shoal to import it")
-            })?;
+        ensure!(version == VERSION, "{}", other_version(version));
         let mut line = String::new();
         input.read_line(&mut line)?;
-        let manifest: serde_json::Value =
-            serde_json::from_str(&line).context("read the export's manifest")?;
-        // Earlier versions name no kind; their manifests hold a workspace.
-        let (kind, lowest) = match manifest.get("kind").is_some_and(|kind| kind == "chat") {
-            true => ("chat", CHAT_VERSION),
-            false => ("workspace", WORKSPACE_VERSION),
-        };
-        ensure!(
-            version >= lowest,
-            "the export holds a {kind} an earlier Shoal packaged, which this one cannot import; export it again with this Shoal"
-        );
         let manifest: Manifest =
-            serde_json::from_value(manifest).context("read the export's manifest")?;
+            serde_json::from_str(&line).context("read the export's manifest")?;
         let sessions = manifest
             .session_files
             .iter()

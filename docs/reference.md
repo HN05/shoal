@@ -4060,7 +4060,7 @@ export and import that the agents' conversations describe work its files lack,
 and tells the agents so. Import refuses `--keep-sessions` for a copy.
 
 `shoal move import <file>` reads an export, or standard input without a file or for
-`-`, refusing a terminal, and continues it in the registered repository with the
+`-`, refusing a terminal and an export another Shoal version wrote, and continues it in the registered repository with the
 exported repository's origin, or the one `--repo` names, or a chat without a
 repository in `root_dir`. Given several files, or a
 directory, whose `.shoal` files it reads in name order, it imports each one, going

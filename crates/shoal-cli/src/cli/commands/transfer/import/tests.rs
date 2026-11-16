@@ -5,8 +5,7 @@ use super::*;
 fn chat_copy(directory: &Path, earlier_files: bool) -> PathBuf {
     let manifest = serde_json::json!({
         "remote_url": "https://forge.test/o/r",
-        "kind": "chat",
-        "workspace": {
+        "record": {
             "workspace_id": "c1",
             "repository_id": "r1",
             "name": "plan",
@@ -19,7 +18,8 @@ fn chat_copy(directory: &Path, earlier_files: bool) -> PathBuf {
         "copy": {"earlier_files": earlier_files},
     });
     let file = directory.join("plan.shoal");
-    std::fs::write(&file, format!("shoal workspace 7\n{manifest}\n")).unwrap();
+    let header = format!("shoal workspace {}", env!("CARGO_PKG_VERSION"));
+    std::fs::write(&file, format!("{header}\n{manifest}\n")).unwrap();
     file
 }
 

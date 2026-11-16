@@ -54,11 +54,9 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     let file = file.to_str().unwrap();
     let exported = fixture.ok(&["move", "export", &fixture.id("moving"), "-o", file]);
     assert!(agent.wait_with_output().unwrap().status.success());
-    assert_eq!(exported["manifest"]["workspace"]["name"], "moving");
+    assert_eq!(exported["manifest"]["record"]["name"], "moving");
     assert!(exported["manifest"]["bundle"].as_bool().unwrap());
-    let agents = exported["manifest"]["workspace"]["agents"]
-        .as_array()
-        .unwrap();
+    let agents = exported["manifest"]["record"]["agents"].as_array().unwrap();
     assert_eq!(agents.len(), 1, "{exported}");
     assert_eq!(agents[0]["record"]["moved"], true);
     assert!(!path.exists());
@@ -684,7 +682,7 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|export| export["manifest"]["workspace"]["name"].clone())
+        .map(|export| export["manifest"]["record"]["name"].clone())
         .collect();
     assert_eq!(names, ["first", "second"]);
     assert_eq!(exported["failed"], serde_json::json!([]));
@@ -769,7 +767,7 @@ fn export_all_keep_copies_every_space_past_one_that_cannot_be_copied() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|export| export["manifest"]["workspace"]["name"].clone())
+        .map(|export| export["manifest"]["record"]["name"].clone())
         .collect();
     assert_eq!(names, ["second"], "{copied}");
     assert_eq!(copied["failed"][0]["workspace"], "first", "{copied}");
@@ -1292,8 +1290,8 @@ fn a_chat_moves_with_its_session_and_continues_it() {
         assert_eq!(fixture.ok(&["list", "--chats"])[0]["name"], "talk");
         let exported = fixture.ok(&["move", "export", &fixture.id("talk"), "-o", file, "--yes"]);
         let manifest = &exported["manifest"];
-        assert_eq!(manifest["kind"], "chat", "{exported}");
-        assert_eq!(manifest["workspace"]["name"], "talk", "{exported}");
+        assert!(manifest["record"]["chat"].is_object(), "{exported}");
+        assert_eq!(manifest["record"]["name"], "talk", "{exported}");
         assert_eq!(
             manifest["session_files"][0]["path"], "-repo/chat-session.jsonl",
             "{exported}"
@@ -1314,11 +1312,11 @@ fn a_removed_chat_moves_from_its_removal_record() {
     let file = file.to_str().unwrap();
 
     let exported = fixture.ok(&["move", "export", &id, "-o", file]);
-    assert_eq!(exported["manifest"]["kind"], "chat", "{exported}");
-    assert_eq!(
-        exported["manifest"]["workspace"]["name"], "talk",
+    assert!(
+        exported["manifest"]["record"]["chat"].is_object(),
         "{exported}"
     );
+    assert_eq!(exported["manifest"]["record"]["name"], "talk", "{exported}");
     let removed = fixture.ok(&["restore"])["removed"].clone();
     assert_eq!(removed[0]["workspace_id"], id.as_str(), "{removed}");
     // The record stays here, so the import elsewhere opens the chat again.
@@ -1374,7 +1372,7 @@ fn a_chat_from_a_worktree_moves_back_into_it() {
     let workspace = chat_in_worktree(&fixture, &marked, || {
         id = fixture.id("reading");
         let exported = fixture.ok(&["move", "export", &id, "-o", file, "--yes"]);
-        let ran_in = &exported["manifest"]["workspace"]["chat"]["workspace"]["id"];
+        let ran_in = &exported["manifest"]["record"]["chat"]["workspace"]["id"];
         assert_eq!(ran_in, &fixture.ok(&["list"])[0]["id"], "{exported}");
     });
     assert_eq!(fixture.ok(&["list"])[0]["id"], workspace["id"]);
@@ -1529,9 +1527,7 @@ fn import_without_opening(fixture: &Fixture, file: &str, branch: &str) {
     let package = fs::read(file).unwrap();
     let manifest = package.split(|&byte| byte == b'\n').nth(1).unwrap();
     let manifest: Value = serde_json::from_slice(manifest).unwrap();
-    let head = manifest["workspace"]["checkpoint"]["head"]
-        .as_str()
-        .unwrap();
+    let head = manifest["record"]["checkpoint"]["head"].as_str().unwrap();
     let branches = [branch, &head[..7]];
     let tree = git(&fixture.repo, &["write-tree"]);
     let unrelated = git_with_identity(

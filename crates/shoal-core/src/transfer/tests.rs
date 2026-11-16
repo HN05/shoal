@@ -6,16 +6,34 @@ use super::*;
 use crate::execution::recovery::{LastSession, Record};
 use shoal_ids::agent_session_ids::AgentSessionId;
 
-/// A registered repository pushed to a bare `origin`.
 #[test]
-fn import_refuses_other_files_and_newer_formats() {
+fn import_refuses_other_files_and_versions() {
     assert!(Import::read(&mut &b"not an export\n"[..]).is_err());
-    assert!(Import::read(&mut &b"shoal workspace 8\n{}\n"[..]).is_err());
+    let bytes = format!(
+        "{FORMAT} 0.0.1\n{}\n",
+        manifest_json(&manifest_with_sessions())
+    );
+    let refused = Import::read(&mut bytes.as_bytes()).err().expect("refused");
+    assert!(
+        format!("{refused:#}").contains("Shoal 0.0.1"),
+        "{refused:#}"
+    );
+    // A format number of an earlier package names no release.
+    let bytes = format!("{FORMAT} 9\n{{}}\n");
+    let refused = Import::read(&mut bytes.as_bytes()).err().expect("refused");
+    assert!(
+        format!("{refused:#}").contains("an earlier Shoal"),
+        "{refused:#}"
+    );
 }
 
-/// The header of format version `version`.
-fn header(version: u32) -> String {
-    format!("{FORMAT} {version}")
+/// The header of a package this Shoal writes.
+fn header() -> String {
+    format!("{FORMAT} {VERSION}")
+}
+
+fn manifest_json(manifest: &Manifest) -> String {
+    serde_json::to_string(manifest).unwrap()
 }
 
 #[test]
@@ -28,39 +46,13 @@ fn a_workspace_package_keeps_its_branch_or_starting_commit() {
             made_for: None,
         });
     for manifest in [manifest, at_commit] {
-        let bytes = export_bytes(&header(version(&manifest)), &manifest, &[]);
+        let bytes = export_bytes(&header(), &manifest, &[]);
         let import = Import::read(&mut &bytes[..]).unwrap();
         let kept = import.manifest.space.record.kept_workspace().unwrap();
         assert_eq!(
             kept.head,
             manifest.space.record.kept_workspace().unwrap().head
         );
-    }
-}
-
-#[test]
-fn a_workspace_package_an_earlier_shoal_wrote_is_refused() {
-    let mut value = serde_json::to_value(manifest_with_sessions()).unwrap();
-    // Earlier versions name no kind; their manifests hold a workspace.
-    value.as_object_mut().unwrap().remove("kind");
-    let bytes = format!("{}\n{value}\n", header(8)).into_bytes();
-    let refused = Import::read(&mut &bytes[..]).err().expect("refused");
-    assert!(
-        format!("{refused:#}").contains("earlier Shoal"),
-        "{refused:#}"
-    );
-}
-
-#[test]
-fn a_package_imports_under_the_name_it_holds() {
-    let manifest = manifest_with_sessions();
-    let mut value = serde_json::to_value(&manifest).unwrap();
-    // A name an earlier rule refused, and one longer than a set name may be.
-    for name in ["123", &"x".repeat(64)] {
-        value["workspace"]["name"] = name.into();
-        let bytes = format!("{}\n{value}\n", header(version(&manifest))).into_bytes();
-        let import = Import::read(&mut &bytes[..]).unwrap();
-        assert_eq!(import.manifest.space.record.name, name);
     }
 }
 
@@ -76,7 +68,7 @@ fn a_chat_package_holds_its_removal_record_and_continues_its_session() {
             "prs": [{"kind": "pr", "url": "https://forge.example/team/repo/pulls/14", "title": "Fix it"}],
             "related": [{"kind": "issue", "url": "https://forge.example/team/repo/issues/9", "title": null}],
         },
-        "last_sessions": [{"execution": "e1", "agent": "claude", "session": "s1"}],
+        "last_sessions": [{"execution": "e1", "agent": "claude", "session": "s1", "mode": "plan"}],
         "cause": "manual",
         "removed_at": 1,
         "expires_at": 2,
@@ -95,9 +87,7 @@ fn a_chat_package_holds_its_removal_record_and_continues_its_session() {
         copy: None,
         chats: Vec::new(),
     };
-    assert_eq!(version(&manifest), 8);
-    assert_eq!(serde_json::to_value(&manifest).unwrap()["kind"], "chat");
-    let bytes = export_bytes(&header(8), &manifest, &["abc"]);
+    let bytes = export_bytes(&header(), &manifest, &["abc"]);
     let import = Import::read(&mut &bytes[..]).unwrap();
     assert!(import.bundle.is_none());
     // The record comes back whole, under its ID and below its parent, with
@@ -123,21 +113,10 @@ fn a_chat_package_holds_its_removal_record_and_continues_its_session() {
     assert_eq!(manifest.sessions_on(Some("m1"), None).reported().count(), 1);
 }
 
-#[test]
-fn a_chat_package_an_earlier_shoal_wrote_is_refused() {
-    let earlier = serde_json::json!({"kind": "chat", "name": "plan", "agent": "claude"});
-    let bytes = format!("{}\n{earlier}\n", header(6)).into_bytes();
-    let refused = Import::read(&mut &bytes[..]).err().expect("refused");
-    assert!(
-        format!("{refused:#}").contains("earlier Shoal"),
-        "{refused:#}"
-    );
-}
-
 /// The bytes of an export of `manifest`'s format carrying `contents` for its
 /// session files.
 fn export_bytes(header: &str, manifest: &Manifest, contents: &[&str]) -> Vec<u8> {
-    let mut bytes = format!("{header}\n{}\n", serde_json::to_string(manifest).unwrap());
+    let mut bytes = format!("{header}\n{}\n", manifest_json(manifest));
     for content in contents {
         bytes.push_str(content);
     }
@@ -157,8 +136,7 @@ fn session_file(path: &str, size: u64) -> SessionFile {
 fn import_reads_session_files_and_refuses_paths_outside_their_directory() {
     let mut manifest = manifest_with_sessions();
     manifest.session_files = vec![session_file("p/s1.jsonl", 3), session_file("p/s1/a", 2)];
-    let current = header(version(&manifest));
-    let bytes = export_bytes(&current, &manifest, &["abc", "de"]);
+    let bytes = export_bytes(&header(), &manifest, &["abc", "de"]);
     let import = Import::read(&mut &bytes[..]).unwrap();
     let read: Vec<_> = import
         .sessions
@@ -175,11 +153,11 @@ fn import_reads_session_files_and_refuses_paths_outside_their_directory() {
             ("p/s1/a".to_owned(), "de".to_owned())
         ]
     );
-    let short = export_bytes(&current, &manifest, &["abc", "d"]);
+    let short = export_bytes(&header(), &manifest, &["abc", "d"]);
     assert!(Import::read(&mut &short[..]).is_err());
     for path in ["../escape", "/absolute"] {
         manifest.session_files = vec![session_file(path, 1)];
-        let bytes = export_bytes(&current, &manifest, &["x"]);
+        let bytes = export_bytes(&header(), &manifest, &["x"]);
         assert!(Import::read(&mut &bytes[..]).is_err(), "{path}");
     }
 }
@@ -190,7 +168,8 @@ fn manifest_with_sessions() -> Manifest {
     let record: Record = serde_json::from_value(serde_json::json!({
         "agent": "claude",
         "session": "s1",
-        "place": "tab",
+        "origin": {"host": "herdr", "place": "tab"},
+        "mode": "worker",
     }))
     .unwrap();
     let agent = StoppedAgent {
@@ -234,8 +213,7 @@ fn manifest_with_sessions() -> Manifest {
         "branch": "topic",
         "links": {"issues": [], "prs": []},
         "agents": [agent],
-        // Earlier removal records kept a single last session.
-        "last_session": last,
+        "last_sessions": [last],
         "cause": "manual",
         "removed_at": 1,
         "expires_at": 2,
@@ -333,7 +311,8 @@ fn moved_records_keep_no_session_place_or_wrapper() {
     let record: Record = serde_json::from_value(serde_json::json!({
         "agent": "codex",
         "session": "s1",
-        "place": "tab",
+        "origin": {"host": "herdr", "place": "tab"},
+        "mode": "worker",
     }))
     .unwrap();
     assert!(!record.moved);
