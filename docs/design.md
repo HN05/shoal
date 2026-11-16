@@ -542,12 +542,13 @@ Plain Git creates and removes worktrees through the `git` module with hooks
 disabled: `git worktree add` on a new or existing branch, at a commit, or without
 checking files out for a copy, and `git worktree remove`, then `git branch -D` when
 the removal decision deletes the branch. Before `git worktree remove`, Shoal
-marks the worktree's admin directory; a removal stopped partway checks the
-`.git` link and tracked files it deleted out again, or, leaving the workspace
-failed, startup or the next removal does once the admin directory proves the
-worktree is the workspace's, so that no decision reads Shoal's own deletions as
-unsaved work; a workspace readied or failed otherwise since, which replaced that
-removal's error, drops the marker, its deletions its own. Typed removal outcomes preserve
+marks the worktree's admin directory, so that no decision reads Shoal's own
+deletions as unsaved work. A removal stopped partway checks the `.git` link and
+tracked files it deleted out again. If it cannot, it fails the workspace with a
+`removal stopped` error, and startup or the next removal restores them once the
+admin directory proves the worktree is the workspace's. A workspace readied or
+failed otherwise since has lost that error: its marker is dropped and its
+deletions count as its own. Typed removal outcomes preserve
 unfamiliar strings; only confirmed branch deletion sets the response deletion
 flag. Invoke external tools with argument arrays. Captured subprocesses share optional deadlines, whose
 error names the command line and directory, and a
