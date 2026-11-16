@@ -52,7 +52,8 @@ impl Contents {
         Self::Seed,
     ];
 
-    fn directory(self) -> &'static str {
+    /// The directory's name beside the workspaces.
+    pub fn directory(self) -> &'static str {
         match self {
             Self::TmpDirs => ".tmp",
             Self::Attachments => ".attachments",
