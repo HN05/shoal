@@ -1538,6 +1538,39 @@ async fn the_agent_that_takes_a_launchs_entry_learns_what_made_the_launch() {
 }
 
 #[tokio::test]
+async fn a_source_this_build_cannot_read_leaves_the_entry_consumed() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let entry = add(&manager, &repo, "launch").await.entry.unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "launch".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .queue_attach(&entry.id, &SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+    let id = entry.id.clone();
+    (manager.store)
+        .run(move |db| {
+            let unknown = r#"{"kind":"webhook"}"#;
+            db.execute(
+                "UPDATE agent_queue SET source=?2 WHERE id=?1",
+                params![id, unknown],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let consumed = manager.consume_queue_entry(&entry.id, &workspace.id).await;
+    assert_eq!(consumed, None);
+    assert_eq!(
+        manager.started_launch(&entry.id).await.unwrap(),
+        Some(workspace.id.clone())
+    );
+}
+
+#[tokio::test]
 async fn a_oneshot_run_starts_beside_the_agents_without_a_slot() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;

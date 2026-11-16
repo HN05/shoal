@@ -568,13 +568,18 @@ impl Manager {
                     return Ok(None);
                 };
                 record_started(tx, &entry, &workspace)?;
-                Ok(source.as_deref().map(serde_json::from_str).transpose()?)
+                Ok(source)
             })
             .await;
-        consumed.unwrap_or_else(|error| {
+        let source = consumed.unwrap_or_else(|error| {
             crate::daemon::log!("agent queue: {error:#}");
             None
-        })
+        })?;
+        // The entry is consumed whatever its source holds: one this build
+        // cannot read is left out of the agent's start.
+        serde_json::from_str(&source)
+            .inspect_err(|error| crate::daemon::log!("launch source of {id} not read: {error:#}"))
+            .ok()
     }
 
     /// The workspace the launch `entry`, which left the queue, started its
