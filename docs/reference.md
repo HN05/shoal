@@ -3949,10 +3949,12 @@ stays open. `--no-agents` keeps them saved for a later `shoal restore`, keeping 
 workspace from idle cleanup as stopped work does, and `--forget` forgets them.
 An agent whose session another space here holds, running or stopped, starts
 from a fork of it, as a [copy](#copies)'s does, with a warning naming that
-space; this holds for a chat's restore too. It refuses when another
-workspace uses the branch, when the branch no longer contains the removed HEAD,
-or when it moved past HEAD while unsaved files would have to be applied to it;
-the error names the commit to recover by hand. A scoped process restores a
+space; this holds for a chat's restore too. A branch that no longer contains
+the removed HEAD, as after a removal during a rebase, leaves the workspace to
+reopen, with a warning, on a branch named after the short commit. It refuses
+when another workspace uses the branch, when neither branch contains the
+removed HEAD, or when the branch moved past HEAD while unsaved files would have
+to be applied to it; the error names the commit to recover by hand. A scoped process restores a
 removed space, of either kind, whose recorded parent exists and its scope
 reaches, always below that parent, and a chat only where it could start one:
 in a worktree its scope reaches, with permissions its own space holds; any other

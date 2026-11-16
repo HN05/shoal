@@ -1520,16 +1520,27 @@ fn a_restore_that_places_no_session_files_keeps_them_for_the_next() {
 }
 
 /// Import the export `file` while a branch named `branch`, the workspace's,
-/// has another history, so the import records the workspace without opening
-/// it, then delete that branch. A development build leaves agents' files to
-/// the installed Shoal unless told otherwise.
+/// and the one named after its short commit, which would take it instead,
+/// have another history, so the import records the workspace without
+/// opening it, then delete those branches. A development build leaves
+/// agents' files to the installed Shoal unless told otherwise.
 fn import_without_opening(fixture: &Fixture, file: &str, branch: &str) {
+    // The manifest is the package's second line, before its bundle.
+    let package = fs::read(file).unwrap();
+    let manifest = package.split(|&byte| byte == b'\n').nth(1).unwrap();
+    let manifest: Value = serde_json::from_slice(manifest).unwrap();
+    let head = manifest["workspace"]["checkpoint"]["head"]
+        .as_str()
+        .unwrap();
+    let branches = [branch, &head[..7]];
     let tree = git(&fixture.repo, &["write-tree"]);
     let unrelated = git_with_identity(
         &fixture.repo,
         &["commit-tree", tree.trim(), "-m", "Another history"],
     );
-    git(&fixture.repo, &["branch", "-f", branch, unrelated.trim()]);
+    for branch in branches {
+        git(&fixture.repo, &["branch", "-f", branch, unrelated.trim()]);
+    }
     let repo = fixture.repo.to_str().unwrap();
     let imported = fixture
         .command()
@@ -1538,7 +1549,9 @@ fn import_without_opening(fixture: &Fixture, file: &str, branch: &str) {
         .output()
         .unwrap();
     assert!(!imported.status.success(), "{}", printed(&imported));
-    git(&fixture.repo, &["branch", "-D", branch]);
+    for branch in branches {
+        git(&fixture.repo, &["branch", "-D", branch]);
+    }
 }
 
 /// Restore the removed `workspace`, letting the development build put its

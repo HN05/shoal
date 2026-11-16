@@ -322,11 +322,15 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
         file: session_file.clone(),
         contents,
     };
-    // Another history on the workspace's branch keeps the import from
+    // Another history on the workspace's branch, and on the one named after
+    // its short commit that would take it instead, keeps the import from
     // opening it.
-    git(&target_repo.path, &["checkout", "-q", "--orphan", "topic"]);
-    fs::write(target_repo.path.join("another"), "another\n").unwrap();
-    commit(&target_repo.path, "another");
+    let head = &workspace.kept_workspace().unwrap().checkpoint.head;
+    for branch in ["topic", head.abbreviated(7)] {
+        git(&target_repo.path, &["checkout", "-q", "--orphan", branch]);
+        fs::write(target_repo.path.join("another"), "another\n").unwrap();
+        commit(&target_repo.path, "another");
+    }
     git(&target_repo.path, &["checkout", "-q", "main"]);
     let carried_files = std::slice::from_ref(&carried);
     let import = workspace_import(&target_repo, &import, workspace, carried_files);

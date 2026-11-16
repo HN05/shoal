@@ -15,7 +15,10 @@ use super::commits::NewRecord;
 use crate::daemon::scope::Caller;
 use crate::{
     git,
-    model::{Head, OpenedWorkspace, RemovedSpace, RestoredSpace, RestoredWorkspace},
+    model::{
+        Checkpoint, Head, OpenedWorkspace, RemovedSpace, Repository, RestoredSpace,
+        RestoredWorkspace,
+    },
     transfer::CarriedSessionFile,
 };
 use shoal_protocol::space_names::SpaceName;
@@ -163,7 +166,7 @@ impl Manager {
                 reused: false,
             },
             Head::Branch(branch) => {
-                (self.restore_branch_workspace(&removed, branch, new, files)).await?
+                (self.restore_branch_workspace(&removed, branch, new, files, &mut warnings)).await?
             }
         };
         let id = &opened.workspace.id;
@@ -311,15 +314,17 @@ impl Manager {
     }
 
     /// Open the removed workspace `removed` again as `new` places it, on its
-    /// `branch` at the removed HEAD, with `files` from its checkpoint.
+    /// `branch` at the removed HEAD, with `files` from its checkpoint, adding
+    /// to `warnings` when another branch has to take it.
     async fn restore_branch_workspace(
         &self,
         removed: &RemovedSpace,
         branch: BranchName,
         new: NewRecord,
         files: Option<RestoredFiles>,
+        warnings: &mut Vec<String>,
     ) -> Result<OpenedWorkspace> {
-        self.restore_branch(removed, &branch).await?;
+        let branch = self.restore_branch(removed, branch, warnings).await?;
         let base = self.restore_base(removed).await?;
         let new = super::NewWorkspace {
             options: crate::protocol::CreationOptions {
@@ -346,12 +351,42 @@ impl Manager {
         Ok(opened)
     }
 
-    /// Ready `branch` to open: at the removed HEAD, or at a later commit
-    /// when nothing unsaved has to be applied, created at HEAD when it was
-    /// deleted.
-    async fn restore_branch(&self, removed: &RemovedSpace, branch: &BranchName) -> Result<()> {
+    /// The branch to open: the workspace's `branch`, or, when it no longer
+    /// contains the removed HEAD, as when the workspace was removed during a
+    /// rebase, one named after the short commit, with a warning in
+    /// `warnings`.
+    async fn restore_branch(
+        &self,
+        removed: &RemovedSpace,
+        branch: BranchName,
+        warnings: &mut Vec<String>,
+    ) -> Result<BranchName> {
         let (repo, _guard) = self.lock_repository(removed.repository()?).await?;
         let checkpoint = &removed.kept_workspace()?.checkpoint;
+        if self.ready_branch(&repo, &branch, checkpoint).await? {
+            return Ok(branch);
+        }
+        let short = BranchName::from(checkpoint.head.abbreviated(7));
+        ensure!(
+            self.ready_branch(&repo, &short, checkpoint).await?,
+            "neither branch {branch} nor {short} contains the removed HEAD {}; point one of them back at it to restore the workspace",
+            checkpoint.head
+        );
+        warnings.push(format!(
+            "branch {branch} no longer contains the removed HEAD, so the workspace reopens on branch {short}"
+        ));
+        Ok(short)
+    }
+
+    /// Ready `branch` to open at `checkpoint`'s HEAD: at it, or at a later
+    /// commit when nothing unsaved has to be applied, created there when it
+    /// does not exist; false when it no longer contains HEAD.
+    async fn ready_branch(
+        &self,
+        repo: &Repository,
+        branch: &BranchName,
+        checkpoint: &Checkpoint,
+    ) -> Result<bool> {
         let head = checkpoint.head.as_str();
         if let Some(workspace) = self.list_workspaces().await?.into_iter().find(|workspace| {
             workspace.repository() == &repo.id && workspace.branch() == Some(branch)
@@ -361,7 +396,7 @@ impl Manager {
         let local = git::local_ref(branch);
         if !git::ref_exists(&repo.path, &local, git::isolated_command).await? {
             git::branch::create(&repo.path, branch, head).await?;
-            return Ok(());
+            return Ok(true);
         }
         let tip = git::verify_revision(
             &repo.path,
@@ -370,18 +405,15 @@ impl Manager {
         )
         .await?;
         let tip = tip.trim();
-        ensure!(
-            git::is_ancestor(&repo.path, head, tip, git::isolated_command).await?,
-            "branch {branch} no longer contains the removed HEAD {}; restore it under another name with git branch <name> {}",
-            checkpoint.head,
-            checkpoint.commit
-        );
+        if !git::is_ancestor(&repo.path, head, tip, git::isolated_command).await? {
+            return Ok(false);
+        }
         ensure!(
             tip == checkpoint.head || checkpoint.commit == checkpoint.head,
             "branch {branch} moved past the removed HEAD; open it with shoal new and apply the unsaved files with git cherry-pick --no-commit {}",
             checkpoint.commit
         );
-        Ok(())
+        Ok(true)
     }
 
     /// The recorded base, so diffs and the stack link come back: its ref

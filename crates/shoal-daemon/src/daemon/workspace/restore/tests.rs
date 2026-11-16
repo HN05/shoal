@@ -483,7 +483,7 @@ async fn a_started_restore_keeps_expiry_from_its_record_checkpoints_and_files() 
 }
 
 #[tokio::test]
-async fn restore_refuses_a_branch_that_moved_away_or_is_in_use() {
+async fn restore_refuses_a_branch_in_use() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
@@ -504,14 +504,6 @@ async fn restore_refuses_a_branch_that_moved_away_or_is_in_use() {
         )
         .await
         .unwrap();
-    // The kept branch was reset elsewhere, losing the removed commit.
-    git(&checkout, &["branch", "-f", "topic", "main"]);
-    assert!(
-        manager
-            .restore_workspace(&manager.named("topic").await)
-            .await
-            .is_err()
-    );
     git(&checkout, &["branch", "-D", "topic"]);
     manager
         .create_workspace(&repo.id, "topic".into(), None, None, None)
@@ -559,6 +551,44 @@ async fn restore_reopens_the_branch_of_a_workspace_removed_with_a_detached_head(
         restored.opened.workspace.branch().map(BranchName::as_str),
         Some("topic")
     );
+}
+
+#[tokio::test]
+async fn restore_reopens_a_head_its_branch_lost_on_a_branch_of_its_own() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let tip = git(&checkout, &["rev-parse", "topic"]);
+    // As in a rebase, HEAD left the branch and gained a commit it lacks.
+    git(&workspace.path, &["checkout", "--detach"]);
+    fs::write(workspace.path.join("work"), "work\n").unwrap();
+    commit(&workspace.path, "work");
+    let head = git(&workspace.path, &["rev-parse", "HEAD"]);
+    manager
+        .remove_selected(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::IncludeDirectoryProcesses,
+        )
+        .await
+        .unwrap();
+
+    let restored = manager
+        .restore_workspace(&manager.named("topic").await)
+        .await
+        .unwrap();
+    let reopened = &restored.opened.workspace;
+    assert_eq!(reopened.branch().map(BranchName::as_str), Some(&head[..7]));
+    assert_eq!(git(&reopened.path, &["rev-parse", "HEAD"]), head);
+    assert_eq!(git(&checkout, &["rev-parse", "topic"]), tip);
+    assert_eq!(restored.warnings.len(), 1, "{:?}", restored.warnings);
 }
 
 #[tokio::test]
