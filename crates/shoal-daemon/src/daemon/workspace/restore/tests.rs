@@ -122,6 +122,9 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
     commit(&workspace.path, "work");
     let head = git(&workspace.path, &["rev-parse", "HEAD"]);
     fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
+    // The archive limit caps only an agent's checkpoint.
+    crate::daemon::test_support::configure(&manager, "[cleanup.restore]\narchive_max_mb = 0\n")
+        .await;
     let id = workspace.id.clone();
     manager
         .store

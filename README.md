@@ -499,8 +499,8 @@ agent exits or is stopped. Until the checkpoint expires, after 30 days by defaul
 checkpoint kept, and restores the agents the removal stopped; a removed chat
 comes back the same way, with its agent's session; `--no-agents` keeps them
 saved for a later `shoal restore`, and `--forget` forgets them. A checkpoint keeps
-HEAD only when the unsaved files are too large or include a nested repository or
-changed submodule; see [Checkpoints and restore](docs/reference.md#checkpoints-and-restore).
+HEAD only when the unsaved files include a nested repository or changed
+submodule, or, for an agent's exit or stop, exceed `archive_max_mb`; see [Checkpoints and restore](docs/reference.md#checkpoints-and-restore).
 `shoal restore <workspace> --checkpoint <number>` returns an existing workspace
 to one of its checkpoints. `shoal move export <workspace> -o <file>`
 removes a workspace and writes its removal checkpoint and record to a file, and `shoal

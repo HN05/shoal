@@ -1015,7 +1015,7 @@ enabled = true       # Clean up after `shoal done`; false keeps the space for re
 
 [cleanup.restore]
 retention_days = 30  # How long removed workspaces stay restorable
-archive_max_mb = 50  # Uncommitted and untracked files a checkpoint keeps
+archive_max_mb = 50  # Unsaved files an agent's exit or stop checkpoint keeps
 ```
 
 `grace_minutes` is how long every unattended removal except for low disk space

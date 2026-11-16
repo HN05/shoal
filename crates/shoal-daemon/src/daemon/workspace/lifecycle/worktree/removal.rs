@@ -15,7 +15,7 @@ use crate::{
         worktree::{BranchRemoval, FileRemoval, interrupted},
     },
     hooks::{self, Hook, HookKind},
-    model::{RemovedSpace, Space, Workspace},
+    model::{CheckpointCause, RemovedSpace, Space, Workspace},
     removal::{
         self, BranchOutcome, IdleRestore, Inspection, InspectionPolicy, RemovalCheck, RemovalResult,
     },
@@ -144,7 +144,9 @@ impl Manager {
             .check;
         if include_changes && check.dirty {
             removal::load_changed_files(&mut check).await?;
-            check.unsaved_files_archived = self.archives_unsaved_files(&check.workspace).await?;
+            check.unsaved_files_archived = self
+                .checkpoint_keeps_unsaved_files(&check.workspace, CheckpointCause::Removal)
+                .await?;
         }
         Ok(check)
     }

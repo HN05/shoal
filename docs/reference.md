@@ -2958,9 +2958,9 @@ ordinary, writable workspace with one editing agent of its own, which
 [`shoal refresh`](#refresh) copies its live source's files into again.
 
 Once its files are in, a copy takes a checkpoint of itself, its starting
-checkpoint, which keeps every unsaved file whatever `archive_max_mb` and does not
-expire while the copy exists; a later checkpoint, a removal's included, keeps
-them whatever their size too while they still match it. The commits up to its HEAD count as kept, and
+checkpoint, which keeps every unsaved file and does not expire while the copy
+exists; a later checkpoint, an agent's included, keeps them whatever their size
+too while they still match it. The commits up to its HEAD count as kept, and
 files that still match it count as unchanged, so a copy with nothing of its own
 is removed by [automatic cleanup](#automatic-cleanup) like an empty workspace;
 commits on top of it and files that differ are the copy's own work. Removal
@@ -3911,10 +3911,11 @@ repository; taking one leaves the worktree and its index untouched.
 exits or is stopped, before a restore to a checkpoint, when a [copy](#copies)
 starts, and on every removal of an existing worktree except a disposable
 workspace's. An automatic checkpoint that would keep what the newest one keeps
-extends that one instead. When the unsaved files exceed `archive_max_mb`, include
-an untracked nested repository or a changed submodule, whose files it cannot hold,
-the checkpoint keeps HEAD only, except a copy's starting checkpoint, which
-keeps every file whatever their size. Checkpoints expire after
+extends that one instead. When the unsaved files include an untracked nested
+repository or a changed submodule, whose files it cannot hold, the checkpoint
+keeps HEAD only. The checkpoint of an agent's exit or stop also keeps HEAD only
+when the unsaved files exceed `archive_max_mb`, unless they are a copy's
+starting files; every other checkpoint keeps them whatever their size. Checkpoints expire after
 `retention_days`, a copy's starting checkpoint only once the copy is gone; their
 numbers are never reused, so a number names one checkpoint for good.
 

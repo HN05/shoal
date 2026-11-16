@@ -129,6 +129,55 @@ async fn checkpoints_keep_head_and_unsaved_files_and_only_manual_ones_repeat() {
 }
 
 #[tokio::test]
+async fn the_archive_limit_caps_only_an_agents_checkpoint() {
+    let f = Fixture::new().await;
+    let manager = &f.manager;
+    crate::daemon::test_support::configure(manager, "[cleanup.restore]\narchive_max_mb = 0\n")
+        .await;
+    f.write("scratch", "notes\n");
+    let head = f.git(&["rev-parse", "HEAD"]);
+    let requested = manager
+        .take_checkpoint(&manager.named("topic").await, None)
+        .await
+        .unwrap();
+    assert!(!requested.files_omitted);
+
+    manager.checkpoint_after_agent(&f.workspace.id).await;
+    let id = f.workspace.id.clone();
+    let agents = (manager.store.run(move |db| latest(db, &id)).await)
+        .unwrap()
+        .unwrap();
+    assert_eq!(agents.cause, CheckpointCause::AgentStopped);
+    assert!(agents.files_omitted);
+    assert_eq!(agents.commit, head.trim());
+
+    // A restore keeps the state it replaces whatever its size.
+    f.write("scratch", "more notes\n");
+    let restored = manager
+        .restore_checkpoint(&manager.named("topic").await, requested.number, None)
+        .await
+        .unwrap();
+    assert!(!restored.replaced.files_omitted);
+    assert_eq!(f.read("scratch").as_deref(), Some("notes\n"));
+    assert_eq!(
+        git(
+            &f.checkout,
+            &["show", &format!("{}:scratch", restored.replaced.commit)]
+        ),
+        "more notes\n"
+    );
+
+    // No checkpoint keeps the files of a nested repository.
+    repository(&f.workspace.path, "nested");
+    let nested = manager
+        .take_checkpoint(&manager.named("topic").await, None)
+        .await
+        .unwrap();
+    assert!(nested.files_omitted);
+    assert_eq!(nested.commit, head.trim());
+}
+
+#[tokio::test]
 async fn listings_come_in_pages_that_fit_a_protocol_frame() {
     let f = Fixture::new().await;
     let long = "n".repeat(NAME_LIMIT + 1);

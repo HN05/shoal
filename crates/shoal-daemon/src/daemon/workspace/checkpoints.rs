@@ -81,8 +81,8 @@ impl Manager {
         }
     }
 
-    /// Keep HEAD and, within the archive limit, the unsaved files reachable
-    /// under a new checkpoint. Other than a manual checkpoint, one that would
+    /// Keep HEAD and the unsaved files, within the archive limit where the
+    /// cause is capped, reachable under a new checkpoint. Other than a manual checkpoint, one that would
     /// keep what the latest already keeps extends that one instead.
     pub(super) async fn checkpoint(
         &self,
@@ -113,10 +113,12 @@ impl Manager {
             .cleanup
             .restore
             .retention();
-        // A copy's starting checkpoint keeps what it started with whatever
-        // its size; its source had nothing a checkpoint cannot hold.
-        let files_omitted =
-            cause != CheckpointCause::Start && !self.archives_unsaved_files(workspace).await?;
+        // A copy's starting checkpoint keeps what it started with; its
+        // source had nothing a checkpoint cannot hold.
+        let files_omitted = cause != CheckpointCause::Start
+            && !self
+                .checkpoint_keeps_unsaved_files(workspace, cause)
+                .await?;
         let message = format!("Shoal checkpoint of {}", workspace.name);
         let snapshot = git::checkpoint::snapshot(&workspace.path, &message, !files_omitted).await?;
         let created_at = UnixTime::now();

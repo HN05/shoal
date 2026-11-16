@@ -454,25 +454,23 @@ async fn a_copy_with_a_conflict_is_inspected_as_changed() {
 }
 
 #[tokio::test]
-async fn removal_keeps_starting_files_above_the_archive_limit() {
+async fn an_agents_checkpoint_keeps_starting_files_above_the_archive_limit() {
     let f = Fixture::new().await;
     let copy = f.copy(None, CopyPlace::Branch(None)).await.unwrap();
     crate::daemon::test_support::configure(&f.manager, "[cleanup.restore]\narchive_max_mb = 0\n")
         .await;
-    f.manager
-        .remove_selected(
-            &SpaceSelector::id(&copy.id),
-            UnsavedWork::default(),
-            InspectionPolicy::GitOnly,
-        )
+    f.manager.checkpoint_after_agent(&copy.id).await;
+    let checkpoints = (f.manager)
+        .checkpoints(&SpaceSelector::id(&copy.id), None)
         .await
+        .unwrap()
         .unwrap();
-    let removed = f.manager.removed_workspaces().await.unwrap();
-    let removed = removed
-        .iter()
-        .find(|removed| removed.space_id == copy.id)
-        .unwrap();
-    assert!(!removed.kept_workspace().unwrap().checkpoint.files_omitted);
+    assert!(!checkpoints.is_empty());
+    assert!(
+        checkpoints
+            .iter()
+            .all(|checkpoint| !checkpoint.files_omitted)
+    );
 }
 
 #[tokio::test]

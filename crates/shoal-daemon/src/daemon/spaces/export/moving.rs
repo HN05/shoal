@@ -94,7 +94,7 @@ impl Manager {
         let checkpoint = self.take_checkpoint(&selector, None).await?;
         ensure!(
             !checkpoint.files_omitted,
-            "a checkpoint cannot keep the uncommitted files of {} (they are too large, or include a repository or a changed submodule); commit or remove them before moving it",
+            "a checkpoint cannot keep the uncommitted files of {} (they include a repository or a changed submodule); commit or remove them before moving it",
             workspace.name
         );
         let workspace = self.workspace_by_id(&workspace.id).await?;

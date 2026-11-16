@@ -8,7 +8,7 @@ use super::record::ConvertedChat;
 use crate::{
     config::modes::ModeName,
     daemon::workspace::Manager,
-    model::{HoldPlacer, Workspace},
+    model::{CheckpointCause, HoldPlacer, Workspace},
     removal::InspectionPolicy,
     state::WorkspaceState,
 };
@@ -137,7 +137,9 @@ impl Manager {
         let selector = SpaceSelector::id(&workspace.id);
         let inspection = (self.check_removal(&selector, InspectionPolicy::GitOnly)).await?;
         ensure!(
-            !inspection.check.dirty || self.archives_unsaved_files(&workspace).await?,
+            !inspection.check.dirty
+                || (self.checkpoint_keeps_unsaved_files(&workspace, CheckpointCause::Removal))
+                    .await?,
             "a checkpoint cannot keep the unsaved files of {}; commit or delete them first",
             workspace.name
         );

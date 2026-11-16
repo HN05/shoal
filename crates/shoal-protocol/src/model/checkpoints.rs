@@ -15,13 +15,21 @@ shoal_states::states!(
         /// The state a restore to an earlier checkpoint replaced.
         Restore => "restore",
         Removal => "removal",
-        /// What a copy of another workspace started with, which keeps every
-        /// unsaved file whatever the archive limit.
+        /// What a copy of another workspace started with.
         Start => "start",
         /// The state a refresh replaced with its source's files again.
         Refresh => "refresh",
     }
 );
+
+impl CheckpointCause {
+    /// Whether the archive limit caps the unsaved files the checkpoint
+    /// keeps: only where the worktree still has them afterwards, so that
+    /// leaving them out loses nothing.
+    pub fn capped(self) -> bool {
+        self == Self::AgentStopped
+    }
+}
 
 /// A workspace's HEAD and unsaved files, kept until `expires_at`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,7 +45,9 @@ pub struct Checkpoint {
     pub head: CommitId,
     /// HEAD, or a commit on top of it with the unsaved files.
     pub commit: CommitId,
-    /// Unsaved files exceeded the archive limit and were not kept.
+    /// Unsaved files were not kept: they exceeded the archive limit of a
+    /// capped checkpoint, or included a nested repository or a changed
+    /// submodule.
     pub files_omitted: bool,
     pub created_at: crate::time::UnixTime,
     pub expires_at: crate::time::UnixTime,

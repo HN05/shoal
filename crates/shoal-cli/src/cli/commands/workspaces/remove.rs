@@ -253,7 +253,7 @@ fn unsaved_losses(check: &RemovalCheck) -> Vec<String> {
     lines.push(if !check.dirty || check.unsaved_files_archived {
         "shoal restore brings them back until the checkpoint expires.".into()
     } else {
-        "The checkpoint cannot keep the uncommitted files (they are too large, or include a repository or a changed submodule), so they cannot be restored.".into()
+        "The checkpoint cannot keep the uncommitted files (they include a repository or a changed submodule), so they cannot be restored.".into()
     });
     lines
 }

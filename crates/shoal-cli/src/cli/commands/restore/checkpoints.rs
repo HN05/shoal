@@ -28,7 +28,7 @@ pub(in crate::cli::commands) async fn checkpoint(
         )
         .await?;
     let files = if checkpoint.files_omitted {
-        "; unsaved files exceed the archive limit and were not kept"
+        "; unsaved files include a repository or a changed submodule and were not kept"
     } else {
         ""
     };

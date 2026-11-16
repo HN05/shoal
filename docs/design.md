@@ -894,7 +894,7 @@ copy would share the source's `.git` file and index. It then takes a checkpoint
 of itself, private at that moment, so the record matches its files even when the
 source's agent kept editing during the clone. A copy of a checkpoint writes its
 files into a new worktree as a restore does. Either way the copy's starting
-checkpoint keeps every unsaved file whatever `archive_max_mb`, and the copy's
+checkpoint keeps every unsaved file, and the copy's
 record keeps it from expiring, so commits up to its HEAD count as kept and files
 that match it count as unchanged: what a copy was given is never its own work,
 and an untouched copy is cleaned up like an empty workspace. That decides only
@@ -3471,9 +3471,15 @@ checkpoint is taken only once the processes it left are proven stopped, and a
 restore excludes link changes like other lifecycle operations. Checkpoints are taken on request, when an agent exits or is stopped
 (while the workspace is ready or stopping), before a restore to a checkpoint, and
 by removal, and when a copy starts; all but requested ones extend the newest
-checkpoint instead when they would keep the same branch, HEAD and files. Unsaved
-files beyond `[cleanup.restore] archive_max_mb` are not kept, leaving HEAD only,
-except in a copy's starting checkpoint. A snapshot
+checkpoint instead when they would keep the same branch, HEAD and files. A
+checkpoint keeps HEAD only when the unsaved files include an untracked nested
+repository or a changed submodule, whose files it cannot hold.
+`[cleanup.restore] archive_max_mb` caps only the checkpoint of an agent's exit
+or stop, whose files stay in the worktree, so leaving them out loses nothing:
+above it, that checkpoint keeps HEAD only, unless the files are a copy's
+starting ones, which bounds the time each agent stop spends hashing large
+untracked files and the versions a large changing file would pile up. Any other
+checkpoint may hold their last copy, so it keeps them whatever their size. A snapshot
 fails when HEAD or the branch moves while it is taken, so its record's HEAD
 always matches its files. Checkpoints
 expire after `retention_days`, a copy's starting checkpoint only once the copy is

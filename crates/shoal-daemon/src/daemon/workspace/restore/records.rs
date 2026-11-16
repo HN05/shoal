@@ -140,11 +140,23 @@ impl Manager {
         Ok((agents, last_sessions))
     }
 
-    /// Whether a checkpoint would keep all of the workspace's unsaved files:
-    /// within the archive limit, or a copy's starting files whatever their
-    /// size, which its starting checkpoint already holds.
-    pub(crate) async fn archives_unsaved_files(&self, workspace: &Workspace) -> Result<bool> {
+    /// Whether a checkpoint taken for `cause` would keep all of the
+    /// workspace's unsaved files: none is a nested repository or a changed
+    /// submodule, and a capped checkpoint's are within the archive limit; or
+    /// they are a copy's starting files, which its starting checkpoint
+    /// already holds.
+    pub(crate) async fn checkpoint_keeps_unsaved_files(
+        &self,
+        workspace: &Workspace,
+        cause: CheckpointCause,
+    ) -> Result<bool> {
         if crate::removal::holds_starting_files(workspace).await? {
+            return Ok(true);
+        }
+        let Some(bytes) = git::checkpoint::unsaved_bytes(&workspace.path).await? else {
+            return Ok(false);
+        };
+        if !cause.capped() {
             return Ok(true);
         }
         let settings = self
@@ -153,9 +165,7 @@ impl Manager {
             .into_settings()
             .cleanup
             .restore;
-        Ok(git::checkpoint::unsaved_bytes(&workspace.path)
-            .await?
-            .is_some_and(|bytes| bytes <= settings.archive_max_bytes()))
+        Ok(bytes <= settings.archive_max_bytes())
     }
 
     /// Whether merged cleanup may archive the workspace's unsaved files: the
@@ -170,7 +180,8 @@ impl Manager {
         };
         Ok(
             git::status::commits_since(&workspace.path, base.as_str()).await? > 0
-                && self.archives_unsaved_files(workspace).await?,
+                && (self.checkpoint_keeps_unsaved_files(workspace, CheckpointCause::Removal))
+                    .await?,
         )
     }
 

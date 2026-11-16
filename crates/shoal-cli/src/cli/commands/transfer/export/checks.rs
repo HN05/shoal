@@ -180,7 +180,7 @@ async fn check_workspace_export(
     );
     ensure!(
         !worktree.dirty || worktree.unsaved_files_archived,
-        "a checkpoint cannot keep the uncommitted files (they are too large, or include a repository or a changed submodule); commit or remove them before exporting"
+        "a checkpoint cannot keep the uncommitted files (they include a repository or a changed submodule); commit or remove them before exporting"
     );
     match output.destination() {
         Some(destination) => ensure!(

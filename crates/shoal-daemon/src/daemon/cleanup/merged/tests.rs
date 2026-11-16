@@ -334,6 +334,15 @@ async fn unsaved_files_of_a_merged_workspace_go_into_its_checkpoint() {
     let head = git(&f.workspace.path, &["rev-parse", "HEAD"]);
     fs::write(f.workspace.path.join("two"), "edited\n").unwrap();
     fs::write(f.workspace.path.join("scratch"), "notes\n").unwrap();
+    // The archive limit caps only an agent's checkpoint.
+    let repo = f.workspace.repository().clone();
+    (f.manager)
+        .write_local_config(
+            &repo,
+            Some("[cleanup.restore]\narchive_max_mb = 0\n".into()),
+        )
+        .await
+        .unwrap();
     assert!(!f.kept_after(5).await);
 
     let snapshot = git(
@@ -435,20 +444,14 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
     assert!(f.kept_after(5).await, "a merge under way");
     fs::remove_file(git_dir.join("MERGE_HEAD")).unwrap();
 
-    let repo = f.workspace.repository().clone();
-    fs::write(f.workspace.path.join("two"), "edited\n").unwrap();
-    manager
-        .write_local_config(
-            &repo,
-            Some("[cleanup.restore]\narchive_max_mb = 0\n".into()),
-        )
-        .await
-        .unwrap();
+    let nested = repository(&f.workspace.path, "nested");
     assert!(
         f.kept_after(5).await,
-        "unsaved files beyond the archive limit"
+        "unsaved files no checkpoint can keep"
     );
-    git(&f.workspace.path, &["checkout", "--", "two"]);
+    fs::remove_dir_all(nested).unwrap();
+
+    let repo = f.workspace.repository().clone();
 
     manager
         .write_local_config(&repo, Some("[cleanup.merged]\nenabled = false\n".into()))

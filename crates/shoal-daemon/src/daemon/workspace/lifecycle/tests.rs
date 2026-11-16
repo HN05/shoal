@@ -588,9 +588,9 @@ async fn removal_keeps_files_it_promised_to_restore_when_the_checkpoint_cannot()
         files_restorable,
         children: None,
     };
-    // The files grew past the archive limit after the user confirmed.
-    crate::daemon::test_support::configure(&manager, "[cleanup.restore]\narchive_max_mb = 0\n")
-        .await;
+    // A repository, which no checkpoint can keep, appeared after the user
+    // confirmed.
+    repository(&workspace.path, "nested");
 
     let removed = manager
         .remove_selected(
