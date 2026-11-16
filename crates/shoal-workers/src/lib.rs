@@ -10,6 +10,7 @@ extern crate shoal_core;
 pub mod chat_starts;
 pub mod execution;
 pub mod git_credential;
+pub mod homes;
 pub mod opened_pull;
 pub mod operations;
 pub mod places;

@@ -277,7 +277,8 @@ async fn workspace_dir_args(
     workspace: &Workspace,
 ) -> Vec<OsString> {
     if app.takes_agent_args() {
-        crate::agents::workspace_dir_args(&ctx.paths, settings, &app.agent(), workspace).await
+        shoal_workers::homes::workspace_dir_args(&ctx.paths, settings, &app.agent(), workspace)
+            .await
     } else {
         Vec::new()
     }

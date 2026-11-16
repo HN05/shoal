@@ -339,7 +339,7 @@ async fn run_agent(
         home,
         repo: repository.registered().map(crate::repository::name),
     };
-    let space_args = agent_home.args(&ctx.paths, &settings, &agent).await?;
+    let space_args = shoal_workers::homes::args(&ctx.paths, agent_home, &settings, &agent).await?;
     let command = command::command(
         &settings,
         [model_args, space_args].concat(),

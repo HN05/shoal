@@ -12,7 +12,6 @@ use anyhow::{Context as _, Result};
 use super::{AgentHome, hook_args};
 use crate::{
     agent::{Agent, ModelChoice},
-    client::connection::CommandPaths,
     config::{Config, Effective, modes},
     fsutil,
     model::{Chat, Workspace},
@@ -82,30 +81,32 @@ pub fn insert_options(command: &mut Vec<OsString>, options: Vec<OsString>) {
 
 /// What a workspace's agent `name` runs with besides its instructions, prompt
 /// and forwarded arguments: Shoal's hooks and [`workspace_dir_args`].
-pub async fn workspace_args(
-    paths: &CommandPaths,
+pub fn workspace_args(
     settings: &Effective,
     name: &Agent,
     workspace: &Workspace,
+    home: &Path,
+    workspaces_dir: Option<&Path>,
 ) -> Result<Vec<OsString>> {
     let proxied = settings.proxy(name).is_some();
     let mut args = hook_args(settings.integration(name), workspace.into(), proxied)?;
-    args.extend(workspace_dir_args(paths, settings, name, workspace).await);
+    args.extend(workspace_dir_args(settings, name, home, workspaces_dir));
     Ok(args)
 }
 
 /// The arguments that give a workspace's agent `name` the configured agent
 /// directories and the repository's workspaces directory as other working
 /// directories, so it may also work in the child workspaces it splits
-/// there and in its temporary directory.
-pub async fn workspace_dir_args(
-    paths: &CommandPaths,
+/// there and in its temporary directory. `home`, the user's home, resolves
+/// the configured ones; `workspaces_dir` is resolved as agents compare paths.
+pub fn workspace_dir_args(
     settings: &Effective,
     name: &Agent,
-    workspace: &Workspace,
+    home: &Path,
+    workspaces_dir: Option<&Path>,
 ) -> Vec<OsString> {
-    let workspaces_dir = workspaces_dir(paths, workspace).await;
-    dir_args(settings, name, &paths.home, workspaces_dir.as_slice())
+    let extra: Vec<PathBuf> = workspaces_dir.into_iter().map(Path::to_path_buf).collect();
+    dir_args(settings, name, home, &extra)
 }
 
 /// The arguments that give agent `name` the configured agent directories as
@@ -195,30 +196,6 @@ fn agent_dirs(settings: &Effective, home: &Path) -> BTreeSet<PathBuf> {
         .map(|directory| fsutil::home::expand_home(Path::new(directory), home))
         .map(|directory| std::fs::canonicalize(&directory).unwrap_or(directory))
         .collect()
-}
-
-/// The directory in which `workspace`'s repository keeps its workspaces,
-/// resolved as agents compare paths; `None`, with a warning when it cannot be
-/// looked up, when there is none.
-async fn workspaces_dir(paths: &CommandPaths, workspace: &Workspace) -> Option<PathBuf> {
-    let directory = crate::client::repositories::list(paths)
-        .await
-        .and_then(|repositories| {
-            repositories
-                .into_iter()
-                .find(|repository| repository.id == workspace.repository_id)
-                .map(|repository| repository.workspaces_dir)
-                .context("workspace repository is missing")
-        });
-    match directory {
-        Ok(directory) => {
-            directory.map(|directory| std::fs::canonicalize(&directory).unwrap_or(directory))
-        }
-        Err(error) => {
-            eprintln!("warning: could not give the agent the workspaces directory: {error:#}");
-            None
-        }
-    }
 }
 
 #[cfg(test)]

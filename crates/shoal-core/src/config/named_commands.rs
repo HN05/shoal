@@ -7,8 +7,7 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 use shoal_refs::{BranchName, CommitId};
 
-use crate::space_names::SpaceSelector;
-use crate::{config::placeholders::render_os as render, connection::Daemon, model::Workspace};
+use crate::{config::placeholders::render_os as render, model::Workspace};
 
 pub type Commands = BTreeMap<String, Vec<String>>;
 
@@ -77,20 +76,20 @@ pub fn workspace_fields<'a>(
 }
 
 /// `name`'s command for `workspace`, with `extra_fields` beside the
-/// workspace's own placeholders.
-pub async fn expand_with_fields(
-    daemon: &impl Daemon,
+/// workspace's own placeholders, `{diff_base}` among them when `diff_base`
+/// is known.
+pub fn expand_with_fields(
     commands: &Commands,
     name: &str,
     workspace: &Workspace,
     args: Vec<OsString>,
     extra_fields: &[(&str, &OsStr)],
+    diff_base: Option<&CommitId>,
 ) -> Result<Vec<OsString>> {
     let argv = commands
         .get(name)
         .with_context(|| format!("unknown command {name:?}"))?;
-    let base = diff_base(daemon, workspace, argv).await?;
-    let mut fields = workspace_fields(workspace, base.as_ref());
+    let mut fields = workspace_fields(workspace, diff_base);
     fields.extend_from_slice(extra_fields);
     Ok(substitute(argv, &fields, args))
 }
@@ -109,20 +108,6 @@ pub fn substitute_outside_workspace(
         );
     }
     Ok(substitute(argv, fields, args))
-}
-
-/// The workspace's diff base commit when `argv` uses it.
-async fn diff_base(
-    daemon: &impl Daemon,
-    workspace: &Workspace,
-    argv: &[String],
-) -> Result<Option<CommitId>> {
-    if !uses_diff_base(argv) {
-        return Ok(None);
-    }
-    let base =
-        crate::client::workspaces::diff_base(daemon, SpaceSelector::id(&workspace.id)).await?;
-    Ok(Some(base.commit))
 }
 
 /// Render each argument once, putting `args` at `{args}` or after the command.

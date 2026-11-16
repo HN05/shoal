@@ -154,7 +154,7 @@ async fn restore(
         (_, false) => {}
     }
     let selector = SpaceSelector::id(space.id());
-    let home = crate::agents::HomeRecords::read(&ctx.paths, &selector).await?;
+    let home = shoal_workers::homes::records(&ctx.paths, &selector).await?;
     let restored = Restored {
         agent: &session.agent,
         model: &session.model,

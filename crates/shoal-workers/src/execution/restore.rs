@@ -38,15 +38,15 @@ impl RestoreCommand<'_> {
     /// and proxy arguments, and whether it carries the prompt. It is the
     /// user's own, so Shoal adds no rules to it.
     async fn configured(self, argv: &[String]) -> Result<(Vec<OsString>, bool)> {
-        let mut command = (self.home)
-            .expand(
-                self.paths,
-                &self.settings.resume_commands,
-                self.name.name(),
-                vec![],
-                &[("{prompt}", self.prompt)],
-            )
-            .await?;
+        let mut command = crate::homes::expand(
+            self.paths,
+            self.home,
+            &self.settings.resume_commands,
+            self.name.name(),
+            vec![],
+            &[("{prompt}", self.prompt)],
+        )
+        .await?;
         crate::agents::insert_options(&mut command, self.model_args);
         // Without Shoal's hooks it still goes through the agent's proxy.
         crate::agents::with_proxy_args(self.settings, self.name, &mut command);
@@ -58,7 +58,7 @@ impl RestoreCommand<'_> {
     async fn resumed(self, mut args: Vec<OsString>) -> Result<Vec<OsString>> {
         args.extend(self.model_args);
         args.extend(self.instruction_args);
-        args.extend(self.home.args(self.paths, self.settings, self.name).await?);
+        args.extend(crate::homes::args(self.paths, self.home, self.settings, self.name).await?);
         let takes_field = self
             .settings
             .launchers
@@ -67,15 +67,15 @@ impl RestoreCommand<'_> {
         if !takes_field {
             args.push(self.prompt.to_owned());
         }
-        (self.home)
-            .expand(
-                self.paths,
-                &self.settings.launchers,
-                self.name.name(),
-                args,
-                &[("{prompt}", self.prompt)],
-            )
-            .await
+        crate::homes::expand(
+            self.paths,
+            self.home,
+            &self.settings.launchers,
+            self.name.name(),
+            args,
+            &[("{prompt}", self.prompt)],
+        )
+        .await
     }
 }
 
@@ -127,7 +127,7 @@ async fn resolve_in(
     restored: Restored<'_>,
     stop: Option<&Stop>,
 ) -> Result<Recovery> {
-    let records = crate::agents::HomeRecords::read(paths, space).await?;
+    let records = crate::homes::records(paths, space).await?;
     resolve(paths, records.home()?, restored, None, stop).await
 }
 

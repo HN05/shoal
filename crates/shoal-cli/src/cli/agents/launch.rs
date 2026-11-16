@@ -9,7 +9,7 @@ use crate::{
     agent::Agent,
     agents::{Integration, ensure_available},
     cli::{context::Context, terminal},
-    config::{Effective, named_commands},
+    config::Effective,
     execution,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -94,17 +94,17 @@ async fn command(
         prompt.clone(),
         [
             model_args,
-            crate::agents::workspace_args(&ctx.paths, settings, name, workspace).await?,
+            shoal_workers::homes::args(&ctx.paths, workspace.into(), settings, name).await?,
         ]
         .concat(),
         args.clone(),
     );
     let args = fork.iter().cloned().chain(args).collect();
-    named_commands::expand_with_fields(
+    shoal_workers::homes::expand(
         &ctx.paths,
+        workspace.into(),
         &settings.launchers,
         name.name(),
-        workspace,
         args,
         &[("{prompt}", OsStr::new(&prompt))],
     )

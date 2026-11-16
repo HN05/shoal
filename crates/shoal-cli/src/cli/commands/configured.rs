@@ -237,11 +237,11 @@ async fn expand(
     workspace: &Workspace,
     args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
-    named_commands::expand_with_fields(
+    shoal_workers::homes::expand(
         paths,
+        workspace.into(),
         commands,
         name,
-        workspace,
         args,
         &[("{prompt}", OsStr::new(""))],
     )

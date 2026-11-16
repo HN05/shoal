@@ -11,12 +11,11 @@ use anyhow::{Context as _, Result};
 use super::{agent_integration, args, delivery, hook_args};
 use crate::{
     agent::Agent,
-    client::connection::CommandPaths,
     config::{Effective, named_commands, templates},
-    model::{Chat, ChatHome, PresentSpace, Repository, SpaceLinks, Workspace},
+    model::{Chat, ChatHome, Repository, SpaceLinks, Workspace},
 };
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_refs::CommitId;
 
 /// The space an agent runs in.
 #[derive(Clone, Copy)]
@@ -92,42 +91,44 @@ impl<'a> AgentHome<'a> {
 
     /// What agent `name` runs with here besides its instructions, prompt and
     /// forwarded arguments: Shoal's hooks and the other working directories
-    /// it may use.
-    pub async fn args(
+    /// it may use, `workspaces_dir` among them for a workspace, as `home`,
+    /// the user's home, resolves the configured ones.
+    pub fn args(
         self,
-        paths: &CommandPaths,
         settings: &Effective,
         name: &Agent,
+        home: &Path,
+        workspaces_dir: Option<&Path>,
     ) -> Result<Vec<OsString>> {
         match self {
             Self::Workspace(workspace) => {
-                args::workspace_args(paths, settings, name, workspace).await
+                args::workspace_args(settings, name, workspace, home, workspaces_dir)
             }
             Self::Chat { chat, .. } => {
                 let proxied = settings.proxy(name).is_some();
                 let integration = settings.integration(name);
                 let mut args = hook_args(integration, super::AgentSpace::Chat, proxied)?;
-                args.extend(args::chat_dir_args(settings, name, &paths.home, chat));
+                args.extend(args::chat_dir_args(settings, name, home, chat));
                 Ok(args)
             }
         }
     }
 
     /// `name`'s command among `commands` here, with `fields` beside the
-    /// space's own placeholders: a workspace's, or a chat's `{path}`.
-    pub async fn expand(
+    /// space's own placeholders: a workspace's, with its `diff_base` when the
+    /// command uses it, or a chat's `{path}`.
+    pub fn expand(
         self,
-        paths: &CommandPaths,
         commands: &named_commands::Commands,
         name: &str,
         args: Vec<OsString>,
         fields: &[(&str, &OsStr)],
+        diff_base: Option<&CommitId>,
     ) -> Result<Vec<OsString>> {
         match self {
-            Self::Workspace(workspace) => {
-                named_commands::expand_with_fields(paths, commands, name, workspace, args, fields)
-                    .await
-            }
+            Self::Workspace(workspace) => named_commands::expand_with_fields(
+                commands, name, workspace, args, fields, diff_base,
+            ),
             Self::Chat { home, .. } => {
                 let argv =
                     (commands.get(name)).with_context(|| format!("unknown command {name:?}"))?;
@@ -156,35 +157,6 @@ pub enum HomeRecords {
 }
 
 impl HomeRecords {
-    /// The records of the space `selector` names.
-    pub async fn read(paths: &CommandPaths, selector: &SpaceSelector) -> Result<Self> {
-        let spaces = crate::client::workspaces::spaces(paths).await?;
-        match spaces
-            .find(selector)
-            .with_context(|| format!("no space {selector}"))?
-        {
-            PresentSpace::Workspace(workspace) => Ok(Self::Workspace(workspace)),
-            PresentSpace::Chat(chat) => {
-                let workspace = (chat.workspace.as_ref())
-                    .and_then(|workspace| spaces.find(&SpaceSelector::id(&workspace.id)))
-                    .and_then(|space| space.worktree().cloned());
-                let repository = match &chat.repository_id {
-                    Some(id) => Some(
-                        (crate::client::repositories::list(paths).await?.into_iter())
-                            .find(|repository| repository.id == *id)
-                            .with_context(|| format!("no repository {id}"))?,
-                    ),
-                    None => None,
-                };
-                Ok(Self::Chat {
-                    chat,
-                    repository,
-                    workspace,
-                })
-            }
-        }
-    }
-
     /// The space as an agent there sees it.
     pub fn home(&self) -> Result<AgentHome<'_>> {
         Ok(match self {

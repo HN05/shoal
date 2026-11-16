@@ -74,7 +74,7 @@ async fn chat_restore_child() {
         )
         .await
         .unwrap();
-    let records = crate::agents::HomeRecords::read(&paths, &SpaceSelector::id(&chat.id))
+    let records = shoal_workers::homes::records(&paths, &SpaceSelector::id(&chat.id))
         .await
         .unwrap();
     let home = records.home().unwrap();

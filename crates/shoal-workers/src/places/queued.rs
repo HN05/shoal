@@ -138,7 +138,7 @@ pub async fn restore_chat(
     space: &PresentSpace,
     args: &[OsString],
 ) -> Result<()> {
-    let records = HomeRecords::read(paths, &SpaceSelector::id(space.id())).await?;
+    let records = crate::homes::records(paths, &SpaceSelector::id(space.id())).await?;
     let home = records.home()?;
     let repository = match &records {
         HomeRecords::Chat { repository, .. } => repository.as_ref(),

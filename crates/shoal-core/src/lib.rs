@@ -50,11 +50,9 @@ pub mod tools;
 pub mod transfer;
 pub mod workers;
 
-use shoal_client as client;
-use shoal_client::connection;
 use shoal_forge_types as forge;
 use shoal_protocol::time;
-use shoal_protocol::{agent, model, protocol, resources, sim, space_names, state, validate};
+use shoal_protocol::{agent, model, protocol, resources, sim, state, validate};
 use shoal_subprocess as subprocess;
 
 /// Tokio worker threads get more stack than its 2 MiB default: the daemon
